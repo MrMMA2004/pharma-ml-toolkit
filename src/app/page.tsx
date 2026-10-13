@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import {
@@ -57,6 +58,12 @@ export default function Home() {
   const setTab = useToolkitStore((s) => s.setTab);
   const stats = useToolkitStore((s) => s.stats);
 
+  /* Tabs behave like pages: always start a fresh tab at the top (also
+   * keeps deep links to the code explorer from inheriting stale scroll). */
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [tab]);
+
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       {/* ------------------------------ Header ------------------------------ */}
@@ -98,14 +105,24 @@ export default function Home() {
                   onClick={() => setTab(t.id)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4",
+                    "relative flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4",
                     active
-                      ? "bg-primary/12 text-primary"
+                      ? "text-primary"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
-                  <Icon className="size-4 shrink-0" aria-hidden />
-                  {t.label}
+                  {active ? (
+                    <motion.span
+                      layoutId="nav-active-pill"
+                      className="absolute inset-0 rounded-full bg-primary/12"
+                      transition={{ type: "spring", bounce: 0.25, duration: 0.5 }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    <Icon className="size-4 shrink-0" aria-hidden />
+                    {t.label}
+                  </span>
                 </button>
               );
             })}

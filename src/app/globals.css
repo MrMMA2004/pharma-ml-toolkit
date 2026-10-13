@@ -195,3 +195,34 @@
 .data-table tbody tr:hover {
   background: color-mix(in oklch, var(--primary) 8%, transparent);
 }
+
+/* ---- Code viewer: per-line wrappers for definition deep links ---- */
+.code-line {
+  display: block;
+}
+.code-line-highlight {
+  background: color-mix(in oklch, var(--primary) 13%, transparent);
+  box-shadow: inset 3px 0 0 0 var(--primary);
+  animation: line-flash 1.8s ease-out 1 both;
+}
+@keyframes line-flash {
+  0% {
+    background: color-mix(in oklch, var(--primary) 34%, transparent);
+  }
+  100% {
+    background: color-mix(in oklch, var(--primary) 13%, transparent);
+  }
+}
+
+/* ---- Custom text selection ---- */
+::selection {
+  background: color-mix(in oklch, var(--primary) 26%, transparent);
+}
+
+/* ---- Reduced motion: no flash, no smooth scroll ---- */
+@media (prefers-reduced-motion: reduce) {
+  .code-line-highlight {
+    animation: none;
+  }
+}
+

@@ -27,6 +27,12 @@ interface ToolkitStore {
   selectedFile: string;
   setSelectedFile: (path: string) => void;
 
+  /** Definition line to highlight + scroll to (API-reference deep links). */
+  targetLine: number | null;
+  setTargetLine: (line: number | null) => void;
+  /** Open a file and (optionally) jump to a definition line. */
+  openFileAtLine: (path: string, line: number | null) => void;
+
   tree: TreeNode | null;
   stats: TreeStats | null;
   treeStatus: TreeStatus;
@@ -40,7 +46,11 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
   setTab: (tab) => set({ tab }),
 
   selectedFile: "README.md",
-  setSelectedFile: (path) => set({ selectedFile: path }),
+  setSelectedFile: (path) => set({ selectedFile: path, targetLine: null }),
+
+  targetLine: null,
+  setTargetLine: (line) => set({ targetLine: line }),
+  openFileAtLine: (path, line) => set({ selectedFile: path, targetLine: line }),
 
   tree: null,
   stats: null,

@@ -59,7 +59,7 @@ after adding new public functions.
 | Symbol | Kind | Summary |
 |---|---|---|
 | `UnitConverter` | class | Dimension-aware unit converter for pharmaceutical quantities. |
-| `molar_mass` | constant |  |
+| `molar_mass` | function | Compute the molar mass (g/mol) of a chemical formula. |
 | `accumulation_ratio` | function | Accumulation ratio for regular intermittent dosing. |
 | `auc_trapezoid` | function | Area under the concentration-time curve (trapezoidal rule). |
 | `aucm_trapezoid` | function | Area under the first-moment curve (AUMC = ∫ t·C dt, linear trapezoid). |

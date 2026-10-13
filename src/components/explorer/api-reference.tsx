@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
+  ArrowRight,
   Braces,
+  Download,
   FileCode2,
   RefreshCw,
   Search,
@@ -41,7 +43,7 @@ const KIND_STYLES: Record<SymbolKind, string> = {
 /** Browsable, searchable rendering of docs/INDEX.md with view-source links. */
 export function ApiReference() {
   const setTab = useToolkitStore((s) => s.setTab);
-  const setSelectedFile = useToolkitStore((s) => s.setSelectedFile);
+  const openFileAtLine = useToolkitStore((s) => s.openFileAtLine);
 
   const [data, setData] = useState<ReferenceResponse | null>(refCache);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">(
@@ -85,6 +87,18 @@ export function ApiReference() {
   const trimmed = query.trim().toLowerCase();
   const searchActive = trimmed.length > 0;
 
+  /** Unfiltered kind counts for the filter pills. */
+  const kindCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!data) return counts;
+    for (const mod of data.modules) {
+      for (const sym of mod.symbols) {
+        counts.set(sym.kind, (counts.get(sym.kind) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [data]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
     return data.modules
@@ -105,10 +119,34 @@ export function ApiReference() {
 
   const visibleSymbols = filtered.reduce((acc, m) => acc + m.symbols.length, 0);
 
-  function viewSource(sourcePath: string, moduleName: string) {
-    setSelectedFile(sourcePath);
+  /** Deep link: open the module source at the symbol's definition line. */
+  function viewSource(sourcePath: string, moduleName: string, line?: number | null) {
+    openFileAtLine(sourcePath, line ?? null);
     setTab("explorer");
-    toast(`Opened ${moduleName} source in the Code Explorer`);
+    toast(
+      line
+        ? `Jumped to ${moduleName} · line ${line} in the Code Explorer`
+        : `Opened ${moduleName} source in the Code Explorer`
+    );
+  }
+
+  /** Download the structured reference as a JSON file. */
+  function exportJson() {
+    if (!data) return;
+    try {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "pharmaml-api-reference.json";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Exported pharmaml-api-reference.json");
+    } catch {
+      toast.error("Could not export the reference as JSON.");
+    }
   }
 
   if (status === "error") {
@@ -153,7 +191,8 @@ export function ApiReference() {
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Every public symbol of the <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">pharmaml</code>{" "}
             package, auto-derived from each module&apos;s <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">__all__</code>{" "}
-            exports in <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">docs/INDEX.md</code>.
+            exports in <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">docs/INDEX.md</code>. Click a
+            symbol to jump straight to its definition.
           </p>
         </div>
 
@@ -206,23 +245,45 @@ export function ApiReference() {
               aria-label="Filter symbols by kind"
               className="flex gap-1 rounded-lg border bg-muted/40 p-1"
             >
-              {KIND_FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setKindFilter(f.id)}
-                  aria-pressed={kindFilter === f.id}
-                  className={cn(
-                    "h-7 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    kindFilter === f.id
-                      ? "bg-background shadow-sm text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {f.label}
-                </button>
-              ))}
+              {KIND_FILTERS.map((f) => {
+                const count =
+                  f.id === "all"
+                    ? data?.stats.symbols
+                    : kindCounts.get(f.id);
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setKindFilter(f.id)}
+                    aria-pressed={kindFilter === f.id}
+                    className={cn(
+                      "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      kindFilter === f.id
+                        ? "bg-background shadow-sm text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {f.label}
+                    {typeof count === "number" ? (
+                      <span className="font-mono text-[10px] tabular-nums opacity-60">
+                        {fmtInt(count)}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 gap-1.5"
+              onClick={exportJson}
+              disabled={!data}
+              aria-label="Export the API reference as JSON"
+            >
+              <Download className="size-3.5" aria-hidden />
+              <span className="hidden lg:inline">JSON</span>
+            </Button>
           </div>
         </div>
       </section>
@@ -301,27 +362,46 @@ export function ApiReference() {
                 <CardContent className="py-0">
                   <ul className="divide-y">
                     {mod.symbols.map((sym) => (
-                      <li
-                        key={sym.name}
-                        className="flex flex-col gap-1 py-2.5 transition-colors hover:bg-primary/5 sm:flex-row sm:items-center sm:gap-3"
-                      >
-                        <div className="flex min-w-0 items-center gap-2 sm:w-[240px] sm:shrink-0">
-                          <code className="break-all font-mono text-[13px] font-medium text-foreground">
-                            {sym.name}
-                          </code>
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "w-fit shrink-0 px-1.5 py-0 font-mono text-[10px] uppercase tracking-wide",
-                            KIND_STYLES[sym.kind]
-                          )}
+                      <li key={sym.name}>
+                        <button
+                          type="button"
+                          onClick={() => viewSource(sym.sourcePath ?? mod.sourcePath, mod.name, sym.line)}
+                          aria-label={
+                            sym.line
+                              ? `Jump to ${sym.name} definition at line ${sym.line} of ${mod.name}`
+                              : `Open source of ${mod.name} (${sym.name})`
+                          }
+                          className="group flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:bg-primary/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-3"
                         >
-                          {sym.kind}
-                        </Badge>
-                        <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
-                          {sym.summary || "—"}
-                        </p>
+                          <div className="flex min-w-0 items-center gap-2 sm:w-[240px] sm:shrink-0">
+                            <code className="break-all font-mono text-[13px] font-medium text-foreground">
+                              {sym.name}
+                            </code>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "px-1.5 py-0 font-mono text-[10px] uppercase tracking-wide",
+                                KIND_STYLES[sym.kind]
+                              )}
+                            >
+                              {sym.kind}
+                            </Badge>
+                            {sym.line ? (
+                              <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">
+                                L{sym.line}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+                            {sym.summary || "—"}
+                          </p>
+                          <ArrowRight
+                            className="hidden size-3.5 shrink-0 -translate-x-1 text-primary opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 sm:block"
+                            aria-hidden
+                          />
+                        </button>
                       </li>
                     ))}
                   </ul>

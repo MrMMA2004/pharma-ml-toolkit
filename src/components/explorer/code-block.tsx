@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
 import toml from "react-syntax-highlighter/dist/esm/languages/prism/toml";
@@ -13,7 +13,7 @@ import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
 import oneDark from "react-syntax-highlighter/dist/esm/styles/prism/one-dark";
 import oneLight from "react-syntax-highlighter/dist/esm/styles/prism/one-light";
 import { useTheme } from "next-themes";
-import { Check, Copy, FileCode2 } from "lucide-react";
+import { Check, Copy, FileCode2, LocateFixed, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -63,6 +63,10 @@ interface CodeBlockProps {
   showLineNumbers?: boolean;
   /** Tailwind max-height class for the scroll container. */
   maxHeightClass?: string;
+  /** 1-based line to highlight and scroll to (definition deep links). */
+  highlightLine?: number | null;
+  /** Called when the user dismisses the line-highlight chip. */
+  onClearHighlight?: () => void;
   className?: string;
 }
 
@@ -72,14 +76,33 @@ export function CodeBlock({
   fileName,
   showLineNumbers = false,
   maxHeightClass = "max-h-[70vh]",
+  highlightLine = null,
+  onClearHighlight,
   className,
 }: CodeBlockProps) {
   const { resolvedTheme } = useTheme();
   const [copied, setCopied] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const style = resolvedTheme === "dark" ? oneDark : oneLight;
   const grammar = REGISTERED_GRAMMARS.has(language) ? language : undefined;
   const label = LANGUAGE_LABELS[language] ?? language;
+  const hasHighlight = highlightLine !== null && highlightLine > 0;
+
+  /* Scroll the highlighted line to the middle of the pane once the code
+   * for the current highlight target has rendered. */
+  useEffect(() => {
+    if (!hasHighlight) return;
+    const timer = window.setTimeout(() => {
+      const container = scrollRef.current;
+      if (!container) return;
+      const line = container.querySelector<HTMLElement>(`.cl-${highlightLine}`);
+      if (!line) return;
+      const target = Math.max(0, line.offsetTop - container.clientHeight / 2);
+      container.scrollTo({ top: target, behavior: "smooth" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [hasHighlight, highlightLine, code]);
 
   async function handleCopy() {
     const ok = await copyToClipboard(code);
@@ -106,6 +129,25 @@ export function CodeBlock({
           <Badge variant="secondary" className="hidden shrink-0 font-mono text-[10px] sm:inline-flex">
             {label}
           </Badge>
+          {hasHighlight ? (
+            <Badge
+              variant="outline"
+              className="shrink-0 gap-1 border-primary/30 bg-primary/5 font-mono text-[10px] text-primary tabular-nums"
+            >
+              <LocateFixed className="size-3" aria-hidden />
+              line {highlightLine}
+              {onClearHighlight ? (
+                <button
+                  type="button"
+                  onClick={onClearHighlight}
+                  aria-label="Dismiss line highlight"
+                  className="-mr-1 flex size-4 items-center justify-center rounded-full transition-colors hover:bg-primary/15"
+                >
+                  <X className="size-2.5" aria-hidden />
+                </button>
+              ) : null}
+            </Badge>
+          ) : null}
         </div>
         <Button
           type="button"
@@ -123,12 +165,26 @@ export function CodeBlock({
           <span className="hidden sm:inline">{copied ? "Copied" : "Copy"}</span>
         </Button>
       </div>
-      <div className={cn("thin-scrollbar overflow-auto", maxHeightClass)}>
+      <div
+        ref={scrollRef}
+        className={cn("thin-scrollbar relative overflow-auto", maxHeightClass)}
+      >
         <SyntaxHighlighter
           language={grammar}
           style={style}
           showLineNumbers={showLineNumbers}
           wrapLongLines={false}
+          wrapLines={hasHighlight}
+          lineProps={
+            hasHighlight
+              ? (lineNumber: number) => ({
+                  className:
+                    lineNumber === highlightLine
+                      ? `code-line cl-${lineNumber} code-line-highlight`
+                      : `code-line cl-${lineNumber}`,
+                })
+              : undefined
+          }
           customStyle={{
             background: "transparent",
             margin: 0,

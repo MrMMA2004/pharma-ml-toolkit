@@ -54,6 +54,10 @@ export interface ReferenceSymbol {
   kind: SymbolKind;
   /** First line of the docstring (may be empty for constants). */
   summary: string;
+  /** 1-based definition line in the module's source file (null if unresolved). */
+  line?: number | null;
+  /** Source file override when the symbol lives in a re-exported sub-module. */
+  sourcePath?: string;
 }
 
 export interface ReferenceModule {
@@ -133,6 +137,40 @@ export interface MLTrainResponse {
     seed: number;
     features: string[];
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* ML dataset preview                                                   */
+/* ------------------------------------------------------------------ */
+
+export interface DatasetPreviewRequest {
+  task: MLTask;
+  samples: number;
+  noise: number;
+  seed: number;
+}
+
+export interface DatasetColumnStats {
+  column: string;
+  mean: number;
+  std: number;
+  min: number;
+  max: number;
+}
+
+export interface DatasetPreviewResponse {
+  task: MLTask;
+  columns: string[];
+  /** First rows of the dataset (numbers; label columns are 0/1). */
+  rows: Array<Record<string, number>>;
+  nTotal: number;
+  stats: DatasetColumnStats[];
+  /** Regression only: Pearson correlation between x and y. */
+  correlation?: number;
+  /** Classification only: class balance. */
+  classBalance?: Array<{ label: number; count: number; pct: number }>;
+  noise: number;
+  seed: number;
 }
 
 /* ------------------------------------------------------------------ */

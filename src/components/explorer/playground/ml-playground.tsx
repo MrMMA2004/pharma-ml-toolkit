@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Brain, Loader2, Play, TriangleAlert } from "lucide-react";
+import { Brain, ChevronDown, Loader2, Play, Table2, TriangleAlert } from "lucide-react";
 import {
   CartesianGrid,
   Legend,
@@ -41,7 +41,12 @@ import {
 } from "@/components/ui/table";
 import { CHART } from "@/components/explorer/playground/calc-ui";
 import { fmtNum, fmtTick } from "@/lib/format";
-import type { MLTrainResponse, MLTrainRequest } from "@/lib/toolkit-types";
+import { cn } from "@/lib/utils";
+import type {
+  DatasetPreviewResponse,
+  MLTrainResponse,
+  MLTrainRequest,
+} from "@/lib/toolkit-types";
 
 type Task = "regression" | "classification";
 type RegModel = "linear" | "polynomial" | "ridge";
@@ -87,6 +92,15 @@ function MoonDot(color: string) {
   };
 }
 
+/** Qualitative label for a Pearson correlation coefficient. */
+function corrStrength(r: number): string {
+  const a = Math.abs(r);
+  if (a >= 0.9) return "very strong";
+  if (a >= 0.7) return "strong";
+  if (a >= 0.5) return "moderate";
+  return "weak";
+}
+
 export function MlPlayground() {
   const [task, setTask] = useState<Task>("regression");
   const [samples, setSamples] = useState(300);
@@ -102,6 +116,10 @@ export function MlPlayground() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MLTrainResponse | null>(null);
 
+  const [preview, setPreview] = useState<DatasetPreviewResponse | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(true);
+
   const noiseMax = task === "regression" ? 2 : 1.5;
   const metricSpecs = task === "regression" ? REG_METRICS : CLS_METRICS;
 
@@ -114,6 +132,7 @@ export function MlPlayground() {
     setStatus("idle");
     setResult(null);
     setError(null);
+    setPreview(null);
   }
 
   const seedValid = /^\d{1,10}$/.test(seed.trim());
@@ -171,6 +190,46 @@ export function MlPlayground() {
       setStatus("error");
       const message = err instanceof Error ? err.message : "Training request failed.";
       setError(message);
+    }
+  }
+
+  /** Fetch the first rows + summary stats of the (deterministic) dataset. */
+  async function previewDataset() {
+    if (!seedValid) {
+      setError("Seed must be a non-negative integer (0 – 2147483647).");
+      return;
+    }
+    setPreviewLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/ml/dataset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task,
+          samples,
+          noise,
+          seed: Number.parseInt(seed, 10) || 0,
+        }),
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        const message =
+          typeof data === "object" && data !== null && "error" in data
+            ? `${String((data as { error: unknown }).error)}${
+                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+                  : ""
+              }`
+            : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      setPreview(data as DatasetPreviewResponse);
+      setPreviewOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Preview request failed.");
+    } finally {
+      setPreviewLoading(false);
     }
   }
 
@@ -389,24 +448,42 @@ export function MlPlayground() {
             </div>
           </div>
 
-          <Button
-            size="lg"
-            className="h-11 w-full gap-2"
-            onClick={() => void run()}
-            disabled={running}
-          >
-            {running ? (
-              <>
+          <div className="flex gap-2">
+            <Button
+              size="lg"
+              className="h-11 flex-1 gap-2"
+              onClick={() => void run()}
+              disabled={running}
+            >
+              {running ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  Training…
+                </>
+              ) : (
+                <>
+                  <Play className="size-4" aria-hidden />
+                  Train model
+                </>
+              )}
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-11 shrink-0 gap-2"
+              onClick={() => void previewDataset()}
+              disabled={previewLoading}
+              aria-label="Preview the dataset before training"
+            >
+              {previewLoading ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />
-                Training…
-              </>
-            ) : (
-              <>
-                <Play className="size-4" aria-hidden />
-                Train model
-              </>
-            )}
-          </Button>
+              ) : (
+                <Table2 className="size-4" aria-hidden />
+              )}
+              <span className="hidden sm:inline">Preview data</span>
+              <span className="sm:hidden">Data</span>
+            </Button>
+          </div>
 
           {error ? (
             <Alert variant="destructive">
@@ -420,6 +497,112 @@ export function MlPlayground() {
 
       {/* ------------------------------ Results ------------------------------ */}
       <div className="min-w-0 space-y-4">
+        {preview ? (
+          <Card className="overflow-hidden py-0 shadow-sm">
+            <CardHeader className="border-b bg-muted/30 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <CardTitle className="text-sm">Dataset preview</CardTitle>
+                  <CardDescription className="text-xs">
+                    First {preview.rows.length} of {preview.nTotal} rows · seed {preview.seed} ·
+                    noise σ {preview.noise.toFixed(2)} — same generator the trainer uses
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 shrink-0 p-0"
+                  onClick={() => setPreviewOpen((v) => !v)}
+                  aria-expanded={previewOpen}
+                  aria-label={previewOpen ? "Collapse dataset preview" : "Expand dataset preview"}
+                >
+                  <ChevronDown
+                    className={cn(
+                      "size-4 transition-transform duration-200",
+                      previewOpen ? "" : "-rotate-90"
+                    )}
+                    aria-hidden
+                  />
+                </Button>
+              </div>
+            </CardHeader>
+            {previewOpen ? (
+              <CardContent className="space-y-3 p-3 sm:p-4">
+                <div className="thin-scrollbar max-h-72 overflow-auto rounded-md border">
+                  <Table className="data-table">
+                    <TableHeader>
+                      <TableRow className="bg-muted/40 hover:bg-muted/40">
+                        {preview.columns.map((c) => (
+                          <TableHead key={c} className="h-8 font-mono text-[11px]">
+                            {c}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {preview.rows.map((row) => (
+                        <TableRow key={row.i}>
+                          {preview.columns.map((c) => (
+                            <TableCell key={c} className="py-1.5 font-mono text-xs tabular-nums">
+                              {c === "label" ? (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span
+                                    className={cn(
+                                      "size-1.5 rounded-full",
+                                      row[c] === 1 ? "bg-chart-1" : "bg-chart-2"
+                                    )}
+                                    aria-hidden
+                                  />
+                                  {row[c]}
+                                </span>
+                              ) : (
+                                fmtNum(row[c] ?? 0, 4)
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {preview.stats.map((s) => (
+                    <div key={s.column} className="rounded-md border bg-muted/20 px-3 py-2">
+                      <p className="font-mono text-xs font-medium">{s.column}</p>
+                      <p className="mt-0.5 font-mono text-[11px] leading-snug tabular-nums text-muted-foreground">
+                        mean {fmtNum(s.mean, 4)} · σ {fmtNum(s.std, 4)} · min {fmtNum(s.min, 4)} ·
+                        max {fmtNum(s.max, 4)}
+                      </p>
+                    </div>
+                  ))}
+                  {typeof preview.correlation === "number" ? (
+                    <div className="rounded-md border border-primary/25 bg-primary/5 px-3 py-2">
+                      <p className="font-mono text-xs font-medium text-primary">Pearson r(x, y)</p>
+                      <p className="mt-0.5 font-mono text-[11px] tabular-nums text-primary/90">
+                        {fmtNum(preview.correlation, 4)} — {corrStrength(preview.correlation)} linear
+                        signal
+                      </p>
+                    </div>
+                  ) : null}
+                  {preview.classBalance ? (
+                    <div className="rounded-md border border-primary/25 bg-primary/5 px-3 py-2">
+                      <p className="font-mono text-xs font-medium text-primary">Class balance</p>
+                      <p className="mt-0.5 font-mono text-[11px] tabular-nums text-primary/90">
+                        {preview.classBalance
+                          .map(
+                            (c) =>
+                              `class ${c.label}: ${c.count} (${c.pct.toFixed(1)}%)`
+                          )
+                          .join(" · ")}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </CardContent>
+            ) : null}
+          </Card>
+        ) : null}
+
         {!result && status !== "running" ? (
           <Card className="py-0 shadow-sm">
             <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">

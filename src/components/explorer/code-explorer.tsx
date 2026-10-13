@@ -31,6 +31,8 @@ export function CodeExplorer() {
 
   const selectedFile = useToolkitStore((s) => s.selectedFile);
   const setSelectedFile = useToolkitStore((s) => s.setSelectedFile);
+  const targetLine = useToolkitStore((s) => s.targetLine);
+  const setTargetLine = useToolkitStore((s) => s.setTargetLine);
 
   const [content, setContent] = useState<FileContentResponse | null>(null);
   const [fileStatus, setFileStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -265,6 +267,8 @@ export function CodeExplorer() {
               fileName={content.path.split("/").pop() ?? content.path}
               showLineNumbers
               maxHeightClass="max-h-[70vh]"
+              highlightLine={targetLine}
+              onClearHighlight={() => setTargetLine(null)}
             />
           ) : null}
         </CardContent>

@@ -41,7 +41,10 @@ for mod_name, blurb in MODULES:
         if inspect.isclass(obj):
             kind = "class"
             doc = inspect.getdoc(obj)
-        elif inspect.isfunction(obj):
+        elif inspect.isroutine(obj) or inspect.isfunction(inspect.unwrap(obj)):
+            # isroutine + unwrap covers plain functions, builtins and
+            # wrappers such as functools.lru_cache (previously these fell
+            # through to the "constant" branch and were misclassified).
             kind = "function"
             doc = inspect.getdoc(obj)
         elif inspect.ismodule(obj):
