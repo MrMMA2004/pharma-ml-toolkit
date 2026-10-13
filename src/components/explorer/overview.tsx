@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useRef } from "react";
+import { motion, useInView } from "framer-motion";
 import {
   ArrowRight,
   BookOpen,
@@ -33,6 +33,7 @@ import { CodeBlock } from "@/components/explorer/code-block";
 import { StatChip } from "@/components/explorer/stat-chip";
 import { useToolkitStore } from "@/lib/store";
 import { fmtBytes, fmtInt } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { TreeNode } from "@/lib/toolkit-types";
 
 /** Depth-first lookup of a node by exact path (hero notebook metadata). */
@@ -217,6 +218,10 @@ export function Overview() {
     void ensureTree();
   }, [ensureTree]);
 
+  /* Sparkline animates only once the featured card scrolls into view. */
+  const sparkRef = useRef<HTMLDivElement>(null);
+  const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
+
   const fileCount = stats ? fmtInt(stats.files) : "51";
   const loc = stats ? fmtInt(stats.totalLines) : "8,258";
 
@@ -286,24 +291,28 @@ export function Overview() {
               <StatChip
                 icon={FileCode2}
                 value={treeStatus === "loading" ? "…" : fileCount}
+                countTo={treeStatus === "loading" ? undefined : stats?.files}
                 label="source files"
                 hint="Whole package: src, tests, examples, CI"
               />
               <StatChip
                 icon={Sigma}
                 value={treeStatus === "loading" ? "…" : loc}
+                countTo={treeStatus === "loading" ? undefined : stats?.totalLines}
                 label="lines of code"
                 hint="Counted live from the file tree"
               />
               <StatChip
                 icon={CircleCheck}
                 value="177"
+                countTo={177}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
               <StatChip
                 icon={Brain}
                 value="15"
+                countTo={15}
                 label="registry models"
                 hint="sklearn core + optional boosters"
               />
@@ -370,7 +379,11 @@ export function Overview() {
 
               {/* Mock notebook preview: two cells + animated R² sparkline. */}
               <div
-                className="space-y-1.5 rounded-lg border bg-muted/30 p-2.5"
+                ref={sparkRef}
+                className={cn(
+                  "space-y-1.5 rounded-lg border bg-muted/30 p-2.5",
+                  sparkInView && "spark-live"
+                )}
                 aria-hidden
               >
                 <div className="flex items-center gap-1.5 font-mono text-[9px] leading-none text-muted-foreground">

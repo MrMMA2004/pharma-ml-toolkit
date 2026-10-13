@@ -47,6 +47,30 @@ const ML_RESULT_STORAGE_KEY = "pharmaml.mlResult";
 /** Hard cap on the persisted ML result JSON size (bytes). */
 const ML_RESULT_MAX_BYTES = 400_000;
 
+/** sessionStorage key for the ML run history (newest first). */
+const ML_HISTORY_STORAGE_KEY = "pharmaml.mlHistory";
+
+/** Maximum training runs kept in the history strip. */
+export const ML_HISTORY_LIMIT = 5;
+
+/** One completed training run: config snapshot + full result, for restore. */
+export interface MlRunRecord {
+  /** Epoch-milliseconds id (also the creation time). */
+  id: number;
+  /** ISO timestamp of when the run finished. */
+  at: string;
+  task: "regression" | "classification";
+  model: string;
+  /** Display name of the headline metric, e.g. "R²" or "Accuracy". */
+  keyMetric: string;
+  /** Value of the headline metric. */
+  keyValue: number;
+  /** Config snapshot that produced the run. */
+  config: MlConfig;
+  /** Full training response (restored verbatim). */
+  result: MLTrainResponse;
+}
+
 /** Read the persisted recent-files list (client only, failure-tolerant). */
 function loadRecentFiles(): string[] {
   if (typeof window === "undefined") return [];
@@ -278,6 +302,81 @@ function loadMlResult(): MLTrainResponse | null {
   }
 }
 
+/** Validate a persisted run-history payload; malformed entries are skipped.
+ * Accepts both the current `{ currentId, runs }` shape and the legacy bare
+ * array (current run = newest). */
+function validateMlHistoryPayload(raw: unknown): {
+  runs: MlRunRecord[];
+  currentId: number | null;
+} {
+  const body = Array.isArray(raw) ? { runs: raw, currentId: undefined } : raw;
+  if (typeof body !== "object" || body === null || !Array.isArray((body as { runs?: unknown }).runs)) {
+    return { runs: [], currentId: null };
+  }
+  const runs: MlRunRecord[] = [];
+  for (const item of ((body as { runs: unknown[] }).runs).slice(0, ML_HISTORY_LIMIT)) {
+    if (typeof item !== "object" || item === null) continue;
+    const r = item as Record<string, unknown>;
+    const result = validateMlResult(r.result);
+    if (
+      !result ||
+      typeof r.id !== "number" ||
+      !Number.isFinite(r.id) ||
+      typeof r.at !== "string" ||
+      r.at.length > 40 ||
+      (r.task !== "regression" && r.task !== "classification") ||
+      typeof r.model !== "string" ||
+      r.model.length > 40 ||
+      typeof r.keyMetric !== "string" ||
+      r.keyMetric.length > 16 ||
+      typeof r.keyValue !== "number" ||
+      !Number.isFinite(r.keyValue)
+    ) {
+      continue;
+    }
+    runs.push({
+      id: r.id,
+      at: r.at,
+      task: r.task,
+      model: r.model,
+      keyMetric: r.keyMetric,
+      keyValue: r.keyValue,
+      config: validateMl(r.config),
+      result,
+    });
+  }
+  const rawId = (body as { currentId?: unknown }).currentId;
+  const currentId =
+    typeof rawId === "number" && Number.isFinite(rawId) && runs.some((h) => h.id === rawId)
+      ? rawId
+      : (runs[0]?.id ?? null);
+  return { runs, currentId };
+}
+
+/** Read the persisted run history (client only, failure-tolerant). */
+function loadMlHistory(): { runs: MlRunRecord[]; currentId: number | null } {
+  if (typeof window === "undefined") return { runs: [], currentId: null };
+  try {
+    const raw = window.sessionStorage.getItem(ML_HISTORY_STORAGE_KEY);
+    if (!raw) return { runs: [], currentId: null };
+    return validateMlHistoryPayload(JSON.parse(raw));
+  } catch {
+    return { runs: [], currentId: null }; // corrupted JSON / private mode — start fresh
+  }
+}
+
+/** Persist the run history + current-run pointer (client only, best-effort). */
+function saveMlHistory(history: MlRunRecord[], currentId: number | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    const json = JSON.stringify({ currentId, runs: history });
+    if (json.length > 1_200_000) return; // oversized — persistence is optional
+    window.sessionStorage.setItem(ML_HISTORY_STORAGE_KEY, json);
+  } catch {
+    /* quota exceeded or private mode — persistence is optional */
+  }
+}
+
 /** Persist the ML training result (client only, size-capped, best-effort). */
 function saveMlResult(result: MLTrainResponse | null): void {
   if (typeof window === "undefined") return;
@@ -407,6 +506,14 @@ interface ToolkitStore {
   mlPreview: DatasetPreviewResponse | null;
   setMlPreview: (preview: DatasetPreviewResponse | null) => void;
 
+  /** Recent training runs (newest first) — persisted so the strip survives reloads. */
+  mlHistory: MlRunRecord[];
+  pushMlRun: (record: MlRunRecord) => void;
+  clearMlHistory: () => void;
+  /** Id of the run whose result is currently displayed (drives the badge). */
+  mlCurrentRunId: number | null;
+  setMlCurrentRun: (id: number | null) => void;
+
   tree: TreeNode | null;
   stats: TreeStats | null;
   treeStatus: TreeStatus;
@@ -423,6 +530,9 @@ function pushRecent(recent: string[], path: string): string[] {
 
 /** Session-restored playground snapshot ({} on the server / fresh session). */
 const persistedPlayground = loadPlayground();
+
+/** Session-restored ML run history (empty on the server / fresh session). */
+const persistedMlHistory = loadMlHistory();
 
 export const useToolkitStore = create<ToolkitStore>((set, get) => ({
   tab: "overview",
@@ -508,6 +618,25 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
   },
   mlPreview: null,
   setMlPreview: (preview) => set({ mlPreview: preview }),
+
+  mlHistory: persistedMlHistory.runs,
+  pushMlRun: (record) => {
+    const mlHistory = [
+      record,
+      ...get().mlHistory.filter((h) => h.id !== record.id),
+    ].slice(0, ML_HISTORY_LIMIT);
+    set({ mlHistory, mlCurrentRunId: record.id });
+    saveMlHistory(mlHistory, record.id);
+  },
+  clearMlHistory: () => {
+    saveMlHistory([], null);
+    set({ mlHistory: [], mlCurrentRunId: null });
+  },
+  mlCurrentRunId: persistedMlHistory.currentId,
+  setMlCurrentRun: (id) => {
+    set({ mlCurrentRunId: id });
+    saveMlHistory(get().mlHistory, id);
+  },
 
   tree: null,
   stats: null,

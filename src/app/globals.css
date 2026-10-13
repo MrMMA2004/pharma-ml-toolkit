@@ -378,11 +378,17 @@
   border-color: color-mix(in oklch, var(--primary) 45%, transparent);
 }
 
-/* ---- Featured card: mock notebook preview + animated sparkline ---- */
+/* ---- Featured card: mock notebook preview + animated sparkline ----
+ * The sparkline sits idle (hidden stroke, dimmed dots) until the card
+ * scrolls into view — the component then adds `.spark-live`, which starts
+ * the draw-in, dot-pop and pulse animations. */
 .sparkline-draw {
   stroke-dasharray: 260;
   stroke-dashoffset: 260;
-  animation: spark-draw 1.5s cubic-bezier(0.4, 0, 0.2, 1) 0.7s forwards;
+}
+
+.spark-live .sparkline-draw {
+  animation: spark-draw 1.5s cubic-bezier(0.4, 0, 0.2, 1) 0.15s forwards;
 }
 
 @keyframes spark-draw {
@@ -395,7 +401,10 @@
   opacity: 0;
   transform-box: fill-box;
   transform-origin: center;
-  animation: spark-dot-pop 0.4s ease-out 2.1s forwards;
+}
+
+.spark-live .spark-dot {
+  animation: spark-dot-pop 0.4s ease-out 1.55s forwards;
 }
 
 @keyframes spark-dot-pop {
@@ -414,7 +423,11 @@
 }
 
 .spark-dot-pulse {
-  animation: spark-dot-pulse 2.2s ease-in-out 2.5s infinite;
+  opacity: 0;
+}
+
+.spark-live .spark-dot-pulse {
+  animation: spark-dot-pulse 2.2s ease-in-out 2s infinite;
 }
 
 @keyframes spark-dot-pulse {

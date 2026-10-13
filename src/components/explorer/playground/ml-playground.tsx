@@ -1,7 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Brain, ChevronDown, Download, Loader2, Play, RotateCcw, Table2, TriangleAlert, ZoomIn } from "lucide-react";
+import {
+  Brain,
+  ChevronDown,
+  Download,
+  Eraser,
+  History,
+  Loader2,
+  Play,
+  RotateCcw,
+  Table2,
+  TrendingDown,
+  TrendingUp,
+  TriangleAlert,
+  ZoomIn,
+} from "lucide-react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -45,7 +59,7 @@ import { CHART } from "@/components/explorer/playground/calc-ui";
 import { fmtBytes, fmtNum, fmtTick } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { DEFAULT_ML_CONFIG, useToolkitStore } from "@/lib/store";
+import { DEFAULT_ML_CONFIG, useToolkitStore, type MlRunRecord } from "@/lib/store";
 import type {
   DatasetPreviewResponse,
   MLTrainResponse,
@@ -104,6 +118,17 @@ function corrStrength(r: number): string {
   return "weak";
 }
 
+/** Compact "time ago" label for run-history rows (client-side only). */
+function timeAgo(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
 export function MlPlayground() {
   /* Experiment setup + results live in the store, so the whole playground
    * (config, trained model, dataset preview) survives tab switches. */
@@ -114,6 +139,11 @@ export function MlPlayground() {
   const setResult = useToolkitStore((s) => s.setMlResult);
   const preview = useToolkitStore((s) => s.mlPreview);
   const setPreview = useToolkitStore((s) => s.setMlPreview);
+  const mlHistory = useToolkitStore((s) => s.mlHistory);
+  const pushMlRun = useToolkitStore((s) => s.pushMlRun);
+  const clearMlHistory = useToolkitStore((s) => s.clearMlHistory);
+  const mlCurrentRunId = useToolkitStore((s) => s.mlCurrentRunId);
+  const setMlCurrentRun = useToolkitStore((s) => s.setMlCurrentRun);
 
   const { task, samples, noise, regModel, alpha, l2, testSizePct, cv, seed } = mlConfig;
 
@@ -294,13 +324,44 @@ export function MlPlayground() {
             : `HTTP ${res.status}`;
         throw new Error(message);
       }
-      setResult(data as MLTrainResponse);
+      const payload = data as MLTrainResponse;
+      setResult(payload);
       setStatus("done");
+      /* Record the completed run in the history strip (restorable). */
+      const key = payload.task === "regression" ? "r2" : "accuracy";
+      const keyValue = payload.metrics[key];
+      if (typeof keyValue === "number" && Number.isFinite(keyValue)) {
+        pushMlRun({
+          id: Date.now(),
+          at: new Date().toISOString(),
+          task: payload.task,
+          model: payload.model,
+          keyMetric: payload.task === "regression" ? "R²" : "Accuracy",
+          keyValue,
+          config: { ...mlConfig },
+          result: payload,
+        });
+      }
     } catch (err) {
       setStatus("error");
       const message = err instanceof Error ? err.message : "Training request failed.";
       setError(message);
     }
+  }
+
+  /** Restore a previous run: config snapshot + full result + charts. */
+  function restoreRun(rec: MlRunRecord) {
+    setMlConfig(rec.config);
+    setResult(rec.result);
+    setMlCurrentRun(rec.id);
+    setStatus("done");
+    setError(null);
+    setXZoom(null);
+    toast.success("Run restored", {
+      description: `${rec.model} · seed ${rec.config.seed} · ${
+        rec.keyMetric
+      } ${fmtNum(rec.keyValue, 4)}`,
+    });
   }  /** Fetch the first rows + summary stats of the (deterministic) dataset. */
   async function previewDataset() {
     if (!seedValid) {
@@ -1161,6 +1222,127 @@ export function MlPlayground() {
               </Card>
             </div>
           </>
+        ) : null}
+
+        {/* ------------------------------ Run history ------------------------------ */}
+        {mlHistory.length > 0 ? (
+          <Card className="overflow-hidden py-0 shadow-sm">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/30 py-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <History className="size-4.5" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <CardTitle className="text-base">Run history</CardTitle>
+                  <CardDescription className="text-xs">
+                    Last {mlHistory.length} training{" "}
+                    {mlHistory.length === 1 ? "run" : "runs"} · survives reloads · Restore
+                    reloads the config and results
+                  </CardDescription>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={clearMlHistory}
+                aria-label="Clear the run history"
+              >
+                <Eraser className="size-3.5" aria-hidden />
+                Clear
+              </Button>
+            </CardHeader>
+            <CardContent className="py-0">
+              <ul className="divide-y">
+                {mlHistory.map((rec, i) => {
+                  /* Newest-first list: the run *before* this one is i + 1. */
+                  const prev = mlHistory[i + 1];
+                  const delta = prev ? rec.keyValue - prev.keyValue : null;
+                  const isCurrent = result !== null && rec.id === mlCurrentRunId;
+                  const up = delta !== null && delta >= 0;
+                  return (
+                    <li
+                      key={rec.id}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-primary/5",
+                        isCurrent && "bg-primary/5"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center rounded-md border font-mono text-[10px] font-semibold uppercase",
+                          isCurrent
+                            ? "border-primary/30 bg-primary/10 text-primary"
+                            : "bg-muted/40 text-muted-foreground"
+                        )}
+                        title={rec.task}
+                      >
+                        {rec.task === "regression" ? "reg" : "cls"}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-mono text-xs font-medium">
+                          {rec.model}
+                          <span className="font-normal text-muted-foreground">
+                            {" "}
+                            · seed {rec.config.seed} · n{rec.config.samples} · noise{" "}
+                            {rec.config.noise}
+                          </span>
+                        </p>
+                        <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          {timeAgo(rec.at)}
+                          {isCurrent ? (
+                            <span className="rounded-sm border border-primary/30 bg-primary/10 px-1 font-mono text-[9px] font-semibold uppercase text-primary">
+                              current
+                            </span>
+                          ) : null}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="font-mono text-sm font-semibold tabular-nums">
+                          {fmtNum(rec.keyValue, 4)}
+                          <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                            {rec.keyMetric}
+                          </span>
+                        </p>
+                        {delta !== null ? (
+                          <p
+                            className={cn(
+                              "flex items-center justify-end gap-0.5 font-mono text-[10px] tabular-nums",
+                              up ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+                            )}
+                            title="Change vs the previous run"
+                          >
+                            {up ? (
+                              <TrendingUp className="size-3" aria-hidden />
+                            ) : (
+                              <TrendingDown className="size-3" aria-hidden />
+                            )}
+                            {up ? "+" : "−"}
+                            {fmtNum(Math.abs(delta), 3)}
+                          </p>
+                        ) : (
+                          <p className="font-mono text-[10px] text-muted-foreground/60">—</p>
+                        )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 shrink-0 px-2.5 text-xs"
+                        onClick={() => restoreRun(rec)}
+                        aria-label={`Restore run ${rec.model} seed ${rec.config.seed}`}
+                        disabled={isCurrent}
+                      >
+                        <RotateCcw className="size-3.5" aria-hidden />
+                        <span className="hidden sm:inline">
+                          {isCurrent ? "Current" : "Restore"}
+                        </span>
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
         ) : null}
       </div>
     </div>

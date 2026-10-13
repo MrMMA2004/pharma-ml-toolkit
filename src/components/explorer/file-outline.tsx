@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Braces,
+  Check,
   ChevronDown,
+  ClipboardCopy,
   Hash,
   ListTree,
   Parentheses,
@@ -17,6 +19,8 @@ import {
 } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { copyToClipboard } from "@/lib/format";
+import { toast } from "sonner";
 import {
   extractOutline,
   OUTLINE_KIND_LABEL,
@@ -35,6 +39,18 @@ const KIND_ICON: Record<OutlineKind, typeof Braces> = {
   section: ChevronDown,
 };
 
+/** Render the outline as an indented markdown list (for notes / docs). */
+function outlineToMarkdown(filePath: string, symbols: OutlineSymbol[]): string {
+  const fileName = filePath.split("/").pop() ?? filePath;
+  const lines = [`## Outline — ${fileName}`, ""];
+  for (const s of symbols) {
+    const indent = "  ".repeat(Math.min(s.depth, 4));
+    const label = s.kind === "heading" || s.kind === "section" ? s.name : `\`${s.name}\``;
+    lines.push(`${indent}- ${label} — L${s.line}`);
+  }
+  return lines.join("\n");
+}
+
 interface FileOutlineProps {
   code: string;
   language: string;
@@ -43,6 +59,8 @@ interface FileOutlineProps {
   /** Currently topmost visible line in the code pane (scroll-spy). The last
    * symbol at or above it renders as the active row. */
   activeLine?: number | null;
+  /** Toolkit-relative file path — used to title the markdown export. */
+  filePath?: string;
 }
 
 /**
@@ -51,8 +69,9 @@ interface FileOutlineProps {
  * symbol scrolls the code pane to that line and pins the highlight; the
  * row matching the pane's scroll position (scroll-spy) stays emphasized.
  */
-export function FileOutline({ code, language, onJump, activeLine }: FileOutlineProps) {
+export function FileOutline({ code, language, onJump, activeLine, filePath }: FileOutlineProps) {
   const [open, setOpen] = useState(true);
+  const [copied, setCopied] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const symbols = useMemo(() => extractOutline(code, language), [code, language]);
 
@@ -82,6 +101,21 @@ export function FileOutline({ code, language, onJump, activeLine }: FileOutlineP
 
   if (symbols.length < MIN_SYMBOLS) return null;
 
+  /** Copy the outline as a markdown checklist (file path title + indented list). */
+  async function copyOutline() {
+    const markdown = outlineToMarkdown(filePath ?? "file", symbols);
+    const ok = await copyToClipboard(markdown);
+    if (ok) {
+      setCopied(true);
+      toast.success("Outline copied as markdown", {
+        description: `${symbols.length} symbols · ${filePath ?? "file"}`,
+      });
+      window.setTimeout(() => setCopied(false), 1600);
+    } else {
+      toast.error("Could not copy — your browser blocked clipboard access");
+    }
+  }
+
   const counts = symbols.reduce<Record<string, number>>((acc, s) => {
     acc[s.kind] = (acc[s.kind] ?? 0) + 1;
     return acc;
@@ -97,25 +131,40 @@ export function FileOutline({ code, language, onJump, activeLine }: FileOutlineP
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className="rounded-lg border bg-muted/20 shadow-sm"
+      className="overflow-hidden rounded-lg border bg-muted/20 shadow-sm"
     >
-      <CollapsibleTrigger
-        className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        aria-label={open ? "Collapse file outline" : "Expand file outline"}
-      >
-        <ListTree className="size-4 shrink-0 text-primary" aria-hidden />
-        <span className="text-sm font-medium">Outline</span>
-        <Badge variant="secondary" className="shrink-0 tabular-nums">
-          {symbols.length}
-        </Badge>
-        <span className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground sm:block">
-          {kindSummary}
-        </span>
-        <ChevronDown
-          className="ml-auto size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
-          aria-hidden
-        />
-      </CollapsibleTrigger>
+      <div className="flex items-stretch">
+        <CollapsibleTrigger
+          className="group flex min-w-0 flex-1 items-center gap-2 rounded-l-lg px-3 py-2 text-left transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+          aria-label={open ? "Collapse file outline" : "Expand file outline"}
+        >
+          <ListTree className="size-4 shrink-0 text-primary" aria-hidden />
+          <span className="text-sm font-medium">Outline</span>
+          <Badge variant="secondary" className="shrink-0 tabular-nums">
+            {symbols.length}
+          </Badge>
+          <span className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground sm:block">
+            {kindSummary}
+          </span>
+          <ChevronDown
+            className="ml-auto size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+            aria-hidden
+          />
+        </CollapsibleTrigger>
+        <button
+          type="button"
+          onClick={() => void copyOutline()}
+          aria-label="Copy the outline as a markdown list"
+          title="Copy outline as markdown"
+          className="flex w-10 shrink-0 items-center justify-center border-l border-border/60 text-muted-foreground transition-colors hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+        >
+          {copied ? (
+            <Check className="size-4 text-primary" aria-hidden />
+          ) : (
+            <ClipboardCopy className="size-4" aria-hidden />
+          )}
+        </button>
+      </div>
       <CollapsibleContent>
         <nav
           ref={navRef}

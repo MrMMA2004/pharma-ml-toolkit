@@ -167,21 +167,42 @@ export function CodeExplorer() {
     }
   }, [jumpTarget, openFileAtLine]);
 
+  /* Scroll-spy: topmost visible line in the code pane → active outline row.
+   * The spy state is tagged with the file it belongs to, so switching files
+   * can never leak the previous file's active line. Reports are suppressed
+   * for a short window after any programmatic jump (outline click or deep
+   * link) so the smooth scroll never flashes intermediate symbols. */
+  const [spy, setSpy] = useState<{ file: string; line: number } | null>(null);
+  const spySuppressUntilRef = useRef(0);
+  useEffect(() => {
+    if (targetLine !== null) {
+      spySuppressUntilRef.current = Date.now() + 900;
+    }
+  }, [targetLine]);
+  const handleVisibleLine = useCallback(
+    (line: number) => {
+      if (Date.now() < spySuppressUntilRef.current) return;
+      setSpy((prev) =>
+        prev && prev.file === selectedFile && prev.line === line
+          ? prev
+          : { file: selectedFile, line }
+      );
+    },
+    [selectedFile]
+  );
+  const activeOutlineLine = spy && spy.file === selectedFile ? spy.line : null;
+
   /** Jump to a line in the *currently open* file: clearing first makes
    * repeated clicks on the same symbol re-trigger the scroll effect. */
   const jumpInFile = useCallback(
     (line: number) => {
+      // The jumped-to symbol becomes the active outline row immediately.
+      setSpy({ file: selectedFile, line });
       setTargetLine(null);
       requestAnimationFrame(() => setTargetLine(line));
     },
-    [setTargetLine]
+    [setTargetLine, selectedFile]
   );
-
-  /* Scroll-spy: topmost visible line in the code pane → active outline row. */
-  const [visibleLine, setVisibleLine] = useState<number | null>(null);
-  const handleVisibleLine = useCallback((line: number) => {
-    setVisibleLine((prev) => (prev === line ? prev : line));
-  }, []);
 
   const filteredTree = useMemo(() => {
     if (!tree || !searchActive) return tree;
@@ -441,7 +462,8 @@ export function CodeExplorer() {
                 code={content.content}
                 language={content.language}
                 onJump={jumpInFile}
-                activeLine={visibleLine}
+                activeLine={activeOutlineLine}
+                filePath={content.path}
               />
               <CodeBlock
                 code={content.content}
