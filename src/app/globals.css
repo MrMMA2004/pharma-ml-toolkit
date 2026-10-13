@@ -378,6 +378,55 @@
   border-color: color-mix(in oklch, var(--primary) 45%, transparent);
 }
 
+/* ---- Featured card: mock notebook preview + animated sparkline ---- */
+.sparkline-draw {
+  stroke-dasharray: 260;
+  stroke-dashoffset: 260;
+  animation: spark-draw 1.5s cubic-bezier(0.4, 0, 0.2, 1) 0.7s forwards;
+}
+
+@keyframes spark-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.spark-dot {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spark-dot-pop 0.4s ease-out 2.1s forwards;
+}
+
+@keyframes spark-dot-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.spark-dot-pulse {
+  animation: spark-dot-pulse 2.2s ease-in-out 2.5s infinite;
+}
+
+@keyframes spark-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
 /* ---- Reduced motion: no flash, no ping, no smooth scroll, no lift ---- */
 @media (prefers-reduced-motion: reduce) {
   .code-line-highlight {
@@ -401,6 +450,18 @@
   }
   .featured-card:hover {
     transform: none;
+  }
+  .sparkline-draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .spark-dot {
+    animation: none;
+    opacity: 1;
+  }
+  .spark-dot-pulse {
+    animation: none;
+    opacity: 0;
   }
 }
 

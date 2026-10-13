@@ -72,6 +72,9 @@ interface CodeBlockProps {
    * clicking any line copies "<path>#L<line>" to the clipboard.
    */
   permalinkPath?: string;
+  /** Called (rAF-throttled) with the topmost visible 1-based line while the
+   * pane scrolls — powers the outline's active-symbol scroll-spy. */
+  onVisibleLineChange?: (line: number) => void;
   className?: string;
 }
 
@@ -84,6 +87,7 @@ export function CodeBlock({
   highlightLine = null,
   onClearHighlight,
   permalinkPath,
+  onVisibleLineChange,
   className,
 }: CodeBlockProps) {
   const { resolvedTheme } = useTheme();
@@ -112,6 +116,36 @@ export function CodeBlock({
     }, 80);
     return () => window.clearTimeout(timer);
   }, [hasHighlight, highlightLine, code]);
+
+  /* Scroll-spy: report the topmost fully-relevant visible line (rAF-throttled)
+   * so the file outline can track the active symbol while scrolling. Only
+   * active when the pane wraps lines (`.code-line` wrappers exist). */
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container || !onVisibleLineChange || !wrapLines) return;
+    let raf = 0;
+    const report = () => {
+      raf = 0;
+      const lines = container.querySelectorAll<HTMLElement>(".code-line");
+      for (const line of lines) {
+        // First line whose bottom edge sits below the viewport top (+4px slack).
+        if (line.offsetTop + line.offsetHeight > container.scrollTop + 4) {
+          const match = /(?:^|\s)cl-(\d+)(?:\s|$)/.exec(line.className);
+          if (match) onVisibleLineChange(Number(match[1]));
+          break;
+        }
+      }
+    };
+    const onScroll = () => {
+      if (raf === 0) raf = window.requestAnimationFrame(report);
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    report(); // report the initial position (line 1) without scrolling
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      if (raf !== 0) window.cancelAnimationFrame(raf);
+    };
+  }, [code, wrapLines, onVisibleLineChange]);
 
   async function handleCopy() {
     const ok = await copyToClipboard(code);

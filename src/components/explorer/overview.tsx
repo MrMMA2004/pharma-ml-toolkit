@@ -318,20 +318,26 @@ export function Overview() {
             >
               <Button
                 size="lg"
-                className="h-11 gap-2"
+                className="group h-11 gap-2"
                 onClick={() => setTab("explorer")}
               >
                 <BookOpen className="size-4" aria-hidden />
                 Explore the code
-                <ArrowRight className="size-4" aria-hidden />
+                <ArrowRight
+                  className="size-4 transition-transform duration-200 group-hover:translate-x-1"
+                  aria-hidden
+                />
               </Button>
               <Button
                 size="lg"
                 variant="outline"
-                className="h-11 gap-2"
+                className="group h-11 gap-2"
                 onClick={() => setTab("download")}
               >
-                <FileArchive className="size-4" aria-hidden />
+                <FileArchive
+                  className="size-4 transition-transform duration-200 group-hover:translate-y-[-1px]"
+                  aria-hidden
+                />
                 Download ZIP
               </Button>
             </motion.div>
@@ -361,6 +367,77 @@ export function Overview() {
                 One notebook, the whole toolkit: pharmaceutical calculations, a QSAR training
                 pipeline, and docking rescoring — ready to run top-to-bottom.
               </p>
+
+              {/* Mock notebook preview: two cells + animated R² sparkline. */}
+              <div
+                className="space-y-1.5 rounded-lg border bg-muted/30 p-2.5"
+                aria-hidden
+              >
+                <div className="flex items-center gap-1.5 font-mono text-[9px] leading-none text-muted-foreground">
+                  <span className="rounded-sm bg-emerald-500/15 px-1 py-0.5 text-emerald-600 dark:text-emerald-400">
+                    In [1–14]
+                  </span>
+                  <span className="ml-auto">executed top-to-bottom</span>
+                </div>
+                <div className="rounded-md border bg-background/70 px-2.5 py-1.5 font-mono text-[10px] leading-relaxed">
+                  <span className="text-primary">from</span>{" "}
+                  <span className="text-muted-foreground">pharmaml.pharma</span>{" "}
+                  <span className="text-primary">import</span>{" "}
+                  <span className="text-muted-foreground">loading_dose</span>
+                </div>
+                <div className="space-y-1.5 rounded-md border bg-background/70 px-2.5 py-1.5">
+                  <div className="font-mono text-[10px] leading-relaxed">
+                    <span className="text-primary">rescore</span>
+                    <span className="text-muted-foreground">(docking_poses)</span>
+                  </div>
+                  {/* Sparkline: R² progression across the walkthrough stages. */}
+                  <svg
+                    viewBox="0 0 230 36"
+                    className="block h-9 w-full"
+                    preserveAspectRatio="none"
+                    role="presentation"
+                  >
+                    <defs>
+                      <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.22" />
+                        <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      d="M0,20.2 L32,16.6 L64,14.4 L96,12.1 L128,9 L160,7.4 L192,5.7 L224,4.8 L224,36 L0,36 Z"
+                      fill="url(#sparkFill)"
+                    />
+                    <polyline
+                      points="0,20.2 32,16.6 64,14.4 96,12.1 128,9 160,7.4 192,5.7 224,4.8"
+                      fill="none"
+                      stroke="var(--primary)"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="sparkline-draw"
+                    />
+                    <circle
+                      cx="224"
+                      cy="4.8"
+                      r="2.75"
+                      fill="var(--primary)"
+                      className="spark-dot"
+                    />
+                    <circle
+                      cx="224"
+                      cy="4.8"
+                      r="5.5"
+                      fill="var(--primary)"
+                      className="spark-dot-pulse"
+                    />
+                  </svg>
+                  <div className="flex items-center justify-between font-mono text-[9px] leading-none text-muted-foreground">
+                    <span>test R² · stages 1→14</span>
+                    <span className="font-semibold text-primary">0.42 → 0.97</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono tabular-nums">
                   {notebookMeta ? fmtBytes(notebookMeta.size) : "…"}

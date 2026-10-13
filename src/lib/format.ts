@@ -73,6 +73,30 @@ export function fuzzyScore(query: string, target: string): number | null {
   return score - Math.min(20, (t.length - q.length) * 0.5);
 }
 
+/**
+ * Indices of the characters in `target` matched by the fuzzy query
+ * (case-insensitive), consistent with `fuzzyScore`'s walk: an exact substring
+ * highlights the whole substring; otherwise the subsequence positions.
+ * Returns `null` when the query does not match, `[]` for an empty query.
+ */
+export function fuzzyMatchIndices(query: string, target: string): number[] | null {
+  const q = query.trim().toLowerCase();
+  const t = target.toLowerCase();
+  if (q.length === 0) return [];
+  const subIdx = t.indexOf(q);
+  if (subIdx >= 0) {
+    return Array.from({ length: q.length }, (_, i) => subIdx + i);
+  }
+  const indices: number[] = [];
+  let qi = 0;
+  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+    if (t[ti] !== q[qi]) continue;
+    indices.push(ti);
+    qi += 1;
+  }
+  return qi === q.length ? indices : null;
+}
+
 /** Copy text to the clipboard with a legacy fallback. */
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {

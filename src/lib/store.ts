@@ -41,6 +41,12 @@ const RECENT_STORAGE_KEY = "pharmaml.recentFiles";
 /** sessionStorage key for playground state (PK regimen + ML setup + sub-tab). */
 const PLAYGROUND_STORAGE_KEY = "pharmaml.playground";
 
+/** sessionStorage key for the last ML training result (metrics + chart series). */
+const ML_RESULT_STORAGE_KEY = "pharmaml.mlResult";
+
+/** Hard cap on the persisted ML result JSON size (bytes). */
+const ML_RESULT_MAX_BYTES = 400_000;
+
 /** Read the persisted recent-files list (client only, failure-tolerant). */
 function loadRecentFiles(): string[] {
   if (typeof window === "undefined") return [];
@@ -127,6 +133,167 @@ function validateMl(raw: unknown): MlConfig {
   };
 }
 
+/* ---- ML result persistence (last training run: metrics + chart series) ----
+ * Restored field-by-field with the same defensive validation as the rest of
+ * the persisted state; anything malformed falls back to "no result". */
+
+function finiteArray(raw: unknown, cap: number, validate: (v: unknown) => boolean): unknown[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > cap) return null;
+  return raw.every(validate) ? raw : null;
+}
+
+const isFiniteNumber = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v);
+
+const isPoint = (v: unknown): boolean => {
+  if (typeof v !== "object" || v === null) return false;
+  const p = v as Record<string, unknown>;
+  return isFiniteNumber(p.x) && isFiniteNumber(p.y);
+};
+
+const isCurvePoint = (v: unknown): boolean => {
+  if (typeof v !== "object" || v === null) return false;
+  const p = v as Record<string, unknown>;
+  return isFiniteNumber(p.x) && isFiniteNumber(p.yhat);
+};
+
+const isBoundaryPoint = (v: unknown): boolean => {
+  if (typeof v !== "object" || v === null) return false;
+  const p = v as Record<string, unknown>;
+  return isFiniteNumber(p.x) && isFiniteNumber(p.y) && isFiniteNumber(p.pred);
+};
+
+/** Validate a persisted ML train response; null when unusable. */
+function validateMlResult(raw: unknown): MLTrainResponse | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (r.task !== "regression" && r.task !== "classification") return null;
+  if (typeof r.model !== "string" || r.model.length > 40) return null;
+
+  const metricsRaw = r.metrics;
+  if (typeof metricsRaw !== "object" || metricsRaw === null) return null;
+  const metrics: Record<string, number> = {};
+  for (const [k, v] of Object.entries(metricsRaw as Record<string, unknown>)) {
+    if (isFiniteNumber(v) && k.length <= 24) metrics[k] = v;
+  }
+  if (Object.keys(metrics).length === 0) return null;
+
+  const coefsRaw = r.coefficients;
+  if (typeof coefsRaw !== "object" || coefsRaw === null) return null;
+  const c = coefsRaw as Record<string, unknown>;
+  const coefsArr = finiteArray(c.coefs, 512, isFiniteNumber);
+  if (!isFiniteNumber(c.intercept) || !coefsArr || typeof c.standardized !== "boolean") {
+    return null;
+  }
+
+  const seriesRaw = r.series;
+  if (typeof seriesRaw !== "object" || seriesRaw === null) return null;
+  const s = seriesRaw as Record<string, unknown>;
+  const test = finiteArray(s.test, 1200, isPoint);
+  if (!test) return null;
+  const curve = finiteArray(s.curve, 400, isCurvePoint);
+  const boundary = finiteArray(s.boundary, 400, isBoundaryPoint);
+
+  const metaRaw = r.datasetMeta;
+  if (typeof metaRaw !== "object" || metaRaw === null) return null;
+  const m = metaRaw as Record<string, unknown>;
+  const features = Array.isArray(m.features)
+    ? m.features.filter((f): f is string => typeof f === "string" && f.length <= 24).slice(0, 12)
+    : [];
+  if (
+    !isFiniteNumber(m.nTotal) ||
+    !isFiniteNumber(m.nTrain) ||
+    !isFiniteNumber(m.nTest) ||
+    !isFiniteNumber(m.noise) ||
+    !isFiniteNumber(m.seed)
+  ) {
+    return null;
+  }
+
+  // Optional cross-validation summary — dropped when malformed.
+  let cv: MLTrainResponse["cv"];
+  if (typeof r.cv === "object" && r.cv !== null) {
+    const cvRaw = r.cv as Record<string, unknown>;
+    const folds = Array.isArray(cvRaw.folds)
+      ? cvRaw.folds.filter(
+          (f): f is { fold: number; value: number } =>
+            typeof f === "object" &&
+            f !== null &&
+            isFiniteNumber((f as Record<string, unknown>).fold) &&
+            isFiniteNumber((f as Record<string, unknown>).value)
+        )
+      : [];
+    if (
+      (cvRaw.k === 3 || cvRaw.k === 5 || cvRaw.k === 10) &&
+      typeof cvRaw.metricName === "string" &&
+      folds.length === cvRaw.k &&
+      isFiniteNumber(cvRaw.mean) &&
+      isFiniteNumber(cvRaw.std)
+    ) {
+      cv = {
+        k: cvRaw.k,
+        metricName: cvRaw.metricName,
+        folds,
+        mean: cvRaw.mean,
+        std: cvRaw.std,
+      };
+    }
+  }
+
+  return {
+    task: r.task,
+    model: r.model,
+    metrics,
+    cv,
+    coefficients: {
+      intercept: c.intercept as number,
+      coefs: coefsArr as number[],
+      standardized: c.standardized,
+    },
+    series: {
+      test: test as { x: number; y: number; label?: number }[],
+      ...(curve ? { curve: curve as { x: number; yhat: number }[] } : {}),
+      ...(boundary ? { boundary: boundary as { x: number; y: number; pred: number }[] } : {}),
+    },
+    datasetMeta: {
+      nTotal: m.nTotal,
+      nTrain: m.nTrain,
+      nTest: m.nTest,
+      noise: m.noise,
+      seed: m.seed,
+      features,
+    },
+  };
+}
+
+/** Read the persisted ML training result (client only, failure-tolerant). */
+function loadMlResult(): MLTrainResponse | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(ML_RESULT_STORAGE_KEY);
+    if (!raw) return null;
+    return validateMlResult(JSON.parse(raw));
+  } catch {
+    return null; // corrupted JSON / private mode — start fresh
+  }
+}
+
+/** Persist the ML training result (client only, size-capped, best-effort). */
+function saveMlResult(result: MLTrainResponse | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (result === null) {
+      window.sessionStorage.removeItem(ML_RESULT_STORAGE_KEY);
+      return;
+    }
+    const json = JSON.stringify(result);
+    if (json.length > ML_RESULT_MAX_BYTES) return; // oversized — persistence is optional
+    window.sessionStorage.setItem(ML_RESULT_STORAGE_KEY, json);
+  } catch {
+    /* quota exceeded or private mode — persistence is optional */
+  }
+}
+
 /** Read the persisted playground snapshot (client only, failure-tolerant). */
 function loadPlayground(): Partial<PlaygroundPersisted> {
   if (typeof window === "undefined") return {};
@@ -201,6 +368,10 @@ interface ToolkitStore {
   tab: TabId;
   setTab: (tab: TabId) => void;
 
+  /** Command palette open state (Ctrl/Cmd+K or the header button). */
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
+
   /** Currently selected file (relative path) in the code explorer. */
   selectedFile: string;
   setSelectedFile: (path: string) => void;
@@ -229,7 +400,7 @@ interface ToolkitStore {
   mlConfig: MlConfig;
   setMlConfig: (patch: Partial<MlConfig>) => void;
   resetMlConfig: () => void;
-  /** Last training result (rendered until the config changes). */
+  /** Last training result (rendered until the config changes; survives reloads). */
   mlResult: MLTrainResponse | null;
   setMlResult: (result: MLTrainResponse | null) => void;
   /** Last dataset-preview payload. */
@@ -256,6 +427,9 @@ const persistedPlayground = loadPlayground();
 export const useToolkitStore = create<ToolkitStore>((set, get) => ({
   tab: "overview",
   setTab: (tab) => set({ tab }),
+
+  paletteOpen: false,
+  setPaletteOpen: (open) => set({ paletteOpen: open }),
 
   selectedFile: "README.md",
   setSelectedFile: (path) =>
@@ -327,8 +501,11 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
       mlConfig: DEFAULT_ML_CONFIG,
     });
   },
-  mlResult: null,
-  setMlResult: (result) => set({ mlResult: result }),
+  mlResult: loadMlResult(),
+  setMlResult: (result) => {
+    set({ mlResult: result });
+    saveMlResult(result);
+  },
   mlPreview: null,
   setMlPreview: (preview) => set({ mlPreview: preview }),
 

@@ -19,11 +19,11 @@ export function StatChip({ icon: Icon, value, label, hint, className }: StatChip
       whileHover={{ y: -3 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
       className={cn(
-        "flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 shadow-sm",
+        "group flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 shadow-sm transition-colors hover:border-primary/40",
         className
       )}
     >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-all duration-200 group-hover:scale-105 group-hover:bg-primary/15">
         <Icon className="size-4.5" aria-hidden />
       </span>
       <div className="min-w-0">

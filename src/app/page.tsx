@@ -20,6 +20,10 @@ import { CodeExplorer } from "@/components/explorer/code-explorer";
 import { ApiReference } from "@/components/explorer/api-reference";
 import { Playground } from "@/components/explorer/playground";
 import { DownloadPanel } from "@/components/explorer/download-panel";
+import {
+  CommandPalette,
+  CommandPaletteTrigger,
+} from "@/components/explorer/command-palette";
 import { TABS, useToolkitStore } from "@/lib/store";
 import type { TabId } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -87,7 +91,10 @@ export default function Home() {
               </div>
             </div>
             <div className="md:hidden">
-              <ThemeToggle />
+              <div className="flex items-center gap-1">
+                <CommandPaletteTrigger compact />
+                <ThemeToggle />
+              </div>
             </div>
           </div>
 
@@ -128,7 +135,8 @@ export default function Home() {
             })}
           </nav>
 
-          <div className="hidden shrink-0 md:block">
+          <div className="hidden shrink-0 items-center gap-1 md:flex">
+            <CommandPaletteTrigger />
             <ThemeToggle />
           </div>
         </div>
@@ -152,6 +160,9 @@ export default function Home() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* Global command palette (Ctrl/Cmd+K), mounted once at the page level. */}
+      <CommandPalette />
 
       {/* ------------------------------ Footer ------------------------------ */}
       <footer className="mt-auto border-t bg-muted/30 pb-[max(1.5rem,env(safe-area-inset-bottom))]">

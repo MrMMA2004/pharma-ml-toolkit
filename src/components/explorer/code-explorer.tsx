@@ -177,6 +177,12 @@ export function CodeExplorer() {
     [setTargetLine]
   );
 
+  /* Scroll-spy: topmost visible line in the code pane → active outline row. */
+  const [visibleLine, setVisibleLine] = useState<number | null>(null);
+  const handleVisibleLine = useCallback((line: number) => {
+    setVisibleLine((prev) => (prev === line ? prev : line));
+  }, []);
+
   const filteredTree = useMemo(() => {
     if (!tree || !searchActive) return tree;
     const matchesPath = (p: string) => p.toLowerCase().includes(trimmed);
@@ -435,6 +441,7 @@ export function CodeExplorer() {
                 code={content.content}
                 language={content.language}
                 onJump={jumpInFile}
+                activeLine={visibleLine}
               />
               <CodeBlock
                 code={content.content}
@@ -445,6 +452,7 @@ export function CodeExplorer() {
                 highlightLine={targetLine}
                 onClearHighlight={() => setTargetLine(null)}
                 permalinkPath={content.path}
+                onVisibleLineChange={handleVisibleLine}
               />
             </>
           ) : null}

@@ -382,7 +382,7 @@ export function MlPlayground() {
             <div>
               <CardTitle className="text-base">Experiment setup</CardTitle>
               <CardDescription className="text-xs">
-                Deterministic — same seed, same result · survives tab switches & reloads
+                Deterministic — same seed, same result · setup & results survive reloads
               </CardDescription>
             </div>
           </div>

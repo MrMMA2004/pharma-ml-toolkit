@@ -23,10 +23,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useToolkitStore } from "@/lib/store";
 import { copyToClipboard, fmtInt, fuzzyScore } from "@/lib/format";
+import { getReference, peekReference } from "@/lib/reference-cache";
+import { HighlightText } from "@/components/explorer/highlight-text";
 import type { ReferenceResponse, SymbolKind } from "@/lib/toolkit-types";
-
-/** Module-level cache so tab switches never refetch. */
-let refCache: ReferenceResponse | null = null;
 
 const KIND_FILTERS: Array<{ id: SymbolKind | "all"; label: string }> = [
   { id: "all", label: "All" },
@@ -47,9 +46,9 @@ export function ApiReference() {
   const setTab = useToolkitStore((s) => s.setTab);
   const openFileAtLine = useToolkitStore((s) => s.openFileAtLine);
 
-  const [data, setData] = useState<ReferenceResponse | null>(refCache);
+  const [data, setData] = useState<ReferenceResponse | null>(() => peekReference());
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">(
-    refCache ? "ready" : "loading"
+    peekReference() ? "ready" : "loading"
   );
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -58,31 +57,19 @@ export function ApiReference() {
   const [copiedSym, setCopiedSym] = useState<string | null>(null);
 
   useEffect(() => {
-    if (refCache) return;
+    if (peekReference()) return;
     let stale = false;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/toolkit/reference");
-        const body: unknown = await res.json();
-        if (!res.ok) {
-          const message =
-            typeof body === "object" && body !== null && "detail" in body
-              ? String((body as { detail: unknown }).detail)
-              : `HTTP ${res.status}`;
-          throw new Error(message);
-        }
-        const payload = body as ReferenceResponse;
+    getReference()
+      .then((payload) => {
         if (stale) return;
-        refCache = payload;
         setData(payload);
         setStatus("ready");
-      } catch (err: unknown) {
+      })
+      .catch((err: unknown) => {
         if (stale) return;
         setStatus("error");
         setError(err instanceof Error ? err.message : "Unknown error.");
-      }
-    };
-    void load();
+      });
     return () => {
       stale = true;
     };
@@ -200,7 +187,6 @@ export function ApiReference() {
             size="sm"
             className="gap-2"
             onClick={() => {
-              refCache = null;
               setStatus("loading");
               setError(null);
               window.setTimeout(() => window.location.reload(), 100);
@@ -415,7 +401,7 @@ export function ApiReference() {
                           >
                             <div className="flex min-w-0 items-center gap-2 sm:w-[240px] sm:shrink-0">
                               <code className="break-all font-mono text-[13px] font-medium text-foreground">
-                                {sym.name}
+                                <HighlightText text={sym.name} query={query} />
                               </code>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">

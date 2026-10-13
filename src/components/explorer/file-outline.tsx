@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Braces,
   ChevronDown,
@@ -40,16 +40,45 @@ interface FileOutlineProps {
   language: string;
   /** Called with the 1-based line to jump to. */
   onJump: (line: number) => void;
+  /** Currently topmost visible line in the code pane (scroll-spy). The last
+   * symbol at or above it renders as the active row. */
+  activeLine?: number | null;
 }
 
 /**
  * Collapsible table of contents for the currently open file — Python
  * classes/functions, Markdown headings, TOML/YAML sections. Clicking a
- * symbol scrolls the code pane to that line and pins the highlight.
+ * symbol scrolls the code pane to that line and pins the highlight; the
+ * row matching the pane's scroll position (scroll-spy) stays emphasized.
  */
-export function FileOutline({ code, language, onJump }: FileOutlineProps) {
+export function FileOutline({ code, language, onJump, activeLine }: FileOutlineProps) {
   const [open, setOpen] = useState(true);
+  const navRef = useRef<HTMLElement>(null);
   const symbols = useMemo(() => extractOutline(code, language), [code, language]);
+
+  const activeIndex = useMemo(() => {
+    if (activeLine === null || activeLine === undefined) return -1;
+    let idx = -1;
+    for (let i = 0; i < symbols.length; i++) {
+      if (symbols[i].line <= activeLine) idx = i;
+      else break;
+    }
+    return idx;
+  }, [symbols, activeLine]);
+
+  /* Keep the active row inside the (scrollable, expanded) outline nav. */
+  useEffect(() => {
+    if (activeIndex < 0 || !open || !navRef.current) return;
+    const row = navRef.current.querySelector<HTMLButtonElement>(`[data-active="true"]`);
+    if (!row) return;
+    const nav = navRef.current;
+    const rowTopInNav = row.getBoundingClientRect().top - nav.getBoundingClientRect().top + nav.scrollTop;
+    if (rowTopInNav < nav.scrollTop + 8) {
+      nav.scrollTo({ top: Math.max(0, rowTopInNav - 44) });
+    } else if (rowTopInNav + row.offsetHeight > nav.scrollTop + nav.clientHeight - 8) {
+      nav.scrollTo({ top: rowTopInNav + row.offsetHeight - nav.clientHeight + 44 });
+    }
+  }, [activeIndex, open]);
 
   if (symbols.length < MIN_SYMBOLS) return null;
 
@@ -89,12 +118,19 @@ export function FileOutline({ code, language, onJump }: FileOutlineProps) {
       </CollapsibleTrigger>
       <CollapsibleContent>
         <nav
+          ref={navRef}
           aria-label="Symbol outline"
           className="thin-scrollbar max-h-52 overflow-y-auto border-t px-1.5 py-1.5"
         >
           <ul className="space-y-0.5">
             {symbols.map((s, i) => (
-              <OutlineRow key={`${s.line}-${s.name}`} symbol={s} onJump={onJump} index={i} />
+              <OutlineRow
+                key={`${s.line}-${s.name}`}
+                symbol={s}
+                onJump={onJump}
+                index={i}
+                active={i === activeIndex}
+              />
             ))}
           </ul>
         </nav>
@@ -107,10 +143,12 @@ function OutlineRow({
   symbol,
   onJump,
   index,
+  active,
 }: {
   symbol: OutlineSymbol;
   onJump: (line: number) => void;
   index: number;
+  active: boolean;
 }) {
   const Icon = KIND_ICON[symbol.kind];
   const tone =
@@ -120,17 +158,28 @@ function OutlineRow({
         ? "text-foreground/70"
         : "text-muted-foreground";
   return (
-    <li>
+    <li className="relative">
+      {/* Active marker: thin accent bar on the left edge of the row. */}
+      {active ? (
+        <motion.span
+          layoutId="outline-active-bar"
+          className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-primary"
+          aria-hidden
+        />
+      ) : null}
       <motion.button
         type="button"
         initial={{ opacity: 0, x: -4 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: Math.min(index * 0.012, 0.25), duration: 0.15 }}
         onClick={() => onJump(symbol.line)}
+        data-active={active ? "true" : undefined}
         aria-label={`Jump to ${OUTLINE_KIND_LABEL[symbol.kind]} ${symbol.name} on line ${symbol.line}`}
+        aria-current={active ? "true" : undefined}
         className={cn(
           "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors",
           "hover:bg-primary/8 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          active && "bg-primary/10 text-primary",
           symbol.kind === "class" && "font-mono font-semibold",
           (symbol.kind === "function" || symbol.kind === "method") && "font-mono",
           symbol.kind === "heading" && "font-sans",
@@ -138,9 +187,17 @@ function OutlineRow({
         )}
         style={{ paddingLeft: `${0.5 + symbol.depth * 0.75}rem` }}
       >
-        <Icon className={cn("size-3.5 shrink-0", tone)} aria-hidden />
+        <Icon
+          className={cn("size-3.5 shrink-0", active ? "text-primary" : tone)}
+          aria-hidden
+        />
         <span className="min-w-0 flex-1 truncate">{symbol.name}</span>
-        <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/70">
+        <span
+          className={cn(
+            "shrink-0 font-mono text-[10px] tabular-nums",
+            active ? "text-primary" : "text-muted-foreground/70"
+          )}
+        >
           {symbol.line}
         </span>
       </motion.button>
