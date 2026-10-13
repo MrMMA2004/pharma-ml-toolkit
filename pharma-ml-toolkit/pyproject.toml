@@ -72,6 +72,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 addopts = "-q --tb=short"
 
 [tool.ruff]

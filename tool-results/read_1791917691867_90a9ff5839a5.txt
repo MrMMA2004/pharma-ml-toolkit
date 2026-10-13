@@ -1,0 +1,602 @@
+     1→    60→  { key: "f1", label: "F1" },
+     2→    61→];
+     3→    62→
+     4→    63→function MetricCard({ label, value }: { label: string; value: number }) {
+     5→    64→  return (
+     6→    65→    <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+     7→    66→      <p className="text-xs text-muted-foreground">{label}</p>
+     8→    67→      <p className="font-mono text-xl font-semibold tabular-nums">{fmtNum(value, 4)}</p>
+     9→    68→    </div>
+    10→    69→  );
+    11→    70→}
+    12→    71→
+    13→    72→/** Factory for tiny boundary dot renderers (60×60 grid → 3600 points). */
+    14→    73→function TinyDot(color: string) {
+    15→    74→  return function renderTinyDot(props: { cx?: number; cy?: number }) {
+    16→    75→    const { cx, cy } = props;
+    17→    76→    if (cx === undefined || cy === undefined) return null;
+    18→    77→    return <circle cx={cx} cy={cy} r={1.5} fill={color} fillOpacity={0.3} />;
+    19→    78→  };
+    20→    79→}
+    21→    80→
+    22→    81→/** Factory for the larger moon-class dots. */
+    23→    82→function MoonDot(color: string) {
+    24→    83→  return function renderMoonDot(props: { cx?: number; cy?: number }) {
+    25→    84→    const { cx, cy } = props;
+    26→    85→    if (cx === undefined || cy === undefined) return null;
+    27→    86→    return <circle cx={cx} cy={cy} r={3.2} fill={color} fillOpacity={0.9} stroke={color} strokeWidth={0.6} />;
+    28→    87→  };
+    29→    88→}
+    30→    89→
+    31→    90→export function MlPlayground() {
+    32→    91→  const [task, setTask] = useState<Task>("regression");
+    33→    92→  const [samples, setSamples] = useState(300);
+    34→    93→  const [noise, setNoise] = useState(0.4);
+    35→    94→  const [regModel, setRegModel] = useState<RegModel>("linear");
+    36→    95→  const [alpha, setAlpha] = useState("1.0");
+    37→    96→  const [l2, setL2] = useState("1.0");
+    38→    97→  const [testSizePct, setTestSizePct] = useState(20);
+    39→    98→  const [cv, setCv] = useState<CvValue>("5");
+    40→    99→  const [seed, setSeed] = useState("42");
+    41→   100→
+    42→   101→  const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+    43→   102→  const [error, setError] = useState<string | null>(null);
+    44→   103→  const [result, setResult] = useState<MLTrainResponse | null>(null);
+    45→   104→
+    46→   105→  const noiseMax = task === "regression" ? 2 : 1.5;
+    47→   106→  const metricSpecs = task === "regression" ? REG_METRICS : CLS_METRICS;
+    48→   107→
+    49→   108→  function switchTask(next: Task) {
+    50→   109→    setTask(next);
+    51→   110→    if (next === "classification" && noise > 1.5) setNoise(0.3);
+    52→   111→    if (next === "regression" && regModel !== "ridge" && regModel !== "linear" && regModel !== "polynomial") {
+    53→   112→      setRegModel("linear");
+    54→   113→    }
+    55→   114→    setStatus("idle");
+    56→   115→    setResult(null);
+    57→   116→    setError(null);
+    58→   117→  }
+    59→   118→
+    60→   119→  const seedValid = /^\d{1,10}$/.test(seed.trim());
+    61→   120→  const alphaValid = Number.isFinite(Number.parseFloat(alpha)) && Number.parseFloat(alpha) >= 0;
+    62→   121→  const l2Valid = Number.isFinite(Number.parseFloat(l2)) && Number.parseFloat(l2) >= 0;
+    63→   122→
+    64→   123→  async function run() {
+    65→   124→    if (!seedValid) {
+    66→   125→      setError("Seed must be a non-negative integer (0 – 2147483647).");
+    67→   126→      return;
+    68→   127→    }
+    69→   128→    if (task === "regression" && regModel === "ridge" && !alphaValid) {
+    70→   129→      setError("Ridge alpha must be a number ≥ 0.");
+    71→   130→      return;
+    72→   131→    }
+    73→   132→    if (task === "classification" && !l2Valid) {
+    74→   133→      setError("L2 strength must be a number ≥ 0.");
+    75→   134→      return;
+    76→   135→    }
+    77→   136→    setStatus("running");
+    78→   137→    setError(null);
+    79→   138→    const body: MLTrainRequest = {
+    80→   139→      task,
+    81→   140→      samples,
+    82→   141→      noise,
+    83→   142→      model: task === "regression" ? regModel : "logistic",
+    84→   143→      testSize: testSizePct / 100,
+    85→   144→      cv: (Number.parseInt(cv, 10) || 0) as 0 | 3 | 5 | 10,
+    86→   145→      seed: Number.parseInt(seed, 10) || 0,
+    87→   146→    };
+    88→   147→    if (task === "regression" && regModel === "ridge") body.alpha = Number.parseFloat(alpha);
+    89→   148→    if (task === "classification") body.l2 = Number.parseFloat(l2);
+    90→   149→
+    91→   150→    try {
+    92→   151→      const res = await fetch("/api/ml/train", {
+    93→   152→        method: "POST",
+    94→   153→        headers: { "Content-Type": "application/json" },
+    95→   154→        body: JSON.stringify(body),
+    96→   155→      });
+    97→   156→      const data: unknown = await res.json();
+    98→   157→      if (!res.ok) {
+    99→   158→        const message =
+   100→   159→          typeof data === "object" && data !== null && "error" in data
+   101→   160→            ? `${String((data as { error: unknown }).error)}${
+   102→   161→                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+   103→   162→                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+   104→   163→                  : ""
+   105→   164→              }`
+   106→   165→            : `HTTP ${res.status}`;
+   107→   166→        throw new Error(message);
+   108→   167→      }
+   109→   168→      setResult(data as MLTrainResponse);
+   110→   169→      setStatus("done");
+   111→   170→    } catch (err) {
+   112→   171→      setStatus("error");
+   113→   172→      const message = err instanceof Error ? err.message : "Training request failed.";
+   114→   173→      setError(message);
+   115→   174→    }
+   116→   175→  }
+   117→   176→
+   118→   177→  const running = status === "running";
+   119→   178→
+   120→   179→  /* Chart series (memoized splits so recharts gets stable references). */
+   121→   180→  const clsSeries = useMemo(() => {
+   122→   181→    if (!result || result.task !== "classification") return null;
+   123→   182→    const boundary = result.series.boundary ?? [];
+   124→   183→    return {
+   125→   184→      grid0: boundary.filter((p) => p.pred === 0),
+   126→   185→      grid1: boundary.filter((p) => p.pred === 1),
+   127→   186→      moon0: result.series.test.filter((p) => p.label === 0),
+   128→   187→      moon1: result.series.test.filter((p) => p.label === 1),
+   129→   188→    };
+   130→   189→  }, [result]);
+   131→   190→
+   132→   191→  const coefficientsText = useMemo(() => {
+   133→   192→    if (!result) return null;
+   134→   193→    const { intercept, coefs } = result.coefficients;
+   135→   194→    if (result.task === "regression") {
+   136→   195→      const terms = coefs
+   137→   196→        .map((c, i) => `${fmtNum(c, 4)}·x̂${coefs.length > 1 ? `^${i + 1}` : ""}`)
+   138→   197→        .join(" + ");
+   139→   198→      return `ŷ = ${fmtNum(intercept, 4)} + ${terms}   (x̂ = standardized x)`;
+   140→   199→    }
+   141→   200→    return `σ(b₀ + w₁x̂₁ + w₂x̂₂)   b₀=${fmtNum(intercept, 4)}, w=[${coefs
+   142→   201→      .map((c) => fmtNum(c, 4))
+   143→   202→      .join(", ")}]`;
+   144→   203→  }, [result]);
+   145→   204→
+   146→   205→  return (
+   147→   206→    <div className="grid gap-4 xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
+   148→   207→      {/* ------------------------------ Controls ------------------------------ */}
+   149→   208→      <Card className="h-fit overflow-hidden py-0 shadow-sm xl:sticky xl:top-24">
+   150→   209→        <CardHeader className="border-b bg-muted/30 py-3">
+   151→   210→          <div className="flex items-center gap-2.5">
+   152→   211→            <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+   153→   212→              <Brain className="size-4.5" aria-hidden />
+   154→   213→            </span>
+   155→   214→            <div>
+   156→   215→              <CardTitle className="text-base">Experiment setup</CardTitle>
+   157→   216→              <CardDescription className="text-xs">
+   158→   217→                Deterministic — same seed, same result
+   159→   218→              </CardDescription>
+   160→   219→            </div>
+   161→   220→          </div>
+   162→   221→        </CardHeader>
+   163→   222→        <CardContent className="space-y-5 pb-4">
+   164→   223→          {/* Task */}
+   165→   224→          <div className="space-y-1.5">
+   166→   225→            <Label className="text-xs font-medium">Task</Label>
+   167→   226→            <div className="grid grid-cols-2 gap-1 rounded-lg border bg-muted/40 p-1" role="tablist" aria-label="ML task">
+   168→   227→              {(["regression", "classification"] as const).map((t) => (
+   169→   228→                <button
+   170→   229→                  key={t}
+   171→   230→                  type="button"
+   172→   231→                  role="tab"
+   173→   232→                  aria-selected={task === t}
+   174→   233→                  onClick={() => switchTask(t)}
+   175→   234→                  className={`h-9 rounded-md text-sm font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+   176→   235→                    task === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+   177→   236→                  }`}
+   178→   237→                >
+   179→   238→                  {t}
+   180→   239→                </button>
+   181→   240→              ))}
+   182→   241→            </div>
+   183→   242→          </div>
+   184→   243→
+   185→   244→          {/* Samples */}
+   186→   245→          <div className="space-y-2">
+   187→   246→            <div className="flex items-center justify-between">
+   188→   247→              <Label htmlFor="ml-samples" className="text-xs font-medium">
+   189→   248→                Samples
+   190→   249→              </Label>
+   191→   250→              <span className="font-mono text-xs tabular-nums text-muted-foreground">{samples}</span>
+   192→   251→            </div>
+   193→   252→            <Slider
+   194→   253→              id="ml-samples"
+   195→   254→              min={100}
+   196→   255→              max={1000}
+   197→   256→              step={50}
+   198→   257→              value={[samples]}
+   199→   258→              onValueChange={(v) => setSamples(v[0] ?? samples)}
+   200→   259→            />
+   201→   260→          </div>
+   202→   261→
+   203→   262→          {/* Noise */}
+   204→   263→          <div className="space-y-2">
+   205→   264→            <div className="flex items-center justify-between">
+   206→   265→              <Label htmlFor="ml-noise" className="text-xs font-medium">
+   207→   266→                Noise {task === "classification" ? "(moons)" : "σ"}
+   208→   267→              </Label>
+   209→   268→              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+   210→   269→                {noise.toFixed(2)}
+   211→   270→              </span>
+   212→   271→            </div>
+   213→   272→            <Slider
+   214→   273→              id="ml-noise"
+   215→   274→              min={0}
+   216→   275→              max={noiseMax}
+   217→   276→              step={0.05}
+   218→   277→              value={[Math.min(noise, noiseMax)]}
+   219→   278→              onValueChange={(v) => setNoise(v[0] ?? noise)}
+   220→   279→            />
+   221→   280→          </div>
+   222→   281→
+   223→   282→          {/* Model */}
+   224→   283→          <div className="space-y-1.5">
+   225→   284→            <Label className="text-xs font-medium">Model</Label>
+   226→   285→            {task === "regression" ? (
+   227→   286→              <Select value={regModel} onValueChange={(v) => setRegModel(v as RegModel)}>
+   228→   287→                <SelectTrigger className="h-10" aria-label="Regression model">
+   229→   288→                  <SelectValue />
+   230→   289→                </SelectTrigger>
+   231→   290→                <SelectContent>
+   232→   291→                  <SelectItem value="linear">Linear regression</SelectItem>
+   233→   292→                  <SelectItem value="polynomial">Polynomial (degree 2)</SelectItem>
+   234→   293→                  <SelectItem value="ridge">Ridge (α regularized)</SelectItem>
+   235→   294→                </SelectContent>
+   236→   295→              </Select>
+   237→   296→            ) : (
+   238→   297→              <div className="space-y-2">
+   239→   298→                <div className="flex h-10 items-center rounded-md border bg-muted/30 px-3 text-sm text-muted-foreground">
+   240→   299→                  Logistic regression (batch GD, 800 epochs)
+   241→   300→                </div>
+   242→   301→                <div className="space-y-1.5">
+   243→   302→                  <Label htmlFor="ml-l2" className="text-xs font-medium">
+   244→   303→                    L2 strength λ
+   245→   304→                  </Label>
+   246→   305→                  <Input
+   247→   306→                    id="ml-l2"
+   248→   307→                    inputMode="decimal"
+   249→   308→                    value={l2}
+   250→   309→                    onChange={(e) => setL2(e.target.value)}
+   251→   310→                    aria-invalid={l2Valid ? undefined : true}
+   252→   311→                    className={`h-10 font-mono text-sm tabular-nums ${l2Valid ? "" : "border-destructive/60"}`}
+   253→   312→                  />
+   254→   313→                  {!l2Valid ? (
+   255→   314→                    <p className="text-[11px] text-destructive">Must be a number ≥ 0.</p>
+   256→   315→                  ) : null}
+   257→   316→                </div>
+   258→   317→              </div>
+   259→   318→            )}
+   260→   319→          </div>
+   261→   320→
+   262→   321→          {task === "regression" && regModel === "ridge" ? (
+   263→   322→            <div className="space-y-1.5">
+   264→   323→              <Label htmlFor="ml-alpha" className="text-xs font-medium">
+   265→   324→                Ridge α
+   266→   325→              </Label>
+   267→   326→              <Input
+   268→   327→                id="ml-alpha"
+   269→   328→                inputMode="decimal"
+   270→   329→                value={alpha}
+   271→   330→                onChange={(e) => setAlpha(e.target.value)}
+   272→   331→                aria-invalid={alphaValid ? undefined : true}
+   273→   332→                className={`h-10 font-mono text-sm tabular-nums ${alphaValid ? "" : "border-destructive/60"}`}
+   274→   333→              />
+   275→   334→              {!alphaValid ? <p className="text-[11px] text-destructive">Must be a number ≥ 0.</p> : null}
+   276→   335→            </div>
+   277→   336→          ) : null}
+   278→   337→
+   279→   338→          {/* Test size */}
+   280→   339→          <div className="space-y-2">
+   281→   340→            <div className="flex items-center justify-between">
+   282→   341→              <Label htmlFor="ml-test" className="text-xs font-medium">
+   283→   342→                Test split
+   284→   343→              </Label>
+   285→   344→              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+   286→   345→                {testSizePct}%
+   287→   346→              </span>
+   288→   347→            </div>
+   289→   348→            <Slider
+   290→   349→              id="ml-test"
+   291→   350→              min={10}
+   292→   351→              max={50}
+   293→   352→              step={5}
+   294→   353→              value={[testSizePct]}
+   295→   354→              onValueChange={(v) => setTestSizePct(v[0] ?? testSizePct)}
+   296→   355→            />
+   297→   356→          </div>
+   298→   357→
+   299→   358→          {/* CV + seed */}
+   300→   359→          <div className="grid grid-cols-2 gap-3">
+   301→   360→            <div className="space-y-1.5">
+   302→   361→              <Label className="text-xs font-medium">k-fold CV</Label>
+   303→   362→              <Select value={cv} onValueChange={(v) => setCv(v as CvValue)}>
+   304→   363→                <SelectTrigger className="h-10" aria-label="Cross-validation folds">
+   305→   364→                  <SelectValue />
+   306→   365→                </SelectTrigger>
+   307→   366→                <SelectContent>
+   308→   367→                  <SelectItem value="0">Off</SelectItem>
+   309→   368→                  <SelectItem value="3">3-fold</SelectItem>
+   310→   369→                  <SelectItem value="5">5-fold</SelectItem>
+   311→   370→                  <SelectItem value="10">10-fold</SelectItem>
+   312→   371→                </SelectContent>
+   313→   372→              </Select>
+   314→   373→            </div>
+   315→   374→            <div className="space-y-1.5">
+   316→   375→              <Label htmlFor="ml-seed" className="text-xs font-medium">
+   317→   376→                Seed
+   318→   377→              </Label>
+   319→   378→              <Input
+   320→   379→                id="ml-seed"
+   321→   380→                inputMode="numeric"
+   322→   381→                value={seed}
+   323→   382→                onChange={(e) => setSeed(e.target.value)}
+   324→   383→                aria-invalid={seedValid ? undefined : true}
+   325→   384→                className={`h-10 font-mono text-sm tabular-nums ${seedValid ? "" : "border-destructive/60"}`}
+   326→   385→              />
+   327→   386→              {!seedValid ? (
+   328→   387→                <p className="text-[11px] text-destructive">Non-negative integer.</p>
+   329→   388→              ) : null}
+   330→   389→            </div>
+   331→   390→          </div>
+   332→   391→
+   333→   392→          <Button
+   334→   393→            size="lg"
+   335→   394→            className="h-11 w-full gap-2"
+   336→   395→            onClick={() => void run()}
+   337→   396→            disabled={running}
+   338→   397→          >
+   339→   398→            {running ? (
+   340→   399→              <>
+   341→   400→                <Loader2 className="size-4 animate-spin" aria-hidden />
+   342→   401→                Training…
+   343→   402→              </>
+   344→   403→            ) : (
+   345→   404→              <>
+   346→   405→                <Play className="size-4" aria-hidden />
+   347→   406→                Train model
+   348→   407→              </>
+   349→   408→            )}
+   350→   409→          </Button>
+   351→   410→
+   352→   411→          {error ? (
+   353→   412→            <Alert variant="destructive">
+   354→   413→              <TriangleAlert className="size-4" aria-hidden />
+   355→   414→              <AlertTitle>Request failed</AlertTitle>
+   356→   415→              <AlertDescription>{error}</AlertDescription>
+   357→   416→            </Alert>
+   358→   417→          ) : null}
+   359→   418→        </CardContent>
+   360→   419→      </Card>
+   361→   420→
+   362→   421→      {/* ------------------------------ Results ------------------------------ */}
+   363→   422→      <div className="min-w-0 space-y-4">
+   364→   423→        {!result && status !== "running" ? (
+   365→   424→          <Card className="py-0 shadow-sm">
+   366→   425→            <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+   367→   426→              <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+   368→   427→                <Brain className="size-6" aria-hidden />
+   369→   428→              </span>
+   370→   429→              <p className="text-sm font-medium">No results yet</p>
+   371→   430→              <p className="max-w-sm text-xs text-muted-foreground">
+   372→   431→                Configure the experiment and press{" "}
+   373→   432→                <strong className="font-semibold text-foreground">Train model</strong>. Data is
+   374→   433→                generated server-side from your seed — regression fits a closed-form least-squares
+   375→   434→                model; classification trains logistic regression on two moons.
+   376→   435→              </p>
+   377→   436→            </CardContent>
+   378→   437→          </Card>
+   379→   438→        ) : null}
+   380→   439→
+   381→   440→        {status === "running" ? (
+   382→   441→          <Card className="py-0 shadow-sm">
+   383→   442→            <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+   384→   443→              <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
+   385→   444→              <p className="text-sm font-medium">Training…</p>
+   386→   445→              <p className="text-xs text-muted-foreground">
+   387→   446→                Generating {samples} samples, fitting the model, evaluating the held-out split
+   388→   447→                {cv !== "0" ? ` and running ${cv}-fold CV` : ""}.
+   389→   448→              </p>
+   390→   449→            </CardContent>
+   391→   450→          </Card>
+   392→   451→        ) : null}
+   393→   452→
+   394→   453→        {result && status !== "running" ? (
+   395→   454→          <>
+   396→   455→            {/* Metrics */}
+   397→   456→            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+   398→   457→              {metricSpecs.map((m) => (
+   399→   458→                <MetricCard key={m.key} label={m.label} value={result.metrics[m.key] ?? Number.NaN} />
+   400→   459→              ))}
+   401→   460→              {result.cv ? (
+   402→   461→                <div className="col-span-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5 shadow-sm sm:col-span-4">
+   403→   462→                  <p className="text-xs text-muted-foreground">
+   404→   463→                    {result.cv.k}-fold CV {result.cv.metricName}
+   405→   464→                  </p>
+   406→   465→                  <p className="font-mono text-xl font-semibold tabular-nums text-primary">
+   407→   466→                    {fmtNum(result.cv.mean, 4)}{" "}
+   408→   467→                    <span className="text-sm font-normal">± {fmtNum(result.cv.std, 3)}</span>
+   409→   468→                  </p>
+   410→   469→                </div>
+   411→   470→              ) : null}
+   412→   471→            </div>
+   413→   472→
+   414→   473→            {/* Chart */}
+   415→   474→            <Card className="overflow-hidden py-0 shadow-sm">
+   416→   475→              <CardHeader className="border-b bg-muted/30 py-3">
+   417→   476→                <CardTitle className="text-sm">
+   418→   477→                  {result.task === "regression"
+   419→   478→                    ? "Test points & fitted curve"
+   420→   479→                    : "Two moons & decision boundary"}
+   421→   480→                </CardTitle>
+   422→   481→                <CardDescription className="text-xs">
+   423→   482→                  {result.datasetMeta.nTotal} samples · {result.datasetMeta.nTrain} train ·{" "}
+   424→   483→                  {result.datasetMeta.nTest} test · seed {result.datasetMeta.seed}
+   425→   484→                </CardDescription>
+   426→   485→              </CardHeader>
+   427→   486→              <CardContent className="p-3 sm:p-4">
+   428→   487→                <div
+   429→   488→                  className="h-[340px] w-full"
+   430→   489→                  role="img"
+   431→   490→                  aria-label={
+   432→   491→                    result.task === "regression"
+   433→   492→                      ? "Scatter plot of test points with the fitted regression curve"
+   434→   493→                      : "Scatter plot of the two moon classes with model decision boundary"
+   435→   494→                  }
+   436→   495→                >
+   437→   496→                  <ResponsiveContainer width="100%" height="100%">
+   438→   497→                    {result.task === "regression" ? (
+   439→   498→                      <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+   440→   499→                        <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+   441→   500→                        <XAxis
+   442→   501→                          type="number"
+   443→   502→                          dataKey="x"
+   444→   503→                          domain={["auto", "auto"]}
+   445→   504→                          tick={CHART.axisTick}
+   446→   505→                          tickFormatter={fmtTick}
+   447→   506→                          tickLine={false}
+   448→   507→                          axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+   449→   508→                          label={{ value: "x", position: "insideBottomRight", offset: -2, fill: "#78716c", fontSize: 11 }}
+   450→   509→                        />
+   451→   510→                        <YAxis
+   452→   511→                          type="number"
+   453→   512→                          dataKey="y"
+   454→   513→                          width={44}
+   455→   514→                          tick={CHART.axisTick}
+   456→   515→                          tickFormatter={fmtTick}
+   457→   516→                          tickLine={false}
+   458→   517→                          axisLine={false}
+   459→   518→                        />
+   460→   519→                        <Tooltip
+   461→   520→                          cursor={{ strokeDasharray: "3 3" }}
+   462→   521→                          contentStyle={CHART.tooltipStyle}
+   463→   522→                          formatter={(value) => fmtNum(Number(value), 4)}
+   464→   523→                        />
+   465→   524→                        <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+   466→   525→                        <Scatter
+   467→   526→                          name="fitted curve"
+   468→   527→                          data={result.series.curve ?? []}
+   469→   528→                          line={{ stroke: CHART.emerald, strokeWidth: 2.5 }}
+   470→   529→                          shape="square"
+   471→   530→                          fill={CHART.emerald}
+   472→   531→                          fillOpacity={0.5}
+   473→   532→                          isAnimationActive={false}
+   474→   533→                        />
+   475→   534→                        <Scatter
+   476→   535→                          name="test points"
+   477→   536→                          data={result.series.test}
+   478→   537→                          fill={CHART.stone}
+   479→   538→                          fillOpacity={0.8}
+   480→   539→                          isAnimationActive={false}
+   481→   540→                        />
+   482→   541→                      </ScatterChart>
+   483→   542→                    ) : (
+   484→   543→                      <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+   485→   544→                        <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+   486→   545→                        <XAxis
+   487→   546→                          type="number"
+   488→   547→                          dataKey="x"
+   489→   548→                          domain={["auto", "auto"]}
+   490→   549→                          tick={CHART.axisTick}
+   491→   550→                          tickFormatter={fmtTick}
+   492→   551→                          tickLine={false}
+   493→   552→                          axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+   494→   553→                        />
+   495→   554→                        <YAxis
+   496→   555→                          type="number"
+   497→   556→                          dataKey="y"
+   498→   557→                          width={44}
+   499→   558→                          tick={CHART.axisTick}
+   500→   559→                          tickFormatter={fmtTick}
+   501→   560→                          tickLine={false}
+   502→   561→                          axisLine={false}
+   503→   562→                        />
+   504→   563→                        <Tooltip
+   505→   564→                          cursor={{ strokeDasharray: "3 3" }}
+   506→   565→                          contentStyle={CHART.tooltipStyle}
+   507→   566→                          formatter={(value) => fmtNum(Number(value), 3)}
+   508→   567→                        />
+   509→   568→                        <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+   510→   569→                        {clsSeries ? (
+   511→   570→                          <Scatter
+   512→   571→                            name="boundary: class 0"
+   513→   572→                            data={clsSeries.grid0}
+   514→   573→                            fill={CHART.teal}
+   515→   574→                            shape={TinyDot(CHART.teal)}
+   516→   575→                            isAnimationActive={false}
+   517→   576→                          />
+   518→   577→                        ) : null}
+   519→   578→                        {clsSeries ? (
+   520→   579→                          <Scatter
+   521→   580→                            name="boundary: class 1"
+   522→   581→                            data={clsSeries.grid1}
+   523→   582→                            fill={CHART.amber}
+   524→   583→                            shape={TinyDot(CHART.amber)}
+   525→   584→                            isAnimationActive={false}
+   526→   585→                          />
+   527→   586→                        ) : null}
+   528→   587→                        {clsSeries ? (
+   529→   588→                          <Scatter
+   530→   589→                            name="moon 0 (test)"
+   531→   590→                            data={clsSeries.moon0}
+   532→   591→                            fill={CHART.emerald}
+   533→   592→                            shape={MoonDot(CHART.emerald)}
+   534→   593→                            isAnimationActive={false}
+   535→   594→                          />
+   536→   595→                        ) : null}
+   537→   596→                        {clsSeries ? (
+   538→   597→                          <Scatter
+   539→   598→                            name="moon 1 (test)"
+   540→   599→                            data={clsSeries.moon1}
+   541→   600→                            fill={CHART.rose}
+   542→   601→                            shape={MoonDot(CHART.rose)}
+   543→   602→                            isAnimationActive={false}
+   544→   603→                          />
+   545→   604→                        ) : null}
+   546→   605→                      </ScatterChart>
+   547→   606→                    )}
+   548→   607→                  </ResponsiveContainer>
+   549→   608→                </div>
+   550→   609→                <p className="mt-1 text-center text-[11px] text-muted-foreground">
+   551→   610→                  {result.task === "regression"
+   552→   611→                    ? "Stone dots = held-out test points; emerald line = model prediction (100-point sweep)."
+   553→   612→                    : "Emerald/rose = test-set moons; faint teal/amber dots = 60×60 grid classified by the model."}
+   554→   613→                </p>
+   555→   614→              </CardContent>
+   556→   615→            </Card>
+   557→   616→
+   558→   617→            {/* CV folds + coefficients */}
+   559→   618→            <div className="grid gap-4 lg:grid-cols-2">
+   560→   619→              {result.cv ? (
+   561→   620→                <Card className="overflow-hidden py-0 shadow-sm">
+   562→   621→                  <CardHeader className="border-b bg-muted/30 py-3">
+   563→   622→                    <CardTitle className="text-sm">
+   564→   623→                      {result.cv.k}-fold CV — {result.cv.metricName} per fold
+   565→   624→                    </CardTitle>
+   566→   625→                  </CardHeader>
+   567→   626→                  <div className="thin-scrollbar max-h-72 overflow-y-auto">
+   568→   627→                    <Table>
+   569→   628→                      <TableHeader className="sticky top-0 bg-muted/60 backdrop-blur">
+   570→   629→                        <TableRow className="hover:bg-transparent">
+   571→   630→                          <TableHead className="h-9">Fold</TableHead>
+   572→   631→                          <TableHead className="h-9 text-right">{result.cv.metricName}</TableHead>
+   573→   632→                        </TableRow>
+   574→   633→                      </TableHeader>
+   575→   634→                      <TableBody>
+   576→   635→                        {result.cv.folds.map((f) => (
+   577→   636→                          <TableRow key={f.fold}>
+   578→   637→                            <TableCell className="py-2 font-mono text-xs">fold {f.fold}</TableCell>
+   579→   638→                            <TableCell className="py-2 text-right font-mono text-xs tabular-nums">
+   580→   639→                              {fmtNum(f.value, 4)}
+   581→   640→                            </TableCell>
+   582→   641→                          </TableRow>
+   583→   642→                        ))}
+   584→   643→                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+   585→   644→                          <TableCell className="py-2 text-xs font-medium">mean ± std</TableCell>
+   586→   645→                          <TableCell className="py-2 text-right font-mono text-xs font-semibold tabular-nums text-primary">
+   587→   646→                            {fmtNum(result.cv?.mean ?? 0, 4)} ± {fmtNum(result.cv?.std ?? 0, 3)}
+   588→   647→                          </TableCell>
+   589→   648→                        </TableRow>
+   590→   649→                      </TableBody>
+   591→   650→                    </Table>
+   592→   651→                  </div>
+   593→   652→                </Card>
+   594→   653→              ) : null}
+   595→   654→
+   596→   655→              <Card className="overflow-hidden py-0 shadow-sm">
+   597→   656→                <CardHeader className="border-b bg-muted/30 py-3">
+   598→   657→                  <CardTitle className="text-sm">Learned parameters</CardTitle>
+   599→   658→                  <CardDescription className="text-xs">
+   600→   659→                    Standardized feature space (train-set μ, σ)
+   601→
+   602→[showing lines 60-659 of 682; use offset=660 with limit to continue reading]

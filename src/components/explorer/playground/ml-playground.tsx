@@ -1,0 +1,681 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Brain, Loader2, Play, TriangleAlert } from "lucide-react";
+import {
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { CHART } from "@/components/explorer/playground/calc-ui";
+import { fmtNum, fmtTick } from "@/lib/format";
+import type { MLTrainResponse, MLTrainRequest } from "@/lib/toolkit-types";
+
+type Task = "regression" | "classification";
+type RegModel = "linear" | "polynomial" | "ridge";
+type CvValue = "0" | "3" | "5" | "10";
+
+const REG_METRICS: Array<{ key: string; label: string }> = [
+  { key: "r2", label: "R²" },
+  { key: "rmse", label: "RMSE" },
+  { key: "mae", label: "MAE" },
+];
+
+const CLS_METRICS: Array<{ key: string; label: string }> = [
+  { key: "accuracy", label: "Accuracy" },
+  { key: "precision", label: "Precision" },
+  { key: "recall", label: "Recall" },
+  { key: "f1", label: "F1" },
+];
+
+function MetricCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-mono text-xl font-semibold tabular-nums">{fmtNum(value, 4)}</p>
+    </div>
+  );
+}
+
+/** Factory for tiny boundary dot renderers (60×60 grid → 3600 points). */
+function TinyDot(color: string) {
+  return function renderTinyDot(props: { cx?: number; cy?: number }) {
+    const { cx, cy } = props;
+    if (cx === undefined || cy === undefined) return null;
+    return <circle cx={cx} cy={cy} r={1.5} fill={color} fillOpacity={0.3} />;
+  };
+}
+
+/** Factory for the larger moon-class dots. */
+function MoonDot(color: string) {
+  return function renderMoonDot(props: { cx?: number; cy?: number }) {
+    const { cx, cy } = props;
+    if (cx === undefined || cy === undefined) return null;
+    return <circle cx={cx} cy={cy} r={3.2} fill={color} fillOpacity={0.9} stroke={color} strokeWidth={0.6} />;
+  };
+}
+
+export function MlPlayground() {
+  const [task, setTask] = useState<Task>("regression");
+  const [samples, setSamples] = useState(300);
+  const [noise, setNoise] = useState(0.4);
+  const [regModel, setRegModel] = useState<RegModel>("linear");
+  const [alpha, setAlpha] = useState("1.0");
+  const [l2, setL2] = useState("1.0");
+  const [testSizePct, setTestSizePct] = useState(20);
+  const [cv, setCv] = useState<CvValue>("5");
+  const [seed, setSeed] = useState("42");
+
+  const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<MLTrainResponse | null>(null);
+
+  const noiseMax = task === "regression" ? 2 : 1.5;
+  const metricSpecs = task === "regression" ? REG_METRICS : CLS_METRICS;
+
+  function switchTask(next: Task) {
+    setTask(next);
+    if (next === "classification" && noise > 1.5) setNoise(0.3);
+    if (next === "regression" && regModel !== "ridge" && regModel !== "linear" && regModel !== "polynomial") {
+      setRegModel("linear");
+    }
+    setStatus("idle");
+    setResult(null);
+    setError(null);
+  }
+
+  const seedValid = /^\d{1,10}$/.test(seed.trim());
+  const alphaValid = Number.isFinite(Number.parseFloat(alpha)) && Number.parseFloat(alpha) >= 0;
+  const l2Valid = Number.isFinite(Number.parseFloat(l2)) && Number.parseFloat(l2) >= 0;
+
+  async function run() {
+    if (!seedValid) {
+      setError("Seed must be a non-negative integer (0 – 2147483647).");
+      return;
+    }
+    if (task === "regression" && regModel === "ridge" && !alphaValid) {
+      setError("Ridge alpha must be a number ≥ 0.");
+      return;
+    }
+    if (task === "classification" && !l2Valid) {
+      setError("L2 strength must be a number ≥ 0.");
+      return;
+    }
+    setStatus("running");
+    setError(null);
+    const body: MLTrainRequest = {
+      task,
+      samples,
+      noise,
+      model: task === "regression" ? regModel : "logistic",
+      testSize: testSizePct / 100,
+      cv: (Number.parseInt(cv, 10) || 0) as 0 | 3 | 5 | 10,
+      seed: Number.parseInt(seed, 10) || 0,
+    };
+    if (task === "regression" && regModel === "ridge") body.alpha = Number.parseFloat(alpha);
+    if (task === "classification") body.l2 = Number.parseFloat(l2);
+
+    try {
+      const res = await fetch("/api/ml/train", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        const message =
+          typeof data === "object" && data !== null && "error" in data
+            ? `${String((data as { error: unknown }).error)}${
+                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+                  : ""
+              }`
+            : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      setResult(data as MLTrainResponse);
+      setStatus("done");
+    } catch (err) {
+      setStatus("error");
+      const message = err instanceof Error ? err.message : "Training request failed.";
+      setError(message);
+    }
+  }
+
+  const running = status === "running";
+
+  /* Chart series (memoized splits so recharts gets stable references). */
+  const clsSeries = useMemo(() => {
+    if (!result || result.task !== "classification") return null;
+    const boundary = result.series.boundary ?? [];
+    return {
+      grid0: boundary.filter((p) => p.pred === 0),
+      grid1: boundary.filter((p) => p.pred === 1),
+      moon0: result.series.test.filter((p) => p.label === 0),
+      moon1: result.series.test.filter((p) => p.label === 1),
+    };
+  }, [result]);
+
+  const coefficientsText = useMemo(() => {
+    if (!result) return null;
+    const { intercept, coefs } = result.coefficients;
+    if (result.task === "regression") {
+      const terms = coefs
+        .map((c, i) => `${fmtNum(c, 4)}·x̂${coefs.length > 1 ? `^${i + 1}` : ""}`)
+        .join(" + ");
+      return `ŷ = ${fmtNum(intercept, 4)} + ${terms}   (x̂ = standardized x)`;
+    }
+    return `σ(b₀ + w₁x̂₁ + w₂x̂₂)   b₀=${fmtNum(intercept, 4)}, w=[${coefs
+      .map((c) => fmtNum(c, 4))
+      .join(", ")}]`;
+  }, [result]);
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
+      {/* ------------------------------ Controls ------------------------------ */}
+      <Card className="h-fit overflow-hidden py-0 shadow-sm xl:sticky xl:top-24">
+        <CardHeader className="border-b bg-muted/30 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Brain className="size-4.5" aria-hidden />
+            </span>
+            <div>
+              <CardTitle className="text-base">Experiment setup</CardTitle>
+              <CardDescription className="text-xs">
+                Deterministic — same seed, same result
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5 pb-4">
+          {/* Task */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Task</Label>
+            <div className="grid grid-cols-2 gap-1 rounded-lg border bg-muted/40 p-1" role="tablist" aria-label="ML task">
+              {(["regression", "classification"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="tab"
+                  aria-selected={task === t}
+                  onClick={() => switchTask(t)}
+                  className={`h-9 rounded-md text-sm font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                    task === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Samples */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="ml-samples" className="text-xs font-medium">
+                Samples
+              </Label>
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">{samples}</span>
+            </div>
+            <Slider
+              id="ml-samples"
+              min={100}
+              max={1000}
+              step={50}
+              value={[samples]}
+              onValueChange={(v) => setSamples(v[0] ?? samples)}
+            />
+          </div>
+
+          {/* Noise */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="ml-noise" className="text-xs font-medium">
+                Noise {task === "classification" ? "(moons)" : "σ"}
+              </Label>
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                {noise.toFixed(2)}
+              </span>
+            </div>
+            <Slider
+              id="ml-noise"
+              min={0}
+              max={noiseMax}
+              step={0.05}
+              value={[Math.min(noise, noiseMax)]}
+              onValueChange={(v) => setNoise(v[0] ?? noise)}
+            />
+          </div>
+
+          {/* Model */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Model</Label>
+            {task === "regression" ? (
+              <Select value={regModel} onValueChange={(v) => setRegModel(v as RegModel)}>
+                <SelectTrigger className="h-10" aria-label="Regression model">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="linear">Linear regression</SelectItem>
+                  <SelectItem value="polynomial">Polynomial (degree 2)</SelectItem>
+                  <SelectItem value="ridge">Ridge (α regularized)</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex h-10 items-center rounded-md border bg-muted/30 px-3 text-sm text-muted-foreground">
+                  Logistic regression (batch GD, 800 epochs)
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ml-l2" className="text-xs font-medium">
+                    L2 strength λ
+                  </Label>
+                  <Input
+                    id="ml-l2"
+                    inputMode="decimal"
+                    value={l2}
+                    onChange={(e) => setL2(e.target.value)}
+                    aria-invalid={l2Valid ? undefined : true}
+                    className={`h-10 font-mono text-sm tabular-nums ${l2Valid ? "" : "border-destructive/60"}`}
+                  />
+                  {!l2Valid ? (
+                    <p className="text-[11px] text-destructive">Must be a number ≥ 0.</p>
+                  ) : null}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {task === "regression" && regModel === "ridge" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="ml-alpha" className="text-xs font-medium">
+                Ridge α
+              </Label>
+              <Input
+                id="ml-alpha"
+                inputMode="decimal"
+                value={alpha}
+                onChange={(e) => setAlpha(e.target.value)}
+                aria-invalid={alphaValid ? undefined : true}
+                className={`h-10 font-mono text-sm tabular-nums ${alphaValid ? "" : "border-destructive/60"}`}
+              />
+              {!alphaValid ? <p className="text-[11px] text-destructive">Must be a number ≥ 0.</p> : null}
+            </div>
+          ) : null}
+
+          {/* Test size */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="ml-test" className="text-xs font-medium">
+                Test split
+              </Label>
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                {testSizePct}%
+              </span>
+            </div>
+            <Slider
+              id="ml-test"
+              min={10}
+              max={50}
+              step={5}
+              value={[testSizePct]}
+              onValueChange={(v) => setTestSizePct(v[0] ?? testSizePct)}
+            />
+          </div>
+
+          {/* CV + seed */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">k-fold CV</Label>
+              <Select value={cv} onValueChange={(v) => setCv(v as CvValue)}>
+                <SelectTrigger className="h-10" aria-label="Cross-validation folds">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Off</SelectItem>
+                  <SelectItem value="3">3-fold</SelectItem>
+                  <SelectItem value="5">5-fold</SelectItem>
+                  <SelectItem value="10">10-fold</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ml-seed" className="text-xs font-medium">
+                Seed
+              </Label>
+              <Input
+                id="ml-seed"
+                inputMode="numeric"
+                value={seed}
+                onChange={(e) => setSeed(e.target.value)}
+                aria-invalid={seedValid ? undefined : true}
+                className={`h-10 font-mono text-sm tabular-nums ${seedValid ? "" : "border-destructive/60"}`}
+              />
+              {!seedValid ? (
+                <p className="text-[11px] text-destructive">Non-negative integer.</p>
+              ) : null}
+            </div>
+          </div>
+
+          <Button
+            size="lg"
+            className="h-11 w-full gap-2"
+            onClick={() => void run()}
+            disabled={running}
+          >
+            {running ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+                Training…
+              </>
+            ) : (
+              <>
+                <Play className="size-4" aria-hidden />
+                Train model
+              </>
+            )}
+          </Button>
+
+          {error ? (
+            <Alert variant="destructive">
+              <TriangleAlert className="size-4" aria-hidden />
+              <AlertTitle>Request failed</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* ------------------------------ Results ------------------------------ */}
+      <div className="min-w-0 space-y-4">
+        {!result && status !== "running" ? (
+          <Card className="py-0 shadow-sm">
+            <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+              <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Brain className="size-6" aria-hidden />
+              </span>
+              <p className="text-sm font-medium">No results yet</p>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Configure the experiment and press{" "}
+                <strong className="font-semibold text-foreground">Train model</strong>. Data is
+                generated server-side from your seed — regression fits a closed-form least-squares
+                model; classification trains logistic regression on two moons.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {status === "running" ? (
+          <Card className="py-0 shadow-sm">
+            <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
+              <p className="text-sm font-medium">Training…</p>
+              <p className="text-xs text-muted-foreground">
+                Generating {samples} samples, fitting the model, evaluating the held-out split
+                {cv !== "0" ? ` and running ${cv}-fold CV` : ""}.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {result && status !== "running" ? (
+          <>
+            {/* Metrics */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {metricSpecs.map((m) => (
+                <MetricCard key={m.key} label={m.label} value={result.metrics[m.key] ?? Number.NaN} />
+              ))}
+              {result.cv ? (
+                <div className="col-span-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5 shadow-sm sm:col-span-4">
+                  <p className="text-xs text-muted-foreground">
+                    {result.cv.k}-fold CV {result.cv.metricName}
+                  </p>
+                  <p className="font-mono text-xl font-semibold tabular-nums text-primary">
+                    {fmtNum(result.cv.mean, 4)}{" "}
+                    <span className="text-sm font-normal">± {fmtNum(result.cv.std, 3)}</span>
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Chart */}
+            <Card className="overflow-hidden py-0 shadow-sm">
+              <CardHeader className="border-b bg-muted/30 py-3">
+                <CardTitle className="text-sm">
+                  {result.task === "regression"
+                    ? "Test points & fitted curve"
+                    : "Two moons & decision boundary"}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {result.datasetMeta.nTotal} samples · {result.datasetMeta.nTrain} train ·{" "}
+                  {result.datasetMeta.nTest} test · seed {result.datasetMeta.seed}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4">
+                <div
+                  className="h-[340px] w-full"
+                  role="img"
+                  aria-label={
+                    result.task === "regression"
+                      ? "Scatter plot of test points with the fitted regression curve"
+                      : "Scatter plot of the two moon classes with model decision boundary"
+                  }
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    {result.task === "regression" ? (
+                      <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+                        <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+                        <XAxis
+                          type="number"
+                          dataKey="x"
+                          domain={["auto", "auto"]}
+                          tick={CHART.axisTick}
+                          tickFormatter={fmtTick}
+                          tickLine={false}
+                          axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+                          label={{ value: "x", position: "insideBottomRight", offset: -2, fill: "#78716c", fontSize: 11 }}
+                        />
+                        <YAxis
+                          type="number"
+                          dataKey="y"
+                          width={44}
+                          tick={CHART.axisTick}
+                          tickFormatter={fmtTick}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <Tooltip
+                          cursor={{ strokeDasharray: "3 3" }}
+                          contentStyle={CHART.tooltipStyle}
+                          formatter={(value) => fmtNum(Number(value), 4)}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                        <Scatter
+                          name="fitted curve"
+                          data={result.series.curve ?? []}
+                          line={{ stroke: CHART.emerald, strokeWidth: 2.5 }}
+                          shape="square"
+                          fill={CHART.emerald}
+                          fillOpacity={0.5}
+                          isAnimationActive={false}
+                        />
+                        <Scatter
+                          name="test points"
+                          data={result.series.test}
+                          fill={CHART.stone}
+                          fillOpacity={0.8}
+                          isAnimationActive={false}
+                        />
+                      </ScatterChart>
+                    ) : (
+                      <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+                        <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+                        <XAxis
+                          type="number"
+                          dataKey="x"
+                          domain={["auto", "auto"]}
+                          tick={CHART.axisTick}
+                          tickFormatter={fmtTick}
+                          tickLine={false}
+                          axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+                        />
+                        <YAxis
+                          type="number"
+                          dataKey="y"
+                          width={44}
+                          tick={CHART.axisTick}
+                          tickFormatter={fmtTick}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <Tooltip
+                          cursor={{ strokeDasharray: "3 3" }}
+                          contentStyle={CHART.tooltipStyle}
+                          formatter={(value) => fmtNum(Number(value), 3)}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                        {clsSeries ? (
+                          <Scatter
+                            name="boundary: class 0"
+                            data={clsSeries.grid0}
+                            fill={CHART.teal}
+                            shape={TinyDot(CHART.teal)}
+                            isAnimationActive={false}
+                          />
+                        ) : null}
+                        {clsSeries ? (
+                          <Scatter
+                            name="boundary: class 1"
+                            data={clsSeries.grid1}
+                            fill={CHART.amber}
+                            shape={TinyDot(CHART.amber)}
+                            isAnimationActive={false}
+                          />
+                        ) : null}
+                        {clsSeries ? (
+                          <Scatter
+                            name="moon 0 (test)"
+                            data={clsSeries.moon0}
+                            fill={CHART.emerald}
+                            shape={MoonDot(CHART.emerald)}
+                            isAnimationActive={false}
+                          />
+                        ) : null}
+                        {clsSeries ? (
+                          <Scatter
+                            name="moon 1 (test)"
+                            data={clsSeries.moon1}
+                            fill={CHART.rose}
+                            shape={MoonDot(CHART.rose)}
+                            isAnimationActive={false}
+                          />
+                        ) : null}
+                      </ScatterChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+                <p className="mt-1 text-center text-[11px] text-muted-foreground">
+                  {result.task === "regression"
+                    ? "Stone dots = held-out test points; emerald line = model prediction (100-point sweep)."
+                    : "Emerald/rose = test-set moons; faint teal/amber dots = 60×60 grid classified by the model."}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* CV folds + coefficients */}
+            <div className="grid gap-4 lg:grid-cols-2">
+              {result.cv ? (
+                <Card className="overflow-hidden py-0 shadow-sm">
+                  <CardHeader className="border-b bg-muted/30 py-3">
+                    <CardTitle className="text-sm">
+                      {result.cv.k}-fold CV — {result.cv.metricName} per fold
+                    </CardTitle>
+                  </CardHeader>
+                  <div className="thin-scrollbar max-h-72 overflow-y-auto">
+                    <Table>
+                      <TableHeader className="sticky top-0 bg-muted/60 backdrop-blur">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="h-9">Fold</TableHead>
+                          <TableHead className="h-9 text-right">{result.cv.metricName}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {result.cv.folds.map((f) => (
+                          <TableRow key={f.fold}>
+                            <TableCell className="py-2 font-mono text-xs">fold {f.fold}</TableCell>
+                            <TableCell className="py-2 text-right font-mono text-xs tabular-nums">
+                              {fmtNum(f.value, 4)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                          <TableCell className="py-2 text-xs font-medium">mean ± std</TableCell>
+                          <TableCell className="py-2 text-right font-mono text-xs font-semibold tabular-nums text-primary">
+                            {fmtNum(result.cv?.mean ?? 0, 4)} ± {fmtNum(result.cv?.std ?? 0, 3)}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </Card>
+              ) : null}
+
+              <Card className="overflow-hidden py-0 shadow-sm">
+                <CardHeader className="border-b bg-muted/30 py-3">
+                  <CardTitle className="text-sm">Learned parameters</CardTitle>
+                  <CardDescription className="text-xs">
+                    Standardized feature space (train-set μ, σ)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pb-4">
+                  {coefficientsText ? (
+                    <pre className="thin-scrollbar overflow-x-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+                      {coefficientsText}
+                    </pre>
+                  ) : null}
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    {result.task === "regression"
+                      ? "Solved in closed form via normal equations (Gaussian elimination with partial pivoting); ridge adds α to the diagonal, skipping the intercept."
+                      : "Batch gradient descent: lr = 0.1, 800 epochs, L2-penalized weights (bias exempt)."}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}

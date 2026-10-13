@@ -16,3 +16,73 @@ Stage Summary:
   - Docking: AutoDock4 batch orchestration (autogrid4/autodock4 via subprocess + ProcessPoolExecutor), GPF generator with atom-type extraction, DLG cluster-table parser, docking completeness checker, SMILES→PDBQT via Meeko with AD4 atom-type repair.
 - Quality issues found: no package structure (flat scripts), massive duplication, hardcoded Windows file paths (`C:\Users\...`), no type hints, no docstrings, bare `except:`, print-based logging, `os.chdir` side effects, `shell=True` subprocess calls, no tests, no CLI, mixed Persian/English messages, no pharmaceutical PK/PD/dosage calculation modules (user explicitly requests these as a new domain).
 - Upgrade plan: build `pharma-ml-toolkit/` — a typed, documented, tested Python 3.10+ package `pharmaml` with subpackages `chem`, `ml`, `pharma` (NEW: PK/PD/dosage), `docking`, `utils`, plus examples, pytest suite, pyproject, Dockerfile, CI; then a Next.js "Codebase Explorer" web app on `/` to browse/download the upgraded codebase.
+
+---
+Task ID: 2
+Agent: Main orchestrator (Z.ai Code)
+Task: Finalize the Python package deliverable (pytest path fix, README, CI) and verify the suite.
+
+Work Log:
+- Assessed `pharma-ml-toolkit/` state: ~6,600 lines across `src/pharmaml/` (chem/ml/pharma/docking/utils + cli/config/logger/exceptions), 10 test modules, 5 examples, Dockerfile, pyproject.toml, requirements.txt. All written in a prior session but never logged.
+- Fixed pytest import path: added `pythonpath = ["src"]` to `[tool.pytest.ini_options]` in pyproject.toml (tests previously failed with ModuleNotFoundError unless PYTHONPATH was set manually).
+- Wrote the missing `pharma-ml-toolkit/README.md` (referenced by pyproject but absent): overview, design assumptions, install, package layout, quickstart per domain, CLI reference, error-handling/logging, testing, Docker, design-choices & trade-offs.
+- Added `.github/workflows/ci.yml`: matrix CI (Python 3.10/3.11/3.12) — install → ruff → mypy (non-blocking) → pytest with coverage; plus a full-deps job (chem+boosting extras).
+- Re-ran the suite: **159 passed, 1 skipped** with zero env setup. Smoke-tested imports & math: CrCl(68y/70kg/1.1)=63.64 mL/min ✓, Mosteller BSA=1.845 m² ✓, pIC50(100 nM)=7.0 ✓, ligand efficiency=0.3 ✓.
+
+Stage Summary:
+- Python deliverable COMPLETE and verified: package imports cleanly, CLI exists (`pharmaml ml train|compare`, `chem pic50|descriptors`, `pharma pk|dose`, `docking scan|check`), model registry lists sklearn models with XGBoost/LightGBM/CatBoost behind lazy optional imports.
+- Remaining work: the Next.js "Codebase Explorer" web app on `/` (currently default placeholder page.tsx), browser verification, cron setup.
+
+---
+Task ID: 5
+Agent: full-stack-developer
+Task: Build the PharmaML Toolkit Explorer web app on /
+
+Work Log:
+- Read worklog + audited the working tree: a prior (interrupted, unlogged) session had already written the full app — page.tsx (4-tab single page), layout.tsx (ThemeProvider + sonner Toaster + metadata), explorer components (overview, code-explorer, file-tree, code-block, playground/{playground, pharma-calcs, calc-ui, ml-playground, docking-parser}, download-panel, stat-chip), libs (store/toolkit-types/toolkit-fs/ml-math/docking-parse/docking-samples/format) and all 5 API routes. @types/react-syntax-highlighter already installed.
+- Verified all 5 API routes end-to-end with curl: GET /api/toolkit/tree (48 files, 12 dirs, 7,097 LOC, 237,586 B; hidden .github included; 60s TTL cache visibly working: 114ms → 8ms); GET /api/toolkit/file (README 200; traversal `../` → 400; illegal ext → 400; missing → 404; .github/workflows/ci.yml viewable); GET /api/toolkit/download (streams zip -r via child_process, correct Content-Type/Disposition, 60 entries / 237,586 B matching tree stats); POST /api/ml/train (linear R²=0.9077±CV, ridge α, polynomial deg-2 with 2 coefs, logistic moons acc=0.853 with 3,600-point 60×60 boundary grid, k-fold CV mean±std, zod 400 on bad body); POST /api/docking/parse (Vina 9-pose table, DLG cluster table, CSV with 2 score columns → consensus z-score rescore + re-rank, garbage input → 400 with actionable message).
+- Fixed a real bug in src/components/explorer/code-block.tsx: the grammar lookup `SYNTAX_MAP[language] === undefined ? SYNTAX_MAP[language] : language` always resolved to undefined (missing keys are undefined too), so NO file ever got Prism highlighting. Replaced with a REGISTERED_GRAMMARS whitelist; also registered the bash grammar so the download-panel install block highlights as Shell.
+- Polish: fixed odd JSX indentation of the "best" badge in docking-parser.tsx; updated fallback hero/footer LOC stats from stale "6,993" to the live value "7,097" (48 files); confirmed registry stat uses the true count (15 models) from list_models() rather than the spec's "20+".
+- bun run lint → zero errors. Curled / and every route to force recompiles; dev.log tail shows only 200/400/404s, no compile or runtime errors.
+
+Stage Summary:
+- Files: src/app/page.tsx, src/app/layout.tsx, src/app/api/{toolkit/tree,toolkit/file,toolkit/download,ml/train,docking/parse}/route.ts, src/components/explorer/{overview,code-explorer,file-tree,code-block,stat-chip,download-panel}.tsx, src/components/explorer/playground/{playground,pharma-calcs,calc-ui,ml-playground,docking-parser}.tsx, src/lib/{store,toolkit-types,toolkit-fs,ml-math,docking-parse,docking-samples,format}.ts, globals.css (emerald/amber palette, thin-scrollbar + pill-scroll rules, sticky footer via mt-auto + safe-area inset).
+- Features: Overview (hero w/ live stats, 4 domain cards, before→after table, 5 design-choice cards from README, quickstart + copy); Code Explorer (collapsible tree w/ line counts, breadcrumb + badges + copy, Prism light/dark, line numbers, max-h-[70vh], README.md default, zustand-persisted selection, skeletons + retry); Playground (7 pharma calculators with validation/formulas/copy + recharts AUC & PD Hill charts; ML trainer with sliders/selects, metric cards, CV table, fitted-curve and moons+boundary charts, learned params — all math server-side & seeded; docking parser with 3 embedded samples, ranked table, LE, stat chips, affinity bar chart, consensus z-score column); Download (live file counts, install code block, blob download w/ loading + toasts).
+- Status: lint clean (exit 0), dev.log clean, all API contracts verified. Known notes: docs/ dir in the package is empty (shown as placeholder); README says "152 tests" while the verified suite is 159 — the app consistently displays 159.
+
+---
+Task ID: 6
+Agent: Main orchestrator (Z.ai Code)
+Task: End-to-end browser verification of the PharmaML Explorer web app + fixes.
+
+Work Log:
+- Loaded agent-browser skill and drove the full golden path on http://localhost:3000:
+  - Overview tab: hero, live stats, before→after upgrade table, design-choice cards, quickstart — all render.
+  - Code Explorer: real file tree from /api/toolkit/tree; opened src/pharmaml/ml/models.py — 14,546 chars of Prism-highlighted code rendered; copy button present.
+  - Playground → Calculators: verified math against hand calculations — CrCl(68y/70kg/1.1/male)=63.64 mL/min ✓, Mosteller BSA=1.845 m² ✓, pediatric 330 mg & 990 mg/day ✓, LD=540 mg ✓, MD=153.6 mg/τ ✓, ke=0.1155 h⁻¹ ✓, AUC trapezoid=32.65 µg·h/mL ✓ (hand-computed).
+  - Playground → ML Training: regression (5-fold CV R²=0.912–0.941, mean 0.92 ± 0.0132 — std verified by hand) and classification (5-fold acc 0.79 ± 0.034, moons scatter + boundary dots + recharts SVGs confirmed).
+  - Playground → Docking Parser: Vina sample → 9 poses with LE(−10.3/32)=−0.322 ✓, RMSD columns, bar chart; CSV sample → consensus z-score rescore (−2.546, −2.735, …) ✓.
+  - Download: button shows ≈232.0 KB; curl of /api/toolkit/download → HTTP 200, 93,589 bytes, unzip lists 60 files / 237,586 bytes matching tree stats exactly.
+- Checks: zero page errors, zero console errors/warnings; responsive at 360×800 (horizontal pill-scroll nav, overflow-x:auto); sticky-footer CSS confirmed (wrapper flex min-h-screen flex-col + footer mt-auto + safe-area inset); theme toggle renders correct dark palette.
+- Visual QA with VLM (z-ai vision) on mobile + desktop-dark screenshots: desktop clean & professional; mobile revealed real defect — StatChip `truncate` clipped "232.0 KB"/"uncompressed"/"passing tests" at 360px.
+- Fix 1: stat-chip.tsx — replaced truncate with break-words (+leading-snug on label); re-verified at 360px: 0 clipped elements.
+- Fix 2: next.config.ts — added `allowedDevOrigins: ["*.space-z.ai"]` to silence the preview-origin dev warning; server auto-restarted cleanly.
+- Fix 3: README.md test counts 152 → 159 (matches verified suite).
+- bun run lint → exit 0; dev.log tail → only 200/400/404s, no compile/hydration/runtime errors.
+
+Stage Summary:
+- Web app fully browser-verified: every tab, every API, mobile + desktop, light + dark. All interactive flows work end-to-end with correct math.
+- dev server healthy on port 3000.
+
+---
+Task ID: 7
+Agent: Main orchestrator (Z.ai Code)
+Task: Schedule the recurring web-dev review job and close out.
+
+Work Log:
+- Created cron job "PharmaML Explorer — 15-min dev review" (job_id 457247, kind=webDevReview, Quartz cron `0 */15 * * * ?`, tz Asia/Tehran, priority 5) with the standard QA/continue-development prompt (worklog review → agent-browser testing → fix-or-extend → worklog update).
+- Closed the agent-browser session.
+
+Stage Summary:
+- Project COMPLETE and verified: (1) `pharma-ml-toolkit/` Python package — 48 files, ~7.1k LOC, 159 passing tests, README, CI, Dockerfile, CLI; (2) Next.js single-page Explorer app on `/` — overview, code browser, interactive playground (pharma calculators / ML training / docking parser), ZIP download; lint-clean, browser-verified.
+- Known minor items: empty `docs/` directory in the package (rendered as a harmless placeholder in the explorer); PyTorch not used (sklearn backbone by design).

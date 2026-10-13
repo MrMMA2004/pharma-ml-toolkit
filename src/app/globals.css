@@ -51,7 +51,8 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  /* emerald-600 */
+  --primary: oklch(0.596 0.145 163.225);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -62,12 +63,18 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  /* emerald-500 */
+  --ring: oklch(0.696 0.17 162.48);
+  /* emerald-600 */
+  --chart-1: oklch(0.596 0.145 163.225);
+  /* amber-500 */
+  --chart-2: oklch(0.769 0.188 70.08);
+  /* rose-500 */
+  --chart-3: oklch(0.645 0.246 16.439);
+  /* teal-500 */
+  --chart-4: oklch(0.704 0.14 182.503);
+  /* stone-500 */
+  --chart-5: oklch(0.553 0.016 285.938);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -85,8 +92,9 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  /* emerald-500 */
+  --primary: oklch(0.696 0.17 162.48);
+  --primary-foreground: oklch(0.145 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -96,20 +104,25 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  --ring: oklch(0.696 0.17 162.48);
+  /* emerald-400 */
+  --chart-1: oklch(0.765 0.177 163.223);
+  /* amber-400 */
+  --chart-2: oklch(0.828 0.189 84.429);
+  /* rose-400 */
+  --chart-3: oklch(0.712 0.194 13.428);
+  /* teal-400 */
+  --chart-4: oklch(0.777 0.152 181.912);
+  /* stone-400 */
+  --chart-5: oklch(0.706 0.01 56.759);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: oklch(0.696 0.17 162.48);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.696 0.17 162.48);
 }
 
 @layer base {
@@ -119,4 +132,32 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* ---- Thin custom scrollbar for long lists / code panes ---- */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--foreground) 25%, transparent) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--foreground) 22%, transparent);
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--foreground) 38%, transparent);
+}
+
+/* Horizontal pill nav scrolling — hide the vertical bar entirely */
+.pill-scroll {
+  scrollbar-width: none;
+}
+.pill-scroll::-webkit-scrollbar {
+  display: none;
 }

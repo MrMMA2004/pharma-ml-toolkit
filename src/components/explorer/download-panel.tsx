@@ -1,0 +1,264 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  CircleCheck,
+  FileArchive,
+  FileCode2,
+  Loader2,
+  Scale,
+  TerminalSquare,
+  TriangleAlert,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { CodeBlock } from "@/components/explorer/code-block";
+import { StatChip } from "@/components/explorer/stat-chip";
+import { useToolkitStore } from "@/lib/store";
+import { fmtBytes, fmtInt } from "@/lib/format";
+import type { TreeNode } from "@/lib/toolkit-types";
+import { toast } from "sonner";
+
+const INSTALL = `# 1. unzip the archive
+unzip pharma-ml-toolkit.zip -d pharmaml && cd pharmaml
+
+# 2. install — core (ML + pharma + docking parsing/scoring)
+pip install -e .
+
+#    …or with cheminformatics extras (RDKit)
+pip install -e ".[chem]"
+
+#    …or with gradient-boosting model families
+pip install -e ".[boosting]"
+
+# 3. verify the installation
+python -m pytest          # 159 tests should pass
+pharmaml --version`;
+
+function countFiles(node: TreeNode): number {
+  if (node.type === "file") return 1;
+  return (node.children ?? []).reduce((acc, child) => acc + countFiles(child), 0);
+}
+
+function collectDirSummary(root: TreeNode): Array<{ name: string; files: number; note: string }> {
+  const notes: Record<string, string> = {
+    src: "the pharmaml package (chem, ml, pharma, docking, utils + CLI)",
+    tests: "159 pytest cases across all domains",
+    examples: "runnable end-to-end demos on synthetic data",
+    ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
+    docs: "empty placeholder for future docs",
+  };
+  const out: Array<{ name: string; files: number; note: string }> = [];
+  let rootFiles = 0;
+  for (const child of root.children ?? []) {
+    if (child.type === "dir") {
+      out.push({
+        name: child.name,
+        files: countFiles(child),
+        note: notes[child.name] ?? "",
+      });
+    } else {
+      rootFiles++;
+    }
+  }
+  if (rootFiles > 0) {
+    out.push({
+      name: "(root)",
+      files: rootFiles,
+      note: "README, pyproject.toml, Dockerfile, requirements.txt, .gitignore",
+    });
+  }
+  return out;
+}
+
+export function DownloadPanel() {
+  const ensureTree = useToolkitStore((s) => s.ensureTree);
+  const tree = useToolkitStore((s) => s.tree);
+  const stats = useToolkitStore((s) => s.stats);
+  const treeStatus = useToolkitStore((s) => s.treeStatus);
+
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    void ensureTree();
+  }, [ensureTree]);
+
+  const dirSummary = useMemo(() => (tree ? collectDirSummary(tree) : []), [tree]);
+
+  async function download() {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/toolkit/download");
+      if (!res.ok) {
+        let message = `HTTP ${res.status}`;
+        try {
+          const data: unknown = await res.json();
+          if (typeof data === "object" && data !== null && "error" in data) {
+            message = String((data as { error: unknown }).error);
+          }
+        } catch {
+          /* body wasn't JSON — keep the status message */
+        }
+        throw new Error(message);
+      }
+      const blob = await res.blob();
+      if (blob.size < 1024) {
+        throw new Error("The archive came back suspiciously small — try again.");
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "pharma-ml-toolkit.zip";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      toast.success("Download started", {
+        description: `pharma-ml-toolkit.zip · ${fmtBytes(blob.size)}`,
+      });
+    } catch (err) {
+      toast.error("Download failed", {
+        description: err instanceof Error ? err.message : "Unknown error.",
+      });
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6">
+      {/* ------------------------------ CTA ------------------------------ */}
+      <Card className="overflow-hidden py-0 shadow-sm">
+        <CardHeader className="border-b bg-gradient-to-br from-primary/10 via-transparent to-amber-500/10 py-6">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <span className="flex size-14 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <FileArchive className="size-7" aria-hidden />
+            </span>
+            <div className="space-y-1">
+              <CardTitle className="text-xl">Download pharma-ml-toolkit.zip</CardTitle>
+              <CardDescription>
+                The complete Python package — source, tests, examples, Dockerfile and CI.
+              </CardDescription>
+            </div>
+            <Button
+              size="lg"
+              className="h-12 gap-2 px-8 text-base"
+              onClick={() => void download()}
+              disabled={downloading}
+            >
+              {downloading ? (
+                <>
+                  <Loader2 className="size-5 animate-spin" aria-hidden />
+                  Packaging…
+                </>
+              ) : (
+                <>
+                  <FileArchive className="size-5" aria-hidden />
+                  Download ZIP
+                  {stats ? (
+                    <span className="ml-1 rounded-full bg-primary-foreground/15 px-2 py-0.5 text-xs font-normal">
+                      ≈ {fmtBytes(stats.totalBytes)}
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Generated on the fly from the server copy — always in sync with the explorer.
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
+          <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
+          <StatChip icon={CircleCheck} value="159" label="passing tests" />
+          <StatChip icon={Scale} value="MIT" label="license" />
+          <StatChip
+            icon={FileArchive}
+            value={stats ? fmtBytes(stats.totalBytes) : "…"}
+            label="uncompressed"
+          />
+        </CardContent>
+      </Card>
+
+      {/* ------------------------------ Contents ------------------------------ */}
+      <Card className="overflow-hidden py-0 shadow-sm">
+        <CardHeader className="border-b bg-muted/30 py-3">
+          <CardTitle className="text-base">What&apos;s inside</CardTitle>
+          <CardDescription className="text-xs">
+            {treeStatus === "loading"
+              ? "Counting files…"
+              : treeStatus === "error"
+                ? "Tree unavailable — using the documented layout."
+                : "File counts computed live from the server file tree."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pb-4 pt-3">
+          {treeStatus === "loading" ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-6 animate-pulse rounded bg-muted" />
+              ))}
+            </div>
+          ) : dirSummary.length > 0 ? (
+            <ul className="divide-y divide-border">
+              {dirSummary.map((d) => (
+                <li key={d.name} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2">
+                  <code className="font-mono text-sm font-medium">{d.name}/</code>
+                  <span className="text-sm tabular-nums text-muted-foreground">
+                    {fmtInt(d.files)} {d.files === 1 ? "file" : "files"}
+                  </span>
+                  {d.note ? (
+                    <span className="w-full text-xs text-muted-foreground/80 sm:w-auto">
+                      — {d.note}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" aria-hidden />
+              <span>
+                src/ (chem, ml, pharma, docking, utils), tests/, examples/, .github/, Dockerfile,
+                pyproject.toml, requirements.txt.
+              </span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ------------------------------ Install ------------------------------ */}
+      <div className="space-y-3">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <TerminalSquare className="size-5 text-primary" aria-hidden />
+          Install &amp; verify
+        </h2>
+        <CodeBlock code={INSTALL} language="bash" fileName="install.sh" maxHeightClass="max-h-none" />
+      </div>
+
+      {/* ------------------------------ License ------------------------------ */}
+      <Card className="border py-0 shadow-sm">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+          <div className="flex items-center gap-3">
+            <Scale className="size-5 text-muted-foreground" aria-hidden />
+            <div>
+              <p className="text-sm font-medium">MIT License</p>
+              <p className="text-xs text-muted-foreground">
+                Free for research and education — attribution appreciated.
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Research &amp; education only — not medical advice.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
