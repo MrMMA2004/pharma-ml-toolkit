@@ -107,6 +107,10 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `read_table` | function | Read a CSV/TSV or Excel file into a DataFrame. |
+| `write_table` | function | Write a DataFrame to CSV or Excel honouring the extension. |
+| `ensure_directory` | function | Create ``path`` (and parents) if missing; return the resolved Path. |
+| `safe_filename` | function | Sanitise a string into a portable filename. |
 
 ## `pharmaml.utils.validation`
 
@@ -114,6 +118,11 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `validate_positive` | function | Assert ``value`` is a finite, (strictly) positive number. |
+| `validate_smiles_syntax` | function | Return True if ``smiles`` passes lightweight syntax checks. |
+| `require_columns` | function | Assert that every name in ``columns`` exists in ``frame``. |
+| `validate_concentration_series` | function | Validate a paired time/concentration series for PK math. |
+| `coerce_frame` | function | Coerce common inputs (DataFrame / dict of arrays) to a DataFrame. |
 
 ## Command-line interface
 

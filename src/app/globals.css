@@ -214,15 +214,64 @@
   }
 }
 
+/* ---- Code viewer: click-a-line permalink gutter ---- */
+.code-permalink .code-line {
+  cursor: copy;
+  transition: background-color 120ms ease;
+}
+.code-permalink .code-line:hover {
+  background: color-mix(in oklch, var(--primary) 6%, transparent);
+  box-shadow: inset 3px 0 0 0 color-mix(in oklch, var(--primary) 40%, transparent);
+}
+.code-permalink .react-syntax-highlighter-line-number {
+  transition: color 120ms ease;
+}
+.code-permalink .code-line:hover .react-syntax-highlighter-line-number {
+  color: color-mix(in oklch, var(--primary) 85%, var(--foreground));
+}
+/* Transient confirmation tint after a reference is copied (amber). */
+.code-line-copied {
+  background: color-mix(in oklch, var(--chart-2) 18%, transparent) !important;
+  box-shadow: inset 3px 0 0 0 var(--chart-2) !important;
+}
+
+/* ---- Soft ping ring for empty-state icons ---- */
+.ping-ring {
+  position: relative;
+}
+.ping-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklch, var(--primary) 45%, transparent);
+  animation: ring-ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes ring-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
 /* ---- Custom text selection ---- */
 ::selection {
   background: color-mix(in oklch, var(--primary) 26%, transparent);
 }
 
-/* ---- Reduced motion: no flash, no smooth scroll ---- */
+/* ---- Reduced motion: no flash, no ping, no smooth scroll ---- */
 @media (prefers-reduced-motion: reduce) {
   .code-line-highlight {
     animation: none;
+  }
+  .ping-ring::before {
+    animation: none;
+    opacity: 0;
   }
 }
 

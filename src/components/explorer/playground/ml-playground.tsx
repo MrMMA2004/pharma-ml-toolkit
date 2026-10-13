@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { Brain, ChevronDown, Loader2, Play, Table2, TriangleAlert } from "lucide-react";
 import {
   CartesianGrid,
+  ComposedChart,
   Legend,
+  Line,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
@@ -119,6 +121,15 @@ export function MlPlayground() {
   const [preview, setPreview] = useState<DatasetPreviewResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(true);
+
+  /** Classification preview: the sampled points split by class for the chart. */
+  const previewClasses = useMemo(() => {
+    if (!preview || preview.task !== "classification") return null;
+    return {
+      cls0: preview.points.filter((p) => p.label === 0),
+      cls1: preview.points.filter((p) => p.label === 1),
+    };
+  }, [preview]);
 
   const noiseMax = task === "regression" ? 2 : 1.5;
   const metricSpecs = task === "regression" ? REG_METRICS : CLS_METRICS;
@@ -528,42 +539,162 @@ export function MlPlayground() {
             </CardHeader>
             {previewOpen ? (
               <CardContent className="space-y-3 p-3 sm:p-4">
-                <div className="thin-scrollbar max-h-72 overflow-auto rounded-md border">
-                  <Table className="data-table">
-                    <TableHeader>
-                      <TableRow className="bg-muted/40 hover:bg-muted/40">
-                        {preview.columns.map((c) => (
-                          <TableHead key={c} className="h-8 font-mono text-[11px]">
-                            {c}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {preview.rows.map((row) => (
-                        <TableRow key={row.i}>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="thin-scrollbar max-h-72 overflow-auto rounded-md border">
+                    <Table className="data-table">
+                      <TableHeader>
+                        <TableRow className="bg-muted/40 hover:bg-muted/40">
                           {preview.columns.map((c) => (
-                            <TableCell key={c} className="py-1.5 font-mono text-xs tabular-nums">
-                              {c === "label" ? (
-                                <span className="inline-flex items-center gap-1.5">
-                                  <span
-                                    className={cn(
-                                      "size-1.5 rounded-full",
-                                      row[c] === 1 ? "bg-chart-1" : "bg-chart-2"
-                                    )}
-                                    aria-hidden
-                                  />
-                                  {row[c]}
-                                </span>
-                              ) : (
-                                fmtNum(row[c] ?? 0, 4)
-                              )}
-                            </TableCell>
+                            <TableHead key={c} className="h-8 font-mono text-[11px]">
+                              {c}
+                            </TableHead>
                           ))}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {preview.rows.map((row) => (
+                          <TableRow key={row.i}>
+                            {preview.columns.map((c) => (
+                              <TableCell key={c} className="py-1.5 font-mono text-xs tabular-nums">
+                                {c === "label" ? (
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <span
+                                      className={cn(
+                                        "size-1.5 rounded-full",
+                                        row[c] === 1 ? "bg-chart-1" : "bg-chart-2"
+                                      )}
+                                      aria-hidden
+                                    />
+                                    {row[c]}
+                                  </span>
+                                ) : (
+                                  fmtNum(row[c] ?? 0, 4)
+                                )}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="flex flex-col rounded-md border bg-muted/10 p-2">
+                    <p className="px-1 pb-1 font-mono text-[11px] leading-snug text-muted-foreground">
+                      all {preview.nTotal} points · {preview.nPoints} evenly-spaced shown
+                      {preview.task === "regression" ? " · true line dashed" : ""}
+                    </p>
+                    <div className="h-56 min-h-0 lg:h-auto lg:flex-1">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {preview.task === "regression" ? (
+                          <ComposedChart margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                            <CartesianGrid
+                              stroke={CHART.gridStroke}
+                              strokeOpacity={CHART.gridStrokeOpacity}
+                            />
+                            <XAxis
+                              type="number"
+                              dataKey="x"
+                              domain={["dataMin - 0.4", "dataMax + 0.4"]}
+                              tick={CHART.axisTick}
+                              tickFormatter={fmtTick}
+                              tickLine={false}
+                              axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+                              label={{
+                                value: "x",
+                                position: "insideBottomRight",
+                                offset: -2,
+                                fill: "#78716c",
+                                fontSize: 11,
+                              }}
+                            />
+                            <YAxis
+                              type="number"
+                              dataKey="y"
+                              width={44}
+                              domain={["dataMin - 0.4", "dataMax + 0.4"]}
+                              tick={CHART.axisTick}
+                              tickFormatter={fmtTick}
+                              tickLine={false}
+                              axisLine={false}
+                            />
+                            <Tooltip
+                              cursor={{ strokeDasharray: "3 3" }}
+                              contentStyle={CHART.tooltipStyle}
+                              formatter={(value) => fmtNum(Number(value), 4)}
+                            />
+                            <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                            <Scatter
+                              name="sampled points"
+                              data={preview.points}
+                              fill={CHART.stone}
+                              fillOpacity={0.7}
+                              isAnimationActive={false}
+                            />
+                            <Line
+                              name="true line (noiseless)"
+                              data={preview.trend ?? []}
+                              dataKey="y"
+                              stroke={CHART.emerald}
+                              strokeWidth={2}
+                              strokeDasharray="6 3"
+                              dot={false}
+                              activeDot={false}
+                              isAnimationActive={false}
+                            />
+                          </ComposedChart>
+                        ) : (
+                          <ScatterChart margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                            <CartesianGrid
+                              stroke={CHART.gridStroke}
+                              strokeOpacity={CHART.gridStrokeOpacity}
+                            />
+                            <XAxis
+                              type="number"
+                              dataKey="x"
+                              domain={["dataMin - 0.3", "dataMax + 0.3"]}
+                              tick={CHART.axisTick}
+                              tickFormatter={fmtTick}
+                              tickLine={false}
+                              axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+                            />
+                            <YAxis
+                              type="number"
+                              dataKey="y"
+                              width={44}
+                              domain={["dataMin - 0.3", "dataMax + 0.3"]}
+                              tick={CHART.axisTick}
+                              tickFormatter={fmtTick}
+                              tickLine={false}
+                              axisLine={false}
+                            />
+                            <Tooltip
+                              cursor={{ strokeDasharray: "3 3" }}
+                              contentStyle={CHART.tooltipStyle}
+                              formatter={(value) => fmtNum(Number(value), 3)}
+                            />
+                            <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                            {previewClasses ? (
+                              <Scatter
+                                name="class 0 (outer moon)"
+                                data={previewClasses.cls0}
+                                fill={CHART.emerald}
+                                fillOpacity={0.75}
+                                isAnimationActive={false}
+                              />
+                            ) : null}
+                            {previewClasses ? (
+                              <Scatter
+                                name="class 1 (inner moon)"
+                                data={previewClasses.cls1}
+                                fill={CHART.rose}
+                                fillOpacity={0.75}
+                                isAnimationActive={false}
+                              />
+                            ) : null}
+                          </ScatterChart>
+                        )}
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {preview.stats.map((s) => (
@@ -606,7 +737,7 @@ export function MlPlayground() {
         {!result && status !== "running" ? (
           <Card className="py-0 shadow-sm">
             <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-              <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <span className="ping-ring flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Brain className="size-6" aria-hidden />
               </span>
               <p className="text-sm font-medium">No results yet</p>

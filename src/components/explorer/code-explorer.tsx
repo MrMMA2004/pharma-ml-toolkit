@@ -269,6 +269,7 @@ export function CodeExplorer() {
               maxHeightClass="max-h-[70vh]"
               highlightLine={targetLine}
               onClearHighlight={() => setTargetLine(null)}
+              permalinkPath={content.path}
             />
           ) : null}
         </CardContent>

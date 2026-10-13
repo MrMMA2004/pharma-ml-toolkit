@@ -35,7 +35,14 @@ def entry(kind: str, name: str, doc: str) -> str:
 for mod_name, blurb in MODULES:
     mod = importlib.import_module(mod_name)
     lines += [f"## `{mod_name}`", "", f"*{blurb}*", "", "| Symbol | Kind | Summary |", "|---|---|---|"]
-    exported = getattr(mod, "__all__", [])
+    if hasattr(mod, "__all__"):
+        exported = list(mod.__all__)
+    else:
+        # No explicit __all__: fall back to the public dir() names so the
+        # section is never silently empty (mirrors the drift test in
+        # tests/test_docs_index.py).  Note that this includes imported
+        # names, so modules should declare __all__ explicitly.
+        exported = [name for name in dir(mod) if not name.startswith("_")]
     for name in exported:
         obj = getattr(mod, name)
         if inspect.isclass(obj):

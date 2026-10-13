@@ -18,6 +18,14 @@ import pandas as pd
 
 from pharmaml.exceptions import DataValidationError
 
+__all__ = [
+    "validate_positive",
+    "validate_smiles_syntax",
+    "require_columns",
+    "validate_concentration_series",
+    "coerce_frame",
+]
+
 # Cheap syntactic sanity check for SMILES: balanced brackets and only
 # characters that are legal in openSMILES.  Chemical *validity* still
 # requires RDKit -- this is a fast pre-filter used when RDKit is absent.

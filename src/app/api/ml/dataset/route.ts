@@ -6,6 +6,7 @@ import {
   mean,
   mulberry32,
   populationStd,
+  regressionTrueY,
 } from "@/lib/ml-math";
 import type {
   DatasetColumnStats,
@@ -17,6 +18,24 @@ export const runtime = "nodejs";
 
 /** Number of rows shown in the preview table. */
 const PREVIEW_ROWS = 10;
+
+/** Maximum points returned for the overview scatter chart. */
+const MAX_POINTS = 300;
+
+/** Evenly strided indices [0, n) capped at `max` samples (deterministic). */
+function stridedIndices(n: number, max: number): number[] {
+  if (n <= max) return Array.from({ length: n }, (_, i) => i);
+  const step = n / max;
+  return Array.from({ length: max }, (_, i) => Math.floor(i * step));
+}
+
+/** The noiseless generating line sampled on a 25-point grid over x ∈ [-3, 3]. */
+function regressionTrend(): Array<{ x: number; y: number }> {
+  return Array.from({ length: 25 }, (_, i) => {
+    const x = -3 + (6 * i) / 24;
+    return { x, y: regressionTrueY(x) };
+  });
+}
 
 const bodySchema = z.object({
   task: z.enum(["regression", "classification"]),
@@ -90,12 +109,19 @@ export async function POST(request: NextRequest) {
       x: xs[i] ?? 0,
       y: ys[i] ?? 0,
     }));
+    const points = stridedIndices(xs.length, MAX_POINTS).map((i) => ({
+      x: xs[i] ?? 0,
+      y: ys[i] ?? 0,
+    }));
     const response: DatasetPreviewResponse = {
       task: "regression",
       columns: ["i", "x", "y"],
       rows,
       nTotal: xs.length,
       stats: [columnStats("x", xs), columnStats("y", ys)],
+      points,
+      nPoints: points.length,
+      trend: regressionTrend(),
       correlation: pearson(xs, ys),
       noise: req.noise,
       seed: req.seed,
@@ -112,6 +138,10 @@ export async function POST(request: NextRequest) {
   }));
   const labels = pts.map((p) => p.label);
   const n0 = labels.filter((l) => l === 0).length;
+  const points = stridedIndices(pts.length, MAX_POINTS).map((i) => {
+    const p = pts[i];
+    return { x: p?.x ?? 0, y: p?.y ?? 0, label: p?.label ?? 0 };
+  });
   const response: DatasetPreviewResponse = {
     task: "classification",
     columns: ["i", "x1", "x2", "label"],
@@ -121,6 +151,8 @@ export async function POST(request: NextRequest) {
       columnStats("x1", pts.map((p) => p.x)),
       columnStats("x2", pts.map((p) => p.y)),
     ],
+    points,
+    nPoints: points.length,
     classBalance: [
       { label: 0, count: n0, pct: (100 * n0) / pts.length },
       { label: 1, count: pts.length - n0, pct: (100 * (pts.length - n0)) / pts.length },

@@ -165,6 +165,12 @@ export interface DatasetPreviewResponse {
   rows: Array<Record<string, number>>;
   nTotal: number;
   stats: DatasetColumnStats[];
+  /** Evenly strided sample of every point for the overview scatter (≤ 300). */
+  points: Array<{ x: number; y: number; label?: number }>;
+  /** Number of points sampled into `points`. */
+  nPoints: number;
+  /** Regression only: the noiseless generating line. */
+  trend?: Array<{ x: number; y: number }>;
   /** Regression only: Pearson correlation between x and y. */
   correlation?: number;
   /** Classification only: class balance. */

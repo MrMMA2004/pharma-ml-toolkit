@@ -204,7 +204,12 @@ export function regressionMetrics(yTrue: number[], yPred: number[]): RegressionM
   };
 }
 
-/** y = 0.8x + 0.5 + noise·N(0,1), x ~ U(-3, 3). */
+/** The noiseless generating line behind makeRegressionData: y = 0.8x + 0.5. */
+export function regressionTrueY(x: number): number {
+  return 0.8 * x + 0.5;
+}
+
+/** y = regressionTrueY(x) + noise·N(0,1), x ~ U(-3, 3). */
 export function makeRegressionData(
   n: number,
   noise: number,
@@ -214,7 +219,7 @@ export function makeRegressionData(
   const ys: number[] = [];
   for (let i = 0; i < n; i++) {
     const x = rand() * 6 - 3;
-    const y = 0.8 * x + 0.5 + noise * gaussian(rand);
+    const y = regressionTrueY(x) + noise * gaussian(rand);
     xs.push(x);
     ys.push(y);
   }

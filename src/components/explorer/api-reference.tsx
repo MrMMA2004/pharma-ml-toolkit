@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useToolkitStore } from "@/lib/store";
-import { fmtInt } from "@/lib/format";
+import { fmtInt, fuzzyScore } from "@/lib/format";
 import type { ReferenceResponse, SymbolKind } from "@/lib/toolkit-types";
 
 /** Module-level cache so tab switches never refetch. */
@@ -102,18 +102,36 @@ export function ApiReference() {
   const filtered = useMemo(() => {
     if (!data) return [];
     return data.modules
-      .map((mod) => ({
-        ...mod,
-        symbols: mod.symbols.filter((sym) => {
-          if (kindFilter !== "all" && sym.kind !== kindFilter) return false;
-          if (!searchActive) return true;
-          return (
-            sym.name.toLowerCase().includes(trimmed) ||
-            sym.summary.toLowerCase().includes(trimmed) ||
-            mod.name.toLowerCase().includes(trimmed)
-          );
-        }),
-      }))
+      .map((mod) => {
+        const scored = mod.symbols.map((sym) => {
+          let keep = true;
+          let score = 0;
+          if (kindFilter !== "all" && sym.kind !== kindFilter) {
+            keep = false;
+          } else if (searchActive) {
+            // Fuzzy match on the symbol / module name, substring on summaries.
+            const nameScore = fuzzyScore(trimmed, sym.name);
+            const modScore = fuzzyScore(trimmed, mod.name);
+            const inSummary = sym.summary.toLowerCase().includes(trimmed);
+            if (nameScore === null && modScore === null && !inSummary) {
+              keep = false;
+            } else {
+              // Direct name hits outrank module-name hits, which outrank summaries.
+              score = Math.max(
+                nameScore ?? -1,
+                modScore === null ? -1 : modScore - 400,
+                inSummary ? 1 : -1
+              );
+            }
+          }
+          return { sym, score, keep };
+        });
+        const symbols = scored
+          .filter((s) => s.keep)
+          .sort((a, b) => (searchActive ? b.score - a.score : 0))
+          .map((s) => s.sym);
+        return { ...mod, symbols };
+      })
       .filter((mod) => mod.symbols.length > 0);
   }, [data, kindFilter, trimmed, searchActive]);
 
@@ -225,7 +243,7 @@ export function ApiReference() {
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search symbols…"
+                placeholder="Search symbols (fuzzy works)…"
                 aria-label="Search API symbols"
                 className="h-9 w-full pl-8 pr-8 text-sm sm:w-56"
               />

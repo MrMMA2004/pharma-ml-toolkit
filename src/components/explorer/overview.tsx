@@ -156,7 +156,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "159 passing pytest cases across every domain",
+    after: "177 passing pytest cases across every domain",
   },
   {
     aspect: "Distribution",
@@ -222,7 +222,10 @@ export function Overview() {
             id="hero-title"
             className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl"
           >
-            One toolkit. Three scientific domains.
+            One toolkit.{" "}
+            <span className="bg-gradient-to-r from-primary via-chart-4 to-chart-1 bg-clip-text text-transparent">
+              Three scientific domains.
+            </span>
           </h1>
           <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
             A production-ready, typed, tested Python package for computational pharmacy — QSAR
@@ -246,7 +249,7 @@ export function Overview() {
           />
           <StatChip
             icon={CircleCheck}
-            value="159"
+            value="177"
             label="passing tests"
             hint="pytest suite covering every domain"
           />

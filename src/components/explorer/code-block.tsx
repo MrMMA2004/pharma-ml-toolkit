@@ -13,7 +13,7 @@ import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
 import oneDark from "react-syntax-highlighter/dist/esm/styles/prism/one-dark";
 import oneLight from "react-syntax-highlighter/dist/esm/styles/prism/one-light";
 import { useTheme } from "next-themes";
-import { Check, Copy, FileCode2, LocateFixed, X } from "lucide-react";
+import { Check, Copy, FileCode2, Link2, LocateFixed, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -67,6 +67,11 @@ interface CodeBlockProps {
   highlightLine?: number | null;
   /** Called when the user dismisses the line-highlight chip. */
   onClearHighlight?: () => void;
+  /**
+   * Toolkit-relative file path. When set (with line numbers enabled),
+   * clicking any line copies "<path>#L<line>" to the clipboard.
+   */
+  permalinkPath?: string;
   className?: string;
 }
 
@@ -78,16 +83,20 @@ export function CodeBlock({
   maxHeightClass = "max-h-[70vh]",
   highlightLine = null,
   onClearHighlight,
+  permalinkPath,
   className,
 }: CodeBlockProps) {
   const { resolvedTheme } = useTheme();
   const [copied, setCopied] = useState(false);
+  const [copiedLine, setCopiedLine] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const style = resolvedTheme === "dark" ? oneDark : oneLight;
   const grammar = REGISTERED_GRAMMARS.has(language) ? language : undefined;
   const label = LANGUAGE_LABELS[language] ?? language;
   const hasHighlight = highlightLine !== null && highlightLine > 0;
+  const permalink = Boolean(permalinkPath && showLineNumbers);
+  const wrapLines = hasHighlight || permalink;
 
   /* Scroll the highlighted line to the middle of the pane once the code
    * for the current highlight target has rendered. */
@@ -115,6 +124,39 @@ export function CodeBlock({
     }
   }
 
+  /** Extract the 1-based line number from a `.code-line.cl-N` wrapper. */
+  function lineFromTarget(target: HTMLElement): number | null {
+    const line = target.closest<HTMLElement>(".code-line");
+    if (!line) return null;
+    const match = /(?:^|\s)cl-(\d+)(?:\s|$)/.exec(line.className);
+    return match ? Number(match[1]) : null;
+  }
+
+  /* Event delegation: any click inside a line (gutter included — the line
+   * number span is a child of the wrapped line) copies a path#LN reference.
+   * Skipped while the user is mid-selection so word/paragraph selection
+   * never triggers a copy. */
+  function handlePaneClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (!permalink || !permalinkPath) return;
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) return;
+    const lineNumber = lineFromTarget(event.target as HTMLElement);
+    if (lineNumber === null) return;
+    const reference = `${permalinkPath}#L${lineNumber}`;
+    void copyToClipboard(reference).then((ok) => {
+      if (!ok) {
+        toast.error("Could not copy — your browser blocked clipboard access");
+        return;
+      }
+      setCopiedLine(lineNumber);
+      window.setTimeout(
+        () => setCopiedLine((cur) => (cur === lineNumber ? null : cur)),
+        1400
+      );
+      toast.success("Line reference copied", { description: reference });
+    });
+  }
+
   return (
     <div
       className={cn(
@@ -129,6 +171,15 @@ export function CodeBlock({
           <Badge variant="secondary" className="hidden shrink-0 font-mono text-[10px] sm:inline-flex">
             {label}
           </Badge>
+          {permalink ? (
+            <span
+              className="hidden shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground/70 md:inline-flex"
+              title="Click any line (or its number) to copy a path#LN reference to the clipboard"
+            >
+              <Link2 className="size-3" aria-hidden />
+              click a line to copy its reference
+            </span>
+          ) : null}
           {hasHighlight ? (
             <Badge
               variant="outline"
@@ -167,21 +218,28 @@ export function CodeBlock({
       </div>
       <div
         ref={scrollRef}
-        className={cn("thin-scrollbar relative overflow-auto", maxHeightClass)}
+        onClick={permalink ? handlePaneClick : undefined}
+        className={cn(
+          "thin-scrollbar relative overflow-auto",
+          maxHeightClass,
+          permalink && "code-permalink"
+        )}
       >
         <SyntaxHighlighter
           language={grammar}
           style={style}
           showLineNumbers={showLineNumbers}
           wrapLongLines={false}
-          wrapLines={hasHighlight}
+          wrapLines={wrapLines}
           lineProps={
-            hasHighlight
+            wrapLines
               ? (lineNumber: number) => ({
-                  className:
-                    lineNumber === highlightLine
-                      ? `code-line cl-${lineNumber} code-line-highlight`
-                      : `code-line cl-${lineNumber}`,
+                  className: cn(
+                    "code-line",
+                    `cl-${lineNumber}`,
+                    lineNumber === highlightLine && "code-line-highlight",
+                    lineNumber === copiedLine && "code-line-copied"
+                  ),
                 })
               : undefined
           }

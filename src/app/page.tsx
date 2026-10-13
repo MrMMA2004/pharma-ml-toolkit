@@ -182,10 +182,11 @@ export default function Home() {
             ))}
           </nav>
 
-          <p className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+          <p className="flex shrink-0 items-center gap-2 font-mono text-xs tabular-nums text-muted-foreground">
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
-            <span className="text-primary">159 tests</span>
+            <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
+            <span className="text-primary">177 tests</span>
           </p>
         </div>
       </footer>

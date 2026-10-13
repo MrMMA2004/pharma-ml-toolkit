@@ -46,6 +46,33 @@ export function parseNonNegativeNumber(raw: string): number | null {
   return v;
 }
 
+/**
+ * Subsequence fuzzy match (case-insensitive). Returns `null` when `query` is
+ * not a subsequence of `target`; otherwise a score where higher is better:
+ * exact substring > word-start / consecutive runs > scattered subsequence.
+ */
+export function fuzzyScore(query: string, target: string): number | null {
+  const q = query.trim().toLowerCase();
+  const t = target.toLowerCase();
+  if (q.length === 0) return 0;
+  const subIdx = t.indexOf(q);
+  if (subIdx >= 0) return 1000 - Math.min(50, subIdx * 2);
+  let qi = 0;
+  let score = 0;
+  let prevTi = -2;
+  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+    if (t[ti] !== q[qi]) continue;
+    score += 10;
+    if (ti === prevTi + 1) score += 8; // consecutive run
+    const prevChar = t[ti - 1] ?? "";
+    if (ti === 0 || /[\s_\-.]/.test(prevChar)) score += 6; // word start
+    prevTi = ti;
+    qi += 1;
+  }
+  if (qi < q.length) return null;
+  return score - Math.min(20, (t.length - q.length) * 0.5);
+}
+
 /** Copy text to the clipboard with a legacy fallback. */
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {

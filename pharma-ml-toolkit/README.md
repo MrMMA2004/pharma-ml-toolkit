@@ -12,7 +12,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (159 tests).
+exceptions, input validation, and pytest coverage** (177 tests).
 
 ---
 
@@ -27,6 +27,14 @@ exceptions, input validation, and pytest coverage** (159 tests).
   external datasets required.
 * **Safety**: pharmaceutical functions validate every input (positive doses, ordered time series,
   bounded fractions) and raise `DataValidationError` on bad values rather than returning nonsense.
+* **Docs stay in sync with code**: `docs/INDEX.md` is auto-generated from each module's `__all__`
+  and docstrings (`python scratch/build_docs_index.py` from the repo root); a drift-guard test
+  (`tests/test_docs_index.py`) fails whenever the index and the live package diverge, so the
+  documented symbol list can never silently rot.
+* **Explorer dataset parity**: the companion web app's dataset preview route (`/api/ml/dataset`)
+  uses the *exact* same seeded generators as its training route (`/api/ml/train`) — identical
+  `mulberry32` PRNG, `make_regression_data`, and `makeMoons` implementations — so previewed rows,
+  statistics, and scatter plots are guaranteed to match the data a model is actually trained on.
 
 ---
 
@@ -69,7 +77,7 @@ pharma-ml-toolkit/
 │   ├── pharma/              # units, pk, pd, dosage
 │   ├── docking/             # preparation, workflow, parsing, scoring
 │   └── utils/               # io (safe read/write), validation
-├── tests/                   # 159 pytest cases across all domains
+├── tests/                   # 177 pytest cases across all domains
 ├── examples/                # runnable demos + pharmaml_walkthrough.ipynb (executed notebook)
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
@@ -205,7 +213,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (159 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (177 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```
