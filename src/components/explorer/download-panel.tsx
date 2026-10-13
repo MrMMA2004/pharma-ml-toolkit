@@ -5,7 +5,11 @@ import {
   CircleCheck,
   FileArchive,
   FileCode2,
+  FileDown,
+  FileText,
   Loader2,
+  NotebookText,
+  RotateCcw,
   Scale,
   TerminalSquare,
   TriangleAlert,
@@ -22,8 +26,9 @@ import { CodeBlock } from "@/components/explorer/code-block";
 import { StatChip } from "@/components/explorer/stat-chip";
 import { useToolkitStore } from "@/lib/store";
 import { fmtBytes, fmtInt } from "@/lib/format";
-import type { TreeNode } from "@/lib/toolkit-types";
+import type { FileContentResponse, TreeNode } from "@/lib/toolkit-types";
 import { toast } from "sonner";
+import type { LucideIcon } from "lucide-react";
 
 const INSTALL = `# 1. unzip the archive
 unzip pharma-ml-toolkit.zip -d pharmaml && cd pharmaml
@@ -45,6 +50,43 @@ function countFiles(node: TreeNode): number {
   if (node.type === "file") return 1;
   return (node.children ?? []).reduce((acc, child) => acc + countFiles(child), 0);
 }
+
+/** Look up a node in the tree by its toolkit-relative path. */
+function findNode(node: TreeNode, path: string): TreeNode | null {
+  if (node.path === path) return node;
+  for (const child of node.children ?? []) {
+    const hit = findNode(child, path);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Hand-picked highlights of the archive, with live tree metadata. */
+const FEATURED_FILES: Array<{
+  path: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  /** Tailwind tint classes for the icon badge. */
+  badgeClass: string;
+}> = [
+  {
+    path: "examples/pharmaml_walkthrough.ipynb",
+    title: "Interactive walkthrough",
+    description:
+      "Runnable Jupyter notebook — an end-to-end tour of the package on synthetic data: descriptors → model training → cross-validation → evaluation.",
+    icon: NotebookText,
+    badgeClass: "bg-primary/10 text-primary",
+  },
+  {
+    path: "docs/INDEX.md",
+    title: "Public API index",
+    description:
+      "Auto-generated module index — every public symbol with a one-line summary, kept in sync by the docs drift-guard tests.",
+    icon: FileText,
+    badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  },
+];
 
 function collectDirSummary(root: TreeNode): Array<{ name: string; files: number; note: string }> {
   const notes: Record<string, string> = {
@@ -82,14 +124,27 @@ export function DownloadPanel() {
   const tree = useToolkitStore((s) => s.tree);
   const stats = useToolkitStore((s) => s.stats);
   const treeStatus = useToolkitStore((s) => s.treeStatus);
+  const setTab = useToolkitStore((s) => s.setTab);
+  const openFileAtLine = useToolkitStore((s) => s.openFileAtLine);
 
   const [downloading, setDownloading] = useState(false);
+  /** Path of the featured file currently being fetched (spinner state). */
+  const [fileBusy, setFileBusy] = useState<string | null>(null);
 
   useEffect(() => {
     void ensureTree();
   }, [ensureTree]);
 
   const dirSummary = useMemo(() => (tree ? collectDirSummary(tree) : []), [tree]);
+
+  /** Live metadata (size / lines) for each featured file, from the tree. */
+  const featuredMeta = useMemo(() => {
+    const map = new Map<string, TreeNode | null>();
+    for (const f of FEATURED_FILES) {
+      map.set(f.path, tree ? findNode(tree, f.path) : null);
+    }
+    return map;
+  }, [tree]);
 
   async function download() {
     setDownloading(true);
@@ -131,11 +186,52 @@ export function DownloadPanel() {
     }
   }
 
+  /** Deep link a featured file into the Code Explorer. */
+  function viewFeatured(path: string, title: string) {
+    openFileAtLine(path, null);
+    setTab("explorer");
+    toast(`Opened ${title} in the Code Explorer`, { description: path });
+  }
+
+  /** Fetch a single toolkit file and save it locally as a text blob. */
+  async function downloadSingleFile(path: string) {
+    setFileBusy(path);
+    try {
+      const res = await fetch(`/api/toolkit/file?path=${encodeURIComponent(path)}`);
+      const body: unknown = await res.json();
+      if (!res.ok) {
+        const message =
+          typeof body === "object" && body !== null && "error" in body
+            ? String((body as { error: unknown }).error)
+            : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      const payload = body as FileContentResponse;
+      const blob = new Blob([payload.content], { type: "text/plain;charset=utf-8" });
+      const fileName = path.split("/").pop() ?? "file.txt";
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Download started", { description: `${fileName} · ${fmtBytes(blob.size)}` });
+    } catch (err) {
+      toast.error("Download failed", {
+        description: err instanceof Error ? err.message : "Unknown error.",
+      });
+    } finally {
+      setFileBusy(null);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {/* ------------------------------ CTA ------------------------------ */}
       <Card className="overflow-hidden py-0 shadow-sm">
-        <CardHeader className="border-b bg-gradient-to-br from-primary/10 via-transparent to-amber-500/10 py-6">
+        <CardHeader className="dot-grid border-b bg-gradient-to-br from-primary/10 via-transparent to-amber-500/10 py-6">
           <div className="flex flex-col items-center gap-4 text-center">
             <span className="flex size-14 items-center justify-center rounded-xl bg-primary/15 text-primary">
               <FileArchive className="size-7" aria-hidden />
@@ -185,6 +281,76 @@ export function DownloadPanel() {
           />
         </CardContent>
       </Card>
+
+      {/* --------------------------- Featured files --------------------------- */}
+      <section aria-labelledby="featured-title" className="space-y-3">
+        <h2 id="featured-title" className="flex items-center gap-2 text-lg font-semibold">
+          <FileDown className="size-5 text-primary" aria-hidden />
+          Featured files
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {FEATURED_FILES.map((f) => {
+            const meta = featuredMeta.get(f.path) ?? null;
+            const busy = fileBusy === f.path;
+            const Icon = f.icon;
+            return (
+              <Card key={f.path} className="featured-card overflow-hidden py-0 shadow-sm">
+                <CardHeader className="border-b bg-muted/30 py-3">
+                  <div className="flex items-start gap-2.5">
+                    <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${f.badgeClass}`}>
+                      <Icon className="size-4.5" aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                      <CardTitle className="text-sm">{f.title}</CardTitle>
+                      <p className="mt-0.5 break-all font-mono text-[11px] leading-snug text-muted-foreground">
+                        {f.path}
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3 py-3">
+                  <p className="text-xs leading-relaxed text-muted-foreground">{f.description}</p>
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono tabular-nums">
+                      {meta ? fmtBytes(meta.size) : "…"}
+                    </span>
+                    {typeof meta?.lines === "number" ? (
+                      <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono tabular-nums">
+                        {fmtInt(meta.lines)} lines
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 flex-1 gap-1.5 text-xs"
+                      onClick={() => viewFeatured(f.path, f.title)}
+                    >
+                      <FileCode2 className="size-3.5" aria-hidden />
+                      View
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 flex-1 gap-1.5 text-xs"
+                      onClick={() => void downloadSingleFile(f.path)}
+                      disabled={busy}
+                    >
+                      {busy ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <FileDown className="size-3.5" aria-hidden />
+                      )}
+                      Download
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </section>
 
       {/* ------------------------------ Contents ------------------------------ */}
       <Card className="overflow-hidden py-0 shadow-sm">

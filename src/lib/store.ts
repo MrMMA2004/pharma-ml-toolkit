@@ -5,7 +5,7 @@
  */
 
 import { create } from "zustand";
-import type { TreeNode, TreeResponse, TreeStats } from "@/lib/toolkit-types";
+import type { TreeNode, TreeResponse, TreeStats, MLTrainResponse, DatasetPreviewResponse } from "@/lib/toolkit-types";
 
 export type TabId = "overview" | "explorer" | "reference" | "playground" | "download";
 
@@ -34,6 +34,62 @@ export const DEFAULT_PK_PARAMS: PkParams = {
 
 /** Max entries kept in the "recently viewed" strip. */
 export const RECENT_LIMIT = 8;
+
+/** sessionStorage key for the recently-viewed strip (survives reloads). */
+const RECENT_STORAGE_KEY = "pharmaml.recentFiles";
+
+/** Read the persisted recent-files list (client only, failure-tolerant). */
+function loadRecentFiles(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(RECENT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((p): p is string => typeof p === "string")
+      .slice(0, RECENT_LIMIT);
+  } catch {
+    return []; // private mode / quota / corrupted JSON — start fresh
+  }
+}
+
+/** Persist the recent-files list (client only, best-effort). */
+function saveRecentFiles(recent: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recent));
+  } catch {
+    /* quota exceeded or private mode — persistence is optional */
+  }
+}
+
+/** ML playground experiment configuration (survives tab switches). */
+export interface MlConfig {
+  task: "regression" | "classification";
+  samples: number;
+  noise: number;
+  regModel: "linear" | "polynomial" | "ridge";
+  /** Ridge α as raw input text (validated before use). */
+  alpha: string;
+  /** Logistic L2 strength as raw input text (validated before use). */
+  l2: string;
+  testSizePct: number;
+  cv: string;
+  seed: string;
+}
+
+export const DEFAULT_ML_CONFIG: MlConfig = {
+  task: "regression",
+  samples: 300,
+  noise: 0.4,
+  regModel: "linear",
+  alpha: "1.0",
+  l2: "1.0",
+  testSizePct: 20,
+  cv: "5",
+  seed: "42",
+};
 
 export const TABS: Array<{ id: TabId; label: string }> = [
   { id: "overview", label: "Overview" },
@@ -73,6 +129,17 @@ interface ToolkitStore {
   setPkParam: <K extends keyof PkParams>(key: K, value: PkParams[K]) => void;
   resetPkParams: () => void;
 
+  /** ML playground experiment config — persisted so the setup survives tab switches. */
+  mlConfig: MlConfig;
+  setMlConfig: (patch: Partial<MlConfig>) => void;
+  resetMlConfig: () => void;
+  /** Last training result (rendered until the config changes). */
+  mlResult: MLTrainResponse | null;
+  setMlResult: (result: MLTrainResponse | null) => void;
+  /** Last dataset-preview payload. */
+  mlPreview: DatasetPreviewResponse | null;
+  setMlPreview: (preview: DatasetPreviewResponse | null) => void;
+
   tree: TreeNode | null;
   stats: TreeStats | null;
   treeStatus: TreeStatus;
@@ -93,23 +160,26 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
 
   selectedFile: "README.md",
   setSelectedFile: (path) =>
-    set((s) => ({
-      selectedFile: path,
-      targetLine: null,
-      recentFiles: pushRecent(s.recentFiles, path),
-    })),
+    set((s) => {
+      const recentFiles = pushRecent(s.recentFiles, path);
+      saveRecentFiles(recentFiles);
+      return { selectedFile: path, targetLine: null, recentFiles };
+    }),
 
   targetLine: null,
   setTargetLine: (line) => set({ targetLine: line }),
   openFileAtLine: (path, line) =>
-    set((s) => ({
-      selectedFile: path,
-      targetLine: line,
-      recentFiles: pushRecent(s.recentFiles, path),
-    })),
+    set((s) => {
+      const recentFiles = pushRecent(s.recentFiles, path);
+      saveRecentFiles(recentFiles);
+      return { selectedFile: path, targetLine: line, recentFiles };
+    }),
 
-  recentFiles: [],
-  clearRecentFiles: () => set({ recentFiles: [] }),
+  recentFiles: loadRecentFiles(),
+  clearRecentFiles: () => {
+    saveRecentFiles([]);
+    set({ recentFiles: [] });
+  },
 
   playgroundTab: "calculators",
   setPlaygroundTab: (tab) => set({ playgroundTab: tab }),
@@ -118,6 +188,14 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
   setPkParam: (key, value) =>
     set((s) => ({ pkParams: { ...s.pkParams, [key]: value } })),
   resetPkParams: () => set({ pkParams: DEFAULT_PK_PARAMS }),
+
+  mlConfig: DEFAULT_ML_CONFIG,
+  setMlConfig: (patch) => set((s) => ({ mlConfig: { ...s.mlConfig, ...patch } })),
+  resetMlConfig: () => set({ mlConfig: DEFAULT_ML_CONFIG }),
+  mlResult: null,
+  setMlResult: (result) => set({ mlResult: result }),
+  mlPreview: null,
+  setMlPreview: (preview) => set({ mlPreview: preview }),
 
   tree: null,
   stats: null,

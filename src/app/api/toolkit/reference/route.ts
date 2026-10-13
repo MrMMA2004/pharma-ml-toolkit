@@ -224,9 +224,9 @@ async function finalizeModule(mod: {
           try {
             subSource = await fs.readFile(path.join(TOOLKIT_ROOT, candidate), "utf8");
           } catch {
-            subSource = null;
+            subSource = ""; // unreadable sub-module — no line resolution
           }
-          subSources.set(candidate, subSource ?? "");
+          subSources.set(candidate, subSource);
         }
         if (subSource) {
           const subLine = findDefinitionLine(subSource, sym.name, sym.kind);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Brain, ChevronDown, Loader2, Play, Table2, TriangleAlert } from "lucide-react";
+import { Brain, ChevronDown, Loader2, Play, RotateCcw, Table2, TriangleAlert, ZoomIn } from "lucide-react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -44,6 +44,7 @@ import {
 import { CHART } from "@/components/explorer/playground/calc-ui";
 import { fmtNum, fmtTick } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { DEFAULT_ML_CONFIG, useToolkitStore } from "@/lib/store";
 import type {
   DatasetPreviewResponse,
   MLTrainResponse,
@@ -52,7 +53,6 @@ import type {
 
 type Task = "regression" | "classification";
 type RegModel = "linear" | "polynomial" | "ridge";
-type CvValue = "0" | "3" | "5" | "10";
 
 const REG_METRICS: Array<{ key: string; label: string }> = [
   { key: "r2", label: "R²" },
@@ -78,18 +78,18 @@ function MetricCard({ label, value }: { label: string; value: number }) {
 
 /** Factory for tiny boundary dot renderers (60×60 grid → 3600 points). */
 function TinyDot(color: string) {
-  return function renderTinyDot(props: { cx?: number; cy?: number }) {
-    const { cx, cy } = props;
-    if (cx === undefined || cy === undefined) return null;
+  return function renderTinyDot(props: unknown) {
+    const { cx, cy } = props as { cx?: number; cy?: number };
+    if (cx === undefined || cy === undefined) return <g />;
     return <circle cx={cx} cy={cy} r={1.5} fill={color} fillOpacity={0.3} />;
   };
 }
 
 /** Factory for the larger moon-class dots. */
 function MoonDot(color: string) {
-  return function renderMoonDot(props: { cx?: number; cy?: number }) {
-    const { cx, cy } = props;
-    if (cx === undefined || cy === undefined) return null;
+  return function renderMoonDot(props: unknown) {
+    const { cx, cy } = props as { cx?: number; cy?: number };
+    if (cx === undefined || cy === undefined) return <g />;
     return <circle cx={cx} cy={cy} r={3.2} fill={color} fillOpacity={0.9} stroke={color} strokeWidth={0.6} />;
   };
 }
@@ -104,23 +104,28 @@ function corrStrength(r: number): string {
 }
 
 export function MlPlayground() {
-  const [task, setTask] = useState<Task>("regression");
-  const [samples, setSamples] = useState(300);
-  const [noise, setNoise] = useState(0.4);
-  const [regModel, setRegModel] = useState<RegModel>("linear");
-  const [alpha, setAlpha] = useState("1.0");
-  const [l2, setL2] = useState("1.0");
-  const [testSizePct, setTestSizePct] = useState(20);
-  const [cv, setCv] = useState<CvValue>("5");
-  const [seed, setSeed] = useState("42");
+  /* Experiment setup + results live in the store, so the whole playground
+   * (config, trained model, dataset preview) survives tab switches. */
+  const mlConfig = useToolkitStore((s) => s.mlConfig);
+  const setMlConfig = useToolkitStore((s) => s.setMlConfig);
+  const resetMlConfig = useToolkitStore((s) => s.resetMlConfig);
+  const result = useToolkitStore((s) => s.mlResult);
+  const setResult = useToolkitStore((s) => s.setMlResult);
+  const preview = useToolkitStore((s) => s.mlPreview);
+  const setPreview = useToolkitStore((s) => s.setMlPreview);
 
-  const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const { task, samples, noise, regModel, alpha, l2, testSizePct, cv, seed } = mlConfig;
+
+  /* Transient request state — not worth persisting across tab switches. */
+  const [status, setStatus] = useState<"idle" | "running" | "done" | "error">(
+    "idle"
+  );
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<MLTrainResponse | null>(null);
-
-  const [preview, setPreview] = useState<DatasetPreviewResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(true);
+
+  /* X-range zoom on the preview scatter — null = full range. */
+  const [xZoom, setXZoom] = useState<[number, number] | null>(null);
 
   /** Classification preview: the sampled points split by class for the chart. */
   const previewClasses = useMemo(() => {
@@ -131,19 +136,62 @@ export function MlPlayground() {
     };
   }, [preview]);
 
+  /** Windowed view of the preview dataset (a true brush): the x-window
+   *  filters the series data AND re-derives both axis domains, so zooming
+   *  rescales the plot instead of merely clipping it. */
+  const previewView = useMemo(() => {
+    if (!preview || preview.points.length === 0) return null;
+    const xs = preview.points.map((p) => p.x);
+    const fullX: [number, number] = [Math.min(...xs), Math.max(...xs)];
+    const yPad = preview.task === "regression" ? 0.4 : 0.3;
+    const zoomed = xZoom !== null && (xZoom[0] > fullX[0] || xZoom[1] < fullX[1]);
+    const win: [number, number] = xZoom ?? fullX;
+
+    const inside =
+      zoomed ? preview.points.filter((p) => p.x >= win[0] && p.x <= win[1]) : preview.points;
+    const ySource = inside.length > 0 ? inside : preview.points;
+    const ys = ySource.map((p) => p.y);
+    // Pad the window slightly so edge dots aren't cut by the plot boundary.
+    const xPad = zoomed ? Math.max((win[1] - win[0]) * 0.04, 0.05) : yPad;
+
+    const inWin = (p: { x: number }) => !zoomed || (p.x >= win[0] && p.x <= win[1]);
+    return {
+      fullX,
+      win,
+      zoomed,
+      xDomain: [win[0] - xPad, win[1] + xPad] as [number, number],
+      yDomain: [Math.min(...ys) - yPad, Math.max(...ys) + yPad] as [number, number],
+      points: inside,
+      cls0: previewClasses ? previewClasses.cls0.filter(inWin) : [],
+      cls1: previewClasses ? previewClasses.cls1.filter(inWin) : [],
+      trend: (preview.trend ?? []).filter(inWin),
+    };
+  }, [preview, previewClasses, xZoom]);
+
   const noiseMax = task === "regression" ? 2 : 1.5;
   const metricSpecs = task === "regression" ? REG_METRICS : CLS_METRICS;
 
   function switchTask(next: Task) {
-    setTask(next);
-    if (next === "classification" && noise > 1.5) setNoise(0.3);
+    setMlConfig({ task: next });
+    if (next === "classification" && noise > 1.5) setMlConfig({ noise: 0.3 });
     if (next === "regression" && regModel !== "ridge" && regModel !== "linear" && regModel !== "polynomial") {
-      setRegModel("linear");
+      setMlConfig({ regModel: "linear" });
     }
     setStatus("idle");
     setResult(null);
     setError(null);
     setPreview(null);
+    setXZoom(null);
+  }
+
+  /** Restore the default experiment setup and drop any stored results. */
+  function resetSetup() {
+    resetMlConfig();
+    setStatus("idle");
+    setResult(null);
+    setPreview(null);
+    setError(null);
+    setXZoom(null);
   }
 
   const seedValid = /^\d{1,10}$/.test(seed.trim());
@@ -202,9 +250,7 @@ export function MlPlayground() {
       const message = err instanceof Error ? err.message : "Training request failed.";
       setError(message);
     }
-  }
-
-  /** Fetch the first rows + summary stats of the (deterministic) dataset. */
+  }  /** Fetch the first rows + summary stats of the (deterministic) dataset. */
   async function previewDataset() {
     if (!seedValid) {
       setError("Seed must be a non-negative integer (0 – 2147483647).");
@@ -237,6 +283,7 @@ export function MlPlayground() {
       }
       setPreview(data as DatasetPreviewResponse);
       setPreviewOpen(true);
+      setXZoom(null); // fresh dataset — reset the x-range zoom
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preview request failed.");
     } finally {
@@ -284,7 +331,7 @@ export function MlPlayground() {
             <div>
               <CardTitle className="text-base">Experiment setup</CardTitle>
               <CardDescription className="text-xs">
-                Deterministic — same seed, same result
+                Deterministic — same seed, same result · survives tab switches
               </CardDescription>
             </div>
           </div>
@@ -325,7 +372,7 @@ export function MlPlayground() {
               max={1000}
               step={50}
               value={[samples]}
-              onValueChange={(v) => setSamples(v[0] ?? samples)}
+              onValueChange={(v) => setMlConfig({ samples: v[0] ?? samples })}
             />
           </div>
 
@@ -345,7 +392,7 @@ export function MlPlayground() {
               max={noiseMax}
               step={0.05}
               value={[Math.min(noise, noiseMax)]}
-              onValueChange={(v) => setNoise(v[0] ?? noise)}
+              onValueChange={(v) => setMlConfig({ noise: v[0] ?? noise })}
             />
           </div>
 
@@ -353,7 +400,7 @@ export function MlPlayground() {
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Model</Label>
             {task === "regression" ? (
-              <Select value={regModel} onValueChange={(v) => setRegModel(v as RegModel)}>
+              <Select value={regModel} onValueChange={(v) => setMlConfig({ regModel: v as RegModel })}>
                 <SelectTrigger className="h-10" aria-label="Regression model">
                   <SelectValue />
                 </SelectTrigger>
@@ -376,7 +423,7 @@ export function MlPlayground() {
                     id="ml-l2"
                     inputMode="decimal"
                     value={l2}
-                    onChange={(e) => setL2(e.target.value)}
+                    onChange={(e) => setMlConfig({ l2: e.target.value })}
                     aria-invalid={l2Valid ? undefined : true}
                     className={`h-10 font-mono text-sm tabular-nums ${l2Valid ? "" : "border-destructive/60"}`}
                   />
@@ -397,7 +444,7 @@ export function MlPlayground() {
                 id="ml-alpha"
                 inputMode="decimal"
                 value={alpha}
-                onChange={(e) => setAlpha(e.target.value)}
+                onChange={(e) => setMlConfig({ alpha: e.target.value })}
                 aria-invalid={alphaValid ? undefined : true}
                 className={`h-10 font-mono text-sm tabular-nums ${alphaValid ? "" : "border-destructive/60"}`}
               />
@@ -421,7 +468,7 @@ export function MlPlayground() {
               max={50}
               step={5}
               value={[testSizePct]}
-              onValueChange={(v) => setTestSizePct(v[0] ?? testSizePct)}
+              onValueChange={(v) => setMlConfig({ testSizePct: v[0] ?? testSizePct })}
             />
           </div>
 
@@ -429,7 +476,7 @@ export function MlPlayground() {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">k-fold CV</Label>
-              <Select value={cv} onValueChange={(v) => setCv(v as CvValue)}>
+              <Select value={cv} onValueChange={(v) => setMlConfig({ cv: v })}>
                 <SelectTrigger className="h-10" aria-label="Cross-validation folds">
                   <SelectValue />
                 </SelectTrigger>
@@ -449,7 +496,7 @@ export function MlPlayground() {
                 id="ml-seed"
                 inputMode="numeric"
                 value={seed}
-                onChange={(e) => setSeed(e.target.value)}
+                onChange={(e) => setMlConfig({ seed: e.target.value })}
                 aria-invalid={seedValid ? undefined : true}
                 className={`h-10 font-mono text-sm tabular-nums ${seedValid ? "" : "border-destructive/60"}`}
               />
@@ -493,6 +540,18 @@ export function MlPlayground() {
               )}
               <span className="hidden sm:inline">Preview data</span>
               <span className="sm:hidden">Data</span>
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-11 shrink-0 gap-2"
+              onClick={resetSetup}
+              disabled={running || previewLoading}
+              aria-label="Reset the experiment setup to defaults"
+              title="Reset setup to defaults"
+            >
+              <RotateCcw className="size-4" aria-hidden />
+              <span className="hidden xl:inline">Reset</span>
             </Button>
           </div>
 
@@ -593,7 +652,7 @@ export function MlPlayground() {
                             <XAxis
                               type="number"
                               dataKey="x"
-                              domain={["dataMin - 0.4", "dataMax + 0.4"]}
+                              domain={previewView?.xDomain ?? ["dataMin - 0.4", "dataMax + 0.4"]}
                               tick={CHART.axisTick}
                               tickFormatter={fmtTick}
                               tickLine={false}
@@ -610,7 +669,7 @@ export function MlPlayground() {
                               type="number"
                               dataKey="y"
                               width={44}
-                              domain={["dataMin - 0.4", "dataMax + 0.4"]}
+                              domain={previewView?.yDomain ?? ["dataMin - 0.4", "dataMax + 0.4"]}
                               tick={CHART.axisTick}
                               tickFormatter={fmtTick}
                               tickLine={false}
@@ -624,14 +683,14 @@ export function MlPlayground() {
                             <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
                             <Scatter
                               name="sampled points"
-                              data={preview.points}
+                              data={previewView?.points ?? preview.points}
                               fill={CHART.stone}
                               fillOpacity={0.7}
                               isAnimationActive={false}
                             />
                             <Line
                               name="true line (noiseless)"
-                              data={preview.trend ?? []}
+                              data={previewView?.trend ?? preview.trend ?? []}
                               dataKey="y"
                               stroke={CHART.emerald}
                               strokeWidth={2}
@@ -650,7 +709,7 @@ export function MlPlayground() {
                             <XAxis
                               type="number"
                               dataKey="x"
-                              domain={["dataMin - 0.3", "dataMax + 0.3"]}
+                              domain={previewView?.xDomain ?? ["dataMin - 0.3", "dataMax + 0.3"]}
                               tick={CHART.axisTick}
                               tickFormatter={fmtTick}
                               tickLine={false}
@@ -660,7 +719,7 @@ export function MlPlayground() {
                               type="number"
                               dataKey="y"
                               width={44}
-                              domain={["dataMin - 0.3", "dataMax + 0.3"]}
+                              domain={previewView?.yDomain ?? ["dataMin - 0.3", "dataMax + 0.3"]}
                               tick={CHART.axisTick}
                               tickFormatter={fmtTick}
                               tickLine={false}
@@ -672,19 +731,19 @@ export function MlPlayground() {
                               formatter={(value) => fmtNum(Number(value), 3)}
                             />
                             <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
-                            {previewClasses ? (
+                            {previewView ? (
                               <Scatter
                                 name="class 0 (outer moon)"
-                                data={previewClasses.cls0}
+                                data={previewView.cls0}
                                 fill={CHART.emerald}
                                 fillOpacity={0.75}
                                 isAnimationActive={false}
                               />
                             ) : null}
-                            {previewClasses ? (
+                            {previewView ? (
                               <Scatter
                                 name="class 1 (inner moon)"
-                                data={previewClasses.cls1}
+                                data={previewView.cls1}
                                 fill={CHART.rose}
                                 fillOpacity={0.75}
                                 isAnimationActive={false}
@@ -694,6 +753,51 @@ export function MlPlayground() {
                         )}
                       </ResponsiveContainer>
                     </div>
+                    {previewView ? (
+                      <div className="mt-1.5 rounded-md border border-primary/15 bg-primary/5 px-2.5 pb-1.5 pt-2">
+                        <div className="flex items-center justify-between gap-2 pb-1">
+                          <p className="flex items-center gap-1.5 font-mono text-[11px] font-medium text-primary">
+                            <ZoomIn className="size-3 shrink-0" aria-hidden />
+                            x-window zoom
+                          </p>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className="truncate font-mono text-[10px] tabular-nums text-muted-foreground"
+                              aria-live="polite"
+                            >
+                              [{fmtNum(previewView.win[0], 2)} … {fmtNum(previewView.win[1], 2)}]
+                              <span className="sr-only">
+                                ; drag the handles to zoom the chart
+                              </span>
+                            </span>
+                            {previewView.zoomed ? (
+                              <button
+                                type="button"
+                                onClick={() => setXZoom(null)}
+                                aria-label="Reset the chart zoom window"
+                                title="Reset zoom"
+                                className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                              >
+                                <RotateCcw className="size-3" aria-hidden />
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                        <Slider
+                          aria-label="Zoom the preview chart x-axis window"
+                          min={previewView.fullX[0]}
+                          max={previewView.fullX[1]}
+                          step={(previewView.fullX[1] - previewView.fullX[0]) / 200}
+                          value={[previewView.win[0], previewView.win[1]]}
+                          onValueChange={(v) =>
+                            setXZoom([
+                              v[0] ?? previewView.fullX[0],
+                              v[1] ?? previewView.fullX[1],
+                            ])
+                          }
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">

@@ -5,6 +5,8 @@ import { motion } from "framer-motion";
 import {
   ArrowRight,
   Braces,
+  Check,
+  ClipboardCopy,
   Download,
   FileCode2,
   RefreshCw,
@@ -20,7 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useToolkitStore } from "@/lib/store";
-import { fmtInt, fuzzyScore } from "@/lib/format";
+import { copyToClipboard, fmtInt, fuzzyScore } from "@/lib/format";
 import type { ReferenceResponse, SymbolKind } from "@/lib/toolkit-types";
 
 /** Module-level cache so tab switches never refetch. */
@@ -52,6 +54,8 @@ export function ApiReference() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<SymbolKind | "all">("all");
+  /** Symbol whose reference was just copied (drives the check-icon swap). */
+  const [copiedSym, setCopiedSym] = useState<string | null>(null);
 
   useEffect(() => {
     if (refCache) return;
@@ -148,6 +152,19 @@ export function ApiReference() {
     );
   }
 
+  /** Copy a shareable `path#LNN` reference straight from the list. */
+  async function copyReference(name: string, sourcePath: string, line?: number | null) {
+    const reference = line ? `${sourcePath}#L${line}` : sourcePath;
+    const ok = await copyToClipboard(reference);
+    if (ok) {
+      setCopiedSym(name);
+      window.setTimeout(() => setCopiedSym((cur) => (cur === name ? null : cur)), 1600);
+      toast.success("Line reference copied", { description: reference });
+    } else {
+      toast.error("Could not copy — your browser blocked clipboard access");
+    }
+  }
+
   /** Download the structured reference as a JSON file. */
   function exportJson() {
     if (!data) return;
@@ -210,7 +227,8 @@ export function ApiReference() {
             Every public symbol of the <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">pharmaml</code>{" "}
             package, auto-derived from each module&apos;s <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">__all__</code>{" "}
             exports in <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">docs/INDEX.md</code>. Click a
-            symbol to jump straight to its definition.
+            symbol to jump straight to its definition — or use the clipboard button on a row to copy its{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">path#LNN</code> reference.
           </p>
         </div>
 
@@ -379,49 +397,70 @@ export function ApiReference() {
                 </CardHeader>
                 <CardContent className="py-0">
                   <ul className="divide-y">
-                    {mod.symbols.map((sym) => (
-                      <li key={sym.name}>
-                        <button
-                          type="button"
-                          onClick={() => viewSource(sym.sourcePath ?? mod.sourcePath, mod.name, sym.line)}
-                          aria-label={
-                            sym.line
-                              ? `Jump to ${sym.name} definition at line ${sym.line} of ${mod.name}`
-                              : `Open source of ${mod.name} (${sym.name})`
-                          }
-                          className="group flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:bg-primary/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-3"
-                        >
-                          <div className="flex min-w-0 items-center gap-2 sm:w-[240px] sm:shrink-0">
-                            <code className="break-all font-mono text-[13px] font-medium text-foreground">
-                              {sym.name}
-                            </code>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "px-1.5 py-0 font-mono text-[10px] uppercase tracking-wide",
-                                KIND_STYLES[sym.kind]
-                              )}
-                            >
-                              {sym.kind}
-                            </Badge>
-                            {sym.line ? (
-                              <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">
-                                L{sym.line}
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
-                            {sym.summary || "—"}
-                          </p>
-                          <ArrowRight
-                            className="hidden size-3.5 shrink-0 -translate-x-1 text-primary opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 sm:block"
-                            aria-hidden
-                          />
-                        </button>
-                      </li>
-                    ))}
+                    {mod.symbols.map((sym) => {
+                      const symPath = sym.sourcePath ?? mod.sourcePath;
+                      const symRef = sym.line ? `${symPath}#L${sym.line}` : symPath;
+                      const copied = copiedSym === sym.name;
+                      return (
+                        <li key={sym.name} className="group/row flex items-stretch">
+                          <button
+                            type="button"
+                            onClick={() => viewSource(symPath, mod.name, sym.line)}
+                            aria-label={
+                              sym.line
+                                ? `Jump to ${sym.name} definition at line ${sym.line} of ${mod.name}`
+                                : `Open source of ${mod.name} (${sym.name})`
+                            }
+                            className="group flex min-w-0 flex-1 flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:bg-primary/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-3"
+                          >
+                            <div className="flex min-w-0 items-center gap-2 sm:w-[240px] sm:shrink-0">
+                              <code className="break-all font-mono text-[13px] font-medium text-foreground">
+                                {sym.name}
+                              </code>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "px-1.5 py-0 font-mono text-[10px] uppercase tracking-wide",
+                                  KIND_STYLES[sym.kind]
+                                )}
+                              >
+                                {sym.kind}
+                              </Badge>
+                              {sym.line ? (
+                                <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">
+                                  L{sym.line}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+                              {sym.summary || "—"}
+                            </p>
+                            <ArrowRight
+                              className="hidden size-3.5 shrink-0 -translate-x-1 text-primary opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 sm:block"
+                              aria-hidden
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void copyReference(sym.name, symPath, sym.line)}
+                            aria-label={`Copy line reference ${symRef}`}
+                            title={`Copy ${symRef}`}
+                            className={cn(
+                              "flex w-10 shrink-0 items-center justify-center border-l border-transparent text-muted-foreground/60 transition-all hover:border-l-border hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:bg-primary/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring sm:opacity-0 sm:group-hover/row:opacity-100 sm:group-focus-within/row:opacity-100 sm:focus-visible:opacity-100",
+                              copied && "text-primary sm:opacity-100"
+                            )}
+                          >
+                            {copied ? (
+                              <Check className="size-3.5" aria-hidden />
+                            ) : (
+                              <ClipboardCopy className="size-3.5" aria-hidden />
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </CardContent>
               </Card>

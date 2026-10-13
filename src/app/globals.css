@@ -305,6 +305,49 @@
   box-shadow: 0 6px 14px -6px color-mix(in oklch, var(--primary) 30%, transparent);
 }
 
+/* ---- Download CTA header: faint dot texture over the gradient ---- */
+.dot-grid {
+  background-image: radial-gradient(
+    color-mix(in oklch, var(--foreground) 14%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 14px 14px;
+  background-position: center;
+}
+
+/* ---- Featured-file cards: gradient top accent + hover lift + glow ---- */
+.featured-card {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+.featured-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    var(--primary),
+    color-mix(in oklch, var(--chart-2) 70%, var(--primary)),
+    transparent
+  );
+  opacity: 0.85;
+}
+.featured-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklch, var(--primary) 38%, transparent);
+  box-shadow:
+    0 10px 22px -10px color-mix(in oklch, var(--primary) 38%, transparent),
+    0 4px 10px -6px color-mix(in oklch, var(--foreground) 18%, transparent);
+}
+.featured-card:focus-within {
+  border-color: color-mix(in oklch, var(--primary) 45%, transparent);
+}
+
 /* ---- Reduced motion: no flash, no ping, no smooth scroll, no lift ---- */
 @media (prefers-reduced-motion: reduce) {
   .code-line-highlight {
@@ -321,6 +364,12 @@
     transition: none;
   }
   .readout-card:hover {
+    transform: none;
+  }
+  .featured-card {
+    transition: none;
+  }
+  .featured-card:hover {
     transform: none;
   }
 }
