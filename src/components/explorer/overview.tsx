@@ -203,8 +203,8 @@ export function Overview() {
     void ensureTree();
   }, [ensureTree]);
 
-  const fileCount = stats ? fmtInt(stats.files) : "48";
-  const loc = stats ? fmtInt(stats.totalLines) : "7,097";
+  const fileCount = stats ? fmtInt(stats.files) : "51";
+  const loc = stats ? fmtInt(stats.totalLines) : "8,258";
 
   return (
     <div className="space-y-10">

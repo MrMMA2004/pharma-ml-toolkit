@@ -264,7 +264,48 @@
   background: color-mix(in oklch, var(--primary) 26%, transparent);
 }
 
-/* ---- Reduced motion: no flash, no ping, no smooth scroll ---- */
+/* ---- Permalink jump-hint: quick slide-in when detected ---- */
+.hint-enter {
+  animation: hint-in 180ms ease-out both;
+}
+@keyframes hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- PK readout stat cards: emerald top accent + hover lift ---- */
+.readout-card {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+.readout-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(
+    to bottom,
+    var(--primary),
+    color-mix(in oklch, var(--primary) 25%, transparent)
+  );
+}
+.readout-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--primary) 35%, transparent);
+  box-shadow: 0 6px 14px -6px color-mix(in oklch, var(--primary) 30%, transparent);
+}
+
+/* ---- Reduced motion: no flash, no ping, no smooth scroll, no lift ---- */
 @media (prefers-reduced-motion: reduce) {
   .code-line-highlight {
     animation: none;
@@ -272,6 +313,15 @@
   .ping-ring::before {
     animation: none;
     opacity: 0;
+  }
+  .hint-enter {
+    animation: none;
+  }
+  .readout-card {
+    transition: none;
+  }
+  .readout-card:hover {
+    transform: none;
   }
 }
 

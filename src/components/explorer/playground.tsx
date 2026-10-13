@@ -6,11 +6,21 @@ import { PharmaCalcs } from "@/components/explorer/playground/pharma-calcs";
 import { MlPlayground } from "@/components/explorer/playground/ml-playground";
 import { DockingParser } from "@/components/explorer/playground/docking-parser";
 import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
+import { useToolkitStore } from "@/lib/store";
 
-/** Playground: pharma calculators / PK simulator / ML training / docking parser. */
+/** Playground: pharma calculators / PK simulator / ML training / docking parser.
+ * The active sub-tab and the PK regimen live in the store so both survive
+ * switching away and back. */
 export function Playground() {
+  const playgroundTab = useToolkitStore((s) => s.playgroundTab);
+  const setPlaygroundTab = useToolkitStore((s) => s.setPlaygroundTab);
+
   return (
-    <Tabs defaultValue="calculators" className="w-full">
+    <Tabs
+      value={playgroundTab}
+      onValueChange={setPlaygroundTab}
+      className="w-full"
+    >
       <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-3xl grid-cols-2 gap-1 overflow-x-auto p-1 sm:grid-cols-4">
         <TabsTrigger
           value="calculators"

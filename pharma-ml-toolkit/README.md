@@ -35,6 +35,10 @@ exceptions, input validation, and pytest coverage** (177 tests).
   uses the *exact* same seeded generators as its training route (`/api/ml/train`) — identical
   `mulberry32` PRNG, `make_regression_data`, and `makeMoons` implementations — so previewed rows,
   statistics, and scatter plots are guaranteed to match the data a model is actually trained on.
+* **Shareable line references**: the web app's code explorer copies `path#LNN` references on any
+  line click and accepts them back in its search box (validated against the file tree, then
+  jumped to with a highlight), so a doc review, PR comment, or chat message can point peers at
+  an exact line of the package.
 
 ---
 
@@ -76,7 +80,7 @@ pharma-ml-toolkit/
 │   ├── ml/                  # preprocessing, models, training, evaluation, persistence
 │   ├── pharma/              # units, pk, pd, dosage
 │   ├── docking/             # preparation, workflow, parsing, scoring
-│   └── utils/               # io (safe read/write), validation
+│   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
 ├── tests/                   # 177 pytest cases across all domains
 ├── examples/                # runnable demos + pharmaml_walkthrough.ipynb (executed notebook)
 ├── docs/                    # INDEX.md — auto-generated module/API index

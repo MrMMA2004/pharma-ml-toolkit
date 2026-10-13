@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileCode2, RefreshCw, Search, TriangleAlert, X } from "lucide-react";
+import {
+  CornerDownLeft,
+  FileCode2,
+  History,
+  RefreshCw,
+  Search,
+  TriangleAlert,
+  X,
+} from "lucide-react";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -22,6 +32,29 @@ function countFiles(node: TreeNode): number {
   return (node.children ?? []).reduce((acc, child) => acc + countFiles(child), 0);
 }
 
+/** Collect every file path in the tree into a Set. */
+function collectPaths(node: TreeNode, into: Set<string>): void {
+  if (node.type === "file") {
+    into.add(node.path);
+    return;
+  }
+  for (const child of node.children ?? []) collectPaths(child, into);
+}
+
+/** Max chips rendered in the recent strip. */
+const RECENT_SHOWN = 6;
+
+/**
+ * Parse a pasted line reference like `src/pharmaml/chem/converters.py#L94`.
+ * Returns null when the query is a plain filter string.
+ */
+export function parsePermalink(raw: string): { path: string; line: number } | null {
+  const match = /^\s*(.+?)\s*#L(\d+)\s*$/i.exec(raw);
+  if (!match) return null;
+  const line = Number(match[2]);
+  return line > 0 ? { path: match[1], line } : null;
+}
+
 export function CodeExplorer() {
   const ensureTree = useToolkitStore((s) => s.ensureTree);
   const tree = useToolkitStore((s) => s.tree);
@@ -33,6 +66,9 @@ export function CodeExplorer() {
   const setSelectedFile = useToolkitStore((s) => s.setSelectedFile);
   const targetLine = useToolkitStore((s) => s.targetLine);
   const setTargetLine = useToolkitStore((s) => s.setTargetLine);
+  const openFileAtLine = useToolkitStore((s) => s.openFileAtLine);
+  const recentFiles = useToolkitStore((s) => s.recentFiles);
+  const clearRecentFiles = useToolkitStore((s) => s.clearRecentFiles);
 
   const [content, setContent] = useState<FileContentResponse | null>(null);
   const [fileStatus, setFileStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -85,7 +121,51 @@ export function CodeExplorer() {
   }, [selectedFile, loadFile]);
 
   const trimmed = query.trim().toLowerCase();
-  const searchActive = trimmed.length > 0;
+  const permalink = parsePermalink(query);
+  const searchActive = trimmed.length > 0 && !permalink;
+
+  /** All file paths — used to validate pasted references against the tree. */
+  const allPaths = useMemo(() => {
+    const set = new Set<string>();
+    if (tree) collectPaths(tree, set);
+    return set;
+  }, [tree]);
+
+  /** Resolve a pasted path: exact, then case-insensitive fallback. */
+  const resolvePastedPath = useCallback(
+    (path: string): string | null => {
+      if (allPaths.has(path)) return path;
+      const lower = path.toLowerCase();
+      for (const candidate of allPaths) {
+        if (candidate.toLowerCase() === lower) return candidate;
+      }
+      return null;
+    },
+    [allPaths]
+  );
+
+  const jumpTarget = useMemo(() => {
+    if (!permalink) return null;
+    const resolved = resolvePastedPath(permalink.path);
+    return { requested: permalink, resolved };
+  }, [permalink, resolvePastedPath]);
+
+  const jumpToPermalink = useCallback(() => {
+    if (!jumpTarget) return;
+    const { requested, resolved } = jumpTarget;
+    if (resolved) {
+      openFileAtLine(resolved, requested.line);
+      setQuery("");
+      toast.success("Opened line reference", {
+        description: `${resolved}#L${requested.line}`,
+      });
+    } else {
+      toast.error("No such file in the toolkit", {
+        description: requested.path,
+      });
+    }
+  }, [jumpTarget, openFileAtLine]);
+
   const filteredTree = useMemo(() => {
     if (!tree || !searchActive) return tree;
     const matchesPath = (p: string) => p.toLowerCase().includes(trimmed);
@@ -121,11 +201,17 @@ export function CodeExplorer() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter files by name…"
-              aria-label="Filter files in the toolkit tree"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && permalink) {
+                  e.preventDefault();
+                  jumpToPermalink();
+                }
+              }}
+              placeholder="Filter files… or paste path#L94"
+              aria-label="Filter files in the toolkit tree, or paste a path#LNN line reference"
               className="h-9 pl-8 pr-8 text-sm"
             />
-            {searchActive ? (
+            {searchActive || permalink ? (
               <button
                 type="button"
                 onClick={() => setQuery("")}
@@ -136,6 +222,32 @@ export function CodeExplorer() {
               </button>
             ) : null}
           </div>
+          {permalink ? (
+            <button
+              type="button"
+              onClick={jumpToPermalink}
+              aria-label={
+                jumpTarget?.resolved
+                  ? `Jump to ${jumpTarget.resolved} line ${jumpTarget.requested.line}`
+                  : `No file matches ${permalink.path}`
+              }
+              className={
+                "hint-enter mt-2 flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors " +
+                (jumpTarget?.resolved
+                  ? "border-primary/30 bg-primary/5 text-foreground hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  : "border-destructive/30 bg-destructive/5 text-destructive")
+              }
+            >
+              <CornerDownLeft className="size-3.5 shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1 truncate font-mono">
+                {jumpTarget?.resolved ?? permalink.path}
+                <span className="font-semibold">#L{permalink.line}</span>
+              </span>
+              <kbd className="hidden shrink-0 rounded border bg-muted px-1 font-mono text-[10px] text-muted-foreground sm:inline">
+                ⏎
+              </kbd>
+            </button>
+          ) : null}
           <p className="text-xs text-muted-foreground">
             {treeStatus === "loading" && "Scanning directory…"}
             {treeStatus === "ready" && stats && !searchActive && (
@@ -154,6 +266,52 @@ export function CodeExplorer() {
           </p>
         </CardHeader>
         <CardContent className="p-2">
+          {!searchActive && !permalink && recentFiles.some((p) => p !== selectedFile) ? (
+            <div className="mb-2 border-b pb-2">
+              <div className="flex items-center justify-between px-1 pb-1.5">
+                <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <History className="size-3" aria-hidden />
+                  Recently viewed
+                </p>
+                <button
+                  type="button"
+                  onClick={clearRecentFiles}
+                  aria-label="Clear recently viewed files"
+                  className="flex size-5 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <X className="size-3" aria-hidden />
+                </button>
+              </div>
+              <div className="thin-scrollbar flex gap-1.5 overflow-x-auto pb-1" role="list" aria-label="Recently viewed files">
+                {recentFiles.slice(0, RECENT_SHOWN).map((path, i) => {
+                  const isActive = path === selectedFile;
+                  const name = path.split("/").pop() ?? path;
+                  return (
+                    <motion.button
+                      key={path}
+                      type="button"
+                      role="listitem"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.04, 0.16), duration: 0.18 }}
+                      onClick={() => setSelectedFile(path)}
+                      title={path}
+                      aria-label={`Open ${path}`}
+                      aria-current={isActive ? "true" : undefined}
+                      className={
+                        "shrink-0 rounded-md border px-2 py-1 font-mono text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring " +
+                        (isActive
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border/70 bg-muted/40 text-muted-foreground hover:border-primary/30 hover:bg-primary/5 hover:text-foreground")
+                      }
+                    >
+                      {name}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           {treeStatus === "loading" ? (
             <div className="space-y-2 p-2" aria-label="Loading file tree">
               {Array.from({ length: 9 }).map((_, i) => (

@@ -1,0 +1,752 @@
+✅ File saved to: /tmp/vlm-final2.json
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PharmaML Toolkit - Code Explorer</title>
+    <style>
+        :root {
+            --bg-body: #f9fafb;
+            --bg-white: #ffffff;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --text-tertiary: #9ca3af;
+            --accent-green: #10b981; /* Emerald */
+            --accent-green-light: #d1fae5;
+            --accent-green-bg: #ecfdf5;
+            --border-color: #e5e7eb;
+            --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-size: 14px;
+        }
+
+        /* --- Header --- */
+        header {
+            height: 56px;
+            border-bottom: 1px solid var(--border-color);
+            background-color: var(--bg-white);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 28px;
+            height: 28px;
+            color: var(--accent-green);
+        }
+
+        .brand-name {
+            font-weight: 700;
+            font-size: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .version-badge {
+            background-color: var(--accent-green-light);
+            color: #065f46;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        nav {
+            display: flex;
+            gap: 4px;
+            margin-left: 40px;
+        }
+
+        .nav-item {
+            text-decoration: none;
+            color: var(--text-secondary);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .nav-item:hover {
+            background-color: #f3f4f6;
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background-color: var(--accent-green-bg);
+            color: #047857;
+        }
+        
+        .nav-item.active svg {
+            stroke: currentColor;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* --- Main Layout --- */
+        main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Sidebar */
+        aside {
+            width: 320px;
+            background-color: var(--bg-white);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid transparent;
+        }
+
+        .repo-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 8px 12px 8px 34px;
+            border: 1px solid var(--accent-green); /* Highlighted state as per screenshot */
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            color: var(--text-primary);
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            color: var(--text-secondary);
+        }
+
+        .file-stats {
+            margin-top: 8px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .file-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .tree-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 16px;
+            cursor: pointer;
+            color: var(--text-primary);
+            font-size: 13px;
+            user-select: none;
+        }
+
+        .tree-item:hover {
+            background-color: #f9fafb;
+        }
+
+        .tree-icon {
+            width: 18px;
+            height: 18px;
+            margin-right: 8px;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+        
+        .tree-icon.folder { color: #d97706; } /* Amber for folders */
+        .tree-icon.file { color: var(--text-secondary); }
+
+        .tree-arrow {
+            width: 16px;
+            height: 16px;
+            margin-right: 2px;
+            color: var(--text-tertiary);
+            transition: transform 0.2s;
+        }
+        
+        .tree-item.expanded > .tree-arrow {
+            transform: rotate(90deg);
+        }
+
+        .item-count {
+            margin-left: auto;
+            font-size: 11px;
+            color: var(--text-tertiary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .indent-1 { padding-left: 32px; }
+        .indent-2 { padding-left: 48px; }
+        .indent-3 { padding-left: 64px; }
+
+        /* Content Area */
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            background-color: var(--bg-white);
+        }
+
+        /* Breadcrumb Bar */
+        .breadcrumb-bar {
+            height: 48px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background-color: #fff;
+        }
+
+        .path-text {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .file-meta-tags {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tag {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background-color: #f3f4f6;
+            color: var(--text-primary);
+        }
+
+        /* Recently Viewed Chips Strip */
+        .chips-strip {
+            height: 44px;
+            background-color: #fcfcfc;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            gap: 12px;
+            overflow-x: auto;
+        }
+
+        .chip-container {
+            display: flex;
+            align-items: center;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 4px 12px 4px 8px;
+            font-size: 12px;
+            color: var(--text-primary);
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .chip-container:hover {
+            border-color: var(--accent-green);
+            background-color: var(--accent-green-bg);
+        }
+
+        .chip-lang {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        .chip-close {
+            width: 14px;
+            height: 14px;
+            color: var(--text-tertiary);
+            cursor: pointer;
+        }
+        .chip-close:hover { color: var(--text-primary); }
+
+        .copy-btn {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            background: white;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            color: var(--text-primary);
+        }
+
+        /* Code Viewer */
+        .code-viewer {
+            flex: 1;
+            overflow: auto;
+            background-color: #ffffff;
+            position: relative;
+        }
+
+        .code-line {
+            display: flex;
+            min-height: 22px;
+            line-height: 22px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            border-left: 3px solid transparent;
+            padding-left: 12px;
+        }
+
+        .line-number {
+            width: 50px;
+            text-align: right;
+            padding-right: 16px;
+            color: var(--text-tertiary);
+            user-select: none;
+            flex-shrink: 0;
+            font-size: 12px;
+        }
+
+        .line-content {
+            flex: 1;
+            white-space: pre;
+            color: var(--text-primary);
+        }
+
+        /* Specific Line Highlight (Emerald) */
+        .code-line.highlighted {
+            background-color: var(--accent-green-bg);
+            border-left-color: var(--accent-green);
+        }
+
+        /* Syntax Coloring Mockup */
+        .kw { color: #d946ef; } /* Purple/Pink keywords */
+        .fn { color: #10b981; } /* Green functions */
+        .str { color: #059669; } /* Darker green strings */
+        .cmt { color: #9ca3af; font-style: italic; } /* Grey comments */
+        .doc { color: #059669; } /* Docstring green */
+        .mod { color: #2563eb; } /* Blue modules */
+
+        /* Toast Notification */
+        .toast {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            background-color: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            padding: 12px 16px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            z-index: 50;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .toast-icon {
+            color: var(--accent-green);
+            width: 20px;
+            height: 20px;
+        }
+
+        .toast-content h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: #065f46;
+        }
+
+        .toast-content p {
+            font-size: 12px;
+            color: #047857;
+            font-family: var(--font-mono);
+            margin-top: 2px;
+        }
+
+        .toast-close {
+            color: #6b7280;
+            cursor: pointer;
+            margin-left: 12px;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="header-left">
+            <!-- Flask Icon -->
+            <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 3h6"></path>
+                <path d="M10 3v7.5a1 1 0 0 1-.293.708l-5.121 5.122a2 2 0 0 0-.586 1.414V21a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3.256a2 2 0 0 0-.586-1.414l-5.121-5.122A1 1 0 0 1 14 10.5V3"></path>
+                <path d="M7 14h10"></path>
+            </svg>
+            <span class="brand-name">PharmaML Toolkit</span>
+            <span class="version-badge">v1.0.0</span>
+            
+            <nav>
+                <a href="#" class="nav-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    Overview
+                </a>
+                <a href="#" class="nav-item active">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                    Code Explorer
+                </a>
+                <a href="#" class="nav-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    API Reference
+                </a>
+                <a href="#" class="nav-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    Playground
+                </a>
+                <a href="#" class="nav-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    Download
+                </a>
+            </nav>
+        </div>
+
+        <div class="header-right">
+            <button style="background:none; border:none; cursor:pointer; padding: 4px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Sidebar -->
+        <aside>
+            <div class="sidebar-header">
+                <div class="repo-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    pharma-ml-toolkit/
+                </div>
+                <div class="search-box">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" class="search-input" value="Filter files... or paste pat">
+                </div>
+                <div class="file-stats">51 files · 8,258 lines · 273.4 KB</div>
+            </div>
+
+            <div class="file-tree">
+                <!-- Folder Item -->
+                <div class="tree-item">
+                    <svg class="tree-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <svg class="tree-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    .github
+                    <span class="item-count">1</span>
+                </div>
+                
+                <div class="tree-item">
+                    <svg class="tree-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <svg class="tree-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    docs
+                    <span class="item-count">1</span>
+                </div>
+
+                <div class="tree-item">
+                    <svg class="tree-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <svg class="tree-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    examples
+                    <span class="item-count">6</span>
+                </div>
+
+                <!-- Expanded Folder -->
+                <div class="tree-item expanded">
+                    <svg class="tree-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <svg class="tree-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    src
+                    <span class="item-count">1</span>
+                </div>
+
+                <!-- Subfolder Expanded -->
+                <div class="tree-item expanded indent-1">
+                    <svg class="tree-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <svg class="tree-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    pharmaml
+                    <span class="item-count">10</span>
+                </div>
+
+                <div class="tree-item indent-2">
+                    <svg class="tree-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <svg class="tree-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    chem
+                    <span class="item-count">4</span>
+                </div>
+
+                <div class="tree-item indent-2">
+                    <svg class="tree-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <svg class="tree-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    docking
+                    <span class="item-count">5</span>
+                </div>
+
+                <div class="tree-item indent-2">
+                    <svg class="tree-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <svg class="tree-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    ml
+                    <span class="item-count">6</span>
+                </div>
+
+                 <div class="tree-item indent-2">
+                    <svg class="tree-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <svg class="tree-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    pharma
+                    <span class="item-count">5</span>
+                </div>
+
+                <div class="tree-item indent-2">
+                    <svg class="tree-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <svg class="tree-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    utils
+                    <span class="item-count">3</span>
+                </div>
+
+                <!-- Files -->
+                <div class="tree-item indent-2">
+                     <svg class="tree-icon file" style="color:#10b981;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                     __init__.py
+                     <span class="item-count">50L</span>
+                </div>
+                
+                <div class="tree-item indent-2">
+                    <svg class="tree-icon file" style="color:#10b981;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                    cli.py
+                    <span class="item-count">325L</span>
+               </div>
+            </div>
+        </aside>
+
+        <!-- Content Area -->
+        <section class="content-area">
+            <!-- Breadcrumbs -->
+            <div class="breadcrumb-bar">
+                <div class="path-text">pharma-ml-toolkit / src / pharmaml / docking / scoring.py</div>
+                <div class="file-meta-tags">
+                    <span class="tag">PYTHON</span>
+                    <span class="tag">131 lines</span>
+                    <span class="tag">4.3 KB</span>
+                </div>
+            </div>
+
+            <!-- Chips Strip (Recently Viewed) -->
+            <div class="chips-strip">
+                <div class="chip-container">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                    scoring.py
+                    <span class="chip-lang">Python</span>
+                    <svg class="chip-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </div>
+                
+                <span style="font-size: 11px; color: #9ca3af;">click a line to copy its reference</span>
+
+                <button class="copy-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    Copy
+                </button>
+            </div>
+
+            <!-- Code Editor -->
+            <div class="code-viewer">
+                <div class="code-line highlighted">
+                    <span class="line-number">1</span>
+                    <span class="line-content"><span class="str">"""Post-docking scoring: ligand efficiency and consensus rescoring.</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">2</span>
+                    <span class="line-content"></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">3</span>
+                    <span class="line-content"><span class="cmt">Upgrades the intent behind ``Prettier_extracted_dlgs.py`` /</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">4</span>
+                    <span class="line-content"><span class="cmt">``dlg_extractor.py`` (ranking ligands across a docking campaign) with</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">5</span>
+                    <span class="line-content"><span class="cmt">two standard analysis hooks:</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">6</span>
+                    <span class="line-content"></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">7</span>
+                    <span class="line-content"><span class="cmt">* :func:`ligand_efficiency` -- binding energy normalised by heavy-atom</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">8</span>
+                    <span class="line-content"><span class="cmt">  count, the classic flat-scoring correction [1]_;</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">9</span>
+                    <span class="line-content"><span class="cmt">* :func:`consensus_rescore` -- min-max normalisation of several</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">10</span>
+                    <span class="line-content"><span class="cmt">  evidence columns into one 0–1 consensus score.</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">11</span>
+                    <span class="line-content"></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">12</span>
+                    <span class="line-content"><span class="cmt">References</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">13</span>
+                    <span class="line-content"><span class="cmt">----------</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">14</span>
+                    <span class="line-content"><span class="cmt">.. [1] Hopkins, A. L. et al., J. Med. Chem. 47 (2004): 3385–3387.</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">15</span>
+                    <span class="line-content"><span class="str">"""</span></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">16</span>
+                    <span class="line-content"></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">17</span>
+                    <span class="line-content"><span class="kw">from</span> <span class="mod">__future__</span> <span class="kw">import</span> annotations</span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">18</span>
+                    <span class="line-content"></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">19</span>
+                    <span class="line-content"><span class="kw">import</span> <span class="mod">numpy</span> <span class="kw">as</span> np</span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">20</span>
+                    <span class="line-content"><span class="kw">import</span> <span class="mod">pandas</span> <span class="kw">as</span> pd</span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">21</span>
+                    <span class="line-content"></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">22</span>
+                    <span class="line-content"><span class="kw">from</span> <span class="mod">pharmaml.exceptions</span> <span class="kw">import</span> DataValidationError</span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">23</span>
+                    <span class="line-content"><span class="kw">from</span> <span class="mod">pharmaml.logger</span> <span class="kw">import</span> get_logger</span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">24</span>
+                    <span class="line-content"><span class="kw">from</span> <span class="mod">pharmaml.utils.validation</span> <span class="kw">import</span> validate_positive</span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">25</span>
+                    <span class="line-content"></span>
+                </div>
+                <div class="code-line">
+                    <span class="line-number">26</span>
+                    <span class="line-content">_LOG = get_logger(__name__)</span>
+                </div>
+            </div>
+
+            <!-- Toast Notification -->
+            <div class="toast">
+                <svg class="toast-close" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" style="position:absolute; top:-10px; right:-10px; background:white; border-radius:50%; padding:2px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                <div class="toast-content">
+                    <h4>Opened line reference</h4>
+                    <p>src/pharmaml/docking/scoring.py#L1</p>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
+```

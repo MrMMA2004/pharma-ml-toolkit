@@ -1,44 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Activity,
   Info,
+  RotateCcw,
   TriangleAlert,
 } from "lucide-react";
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { useToolkitStore, type PkParams } from "@/lib/store";
 import { CHART } from "@/components/explorer/playground/calc-ui";
 
 /* ------------------------------------------------------------------ */
 /* Types & maths                                                       */
 /* ------------------------------------------------------------------ */
 
-type Route = "iv" | "oral";
-
-interface PkParams {
-  route: Route;
-  dose: number; // mg
-  vd: number; // L
-  cl: number; // L/h
-  tau: number; // h
-  doses: number;
-  f: number; // bioavailability (oral)
-  ka: number; // 1/h (oral)
-}
+type Route = PkParams["route"];
 
 interface Derived {
   ke: number; // 1/h
@@ -105,7 +98,7 @@ function ParamSlider({ id, label, unit, min, max, step, value, onChange, format 
         <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">
           {label}
         </Label>
-        <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums">
+        <span className="rounded-md border border-primary/15 bg-primary/5 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums">
           {format ? format(value) : value}
           <span className="ml-0.5 font-normal text-muted-foreground">{unit}</span>
         </span>
@@ -130,21 +123,15 @@ function ParamSlider({ id, label, unit, min, max, step, value, onChange, format 
 
 const SAMPLES = 420;
 
-/** Multi-dose PK simulator: exact superposition, 1-compartment. */
+/** Multi-dose PK simulator: exact superposition, 1-compartment.
+ * Regimen state lives in the zustand store, so sliders keep their values
+ * when the user switches playground tabs or navigates away and back. */
 export function PkSimulator() {
-  const [route, setRoute] = useState<Route>("iv");
-  const [dose, setDose] = useState(250);
-  const [vd, setVd] = useState(45);
-  const [cl, setCl] = useState(3.2);
-  const [tau, setTau] = useState(8);
-  const [doses, setDoses] = useState(6);
-  const [f, setF] = useState(0.9);
-  const [ka, setKa] = useState(1.2);
+  const params = useToolkitStore((s) => s.pkParams);
+  const setPkParam = useToolkitStore((s) => s.setPkParam);
+  const resetPkParams = useToolkitStore((s) => s.resetPkParams);
 
-  const params: PkParams = useMemo(
-    () => ({ route, dose, vd, cl, tau, doses, f, ka }),
-    [route, dose, vd, cl, tau, doses, f, ka]
-  );
+  const { route, dose, vd, cl, tau, doses, f, ka } = params;
 
   const derived = useMemo(() => derive(params), [params]);
 
@@ -184,12 +171,12 @@ export function PkSimulator() {
             <Activity className="size-4 text-primary" aria-hidden />
             Regimen parameters
           </CardTitle>
-          <CardDescription className="text-xs">
-            One compartment · first-order elimination · exact superposition
+          <CardDescription className="flex items-center justify-between gap-2 text-xs">
+            <span>One compartment · first-order elimination · exact superposition</span>
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 py-4">
-          <Tabs value={route} onValueChange={(v) => setRoute(v as Route)}>
+          <Tabs value={route} onValueChange={(v) => setPkParam("route", v as Route)}>
             <TabsList className="grid h-10 w-full grid-cols-2">
               <TabsTrigger value="iv" className="min-h-9 text-xs">
                 IV bolus
@@ -200,18 +187,29 @@ export function PkSimulator() {
             </TabsList>
           </Tabs>
 
-          <ParamSlider id="pk-dose" label="Dose" unit="mg" min={25} max={1000} step={25} value={dose} onChange={setDose} />
-          <ParamSlider id="pk-vd" label="Volume Vd" unit="L" min={5} max={150} step={1} value={vd} onChange={setVd} />
-          <ParamSlider id="pk-cl" label="Clearance CL" unit="L/h" min={0.5} max={12} step={0.1} value={cl} onChange={setCl} format={(v) => v.toFixed(1)} />
-          <ParamSlider id="pk-tau" label="Interval τ" unit="h" min={2} max={24} step={0.5} value={tau} onChange={setTau} format={(v) => v.toFixed(1)} />
-          <ParamSlider id="pk-doses" label="Doses" unit="" min={1} max={12} step={1} value={doses} onChange={setDoses} />
+          <ParamSlider id="pk-dose" label="Dose" unit="mg" min={25} max={1000} step={25} value={dose} onChange={(v) => setPkParam("dose", v)} />
+          <ParamSlider id="pk-vd" label="Volume Vd" unit="L" min={5} max={150} step={1} value={vd} onChange={(v) => setPkParam("vd", v)} />
+          <ParamSlider id="pk-cl" label="Clearance CL" unit="L/h" min={0.5} max={12} step={0.1} value={cl} onChange={(v) => setPkParam("cl", v)} format={(v) => v.toFixed(1)} />
+          <ParamSlider id="pk-tau" label="Interval τ" unit="h" min={2} max={24} step={0.5} value={tau} onChange={(v) => setPkParam("tau", v)} format={(v) => v.toFixed(1)} />
+          <ParamSlider id="pk-doses" label="Doses" unit="" min={1} max={12} step={1} value={doses} onChange={(v) => setPkParam("doses", v)} />
 
           {route === "oral" ? (
             <>
-              <ParamSlider id="pk-f" label="Bioavailability F" unit="" min={0.1} max={1} step={0.05} value={f} onChange={setF} format={(v) => v.toFixed(2)} />
-              <ParamSlider id="pk-ka" label="Absorption ka" unit="h⁻¹" min={0.1} max={3} step={0.05} value={ka} onChange={setKa} format={(v) => v.toFixed(2)} />
+              <ParamSlider id="pk-f" label="Bioavailability F" unit="" min={0.1} max={1} step={0.05} value={f} onChange={(v) => setPkParam("f", v)} format={(v) => v.toFixed(2)} />
+              <ParamSlider id="pk-ka" label="Absorption ka" unit="h⁻¹" min={0.1} max={3} step={0.05} value={ka} onChange={(v) => setPkParam("ka", v)} format={(v) => v.toFixed(2)} />
             </>
           ) : null}
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2 text-xs"
+            onClick={resetPkParams}
+            aria-label="Reset all regimen parameters to defaults"
+          >
+            <RotateCcw className="size-3.5" aria-hidden />
+            Reset parameters
+          </Button>
         </CardContent>
       </Card>
 
@@ -230,7 +228,13 @@ export function PkSimulator() {
           <CardContent className="py-4">
             <div className="h-[300px] w-full sm:h-[340px]" role="img" aria-label="Plasma concentration versus time chart">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={series} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                <ComposedChart data={series} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                  <defs>
+                    <linearGradient id="pkConcFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={CHART.emerald} stopOpacity={0.28} />
+                      <stop offset="100%" stopColor={CHART.emerald} stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
                   <XAxis
                     dataKey="t"
@@ -266,6 +270,13 @@ export function PkSimulator() {
                       fontSize: 11,
                     }}
                   />
+                  <Area
+                    type="monotone"
+                    dataKey="c"
+                    stroke="none"
+                    fill="url(#pkConcFill)"
+                    isAnimationActive={false}
+                  />
                   <Line
                     type="monotone"
                     dataKey="c"
@@ -274,7 +285,7 @@ export function PkSimulator() {
                     dot={false}
                     isAnimationActive={false}
                   />
-                </LineChart>
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
@@ -282,7 +293,7 @@ export function PkSimulator() {
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {readouts.map((r) => (
-            <div key={r.label} className="rounded-lg border bg-card p-3 shadow-sm">
+            <div key={r.label} className="readout-card rounded-lg border bg-card p-3 pl-4 shadow-sm">
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{r.label}</p>
               <p className="mt-0.5 font-mono text-lg font-semibold tabular-nums leading-tight">
                 {r.value}
