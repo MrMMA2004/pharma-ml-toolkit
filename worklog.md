@@ -86,3 +86,27 @@ Work Log:
 Stage Summary:
 - Project COMPLETE and verified: (1) `pharma-ml-toolkit/` Python package — 48 files, ~7.1k LOC, 159 passing tests, README, CI, Dockerfile, CLI; (2) Next.js single-page Explorer app on `/` — overview, code browser, interactive playground (pharma calculators / ML training / docking parser), ZIP download; lint-clean, browser-verified.
 - Known minor items: empty `docs/` directory in the package (rendered as a harmless placeholder in the explorer); PyTorch not used (sklearn backbone by design).
+
+---
+Task ID: R1 (cron review round 1)
+Agent: Main orchestrator (Z.ai Code)
+Task: Scheduled 15-min review: QA the explorer app, then extend both deliverables (fix + features + styling).
+
+Work Log:
+- QA pass (agent-browser): cycled all 4 tabs — zero page/console errors, dev server healthy (HTTP 200).
+- BUG FOUND & FIXED — README/overview API drift: the README quickstart and the web app's QUICKSTART block used keyword names that don't exist (`age=`, `scr_mg_dl=`, `target_conc=`, `train_model(data=…)`, `report.metrics`, `ligand_efficiency(affinity=, heavy_atoms=)`, `consensus_rescore(dict)`) and stale registry names (`logistic`, `ada_boost`). Cross-checked every signature against the actual source and rewrote both snippets with the verified API; executed a mirror of every code cell as a script to prove correctness (all values verified: CV ROC-AUC 0.924 ± 0.031, acc 0.833, NCA AUC 63.7, CrCl 63.6, LD 540, LE 0.322…).
+- NEW Python deliverable — `examples/pharmaml_walkthrough.ipynb`: built with nbformat and EXECUTED with nbclient (10 code cells, 10 outputs, 0 errors, kernel path = examples/); covers ML train/eval/leaderboard/persistence, NCA PK, dosing design, Vina parsing + LE, pIC50 conversion. Package installed editable (`python -m pip install -e . --no-deps` into the venv) to enable kernel import.
+- NEW Python deliverable — `docs/INDEX.md`: auto-generated module index (126 lines, 7 modules) from each module's `__all__` + docstrings, via `scratch/build_docs_index.py`.
+- NEW web feature — Code Explorer search: filter input with clear button, live match count, empty state, pruned tree with auto-expanded dirs (file-tree.tsx `searchActive` prop).
+- NEW web feature — PK Simulator (4th Playground tab): exact 1-compartment superposition for repeated IV-bolus/oral dosing, 5–7 sliders, recharts concentration–time profile with dashed Css,avg reference, derived readouts (ke, t½, R, Css,avg, Cmax), flip-flop kinetics warning at ka ≤ 1.25·ke. Browser-verified: readouts ke=0.0711, t½=9.75 h, R=2.30×, Css,avg=9.77 mg/L, Cmax=5.56 mg/L (all hand-checked); warning toggles correctly via slider keyboard interaction.
+- NEW support — `.ipynb`/`.json` viewable in the explorer (allowlist + JSON grammar registered in Prism).
+- BUG FOUND & FIXED — egg-info pollution: the editable install created `src/pharmaml.egg-info/` which leaked into the tree and ZIP; excluded via suffix check in the tree walk and `*.egg-info*` patterns in the zip command. Verified: 0 PKG matches in tree, ZIP clean, notebook + INDEX.md included.
+- Styling polish: hero redesigned as a framed panel with layered radial glow + faint blueprint grid (multi background-image — no z-index paint-order issues), mono uppercase eyebrow labels on 4 overview sections, data-table zebra + emerald hover on all three tables (best-pose highlight moved to inline style to win specificity), download panel docs note updated, playground tab grid now 2×2 on mobile (4 tabs).
+- Verification: `bun run lint` exit 0; console/page errors zero after reload; 360px check: 0 clipped elements, playground tabs fit; VLM QA of new hero: "professional, technical blueprint aesthetic, no contrast issues"; dev.log tail: all 200s, only the transient import-typo error (fixed) from hot-reload.
+- Cleaned scratch build artifacts (kept scratch/*.py generator scripts for regeneration).
+
+Stage Summary:
+- Fixed: 1 real doc bug (API drift in README + web quickstart), 1 pollution bug (egg-info in tree/ZIP), 1 transient import typo.
+- Added: executed Jupyter walkthrough notebook, auto-generated docs/INDEX.md, file-tree search, PK Simulator tab, ipynb viewing, hero/eyebrow/table styling refresh.
+- Python package now at 50 files (notebook + INDEX); all 159 tests still pass; web app fully re-verified.
+- Known minor items / next-round candidates: (a) README "Design assumptions" could mention the notebook; (b) the notebooks' matplotlib-free charting means outputs are text/HTML tables only; (c) could add an "API reference" tab in the web app rendering docs/INDEX.md as a page instead of raw markdown; (d) example ML playground could add a regression-degree selector effect on the chart legend.

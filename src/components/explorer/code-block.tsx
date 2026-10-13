@@ -9,6 +9,7 @@ import markdown from "react-syntax-highlighter/dist/esm/languages/prism/markdown
 import docker from "react-syntax-highlighter/dist/esm/languages/prism/docker";
 import ini from "react-syntax-highlighter/dist/esm/languages/prism/ini";
 import bash from "react-syntax-highlighter/dist/esm/languages/prism/bash";
+import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
 import oneDark from "react-syntax-highlighter/dist/esm/styles/prism/one-dark";
 import oneLight from "react-syntax-highlighter/dist/esm/styles/prism/one-light";
 import { useTheme } from "next-themes";
@@ -27,6 +28,7 @@ SyntaxHighlighter.registerLanguage("markdown", markdown);
 SyntaxHighlighter.registerLanguage("docker", docker);
 SyntaxHighlighter.registerLanguage("ini", ini);
 SyntaxHighlighter.registerLanguage("bash", bash);
+SyntaxHighlighter.registerLanguage("json", json);
 
 /** Grammar ids registered with Prism — anything else renders as plain text. */
 const REGISTERED_GRAMMARS = new Set([
@@ -37,6 +39,7 @@ const REGISTERED_GRAMMARS = new Set([
   "docker",
   "ini",
   "bash",
+  "json",
 ]);
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -48,6 +51,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
   ini: "INI",
   text: "Text",
   bash: "Shell",
+  json: "JSON",
 };
 
 interface CodeBlockProps {

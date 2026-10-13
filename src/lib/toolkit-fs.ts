@@ -22,6 +22,8 @@ const ALLOWED_EXTENSIONS = new Set([
   ".yaml",
   ".cfg",
   ".ini",
+  ".ipynb",
+  ".json",
 ]);
 
 const ALLOWED_BASENAMES = new Set(["Dockerfile", ".dockerignore", ".gitignore"]);
@@ -52,6 +54,10 @@ export function detectLanguage(relPath: string): string {
     case ".cfg":
     case ".ini":
       return "ini";
+    case ".ipynb":
+      return "json";
+    case ".json":
+      return "json";
     default:
       return "text";
   }
@@ -83,7 +89,8 @@ async function walk(dirAbs: string, relDir: string, acc: WalkAccumulator): Promi
     const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
     const abs = path.join(dirAbs, entry.name);
     if (entry.isDirectory()) {
-      if (EXCLUDED_DIRS.has(entry.name)) continue;
+      // Build/install metadata (e.g. pharmaml.egg-info) never ships.
+      if (EXCLUDED_DIRS.has(entry.name) || entry.name.endsWith(".egg-info")) continue;
       acc.dirs += 1;
       const node = await walk(abs, rel, acc);
       children.push(node);

@@ -161,3 +161,37 @@
 .pill-scroll::-webkit-scrollbar {
   display: none;
 }
+
+/* ---- Hero panel: layered radial glow + faint blueprint grid ---- */
+.hero-panel {
+  background-image:
+    radial-gradient(55% 50% at 12% 0%,
+      color-mix(in oklch, var(--primary) 16%, transparent), transparent 72%),
+    radial-gradient(45% 42% at 92% 8%,
+      color-mix(in oklch, var(--chart-2) 12%, transparent), transparent 70%),
+    linear-gradient(color-mix(in oklch, var(--foreground) 3.5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg,
+      color-mix(in oklch, var(--foreground) 3.5%, transparent) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+}
+
+/* ---- Section eyebrow label ---- */
+.eyebrow {
+  font-family: var(--font-geist-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in oklch, var(--primary) 78%, var(--foreground));
+}
+
+/* ---- Data tables: subtle zebra + emerald hover ---- */
+.data-table tbody tr:nth-child(odd) {
+  background: color-mix(in oklch, var(--foreground) 2.5%, transparent);
+}
+.data-table tbody tr {
+  transition: background-color 150ms ease;
+}
+.data-table tbody tr:hover {
+  background: color-mix(in oklch, var(--primary) 8%, transparent);
+}

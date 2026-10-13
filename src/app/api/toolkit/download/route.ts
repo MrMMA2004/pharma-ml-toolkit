@@ -34,6 +34,8 @@ export async function GET() {
         "__pycache__/*",
         "*/__pycache__/*",
         "*.pyc",
+        "*.egg-info",
+        "*.egg-info/*",
       ],
       { cwd: TOOLKIT_ROOT }
     );

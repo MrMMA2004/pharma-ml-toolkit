@@ -275,7 +275,7 @@ export function DockingParser() {
                 </CardDescription>
               </CardHeader>
               <div className="thin-scrollbar max-h-96 overflow-auto">
-                <Table>
+                <Table className="data-table">
                   <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="h-9">#</TableHead>
@@ -319,7 +319,11 @@ export function DockingParser() {
                     {result.poses.map((pose: DockingPose) => (
                       <TableRow
                         key={`${pose.rank}-${pose.mode ?? ""}`}
-                        className={pose.rank === 1 ? "bg-primary/5" : undefined}
+                        style={
+                          pose.rank === 1
+                            ? { background: "color-mix(in oklch, var(--primary) 8%, transparent)" }
+                            : undefined
+                        }
                       >
                         <TableCell className="py-2 font-mono text-xs tabular-nums">
                           {pose.rank === 1 ? (

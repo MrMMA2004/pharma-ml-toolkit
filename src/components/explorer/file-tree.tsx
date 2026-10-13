@@ -9,6 +9,8 @@ interface FileTreeProps {
   node: TreeNode;
   selectedPath: string;
   onSelect: (path: string) => void;
+  /** When true (active search), every directory renders expanded. */
+  searchActive?: boolean;
 }
 
 const CODE_EXTENSIONS = new Set([".py", ".toml", ".yml", ".yaml", ".cfg", ".ini"]);
@@ -34,6 +36,7 @@ function TreeNodeRow({
   onSelect,
   expanded,
   toggleDir,
+  searchActive,
 }: {
   node: TreeNode;
   depth: number;
@@ -41,11 +44,12 @@ function TreeNodeRow({
   onSelect: (path: string) => void;
   expanded: Set<string>;
   toggleDir: (path: string) => void;
+  searchActive?: boolean;
 }) {
   const paddingLeft = 8 + depth * 16;
 
   if (node.type === "dir") {
-    const isOpen = expanded.has(node.path);
+    const isOpen = searchActive || expanded.has(node.path);
     const childCount = node.children?.length ?? 0;
     return (
       <li className="list-none" role="none">
@@ -87,6 +91,7 @@ function TreeNodeRow({
                 onSelect={onSelect}
                 expanded={expanded}
                 toggleDir={toggleDir}
+                searchActive={searchActive}
               />
             ))}
           </ul>
@@ -134,7 +139,7 @@ function TreeNodeRow({
 }
 
 /** Collapsible file tree with line counts and emerald selection highlight. */
-export function FileTree({ node, selectedPath, onSelect }: FileTreeProps) {
+export function FileTree({ node, selectedPath, onSelect, searchActive }: FileTreeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set(["", "src", "src/pharmaml"])
   );
@@ -160,6 +165,7 @@ export function FileTree({ node, selectedPath, onSelect }: FileTreeProps) {
             onSelect={onSelect}
             expanded={expanded}
             toggleDir={toggleDir}
+            searchActive={searchActive}
           />
         ))}
       </ul>

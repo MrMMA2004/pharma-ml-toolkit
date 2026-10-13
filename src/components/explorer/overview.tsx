@@ -40,23 +40,27 @@ from pharmaml.pharma import (
 )
 import numpy as np
 
-crcl = creatinine_clearance(age=68, weight_kg=70, scr_mg_dl=1.1, sex="male")
-bsa  = bsa_mosteller(weight_kg=70, height_cm=175)          # m^2
-ld   = loading_dose(target_conc=12.0, vd=45.0)             # mg
+crcl = creatinine_clearance(age_years=68, weight_kg=70,
+                            serum_cr_mg_dl=1.1, sex="male")
+bsa  = bsa_mosteller(height_cm=175, weight_kg=70)      # m^2
+ld   = loading_dose(vd=45.0, target_concentration=12.0)  # mg
 md   = maintenance_dose(clearance_=3.2, target_css=6.0, tau=8.0)
 
 t = np.array([0.0, 1.0, 2.0, 4.0, 8.0, 12.0])
 c = np.array([0.0, 8.2, 6.1, 3.4, 1.1, 0.35])
-auc = auc_trapezoid(t, c)                                  # ug*h/mL
+auc = auc_trapezoid(t, c)                              # ug*h/mL
 
 # --- QSAR machine learning --------------------------------------
-from pharmaml.ml import train_model, compare_models, list_models
-
-report = train_model(
-    "random_forest", data="dataset.csv", target="Target",
-    cv=5, tune=True, out="artifacts",
+from pharmaml.ml import (
+    train_model, evaluate_model, compare_models,
+    make_train_test_split,
 )
-print(report.metrics)          # accuracy, ROC-AUC, F1, CV mean +/- std
+
+X_tr, X_te, y_tr, y_te = make_train_test_split(X, y, test_size=0.2)
+result = train_model("random_forest", "classification",
+                     X_tr, y_tr, cv=5, tune=True)
+print(result.cv_mean, result.cv_std)      # 5-fold ROC-AUC mean +/- std
+report = evaluate_model(result.model, X_te, y_te, "classification")
 
 # --- Docking -----------------------------------------------------
 from pharmaml.docking import (
@@ -64,9 +68,9 @@ from pharmaml.docking import (
     ligand_efficiency, consensus_rescore,
 )
 
-poses   = parse_vina_output(open("vina.out").read())
-le      = ligand_efficiency(affinity=-9.6, heavy_atoms=32)  # kcal/mol/atom
-ranked  = consensus_rescore({"vina": scores, "ad4": scores2})`;
+poses = parse_vina_output(open("vina.out").read())
+le    = ligand_efficiency(affinity_kcal_mol=-9.6, num_heavy_atoms=32)
+cons  = consensus_rescore(scores_df, columns=["vina", "ad4"])`;
 
 interface DomainCardSpec {
   icon: LucideIcon;
@@ -205,7 +209,10 @@ export function Overview() {
   return (
     <div className="space-y-10">
       {/* ------------------------------ Hero ------------------------------ */}
-      <section aria-labelledby="hero-title" className="space-y-6">
+      <section
+        aria-labelledby="hero-title"
+        className="hero-panel relative space-y-6 rounded-2xl border border-border/70 p-6 shadow-sm sm:p-10"
+      >
         <div className="space-y-4">
           <Badge variant="secondary" className="gap-1.5 border border-primary/25 bg-primary/10 text-primary">
             <ShieldCheck className="size-3.5" aria-hidden />
@@ -277,7 +284,8 @@ export function Overview() {
       <section aria-labelledby="domains-title" className="space-y-4">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 id="domains-title" className="text-xl font-semibold tracking-tight sm:text-2xl">
+            <p className="eyebrow">The package</p>
+            <h2 id="domains-title" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
               Four subpackages, one import
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -334,7 +342,8 @@ export function Overview() {
       {/* ------------------------- Upgrade comparison ------------------------- */}
       <section aria-labelledby="upgrade-title" className="space-y-4">
         <div>
-          <h2 id="upgrade-title" className="text-xl font-semibold tracking-tight sm:text-2xl">
+          <p className="eyebrow">The re-engineering</p>
+          <h2 id="upgrade-title" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
             Before → After: the upgrade
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -345,7 +354,7 @@ export function Overview() {
         </div>
         <Card className="overflow-hidden py-0 shadow-sm">
           <div className="thin-scrollbar overflow-x-auto">
-            <Table>
+            <Table className="data-table">
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead className="w-[110px] font-semibold">Aspect</TableHead>
@@ -374,7 +383,8 @@ export function Overview() {
       {/* --------------------------- Design choices --------------------------- */}
       <section aria-labelledby="design-title" className="space-y-4">
         <div>
-          <h2 id="design-title" className="text-xl font-semibold tracking-tight sm:text-2xl">
+          <p className="eyebrow">Architecture rationale</p>
+          <h2 id="design-title" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
             Design choices &amp; trade-offs
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -413,7 +423,8 @@ export function Overview() {
       {/* ------------------------------ Quickstart ------------------------------ */}
       <section aria-labelledby="quickstart-title" className="space-y-4">
         <div>
-          <h2 id="quickstart-title" className="text-xl font-semibold tracking-tight sm:text-2xl">
+          <p className="eyebrow">Get running</p>
+          <h2 id="quickstart-title" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
             Quickstart
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">

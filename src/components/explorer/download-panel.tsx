@@ -52,7 +52,7 @@ function collectDirSummary(root: TreeNode): Array<{ name: string; files: number;
     tests: "159 pytest cases across all domains",
     examples: "runnable end-to-end demos on synthetic data",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
-    docs: "empty placeholder for future docs",
+    docs: "module index — auto-generated API reference",
   };
   const out: Array<{ name: string; files: number; note: string }> = [];
   let rootFiles = 0;

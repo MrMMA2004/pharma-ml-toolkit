@@ -624,7 +624,7 @@ export function MlPlayground() {
                     </CardTitle>
                   </CardHeader>
                   <div className="thin-scrollbar max-h-72 overflow-y-auto">
-                    <Table>
+                    <Table className="data-table">
                       <TableHeader className="sticky top-0 bg-muted/60 backdrop-blur">
                         <TableRow className="hover:bg-transparent">
                           <TableHead className="h-9">Fold</TableHead>

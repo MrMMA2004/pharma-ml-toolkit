@@ -1,19 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { FileCode2, RefreshCw, TriangleAlert } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FileCode2, RefreshCw, Search, TriangleAlert, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CodeBlock } from "@/components/explorer/code-block";
 import { FileTree } from "@/components/explorer/file-tree";
 import { useToolkitStore } from "@/lib/store";
 import { fmtBytes, fmtInt } from "@/lib/format";
-import type { FileContentResponse } from "@/lib/toolkit-types";
+import type { FileContentResponse, TreeNode } from "@/lib/toolkit-types";
 
 /** Module-level cache of file contents so tab switches never refetch. */
 const fileCache = new Map<string, FileContentResponse>();
+
+/** Count files in a (sub)tree. */
+function countFiles(node: TreeNode): number {
+  if (node.type === "file") return 1;
+  return (node.children ?? []).reduce((acc, child) => acc + countFiles(child), 0);
+}
 
 export function CodeExplorer() {
   const ensureTree = useToolkitStore((s) => s.ensureTree);
@@ -28,6 +35,7 @@ export function CodeExplorer() {
   const [content, setContent] = useState<FileContentResponse | null>(null);
   const [fileStatus, setFileStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [fileError, setFileError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const fetchSeq = useRef(0);
 
   useEffect(() => {
@@ -74,6 +82,25 @@ export function CodeExplorer() {
     void loadFile(selectedFile);
   }, [selectedFile, loadFile]);
 
+  const trimmed = query.trim().toLowerCase();
+  const searchActive = trimmed.length > 0;
+  const filteredTree = useMemo(() => {
+    if (!tree || !searchActive) return tree;
+    const matchesPath = (p: string) => p.toLowerCase().includes(trimmed);
+    const prune = (node: TreeNode): TreeNode | null => {
+      if (node.type === "file") return matchesPath(node.path) ? node : null;
+      const children = (node.children ?? [])
+        .map((child) => prune(child))
+        .filter((child): child is TreeNode => child !== null);
+      return children.length > 0 ? { ...node, children } : null;
+    };
+    const rootChildren = (tree.children ?? [])
+      .map((child) => prune(child))
+      .filter((child): child is TreeNode => child !== null);
+    return { ...tree, children: rootChildren };
+  }, [tree, trimmed, searchActive]);
+  const matchCount = filteredTree ? countFiles(filteredTree) : 0;
+
   return (
     <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
       {/* ------------------------------ Sidebar ------------------------------ */}
@@ -83,13 +110,43 @@ export function CodeExplorer() {
             <FileCode2 className="size-4 text-primary" aria-hidden />
             <p className="truncate font-mono text-sm font-semibold">pharma-ml-toolkit/</p>
           </div>
+          <div className="relative mt-2">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter files by name…"
+              aria-label="Filter files in the toolkit tree"
+              className="h-9 pl-8 pr-8 text-sm"
+            />
+            {searchActive ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear filter"
+                className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="size-3.5" aria-hidden />
+              </button>
+            ) : null}
+          </div>
           <p className="text-xs text-muted-foreground">
             {treeStatus === "loading" && "Scanning directory…"}
-            {treeStatus === "ready" && stats && (
+            {treeStatus === "ready" && stats && !searchActive && (
               <>
                 {fmtInt(stats.files)} files · {fmtInt(stats.totalLines)} lines ·{" "}
                 {fmtBytes(stats.totalBytes)}
               </>
+            )}
+            {treeStatus === "ready" && searchActive && (
+              <span className={matchCount === 0 ? "text-destructive" : undefined}>
+                {matchCount} file{matchCount === 1 ? "" : "s"} match
+                {matchCount === 1 ? "" : "es"} “{query.trim()}”
+              </span>
             )}
             {treeStatus === "error" && "Could not load the tree"}
           </p>
@@ -112,8 +169,24 @@ export function CodeExplorer() {
                 Retry
               </Button>
             </div>
-          ) : tree ? (
-            <FileTree node={tree} selectedPath={selectedFile} onSelect={setSelectedFile} />
+          ) : searchActive && matchCount === 0 ? (
+            <div className="flex flex-col items-center gap-2 px-3 py-10 text-center">
+              <Search className="size-6 text-muted-foreground/50" aria-hidden />
+              <p className="text-sm text-muted-foreground">
+                No files match <span className="font-mono font-medium text-foreground">{query.trim()}</span>
+              </p>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setQuery("")}>
+                <X className="size-3.5" aria-hidden />
+                Clear filter
+              </Button>
+            </div>
+          ) : filteredTree ? (
+            <FileTree
+              node={filteredTree}
+              selectedPath={selectedFile}
+              onSelect={setSelectedFile}
+              searchActive={searchActive}
+            />
           ) : null}
         </CardContent>
       </Card>

@@ -83,25 +83,37 @@ pharma-ml-toolkit/
 ### Machine learning (QSAR)
 
 ```python
-from pharmaml.ml import compare_models, train_model, save_model
-
-report = train_model(
-    "random_forest",
-    data="dataset.csv",     # CSV/Excel with a "Target" column
-    target="Target",
-    cv=5,                   # stratified 5-fold cross-validation
-    tune=True,              # small grid search
-    out="artifacts",        # model + metadata land here
+import pandas as pd
+from pharmaml.ml import (
+    clean_numeric_frame, make_train_test_split, train_model,
+    evaluate_model, compare_models, save_model, load_model,
 )
-print(report.metrics)       # accuracy, ROC-AUC, F1, CV mean ± std
 
-leaderboard = compare_models("dataset.csv", target="Target", cv=5)
-print(leaderboard.sort_values("roc_auc_mean", ascending=False))
+frame = clean_numeric_frame(pd.read_csv("dataset.csv"), target_col="Target")
+X_train, X_test, y_train, y_test = make_train_test_split(
+    frame.drop(columns=["Target"]), frame["Target"], test_size=0.2
+)
+
+result = train_model("random_forest", "classification", X_train, y_train, cv=5, tune=True)
+print(f"CV ROC-AUC {result.cv_mean:.3f} ± {result.cv_std:.3f} in {result.fit_seconds:.1f}s")
+print("Best params:", result.best_params)
+
+report = evaluate_model(result.model, X_test, y_test, "classification")
+print(f"accuracy={report.accuracy:.3f}  f1={report.f1_macro:.3f}  roc_auc={report.roc_auc:.3f}")
+
+save_model(result.model, "artifacts/rf.joblib", name="random_forest",
+           task="classification", metrics={"accuracy": report.accuracy})
+model, metadata = load_model("artifacts/rf.joblib")
+
+leaderboard = compare_models(frame.drop(columns=["Target"]), frame["Target"],
+                             "classification", cv=5)
+print(leaderboard.head())   # one row per model, sorted by CV metric
 ```
 
-Registry models: `logistic`, `ridge`, `lasso`, `elastic_net`, `svm`, `knn`, `decision_tree`,
-`random_forest`, `ada_boost`, `ann`, plus `xgboost` / `lightgbm` / `catboost` when the
-optional packages are installed. `list_models()` shows what is available in *your* environment.
+Registry models: `logistic_regression`, `ridge_classifier`, `svm`, `knn`, `decision_tree`,
+`random_forest`, `adaboost`, `ann`, `lasso`, `ridge`, `elastic_net`, `linear_regression`,
+plus `xgboost` / `lightgbm` / `catboost` when the optional packages are installed.
+`list_models()` shows what is available in *your* environment.
 
 ### Pharmaceutical calculations
 
@@ -118,31 +130,34 @@ c = np.array([0.0, 8.2, 6.1, 3.4, 1.1, 0.35])
 auc = auc_trapezoid(t, c)                     # µg·h/mL
 
 # Renal function & dosing
-crcl = creatinine_clearance(age=68, weight_kg=70, scr_mg_dl=1.1, sex="male")
-bsa  = bsa_mosteller(weight_kg=70, height_cm=175)          # m²
-dose = dose_by_bsa(dose_mg_per_m2=250, weight_kg=70, height_cm=175)
+crcl = creatinine_clearance(age_years=68, weight_kg=70, serum_cr_mg_dl=1.1, sex="male")
+bsa  = bsa_mosteller(height_cm=175, weight_kg=70)             # m²
+dose = dose_by_bsa(dose_per_m2=250, height_cm=175, weight_kg=70)  # mg, optional max_dose cap
 
 # Regimen design
-ld  = loading_dose(target_conc=12.0, vd=45.0)              # mg
+ld  = loading_dose(vd=45.0, target_concentration=12.0)      # mg
 md  = maintenance_dose(clearance_=3.2, target_css=6.0, tau=8.0)  # mg per interval
 ```
 
 ### Molecular docking
 
 ```python
+import pandas as pd
 from pharmaml.docking import (
     compute_grid_box, write_gpf, parse_vina_output,
     parse_dlg_cluster_table, ligand_efficiency, consensus_rescore,
 )
 
-box = compute_grid_box("receptor.pdb", padding=4.0)   # AutoDock grid box from binding site
-write_gpf("receptor.pdbqt", box, n_points=(60, 60, 60), spacing=0.375, gpf_path="receptor.gpf")
+box = compute_grid_box("reference_ligand.pdbqt", padding=4.0)   # grid box around the co-crystal ligand
+write_gpf("ligand.pdbqt", receptor_file="receptor.pdbqt", box=box, output_path="grid.gpf")
 
 poses = parse_vina_output(open("vina.out").read())    # ranked poses (affinity, RMSD l.b./u.b.)
 clusters = parse_dlg_cluster_table(open("r.dlg").read())  # AutoDock4 cluster histogram
 
-le  = ligand_efficiency(affinity=-9.6, heavy_atoms=32)   # kcal/mol per heavy atom
-rescored = consensus_rescore({"vina": scores, "ad4": scores2})  # z-score consensus ranking
+le = ligand_efficiency(affinity_kcal_mol=-9.6, num_heavy_atoms=32)  # 0.30 kcal/mol per atom
+
+scores = pd.DataFrame({"vina": [...], "ad4": [...]})  # one row per ligand
+consensus = consensus_rescore(scores, columns=["vina", "ad4"])     # 0–1 combined score
 ```
 
 ---
