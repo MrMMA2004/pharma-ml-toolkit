@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Boxes,
   CircleCheck,
+  Eraser,
   Loader2,
   ScanSearch,
   Sigma,
@@ -62,19 +63,62 @@ const FORMATS: Array<{ value: DockingFormat; label: string; sample: string }> = 
   { value: "csv", label: "Generic CSV", sample: CSV_SAMPLE },
 ];
 
+/** sessionStorage key for the pasted docking input (survives reloads). */
+const DOCKING_STORAGE_KEY = "pharmaml.dockingInput";
+
+interface DockingPersisted {
+  format: DockingFormat;
+  content: string;
+  heavyAtoms: string;
+}
+
+/** Read the persisted docking input (client only, failure-tolerant). */
+function loadDockingInput(): DockingPersisted | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(DOCKING_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const p = parsed as Partial<DockingPersisted>;
+    const format =
+      p.format === "vina" || p.format === "dlg" || p.format === "csv" ? p.format : "vina";
+    const content = typeof p.content === "string" ? p.content.slice(0, 200_000) : "";
+    const heavyAtoms = typeof p.heavyAtoms === "string" ? p.heavyAtoms.slice(0, 6) : "32";
+    return { format, content, heavyAtoms };
+  } catch {
+    return null; // corrupted JSON / private mode — start fresh
+  }
+}
+
 function PoseValue({ value, sig = 3 }: { value: number | undefined; sig?: number }) {
   if (value === undefined || !Number.isFinite(value)) return <span className="text-muted-foreground">—</span>;
   return <span className="tabular-nums">{fmtNum(value, sig)}</span>;
 }
 
 export function DockingParser() {
-  const [format, setFormat] = useState<DockingFormat>("vina");
-  const [content, setContent] = useState("");
-  const [heavyAtoms, setHeavyAtoms] = useState("32");
+  const [restored] = useState(loadDockingInput);
+  const [format, setFormat] = useState<DockingFormat>(restored?.format ?? "vina");
+  const [content, setContent] = useState(restored?.content ?? "");
+  const [heavyAtoms, setHeavyAtoms] = useState(restored?.heavyAtoms ?? "32");
 
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DockingParseResponse | null>(null);
+
+  /* Persist the input (format + pasted text + heavy atoms) so a reload
+   * doesn't lose work. Hydration-safe: this component only renders inside
+   * the Playground tab, never during the SSR/hydration render. */
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        DOCKING_STORAGE_KEY,
+        JSON.stringify({ format, content, heavyAtoms })
+      );
+    } catch {
+      /* quota exceeded or private mode — persistence is optional */
+    }
+  }, [format, content, heavyAtoms]);
 
   const ha = parsePositiveNumber(heavyAtoms);
   const haValid = ha !== null && Number.isInteger(ha);
@@ -218,6 +262,23 @@ export function DockingParser() {
                     {f.value === "vina" ? "Vina" : f.value === "dlg" ? "DLG" : "CSV"} sample
                   </Button>
                 ))}
+                {content.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2.5 text-[11px] text-muted-foreground"
+                    onClick={() => {
+                      setContent("");
+                      setStatus("idle");
+                      setResult(null);
+                      setError(null);
+                    }}
+                  >
+                    <Eraser className="size-3" aria-hidden />
+                    Clear
+                  </Button>
+                ) : null}
               </div>
             </div>
             <Textarea
@@ -228,6 +289,9 @@ export function DockingParser() {
               className="thin-scrollbar min-h-[160px] max-h-72 resize-y font-mono text-xs leading-relaxed"
               aria-label="Docking output text"
             />
+            <p className="text-[11px] text-muted-foreground">
+              Input survives page reloads within this browser session — use Clear to wipe it.
+            </p>
           </div>
 
           <Button size="lg" className="h-11 gap-2" onClick={() => void parse()} disabled={running}>

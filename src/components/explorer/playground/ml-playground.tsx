@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Brain, ChevronDown, Loader2, Play, RotateCcw, Table2, TriangleAlert, ZoomIn } from "lucide-react";
+import { Brain, ChevronDown, Download, Loader2, Play, RotateCcw, Table2, TriangleAlert, ZoomIn } from "lucide-react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -42,8 +42,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CHART } from "@/components/explorer/playground/calc-ui";
-import { fmtNum, fmtTick } from "@/lib/format";
+import { fmtBytes, fmtNum, fmtTick } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { DEFAULT_ML_CONFIG, useToolkitStore } from "@/lib/store";
 import type {
   DatasetPreviewResponse,
@@ -122,6 +123,7 @@ export function MlPlayground() {
   );
   const [error, setError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [csvLoading, setCsvLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(true);
 
   /* X-range zoom on the preview scatter — null = full range. */
@@ -167,6 +169,55 @@ export function MlPlayground() {
       trend: (preview.trend ?? []).filter(inWin),
     };
   }, [preview, previewClasses, xZoom]);
+
+  /** Export the full deterministic dataset (all rows) as a CSV file. */
+  async function downloadCsv() {
+    if (!seedValid) {
+      setError("Seed must be a non-negative integer (0 – 2147483647).");
+      return;
+    }
+    setCsvLoading(true);
+    setError(null);
+    const seedNum = Number.parseInt(seed, 10) || 0;
+    const fileName = `pharmaml_${task}_n${samples}_seed${seedNum}.csv`;
+    try {
+      const qs = new URLSearchParams({
+        task,
+        samples: String(samples),
+        noise: String(noise),
+        seed: String(seedNum),
+      });
+      const res = await fetch(`/api/ml/dataset/csv?${qs.toString()}`);
+      if (!res.ok) {
+        let message = `HTTP ${res.status}`;
+        try {
+          const data: unknown = await res.json();
+          if (typeof data === "object" && data !== null && "error" in data) {
+            message = String((data as { error: unknown }).error);
+          }
+        } catch {
+          /* body wasn't JSON — keep the status message */
+        }
+        throw new Error(message);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      toast.success("Dataset exported", {
+        description: `${fileName} · ${samples} rows · ${fmtBytes(blob.size)}`,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "CSV export failed.");
+    } finally {
+      setCsvLoading(false);
+    }
+  }
 
   const noiseMax = task === "regression" ? 2 : 1.5;
   const metricSpecs = task === "regression" ? REG_METRICS : CLS_METRICS;
@@ -331,7 +382,7 @@ export function MlPlayground() {
             <div>
               <CardTitle className="text-base">Experiment setup</CardTitle>
               <CardDescription className="text-xs">
-                Deterministic — same seed, same result · survives tab switches
+                Deterministic — same seed, same result · survives tab switches & reloads
               </CardDescription>
             </div>
           </div>
@@ -578,6 +629,23 @@ export function MlPlayground() {
                     noise σ {preview.noise.toFixed(2)} — same generator the trainer uses
                   </CardDescription>
                 </div>
+                <div className="flex items-center gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
+                  onClick={() => void downloadCsv()}
+                  disabled={csvLoading}
+                  aria-label="Download the full dataset as CSV"
+                  title="Download the full dataset as CSV"
+                >
+                  {csvLoading ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <Download className="size-3.5" aria-hidden />
+                  )}
+                  <span className="hidden sm:inline">CSV</span>
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -594,6 +662,7 @@ export function MlPlayground() {
                     aria-hidden
                   />
                 </Button>
+                </div>
               </div>
             </CardHeader>
             {previewOpen ? (

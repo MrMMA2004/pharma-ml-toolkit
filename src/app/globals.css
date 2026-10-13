@@ -175,6 +175,36 @@
   background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
 }
 
+/* ---- Hero headline: slow gradient shimmer (reduced-motion: static) ---- */
+.hero-gradient-text {
+  background-image: linear-gradient(100deg,
+    var(--primary) 0%,
+    var(--chart-4) 30%,
+    var(--chart-1) 55%,
+    var(--primary) 80%,
+    var(--chart-4) 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: hero-shimmer 9s ease-in-out infinite;
+}
+@keyframes hero-shimmer {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-gradient-text {
+    animation: none;
+    background-position: 0% 50%;
+  }
+}
+
 /* ---- Section eyebrow label ---- */
 .eyebrow {
   font-family: var(--font-geist-mono);

@@ -38,6 +38,9 @@ export const RECENT_LIMIT = 8;
 /** sessionStorage key for the recently-viewed strip (survives reloads). */
 const RECENT_STORAGE_KEY = "pharmaml.recentFiles";
 
+/** sessionStorage key for playground state (PK regimen + ML setup + sub-tab). */
+const PLAYGROUND_STORAGE_KEY = "pharmaml.playground";
+
 /** Read the persisted recent-files list (client only, failure-tolerant). */
 function loadRecentFiles(): string[] {
   if (typeof window === "undefined") return [];
@@ -59,6 +62,99 @@ function saveRecentFiles(recent: string[]): void {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recent));
+  } catch {
+    /* quota exceeded or private mode — persistence is optional */
+  }
+}
+
+/* ---- Playground persistence (PK regimen + ML config + active sub-tab) ----
+ * Hydration-safe for the same reason as recentFiles: every component that
+ * reads these values renders only inside the Playground tab, which is never
+ * the SSR/hydration render (the default top-level tab is Overview). */
+
+interface PlaygroundPersisted {
+  playgroundTab: string;
+  pkParams: PkParams;
+  mlConfig: MlConfig;
+}
+
+/** Validate a persisted PK regimen field-by-field, falling back to defaults. */
+function validatePk(raw: unknown): PkParams {
+  const base = DEFAULT_PK_PARAMS;
+  if (typeof raw !== "object" || raw === null) return base;
+  const p = raw as Partial<PkParams>;
+  const num = (v: unknown, def: number, lo: number, hi: number) =>
+    typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi ? v : def;
+  return {
+    route: p.route === "oral" ? "oral" : "iv",
+    dose: num(p.dose, base.dose, 0.1, 10_000),
+    vd: num(p.vd, base.vd, 0.1, 1_000),
+    cl: num(p.cl, base.cl, 0.01, 100),
+    tau: num(p.tau, base.tau, 0.25, 168),
+    doses: Math.round(num(p.doses, base.doses, 1, 48)),
+    f: num(p.f, base.f, 0.05, 1),
+    ka: num(p.ka, base.ka, 0.01, 12),
+  };
+}
+
+/** Validate a persisted ML config field-by-field, falling back to defaults. */
+function validateMl(raw: unknown): MlConfig {
+  const base = DEFAULT_ML_CONFIG;
+  if (typeof raw !== "object" || raw === null) return base;
+  const p = raw as Partial<MlConfig>;
+  const str = (v: unknown, def: string) =>
+    typeof v === "string" && v.length <= 12 ? v : def;
+  return {
+    task: p.task === "classification" ? "classification" : "regression",
+    samples:
+      typeof p.samples === "number" && Number.isFinite(p.samples) && p.samples >= 100 && p.samples <= 1000
+        ? Math.round(p.samples)
+        : base.samples,
+    noise:
+      typeof p.noise === "number" && Number.isFinite(p.noise) && p.noise >= 0 && p.noise <= 2
+        ? p.noise
+        : base.noise,
+    regModel:
+      p.regModel === "polynomial" || p.regModel === "ridge" ? p.regModel : "linear",
+    alpha: str(p.alpha, base.alpha),
+    l2: str(p.l2, base.l2),
+    testSizePct:
+      typeof p.testSizePct === "number" && Number.isFinite(p.testSizePct) && p.testSizePct >= 5 && p.testSizePct <= 50
+        ? p.testSizePct
+        : base.testSizePct,
+    cv: str(p.cv, base.cv),
+    seed: str(p.seed, base.seed),
+  };
+}
+
+/** Read the persisted playground snapshot (client only, failure-tolerant). */
+function loadPlayground(): Partial<PlaygroundPersisted> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.sessionStorage.getItem(PLAYGROUND_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return {};
+    const p = parsed as Partial<PlaygroundPersisted>;
+    return {
+      playgroundTab: typeof p.playgroundTab === "string" ? p.playgroundTab.slice(0, 32) : undefined,
+      pkParams: validatePk(p.pkParams),
+      mlConfig: validateMl(p.mlConfig),
+    };
+  } catch {
+    return {}; // corrupted JSON / private mode — start fresh
+  }
+}
+
+/** Persist the current playground snapshot (client only, best-effort). */
+function savePlayground(state: {
+  playgroundTab: string;
+  pkParams: PkParams;
+  mlConfig: MlConfig;
+}): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(state));
   } catch {
     /* quota exceeded or private mode — persistence is optional */
   }
@@ -154,6 +250,9 @@ function pushRecent(recent: string[], path: string): string[] {
   return next.slice(0, RECENT_LIMIT);
 }
 
+/** Session-restored playground snapshot ({} on the server / fresh session). */
+const persistedPlayground = loadPlayground();
+
 export const useToolkitStore = create<ToolkitStore>((set, get) => ({
   tab: "overview",
   setTab: (tab) => set({ tab }),
@@ -181,17 +280,53 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
     set({ recentFiles: [] });
   },
 
-  playgroundTab: "calculators",
-  setPlaygroundTab: (tab) => set({ playgroundTab: tab }),
+  playgroundTab: persistedPlayground.playgroundTab ?? "calculators",
+  setPlaygroundTab: (tab) => {
+    set({ playgroundTab: tab });
+    savePlayground({
+      playgroundTab: tab,
+      pkParams: get().pkParams,
+      mlConfig: get().mlConfig,
+    });
+  },
 
-  pkParams: DEFAULT_PK_PARAMS,
-  setPkParam: (key, value) =>
-    set((s) => ({ pkParams: { ...s.pkParams, [key]: value } })),
-  resetPkParams: () => set({ pkParams: DEFAULT_PK_PARAMS }),
+  pkParams: persistedPlayground.pkParams ?? DEFAULT_PK_PARAMS,
+  setPkParam: (key, value) => {
+    const pkParams = { ...get().pkParams, [key]: value };
+    set({ pkParams });
+    savePlayground({
+      playgroundTab: get().playgroundTab,
+      pkParams,
+      mlConfig: get().mlConfig,
+    });
+  },
+  resetPkParams: () => {
+    set({ pkParams: DEFAULT_PK_PARAMS });
+    savePlayground({
+      playgroundTab: get().playgroundTab,
+      pkParams: DEFAULT_PK_PARAMS,
+      mlConfig: get().mlConfig,
+    });
+  },
 
-  mlConfig: DEFAULT_ML_CONFIG,
-  setMlConfig: (patch) => set((s) => ({ mlConfig: { ...s.mlConfig, ...patch } })),
-  resetMlConfig: () => set({ mlConfig: DEFAULT_ML_CONFIG }),
+  mlConfig: persistedPlayground.mlConfig ?? DEFAULT_ML_CONFIG,
+  setMlConfig: (patch) => {
+    const mlConfig = { ...get().mlConfig, ...patch };
+    set({ mlConfig });
+    savePlayground({
+      playgroundTab: get().playgroundTab,
+      pkParams: get().pkParams,
+      mlConfig,
+    });
+  },
+  resetMlConfig: () => {
+    set({ mlConfig: DEFAULT_ML_CONFIG });
+    savePlayground({
+      playgroundTab: get().playgroundTab,
+      pkParams: get().pkParams,
+      mlConfig: DEFAULT_ML_CONFIG,
+    });
+  },
   mlResult: null,
   setMlResult: (result) => set({ mlResult: result }),
   mlPreview: null,

@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CodeBlock } from "@/components/explorer/code-block";
+import { FileOutline } from "@/components/explorer/file-outline";
 import { FileTree } from "@/components/explorer/file-tree";
 import { useToolkitStore } from "@/lib/store";
 import { fmtBytes, fmtInt } from "@/lib/format";
@@ -165,6 +166,16 @@ export function CodeExplorer() {
       });
     }
   }, [jumpTarget, openFileAtLine]);
+
+  /** Jump to a line in the *currently open* file: clearing first makes
+   * repeated clicks on the same symbol re-trigger the scroll effect. */
+  const jumpInFile = useCallback(
+    (line: number) => {
+      setTargetLine(null);
+      requestAnimationFrame(() => setTargetLine(line));
+    },
+    [setTargetLine]
+  );
 
   const filteredTree = useMemo(() => {
     if (!tree || !searchActive) return tree;
@@ -391,7 +402,7 @@ export function CodeExplorer() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-3 sm:p-4">
+        <CardContent className="space-y-3 p-3 sm:p-4">
           {fileStatus === "loading" ? (
             <div className="space-y-2.5" aria-label="Loading file content">
               <Skeleton className="h-4 w-2/3" />
@@ -419,16 +430,23 @@ export function CodeExplorer() {
               </Button>
             </div>
           ) : content ? (
-            <CodeBlock
-              code={content.content}
-              language={content.language}
-              fileName={content.path.split("/").pop() ?? content.path}
-              showLineNumbers
-              maxHeightClass="max-h-[70vh]"
-              highlightLine={targetLine}
-              onClearHighlight={() => setTargetLine(null)}
-              permalinkPath={content.path}
-            />
+            <>
+              <FileOutline
+                code={content.content}
+                language={content.language}
+                onJump={jumpInFile}
+              />
+              <CodeBlock
+                code={content.content}
+                language={content.language}
+                fileName={content.path.split("/").pop() ?? content.path}
+                showLineNumbers
+                maxHeightClass="max-h-[70vh]"
+                highlightLine={targetLine}
+                onClearHighlight={() => setTargetLine(null)}
+                permalinkPath={content.path}
+              />
+            </>
           ) : null}
         </CardContent>
       </Card>

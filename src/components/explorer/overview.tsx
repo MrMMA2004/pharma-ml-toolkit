@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -12,6 +12,7 @@ import {
   Dna,
   FileArchive,
   FileCode2,
+  NotebookText,
   Pill,
   ShieldCheck,
   Sigma,
@@ -31,7 +32,18 @@ import {
 import { CodeBlock } from "@/components/explorer/code-block";
 import { StatChip } from "@/components/explorer/stat-chip";
 import { useToolkitStore } from "@/lib/store";
-import { fmtInt } from "@/lib/format";
+import { fmtBytes, fmtInt } from "@/lib/format";
+import type { TreeNode } from "@/lib/toolkit-types";
+
+/** Depth-first lookup of a node by exact path (hero notebook metadata). */
+function findNode(node: TreeNode, path: string): TreeNode | null {
+  if (node.path === path) return node;
+  for (const child of node.children ?? []) {
+    const hit = findNode(child, path);
+    if (hit) return hit;
+  }
+  return null;
+}
 
 const QUICKSTART = `# --- Pharmaceutical calculations -------------------------------
 from pharmaml.pharma import (
@@ -198,6 +210,8 @@ export function Overview() {
   const ensureTree = useToolkitStore((s) => s.ensureTree);
   const stats = useToolkitStore((s) => s.stats);
   const treeStatus = useToolkitStore((s) => s.treeStatus);
+  const tree = useToolkitStore((s) => s.tree);
+  const openFileAtLine = useToolkitStore((s) => s.openFileAtLine);
 
   useEffect(() => {
     void ensureTree();
@@ -206,6 +220,21 @@ export function Overview() {
   const fileCount = stats ? fmtInt(stats.files) : "51";
   const loc = stats ? fmtInt(stats.totalLines) : "8,258";
 
+  /* Live metadata for the featured walkthrough notebook in the hero. */
+  const notebookMeta = useMemo(
+    () => (tree ? findNode(tree, "examples/pharmaml_walkthrough.ipynb") : null),
+    [tree]
+  );
+
+  const heroStagger = {
+    hidden: { opacity: 0, y: 14 },
+    show: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: { delay: 0.08 + i * 0.07, duration: 0.32, ease: "easeOut" as const },
+    }),
+  };
+
   return (
     <div className="space-y-10">
       {/* ------------------------------ Hero ------------------------------ */}
@@ -213,73 +242,153 @@ export function Overview() {
         aria-labelledby="hero-title"
         className="hero-panel relative space-y-6 rounded-2xl border border-border/70 p-6 shadow-sm sm:p-10"
       >
-        <div className="space-y-4">
-          <Badge variant="secondary" className="gap-1.5 border border-primary/25 bg-primary/10 text-primary">
-            <ShieldCheck className="size-3.5" aria-hidden />
-            Python ≥ 3.10 · numpy / pandas / sklearn core
-          </Badge>
-          <h1
-            id="hero-title"
-            className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl"
-          >
-            One toolkit.{" "}
-            <span className="bg-gradient-to-r from-primary via-chart-4 to-chart-1 bg-clip-text text-transparent">
-              Three scientific domains.
-            </span>
-          </h1>
-          <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-            A production-ready, typed, tested Python package for computational pharmacy — QSAR
-            machine learning, pharmaceutical PK/PD &amp; dosage calculations, and molecular
-            docking workflows, upgraded from a flat collection of research scripts.
-          </p>
-        </div>
+        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+          {/* -- Left: headline, stats, CTAs -- */}
+          <div className="space-y-4">
+            <motion.div variants={heroStagger} initial="hidden" animate="show" custom={0}>
+              <Badge variant="secondary" className="gap-1.5 border border-primary/25 bg-primary/10 text-primary">
+                <ShieldCheck className="size-3.5" aria-hidden />
+                Python ≥ 3.10 · numpy / pandas / sklearn core
+              </Badge>
+            </motion.div>
+            <motion.h1
+              variants={heroStagger}
+              initial="hidden"
+              animate="show"
+              custom={1}
+              id="hero-title"
+              className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl"
+            >
+              One toolkit.{" "}
+              <span className="hero-gradient-text">
+                Three scientific domains.
+              </span>
+            </motion.h1>
+            <motion.p
+              variants={heroStagger}
+              initial="hidden"
+              animate="show"
+              custom={2}
+              className="max-w-2xl text-base text-muted-foreground sm:text-lg"
+            >
+              A production-ready, typed, tested Python package for computational pharmacy — QSAR
+              machine learning, pharmaceutical PK/PD &amp; dosage calculations, and molecular
+              docking workflows, upgraded from a flat collection of research scripts.
+            </motion.p>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatChip
-            icon={FileCode2}
-            value={treeStatus === "loading" ? "…" : fileCount}
-            label="source files"
-            hint="Whole package: src, tests, examples, CI"
-          />
-          <StatChip
-            icon={Sigma}
-            value={treeStatus === "loading" ? "…" : loc}
-            label="lines of code"
-            hint="Counted live from the file tree"
-          />
-          <StatChip
-            icon={CircleCheck}
-            value="177"
-            label="passing tests"
-            hint="pytest suite covering every domain"
-          />
-          <StatChip
-            icon={Brain}
-            value="15"
-            label="registry models"
-            hint="sklearn core + optional boosters"
-          />
-        </div>
+            <motion.div
+              variants={heroStagger}
+              initial="hidden"
+              animate="show"
+              custom={3}
+              className="grid grid-cols-2 gap-3 pt-2 lg:grid-cols-4"
+            >
+              <StatChip
+                icon={FileCode2}
+                value={treeStatus === "loading" ? "…" : fileCount}
+                label="source files"
+                hint="Whole package: src, tests, examples, CI"
+              />
+              <StatChip
+                icon={Sigma}
+                value={treeStatus === "loading" ? "…" : loc}
+                label="lines of code"
+                hint="Counted live from the file tree"
+              />
+              <StatChip
+                icon={CircleCheck}
+                value="177"
+                label="passing tests"
+                hint="pytest suite covering every domain"
+              />
+              <StatChip
+                icon={Brain}
+                value="15"
+                label="registry models"
+                hint="sklearn core + optional boosters"
+              />
+            </motion.div>
 
-        <div className="flex flex-wrap gap-3">
-          <Button
-            size="lg"
-            className="h-11 gap-2"
-            onClick={() => setTab("explorer")}
+            <motion.div
+              variants={heroStagger}
+              initial="hidden"
+              animate="show"
+              custom={4}
+              className="flex flex-wrap gap-3 pt-2"
+            >
+              <Button
+                size="lg"
+                className="h-11 gap-2"
+                onClick={() => setTab("explorer")}
+              >
+                <BookOpen className="size-4" aria-hidden />
+                Explore the code
+                <ArrowRight className="size-4" aria-hidden />
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-11 gap-2"
+                onClick={() => setTab("download")}
+              >
+                <FileArchive className="size-4" aria-hidden />
+                Download ZIP
+              </Button>
+            </motion.div>
+          </div>
+
+          {/* -- Right: featured walkthrough notebook (deep-links into the explorer) -- */}
+          <motion.aside
+            initial={{ opacity: 0, x: 18 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.28, duration: 0.4, ease: "easeOut" }}
+            className="featured-card relative overflow-hidden rounded-xl border bg-card/80 shadow-sm"
+            aria-label="Featured walkthrough notebook"
           >
-            <BookOpen className="size-4" aria-hidden />
-            Explore the code
-            <ArrowRight className="size-4" aria-hidden />
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            className="h-11 gap-2"
-            onClick={() => setTab("download")}
-          >
-            <FileArchive className="size-4" aria-hidden />
-            Download ZIP
-          </Button>
+            <div className="space-y-3 p-5">
+              <div className="flex items-center gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <NotebookText className="size-5" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">Guided walkthrough</p>
+                  <p className="break-all font-mono text-[11px] leading-snug text-muted-foreground">
+                    examples/pharmaml_walkthrough.ipynb
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                One notebook, the whole toolkit: pharmaceutical calculations, a QSAR training
+                pipeline, and docking rescoring — ready to run top-to-bottom.
+              </p>
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono tabular-nums">
+                  {notebookMeta ? fmtBytes(notebookMeta.size) : "…"}
+                </span>
+                {typeof notebookMeta?.lines === "number" ? (
+                  <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono tabular-nums">
+                    {fmtInt(notebookMeta.lines)} lines
+                  </span>
+                ) : null}
+                <span className="rounded-md border bg-primary/10 px-1.5 py-0.5 font-mono text-primary">
+                  Jupyter
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 w-full gap-1.5 text-xs"
+                onClick={() => {
+                  openFileAtLine("examples/pharmaml_walkthrough.ipynb", null);
+                  setTab("explorer");
+                }}
+              >
+                <FileCode2 className="size-3.5" aria-hidden />
+                Open in the Code Explorer
+                <ArrowRight className="size-3.5" aria-hidden />
+              </Button>
+            </div>
+          </motion.aside>
         </div>
       </section>
 
