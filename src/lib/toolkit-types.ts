@@ -85,6 +85,25 @@ export interface ReferenceResponse {
 
 export type MLTask = "regression" | "classification";
 
+/** Provenance + column picks for a user-uploaded CSV dataset. */
+export interface CsvSourceMeta {
+  kind: "csv";
+  /** File name as reported by the client ("pasted.csv" for pasted text). */
+  fileName?: string;
+  /** Numeric columns detected in the uploaded file. */
+  columns: string[];
+  /** Columns used as model input (1 for regression, 2 for classification). */
+  featureColumns: string[];
+  /** Column used as the prediction target. */
+  targetColumn: string;
+  /** Usable rows after dropping malformed ones. */
+  nRows: number;
+  /** Rows skipped because a used cell was blank/non-numeric. */
+  droppedRows: number;
+  /** Classification only: raw target values mapped to class 0 / class 1. */
+  labelMap?: [string, string];
+}
+
 export interface MLTrainRequest {
   task: MLTask;
   samples: number;
@@ -97,6 +116,17 @@ export interface MLTrainRequest {
   testSize: number;
   cv: 0 | 3 | 5 | 10;
   seed: number;
+  /** Raw CSV text — when present, training uses the uploaded data and
+   *  samples/noise/seed are ignored. */
+  csv?: string;
+  /** Client-side file name, echoed back in CsvSourceMeta. */
+  csvName?: string;
+  /** Column picks; omitted/"" means auto-resolve. */
+  featureColumn?: string;
+  /** Classification only: second feature column. */
+  featureColumn2?: string;
+  /** Target/label column. */
+  targetColumn?: string;
 }
 
 export interface CVFold {
@@ -136,6 +166,8 @@ export interface MLTrainResponse {
     noise: number;
     seed: number;
     features: string[];
+    /** Present when the run trained on a user-uploaded CSV. */
+    source?: CsvSourceMeta;
   };
 }
 
@@ -148,6 +180,12 @@ export interface DatasetPreviewRequest {
   samples: number;
   noise: number;
   seed: number;
+  /** Raw CSV text — when present, the preview shows the uploaded data. */
+  csv?: string;
+  csvName?: string;
+  featureColumn?: string;
+  featureColumn2?: string;
+  targetColumn?: string;
 }
 
 export interface DatasetColumnStats {
@@ -177,6 +215,8 @@ export interface DatasetPreviewResponse {
   classBalance?: Array<{ label: number; count: number; pct: number }>;
   noise: number;
   seed: number;
+  /** Present when the preview shows a user-uploaded CSV. */
+  source?: CsvSourceMeta;
 }
 
 /* ------------------------------------------------------------------ */

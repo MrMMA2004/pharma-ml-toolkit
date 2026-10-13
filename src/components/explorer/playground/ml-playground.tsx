@@ -1,11 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Brain,
   ChevronDown,
+  ClipboardPaste,
   Download,
   Eraser,
+  FileSpreadsheet,
+  FileUp,
   History,
   Loader2,
   Play,
@@ -14,6 +17,7 @@ import {
   TrendingDown,
   TrendingUp,
   TriangleAlert,
+  X,
   ZoomIn,
 } from "lucide-react";
 import {
@@ -56,6 +60,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CHART } from "@/components/explorer/playground/calc-ui";
+import {
+  MAX_CSV_TEXT,
+  MIN_CSV_ROWS,
+  numericColumnNames,
+  parseCsv,
+} from "@/lib/csv";
 import { fmtBytes, fmtNum, fmtTick } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -144,8 +154,24 @@ export function MlPlayground() {
   const clearMlHistory = useToolkitStore((s) => s.clearMlHistory);
   const mlCurrentRunId = useToolkitStore((s) => s.mlCurrentRunId);
   const setMlCurrentRun = useToolkitStore((s) => s.setMlCurrentRun);
+  const mlCsv = useToolkitStore((s) => s.mlCsv);
+  const setMlCsv = useToolkitStore((s) => s.setMlCsv);
 
-  const { task, samples, noise, regModel, alpha, l2, testSizePct, cv, seed } = mlConfig;
+  const {
+    task,
+    source,
+    samples,
+    noise,
+    regModel,
+    alpha,
+    l2,
+    testSizePct,
+    cv,
+    seed,
+    featureColumn,
+    featureColumn2,
+    targetColumn,
+  } = mlConfig;
 
   /* Transient request state — not worth persisting across tab switches. */
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">(
@@ -158,6 +184,31 @@ export function MlPlayground() {
 
   /* X-range zoom on the preview scatter — null = full range. */
   const [xZoom, setXZoom] = useState<[number, number] | null>(null);
+
+  /* Uploaded-CSV state: drag feedback, paste area, hidden file input. */
+  const [dragOver, setDragOver] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /* The loaded CSV parsed once per file (memoized) + client-side sanity. */
+  const csvTable = useMemo(() => {
+    if (!mlCsv) return null;
+    try {
+      const table = parseCsv(mlCsv.text);
+      return table.columns.length > 0 && table.rows.length > 0 ? table : null;
+    } catch {
+      return null;
+    }
+  }, [mlCsv]);
+  const csvNumericCols = useMemo(
+    () => (csvTable ? numericColumnNames(csvTable) : []),
+    [csvTable]
+  );
+  const csvUsable =
+    csvTable !== null &&
+    csvTable.rows.length >= MIN_CSV_ROWS &&
+    csvNumericCols.length >= 2;
 
   /** Classification preview: the sampled points split by class for the chart. */
   const previewClasses = useMemo(() => {
@@ -275,13 +326,98 @@ export function MlPlayground() {
     setXZoom(null);
   }
 
+  /* ------------------------- CSV data loading ------------------------- */
+
+  /** Load CSV text into the store, reset column picks, drop stale results.
+   *  Returns false (with a toast) when the text is unusable. */
+  function loadCsv(fileName: string, text: string): boolean {
+    if (text.trim().length < 4 || text.length > MAX_CSV_TEXT) {
+      toast.error("CSV not loaded", {
+        description: "Expected a non-empty file of at most 256 KB.",
+      });
+      return false;
+    }
+    const table = parseCsv(text);
+    if (table.columns.length === 0 || table.rows.length === 0) {
+      toast.error("Could not parse the CSV", {
+        description: "Expected a header row followed by data rows.",
+      });
+      return false;
+    }
+    setMlCsv({ fileName, text });
+    setMlConfig({ featureColumn: "", featureColumn2: "", targetColumn: "" });
+    setStatus("idle");
+    setResult(null);
+    setPreview(null);
+    setError(null);
+    setXZoom(null);
+    toast.success("CSV loaded", {
+      description: `${fileName} — ${table.rows.length} rows × ${table.columns.length} columns · ${numericColumnNames(table).length} numeric`,
+    });
+    return true;
+  }
+
+  /** Read a picked/dropped File as text and load it. */
+  function handleFile(file: File) {
+    if (file.size > MAX_CSV_TEXT) {
+      toast.error("File too large", {
+        description: `CSV uploads are capped at 256 KB — this file is ${fmtBytes(file.size)}.`,
+      });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => loadCsv(file.name, String(reader.result ?? ""));
+    reader.onerror = () =>
+      toast.error("Could not read the file", {
+        description: "Try re-saving it as a plain UTF-8 CSV.",
+      });
+    reader.readAsText(file);
+  }
+
+  /** Load the pasted textarea contents as "pasted.csv". */
+  function loadPasted() {
+    const text = pasteText.trim();
+    if (text.length >= 4 && loadCsv("pasted.csv", text)) {
+      setPasteOpen(false);
+      setPasteText("");
+    }
+  }
+
+  /** Drop the loaded CSV and return to the empty upload state. */
+  function removeCsv() {
+    setMlCsv(null);
+    setMlConfig({ featureColumn: "", featureColumn2: "", targetColumn: "" });
+    setStatus("idle");
+    setResult(null);
+    setPreview(null);
+    setError(null);
+    setXZoom(null);
+  }
+
+  /** Switch the data source; stale results/previews are dropped. */
+  function switchSource(next: "synthetic" | "csv") {
+    if (source === next) return;
+    setMlConfig({ source: next });
+    setStatus("idle");
+    setResult(null);
+    setPreview(null);
+    setError(null);
+    setXZoom(null);
+  }
+
   const seedValid = /^\d{1,10}$/.test(seed.trim());
   const alphaValid = Number.isFinite(Number.parseFloat(alpha)) && Number.parseFloat(alpha) >= 0;
   const l2Valid = Number.isFinite(Number.parseFloat(l2)) && Number.parseFloat(l2) >= 0;
 
   async function run() {
-    if (!seedValid) {
+    if (source === "synthetic" && !seedValid) {
       setError("Seed must be a non-negative integer (0 – 2147483647).");
+      return;
+    }
+    if (source === "csv" && (!mlCsv || !csvUsable)) {
+      setError(
+        `Load a CSV with at least ${MIN_CSV_ROWS} rows and 2 numeric columns before training.`
+      );
       return;
     }
     if (task === "regression" && regModel === "ridge" && !alphaValid) {
@@ -305,6 +441,13 @@ export function MlPlayground() {
     };
     if (task === "regression" && regModel === "ridge") body.alpha = Number.parseFloat(alpha);
     if (task === "classification") body.l2 = Number.parseFloat(l2);
+    if (source === "csv" && mlCsv) {
+      body.csv = mlCsv.text;
+      body.csvName = mlCsv.fileName;
+      if (featureColumn) body.featureColumn = featureColumn;
+      if (featureColumn2) body.featureColumn2 = featureColumn2;
+      if (targetColumn) body.targetColumn = targetColumn;
+    }
 
     try {
       const res = await fetch("/api/ml/train", {
@@ -340,6 +483,16 @@ export function MlPlayground() {
           keyValue,
           config: { ...mlConfig },
           result: payload,
+          ...(source === "csv" && mlCsv
+            ? {
+                csv: {
+                  fileName: mlCsv.fileName,
+                  featureColumn,
+                  featureColumn2,
+                  targetColumn,
+                },
+              }
+            : {}),
         });
       }
     } catch (err) {
@@ -358,14 +511,20 @@ export function MlPlayground() {
     setError(null);
     setXZoom(null);
     toast.success("Run restored", {
-      description: `${rec.model} · seed ${rec.config.seed} · ${
+      description: `${rec.model} · ${rec.csv ? rec.csv.fileName : `seed ${rec.config.seed}`} · ${
         rec.keyMetric
       } ${fmtNum(rec.keyValue, 4)}`,
     });
   }  /** Fetch the first rows + summary stats of the (deterministic) dataset. */
   async function previewDataset() {
-    if (!seedValid) {
+    if (source === "synthetic" && !seedValid) {
       setError("Seed must be a non-negative integer (0 – 2147483647).");
+      return;
+    }
+    if (source === "csv" && (!mlCsv || !csvUsable)) {
+      setError(
+        `Load a CSV with at least ${MIN_CSV_ROWS} rows and 2 numeric columns before previewing.`
+      );
       return;
     }
     setPreviewLoading(true);
@@ -379,6 +538,15 @@ export function MlPlayground() {
           samples,
           noise,
           seed: Number.parseInt(seed, 10) || 0,
+          ...(source === "csv" && mlCsv
+            ? {
+                csv: mlCsv.text,
+                csvName: mlCsv.fileName,
+                ...(featureColumn ? { featureColumn } : {}),
+                ...(featureColumn2 ? { featureColumn2 } : {}),
+                ...(targetColumn ? { targetColumn } : {}),
+              }
+            : {}),
         }),
       });
       const data: unknown = await res.json();
@@ -443,7 +611,7 @@ export function MlPlayground() {
             <div>
               <CardTitle className="text-base">Experiment setup</CardTitle>
               <CardDescription className="text-xs">
-                Deterministic — same seed, same result · setup & results survive reloads
+                Seeded generator or your own CSV — setup & results survive reloads
               </CardDescription>
             </div>
           </div>
@@ -470,43 +638,304 @@ export function MlPlayground() {
             </div>
           </div>
 
-          {/* Samples */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="ml-samples" className="text-xs font-medium">
-                Samples
-              </Label>
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">{samples}</span>
+          {/* Data source: seeded generator or the user's own CSV */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Data source</Label>
+            <div className="grid grid-cols-2 gap-1 rounded-lg border bg-muted/40 p-1" role="tablist" aria-label="Data source">
+              {(["synthetic", "csv"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  role="tab"
+                  aria-selected={source === s}
+                  onClick={() => switchSource(s)}
+                  className={`h-9 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                    source === s ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {s === "synthetic" ? "Synthetic" : "My CSV"}
+                </button>
+              ))}
             </div>
-            <Slider
-              id="ml-samples"
-              min={100}
-              max={1000}
-              step={50}
-              value={[samples]}
-              onValueChange={(v) => setMlConfig({ samples: v[0] ?? samples })}
-            />
           </div>
 
-          {/* Noise */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="ml-noise" className="text-xs font-medium">
-                Noise {task === "classification" ? "(moons)" : "σ"}
-              </Label>
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                {noise.toFixed(2)}
-              </span>
+          {/* Uploaded CSV dataset (drop / browse / paste + column picks) */}
+          {source === "csv" ? (
+            <div className="space-y-2.5">
+              <Label className="text-xs font-medium">Your dataset</Label>
+              {mlCsv ? (
+                <div className="space-y-2.5">
+                  <div className="rounded-lg border bg-muted/20 p-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <FileSpreadsheet className="size-4" aria-hidden />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-mono text-xs font-medium" title={mlCsv.fileName}>
+                          {mlCsv.fileName}
+                        </p>
+                        <p className="text-[11px] leading-snug text-muted-foreground">
+                          {csvTable
+                            ? `${csvTable.rows.length} rows × ${csvTable.columns.length} cols · ${csvNumericCols.length} numeric`
+                            : "Unreadable — re-upload the file"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={removeCsv}
+                        aria-label="Remove the loaded CSV"
+                        title="Remove CSV"
+                        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      >
+                        <X className="size-3.5" aria-hidden />
+                      </button>
+                    </div>
+                    {csvTable && !csvUsable ? (
+                      <p className="mt-2 rounded-md border border-destructive/25 bg-destructive/5 px-2 py-1.5 text-[11px] leading-snug text-destructive">
+                        Needs ≥ {MIN_CSV_ROWS} rows and ≥ 2 numeric columns to train.
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {csvTable ? (
+                    task === "regression" ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[11px] font-medium">Feature (x)</Label>
+                          <Select
+                            value={featureColumn || "auto"}
+                            onValueChange={(v) =>
+                              setMlConfig({ featureColumn: v === "auto" ? "" : v })
+                            }
+                          >
+                            <SelectTrigger className="h-9 text-xs" aria-label="Feature column">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="auto">Auto · first numeric</SelectItem>
+                              {csvNumericCols.map((c) => (
+                                <SelectItem key={c} value={c} className="font-mono text-xs">
+                                  {c}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] font-medium">Target (y)</Label>
+                          <Select
+                            value={targetColumn || "auto"}
+                            onValueChange={(v) =>
+                              setMlConfig({ targetColumn: v === "auto" ? "" : v })
+                            }
+                          >
+                            <SelectTrigger className="h-9 text-xs" aria-label="Target column">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="auto">Auto · last numeric</SelectItem>
+                              {csvNumericCols.map((c) => (
+                                <SelectItem key={c} value={c} className="font-mono text-xs">
+                                  {c}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="space-y-1">
+                          <Label className="text-[11px] font-medium">Feature x₁</Label>
+                          <Select
+                            value={featureColumn || "auto"}
+                            onValueChange={(v) =>
+                              setMlConfig({ featureColumn: v === "auto" ? "" : v })
+                            }
+                          >
+                            <SelectTrigger className="h-9 text-xs" aria-label="First feature column">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="auto">Auto · first numeric</SelectItem>
+                              {csvNumericCols.map((c) => (
+                                <SelectItem key={c} value={c} className="font-mono text-xs">
+                                  {c}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] font-medium">Feature x₂</Label>
+                          <Select
+                            value={featureColumn2 || "auto"}
+                            onValueChange={(v) =>
+                              setMlConfig({ featureColumn2: v === "auto" ? "" : v })
+                            }
+                          >
+                            <SelectTrigger className="h-9 text-xs" aria-label="Second feature column">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="auto">Auto · second numeric</SelectItem>
+                              {csvNumericCols.map((c) => (
+                                <SelectItem key={c} value={c} className="font-mono text-xs">
+                                  {c}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] font-medium">Label (2 classes)</Label>
+                          <Select
+                            value={targetColumn || "auto"}
+                            onValueChange={(v) =>
+                              setMlConfig({ targetColumn: v === "auto" ? "" : v })
+                            }
+                          >
+                            <SelectTrigger className="h-9 text-xs" aria-label="Label column">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="auto">Auto · 2-value column</SelectItem>
+                              {csvTable.columns.map((c) => (
+                                <SelectItem key={c} value={c} className="font-mono text-xs">
+                                  {c}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )
+                  ) : null}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Upload a CSV file"
+                    onClick={() => fileInputRef.current?.click()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOver(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) void handleFile(file);
+                    }}
+                    className={cn(
+                      "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-6 text-center outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring",
+                      dragOver
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-muted/20 hover:border-primary/40 hover:bg-primary/5"
+                    )}
+                  >
+                    <FileUp className="size-5 text-primary" aria-hidden />
+                    <p className="text-xs font-medium">Drop a CSV here or click to browse</p>
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      .csv · .tsv · .txt · ≤ 256 KB · parsed in your browser
+                    </p>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.tsv,.txt,text/csv,text/plain"
+                    className="sr-only"
+                    aria-label="Choose a CSV file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleFile(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPasteOpen((v) => !v)}
+                    aria-expanded={pasteOpen}
+                    className="w-full rounded-sm text-center text-[11px] font-medium text-primary underline-offset-2 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    {pasteOpen ? "Hide paste area" : "…or paste CSV text instead"}
+                  </button>
+                  {pasteOpen ? (
+                    <div className="space-y-1.5">
+                      <textarea
+                        value={pasteText}
+                        onChange={(e) => setPasteText(e.target.value)}
+                        rows={5}
+                        spellCheck={false}
+                        placeholder={"dose,clearance\n250,3.2\n180,2.4\n…"}
+                        aria-label="Paste CSV text"
+                        className="thin-scrollbar w-full resize-y rounded-md border bg-background p-2 font-mono text-[11px] leading-relaxed outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                      <Button
+                        size="sm"
+                        className="h-8 w-full gap-1.5 text-xs"
+                        onClick={loadPasted}
+                        disabled={pasteText.trim().length < 4}
+                      >
+                        <ClipboardPaste className="size-3.5" aria-hidden />
+                        Load pasted CSV
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
-            <Slider
-              id="ml-noise"
-              min={0}
-              max={noiseMax}
-              step={0.05}
-              value={[Math.min(noise, noiseMax)]}
-              onValueChange={(v) => setMlConfig({ noise: v[0] ?? noise })}
-            />
-          </div>
+          ) : null}
+
+          {/* Samples + noise — synthetic mode only (CSV rows come from the file) */}
+          {source === "synthetic" ? (
+            <>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="ml-samples" className="text-xs font-medium">
+                    Samples
+                  </Label>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">{samples}</span>
+                </div>
+                <Slider
+                  id="ml-samples"
+                  min={100}
+                  max={1000}
+                  step={50}
+                  value={[samples]}
+                  onValueChange={(v) => setMlConfig({ samples: v[0] ?? samples })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="ml-noise" className="text-xs font-medium">
+                    Noise {task === "classification" ? "(moons)" : "σ"}
+                  </Label>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                    {noise.toFixed(2)}
+                  </span>
+                </div>
+                <Slider
+                  id="ml-noise"
+                  min={0}
+                  max={noiseMax}
+                  step={0.05}
+                  value={[Math.min(noise, noiseMax)]}
+                  onValueChange={(v) => setMlConfig({ noise: v[0] ?? noise })}
+                />
+              </div>
+            </>
+          ) : null}
 
           {/* Model */}
           <div className="space-y-1.5">
@@ -600,22 +1029,34 @@ export function MlPlayground() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ml-seed" className="text-xs font-medium">
-                Seed
-              </Label>
-              <Input
-                id="ml-seed"
-                inputMode="numeric"
-                value={seed}
-                onChange={(e) => setMlConfig({ seed: e.target.value })}
-                aria-invalid={seedValid ? undefined : true}
-                className={`h-10 font-mono text-sm tabular-nums ${seedValid ? "" : "border-destructive/60"}`}
-              />
-              {!seedValid ? (
-                <p className="text-[11px] text-destructive">Non-negative integer.</p>
-              ) : null}
-            </div>
+            {source === "synthetic" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="ml-seed" className="text-xs font-medium">
+                  Seed
+                </Label>
+                <Input
+                  id="ml-seed"
+                  inputMode="numeric"
+                  value={seed}
+                  onChange={(e) => setMlConfig({ seed: e.target.value })}
+                  aria-invalid={seedValid ? undefined : true}
+                  className={`h-10 font-mono text-sm tabular-nums ${seedValid ? "" : "border-destructive/60"}`}
+                />
+                {!seedValid ? (
+                  <p className="text-[11px] text-destructive">Non-negative integer.</p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Rows</Label>
+                <div
+                  className="flex h-10 items-center rounded-md border bg-muted/30 px-3 font-mono text-sm tabular-nums text-muted-foreground"
+                  title={mlCsv?.fileName ?? "No CSV loaded"}
+                >
+                  {csvTable ? `${csvTable.rows.length} rows` : "No CSV loaded"}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2">
@@ -686,27 +1127,35 @@ export function MlPlayground() {
                 <div className="min-w-0">
                   <CardTitle className="text-sm">Dataset preview</CardTitle>
                   <CardDescription className="text-xs">
-                    First {preview.rows.length} of {preview.nTotal} rows · seed {preview.seed} ·
-                    noise σ {preview.noise.toFixed(2)} — same generator the trainer uses
+                    {preview.source
+                      ? `First ${preview.rows.length} of ${preview.source.nRows} usable rows · ${
+                          preview.source.fileName ?? "pasted.csv"
+                        } · ${preview.source.droppedRows} malformed row${
+                          preview.source.droppedRows === 1 ? "" : "s"
+                        } dropped — raw column values`
+                      : `First ${preview.rows.length} of ${preview.nTotal} rows · seed ${preview.seed} ·
+                    noise σ ${preview.noise.toFixed(2)} — same generator the trainer uses`}
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-1.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
-                  onClick={() => void downloadCsv()}
-                  disabled={csvLoading}
-                  aria-label="Download the full dataset as CSV"
-                  title="Download the full dataset as CSV"
-                >
-                  {csvLoading ? (
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                  ) : (
-                    <Download className="size-3.5" aria-hidden />
-                  )}
-                  <span className="hidden sm:inline">CSV</span>
-                </Button>
+                {!preview.source ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
+                    onClick={() => void downloadCsv()}
+                    disabled={csvLoading}
+                    aria-label="Download the full dataset as CSV"
+                    title="Download the full dataset as CSV"
+                  >
+                    {csvLoading ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <Download className="size-3.5" aria-hidden />
+                    )}
+                    <span className="hidden sm:inline">CSV</span>
+                  </Button>
+                ) : null}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -741,11 +1190,11 @@ export function MlPlayground() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {preview.rows.map((row) => (
-                          <TableRow key={row.i}>
+                        {preview.rows.map((row, idx) => (
+                          <TableRow key={String(row[preview.columns[0] ?? "i"] ?? idx)}>
                             {preview.columns.map((c) => (
                               <TableCell key={c} className="py-1.5 font-mono text-xs tabular-nums">
-                                {c === "label" ? (
+                                {c === (preview.source?.targetColumn ?? "label") ? (
                                   <span className="inline-flex items-center gap-1.5">
                                     <span
                                       className={cn(
@@ -863,7 +1312,11 @@ export function MlPlayground() {
                             <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
                             {previewView ? (
                               <Scatter
-                                name="class 0 (outer moon)"
+                                name={
+                                  preview.source?.labelMap
+                                    ? `class 0 · ${preview.source.labelMap[0]}`
+                                    : "class 0 (outer moon)"
+                                }
                                 data={previewView.cls0}
                                 fill={CHART.emerald}
                                 fillOpacity={0.75}
@@ -872,7 +1325,11 @@ export function MlPlayground() {
                             ) : null}
                             {previewView ? (
                               <Scatter
-                                name="class 1 (inner moon)"
+                                name={
+                                  preview.source?.labelMap
+                                    ? `class 1 · ${preview.source.labelMap[1]}`
+                                    : "class 1 (inner moon)"
+                                }
                                 data={previewView.cls1}
                                 fill={CHART.rose}
                                 fillOpacity={0.75}
@@ -976,10 +1433,10 @@ export function MlPlayground() {
               </span>
               <p className="text-sm font-medium">No results yet</p>
               <p className="max-w-sm text-xs text-muted-foreground">
-                Configure the experiment and press{" "}
-                <strong className="font-semibold text-foreground">Train model</strong>. Data is
-                generated server-side from your seed — regression fits a closed-form least-squares
-                model; classification trains logistic regression on two moons.
+                Pick a data source — the seeded server-side generator or your own CSV — then press{" "}
+                <strong className="font-semibold text-foreground">Train model</strong>. Regression
+                fits a closed-form least-squares model; classification trains logistic regression
+                on the chosen columns.
               </p>
             </CardContent>
           </Card>
@@ -991,8 +1448,13 @@ export function MlPlayground() {
               <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
               <p className="text-sm font-medium">Training…</p>
               <p className="text-xs text-muted-foreground">
-                Generating {samples} samples, fitting the model, evaluating the held-out split
-                {cv !== "0" ? ` and running ${cv}-fold CV` : ""}.
+                {source === "csv" && mlCsv
+                  ? `Training on ${mlCsv.fileName} (${csvTable?.rows.length ?? 0} rows), fitting the model, evaluating the held-out split${
+                      cv !== "0" ? ` and running ${cv}-fold CV` : ""
+                    }.`
+                  : `Generating ${samples} samples, fitting the model, evaluating the held-out split${
+                      cv !== "0" ? ` and running ${cv}-fold CV` : ""
+                    }.`}
               </p>
             </CardContent>
           </Card>
@@ -1024,11 +1486,20 @@ export function MlPlayground() {
                 <CardTitle className="text-sm">
                   {result.task === "regression"
                     ? "Test points & fitted curve"
-                    : "Two moons & decision boundary"}
+                    : result.datasetMeta.source
+                      ? "Test points & decision boundary"
+                      : "Two moons & decision boundary"}
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  {result.datasetMeta.nTotal} samples · {result.datasetMeta.nTrain} train ·{" "}
-                  {result.datasetMeta.nTest} test · seed {result.datasetMeta.seed}
+                  {result.datasetMeta.source
+                    ? `${result.datasetMeta.nTotal} rows from ${
+                        result.datasetMeta.source.fileName ?? "pasted.csv"
+                      } · ${result.datasetMeta.nTrain} train · ${result.datasetMeta.nTest} test · ${
+                        result.datasetMeta.source.droppedRows
+                      } dropped`
+                    : `${result.datasetMeta.nTotal} samples · ${result.datasetMeta.nTrain} train · ${
+                        result.datasetMeta.nTest
+                      } test · seed ${result.datasetMeta.seed}`}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-3 sm:p-4">
@@ -1038,7 +1509,9 @@ export function MlPlayground() {
                   aria-label={
                     result.task === "regression"
                       ? "Scatter plot of test points with the fitted regression curve"
-                      : "Scatter plot of the two moon classes with model decision boundary"
+                      : result.datasetMeta.source
+                        ? "Scatter plot of the uploaded-data test classes with the model decision boundary"
+                        : "Scatter plot of the two moon classes with model decision boundary"
                   }
                 >
                   <ResponsiveContainer width="100%" height="100%">
@@ -1134,7 +1607,11 @@ export function MlPlayground() {
                         ) : null}
                         {clsSeries ? (
                           <Scatter
-                            name="moon 0 (test)"
+                            name={
+                              result.datasetMeta.source?.labelMap
+                                ? `class 0 · ${result.datasetMeta.source.labelMap[0]} (test)`
+                                : "moon 0 (test)"
+                            }
                             data={clsSeries.moon0}
                             fill={CHART.emerald}
                             shape={MoonDot(CHART.emerald)}
@@ -1143,7 +1620,11 @@ export function MlPlayground() {
                         ) : null}
                         {clsSeries ? (
                           <Scatter
-                            name="moon 1 (test)"
+                            name={
+                              result.datasetMeta.source?.labelMap
+                                ? `class 1 · ${result.datasetMeta.source.labelMap[1]} (test)`
+                                : "moon 1 (test)"
+                            }
                             data={clsSeries.moon1}
                             fill={CHART.rose}
                             shape={MoonDot(CHART.rose)}
@@ -1157,7 +1638,9 @@ export function MlPlayground() {
                 <p className="mt-1 text-center text-[11px] text-muted-foreground">
                   {result.task === "regression"
                     ? "Stone dots = held-out test points; emerald line = model prediction (100-point sweep)."
-                    : "Emerald/rose = test-set moons; faint teal/amber dots = 60×60 grid classified by the model."}
+                    : result.datasetMeta.source
+                      ? "Emerald/rose = test-set classes; faint teal/amber dots = 60×60 grid classified by the model."
+                      : "Emerald/rose = test-set moons; faint teal/amber dots = 60×60 grid classified by the model."}
                 </p>
               </CardContent>
             </Card>
@@ -1284,8 +1767,13 @@ export function MlPlayground() {
                           {rec.model}
                           <span className="font-normal text-muted-foreground">
                             {" "}
-                            · seed {rec.config.seed} · n{rec.config.samples} · noise{" "}
-                            {rec.config.noise}
+                            {rec.csv
+                              ? ` · ${rec.csv.fileName} · target: ${
+                                  rec.csv.targetColumn || "auto"
+                                }`
+                              : ` · seed ${rec.config.seed} · n${rec.config.samples} · noise ${
+                                  rec.config.noise
+                                }`}
                           </span>
                         </p>
                         <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -1329,7 +1817,9 @@ export function MlPlayground() {
                         size="sm"
                         className="h-8 shrink-0 px-2.5 text-xs"
                         onClick={() => restoreRun(rec)}
-                        aria-label={`Restore run ${rec.model} seed ${rec.config.seed}`}
+                        aria-label={`Restore run ${rec.model}${
+                          rec.csv ? ` from ${rec.csv.fileName}` : ` seed ${rec.config.seed}`
+                        }`}
                         disabled={isCurrent}
                       >
                         <RotateCcw className="size-3.5" aria-hidden />

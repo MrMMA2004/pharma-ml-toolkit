@@ -5,7 +5,15 @@
  */
 
 import { create } from "zustand";
-import type { TreeNode, TreeResponse, TreeStats, MLTrainResponse, DatasetPreviewResponse } from "@/lib/toolkit-types";
+import { MAX_CSV_TEXT } from "@/lib/csv";
+import type {
+  TreeNode,
+  TreeResponse,
+  TreeStats,
+  MLTrainResponse,
+  DatasetPreviewResponse,
+  CsvSourceMeta,
+} from "@/lib/toolkit-types";
 
 export type TabId = "overview" | "explorer" | "reference" | "playground" | "download";
 
@@ -69,6 +77,19 @@ export interface MlRunRecord {
   config: MlConfig;
   /** Full training response (restored verbatim). */
   result: MLTrainResponse;
+  /** Present for runs trained on an uploaded CSV (display + column restore). */
+  csv?: {
+    fileName: string;
+    featureColumn: string;
+    featureColumn2: string;
+    targetColumn: string;
+  };
+}
+
+/** The user-uploaded CSV currently loaded in the playground (text + name). */
+export interface MlCsvState {
+  fileName: string;
+  text: string;
 }
 
 /** Read the persisted recent-files list (client only, failure-tolerant). */
@@ -106,6 +127,7 @@ interface PlaygroundPersisted {
   playgroundTab: string;
   pkParams: PkParams;
   mlConfig: MlConfig;
+  mlCsv: MlCsvState | null;
 }
 
 /** Validate a persisted PK regimen field-by-field, falling back to defaults. */
@@ -134,6 +156,8 @@ function validateMl(raw: unknown): MlConfig {
   const p = raw as Partial<MlConfig>;
   const str = (v: unknown, def: string) =>
     typeof v === "string" && v.length <= 12 ? v : def;
+  const str128 = (v: unknown, def: string) =>
+    typeof v === "string" && v.length <= 128 ? v : def;
   return {
     task: p.task === "classification" ? "classification" : "regression",
     samples:
@@ -154,6 +178,10 @@ function validateMl(raw: unknown): MlConfig {
         : base.testSizePct,
     cv: str(p.cv, base.cv),
     seed: str(p.seed, base.seed),
+    source: p.source === "csv" ? "csv" : "synthetic",
+    featureColumn: str128(p.featureColumn, ""),
+    featureColumn2: str128(p.featureColumn2, ""),
+    targetColumn: str128(p.targetColumn, ""),
   };
 }
 
@@ -234,6 +262,44 @@ function validateMlResult(raw: unknown): MLTrainResponse | null {
     return null;
   }
 
+  // Optional CSV provenance — preserved when well-formed, dropped otherwise.
+  let source: CsvSourceMeta | undefined;
+  if (typeof m.source === "object" && m.source !== null) {
+    const s = m.source as Record<string, unknown>;
+    const colList = (v: unknown, cap: number): string[] =>
+      Array.isArray(v)
+        ? v.filter((c): c is string => typeof c === "string" && c.length <= 128).slice(0, cap)
+        : [];
+    const columns = colList(s.columns, 64);
+    const featureColumns = colList(s.featureColumns, 4);
+    const targetColumn = typeof s.targetColumn === "string" ? s.targetColumn.slice(0, 128) : "";
+    if (
+      s.kind === "csv" &&
+      columns.length > 0 &&
+      featureColumns.length > 0 &&
+      targetColumn !== "" &&
+      isFiniteNumber(s.nRows) &&
+      isFiniteNumber(s.droppedRows)
+    ) {
+      const labelMap =
+        Array.isArray(s.labelMap) &&
+        s.labelMap.length === 2 &&
+        s.labelMap.every((v) => typeof v === "string" && v.length <= 64)
+          ? (s.labelMap as [string, string])
+          : undefined;
+      source = {
+        kind: "csv",
+        fileName: typeof s.fileName === "string" ? s.fileName.slice(0, 128) : undefined,
+        columns,
+        featureColumns,
+        targetColumn,
+        nRows: s.nRows,
+        droppedRows: s.droppedRows,
+        ...(labelMap ? { labelMap } : {}),
+      };
+    }
+  }
+
   // Optional cross-validation summary — dropped when malformed.
   let cv: MLTrainResponse["cv"];
   if (typeof r.cv === "object" && r.cv !== null) {
@@ -286,6 +352,7 @@ function validateMlResult(raw: unknown): MLTrainResponse | null {
       noise: m.noise,
       seed: m.seed,
       features,
+      ...(source ? { source } : {}),
     },
   };
 }
@@ -343,6 +410,28 @@ function validateMlHistoryPayload(raw: unknown): {
       keyValue: r.keyValue,
       config: validateMl(r.config),
       result,
+      ...(typeof r.csv === "object" && r.csv !== null
+        ? {
+            csv: {
+              fileName:
+                typeof (r.csv as Record<string, unknown>).fileName === "string"
+                  ? (r.csv as Record<string, unknown>).fileName.slice(0, 128) || "pasted.csv"
+                  : "pasted.csv",
+              featureColumn:
+                typeof (r.csv as Record<string, unknown>).featureColumn === "string"
+                  ? (r.csv as Record<string, unknown>).featureColumn.slice(0, 128)
+                  : "",
+              featureColumn2:
+                typeof (r.csv as Record<string, unknown>).featureColumn2 === "string"
+                  ? (r.csv as Record<string, unknown>).featureColumn2.slice(0, 128)
+                  : "",
+              targetColumn:
+                typeof (r.csv as Record<string, unknown>).targetColumn === "string"
+                  ? (r.csv as Record<string, unknown>).targetColumn.slice(0, 128)
+                  : "",
+            },
+          }
+        : {}),
     });
   }
   const rawId = (body as { currentId?: unknown }).currentId;
@@ -406,6 +495,7 @@ function loadPlayground(): Partial<PlaygroundPersisted> {
       playgroundTab: typeof p.playgroundTab === "string" ? p.playgroundTab.slice(0, 32) : undefined,
       pkParams: validatePk(p.pkParams),
       mlConfig: validateMl(p.mlConfig),
+      mlCsv: validMlCsv(p.mlCsv),
     };
   } catch {
     return {}; // corrupted JSON / private mode — start fresh
@@ -417,6 +507,7 @@ function savePlayground(state: {
   playgroundTab: string;
   pkParams: PkParams;
   mlConfig: MlConfig;
+  mlCsv: MlCsvState | null;
 }): void {
   if (typeof window === "undefined") return;
   try {
@@ -426,9 +517,27 @@ function savePlayground(state: {
   }
 }
 
+/** Validate a persisted uploaded-CSV payload; null when unusable. */
+function validMlCsv(raw: unknown): MlCsvState | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const c = raw as Partial<MlCsvState>;
+  if (
+    typeof c.text !== "string" ||
+    c.text.length === 0 ||
+    c.text.length > MAX_CSV_TEXT ||
+    typeof c.fileName !== "string" ||
+    c.fileName.length > 128
+  ) {
+    return null;
+  }
+  return { fileName: c.fileName, text: c.text };
+}
+
 /** ML playground experiment configuration (survives tab switches). */
 export interface MlConfig {
   task: "regression" | "classification";
+  /** Where the training data comes from. */
+  source: "synthetic" | "csv";
   samples: number;
   noise: number;
   regModel: "linear" | "polynomial" | "ridge";
@@ -439,10 +548,17 @@ export interface MlConfig {
   testSizePct: number;
   cv: string;
   seed: string;
+  /** CSV mode: feature column pick ("" = auto → first numeric). */
+  featureColumn: string;
+  /** CSV mode: second feature column for classification ("" = auto). */
+  featureColumn2: string;
+  /** CSV mode: target/label column pick ("" = auto). */
+  targetColumn: string;
 }
 
 export const DEFAULT_ML_CONFIG: MlConfig = {
   task: "regression",
+  source: "synthetic",
   samples: 300,
   noise: 0.4,
   regModel: "linear",
@@ -451,6 +567,9 @@ export const DEFAULT_ML_CONFIG: MlConfig = {
   testSizePct: 20,
   cv: "5",
   seed: "42",
+  featureColumn: "",
+  featureColumn2: "",
+  targetColumn: "",
 };
 
 export const TABS: Array<{ id: TabId; label: string }> = [
@@ -499,6 +618,9 @@ interface ToolkitStore {
   mlConfig: MlConfig;
   setMlConfig: (patch: Partial<MlConfig>) => void;
   resetMlConfig: () => void;
+  /** User-uploaded CSV (file name + full text); null = not loaded. */
+  mlCsv: MlCsvState | null;
+  setMlCsv: (csv: MlCsvState | null) => void;
   /** Last training result (rendered until the config changes; survives reloads). */
   mlResult: MLTrainResponse | null;
   setMlResult: (result: MLTrainResponse | null) => void;
@@ -571,6 +693,7 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
       playgroundTab: tab,
       pkParams: get().pkParams,
       mlConfig: get().mlConfig,
+      mlCsv: get().mlCsv,
     });
   },
 
@@ -590,6 +713,7 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
       playgroundTab: get().playgroundTab,
       pkParams: DEFAULT_PK_PARAMS,
       mlConfig: get().mlConfig,
+      mlCsv: get().mlCsv,
     });
   },
 
@@ -601,6 +725,7 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
       playgroundTab: get().playgroundTab,
       pkParams: get().pkParams,
       mlConfig,
+      mlCsv: get().mlCsv,
     });
   },
   resetMlConfig: () => {
@@ -609,6 +734,18 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
       playgroundTab: get().playgroundTab,
       pkParams: get().pkParams,
       mlConfig: DEFAULT_ML_CONFIG,
+      mlCsv: get().mlCsv,
+    });
+  },
+
+  mlCsv: persistedPlayground.mlCsv ?? null,
+  setMlCsv: (csv) => {
+    set({ mlCsv: csv });
+    savePlayground({
+      playgroundTab: get().playgroundTab,
+      pkParams: get().pkParams,
+      mlConfig: get().mlConfig,
+      mlCsv: csv,
     });
   },
   mlResult: loadMlResult(),

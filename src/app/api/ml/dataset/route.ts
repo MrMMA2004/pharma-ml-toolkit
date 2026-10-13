@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  parseCsv,
+  resolveClassification,
+  resolveRegression,
+  type CsvClassificationData,
+  type CsvRegressionData,
+} from "@/lib/csv";
+import {
   makeMoons,
   makeRegressionData,
   mean,
@@ -9,6 +16,7 @@ import {
   regressionTrueY,
 } from "@/lib/ml-math";
 import type {
+  CsvSourceMeta,
   DatasetColumnStats,
   DatasetPreviewResponse,
 } from "@/lib/toolkit-types";
@@ -39,21 +47,33 @@ function regressionTrend(): Array<{ x: number; y: number }> {
 
 const bodySchema = z.object({
   task: z.enum(["regression", "classification"]),
-  samples: z.number().int().min(100).max(1000),
-  noise: z.number().min(0).max(2),
-  seed: z.number().int().min(0).max(2_147_483_647),
+  samples: z.number().int().min(100).max(1000).default(300),
+  noise: z.number().min(0).max(2).default(0.4),
+  seed: z.number().int().min(0).max(2_147_483_647).default(42),
+  /* Uploaded-CSV mode: preview the user's own rows/stats instead. */
+  csv: z.string().min(4).max(262_144).optional(),
+  csvName: z.string().min(1).max(128).optional(),
+  featureColumn: z.string().min(1).max(128).optional(),
+  featureColumn2: z.string().min(1).max(128).optional(),
+  targetColumn: z.string().min(1).max(128).optional(),
 });
 
 function columnStats(
   column: string,
   values: number[]
 ): DatasetColumnStats {
+  let min = values[0] ?? 0;
+  let max = min;
+  for (const v of values) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
   return {
     column,
     mean: mean(values),
     std: populationStd(values),
-    min: Math.min(...values),
-    max: Math.max(...values),
+    min,
+    max,
   };
 }
 
@@ -75,10 +95,97 @@ function pearson(a: number[], b: number[]): number {
   return den === 0 ? 0 : num / den;
 }
 
+/** Index column name that never collides with a user column. */
+function indexColumn(...used: string[]): string {
+  return used.includes("i") ? "i#" : "i";
+}
+
+/** Build the CSV-source preview (raw column values, strided scatter points). */
+function csvPreview(
+  task: "regression" | "classification",
+  csvName: string | undefined,
+  data: CsvRegressionData | CsvClassificationData
+): DatasetPreviewResponse {
+  if (task === "regression") {
+    const d = data as CsvRegressionData;
+    const source: CsvSourceMeta = {
+      kind: "csv",
+      fileName: csvName,
+      columns: d.columns,
+      featureColumns: [d.feature],
+      targetColumn: d.target,
+      nRows: d.x.length,
+      droppedRows: d.droppedRows,
+    };
+    const i0 = indexColumn(d.feature, d.target);
+    const rows = Array.from({ length: Math.min(PREVIEW_ROWS, d.x.length) }, (_, i) => ({
+      [i0]: i + 1,
+      [d.feature]: d.x[i] ?? 0,
+      [d.target]: d.y[i] ?? 0,
+    }));
+    const idx = stridedIndices(d.x.length, MAX_POINTS);
+    return {
+      task,
+      columns: [i0, d.feature, d.target],
+      rows,
+      nTotal: d.x.length,
+      stats: [columnStats(d.feature, d.x), columnStats(d.target, d.y)],
+      points: idx.map((i) => ({ x: d.x[i] ?? 0, y: d.y[i] ?? 0 })),
+      nPoints: idx.length,
+      correlation: pearson(d.x, d.y),
+      noise: 0,
+      seed: 0,
+      source,
+    };
+  }
+
+  const d = data as CsvClassificationData;
+  const source: CsvSourceMeta = {
+    kind: "csv",
+    fileName: csvName,
+    columns: d.columns,
+    featureColumns: [d.feature1, d.feature2],
+    targetColumn: d.target,
+    nRows: d.x1.length,
+    droppedRows: d.droppedRows,
+    labelMap: d.labelMap,
+  };
+  const i0 = indexColumn(d.feature1, d.feature2, d.target);
+  const rows = Array.from({ length: Math.min(PREVIEW_ROWS, d.x1.length) }, (_, i) => ({
+    [i0]: i + 1,
+    [d.feature1]: d.x1[i] ?? 0,
+    [d.feature2]: d.x2[i] ?? 0,
+    [d.target]: d.label[i] ?? 0,
+  }));
+  const idx = stridedIndices(d.x1.length, MAX_POINTS);
+  const n1 = d.label.filter((l) => l === 1).length;
+  const n0 = d.x1.length - n1;
+  return {
+    task,
+    columns: [i0, d.feature1, d.feature2, d.target],
+    rows,
+    nTotal: d.x1.length,
+    stats: [columnStats(d.feature1, d.x1), columnStats(d.feature2, d.x2)],
+    points: idx.map((i) => ({
+      x: d.x1[i] ?? 0,
+      y: d.x2[i] ?? 0,
+      label: d.label[i] ?? 0,
+    })),
+    nPoints: idx.length,
+    classBalance: [
+      { label: 0, count: n0, pct: (100 * n0) / d.x1.length },
+      { label: 1, count: n1, pct: (100 * n1) / d.x1.length },
+    ],
+    noise: 0,
+    seed: 0,
+    source,
+  };
+}
+
 /**
- * POST /api/ml/dataset — preview the deterministic dataset that
- * /api/ml/train would generate for the same task + seed. Uses the exact
- * same generators, so rows and statistics match training data 1:1.
+ * POST /api/ml/dataset — preview the dataset that /api/ml/train would use.
+ * Synthetic mode: deterministic generators (same seed → same rows).
+ * CSV mode: the user's uploaded rows, stats and scatter (raw column values).
  */
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -99,6 +206,39 @@ export async function POST(request: NextRequest) {
     );
   }
   const req = parsed.data;
+
+  /* Uploaded-CSV mode: resolve + preview the user's own data. */
+  if (req.csv !== undefined) {
+    const table = parseCsv(req.csv);
+    if (table.rows.length === 0) {
+      return NextResponse.json(
+        { error: "The uploaded CSV has no data rows below the header." },
+        { status: 400 }
+      );
+    }
+    try {
+      const data =
+        req.task === "regression"
+          ? resolveRegression(table, req.featureColumn, req.targetColumn)
+          : resolveClassification(
+              table,
+              req.featureColumn,
+              req.featureColumn2,
+              req.targetColumn
+            );
+      return NextResponse.json(
+        csvPreview(req.task, req.csvName ?? "pasted.csv", data)
+      );
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error: "Could not preview the uploaded CSV.",
+          detail: [err instanceof Error ? err.message : String(err)],
+        },
+        { status: 400 }
+      );
+    }
+  }
 
   const rand = mulberry32(req.seed);
 
