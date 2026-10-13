@@ -4,15 +4,18 @@ import {
   hashCsvSeed,
   parseCsv,
   resolveClassification,
+  resolveMultiRegression,
   resolveRegression,
   zscore,
   type CsvClassificationData,
+  type CsvMultiRegressionData,
   type CsvRegressionData,
 } from "@/lib/csv";
 import {
   classificationMetrics,
   fitLinearRegression,
   fitLogisticRegression,
+  fitMultivariateRegression,
   kFoldSplit,
   makeMoons,
   makeRegressionData,
@@ -44,6 +47,8 @@ const bodySchema = z
      * generator entirely (samples/noise/seed are ignored). */
     csv: z.string().min(4).max(262_144).optional(),
     csvName: z.string().min(1).max(128).optional(),
+    /* Regression only: multi-feature picks (≥2 → multivariate model). */
+    featureColumns: z.array(z.string().min(1).max(128)).max(8).optional(),
     featureColumn: z.string().min(1).max(128).optional(),
     featureColumn2: z.string().min(1).max(128).optional(),
     targetColumn: z.string().min(1).max(128).optional(),
@@ -65,6 +70,23 @@ const bodySchema = z
 
 function num(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/** Count numeric columns without importing the resolver (for mode choice). */
+function numericCandidates(table: { columns: string[]; rows: string[][] }): number {
+  let count = 0;
+  for (let c = 0; c < table.columns.length; c++) {
+    let nonEmpty = 0;
+    let parseable = 0;
+    for (const row of table.rows) {
+      const cell = row[c] ?? "";
+      if (cell === "") continue;
+      nonEmpty++;
+      if (Number.isFinite(Number(cell))) parseable++;
+    }
+    if (nonEmpty > 0 && parseable / nonEmpty >= 0.9) count++;
+  }
+  return count;
 }
 
 /** Min/max via loop — safe for very large CSVs (spread would overflow). */
@@ -100,7 +122,7 @@ export async function POST(request: NextRequest) {
 
   /* Uploaded-CSV mode: parse + resolve columns up front so bad files/picks
    * surface as actionable 400s instead of opaque 500s. */
-  let csvData: CsvRegressionData | CsvClassificationData | undefined;
+  let csvData: CsvRegressionData | CsvClassificationData | CsvMultiRegressionData | undefined;
   let csvName: string | undefined;
   let splitSeed = req.seed;
   if (req.csv !== undefined) {
@@ -113,15 +135,25 @@ export async function POST(request: NextRequest) {
       );
     }
     try {
-      csvData =
-        req.task === "regression"
-          ? resolveRegression(table, req.featureColumn, req.targetColumn)
-          : resolveClassification(
-              table,
-              req.featureColumn,
-              req.featureColumn2,
-              req.targetColumn
-            );
+      if (req.task === "regression") {
+        /* Multivariate when multiple feature columns are requested (or auto
+         * with ≥2 candidate features); single-feature keeps the x↔y chart. */
+        const multi =
+          (req.featureColumns?.length ?? 0) >= 2 ||
+          (req.featureColumns === undefined &&
+            !req.featureColumn &&
+            numericCandidates(table) >= 3);
+        csvData = multi
+          ? resolveMultiRegression(table, req.featureColumns, req.targetColumn)
+          : resolveRegression(table, req.featureColumn ?? req.featureColumns?.[0], req.targetColumn);
+      } else {
+        csvData = resolveClassification(
+          table,
+          req.featureColumn,
+          req.featureColumn2,
+          req.targetColumn
+        );
+      }
     } catch (err) {
       return NextResponse.json(
         {
@@ -138,13 +170,22 @@ export async function POST(request: NextRequest) {
   try {
     let result: MLTrainResponse;
     if (req.task === "regression") {
-      result = runRegression(
-        { ...req, task: "regression" },
-        num(req.alpha, 1),
-        csvData as CsvRegressionData | undefined,
-        csvName,
-        splitSeed
-      );
+      result =
+        csvData && "X" in csvData
+          ? runMultiRegression(
+              { ...req, task: "regression" },
+              num(req.alpha, 1),
+              csvData,
+              csvName,
+              splitSeed
+            )
+          : runRegression(
+              { ...req, task: "regression" },
+              num(req.alpha, 1),
+              csvData as CsvRegressionData | undefined,
+              csvName,
+              splitSeed
+            );
     } else {
       result = runClassification(
         { ...req, task: "classification" },
@@ -276,6 +317,103 @@ function runRegression(
       seed: csv ? 0 : req.seed,
       features,
       ...(source ? { source } : {}),
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Multivariate regression (uploaded CSV, k ≥ 2 features)              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Multivariate CSV regression. The chart becomes predicted-vs-actual:
+ * series.test carries {x: ŷ, y: actual} and `curve` is the perfect-prediction
+ * identity line, so the existing chart renderer works unchanged.
+ */
+function runMultiRegression(
+  req: RegressionBody,
+  alpha: number,
+  csv: CsvMultiRegressionData,
+  csvName: string | undefined,
+  splitSeed: number
+): MLTrainResponse {
+  const effSeed = splitSeed ?? req.seed;
+  const rand = mulberry32(effSeed);
+  const n = csv.y.length;
+  const { train, test } = shuffledSplit(n, req.testSize, rand);
+
+  const effAlpha = req.model === "ridge" ? alpha : 0;
+  const model = fitMultivariateRegression(
+    train.map((i) => csv.X[i] ?? []),
+    train.map((i) => csv.y[i] ?? 0),
+    { alpha: effAlpha }
+  );
+
+  const yTrue = test.map((i) => csv.y[i] ?? 0);
+  const yPred = test.map((i) => model.predict(csv.X[i] ?? []));
+  const metrics = regressionMetrics(yTrue, yPred);
+
+  /* Perfect-prediction identity line over the combined ŷ/y extent. */
+  const all = [...yTrue, ...yPred];
+  const [lo, hi] = extent(all);
+  const curve = Array.from({ length: 100 }, (_, i) => {
+    const v = lo + ((hi - lo) * i) / 99;
+    return { x: v, yhat: v };
+  });
+
+  const source: CsvSourceMeta = {
+    kind: "csv",
+    fileName: csvName,
+    columns: csv.columns,
+    featureColumns: csv.features,
+    targetColumn: csv.target,
+    nRows: n,
+    droppedRows: csv.droppedRows,
+  };
+
+  /* k-fold CV (R² per fold) with an independent, seeded shuffle. */
+  let cv: MLTrainResponse["cv"];
+  if (req.cv > 1) {
+    const cvRand = mulberry32((effSeed + 7919) >>> 0);
+    const folds = kFoldSplit(n, req.cv, cvRand);
+    const foldResults: CVFold[] = folds.map((fold, i) => {
+      const foldSet = new Set(fold);
+      const trainIdx = Array.from({ length: n }, (_, j) => j).filter((j) => !foldSet.has(j));
+      const foldModel = fitMultivariateRegression(
+        trainIdx.map((i) => csv.X[i] ?? []),
+        trainIdx.map((i) => csv.y[i] ?? 0),
+        { alpha: effAlpha }
+      );
+      const fTrue = fold.map((i) => csv.y[i] ?? 0);
+      const fPred = fold.map((i) => foldModel.predict(csv.X[i] ?? []));
+      return { fold: i + 1, value: regressionMetrics(fTrue, fPred).r2 };
+    });
+    const values = foldResults.map((f) => f.value);
+    cv = { k: req.cv, metricName: "R²", folds: foldResults, mean: mean(values), std: populationStd(values) };
+  }
+
+  return {
+    task: "regression",
+    model: req.model,
+    metrics: { r2: metrics.r2, rmse: metrics.rmse, mae: metrics.mae },
+    cv,
+    coefficients: {
+      intercept: model.w[0] ?? 0,
+      coefs: model.w.slice(1),
+      standardized: true,
+    },
+    series: {
+      test: yPred.map((yhat, i) => ({ x: yhat, y: yTrue[i] ?? 0 })),
+      curve,
+    },
+    datasetMeta: {
+      nTotal: n,
+      nTrain: train.length,
+      nTest: test.length,
+      noise: 0,
+      seed: 0,
+      features: csv.features.map((f) => `${f} (standardized)`),
+      source,
     },
   };
 }

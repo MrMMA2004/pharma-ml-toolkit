@@ -3,8 +3,10 @@ import { z } from "zod";
 import {
   parseCsv,
   resolveClassification,
+  resolveMultiRegression,
   resolveRegression,
   type CsvClassificationData,
+  type CsvMultiRegressionData,
   type CsvRegressionData,
 } from "@/lib/csv";
 import {
@@ -53,6 +55,7 @@ const bodySchema = z.object({
   /* Uploaded-CSV mode: preview the user's own rows/stats instead. */
   csv: z.string().min(4).max(262_144).optional(),
   csvName: z.string().min(1).max(128).optional(),
+  featureColumns: z.array(z.string().min(1).max(128)).max(8).optional(),
   featureColumn: z.string().min(1).max(128).optional(),
   featureColumn2: z.string().min(1).max(128).optional(),
   targetColumn: z.string().min(1).max(128).optional(),
@@ -98,6 +101,19 @@ function pearson(a: number[], b: number[]): number {
 /** Index column name that never collides with a user column. */
 function indexColumn(...used: string[]): string {
   return used.includes("i") ? "i#" : "i";
+}
+
+/** Fraction of non-empty cells in a column that parse as numbers. */
+function numericRatio(table: { rows: string[][] }, colIdx: number): number {
+  let nonEmpty = 0;
+  let parseable = 0;
+  for (const row of table.rows) {
+    const cell = row[colIdx] ?? "";
+    if (cell === "") continue;
+    nonEmpty++;
+    if (Number.isFinite(Number(cell))) parseable++;
+  }
+  return nonEmpty === 0 ? 0 : parseable / nonEmpty;
 }
 
 /** Build the CSV-source preview (raw column values, strided scatter points). */
@@ -182,6 +198,53 @@ function csvPreview(
   };
 }
 
+/** Build the multivariate CSV preview: rows/stats for every selected
+ *  feature + target; the overview scatter plots the first feature vs target
+ *  (captioned as such client-side). */
+function csvMultiPreview(
+  csvName: string | undefined,
+  d: CsvMultiRegressionData
+): DatasetPreviewResponse {
+  const source: CsvSourceMeta = {
+    kind: "csv",
+    fileName: csvName,
+    columns: d.columns,
+    featureColumns: d.features,
+    targetColumn: d.target,
+    nRows: d.y.length,
+    droppedRows: d.droppedRows,
+  };
+  const i0 = indexColumn(...d.features, d.target);
+  const rows = Array.from({ length: Math.min(PREVIEW_ROWS, d.y.length) }, (_, i) => {
+    const row: Record<string, number> = { [i0]: i + 1 };
+    d.features.forEach((f, j) => {
+      row[f] = d.X[i]?.[j] ?? 0;
+    });
+    row[d.target] = d.y[i] ?? 0;
+    return row;
+  });
+  const scatterVals = d.X.map((r) => r[0] ?? 0);
+  const idx = stridedIndices(d.y.length, MAX_POINTS);
+  return {
+    task: "regression",
+    columns: [i0, ...d.features, d.target],
+    rows,
+    nTotal: d.y.length,
+    stats: [
+      ...d.features.map((f, j) =>
+        columnStats(f, d.X.map((r) => r[j] ?? 0))
+      ),
+      columnStats(d.target, d.y),
+    ],
+    points: idx.map((i) => ({ x: d.X[i]?.[0] ?? 0, y: d.y[i] ?? 0 })),
+    nPoints: idx.length,
+    correlation: pearson(scatterVals, d.y),
+    noise: 0,
+    seed: 0,
+    source,
+  };
+}
+
 /**
  * POST /api/ml/dataset — preview the dataset that /api/ml/train would use.
  * Synthetic mode: deterministic generators (same seed → same rows).
@@ -217,17 +280,30 @@ export async function POST(request: NextRequest) {
       );
     }
     try {
-      const data =
-        req.task === "regression"
-          ? resolveRegression(table, req.featureColumn, req.targetColumn)
-          : resolveClassification(
-              table,
-              req.featureColumn,
-              req.featureColumn2,
-              req.targetColumn
-            );
+      let data: CsvRegressionData | CsvClassificationData | CsvMultiRegressionData;
+      if (req.task === "regression") {
+        const multi =
+          (req.featureColumns?.length ?? 0) >= 2 ||
+          (req.featureColumns === undefined &&
+            !req.featureColumn &&
+            table.columns.filter(
+              (_, c) => numericRatio(table, c) >= 0.9
+            ).length >= 3);
+        data = multi
+          ? resolveMultiRegression(table, req.featureColumns, req.targetColumn)
+          : resolveRegression(table, req.featureColumn ?? req.featureColumns?.[0], req.targetColumn);
+      } else {
+        data = resolveClassification(
+          table,
+          req.featureColumn,
+          req.featureColumn2,
+          req.targetColumn
+        );
+      }
       return NextResponse.json(
-        csvPreview(req.task, req.csvName ?? "pasted.csv", data)
+        "X" in data
+          ? csvMultiPreview(req.csvName ?? "pasted.csv", data)
+          : csvPreview(req.task, req.csvName ?? "pasted.csv", data)
       );
     } catch (err) {
       return NextResponse.json(

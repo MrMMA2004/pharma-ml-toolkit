@@ -121,7 +121,9 @@ export interface MLTrainRequest {
   csv?: string;
   /** Client-side file name, echoed back in CsvSourceMeta. */
   csvName?: string;
-  /** Column picks; omitted/"" means auto-resolve. */
+  /** Regression only: multiple feature column picks (≥2 = multivariate). */
+  featureColumns?: string[];
+  /** Single feature column pick; omitted/"" means auto-resolve. */
   featureColumn?: string;
   /** Classification only: second feature column. */
   featureColumn2?: string;
@@ -183,6 +185,8 @@ export interface DatasetPreviewRequest {
   /** Raw CSV text — when present, the preview shows the uploaded data. */
   csv?: string;
   csvName?: string;
+  /** Regression only: multiple feature column picks (≥2 = multivariate). */
+  featureColumns?: string[];
   featureColumn?: string;
   featureColumn2?: string;
   targetColumn?: string;

@@ -161,6 +161,9 @@ function distinctValues(table: CsvTable, colIdx: number): string[] {
 /* Dataset resolution                                                  */
 /* ------------------------------------------------------------------ */
 
+/** Maximum features accepted in multivariate regression. */
+export const MAX_CSV_FEATURES = 8;
+
 export interface CsvRegressionData {
   /** Raw feature values (standardization happens in the trainer). */
   x: number[];
@@ -224,6 +227,106 @@ export function resolveRegression(
     throw new Error(`Target column "${target}" is constant — nothing to predict.`);
   }
   return { x, y, feature, target, columns: numeric, droppedRows };
+}
+
+export interface CsvMultiRegressionData {
+  /** Row-major feature matrix (raw values, n × k). */
+  X: number[][];
+  /** Raw target values. */
+  y: number[];
+  /** Selected feature column names, in matrix column order. */
+  features: string[];
+  target: string;
+  /** Numeric columns detected in the file (for the UI pickers). */
+  columns: string[];
+  /** Rows skipped because a used cell was blank/non-numeric. */
+  droppedRows: number;
+}
+
+/** Resolve multiple feature columns + a target column for multivariate
+ *  regression. Auto mode: every numeric column except the target (≤ 8). */
+export function resolveMultiRegression(
+  table: CsvTable,
+  featureColumns?: string[],
+  targetColumn?: string
+): CsvMultiRegressionData {
+  const numeric = numericColumnNames(table);
+  if (numeric.length < 2) {
+    throw new Error(
+      `CSV needs at least 2 fully-numeric columns (found ${numeric.length}${
+        numeric.length ? `: ${numeric.join(", ")}` : ""
+      }).`
+    );
+  }
+
+  /* Target: requested, or the last numeric column. */
+  const target =
+    targetColumn && numeric.includes(targetColumn)
+      ? targetColumn
+      : numeric[numeric.length - 1]!;
+
+  /* Features: requested picks (validated, deduplicated) or all numeric
+   * columns except the target, capped at MAX_CSV_FEATURES. */
+  let features: string[];
+  if (featureColumns && featureColumns.length > 0) {
+    const seen = new Set<string>();
+    features = featureColumns.filter(
+      (c) => numeric.includes(c) && c !== target && !seen.has(c) && seen.add(c)
+    );
+    if (features.length === 0) {
+      throw new Error(
+        `None of the requested feature columns are usable (numeric and distinct from target "${target}").`
+      );
+    }
+  } else {
+    features = numeric.filter((c) => c !== target).slice(0, MAX_CSV_FEATURES);
+  }
+  if (features.length > MAX_CSV_FEATURES) {
+    features = features.slice(0, MAX_CSV_FEATURES);
+  }
+  if (features.length < 1) {
+    throw new Error(`No numeric feature column besides "${target}" was found.`);
+  }
+
+  const idxs = features.map((f) => table.columns.indexOf(f));
+  const ti = table.columns.indexOf(target);
+  const X: number[][] = [];
+  const y: number[] = [];
+  let droppedRows = 0;
+  for (const row of table.rows) {
+    const feats: number[] = [];
+    let ok = true;
+    for (const fi of idxs) {
+      const v = num(row[fi] ?? "");
+      if (v === null) {
+        ok = false;
+        break;
+      }
+      feats.push(v);
+    }
+    const yv = ok ? num(row[ti] ?? "") : null;
+    if (!ok || yv === null) {
+      droppedRows++;
+      continue;
+    }
+    X.push(feats);
+    y.push(yv);
+  }
+  if (X.length < Math.max(MIN_CSV_ROWS, features.length + 2)) {
+    throw new Error(
+      `Only ${X.length} usable rows (need ≥ ${Math.max(MIN_CSV_ROWS, features.length + 2)}); ${droppedRows} rows were dropped for blank/non-numeric cells.`
+    );
+  }
+  if (populationStd(y) === 0) {
+    throw new Error(`Target column "${target}" is constant — nothing to predict.`);
+  }
+  for (let j = 0; j < features.length; j++) {
+    const col = X.map((r) => r[j] ?? 0);
+    if (populationStd(col) === 0) {
+      throw new Error(`Feature column "${features[j]}" is constant — drop it or pick others.`);
+    }
+  }
+  return { X, y, features, target, columns: numeric, droppedRows };
 }
 
 export interface CsvClassificationData {

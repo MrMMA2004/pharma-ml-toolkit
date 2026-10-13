@@ -180,6 +180,80 @@ export function fitLinearRegression(
   };
 }
 
+export interface MultivariateModel {
+  /** Per-feature train-set means (raw units). */
+  mus: number[];
+  /** Per-feature train-set population stds (raw units). */
+  sigmas: number[];
+  /** w[0] = intercept on standardized features, then one weight per feature. */
+  w: number[];
+  /** Predict from raw (unstandardized) feature values. */
+  predict(xsRaw: number[]): number;
+}
+
+/**
+ * Fit least-squares (optionally ridge-regularized) multivariate linear
+ * regression on k features. Mirrors fitLinearRegression's conventions:
+ * each feature is standardized with train-set statistics, the intercept is
+ * never penalized, and the system is solved in closed form via normal
+ * equations (Gaussian elimination with partial pivoting).
+ */
+export function fitMultivariateRegression(
+  X: number[][],
+  y: number[],
+  opts: { alpha?: number } = {}
+): MultivariateModel {
+  const alpha = opts.alpha ?? 0;
+  const n = X.length;
+  const k = X[0]?.length ?? 0;
+  if (n < k + 2) {
+    throw new Error(`Not enough samples to fit the model (${n} rows, ${k} features).`);
+  }
+
+  const mus: number[] = [];
+  const sigmas: number[] = [];
+  for (let j = 0; j < k; j++) {
+    const col = X.map((row) => row[j] ?? 0);
+    const s = stats(col);
+    mus.push(s.mu);
+    sigmas.push(s.sigma);
+  }
+
+  const p = k + 1;
+  const A: number[][] = Array.from({ length: p }, () => new Array<number>(p).fill(0));
+  const b: number[] = new Array<number>(p).fill(0);
+  for (let i = 0; i < n; i++) {
+    const row: number[] = [1];
+    for (let j = 0; j < k; j++) {
+      row.push(((X[i]?.[j] ?? 0) - mus[j]!) / sigmas[j]!);
+    }
+    for (let j = 0; j < p; j++) {
+      b[j] += row[j]! * (y[i] ?? 0);
+      for (let c = j; c < p; c++) {
+        const v = row[j]! * row[c]!;
+        A[j]![c] += v;
+        if (c !== j) A[c]![j] += v;
+      }
+    }
+  }
+  for (let j = 1; j < p; j++) A[j]![j] += alpha; // ridge: skip intercept
+
+  const w = solveLinearSystem(A, b);
+  return {
+    mus,
+    sigmas,
+    w,
+    predict(xsRaw: number[]) {
+      let acc = w[0] ?? 0;
+      for (let j = 0; j < k; j++) {
+        const z = ((xsRaw[j] ?? 0) - mus[j]!) / sigmas[j]!;
+        acc += (w[j + 1] ?? 0) * z;
+      }
+      return acc;
+    },
+  };
+}
+
 export interface RegressionMetrics {
   rmse: number;
   mae: number;

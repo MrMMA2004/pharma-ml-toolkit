@@ -80,8 +80,7 @@ export interface MlRunRecord {
   /** Present for runs trained on an uploaded CSV (display + column restore). */
   csv?: {
     fileName: string;
-    featureColumn: string;
-    featureColumn2: string;
+    featureColumns: string[];
     targetColumn: string;
   };
 }
@@ -158,6 +157,10 @@ function validateMl(raw: unknown): MlConfig {
     typeof v === "string" && v.length <= 12 ? v : def;
   const str128 = (v: unknown, def: string) =>
     typeof v === "string" && v.length <= 128 ? v : def;
+  const strArr = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.filter((c): c is string => typeof c === "string" && c.length > 0 && c.length <= 128).slice(0, 8)
+      : [];
   return {
     task: p.task === "classification" ? "classification" : "regression",
     samples:
@@ -182,6 +185,7 @@ function validateMl(raw: unknown): MlConfig {
     featureColumn: str128(p.featureColumn, ""),
     featureColumn2: str128(p.featureColumn2, ""),
     targetColumn: str128(p.targetColumn, ""),
+    featureColumns: strArr(p.featureColumns),
   };
 }
 
@@ -271,7 +275,7 @@ function validateMlResult(raw: unknown): MLTrainResponse | null {
         ? v.filter((c): c is string => typeof c === "string" && c.length <= 128).slice(0, cap)
         : [];
     const columns = colList(s.columns, 64);
-    const featureColumns = colList(s.featureColumns, 4);
+    const featureColumns = colList(s.featureColumns, 10);
     const targetColumn = typeof s.targetColumn === "string" ? s.targetColumn.slice(0, 128) : "";
     if (
       s.kind === "csv" &&
@@ -417,14 +421,11 @@ function validateMlHistoryPayload(raw: unknown): {
                 typeof (r.csv as Record<string, unknown>).fileName === "string"
                   ? (r.csv as Record<string, unknown>).fileName.slice(0, 128) || "pasted.csv"
                   : "pasted.csv",
-              featureColumn:
-                typeof (r.csv as Record<string, unknown>).featureColumn === "string"
-                  ? (r.csv as Record<string, unknown>).featureColumn.slice(0, 128)
-                  : "",
-              featureColumn2:
-                typeof (r.csv as Record<string, unknown>).featureColumn2 === "string"
-                  ? (r.csv as Record<string, unknown>).featureColumn2.slice(0, 128)
-                  : "",
+              featureColumns: Array.isArray((r.csv as Record<string, unknown>).featureColumns)
+                ? ((r.csv as Record<string, unknown>).featureColumns as unknown[])
+                    .filter((c): c is string => typeof c === "string" && c.length <= 128)
+                    .slice(0, 8)
+                : [],
               targetColumn:
                 typeof (r.csv as Record<string, unknown>).targetColumn === "string"
                   ? (r.csv as Record<string, unknown>).targetColumn.slice(0, 128)
@@ -548,10 +549,12 @@ export interface MlConfig {
   testSizePct: number;
   cv: string;
   seed: string;
-  /** CSV mode: feature column pick ("" = auto → first numeric). */
+  /** CSV mode: single feature pick for classification ("" = auto). */
   featureColumn: string;
   /** CSV mode: second feature column for classification ("" = auto). */
   featureColumn2: string;
+  /** CSV regression mode: feature column picks ([] = auto → all numeric). */
+  featureColumns: string[];
   /** CSV mode: target/label column pick ("" = auto). */
   targetColumn: string;
 }
@@ -569,6 +572,7 @@ export const DEFAULT_ML_CONFIG: MlConfig = {
   seed: "42",
   featureColumn: "",
   featureColumn2: "",
+  featureColumns: [],
   targetColumn: "",
 };
 

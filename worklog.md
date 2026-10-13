@@ -327,3 +327,35 @@ Stage Summary:
 - Files: NEW src/lib/csv.ts; EDITED toolkit-types.ts, store.ts, api/ml/train/route.ts, api/ml/dataset/route.ts, ml-playground.tsx.
 - Unresolved/risks: classification supports exactly 2 features (matches the 2-D boundary chart); CSV cap 256KB (sessionStorage-safe); multi-feature regression and >2-class labels are natural next features. No known bugs.
 - Next-phase priorities: (1) multi-feature regression (matrix normal equations already exist in ml-math), (2) download trained-model predictions as CSV, (3) persist mlCsv across reloads is done — consider IndexedDB for >256KB files.
+
+---
+Task ID: csv-round-2
+Agent: Main orchestrator (Z.ai Code)
+Task: Cron review round — QA regression, then implement queued priority #1 (multi-feature regression) + mandatory styling polish.
+
+Work Log:
+- QA regression: app healthy on load; Playground → ML Training smoke test (synthetic, seed 42 → r² 0.9121 exactly matches historical); zero console errors; dev.log clean.
+- [Mandatory feature] MULTI-FEATURE REGRESSION for uploaded CSVs:
+  - `src/lib/ml-math.ts`: new `fitMultivariateRegression(X, y, {alpha})` — closed-form normal equations via existing `solveLinearSystem`, per-feature standardization with train stats, intercept never penalized (ridge adds α to diagonal), same conventions as `fitLinearRegression`.
+  - `src/lib/csv.ts`: new `resolveMultiRegression` (feature picks validated/dedup'd, auto = all numeric minus target, cap MAX_CSV_FEATURES=8, guards: rows ≥ max(20, k+2), non-constant target/features, per-row drop counting).
+  - `toolkit-types.ts`: `featureColumns?: string[]` on MLTrainRequest + DatasetPreviewRequest.
+  - `store.ts`: `MlConfig.featureColumns: string[]` (persisted, validated, [] = auto); run-history `csv` record now carries `featureColumns` (replaces featureColumn/featureColumn2 pair); source validator cap 10.
+  - Train route: mode choice — explicit ≥2 picks OR auto with ≥3 numeric columns → multivariate; 1 pick / 2-column files keep the single-feature x↔y chart. `runMultiRegression`: series.test = {x: ŷ, y: actual}, curve = perfect-prediction identity line (existing chart renderer reused unchanged), k-fold CV with multivariate fitter, datasetMeta.features = k standardized names, source.featureColumns = k raw names.
+  - Preview route: `csvMultiPreview` — rows/stats for every feature + target, scatter = first feature vs target, Pearson r.
+  - UI: FEATURE CHIPS multi-select (pill buttons, check-circle badge, aria-pressed, cap-8 title hint, "N picked · multi / auto · all numeric" counter) replacing the single Feature select in regression CSV mode; Target select kept; request wiring sends featureColumns only for regression.
+  - BUG FOUND+FIXED during E2E: with auto target (last numeric column), that column still appeared as a selectable feature chip → chips now exclude the *effective* target (`targetColumn || last numeric`).
+- [Mandatory styling]: chip visual system (primary tint + shadow + check circle when active; border/hover/focus states otherwise); dropzone drag feedback upgraded (scale-1.01 + shadow + bg-primary/10); chart header shows "· N features"; pred-vs-actual chart gets Σ icon on "Learned parameters", "ŷ (predicted)" x-label, target-name y-label (angled), legends "perfect prediction (ŷ = y)" / "test predictions", caption "(ŷ, y) pairs…"; multivariate formula renders named weights `w·x̂[mw]`; preview scatter x-axis now labels the actual column name (was hardcoded "x") + "x = col (of N features)" note; history rows show "N feats · target: …".
+
+Verification (all green):
+- `bun run lint`: 0 issues.
+- curl matrix on multi_test.csv (3 informative descriptors + 2 junk rows + phantom empty column): auto → 3 features, r² 0.7675, RMSE 0.379 ≈ noise σ 0.35 (relationship recovered), empty column correctly excluded, dropped=2; explicit [mw,logp] → r² 0.6536 (2 coefs); explicit [mw] → single-feature x-sweep curve; ridge α=5 → 0.6716; bad picks → clear 400 ("None of the requested feature columns are usable…"); constant feature → clear 400; multivariate preview → columns [i,mw,t PSA,logp,heat], 4 stat cards, corr −0.835.
+- agent-browser E2E: upload multi_test.csv (82 rows × 5 cols · 4 numeric toast); chips [mw, t PSA, logp] with heat excluded (auto target); toggled mw+logp → "2 picked · multi"; preview table [i, mw, logp, heat]; train → r² 0.607 (testSize 20%) with pred-vs-actual chart VLM-verified (dots hugging diagonal, "perfect prediction (ŷ = y)" + "test predictions" legends, ŷ/heat axis labels); added t PSA → r² 0.713 (informative feature improves fit); deselected to [mw] → r² 0.700 with "fitted regression curve" x-sweep chart (mode switch confirmed via aria-label); sessionStorage state consistent throughout.
+- Regression checks: synthetic seed-42 r² 0.9121 unchanged; classification CSV acc 0.95, labelMap active/inactive, features [mw, clogp] unchanged; dev.log 0 errors.
+- 360px mobile: chips wrap without overflow, selected chip distinct (tint + check circle), target dropdown full-width, no clipping (VLM-verified).
+- Non-bug noted: two rapid *programmatic* clicks on chips in the same tick hit React-batched stale closures (final state = both toggles applied to the same base). Real user clicks always re-render between toggles — single-click toggles verified correct. No fix needed.
+
+Stage Summary:
+- The ML Playground now trains multivariate regression (up to 8 features) on user CSVs: chips picker → matrix normal equations → predicted-vs-actual chart with identity reference + named-weight formula + per-fold CV. Single-feature mode and all synthetic/classification paths unchanged.
+- Files EDITED: ml-math.ts, csv.ts, toolkit-types.ts, store.ts, api/ml/train/route.ts, api/ml/dataset/route.ts, ml-playground.tsx. No new files.
+- Unresolved/risks: classification still limited to exactly 2 features (2-D boundary chart); >2-class labels unsupported; 256KB CSV cap (sessionStorage); collinear features are not auto-dropped (ridge mitigates).
+- Next-phase priorities: (1) download predictions as CSV (test rows + ŷ + y), (2) multi-feature classification (boundary slice or confusion matrix), (3) IndexedDB storage for larger files, (4) variance-inflation/feature-correlation report card.

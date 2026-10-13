@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import {
   Brain,
+  Check,
   ChevronDown,
   ClipboardPaste,
   Download,
@@ -13,6 +14,7 @@ import {
   Loader2,
   Play,
   RotateCcw,
+  Sigma,
   Table2,
   TrendingDown,
   TrendingUp,
@@ -61,6 +63,7 @@ import {
 } from "@/components/ui/table";
 import { CHART } from "@/components/explorer/playground/calc-ui";
 import {
+  MAX_CSV_FEATURES,
   MAX_CSV_TEXT,
   MIN_CSV_ROWS,
   numericColumnNames,
@@ -170,8 +173,16 @@ export function MlPlayground() {
     seed,
     featureColumn,
     featureColumn2,
+    featureColumns,
     targetColumn,
   } = mlConfig;
+
+  /* Multivariate mode: regression result with ≥2 standardized features
+   * (uploaded CSV only) → the chart switches to predicted-vs-actual. */
+  const predActual =
+    result !== null &&
+    result.task === "regression" &&
+    result.datasetMeta.features.length > 1;
 
   /* Transient request state — not worth persisting across tab switches. */
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">(
@@ -209,6 +220,11 @@ export function MlPlayground() {
     csvTable !== null &&
     csvTable.rows.length >= MIN_CSV_ROWS &&
     csvNumericCols.length >= 2;
+
+  /* Effective target for chip exclusion: explicit pick, or the auto rule
+   * (last numeric column) the server applies when none is picked. */
+  const effectiveTarget =
+    targetColumn || csvNumericCols[csvNumericCols.length - 1] || "";
 
   /** Classification preview: the sampled points split by class for the chart. */
   const previewClasses = useMemo(() => {
@@ -405,6 +421,14 @@ export function MlPlayground() {
     setXZoom(null);
   }
 
+  /** Toggle a feature chip for multivariate regression (capped at 8). */
+  function toggleFeature(col: string) {
+    const next = featureColumns.includes(col)
+      ? featureColumns.filter((c) => c !== col)
+      : [...featureColumns, col].slice(0, MAX_CSV_FEATURES);
+    setMlConfig({ featureColumns: next });
+  }
+
   const seedValid = /^\d{1,10}$/.test(seed.trim());
   const alphaValid = Number.isFinite(Number.parseFloat(alpha)) && Number.parseFloat(alpha) >= 0;
   const l2Valid = Number.isFinite(Number.parseFloat(l2)) && Number.parseFloat(l2) >= 0;
@@ -444,9 +468,14 @@ export function MlPlayground() {
     if (source === "csv" && mlCsv) {
       body.csv = mlCsv.text;
       body.csvName = mlCsv.fileName;
-      if (featureColumn) body.featureColumn = featureColumn;
-      if (featureColumn2) body.featureColumn2 = featureColumn2;
-      if (targetColumn) body.targetColumn = targetColumn;
+      if (task === "regression") {
+        if (featureColumns.length > 0) body.featureColumns = featureColumns;
+        if (targetColumn) body.targetColumn = targetColumn;
+      } else {
+        if (featureColumn) body.featureColumn = featureColumn;
+        if (featureColumn2) body.featureColumn2 = featureColumn2;
+        if (targetColumn) body.targetColumn = targetColumn;
+      }
     }
 
     try {
@@ -487,8 +516,10 @@ export function MlPlayground() {
             ? {
                 csv: {
                   fileName: mlCsv.fileName,
-                  featureColumn,
-                  featureColumn2,
+                  featureColumns:
+                    task === "regression"
+                      ? featureColumns
+                      : [featureColumn, featureColumn2].filter(Boolean),
                   targetColumn,
                 },
               }
@@ -542,9 +573,16 @@ export function MlPlayground() {
             ? {
                 csv: mlCsv.text,
                 csvName: mlCsv.fileName,
-                ...(featureColumn ? { featureColumn } : {}),
-                ...(featureColumn2 ? { featureColumn2 } : {}),
-                ...(targetColumn ? { targetColumn } : {}),
+                ...(task === "regression"
+                  ? {
+                      ...(featureColumns.length > 0 ? { featureColumns } : {}),
+                      ...(targetColumn ? { targetColumn } : {}),
+                    }
+                  : {
+                      ...(featureColumn ? { featureColumn } : {}),
+                      ...(featureColumn2 ? { featureColumn2 } : {}),
+                      ...(targetColumn ? { targetColumn } : {}),
+                    }),
               }
             : {}),
         }),
@@ -589,6 +627,14 @@ export function MlPlayground() {
     if (!result) return null;
     const { intercept, coefs } = result.coefficients;
     if (result.task === "regression") {
+      /* Multivariate: one weight per named feature (uploaded CSV mode). */
+      const names = result.datasetMeta.source?.featureColumns;
+      if (names && names.length > 1) {
+        const terms = coefs
+          .map((c, i) => `${fmtNum(c, 4)}·x̂${names[i] ? `[${names[i]}]` : String(i + 1)}`)
+          .join(" + ");
+        return `ŷ = ${fmtNum(intercept, 4)} + ${terms}   (x̂ = standardized features)`;
+      }
       const terms = coefs
         .map((c, i) => `${fmtNum(c, 4)}·x̂${coefs.length > 1 ? `^${i + 1}` : ""}`)
         .join(" + ");
@@ -699,28 +745,71 @@ export function MlPlayground() {
 
                   {csvTable ? (
                     task === "regression" ? (
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-[11px] font-medium">Feature (x)</Label>
-                          <Select
-                            value={featureColumn || "auto"}
-                            onValueChange={(v) =>
-                              setMlConfig({ featureColumn: v === "auto" ? "" : v })
-                            }
+                      <div className="space-y-2">
+                        {/* Feature chips — multi-select, ≥2 picks = multivariate */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[11px] font-medium">Features (x)</Label>
+                            <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                              {featureColumns.length > 0
+                                ? `${featureColumns.length} picked · multi`
+                                : "auto · all numeric"}
+                            </span>
+                          </div>
+                          <div
+                            role="group"
+                            aria-label="Feature columns"
+                            className="flex flex-wrap gap-1.5"
                           >
-                            <SelectTrigger className="h-9 text-xs" aria-label="Feature column">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="auto">Auto · first numeric</SelectItem>
-                              {csvNumericCols.map((c) => (
-                                <SelectItem key={c} value={c} className="font-mono text-xs">
-                                  {c}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            {csvNumericCols
+                              .filter((c) => c !== effectiveTarget)
+                              .map((col) => {
+                                const active = featureColumns.includes(col);
+                                return (
+                                  <button
+                                    key={col}
+                                    type="button"
+                                    onClick={() => toggleFeature(col)}
+                                    aria-pressed={active}
+                                    className={cn(
+                                      "group inline-flex h-7 items-center gap-1 rounded-full border px-2.5 font-mono text-[11px] transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                                      active
+                                        ? "border-primary/40 bg-primary/10 text-primary shadow-sm"
+                                        : "border-border bg-muted/30 text-muted-foreground hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
+                                    )}
+                                    title={
+                                      featureColumns.length >= MAX_CSV_FEATURES && !active
+                                        ? `Maximum ${MAX_CSV_FEATURES} features`
+                                        : `Toggle feature “${col}”`
+                                    }
+                                  >
+                                    <span
+                                      className={cn(
+                                        "flex size-3.5 items-center justify-center rounded-full transition-colors",
+                                        active
+                                          ? "bg-primary text-primary-foreground"
+                                          : "border border-current opacity-40 group-hover:opacity-70"
+                                      )}
+                                      aria-hidden
+                                    >
+                                      {active ? <Check className="size-2.5" /> : null}
+                                    </span>
+                                    {col}
+                                  </button>
+                                );
+                              })}
+                            {csvNumericCols.filter((c) => c !== effectiveTarget).length === 0 ? (
+                              <p className="text-[11px] leading-snug text-muted-foreground">
+                                No numeric column left besides the target — pick a different target.
+                              </p>
+                            ) : null}
+                          </div>
+                          <p className="text-[10px] leading-snug text-muted-foreground">
+                            Pick 1 for a single-feature fit · pick ≥ 2 for multivariate
+                            (≤ {MAX_CSV_FEATURES}) · none = all numeric columns
+                          </p>
                         </div>
+                        {/* Target */}
                         <div className="space-y-1">
                           <Label className="text-[11px] font-medium">Target (y)</Label>
                           <Select
@@ -837,9 +926,9 @@ export function MlPlayground() {
                       if (file) void handleFile(file);
                     }}
                     className={cn(
-                      "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-6 text-center outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring",
+                      "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-6 text-center outline-none transition-all duration-200 focus-visible:ring-1 focus-visible:ring-ring",
                       dragOver
-                        ? "border-primary bg-primary/5"
+                        ? "scale-[1.01] border-primary bg-primary/10 shadow-sm"
                         : "border-border bg-muted/20 hover:border-primary/40 hover:bg-primary/5"
                     )}
                   >
@@ -1219,6 +1308,9 @@ export function MlPlayground() {
                     <p className="px-1 pb-1 font-mono text-[11px] leading-snug text-muted-foreground">
                       all {preview.nTotal} points · {preview.nPoints} evenly-spaced shown
                       {preview.task === "regression" ? " · true line dashed" : ""}
+                      {preview.source && preview.source.featureColumns.length > 1
+                        ? ` · x = ${preview.source.featureColumns[0]} (of ${preview.source.featureColumns.length} features)`
+                        : ""}
                     </p>
                     <div className="h-56 min-h-0 lg:h-auto lg:flex-1">
                       <ResponsiveContainer width="100%" height="100%">
@@ -1237,7 +1329,10 @@ export function MlPlayground() {
                               tickLine={false}
                               axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
                               label={{
-                                value: "x",
+                                value:
+                                  preview.source?.featureColumns[0] ??
+                                  preview.columns[1] ??
+                                  "x",
                                 position: "insideBottomRight",
                                 offset: -2,
                                 fill: "#78716c",
@@ -1485,7 +1580,9 @@ export function MlPlayground() {
               <CardHeader className="border-b bg-muted/30 py-3">
                 <CardTitle className="text-sm">
                   {result.task === "regression"
-                    ? "Test points & fitted curve"
+                    ? predActual
+                      ? "Predicted vs actual (test set)"
+                      : "Test points & fitted curve"
                     : result.datasetMeta.source
                       ? "Test points & decision boundary"
                       : "Two moons & decision boundary"}
@@ -1496,7 +1593,11 @@ export function MlPlayground() {
                         result.datasetMeta.source.fileName ?? "pasted.csv"
                       } · ${result.datasetMeta.nTrain} train · ${result.datasetMeta.nTest} test · ${
                         result.datasetMeta.source.droppedRows
-                      } dropped`
+                      } dropped${
+                        predActual
+                          ? ` · ${result.datasetMeta.features.length} features`
+                          : ""
+                      }`
                     : `${result.datasetMeta.nTotal} samples · ${result.datasetMeta.nTrain} train · ${
                         result.datasetMeta.nTest
                       } test · seed ${result.datasetMeta.seed}`}
@@ -1508,7 +1609,9 @@ export function MlPlayground() {
                   role="img"
                   aria-label={
                     result.task === "regression"
-                      ? "Scatter plot of test points with the fitted regression curve"
+                      ? predActual
+                        ? "Scatter plot of model predictions versus actual values on the test set, with the perfect-prediction reference line"
+                        : "Scatter plot of test points with the fitted regression curve"
                       : result.datasetMeta.source
                         ? "Scatter plot of the uploaded-data test classes with the model decision boundary"
                         : "Scatter plot of the two moon classes with model decision boundary"
@@ -1526,7 +1629,15 @@ export function MlPlayground() {
                           tickFormatter={fmtTick}
                           tickLine={false}
                           axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
-                          label={{ value: "x", position: "insideBottomRight", offset: -2, fill: "#78716c", fontSize: 11 }}
+                          label={{
+                            value: predActual
+                              ? "ŷ (predicted)"
+                              : result.datasetMeta.source?.featureColumns[0] ?? "x",
+                            position: "insideBottomRight",
+                            offset: -2,
+                            fill: "#78716c",
+                            fontSize: 11,
+                          }}
                         />
                         <YAxis
                           type="number"
@@ -1536,6 +1647,18 @@ export function MlPlayground() {
                           tickFormatter={fmtTick}
                           tickLine={false}
                           axisLine={false}
+                          label={
+                            predActual
+                              ? {
+                                  value: result.datasetMeta.source?.targetColumn ?? "y (actual)",
+                                  angle: -90,
+                                  position: "insideBottomLeft",
+                                  offset: 18,
+                                  fill: "#78716c",
+                                  fontSize: 11,
+                                }
+                              : undefined
+                          }
                         />
                         <Tooltip
                           cursor={{ strokeDasharray: "3 3" }}
@@ -1544,7 +1667,7 @@ export function MlPlayground() {
                         />
                         <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
                         <Scatter
-                          name="fitted curve"
+                          name={predActual ? "perfect prediction (ŷ = y)" : "fitted curve"}
                           data={result.series.curve ?? []}
                           line={{ stroke: CHART.emerald, strokeWidth: 2.5 }}
                           shape="square"
@@ -1553,7 +1676,7 @@ export function MlPlayground() {
                           isAnimationActive={false}
                         />
                         <Scatter
-                          name="test points"
+                          name={predActual ? "test predictions" : "test points"}
                           data={result.series.test}
                           fill={CHART.stone}
                           fillOpacity={0.8}
@@ -1637,7 +1760,9 @@ export function MlPlayground() {
                 </div>
                 <p className="mt-1 text-center text-[11px] text-muted-foreground">
                   {result.task === "regression"
-                    ? "Stone dots = held-out test points; emerald line = model prediction (100-point sweep)."
+                    ? predActual
+                      ? "Stone dots = (ŷ, y) pairs on the held-out test rows; emerald line = perfect prediction."
+                      : "Stone dots = held-out test points; emerald line = model prediction (100-point sweep)."
                     : result.datasetMeta.source
                       ? "Emerald/rose = test-set classes; faint teal/amber dots = 60×60 grid classified by the model."
                       : "Emerald/rose = test-set moons; faint teal/amber dots = 60×60 grid classified by the model."}
@@ -1685,7 +1810,10 @@ export function MlPlayground() {
 
               <Card className="overflow-hidden py-0 shadow-sm">
                 <CardHeader className="border-b bg-muted/30 py-3">
-                  <CardTitle className="text-sm">Learned parameters</CardTitle>
+                  <CardTitle className="text-sm flex items-center gap-1.5">
+                    {predActual ? <Sigma className="size-3.5 text-primary" aria-hidden /> : null}
+                    Learned parameters
+                  </CardTitle>
                   <CardDescription className="text-xs">
                     Standardized feature space (train-set μ, σ)
                   </CardDescription>
@@ -1698,7 +1826,9 @@ export function MlPlayground() {
                   ) : null}
                   <p className="mt-2 text-[11px] text-muted-foreground">
                     {result.task === "regression"
-                      ? "Solved in closed form via normal equations (Gaussian elimination with partial pivoting); ridge adds α to the diagonal, skipping the intercept."
+                      ? predActual
+                        ? "Multivariate least squares: k features standardized on train statistics, solved in closed form via normal equations; ridge adds α to the diagonal, skipping the intercept."
+                        : "Solved in closed form via normal equations (Gaussian elimination with partial pivoting); ridge adds α to the diagonal, skipping the intercept."
                       : "Batch gradient descent: lr = 0.1, 800 epochs, L2-penalized weights (bias exempt)."}
                   </p>
                 </CardContent>
@@ -1768,9 +1898,13 @@ export function MlPlayground() {
                           <span className="font-normal text-muted-foreground">
                             {" "}
                             {rec.csv
-                              ? ` · ${rec.csv.fileName} · target: ${
-                                  rec.csv.targetColumn || "auto"
-                                }`
+                              ? ` · ${rec.csv.fileName} · ${
+                                  rec.csv.featureColumns.length > 0
+                                    ? `${rec.csv.featureColumns.length} feat${
+                                        rec.csv.featureColumns.length > 1 ? "s" : ""
+                                      }`
+                                    : "auto feats"
+                                } · target: ${rec.csv.targetColumn || "auto"}`
                               : ` · seed ${rec.config.seed} · n${rec.config.samples} · noise ${
                                   rec.config.noise
                                 }`}
