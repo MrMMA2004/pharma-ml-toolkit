@@ -110,3 +110,28 @@ Stage Summary:
 - Added: executed Jupyter walkthrough notebook, auto-generated docs/INDEX.md, file-tree search, PK Simulator tab, ipynb viewing, hero/eyebrow/table styling refresh.
 - Python package now at 50 files (notebook + INDEX); all 159 tests still pass; web app fully re-verified.
 - Known minor items / next-round candidates: (a) README "Design assumptions" could mention the notebook; (b) the notebooks' matplotlib-free charting means outputs are text/HTML tables only; (c) could add an "API reference" tab in the web app rendering docs/INDEX.md as a page instead of raw markdown; (d) example ML playground could add a regression-degree selector effect on the chart legend.
+
+---
+Task ID: R2 (cron review round 2)
+Agent: Main orchestrator (Z.ai Code)
+Task: Scheduled 15-min review: QA pass, then implement the R1 next-round candidate — an API Reference tab rendering docs/INDEX.md.
+
+Work Log:
+- QA pass: cycled all tabs incl. PK Simulator (charts+sliders render), zero console/page errors, Python suite re-run → 159 passed, 1 skipped. Phase stable → feature work.
+- NEW API route `GET /api/toolkit/reference`: parses `docs/INDEX.md` into structured JSON (modules → symbols with kind/summary), resolves each module's source file via fs stat (`src/<dotted>.py` vs `src/<dotted>/__init__.py`), 60s TTL cache mirroring the tree route, helpful 500 if INDEX.md missing. Verified via curl: 7 modules / 62 symbols, source paths correct.
+- NEW component `api-reference.tsx` + 5th top-level tab "API Reference" (store TabId + TABS + BookMarked icon + page.tsx render):
+  - Header: eyebrow label, stat badges (7 modules · 62 public symbols · "N shown" while filtering), symbol search input with clear button, kind filter pills (All/Functions/Classes/Constants).
+  - Module cards: mono name, blurb, symbol count, "View source" button → switches to Code Explorer with the module file selected + toast (browser-verified: clicking on pharmaml opened src/pharmaml/__init__.py).
+  - Symbol rows: mono name (break-all), color-coded kind badges (function=emerald, class=amber, module=teal, constant=stone), docstring summary; row hover; per-module framer-motion entrance.
+  - Loading skeletons, error state with retry, empty state with clear-filters; module-level response cache so tab switches never refetch.
+- Integration: Overview quickstart section now has a second link "Browse the API reference" (verified via accessible-name click: lands on the reference tab).
+- README (R1 leftover a): layout tree now lists examples notebook + docs/INDEX.md + .github/workflows; Quickstart ML section mentions the executed walkthrough notebook.
+- BUG FIXED (mobile): module blurbs used `truncate` → clipped at 360px (same defect class as R1's stat chips); changed to break-words/leading-snug and symbol names to break-all → re-verified 0 clipped elements at 360px.
+- Fixed lint error during development: react-hooks/set-state-in-effect in the fetch effect (restructured to async closure, status initialized from cache presence).
+- Verification: `bun run lint` exit 0; fresh-load console completely clean (earlier Fast-Refresh warnings were transient mid-edit hot-reload artifacts — dev.log shows one mid-edit 500 that resolved; final state all 200s, reference route 5-20ms cached); search ("tanimoto" → 1 module/2 rows), kind filter (Classes-only → all badges 'class'), view-source navigation, overview link — all browser-verified; VLM QA of the tab: "clean and professional, no overlapping or misaligned elements, header well laid out".
+
+Stage Summary:
+- Added: API Reference tab (server-parsed INDEX.md → searchable/filterable symbol browser with view-source deep links into the Code Explorer) — completes the "index documentation" deliverable as an interactive surface.
+- Fixed: mobile blurb clipping, one lint rule violation, transient mid-edit 500 (hot reload).
+- Python tests: 159 passed, 1 skipped (unchanged). Web app: 5 tabs, lint-clean, browser-verified desktop + 360px.
+- Next-round candidates: (a) deep-link from symbol rows to the exact definition line in Code Explorer (would need a line-anchor feature in the code viewer); (b) kind counts in filter pills (e.g. "Functions 48"); (c) export the API reference as JSON download; (d) ML playground: show dataset preview table button.

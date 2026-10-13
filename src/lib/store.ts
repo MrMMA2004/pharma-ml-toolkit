@@ -7,11 +7,12 @@
 import { create } from "zustand";
 import type { TreeNode, TreeResponse, TreeStats } from "@/lib/toolkit-types";
 
-export type TabId = "overview" | "explorer" | "playground" | "download";
+export type TabId = "overview" | "explorer" | "reference" | "playground" | "download";
 
 export const TABS: Array<{ id: TabId; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "explorer", label: "Code Explorer" },
+  { id: "reference", label: "API Reference" },
   { id: "playground", label: "Playground" },
   { id: "download", label: "Download" },
 ];

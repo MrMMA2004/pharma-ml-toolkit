@@ -432,10 +432,14 @@ export function Overview() {
           </p>
         </div>
         <CodeBlock code={QUICKSTART} language="python" fileName="quickstart.py" showLineNumbers maxHeightClass="max-h-[520px]" />
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground sm:gap-x-4">
           <span>Want the full picture?</span>
           <Button variant="link" className="h-auto gap-1 p-0 text-sm" onClick={() => setTab("explorer")}>
             Browse the actual source <ArrowRight className="size-3.5" aria-hidden />
+          </Button>
+          <span aria-hidden className="hidden text-border sm:inline">·</span>
+          <Button variant="link" className="h-auto gap-1 p-0 text-sm" onClick={() => setTab("reference")}>
+            Browse the API reference <ArrowRight className="size-3.5" aria-hidden />
           </Button>
         </div>
       </section>

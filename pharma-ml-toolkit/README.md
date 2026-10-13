@@ -70,7 +70,9 @@ pharma-ml-toolkit/
 │   ├── docking/             # preparation, workflow, parsing, scoring
 │   └── utils/               # io (safe read/write), validation
 ├── tests/                   # 159 pytest cases across all domains
-├── examples/                # runnable end-to-end demos (synthetic data)
+├── examples/                # runnable demos + pharmaml_walkthrough.ipynb (executed notebook)
+├── docs/                    # INDEX.md — auto-generated module/API index
+├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
 ├── Dockerfile
 ├── pyproject.toml
 └── requirements.txt
@@ -109,6 +111,10 @@ leaderboard = compare_models(frame.drop(columns=["Target"]), frame["Target"],
                              "classification", cv=5)
 print(leaderboard.head())   # one row per model, sorted by CV metric
 ```
+
+A fully **executed Jupyter notebook** covering all four domains lives at
+`examples/pharmaml_walkthrough.ipynb` (every cell has its output committed — run it
+top-to-bottom to see training metrics, NCA results and docking tables).
 
 Registry models: `logistic_regression`, `ridge_classifier`, `svm`, `knn`, `decision_tree`,
 `random_forest`, `adaboost`, `ann`, `lasso`, `ridge`, `elastic_net`, `linear_regression`,

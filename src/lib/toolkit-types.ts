@@ -44,6 +44,38 @@ export interface FileContentResponse {
 }
 
 /* ------------------------------------------------------------------ */
+/* API reference (parsed from docs/INDEX.md)                           */
+/* ------------------------------------------------------------------ */
+
+export type SymbolKind = "function" | "class" | "module" | "constant";
+
+export interface ReferenceSymbol {
+  name: string;
+  kind: SymbolKind;
+  /** First line of the docstring (may be empty for constants). */
+  summary: string;
+}
+
+export interface ReferenceModule {
+  /** Dotted module name, e.g. `pharmaml.pharma`. */
+  name: string;
+  /** One-line blurb from INDEX.md. */
+  blurb: string;
+  /** Toolkit-relative path of the module's source file (for view-source). */
+  sourcePath: string;
+  symbols: ReferenceSymbol[];
+}
+
+export interface ReferenceResponse {
+  modules: ReferenceModule[];
+  stats: {
+    modules: number;
+    symbols: number;
+  };
+  generatedAt: string;
+}
+
+/* ------------------------------------------------------------------ */
 /* ML training playground                                              */
 /* ------------------------------------------------------------------ */
 

@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import {
   Beaker,
   BookOpen,
+  BookMarked,
   Download,
   FlaskConical,
   LayoutDashboard,
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Overview } from "@/components/explorer/overview";
 import { CodeExplorer } from "@/components/explorer/code-explorer";
+import { ApiReference } from "@/components/explorer/api-reference";
 import { Playground } from "@/components/explorer/playground";
 import { DownloadPanel } from "@/components/explorer/download-panel";
 import { TABS, useToolkitStore } from "@/lib/store";
@@ -24,6 +26,7 @@ import { cn } from "@/lib/utils";
 const TAB_ICONS: Record<TabId, typeof LayoutDashboard> = {
   overview: LayoutDashboard,
   explorer: BookOpen,
+  reference: BookMarked,
   playground: Beaker,
   download: Download,
 };
@@ -126,6 +129,7 @@ export default function Home() {
           >
             {tab === "overview" ? <Overview /> : null}
             {tab === "explorer" ? <CodeExplorer /> : null}
+            {tab === "reference" ? <ApiReference /> : null}
             {tab === "playground" ? <Playground /> : null}
             {tab === "download" ? <DownloadPanel /> : null}
           </motion.div>
