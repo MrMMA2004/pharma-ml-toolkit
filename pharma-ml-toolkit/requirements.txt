@@ -1,0 +1,23 @@
+# Core dependencies (required).
+numpy>=1.24
+pandas>=2.0
+scikit-learn>=1.3
+scipy>=1.11
+joblib>=1.3
+openpyxl>=3.1
+tqdm>=4.65
+
+# Optional feature sets -- uncomment what you need:
+# --- cheminformatics (descriptors, fingerprints, similarity scan) ---
+# rdkit-pypi>=2023.9
+# mordred>=1.2
+# --- gradient-boosting model families ---
+# xgboost>=2.0
+# lightgbm>=4.0
+# catboost>=1.2
+# --- plotting / PDF report generation ---
+# matplotlib>=3.7
+# seaborn>=0.13
+# fpdf>=1.7
+# --- docking preparation ---
+# meeko>=0.5
