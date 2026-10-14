@@ -26,10 +26,25 @@ _LOG = get_logger(__name__)
 __all__ = [
     "clean_numeric_frame",
     "build_preprocessor",
+    "has_categorical_columns",
     "split_features_target",
     "make_train_test_split",
     "remove_outliers_iqr",
 ]
+
+
+def has_categorical_columns(X: pd.DataFrame | np.ndarray) -> bool:
+    """Return True when ``X`` is a DataFrame with non-numeric columns.
+
+    Used by :func:`~pharmaml.ml.training.train_model` and
+    :func:`~pharmaml.ml.training.compare_models` to switch the default
+    preprocessor to one-hot mode automatically, so a mixed feature
+    table (numeric descriptors + e.g. assay/cell-line strings) trains
+    without the caller writing any ColumnTransformer code.
+    """
+    if not isinstance(X, pd.DataFrame):
+        return False
+    return any(not pd.api.types.is_numeric_dtype(X[col]) for col in X.columns)
 
 
 def clean_numeric_frame(
@@ -62,6 +77,7 @@ def clean_numeric_frame(
 def build_preprocessor(
     impute_strategy: str = "median",
     scale: bool = True,
+    encode_categorical: bool = False,
 ) -> Pipeline:
     """Build the (impute -> scale) preprocessing pipeline.
 
@@ -74,21 +90,76 @@ def build_preprocessor(
         Apply :class:`~sklearn.preprocessing.StandardScaler` after
         imputation.  Keep True for distance/linear models; tree/boosting
         models are scale-invariant but rarely hurt by it.
+    encode_categorical:
+        Handle **non-numeric feature columns** with a
+        :class:`~sklearn.compose.ColumnTransformer`: numeric columns
+        get the usual impute(+scale) branch, string/category columns
+        get ``most_frequent`` imputation + one-hot encoding with
+        ``handle_unknown='ignore'`` (unseen categories at scoring time
+        become all-zero instead of crashing).  ``train_model``/
+        ``compare_models`` enable this automatically whenever the
+        feature table contains non-numeric columns.
 
     Returns
     -------
     sklearn.pipeline.Pipeline
         Unfitted pipeline to be composed with an estimator, e.g.
         ``Pipeline([("prep", build_preprocessor()), ("clf", model)])``.
+        With ``encode_categorical=True`` the returned pipeline wraps a
+        ColumnTransformer (``get_feature_names_out`` yields the expanded
+        one-hot names, so feature-importance plots stay readable).
     """
     if impute_strategy not in {"median", "mean", "most_frequent"}:
         raise DataValidationError(
             f"impute_strategy must be median/mean/most_frequent, got {impute_strategy!r}"
         )
-    steps = [("impute", SimpleImputer(strategy=impute_strategy))]
+
+    if not encode_categorical:
+        steps = [("impute", SimpleImputer(strategy=impute_strategy))]
+        if scale:
+            steps.append(("scale", StandardScaler()))
+        return Pipeline(steps)
+
+    from sklearn.compose import ColumnTransformer, make_column_selector
+    from sklearn.preprocessing import OneHotEncoder
+
+    numeric_steps = [("impute", SimpleImputer(strategy=impute_strategy))]
     if scale:
-        steps.append(("scale", StandardScaler()))
-    return Pipeline(steps)
+        numeric_steps.append(("scale", StandardScaler()))
+    return Pipeline(
+        steps=[
+            (
+                "columns",
+                ColumnTransformer(
+                    transformers=[
+                        (
+                            "num",
+                            Pipeline(numeric_steps),
+                            make_column_selector(dtype_include=np.number),
+                        ),
+                        (
+                            "cat",
+                            Pipeline(
+                                steps=[
+                                    ("impute", SimpleImputer(strategy="most_frequent")),
+                                    (
+                                        "onehot",
+                                        OneHotEncoder(
+                                            handle_unknown="ignore",
+                                            sparse_output=False,
+                                        ),
+                                    ),
+                                ]
+                            ),
+                            make_column_selector(dtype_exclude=np.number),
+                        ),
+                    ],
+                    remainder="drop",
+                    verbose_feature_names_out=False,
+                ),
+            )
+        ]
+    )
 
 
 def split_features_target(

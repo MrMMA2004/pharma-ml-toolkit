@@ -19,6 +19,12 @@ replaces that workflow entirely:
        pharmaml data inspect --data my_compounds.csv
        pharmaml ml train --data my_compounds.csv --target activity --task auto
 
+4. :func:`split_table` upgrades the legacy ``Split CSV file.py`` script
+   into a stratified, target-aware splitter that can also carve a
+   validation set and write ``<prefix>_train/test/val`` files::
+
+       pharmaml data split --data qsar.csv --test-size 0.2 --val-size 0.1
+
 Example
 -------
 >>> from pharmaml.data import load_dataset
@@ -53,9 +59,11 @@ __all__ = [
     "TARGET_CANDIDATES",
     "Dataset",
     "DatasetSummary",
+    "SplitResult",
     "load_dataset",
     "summarize_dataset",
     "infer_task",
+    "split_table",
 ]
 
 _LOG = get_logger(__name__)
@@ -140,10 +148,13 @@ class Dataset:
     frame:
         The full cleaned table (target column included).
     X:
-        Feature matrix — numeric columns only; string columns such as
-        SMILES or compound IDs are dropped (and reported in
-        ``dropped_columns``) exactly like the legacy
+        Feature matrix — numeric columns only by default; string
+        columns such as SMILES or compound IDs are dropped (and
+        reported in ``dropped_columns``) exactly like the legacy
         ``Non-numerical data remover.py`` script did, but visibly.
+        With ``load_dataset(..., keep_categorical=True)`` string
+        columns are kept here and listed in ``categorical_columns``;
+        ``train_model`` then one-hot encodes them automatically.
     y:
         Target column.
     target:
@@ -157,7 +168,8 @@ class Dataset:
     class_counts:
         ``{label: row_count}`` for classification, else ``None``.
     dropped_columns:
-        Non-numeric columns excluded from ``X``.
+        Non-numeric columns excluded from ``X`` (empty when
+        ``keep_categorical=True``).
     """
 
     frame: pd.DataFrame
@@ -169,6 +181,7 @@ class Dataset:
     classes: list[Any] | None = None
     class_counts: dict[Any, int] | None = None
     dropped_columns: list[str] = field(default_factory=list)
+    categorical_columns: list[str] = field(default_factory=list)
 
     @property
     def n_samples(self) -> int:
@@ -209,6 +222,7 @@ class DatasetSummary:
     missing_cells: int
     duplicate_rows: int
     dropped_columns: list[str]
+    categorical_columns: list[str]
     memory_mb: float
 
     def as_dict(self) -> dict[str, Any]:
@@ -225,14 +239,22 @@ class DatasetSummary:
             "missing_cells": self.missing_cells,
             "duplicate_rows": self.duplicate_rows,
             "dropped_columns": self.dropped_columns,
+            "categorical_columns": self.categorical_columns,
             "memory_mb": round(self.memory_mb, 4),
         }
 
     def __str__(self) -> str:  # pragma: no cover - presentation only
+        feature_note = f"{self.n_features} features"
+        if self.categorical_columns:
+            feature_note += (
+                f" ({self.n_features - len(self.categorical_columns)} numeric + "
+                f"{len(self.categorical_columns)} categorical)"
+            )
+        else:
+            feature_note += " (numeric)"
         lines = [
             f"source        : {self.path}",
-            f"shape         : {self.n_rows} rows x {self.n_columns} columns "
-            f"({self.n_features} numeric features)",
+            f"shape         : {self.n_rows} rows x {self.n_columns} columns ({feature_note})",
             f"target        : {self.target}",
             f"task          : {self.task}",
             f"missing cells : {self.missing_cells}",
@@ -246,6 +268,13 @@ class DatasetSummary:
             extra = len(self.dropped_columns) - 8
             more = f" (+{extra} more)" if extra > 0 else ""
             lines.append(f"dropped cols  : {shown}{more}  [non-numeric]")
+        if self.categorical_columns:
+            shown = ", ".join(self.categorical_columns[:8])
+            extra = len(self.categorical_columns) - 8
+            more = f" (+{extra} more)" if extra > 0 else ""
+            lines.append(
+                f"categorical   : {shown}{more}  [kept; one-hot at train time]"
+            )
         return "\n".join(lines)
 
 
@@ -285,6 +314,7 @@ def load_dataset(
     drop_cols: list[str] | None = None,
     max_class_count: int = 20,
     sheet_name: str | int = 0,
+    keep_categorical: bool = False,
 ) -> Dataset:
     """Load **your own** data file and split it ready for training.
 
@@ -315,6 +345,14 @@ def load_dataset(
         class labels (passed to :func:`infer_task`).
     sheet_name:
         Excel sheet to read (ignored for CSV-like inputs).
+    keep_categorical:
+        Keep non-numeric feature columns (assay names, cell lines,
+        formulation codes ...) in ``X`` instead of dropping them;
+        they are listed in ``categorical_columns`` and one-hot
+        encoded automatically at train time by ``train_model`` /
+        ``compare_models``.  Metadata like SMILES should still go
+        through ``drop_cols`` — one-hot encoding a structure string
+        is meaningless.
 
     Returns
     -------
@@ -383,22 +421,36 @@ def load_dataset(
         classes = None
         class_counts = None
 
-    # Feature matrix: numeric columns only, target/drop_cols excluded.
+    # Feature matrix: numeric columns only (default), target/drop_cols
+    # excluded; with keep_categorical the non-numeric feature columns
+    # survive in X for one-hot encoding inside train_model.
     exclude = {target_col, *(drop_cols or [])}
+    candidate_cols = [col for col in frame.columns if col not in exclude]
     numeric = [
-        col
-        for col in frame.columns
-        if col not in exclude and pd.api.types.is_numeric_dtype(frame[col])
+        col for col in candidate_cols if pd.api.types.is_numeric_dtype(frame[col])
     ]
-    dropped = [col for col in frame.columns if col not in exclude and col not in numeric]
-    if dropped:
-        _LOG.warning(
-            "Excluding %d non-numeric column(s) from features: %s",
-            len(dropped),
-            dropped[:10],
-        )
+    categorical = [col for col in candidate_cols if col not in numeric]
+    if keep_categorical:
+        feature_cols = candidate_cols
+        dropped: list[str] = []
+        if categorical:
+            _LOG.info(
+                "Keeping %d categorical column(s) as features (one-hot at "
+                "train time): %s",
+                len(categorical),
+                categorical[:10],
+            )
+    else:
+        feature_cols = numeric
+        dropped = categorical
+        if dropped:
+            _LOG.warning(
+                "Excluding %d non-numeric column(s) from features: %s",
+                len(dropped),
+                dropped[:10],
+            )
 
-    X = frame.loc[:, numeric]
+    X = frame.loc[:, feature_cols]
     dataset = Dataset(
         frame=frame,
         X=X,
@@ -409,6 +461,7 @@ def load_dataset(
         classes=classes,
         class_counts=class_counts,
         dropped_columns=dropped,
+        categorical_columns=categorical if keep_categorical else [],
     )
     _LOG.info(
         "Loaded dataset '%s': %d rows, %d features, task=%s%s",
@@ -442,5 +495,219 @@ def summarize_dataset(dataset: Dataset) -> DatasetSummary:
         missing_cells=int(frame.isna().sum().sum()),
         duplicate_rows=int(frame.duplicated().sum()),
         dropped_columns=list(dataset.dropped_columns),
+        categorical_columns=list(dataset.categorical_columns),
         memory_mb=float(frame.memory_usage(deep=True).sum() / 1024**2),
     )
+
+
+@dataclass(slots=True)
+class SplitResult:
+    """Outcome of :func:`split_table` — the split frames plus audit info.
+
+    Attributes
+    ----------
+    train, test, val:
+        The partitioned frames (``val`` is ``None`` unless a validation
+        fraction was requested).
+    target:
+        Column the split was stratified on (``None`` for plain splits).
+    stratified:
+        Whether stratification was actually applied (``False`` when a
+        rare class forced the fallback, with a logged warning).
+    paths:
+        ``{'train': Path, ...}`` when the frames were written to disk.
+    """
+
+    train: pd.DataFrame
+    test: pd.DataFrame
+    val: pd.DataFrame | None
+    target: str | None
+    stratified: bool
+    random_state: int
+    paths: dict[str, Path] = field(default_factory=dict)
+
+    def sides(self) -> dict[str, pd.DataFrame]:
+        """``{'train': ..., 'test': ..., ('val': ...)}`` without ``None``."""
+        out = {"train": self.train, "test": self.test}
+        if self.val is not None:
+            out["val"] = self.val
+        return out
+
+    def write(self, output_dir: str | Path, prefix: str) -> dict[str, Path]:
+        """Write each side as ``<prefix>_<side>.csv``; records ``paths``."""
+        from pharmaml.utils.io import write_table
+
+        for side, frame in self.sides().items():
+            self.paths[side] = write_table(frame, Path(output_dir) / f"{prefix}_{side}.csv")
+        return dict(self.paths)
+
+    def _balance(self, frame: pd.DataFrame) -> dict[Any, int] | None:
+        """Class counts of the target column when it is label-like."""
+        if self.target is None or self.target not in frame.columns:
+            return None
+        counts = frame[self.target].value_counts()
+        if len(counts) > 20:  # continuous endpoint — a balance row is noise
+            return None
+        return {label: int(n) for label, n in counts.items()}
+
+    def __str__(self) -> str:  # pragma: no cover - presentation only
+        mode = "stratified" if self.stratified else "random (unstratified)"
+        lines = [f"split        : {mode} on {self.target!r}",
+                 f"train        : {len(self.train)} rows"]
+        if self.val is not None:
+            lines.append(f"val          : {len(self.val)} rows")
+        lines.append(f"test         : {len(self.test)} rows")
+        for side, frame in self.sides().items():
+            balance = self._balance(frame)
+            if balance is not None:
+                shown = ", ".join(f"{k!r}: {v}" for k, v in sorted(balance.items(), key=str))
+                lines.append(f"{side:<12s}: classes: {shown}")
+        for side, path in self.paths.items():
+            lines.append(f"{side:<12s}: file    : {path}")
+        return "\n".join(lines)
+
+
+def split_table(
+    path: str | Path | None = None,
+    frame: pd.DataFrame | None = None,
+    target: str | None = None,
+    test_size: float = 0.2,
+    val_size: float | None = None,
+    stratify: bool = True,
+    random_state: int = 42,
+) -> SplitResult:
+    """Split a dataset table into train / (optional val) / test parts.
+
+    Upgrades the legacy ``Split CSV file.py`` script, which cut a CSV in
+    half with no regard for class balance — every rare class could land
+    in one side and the later training would crash or silently degrade.
+
+    Parameters
+    ----------
+    path, frame:
+        Either a file path (read via :func:`pharmaml.utils.io.read_table`)
+        or an in-memory DataFrame; exactly one must be given.
+    target:
+        Column to stratify on.  When ``None`` the same auto-detection as
+        :func:`load_dataset` applies; pass ``--no-stratify`` (CLI) or
+        ``stratify=False`` to split plain rows without a target.
+    test_size:
+        Fraction of rows held out for testing (0 < test_size < 1).
+    val_size:
+        Optional fraction of the **original** rows held out for
+        validation, carved out of the train side *after* the test split.
+    stratify:
+        Attempt class-balanced splits (default).  Falls back to a plain
+        random split with a warning when a class has a single member.
+
+    Returns
+    -------
+    SplitResult
+        With ``train``/``test`` (and ``val``) frames; call
+        ``.write(dir, prefix)`` or let the CLI write the files.
+
+    Raises
+    ------
+    DataValidationError
+        For bad fractions, missing files/columns, or a stratified split
+        that is impossible (e.g. a class smaller than the number of
+        sides requested).
+
+    Example
+    -------
+    >>> result = split_table("qsar.csv", test_size=0.2)  # doctest: +SKIP
+    >>> result.write("splits", prefix="qsar")             # doctest: +SKIP
+    {'train': PosixPath('splits/qsar_train.csv'), ...}
+    """
+    from sklearn.model_selection import train_test_split
+
+    from pharmaml.utils.io import read_table
+
+    if (path is None) == (frame is None):
+        raise DataValidationError("give either path=... or frame=..., not both/neither")
+    if not 0.0 < test_size < 1.0:
+        raise DataValidationError(f"test_size must be in (0, 1), got {test_size}")
+    if val_size is not None and not 0.0 < val_size < 1.0:
+        raise DataValidationError(f"val_size must be in (0, 1) or None, got {val_size}")
+
+    table = read_table(Path(path)) if path is not None else frame
+    if table.empty:
+        raise DataValidationError("table contains no data rows")
+    if len(table) < 4:
+        raise DataValidationError(f"{len(table)} row(s) is too few to split")
+
+    target_col: str | None = target
+    if target_col is None and stratify:
+        try:
+            target_col = _resolve_target(table, None)
+        except DataValidationError:
+            raise DataValidationError(
+                "stratify=True needs a target column (auto-detection found none); "
+                "pass target=<column> or stratify=False"
+            ) from None
+    if target_col is not None and target_col not in table.columns:
+        raise DataValidationError(
+            f"target column {target_col!r} not found; available: {list(table.columns)[:20]}"
+        )
+
+    indices = np.arange(len(table))
+    labels = table[target_col] if target_col is not None else None
+
+    use_stratify = stratify and labels is not None
+    if use_stratify:
+        counts = labels.value_counts()
+        n_sides = 3 if val_size else 2
+        # Each side needs at least one member of every class.
+        if counts.min() < n_sides:
+            _LOG.warning(
+                "Class %r has %d member(s) < %d sides; falling back to an "
+                "unstratified split.",
+                str(counts.idxmin()),
+                int(counts.min()),
+                n_sides,
+            )
+            use_stratify = False
+
+    train_idx, test_idx = train_test_split(
+        indices,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=labels if use_stratify else None,
+    )
+
+    val: pd.DataFrame | None = None
+    if val_size is not None:
+        # carve val out of the train side, keeping the overall fraction ≈ val_size
+        remaining = 1.0 - test_size
+        adjusted = val_size / remaining
+        if adjusted >= 1.0:
+            raise DataValidationError(
+                f"val_size={val_size} leaves no training rows "
+                f"(test_size={test_size})"
+            )
+        sub_labels = labels.iloc[train_idx] if use_stratify else None
+        train_idx, val_idx = train_test_split(
+            train_idx,
+            test_size=adjusted,
+            random_state=random_state,
+            stratify=sub_labels if sub_labels is not None else None,
+        )
+        val = table.iloc[val_idx].reset_index(drop=True)
+
+    result = SplitResult(
+        train=table.iloc[train_idx].reset_index(drop=True),
+        test=table.iloc[test_idx].reset_index(drop=True),
+        val=val,
+        target=target_col,
+        stratified=use_stratify,
+        random_state=random_state,
+    )
+    _LOG.info(
+        "Split %d rows -> train=%d%s test=%d (%s)",
+        len(table),
+        len(result.train),
+        f" val={len(val)}" if val is not None else "",
+        len(result.test),
+        "stratified" if use_stratify else "unstratified",
+    )
+    return result

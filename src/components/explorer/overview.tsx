@@ -48,11 +48,18 @@ function findNode(node: TreeNode, path: string): TreeNode | null {
 }
 
 const QUICKSTART = `# --- Bring your own data -----------------------------------------
-from pharmaml.data import load_dataset
+from pharmaml.data import load_dataset, split_table
 
 ds = load_dataset("my_compounds.csv", target="activity")
 print(ds.task)          # 'classification' (2+ classes) or 'regression'
 print(ds.class_counts)  # {'active': 120, 'inactive': 190, ...}
+
+# keep string features (assay, cell line) for one-hot encoding:
+ds = load_dataset("my_compounds.csv", keep_categorical=True)
+
+# stratified 3-way split (upgrades 'Split CSV file.py'):
+parts = split_table("my_compounds.csv", test_size=0.2, val_size=0.1)
+parts.write("splits/", prefix="qsar")     # qsar_train/val/test.csv
 
 # --- Feature calculation: SMILES -> descriptors -------------------
 from pharmaml.chem import (
@@ -216,7 +223,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "291 passing pytest cases across every domain (incl. viz & notebook guards)",
+    after: "344 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Distribution",
@@ -351,8 +358,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="291"
-                countTo={291}
+                value="344"
+                countTo={344}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

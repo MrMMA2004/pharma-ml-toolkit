@@ -19,8 +19,8 @@ from sklearn.pipeline import Pipeline
 
 from pharmaml.exceptions import ModelError
 from pharmaml.logger import get_logger
-from pharmaml.ml.models import MODEL_REGISTRY, build_model
-from pharmaml.ml.preprocessing import build_preprocessor
+from pharmaml.ml.models import MODEL_REGISTRY, build_model, resolve_model_name
+from pharmaml.ml.preprocessing import build_preprocessor, has_categorical_columns
 
 _LOG = get_logger(__name__)
 
@@ -138,9 +138,18 @@ def train_model(
     import time
 
     estimator = build_model(name, task)
-    spec = MODEL_REGISTRY[name.replace(" ", "_")]
+    key = resolve_model_name(name)
+    spec = MODEL_REGISTRY[key]
 
-    steps = [("prep", build_preprocessor())] if preprocess else []
+    encode = has_categorical_columns(X_train)
+    if encode:
+        _LOG.info(
+            "Feature table contains categorical column(s); enabling one-hot "
+            "encoding inside the preprocessing pipeline."
+        )
+    steps = [
+        ("prep", build_preprocessor(encode_categorical=encode))
+    ] if preprocess else []
     step_name = "clf" if task == "classification" else "reg"
     pipeline = Pipeline(steps + [(step_name, estimator)])
 
@@ -245,10 +254,14 @@ def compare_models(
             if spec.available and spec.task in {task, "both"}
         ]
     else:
+        resolved: list[str] = []
         for name in models:
-            spec = MODEL_REGISTRY.get(name)
-            if spec is None:
-                raise ModelError(f"Unknown model {name!r}")
+            try:
+                key = resolve_model_name(name)
+            except ModelError:
+                raise ModelError(f"Unknown model {name!r}") from None
+            spec = MODEL_REGISTRY[key]
+            resolved.append(spec.name)
             if not spec.available:
                 raise ModelError(
                     f"Model {name!r} requires optional package {spec.requires!r}; "
@@ -256,12 +269,22 @@ def compare_models(
                 )
             if spec.task not in {task, "both"}:
                 raise ModelError(f"Model {name!r} does not support {task}")
+        models = resolved
+
+    encode = has_categorical_columns(X)
+    if encode:
+        _LOG.info(
+            "Feature table contains categorical column(s); enabling one-hot "
+            "encoding inside the comparison pipelines."
+        )
 
     # All models in one leaderboard must be scored by the same metric:
     # when *any* member lacks predict_proba (ridge_classifier ...) the
     # whole board falls back to balanced accuracy (multiclass-safe).
     pipelines: dict[str, Pipeline] = {
-        name: Pipeline([("prep", build_preprocessor()), ("est", build_model(name, task))])
+        name: Pipeline(
+            [("prep", build_preprocessor(encode_categorical=encode)), ("est", build_model(name, task))]
+        )
         for name in models
     }
     metric = scoring or _select_scorer(pipelines[models[0]], task)

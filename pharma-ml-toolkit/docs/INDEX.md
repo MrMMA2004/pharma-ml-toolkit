@@ -3,10 +3,9 @@
 Auto-derived from each module's `__all__` exports — the authoritative quick
 reference for the public API. Re-run `python scratch/build_docs_index.py`
 after adding new public functions.
-
 ## `pharmaml`
 
-*Package root: exceptions + version*
+*PharmaML — a production-ready toolkit for computational pharmacy.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -20,20 +19,22 @@ after adding new public functions.
 
 ## `pharmaml.data`
 
-*Bring your own data: load user CSV/TSV/Excel files*
+*Bring your own data: import user files (CSV/TSV/TXT/Excel) into PharmaML.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
 | `TARGET_CANDIDATES` | constant |  |
 | `Dataset` | class | A user-supplied dataset split into features and target. |
 | `DatasetSummary` | class | Human-readable audit of a loaded dataset. |
+| `SplitResult` | class | Outcome of :func:`split_table` — the split frames plus audit info. |
 | `load_dataset` | function | Load **your own** data file and split it ready for training. |
 | `summarize_dataset` | function | Audit a :class:`Dataset` for obvious data-quality problems. |
 | `infer_task` | function | Decide ``'classification'`` or ``'regression'`` from a target column. |
+| `split_table` | function | Split a dataset table into train / (optional val) / test parts. |
 
 ## `pharmaml.chem`
 
-*Cheminformatics: converters, descriptors, similarity*
+*Cheminformatics helpers: endpoint conversion, descriptors, similarity.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -50,15 +51,18 @@ after adding new public functions.
 
 ## `pharmaml.ml`
 
-*QSAR machine learning: preprocessing → training → evaluation → persistence*
+*QSAR machine learning: preprocessing, training, evaluation, persistence.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `MODEL_ALIASES` | constant |  |
 | `MODEL_REGISTRY` | constant |  |
 | `list_models` | function | List registry entries with availability information. |
 | `build_model` | function | Instantiate an unfitted estimator from the registry. |
+| `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
 | `build_preprocessor` | function | Build the (impute -> scale) preprocessing pipeline. |
+| `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `split_features_target` | function | Separate features from the target column. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
@@ -69,7 +73,7 @@ after adding new public functions.
 
 ## `pharmaml.pharma`
 
-*Pharmaceutical calculations: units, PK, PD, dosage*
+*Pharmaceutical calculations: units, PK, PD, dosage design.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -99,7 +103,7 @@ after adding new public functions.
 
 ## `pharmaml.docking`
 
-*Molecular docking: preparation, workflow, parsing, scoring*
+*Molecular-docking workflows: preparation, execution, parsing, scoring.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -122,7 +126,7 @@ after adding new public functions.
 
 ## `pharmaml.viz`
 
-*Visual output for every domain: figures, tables, HTML reports*
+*Visual output for every PharmaML domain — plots, tables, HTML reports.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -156,7 +160,7 @@ after adding new public functions.
 
 ## `pharmaml.utils.io`
 
-*Safe tabular I/O helpers*
+*Robust tabular and filesystem I/O.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -167,7 +171,7 @@ after adding new public functions.
 
 ## `pharmaml.utils.validation`
 
-*Shared input-validation layer*
+*Input validation guards.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -180,9 +184,9 @@ after adding new public functions.
 ## Command-line interface
 
 ```text
-pharmaml models | data inspect | ml train | ml compare | chem pic50
-             | chem descriptors | pharma pk | pharma dose | docking scan
-             | docking check
+pharmaml models | data inspect | data split | ml train | ml compare
+             | chem pic50 | chem descriptors | pharma pk | pharma dose
+             | docking scan | docking check
 ```
 
 See `pharmaml/cli.py` for every flag, and `README.md` for the full manual.

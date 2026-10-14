@@ -376,6 +376,17 @@ def _extract_importances(model_or_mapping, feature_names: list[str] | None):
         )
 
     if feature_names is None:
+        # A Pipeline's preprocessing steps (impute/scale/one-hot) know the
+        # transformed feature names — use them so one-hot expanded columns
+        # stay readable instead of "x0, x1, ...".
+        if hasattr(model_or_mapping, "named_steps") and len(model_or_mapping.named_steps) > 1:
+            try:
+                expanded = list(model_or_mapping[:-1].get_feature_names_out())
+            except Exception:  # noqa: BLE001 - unfitted / unsupported steps
+                expanded = []
+            if expanded and len(expanded) == len(values):
+                feature_names = expanded
+    if feature_names is None:
         feature_names = [f"x{i}" for i in range(len(values))]
     if len(feature_names) != len(values):
         raise DataValidationError(

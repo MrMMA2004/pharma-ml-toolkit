@@ -262,6 +262,62 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
 }
 
 
+#: Friendly short names accepted anywhere a registry key is expected
+#: (``--model rf`` on the CLI, ``train_model("logistic", ...)`` ...).
+MODEL_ALIASES: dict[str, str] = {
+    "logistic": "logistic_regression",
+    "logreg": "logistic_regression",
+    "rf": "random_forest",
+    "randomforest": "random_forest",
+    "dt": "decision_tree",
+    "tree": "decision_tree",
+    "gbm": "lightgbm",
+    "lgbm": "lightgbm",
+    "lightgbm": "lightgbm",
+    "xgb": "xgboost",
+    "xgboost": "xgboost",
+    "cb": "catboost",
+    "cat": "catboost",
+    "catboost": "catboost",
+    "knn": "knn",
+    "svm": "svm",
+    "svc": "svm",
+    "ann": "ann",
+    "mlp": "ann",
+    "neural_net": "ann",
+    "ada": "adaboost",
+    "adaboost": "adaboost",
+    "linreg": "linear_regression",
+    "ols": "linear_regression",
+    "ridge": "ridge",
+    "ridge_cls": "ridge_classifier",
+    "lasso": "lasso",
+    "enet": "elastic_net",
+    "elasticnet": "elastic_net",
+}
+
+
+def resolve_model_name(name: str) -> str:
+    """Normalise a user-supplied model name to a registry key.
+
+    Applies case/whitespace/punctuation clean-up, then the
+    :data:`MODEL_ALIASES` short-name map, so ``'Random-Forest'``,
+    ``'rf'`` and ``'random_forest'`` all resolve to the same key.
+
+    Raises
+    ------
+    ModelError
+        When the cleaned name is neither a registry key nor an alias.
+    """
+    lowered = str(name).strip().lower()
+    underscored = lowered.replace(" ", "_").replace("-", "_")
+    for candidate in (underscored, MODEL_ALIASES.get(lowered), MODEL_ALIASES.get(underscored)):
+        if candidate in MODEL_REGISTRY:
+            return candidate
+    known = ", ".join(sorted(MODEL_REGISTRY))
+    raise ModelError(f"Unknown model {name!r}. Registered models: {known}")
+
+
 _TASK_FACTORIES: dict[str, dict[str, Callable[[], Any]]] = {
     "knn": {
         "classification": KNeighborsClassifier,
@@ -352,10 +408,7 @@ def build_model(
         Unknown name or task; ``DependencyError`` when the backend is
         not installed.
     """
-    key = name.strip().lower().replace(" ", "_").replace("-", "_")
-    if key not in MODEL_REGISTRY:
-        known = ", ".join(sorted(MODEL_REGISTRY))
-        raise ModelError(f"Unknown model {name!r}. Registered models: {known}")
+    key = resolve_model_name(name)
     if task not in {"classification", "regression"}:
         raise ModelError(f"task must be 'classification' or 'regression', got {task!r}")
 

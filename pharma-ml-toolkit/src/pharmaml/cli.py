@@ -2,16 +2,22 @@
 
 Replaces the legacy workflow of "open a per-algorithm .py file, edit
 the hardcoded CSV filename at the bottom, run it".  One command covers
-training, comparison, conversion, PK analysis and docking scans::
+training, comparison, splitting, conversion, PK analysis and docking
+scans::
 
-    pharmaml ml train    --data qsar.csv --target Target --model random_forest
+    pharmaml ml train    --data qsar.csv --target Target --model rf --plots
     pharmaml ml train    --data qsar.csv --task auto        # infer classification/regression
-    pharmaml ml compare  --data qsar.csv --target Target --task classification
+    pharmaml ml train    --data qsar.csv --keep-categorical  # one-hot string features
+    pharmaml ml compare  --data qsar.csv --target Target --task classification --plot
     pharmaml data inspect --data qsar.csv                  # audit your own file
+    pharmaml data split  --data qsar.csv --test-size 0.2 --val-size 0.1
     pharmaml chem pic50  --data activity.xlsx --column "IC50 (nM)"
     pharmaml pharma pk   --data profile.csv --time time_h --conc conc_ng_ml
     pharmaml docking scan --directory docking_run/
     pharmaml models list
+
+``--model`` accepts registry names and their aliases (``rf``,
+``logistic``, ``xgb`` ... — see ``pharmaml.ml.MODEL_ALIASES``).
 """
 
 from __future__ import annotations
@@ -19,6 +25,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from pharmaml import __version__
 from pharmaml.logger import configure_logging, get_logger
@@ -62,6 +69,35 @@ def _build_parser() -> argparse.ArgumentParser:
         help="also print the first N rows of the table",
     )
 
+    split = data_sub.add_parser(
+        "split",
+        help="split a table into stratified train/val/test files "
+        "(upgrades 'Split CSV file.py')",
+    )
+    split.add_argument("--data", required=True, help="CSV/TSV/Excel file to split")
+    split.add_argument(
+        "--target", default=None,
+        help="column to stratify on (auto-detected when omitted)",
+    )
+    split.add_argument("--test-size", type=float, default=0.2, metavar="FRAC")
+    split.add_argument(
+        "--val-size", type=float, default=None, metavar="FRAC",
+        help="also carve a validation set of this fraction",
+    )
+    split.add_argument(
+        "--no-stratify", action="store_true",
+        help="plain random split (no class balancing)",
+    )
+    split.add_argument("--seed", type=int, default=42)
+    split.add_argument(
+        "--out-dir", default=None,
+        help="output directory (default: alongside --data)",
+    )
+    split.add_argument(
+        "--prefix", default=None,
+        help="output filename prefix (default: input file stem)",
+    )
+
     # ---- ml ----------------------------------------------------------
     ml_parser = subparsers.add_parser("ml", help="machine-learning workflows")
     ml_sub = ml_parser.add_subparsers(dest="ml_command", required=True)
@@ -69,7 +105,10 @@ def _build_parser() -> argparse.ArgumentParser:
     train = ml_sub.add_parser("train", help="train one model end-to-end")
     train.add_argument("--data", required=True, help="CSV/Excel with features+target")
     train.add_argument("--target", default=None, help="target column (auto-detected)")
-    train.add_argument("--model", default="random_forest", help="registry model name")
+    train.add_argument(
+        "--model", default="random_forest",
+        help="registry model name or alias (rf, logistic, xgb, ...)",
+    )
     train.add_argument(
         "--task", choices=["classification", "regression", "auto"], default="auto",
         help="task type; 'auto' infers it from the target column (default)",
@@ -77,6 +116,16 @@ def _build_parser() -> argparse.ArgumentParser:
     train.add_argument("--test-size", type=float, default=0.2)
     train.add_argument("--cv", type=int, default=5)
     train.add_argument("--no-tune", action="store_true", help="skip grid search")
+    train.add_argument(
+        "--keep-categorical", action="store_true",
+        help="keep string feature columns and one-hot encode them "
+        "(default: numeric columns only)",
+    )
+    train.add_argument(
+        "--plots", action="store_true",
+        help="emit the full visual bundle (report.html + figures + "
+        "tables) into <out>/report/ — requires pharmaml[reports]",
+    )
     train.add_argument("--out", default="artifacts", help="artifact output directory")
 
     compare = ml_sub.add_parser("compare", help="cross-validated model leaderboard")
@@ -87,6 +136,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     compare.add_argument("--cv", type=int, default=5)
     compare.add_argument("--models", nargs="*", default=None, help="subset of models")
+    compare.add_argument(
+        "--keep-categorical", action="store_true",
+        help="keep string feature columns and one-hot encode them",
+    )
+    compare.add_argument(
+        "--out", default=None,
+        help="write the leaderboard table to this path (csv/tsv/md/json/html)",
+    )
+    compare.add_argument(
+        "--plot", action="store_true",
+        help="save the leaderboard bar chart + report bundle into <out-dir>/ "
+        "— requires pharmaml[reports]",
+    )
+    compare.add_argument(
+        "--out-dir", default="reports", help="directory for --plot artifacts"
+    )
 
     # ---- chem --------------------------------------------------------
     chem_parser = subparsers.add_parser("chem", help="cheminformatics utilities")
@@ -160,12 +225,19 @@ def _load_cli_dataset(args: argparse.Namespace):
 
     Both ``ml train`` and ``ml compare`` accept ``--task auto`` (the
     default), which lets :func:`pharmaml.data.load_dataset` decide
-    classification (2+ classes) vs regression from the target column.
+    classification (2+ classes) vs regression from the target column,
+    and ``--keep-categorical`` to keep string feature columns for
+    one-hot encoding.
     """
     from pharmaml.data import load_dataset
 
     task = None if getattr(args, "task", "auto") == "auto" else args.task
-    return load_dataset(args.data, target=getattr(args, "target", None), task=task)
+    return load_dataset(
+        args.data,
+        target=getattr(args, "target", None),
+        task=task,
+        keep_categorical=getattr(args, "keep_categorical", False),
+    )
 
 
 def _cmd_data_inspect(args: argparse.Namespace) -> int:
@@ -177,6 +249,67 @@ def _cmd_data_inspect(args: argparse.Namespace) -> int:
         print(f"\nfirst {args.head} row(s):")
         print(dataset.frame.head(args.head).to_string(index=False))
     return 0
+
+
+def _cmd_data_split(args: argparse.Namespace) -> int:
+    from pharmaml.data import split_table
+
+    result = split_table(
+        path=args.data,
+        target=args.target,
+        test_size=args.test_size,
+        val_size=args.val_size,
+        stratify=not args.no_stratify,
+        random_state=args.seed,
+    )
+    out_dir = args.out_dir or str(Path(args.data).parent)
+    prefix = args.prefix or Path(args.data).stem
+    result.write(out_dir, prefix)
+    print(result)
+    return 0
+
+
+def _train_figure_bundle(result, report, dataset, X_test, y_test):
+    """Collect the standard figure/table set for ``ml train --plots``."""
+    import pandas as pd
+
+    from pharmaml.viz import metrics_to_dataframe, ml_plots
+
+    figures: dict[str, Any] = {}
+    tables: dict[str, Any] = {}
+
+    if dataset.task == "classification":
+        figures["confusion_matrix"] = ml_plots.plot_confusion_matrix(report)
+        if hasattr(result.model, "predict_proba"):
+            figures["roc_curves"] = ml_plots.plot_roc_curves(
+                result.model, X_test, y_test
+            )
+        if dataset.class_counts:
+            figures["class_distribution"] = ml_plots.plot_class_distribution(
+                dataset.class_counts
+            )
+            tables["class_counts"] = pd.DataFrame(
+                {"class": list(dataset.class_counts),
+                 "count": list(dataset.class_counts.values())}
+            )
+    else:
+        y_pred = result.model.predict(X_test)
+        figures["predicted_vs_actual"] = ml_plots.plot_predicted_vs_actual(
+            y_test, y_pred, metrics=report.as_dict()
+        )
+        figures["residuals"] = ml_plots.plot_residuals(y_test, y_pred)
+
+    if result.cv_scores is not None:
+        figures["cv_scores"] = ml_plots.plot_cv_scores(result)
+    try:
+        figures["feature_importance"] = ml_plots.plot_feature_importance(result.model)
+    except Exception:  # noqa: BLE001 - estimator exposes no importances
+        pass  # e.g. kernel SVM / KNN — importance plot is simply skipped
+
+    tables.setdefault(
+        "held_out_metrics", metrics_to_dataframe(report)
+    )
+    return figures, tables
 
 
 def _cmd_ml_train(args: argparse.Namespace) -> int:
@@ -197,7 +330,7 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
     report = evaluate_model(result.model, X_test, y_test, dataset.task)
 
     config = PipelineConfig()
-    model_path = config.output_path(f"{args.model}_{dataset.task}.joblib")
+    model_path = config.output_path(f"{result.name}_{dataset.task}.joblib")
     save_model(
         result.model,
         model_path,
@@ -215,6 +348,21 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
     print(f"best:     {result.best_params or '(defaults)'}")
     print(f"held-out: {report}")
     print(f"saved:    {model_path}")
+
+    if args.plots:
+        from pharmaml.viz import save_visual_bundle
+
+        figures, tables = _train_figure_bundle(result, report, dataset, X_test, y_test)
+        bundle_dir = Path(args.out) / "report"
+        written = save_visual_bundle(
+            figures,
+            tables,
+            metrics=report,
+            out_dir=bundle_dir,
+            title=f"pharmaml ml train — {result.name} ({dataset.task})",
+            subtitle=str(args.data),
+        )
+        print(f"plots:    {bundle_dir / 'report.html'} (+{len(written) - 1} files)")
     return 0
 
 
@@ -227,6 +375,25 @@ def _cmd_ml_compare(args: argparse.Namespace) -> int:
         dataset.X, dataset.y, dataset.task, models=args.models, cv=args.cv
     )
     print(leaderboard.to_string(index=False))
+
+    if args.out:
+        from pharmaml.utils.io import write_table
+
+        path = write_table(leaderboard, args.out)
+        print(f"\nleaderboard -> {path}")
+
+    if args.plot:
+        from pharmaml.viz import ml_plots, save_visual_bundle
+
+        figure = ml_plots.plot_model_comparison(leaderboard)
+        written = save_visual_bundle(
+            figures={"model_comparison": figure},
+            tables={"leaderboard": leaderboard},
+            out_dir=args.out_dir,
+            title="pharmaml ml compare",
+            subtitle=str(args.data),
+        )
+        print(f"plot:     {Path(args.out_dir) / 'report.html'} (+{len(written) - 1} files)")
 
     if not args.models:
         unavailable = [e["name"] for e in list_models(only_available=False) if not e["available"]]
@@ -326,6 +493,7 @@ def _cmd_docking_check(args: argparse.Namespace) -> int:
 _HANDLERS = {
     ("models", None): _cmd_models,
     ("data", "inspect"): _cmd_data_inspect,
+    ("data", "split"): _cmd_data_split,
     ("ml", "train"): _cmd_ml_train,
     ("ml", "compare"): _cmd_ml_compare,
     ("chem", "pic50"): _cmd_chem_pic50,
