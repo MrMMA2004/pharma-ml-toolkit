@@ -43,8 +43,10 @@ after adding new public functions.
 | `split_table_into_chunks` | function | Stream a large CSV into fixed-size part files. |
 | `compute_descriptors` | function | Compute molecular descriptors for a list of SMILES. |
 | `compute_fingerprints` | function | Compute fingerprints for a list of SMILES. |
+| `compute_maccs` | function | Compute the 167-bit MACCS key fingerprints. |
 | `tanimoto_from_bitarrays` | function | Tanimoto coefficient for two equal-length binary arrays. |
 | `tanimoto_from_sets` | function | Tanimoto coefficient for two feature sets: |A∩B| / |A∪B|. |
+| `tanimoto_matrix` | function | All-vs-all Tanimoto similarities between two bit-matrix batches. |
 
 ## `pharmaml.ml`
 
@@ -103,15 +105,19 @@ after adding new public functions.
 |---|---|---|
 | `GridBox` | class | Docking search box geometry. |
 | `compute_grid_box` | function | Compute a grid box enclosing a reference ligand plus padding. |
+| `extract_pdbqt_atom_types` | function | Collect sorted unique AutoDock atom types from a PDBQT ligand. |
 | `write_gpf` | function | Write an AutoDock4 grid parameter file (GPF) for one ligand. |
+| `smiles_to_pdbqt` | function | Convert one SMILES to a 3D PDBQT ligand (Meeko + RDKit). |
 | `run_autodock4` | function | Run autogrid4 + autodock4 for one ligand directory. |
 | `run_vina` | function | Run a single AutoDock Vina docking. |
 | `batch_run_directories` | function | Dock every prepared ligand sub-directory in parallel. |
 | `parse_dlg_cluster_table` | function | Parse the ``CLUSTERING HISTOGRAM`` table of an AutoDock4 DLG. |
 | `parse_dlg_summary` | function | Summarise one DLG: best cluster, most populated cluster, extremes. |
 | `parse_vina_output` | function | Parse the mode table of a Vina output (stdout log or PDBQT REMARKs). |
+| `check_docking_completion` | function | Audit a docking tree for missing/failed runs (upgrades checker.py). |
 | `scan_docking_directory` | function | Build the docking summary table for every sub-directory. |
 | `ligand_efficiency` | function | Ligand efficiency ``LE = |ΔG| / N_heavy`` (kcal/mol per atom). |
+| `ligand_efficiency_series` | function | Vectorised ligand-efficiency column for a docking summary table. |
 | `consensus_rescore` | function | Combine several docking evidence columns into a 0–1 consensus. |
 
 ## `pharmaml.viz`

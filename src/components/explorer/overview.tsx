@@ -54,6 +54,15 @@ ds = load_dataset("my_compounds.csv", target="activity")
 print(ds.task)          # 'classification' (2+ classes) or 'regression'
 print(ds.class_counts)  # {'active': 120, 'inactive': 190, ...}
 
+# --- Feature calculation: SMILES -> descriptors -------------------
+from pharmaml.chem import (
+    compute_descriptors, compute_fingerprints, tanimoto_matrix,
+)
+
+desc = compute_descriptors(df["SMILES"])   # 217 RDKit descriptors
+bits, valid = compute_fingerprints(df["SMILES"], kind="morgan")
+sim  = tanimoto_matrix(bits, bits)          # Tanimoto heat-map
+
 # --- Pharmaceutical calculations -------------------------------
 from pharmaml.pharma import (
     creatinine_clearance, bsa_mosteller,
@@ -85,13 +94,15 @@ report = evaluate_model(result.model, X_te, y_te, ds.task)
 
 # --- Docking -----------------------------------------------------
 from pharmaml.docking import (
-    parse_vina_output, parse_dlg_cluster_table,
-    ligand_efficiency, consensus_rescore,
+    smiles_to_pdbqt, compute_grid_box, scan_docking_directory,
+    parse_vina_output, ligand_efficiency, consensus_rescore,
 )
 
+ligand = smiles_to_pdbqt("CC(=O)Oc1ccccc1C(=O)O", "ligands/")
+box    = compute_grid_box(ligand, padding=4.0)
+summary = scan_docking_directory("docking_run/")   # one row per ligand
 poses = parse_vina_output(open("vina.out").read())
-le    = ligand_efficiency(affinity_kcal_mol=-9.6, num_heavy_atoms=32)
-cons  = consensus_rescore(scores_df, columns=["vina", "ad4"])
+cons  = consensus_rescore(summary, columns=["best_lowest_energy"])
 
 # --- Visual output: figures + HTML report ------------------------
 from pharmaml.viz import (
@@ -148,9 +159,9 @@ const DOMAINS: DomainCardSpec[] = [
     title: "Molecular Docking",
     tagline: "pharmaml.docking — AutoDock4 & Vina",
     bullets: [
-      "Grid-box & GPF preparation, batch run orchestration",
+      "Grid-box & GPF preparation, SMILES → 3D PDBQT ligand prep",
       "Pure-Python Vina output & DLG cluster-table parsers",
-      "Ligand efficiency + consensus z-score rescoring",
+      "Ligand efficiency + consensus rescoring, one campaign notebook",
     ],
     apis: ["parse_vina_output()", "write_gpf()", "consensus_rescore()"],
     accent: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
@@ -205,7 +216,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "289 passing pytest cases across every domain (incl. viz & notebook guards)",
+    after: "291 passing pytest cases across every domain (incl. viz & notebook guards)",
   },
   {
     aspect: "Distribution",
@@ -340,8 +351,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="289"
-                countTo={289}
+                value="291"
+                countTo={291}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
@@ -409,9 +420,10 @@ export function Overview() {
                 </div>
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Zero to one hundred in one notebook: import your own file → EDA → split →
-                grid-searched training → multiclass evaluation → leaderboard → feature
-                importance → save/load → HTML report. All outputs committed, figures inline.
+                Zero to one hundred in one notebook: import your own file → SMILES →
+                descriptors &amp; fingerprints → EDA → split → grid-searched training →
+                multiclass evaluation → leaderboard → feature importance → save/load →
+                HTML report. All outputs committed, figures inline.
               </p>
 
               {/* Mock notebook preview: two cells + animated ROC-AUC sparkline. */}
@@ -425,9 +437,9 @@ export function Overview() {
               >
                 <div className="flex items-center gap-1.5 font-mono text-[9px] leading-none text-muted-foreground">
                   <span className="rounded-sm bg-emerald-500/15 px-1 py-0.5 text-emerald-600 dark:text-emerald-400">
-                    In [1–29]
+                    In [1–37]
                   </span>
-                  <span className="ml-auto">12 figures · executed top-to-bottom</span>
+                  <span className="ml-auto">15 figures · executed top-to-bottom</span>
                 </div>
                 <div className="rounded-md border bg-background/70 px-2.5 py-1.5 font-mono text-[10px] leading-relaxed">
                   <span className="text-primary">from</span>{" "}
@@ -482,7 +494,7 @@ export function Overview() {
                     />
                   </svg>
                   <div className="flex items-center justify-between font-mono text-[9px] leading-none text-muted-foreground">
-                    <span>CV ROC-AUC · stages 1→12</span>
+                    <span>CV ROC-AUC · stages 1→13</span>
                     <span className="font-semibold text-primary">0.50 → 0.92</span>
                   </div>
                 </div>

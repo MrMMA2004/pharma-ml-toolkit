@@ -19,17 +19,18 @@ you would actually run it:
 | § | Stage | Toolkit |
 |---|---|---|
 | 1 | **Data entry** — import *your own* CSV/Excel | `pharmaml.data` |
-| 2 | Exploratory analysis — audit, class balance, descriptor ranges | `pharmaml.viz` |
-| 3 | Endpoint transformation — IC50 → pIC50 | `pharmaml.chem` |
-| 4 | Split — stratified train/test | `pharmaml.ml` |
-| 5 | Train — grid-searched random forest, CV folds | `pharmaml.ml` |
-| 6 | Evaluate — confusion matrix, ROC, metrics table | `pharmaml.viz` |
-| 7 | Multiclass — 3-class target end-to-end | `pharmaml.ml` |
-| 8 | Regression — parity + residual diagnostics | `pharmaml.viz` |
-| 9 | Leaderboard — every model, cross-validated | `pharmaml.ml` |
-| 10 | Interpret — feature importance | `pharmaml.viz` |
-| 11 | Deploy — save/load, score new compounds | `pharmaml.ml` |
-| 12 | Publish — one-click HTML report + png/svg/pdf + csv/md/json | `pharmaml.viz` |
+| 2 | **Feature calculation** — SMILES → descriptors, fingerprints, similarity | `pharmaml.chem` |
+| 3 | Exploratory analysis — audit, class balance, descriptor ranges | `pharmaml.viz` |
+| 4 | Endpoint transformation — IC50 → pIC50 | `pharmaml.chem` |
+| 5 | Split — stratified train/test | `pharmaml.ml` |
+| 6 | Train — grid-searched random forest, CV folds | `pharmaml.ml` |
+| 7 | Evaluate — confusion matrix, ROC, metrics table | `pharmaml.viz` |
+| 8 | Multiclass — 3-class target end-to-end | `pharmaml.ml` |
+| 9 | Regression — parity + residual diagnostics | `pharmaml.viz` |
+| 10 | Leaderboard — every model, cross-validated | `pharmaml.ml` |
+| 11 | Interpret — feature importance | `pharmaml.viz` |
+| 12 | Deploy — save/load, score new compounds | `pharmaml.ml` |
+| 13 | Publish — one-click HTML report + png/svg/pdf + csv/md/json | `pharmaml.viz` |
 
 **Setup** — install the package with the plotting extra first:
 
@@ -56,10 +57,222 @@ CLI equivalents:
 pharmaml data inspect --data my_compounds.csv
 pharmaml ml train    --data my_compounds.csv --task auto
 ```
+
+The demo file carries a `SMILES` column that `load_dataset` drops as
+non-numeric — §2 turns those structures into features.
 """
 
+MD_1B = """\
+## 2 · Feature calculation — from SMILES to descriptors
+
+The legacy archive scattered feature computation over four scripts
+(`Descriptor calculator.py`, `Morgan_calculator.py`, `ECFP_calculation.py`,
+`Mordred_calculation.py`) that silently assumed *"we are sure all SMILES are
+valid"*. `pharmaml.chem` unifies them with explicit accounting:
+
+* `compute_descriptors(smiles)` — all 2D RDKit descriptors (~217 columns),
+  a Morgan count table, or the 1800+ Mordred suite (`descriptor_set=...`);
+* `compute_fingerprints(smiles)` — Morgan/ECFP, RDKit path and atom-pair
+  fingerprints, binary bits or counts;
+* `compute_maccs(smiles)` — the 167-bit MACCS keys;
+* `tanimoto_matrix(bits, bits)` — pairwise similarity for heat-maps;
+* invalid SMILES are dropped *visibly* (row indices logged), never silently.
+
+Requires RDKit — `pip install 'pharmaml[chem]'`.
+"""
+
+CODE_FC_A = """\
+from pharmaml.chem import compute_descriptors, compute_fingerprints, compute_maccs
+
+# Silence RDKit's C++ parser spam -- pharmaml logs invalid rows explicitly.
+try:
+    from rdkit import RDLogger
+    RDLogger.DisableLog("rdApp.*")
+except ImportError:
+    pass
+
+# A demo screening library of real drug-like structures (77 valid
+# molecules), plus two *deliberately* broken entries so the invalid-SMILES
+# accounting is visible.  (In your project: use your own SMILES column --
+# frame["SMILES"] works directly.)
+LIBRARY = [
+    ("aspirin", "CC(=O)Oc1ccccc1C(=O)O"),
+    ("ibuprofen", "CC(C)Cc1ccc(cc1)C(C)C(=O)O"),
+    ("naproxen", "COc1ccc2cc(ccc2c1)C(C)C(=O)O"),
+    ("paracetamol", "CC(=O)Nc1ccc(O)cc1"),
+    ("caffeine", "Cn1cnc2c1c(=O)n(C)c(=O)n2C"),
+    ("theophylline", "Cn1c(=O)c2[nH]cnc2n(C)c1=O"),
+    ("metformin", "CN(C)C(=N)N=C(N)N"),
+    ("benzocaine", "CCOC(=O)c1ccc(N)cc1"),
+    ("propranolol", "CC(C)NCC(O)COc1cccc2ccccc12"),
+    ("nicotine", "CN1CCCC1c1cccnc1"),
+    ("atenolol", "CC(C)NCC(O)COc1ccc(CC(N)=O)cc1"),
+    ("metoprolol", "COCCc1ccc(OCC(C)NCC(C)C)cc1"),
+    ("lidocaine", "CCN(CC)CC(=O)Nc1c(C)cccc1C"),
+    ("procaine", "CCN(CC)CCOC(=O)c1ccc(N)cc1"),
+    ("fluoxetine", "CNCCC(Oc1ccc(C(F)(F)F)cc1)c1ccccc1"),
+    ("salicylic acid", "OC(=O)c1ccccc1O"),
+    ("benzoic acid", "OC(=O)c1ccccc1"),
+    ("benzaldehyde", "O=Cc1ccccc1"),
+    ("benzamide", "NC(=O)c1ccccc1"),
+    ("salicylamide", "NC(=O)c1ccccc1O"),
+    ("methyl salicylate", "COC(=O)c1ccccc1O"),
+    ("ethyl benzoate", "CCOC(=O)c1ccccc1"),
+    ("phenyl acetate", "CC(=O)Oc1ccccc1"),
+    ("acetophenone", "CC(=O)c1ccccc1"),
+    ("benzophenone", "O=C(c1ccccc1)c1ccccc1"),
+    ("benzyl alcohol", "OCc1ccccc1"),
+    ("phenetole", "CCOc1ccccc1"),
+    ("phenol", "Oc1ccccc1"),
+    ("aniline", "Nc1ccccc1"),
+    ("anisole", "COc1ccccc1"),
+    ("toluene", "Cc1ccccc1"),
+    ("ethylbenzene", "CCc1ccccc1"),
+    ("propylbenzene", "CCCc1ccccc1"),
+    ("o-xylene", "Cc1ccccc1C"),
+    ("mesitylene", "Cc1c(C)c(C)cc(C)c1"),
+    ("styrene", "C=Cc1ccccc1"),
+    ("allylbenzene", "C=CCc1ccccc1"),
+    ("chlorobenzene", "Clc1ccccc1"),
+    ("bromobenzene", "Brc1ccccc1"),
+    ("fluorobenzene", "Fc1ccccc1"),
+    ("nitrobenzene", "O=[N+]([O-])c1ccccc1"),
+    ("benzonitrile", "N#Cc1ccccc1"),
+    ("biphenyl", "c1ccc(-c2ccccc2)cc1"),
+    ("diphenyl ether", "O(c1ccccc1)c1ccccc1"),
+    ("naphthalene", "c1ccc2ccccc2c1"),
+    ("anthracene", "c1ccc2cc3ccccc3cc2c1"),
+    ("indole", "c1ccc2[nH]ccc2c1"),
+    ("quinoline", "c1ccc2ncccc2c1"),
+    ("imidazole", "c1ncc[nH]1"),
+    ("pyrrole", "c1cc[nH]c1"),
+    ("furan", "c1ccoc1"),
+    ("pyridine", "c1ccncc1"),
+    ("pyrimidine", "c1cncnc1"),
+    ("pyrazine", "c1cnccn1"),
+    ("thiazole", "c1cscn1"),
+    ("vanillin", "COc1cc(C=O)ccc1O"),
+    ("eugenol", "COc1cc(CC=C)ccc1O"),
+    ("guaiacol", "COc1ccccc1O"),
+    ("catechol", "Oc1ccccc1O"),
+    ("resorcinol", "Oc1cccc(O)c1"),
+    ("hydroquinone", "Oc1ccc(O)cc1"),
+    ("phthalic acid", "OC(=O)c1ccccc1C(=O)O"),
+    ("cinnamic acid", "OC(=O)C=Cc1ccccc1"),
+    ("cinnamaldehyde", "O=CC=Cc1ccccc1"),
+    ("coumarin", "O=C1Oc2ccccc2C=C1"),
+    ("sulfanilamide", "Nc1ccc(S(N)(=O)=O)cc1"),
+    ("phenacetin", "CCOc1ccc(NC(C)=O)cc1"),
+    ("glycine", "NCC(=O)O"),
+    ("alanine", "CC(N)C(=O)O"),
+    ("valine", "CC(C)CC(N)C(=O)O"),
+    ("leucine", "CC(C)CCC(N)C(=O)O"),
+    ("phenylalanine", "NC(Cc1ccccc1)C(=O)O"),
+    ("tyrosine", "NC(Cc1ccc(O)cc1)C(=O)O"),
+    ("serine", "NC(CO)C(=O)O"),
+    ("histamine", "CNCCc1c[nH]cn1"),
+    ("dopamine", "NCCc1ccc(O)c(O)c1"),
+    ("acetylcholine", "CC[N+](C)(C)CCOC(C)=O"),
+    ("broken-smiles", "not_a_smiles"),
+    ("unclosed-ring", "C1CC"),
+]
+
+smiles_series = pd.Series([smi for _, smi in LIBRARY], name="SMILES")
+
+descriptor_frame = compute_descriptors(smiles_series, progress=False)
+
+print(f"{descriptor_frame.shape[0]} valid molecules x "
+      f"{descriptor_frame.shape[1] - 1} descriptors (RDKit 2D set)")
+print(f"dropped {len(LIBRARY) - len(descriptor_frame)} invalid SMILES ")"""
+
+CODE_FC_B = """\
+# A chemist-readable slice of the 217 computed columns.
+KEY_DESCRIPTORS = ["MolWt", "MolLogP", "TPSA", "NumHDonors", "NumHAcceptors",
+                   "NumRotatableBonds", "LabuteASA", "RingCount"]
+
+key_frame = descriptor_frame[["SMILES"] + KEY_DESCRIPTORS].round(2)
+key_frame.index = [LIBRARY[i][0] for i in descriptor_frame.index]
+key_frame.index.name = "compound"
+key_frame"""
+
+CODE_FC_C = """\
+# Fingerprints: binary bits vs counts, three different families.
+bits_morgan, valid_morgan = compute_fingerprints(smiles_series, kind="morgan", n_bits=2048)
+counts_morgan, _ = compute_fingerprints(smiles_series, kind="morgan", n_bits=2048,
+                                        as_counts=True)
+bits_path, _ = compute_fingerprints(smiles_series, kind="rdkit", n_bits=1024)
+bits_pair, _ = compute_fingerprints(smiles_series, kind="atom_pair", n_bits=2048)
+maccs, valid_maccs = compute_maccs(smiles_series)
+
+print(f"morgan bits   : {bits_morgan.shape}  (mean on-bit rate {bits_morgan.mean():.3f})")
+print(f"morgan counts : {counts_morgan.shape}")
+print(f"rdkit path    : {bits_path.shape}")
+print(f"atom pair     : {bits_pair.shape}")
+print(f"MACCS keys    : {maccs.shape}  (valid rows: {len(valid_maccs)})")"""
+
+CODE_FC_D = """\
+from pharmaml.viz import plot_descriptor_distributions
+
+fig_desc = plot_descriptor_distributions(
+    descriptor_frame[KEY_DESCRIPTORS],
+    title="Computed descriptor distributions (library)",
+)"""
+
+CODE_FC_E = """\
+from pharmaml.chem import tanimoto_matrix
+from pharmaml.viz import plot_similarity_heatmap
+
+similarity = tanimoto_matrix(bits_morgan, bits_morgan)
+labels = [LIBRARY[i][0] for i in valid_morgan]
+
+fig_similarity = plot_similarity_heatmap(
+    similarity, labels=labels,
+    title="Library similarity — Tanimoto on Morgan bits",
+)"""
+
+CODE_FC_F = """\
+# Structures in, model out: the computed descriptors become X.  Here a
+# synthetic activity target (LogP + H-bond donors + noise) plays the role
+# your measured IC50/pIC50 column plays in a real project.
+rng = np.random.default_rng(7)
+activity_score = (1.5 * key_frame["MolLogP"] + 1.0 * key_frame["NumHDonors"]
+                  + rng.normal(scale=0.25, size=len(key_frame)))
+
+struct_table = key_frame.reset_index(drop=True)
+struct_table["activity"] = np.where(
+    activity_score > np.median(activity_score), "active", "inactive"
+)
+
+struct_file = WORK / "library_with_descriptors.csv"
+struct_table.to_csv(struct_file, index=False)
+
+ds_struct = load_dataset(struct_file)   # target auto-detected -> 'activity'
+print(ds_struct.summary())"""
+
+CODE_FC_G = """\
+from pharmaml.ml import make_train_test_split, train_model, evaluate_model
+
+sX_tr, sX_te, sy_tr, sy_te = make_train_test_split(
+    ds_struct.X, ds_struct.y, test_size=0.25, random_state=42
+)
+struct_result = train_model("logistic_regression", "classification", sX_tr, sy_tr,
+                            cv=3, tune=True)
+struct_report = evaluate_model(struct_result.model, sX_te, sy_te, "classification")
+
+print(f"{struct_result.name}: CV ROC-AUC = {struct_result.cv_mean:.3f} "
+      f"± {struct_result.cv_std:.3f}  ({len(ds_struct.y)}-compound demo library)")
+print(f"held-out accuracy: {struct_report.accuracy:.2f} on {len(sy_te)} compounds")"""
+
+CODE_FC_H = """\
+from pharmaml.viz import plot_feature_importance
+
+fig_struct_importance = plot_feature_importance(
+    struct_result.model, feature_names=ds_struct.feature_names, top_n=8,
+    title="Which computed descriptors drive activity?",
+)"""
+
 MD_2 = """\
-## 2 · Exploratory data analysis
+## 3 · Exploratory data analysis
 
 Look at the data *before* modelling: the audit summary, the class balance
 (one bar per class, counts annotated) and the descriptor distributions
@@ -68,21 +281,21 @@ discovered as cryptic sklearn crashes.
 """
 
 MD_3 = """\
-## 3 · Endpoint transformation — IC50 → pIC50
+## 4 · Endpoint transformation — IC50 → pIC50
 
 Potency data arrives as IC50 (nM); models regress on the log-transformed
 pIC50. `add_pic50_column` appends the converted column to any table.
 """
 
 MD_4 = """\
-## 4 · Train / test split
+## 5 · Train / test split
 
 `make_train_test_split` stratifies by the target so every class appears in
 both partitions with the same proportions.
 """
 
 MD_5 = """\
-## 5 · Train one model (with grid search)
+## 6 · Train one model (with grid search)
 
 `train_model` wraps the estimator in the impute+scale pipeline and runs a
 5-fold cross-validated grid search; per-fold scores are returned so the
@@ -90,7 +303,7 @@ mean is never mistaken for a guarantee.
 """
 
 MD_6 = """\
-## 6 · Evaluate the classifier
+## 7 · Evaluate the classifier
 
 The `ClassificationReport` carries every metric plus the confusion matrix;
 the plots below are the two figures the legacy scripts produced —
@@ -99,7 +312,7 @@ annotations and per-class one-vs-rest curves.
 """
 
 MD_7 = """\
-## 7 · Multiclass — two or more classes
+## 8 · Multiclass — two or more classes
 
 A target with 3+ distinct values is a first-class citizen: stratified
 splits, k×k confusion matrix, one-vs-rest ROC per class, macro-averaged
@@ -107,7 +320,7 @@ metrics.
 """
 
 MD_8 = """\
-## 8 · Regression path
+## 9 · Regression path
 
 The same pipeline with a continuous pIC50 target: parity scatter against
 the identity line, and residual diagnostics (vs predicted + histogram)
@@ -115,7 +328,7 @@ that the legacy scripts never drew.
 """
 
 MD_9 = """\
-## 9 · Model leaderboard
+## 10 · Model leaderboard
 
 `compare_models` cross-validates the whole registry at once — the job the
 original archive spread over ~30 near-duplicate scripts. The error bars
@@ -123,21 +336,21 @@ are fold-to-fold standard deviations.
 """
 
 MD_10 = """\
-## 10 · Interpret — feature importance
+## 11 · Interpret — feature importance
 
 Which descriptors drive the model? Works for tree ensembles
 (`feature_importances_`), linear models (`|coef_|`) and explicit mappings.
 """
 
 MD_11 = """\
-## 11 · Deploy — persistence and scoring new compounds
+## 12 · Deploy — persistence and scoring new compounds
 
 `save_model` writes a joblib bundle *with provenance metadata*; `load_model`
 round-trips it. New, unseen rows are scored with one `predict` call.
 """
 
 MD_12 = """\
-## 12 · Publish — the one-click visual bundle
+## 13 · Publish — the one-click visual bundle
 
 `save_visual_bundle` renders every figure and table into a directory **and**
 a self-contained `report.html` (figures embedded as base64 — no external
@@ -146,11 +359,14 @@ markdown; figures as png *and* svg *and* pdf.
 """
 
 MD_13 = """\
-## 13 · Recap
+## 14 · Recap
 
 | Stage | One-liner |
 |---|---|
 | Import your data | `ds = load_dataset("my.csv", target="activity")` |
+| Compute descriptors | `compute_descriptors(frame["SMILES"])` |
+| Compute fingerprints | `compute_fingerprints(smiles, kind="morgan")` |
+| Similarity heat-map | `plot_similarity_heatmap(tanimoto_matrix(bits, bits))` |
 | Audit | `ds.summary()` |
 | Convert endpoints | `add_pic50_column(frame, "IC50 (nM)")` |
 | Split | `make_train_test_split(ds.X, ds.y, 0.2)` |
@@ -421,6 +637,8 @@ BUNDLE = WORK / "reports"
 artifacts = save_visual_bundle(
     figures={
         "class_distribution": fig_balance,
+        "descriptor_distributions": fig_desc,
+        "similarity_heatmap": fig_similarity,
         "cv_scores": fig_cv,
         "confusion_matrix": fig_confusion,
         "roc_curves": fig_roc,
@@ -432,6 +650,7 @@ artifacts = save_visual_bundle(
     tables={
         "metrics": metrics_to_dataframe(report),
         "leaderboard": leaderboard,
+        "computed_descriptors": key_frame,
         "split_audit": split_audit,
         "scored_compounds": scored,
     },
@@ -440,7 +659,7 @@ artifacts = save_visual_bundle(
     title="QSAR activity model — complete workflow",
     subtitle=f"{result.name} · {ds.n_samples} compounds · {len(ds.classes)} classes",
     formats=("png", "svg"),
-    close=False,   # keep figures open so they also render above
+    close=True,    # figures already rendered inline above; free the memory
 )
 pd.DataFrame({"artifact": [p.name for p in artifacts],
               "kind": [p.suffix.lstrip('.') for p in artifacts]})"""
@@ -468,6 +687,8 @@ cells = [nbformat.v4.new_markdown_cell(MD_HEADER),
          nbformat.v4.new_code_cell(CODE_SETUP)]
 for md, code_blocks in (
     (MD_1, [CODE_1A, CODE_1B]),
+    (MD_1B, [CODE_FC_A, CODE_FC_B, CODE_FC_C, CODE_FC_D, CODE_FC_E,
+             CODE_FC_F, CODE_FC_G, CODE_FC_H]),
     (MD_2, [CODE_2, CODE_2B, CODE_2C]),
     (MD_3, [CODE_3]),
     (MD_4, [CODE_4]),
@@ -500,7 +721,10 @@ client = NotebookClient(
     timeout=900,
     kernel_name="python3",
     resources={"metadata": {"path": "/home/z/my-project/pharma-ml-toolkit/examples"}},
-    env={**os.environ, "PYTHONPATH": "/home/z/my-project/pharma-ml-toolkit/src"},
+    env={**os.environ, "PYTHONPATH": "/home/z/my-project/pharma-ml-toolkit/src",
+         # cap BLAS/loky workers: the build sandbox is memory-constrained
+         "LOKY_MAX_CPU_COUNT": "1", "OMP_NUM_THREADS": "1",
+         "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"},
 )
 client.execute()
 

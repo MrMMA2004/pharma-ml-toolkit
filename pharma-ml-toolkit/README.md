@@ -49,8 +49,11 @@ exceptions, input validation, and pytest coverage** (227 tests).
 # core (ML + pharma + docking parsing/scoring)
 pip install -e .
 
-# with cheminformatics extras
+# with cheminformatics extras (RDKit descriptors/fingerprints/similarity)
 pip install -e ".[chem]"
+
+# with docking preparation extras (RDKit + Meeko: SMILES -> 3D PDBQT)
+pip install -e ".[docking]"
 
 # with gradient-boosting model families
 pip install -e ".[boosting]"
@@ -84,8 +87,8 @@ pharma-ml-toolkit/
 │   ├── docking/             # preparation, workflow, parsing, scoring
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 289 pytest cases across all domains
-├── examples/                # runnable demos + two executed notebooks (complete ML workflow · walkthrough)
+├── tests/                   # 291 pytest cases across all domains
+├── examples/                # runnable demos + three executed notebooks (complete ML workflow · complete docking workflow · walkthrough)
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
 ├── Dockerfile
@@ -103,12 +106,34 @@ pharma-ml-toolkit/
 every stage of a QSAR project in the order you would actually run it, with all
 outputs committed (numbers *and* inline figures):
 
-> §1 data entry (your own file) → §2 EDA → §3 IC50→pIC50 → §4 split → §5 grid-searched
-> training → §6 evaluation (confusion, ROC) → §7 multiclass → §8 regression
-> (parity, residuals) → §9 leaderboard → §10 feature importance → §11 save/load &
-> scoring new compounds → §12 one-click HTML report + png/svg/pdf + csv/md/json.
+> §1 data entry (your own file) → §2 **feature calculation** (SMILES → 217 RDKit
+> descriptors, Morgan/RDKit/atom-pair fingerprints, MACCS keys, Tanimoto
+> similarity heat-map, structures → model demo) → §3 EDA → §4 IC50→pIC50 →
+> §5 split → §6 grid-searched training → §7 evaluation (confusion, ROC) →
+> §8 multiclass → §9 regression (parity, residuals) → §10 leaderboard →
+> §11 feature importance → §12 save/load & scoring new compounds → §13
+> one-click HTML report + png/svg/pdf + csv/md/json.
 
-Open it, replace the demo file with your own CSV, and re-run all cells.
+Open it, replace the demo file with your own CSV (and the §2 library with your
+own SMILES column), and re-run all cells. §2 needs RDKit —
+`pip install 'pharmaml[chem]'`.
+
+### The complete docking process in one notebook
+
+`examples/complete_docking_workflow.ipynb` is the docking **zero-to-one-hundred**
+walkthrough — a full virtual-screening campaign, executed end-to-end without a
+docking engine (the demo campaign tree uses the real AutoDock4 `.dlg` format):
+
+> §1 ligand preparation (SMILES → 3D PDBQT via Meeko) → §2 grid box + GPF →
+> §3 running the engines (AutoDock4 / Vina, guarded failures) → §4 parsing
+> (cluster tables, completion audit, campaign scan, idempotent batch re-run) →
+> §5 Vina pose tables → §6 rescoring (ligand efficiency + consensus) → §7
+> energy-distribution & top-ligand figures → §8 one-click HTML report.
+
+Point `DOCKING_DIR` at your real campaign folder and re-run — parsers, rescoring
+and plots work unchanged on real `.dlg` trees. §1 needs
+`pip install 'pharmaml[docking]'`.
+
 (`examples/pharmaml_walkthrough.ipynb` remains the every-domain tour including
 PK, docking and chem conversions.)
 
@@ -353,7 +378,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (289 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (291 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

@@ -9,10 +9,12 @@ from pharmaml.chem.converters import (
 from pharmaml.chem.descriptors import (
     compute_descriptors,
     compute_fingerprints,
+    compute_maccs,
 )
 from pharmaml.chem.similarity import (
     tanimoto_from_bitarrays,
     tanimoto_from_sets,
+    tanimoto_matrix,
 )
 
 __all__ = [
@@ -22,6 +24,8 @@ __all__ = [
     "split_table_into_chunks",
     "compute_descriptors",
     "compute_fingerprints",
+    "compute_maccs",
     "tanimoto_from_bitarrays",
     "tanimoto_from_sets",
+    "tanimoto_matrix",
 ]

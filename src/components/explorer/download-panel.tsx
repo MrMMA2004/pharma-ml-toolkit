@@ -39,11 +39,14 @@ pip install -e .
 #    …or with cheminformatics extras (RDKit)
 pip install -e ".[chem]"
 
+#    …or with docking prep extras (RDKit + Meeko)
+pip install -e ".[docking]"
+
 #    …or with gradient-boosting model families
 pip install -e ".[boosting]"
 
 # 3. verify the installation
-python -m pytest          # 289 tests should pass
+python -m pytest          # 291 tests should pass
 pharmaml --version`;
 
 function countFiles(node: TreeNode): number {
@@ -74,9 +77,17 @@ const FEATURED_FILES: Array<{
     path: "examples/complete_ml_workflow.ipynb",
     title: "Complete ML workflow (zero → one hundred)",
     description:
-      "Executed Jupyter notebook — the full ML process in structured order: import your own file → EDA → pIC50 → split → tuned training → multiclass evaluation → leaderboard → feature importance → save/load → HTML report. 12 figures committed inline.",
+      "Executed Jupyter notebook — the full ML process in structured order: import your own file → SMILES → descriptors & fingerprints (feature calculation) → EDA → pIC50 → split → tuned training → multiclass evaluation → leaderboard → feature importance → save/load → HTML report. 15 figures committed inline.",
     icon: NotebookText,
     badgeClass: "bg-primary/10 text-primary",
+  },
+  {
+    path: "examples/complete_docking_workflow.ipynb",
+    title: "Complete docking workflow (zero → one hundred)",
+    description:
+      "Executed Jupyter notebook — a full virtual-screening campaign: SMILES → 3D PDBQT ligand prep → grid box & GPF → guarded engine runs → DLG parsing & completion audit → ligand efficiency + consensus rescoring → energy figures → HTML report. Runs without a docking engine.",
+    icon: NotebookText,
+    badgeClass: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
   },
   {
     path: "examples/pharmaml_walkthrough.ipynb",
@@ -99,8 +110,8 @@ const FEATURED_FILES: Array<{
 function collectDirSummary(root: TreeNode): Array<{ name: string; files: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "289 pytest cases across all domains",
-    examples: "runnable end-to-end demos on synthetic data",
+    tests: "291 pytest cases across all domains",
+    examples: "three executed notebooks + runnable end-to-end demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
   };
@@ -280,7 +291,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="289" label="passing tests" />
+          <StatChip icon={CircleCheck} value="291" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}

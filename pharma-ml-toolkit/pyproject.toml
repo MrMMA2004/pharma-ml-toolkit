@@ -44,6 +44,10 @@ chem = [
     "rdkit-pypi>=2023.9",
     "mordred>=1.2",
 ]
+docking = [
+    "rdkit-pypi>=2023.9",
+    "meeko>=0.5",
+]
 boosting = [
     "xgboost>=2.0",
     "lightgbm>=4.0",

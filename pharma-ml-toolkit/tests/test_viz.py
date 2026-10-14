@@ -504,21 +504,79 @@ class TestSaveFigure:
 class TestNotebookArtifacts:
     """The shipped notebooks must stay executed and error-free."""
 
-    def test_complete_ml_workflow_notebook(self):
-        path = Path(__file__).resolve().parents[1] / "examples" / "complete_ml_workflow.ipynb"
-        assert path.is_file(), "examples/complete_ml_workflow.ipynb missing from the ZIP"
+    @staticmethod
+    def _read(example_name: str):
         import nbformat
 
-        nb = nbformat.read(path, as_version=4)
+        path = Path(__file__).resolve().parents[1] / "examples" / example_name
+        assert path.is_file(), f"examples/{example_name} missing from the ZIP"
+        return nbformat.read(path, as_version=4)
+
+    @staticmethod
+    def _stats(nb):
         code_cells = [c for c in nb.cells if c.cell_type == "code"]
-        assert len(code_cells) >= 25
         errors = [
             o for c in code_cells for o in c.get("outputs", [])
             if o.output_type == "error"
         ]
-        assert not errors, f"notebook has {len(errors)} committed error output(s)"
         figures = sum(
             1 for c in code_cells for o in c.get("outputs", [])
             if o.get("data", {}).get("image/png")
         )
-        assert figures >= 10, "notebook lost its inline figures"
+        executed = sum(1 for c in code_cells if c.get("execution_count"))
+        return code_cells, errors, figures, executed
+
+    def test_complete_ml_workflow_notebook(self):
+        nb = self._read("complete_ml_workflow.ipynb")
+        code_cells, errors, figures, executed = self._stats(nb)
+        assert len(code_cells) >= 30
+        assert executed == len(code_cells), "notebook has unexecuted code cells"
+        assert not errors, f"notebook has {len(errors)} committed error output(s)"
+        assert figures >= 14, "notebook lost its inline figures"
+
+        sources = "\n".join(c.source for c in code_cells)
+        # The feature-calculation section must stay shipped (§2).
+        for symbol in (
+            "compute_descriptors",
+            "compute_fingerprints",
+            "compute_maccs",
+            "tanimoto_matrix",
+            "plot_similarity_heatmap",
+        ):
+            assert symbol in sources, f"notebook lost its {symbol} section"
+        desc_cell = next(
+            (c for c in code_cells if "compute_descriptors" in c.source), None
+        )
+        assert desc_cell is not None
+        desc_text = "".join(
+            o.get("text", "") for o in desc_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "valid molecules" in desc_text, "descriptor cell lost its output"
+
+    def test_complete_docking_workflow_notebook(self):
+        nb = self._read("complete_docking_workflow.ipynb")
+        code_cells, errors, figures, executed = self._stats(nb)
+        assert len(code_cells) >= 18
+        assert executed == len(code_cells), "notebook has unexecuted code cells"
+        assert not errors, f"notebook has {len(errors)} committed error output(s)"
+        assert figures >= 2, "docking notebook lost its figures"
+
+        sources = "\n".join(c.source for c in code_cells)
+        for symbol in (
+            "smiles_to_pdbqt",
+            "compute_grid_box",
+            "write_gpf",
+            "run_vina",
+            "batch_run_directories",
+            "parse_dlg_summary",
+            "check_docking_completion",
+            "scan_docking_directory",
+            "parse_vina_output",
+            "ligand_efficiency_series",
+            "consensus_rescore",
+            "plot_energy_distribution",
+            "plot_top_ligands",
+            "save_visual_bundle",
+        ):
+            assert symbol in sources, f"docking notebook lost its {symbol} section"
