@@ -49,13 +49,20 @@ _MIME = {"png": "image/png", "svg": "image/svg+xml", "pdf": "application/pdf"}
 
 
 def require_matplotlib():
-    """Import matplotlib lazily and force the ``Agg`` backend.
+    """Import matplotlib lazily and pick the right backend.
+
+    In a plain Python process (scripts, CI, servers) the headless
+    ``Agg`` backend is forced — no window, no ``$DISPLAY`` needed.  Inside
+    Jupyter/IPython the *existing inline backend is kept* so figures
+    produced by this package render directly in notebook cells.
 
     Raises
     ------
     DependencyError
         If matplotlib is not installed, with the exact extra to install.
     """
+    import sys
+
     try:
         import matplotlib
     except ImportError as exc:  # pragma: no cover - depends on env
@@ -64,13 +71,15 @@ def require_matplotlib():
             "Install it with:  pip install 'pharmaml[reports]'  "
             "(or pip install matplotlib)"
         ) from exc
-    # Headless-safe: never open a GUI window, never require $DISPLAY.
-    matplotlib.use("Agg", force=True)
+    # Headless-safe: never open a GUI window, never require $DISPLAY —
+    # but don't hijack the inline backend of a running notebook.
+    if "IPython" not in sys.modules:
+        matplotlib.use("Agg", force=True)
     return matplotlib
 
 
 def get_pyplot():
-    """Return ``matplotlib.pyplot`` with the Agg backend already forced."""
+    """Return ``matplotlib.pyplot`` with a safe backend already selected."""
     require_matplotlib()
     import matplotlib.pyplot as plt
 
@@ -127,7 +136,7 @@ def figure_to_base64(fig, fmt: str = "png") -> str:
     buffer = io.BytesIO()
     fig.savefig(buffer, format=fmt, dpi=110, bbox_inches="tight")
     encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-    return f"{_MIME[fmt]};base64,{encoded}"
+    return f"data:{_MIME[fmt]};base64,{encoded}"
 
 
 def close_figure(fig) -> None:

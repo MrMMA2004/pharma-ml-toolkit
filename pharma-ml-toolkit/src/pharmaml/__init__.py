@@ -17,6 +17,10 @@ tested codebase:
 * :mod:`pharmaml.docking`  -- molecular-docking workflows (ligand and
   grid preparation, AutoDock4/Vina batch execution, result parsing and
   scoring).
+* :mod:`pharmaml.viz`      -- visual output for every domain: figures
+  (confusion matrices, ROC, parity, PK profiles, similarity heat-maps,
+  docking rankings ...), multi-format table export and self-contained
+  HTML reports.
 * :mod:`pharmaml.utils`    -- shared I/O and validation helpers.
 
 Typical usage::

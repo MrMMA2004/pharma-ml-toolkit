@@ -11,7 +11,7 @@ export const TOOLKIT_ROOT = path.join(process.cwd(), "pharma-ml-toolkit");
 export const TOOLKIT_NAME = "pharma-ml-toolkit";
 
 /** Generated artifacts that should never appear in the explorer or ZIP. */
-export const EXCLUDED_DIRS = new Set([".pytest_cache", "__pycache__", "node_modules"]);
+export const EXCLUDED_DIRS = new Set([".pytest_cache", "__pycache__", "node_modules", "catboost_info"]);
 
 const ALLOWED_EXTENSIONS = new Set([
   ".py",

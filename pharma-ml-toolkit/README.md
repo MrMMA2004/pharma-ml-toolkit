@@ -82,9 +82,10 @@ pharma-ml-toolkit/
 │   ├── ml/                  # preprocessing, models, training, evaluation, persistence
 │   ├── pharma/              # units, pk, pd, dosage
 │   ├── docking/             # preparation, workflow, parsing, scoring
+│   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 227 pytest cases across all domains
-├── examples/                # runnable demos + pharmaml_walkthrough.ipynb (executed notebook)
+├── tests/                   # 289 pytest cases across all domains
+├── examples/                # runnable demos + two executed notebooks (complete ML workflow · walkthrough)
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
 ├── Dockerfile
@@ -95,6 +96,21 @@ pharma-ml-toolkit/
 ---
 
 ## Quickstart
+
+### The complete ML process in one notebook
+
+`examples/complete_ml_workflow.ipynb` is the **zero-to-one-hundred** walkthrough —
+every stage of a QSAR project in the order you would actually run it, with all
+outputs committed (numbers *and* inline figures):
+
+> §1 data entry (your own file) → §2 EDA → §3 IC50→pIC50 → §4 split → §5 grid-searched
+> training → §6 evaluation (confusion, ROC) → §7 multiclass → §8 regression
+> (parity, residuals) → §9 leaderboard → §10 feature importance → §11 save/load &
+> scoring new compounds → §12 one-click HTML report + png/svg/pdf + csv/md/json.
+
+Open it, replace the demo file with your own CSV, and re-run all cells.
+(`examples/pharmaml_walkthrough.ipynb` remains the every-domain tour including
+PK, docking and chem conversions.)
 
 ### Bringing your own data (CSV / TSV / Excel)
 
@@ -265,6 +281,37 @@ scores = pd.DataFrame({"vina": [...], "ad4": [...]})  # one row per ligand
 consensus = consensus_rescore(scores, columns=["vina", "ad4"])     # 0–1 combined score
 ```
 
+### Visualization & reports (every domain)
+
+```python
+from pharmaml.viz import (
+    plot_confusion_matrix, plot_roc_curves, plot_predicted_vs_actual,
+    plot_residuals, plot_model_comparison, plot_class_distribution,
+    plot_feature_importance, plot_cv_scores,
+    plot_concentration_profile, plot_dose_accumulation,
+    plot_descriptor_distributions, plot_similarity_heatmap,
+    plot_energy_distribution, plot_top_ligands,
+    HTMLReport, export_table, metrics_to_dataframe, save_visual_bundle, save_figure,
+)
+
+fig = plot_confusion_matrix(report)          # ClassificationReport -> heat-map (2+ classes)
+save_figure(fig, "confusion.png")            # png / svg / pdf by extension
+fig2 = plot_roc_curves(model, X_test, y_test)   # binary or per-class one-vs-rest
+
+export_table(leaderboard, "leaderboard.md")  # csv / tsv / markdown / json / html
+
+save_visual_bundle(                          # one call -> report.html + files
+    figures={"confusion": fig, "roc": fig2},
+    tables={"leaderboard": leaderboard},
+    metrics=report,
+    out_dir="reports",
+)
+```
+
+matplotlib is optional (``pip install 'pharmaml[reports]'``); the Agg backend is
+forced automatically outside notebooks, so plotting works on headless servers
+and CI — and renders inline inside Jupyter.
+
 ---
 
 ## Command-line interface
@@ -306,7 +353,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (227 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (289 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```
@@ -315,8 +362,9 @@ The suite covers: PK/PD/dosage math (against hand-computed references), unit con
 round-trips, ML pipeline behaviour (splits, metrics, persistence round-trip), **user-data
 loading (CSV/Excel, delimiter sniffing, target auto-detection, multiclass and regression
 inference)**, **multiclass end-to-end flows (3–4 classes, scorer fallbacks, ensembles)**,
-docking parsers (synthetic DLG/Vina/PDBQT fixtures), scoring functions, and converter
-edge cases.
+**every plotting function / export format / HTML report path (headless Agg CI proof,
+plus a guard that the shipped notebooks stay executed and error-free)**, docking parsers
+(synthetic DLG/Vina/PDBQT fixtures), scoring functions, and converter edge cases.
 
 ## CI
 

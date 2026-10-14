@@ -7,6 +7,7 @@ import {
   BookOpen,
   Boxes,
   Brain,
+  ChartNoAxesColumn,
   CircleCheck,
   Download,
   Dna,
@@ -90,7 +91,23 @@ from pharmaml.docking import (
 
 poses = parse_vina_output(open("vina.out").read())
 le    = ligand_efficiency(affinity_kcal_mol=-9.6, num_heavy_atoms=32)
-cons  = consensus_rescore(scores_df, columns=["vina", "ad4"])`;
+cons  = consensus_rescore(scores_df, columns=["vina", "ad4"])
+
+# --- Visual output: figures + HTML report ------------------------
+from pharmaml.viz import (
+    plot_confusion_matrix, plot_roc_curves, save_figure,
+    export_table, save_visual_bundle,
+)
+
+fig = plot_confusion_matrix(report)        # 2+ classes, annotated cells
+save_figure(fig, "confusion.png")          # png / svg / pdf
+export_table(leaderboard, "board.md")      # csv/tsv/md/json/html
+
+save_visual_bundle(                        # report.html + all files
+    figures={"confusion": fig},
+    tables={"metrics": metrics_frame},
+    metrics=report, out_dir="reports",
+)`;
 
 interface DomainCardSpec {
   icon: LucideIcon;
@@ -150,13 +167,25 @@ const DOMAINS: DomainCardSpec[] = [
     apis: ["ic50_to_pic50()", "tanimoto_from_sets()", "similarity_scan()"],
     accent: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   },
+  {
+    icon: ChartNoAxesColumn,
+    title: "Visualization & Reports",
+    tagline: "pharmaml.viz — every domain, every format",
+    bullets: [
+      "Confusion matrices, ROC, parity & residual diagnostics (2+ classes)",
+      "PK profiles, dose accumulation, similarity heat-maps, docking rankings",
+      "Self-contained HTML reports + csv/tsv/md/json/html table export",
+    ],
+    apis: ["plot_confusion_matrix()", "save_visual_bundle()", "export_table()"],
+    accent: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  },
 ];
 
 const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Structure",
     before: "30+ flat, near-duplicate scripts in one folder",
-    after: "Typed package pharmaml with 5 subpackages + CLI",
+    after: "Typed package pharmaml with 6 subpackages + CLI",
   },
   {
     aspect: "Typing",
@@ -176,7 +205,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "227 passing pytest cases across every domain",
+    after: "289 passing pytest cases across every domain (incl. viz & notebook guards)",
   },
   {
     aspect: "Distribution",
@@ -229,12 +258,12 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "58";
-  const loc = stats ? fmtInt(stats.totalLines) : "10,670";
+  const fileCount = stats ? fmtInt(stats.files) : "63";
+  const loc = stats ? fmtInt(stats.totalLines) : "13,683";
 
-  /* Live metadata for the featured walkthrough notebook in the hero. */
+  /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
-    () => (tree ? findNode(tree, "examples/pharmaml_walkthrough.ipynb") : null),
+    () => (tree ? findNode(tree, "examples/complete_ml_workflow.ipynb") : null),
     [tree]
   );
 
@@ -311,8 +340,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="227"
-                countTo={227}
+                value="289"
+                countTo={289}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
@@ -359,13 +388,13 @@ export function Overview() {
             </motion.div>
           </div>
 
-          {/* -- Right: featured walkthrough notebook (deep-links into the explorer) -- */}
+          {/* -- Right: featured complete ML workflow notebook (deep-links into the explorer) -- */}
           <motion.aside
             initial={{ opacity: 0, x: 18 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.28, duration: 0.4, ease: "easeOut" }}
             className="featured-card relative overflow-hidden rounded-xl border bg-card/80 shadow-sm"
-            aria-label="Featured walkthrough notebook"
+            aria-label="Featured complete ML workflow notebook"
           >
             <div className="space-y-3 p-5">
               <div className="flex items-center gap-3">
@@ -373,18 +402,19 @@ export function Overview() {
                   <NotebookText className="size-5" aria-hidden />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold">Guided walkthrough</p>
+                  <p className="text-sm font-semibold">Complete ML workflow</p>
                   <p className="break-all font-mono text-[11px] leading-snug text-muted-foreground">
-                    examples/pharmaml_walkthrough.ipynb
+                    examples/complete_ml_workflow.ipynb
                   </p>
                 </div>
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                One notebook, the whole toolkit: pharmaceutical calculations, a QSAR training
-                pipeline, and docking rescoring — ready to run top-to-bottom.
+                Zero to one hundred in one notebook: import your own file → EDA → split →
+                grid-searched training → multiclass evaluation → leaderboard → feature
+                importance → save/load → HTML report. All outputs committed, figures inline.
               </p>
 
-              {/* Mock notebook preview: two cells + animated R² sparkline. */}
+              {/* Mock notebook preview: two cells + animated ROC-AUC sparkline. */}
               <div
                 ref={sparkRef}
                 className={cn(
@@ -395,22 +425,22 @@ export function Overview() {
               >
                 <div className="flex items-center gap-1.5 font-mono text-[9px] leading-none text-muted-foreground">
                   <span className="rounded-sm bg-emerald-500/15 px-1 py-0.5 text-emerald-600 dark:text-emerald-400">
-                    In [1–14]
+                    In [1–29]
                   </span>
-                  <span className="ml-auto">executed top-to-bottom</span>
+                  <span className="ml-auto">12 figures · executed top-to-bottom</span>
                 </div>
                 <div className="rounded-md border bg-background/70 px-2.5 py-1.5 font-mono text-[10px] leading-relaxed">
                   <span className="text-primary">from</span>{" "}
-                  <span className="text-muted-foreground">pharmaml.pharma</span>{" "}
+                  <span className="text-muted-foreground">pharmaml.data</span>{" "}
                   <span className="text-primary">import</span>{" "}
-                  <span className="text-muted-foreground">loading_dose</span>
+                  <span className="text-muted-foreground">load_dataset</span>
                 </div>
                 <div className="space-y-1.5 rounded-md border bg-background/70 px-2.5 py-1.5">
                   <div className="font-mono text-[10px] leading-relaxed">
-                    <span className="text-primary">rescore</span>
-                    <span className="text-muted-foreground">(docking_poses)</span>
+                    <span className="text-primary">plot_confusion_matrix</span>
+                    <span className="text-muted-foreground">(report)</span>
                   </div>
-                  {/* Sparkline: R² progression across the walkthrough stages. */}
+                  {/* Sparkline: CV ROC-AUC progression across the workflow stages. */}
                   <svg
                     viewBox="0 0 230 36"
                     className="block h-9 w-full"
@@ -452,8 +482,8 @@ export function Overview() {
                     />
                   </svg>
                   <div className="flex items-center justify-between font-mono text-[9px] leading-none text-muted-foreground">
-                    <span>test R² · stages 1→14</span>
-                    <span className="font-semibold text-primary">0.42 → 0.97</span>
+                    <span>CV ROC-AUC · stages 1→12</span>
+                    <span className="font-semibold text-primary">0.50 → 0.92</span>
                   </div>
                 </div>
               </div>
@@ -476,7 +506,7 @@ export function Overview() {
                 size="sm"
                 className="h-9 w-full gap-1.5 text-xs"
                 onClick={() => {
-                  openFileAtLine("examples/pharmaml_walkthrough.ipynb", null);
+                  openFileAtLine("examples/complete_ml_workflow.ipynb", null);
                   setTab("explorer");
                 }}
               >
@@ -495,14 +525,14 @@ export function Overview() {
           <div>
             <p className="eyebrow">The package</p>
             <h2 id="domains-title" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
-              Four subpackages, one import
+              Five subpackages, one import
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Every module ships with type hints, docstrings, structured logging and tests.
             </p>
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {DOMAINS.map((d, i) => (
             <motion.div
               key={d.title}

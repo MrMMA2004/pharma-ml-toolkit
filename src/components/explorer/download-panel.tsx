@@ -43,7 +43,7 @@ pip install -e ".[chem]"
 pip install -e ".[boosting]"
 
 # 3. verify the installation
-python -m pytest          # 227 tests should pass
+python -m pytest          # 289 tests should pass
 pharmaml --version`;
 
 function countFiles(node: TreeNode): number {
@@ -71,10 +71,18 @@ const FEATURED_FILES: Array<{
   badgeClass: string;
 }> = [
   {
+    path: "examples/complete_ml_workflow.ipynb",
+    title: "Complete ML workflow (zero → one hundred)",
+    description:
+      "Executed Jupyter notebook — the full ML process in structured order: import your own file → EDA → pIC50 → split → tuned training → multiclass evaluation → leaderboard → feature importance → save/load → HTML report. 12 figures committed inline.",
+    icon: NotebookText,
+    badgeClass: "bg-primary/10 text-primary",
+  },
+  {
     path: "examples/pharmaml_walkthrough.ipynb",
     title: "Interactive walkthrough",
     description:
-      "Runnable Jupyter notebook — an end-to-end tour of the package on synthetic data: descriptors → model training → cross-validation → evaluation.",
+      "Executed Jupyter notebook — an every-domain tour of the package on synthetic data: ML, PK/PD dosage, docking rescoring and endpoint conversion.",
     icon: NotebookText,
     badgeClass: "bg-primary/10 text-primary",
   },
@@ -90,8 +98,8 @@ const FEATURED_FILES: Array<{
 
 function collectDirSummary(root: TreeNode): Array<{ name: string; files: number; note: string }> {
   const notes: Record<string, string> = {
-    src: "the pharmaml package (data, chem, ml, pharma, docking, utils + CLI)",
-    tests: "227 pytest cases across all domains",
+    src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
+    tests: "289 pytest cases across all domains",
     examples: "runnable end-to-end demos on synthetic data",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -272,7 +280,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="227" label="passing tests" />
+          <StatChip icon={CircleCheck} value="289" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}
@@ -391,7 +399,7 @@ export function DownloadPanel() {
             <div className="flex items-start gap-2 text-sm text-muted-foreground">
               <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" aria-hidden />
               <span>
-                src/ (chem, ml, pharma, docking, utils), tests/, examples/, .github/, Dockerfile,
+                src/ (chem, ml, pharma, docking, viz, utils), tests/, examples/, .github/, Dockerfile,
                 pyproject.toml, requirements.txt.
               </span>
             </div>

@@ -14,6 +14,7 @@ MODULES = [
     ("pharmaml.ml", "QSAR machine learning: preprocessing → training → evaluation → persistence"),
     ("pharmaml.pharma", "Pharmaceutical calculations: units, PK, PD, dosage"),
     ("pharmaml.docking", "Molecular docking: preparation, workflow, parsing, scoring"),
+    ("pharmaml.viz", "Visual output for every domain: figures, tables, HTML reports"),
     ("pharmaml.utils.io", "Safe tabular I/O helpers"),
     ("pharmaml.utils.validation", "Shared input-validation layer"),
 ]

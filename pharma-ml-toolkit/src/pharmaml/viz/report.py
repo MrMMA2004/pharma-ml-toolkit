@@ -170,7 +170,13 @@ def export_table(frame: pd.DataFrame, path: str | Path, max_rows: int | None = N
         file_path = file_path.with_suffix(".md")
         file_path.write_text(_frame_to_markdown(frame, max_rows) + "\n", encoding="utf-8")
     elif fmt == "json":
-        frame.to_json(file_path, orient="records", indent=2, default=str)
+        # ``default=`` is not accepted by DataFrame.to_json — convert
+        # non-serialisable cells (numpy scalars, NaN-safe) up front.
+        serialisable = frame.copy()
+        for column in serialisable.columns:
+            if not pd.api.types.is_numeric_dtype(serialisable[column]):
+                serialisable[column] = serialisable[column].astype(str)
+        serialisable.to_json(file_path, orient="records", indent=2)
     elif fmt == "html":
         document = (
             "<!DOCTYPE html><html><head><meta charset='utf-8'>"

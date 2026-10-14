@@ -114,6 +114,40 @@ after adding new public functions.
 | `ligand_efficiency` | function | Ligand efficiency ``LE = |ΔG| / N_heavy`` (kcal/mol per atom). |
 | `consensus_rescore` | function | Combine several docking evidence columns into a 0–1 consensus. |
 
+## `pharmaml.viz`
+
+*Visual output for every domain: figures, tables, HTML reports*
+
+| Symbol | Kind | Summary |
+|---|---|---|
+| `PALETTE` | constant |  |
+| `PLOT_FORMATS` | constant |  |
+| `close_figure` | function | Close a figure defensively (no-op when matplotlib is absent). |
+| `figure_to_base64` | function | Render a figure to a ``data:`` URI for embedding in HTML reports. |
+| `get_pyplot` | function | Return ``matplotlib.pyplot`` with a safe backend already selected. |
+| `new_figure` | function | Create a styled ``(figure, axes)`` pair (grid + soft spines). |
+| `require_matplotlib` | function | Import matplotlib lazily and pick the right backend. |
+| `save_figure` | function | Save a figure to ``png``/``svg``/``pdf`` (chosen by extension). |
+| `plot_class_distribution` | function | Bar chart of class balance (accepts a mapping or a ``Dataset``). |
+| `plot_confusion_matrix` | function | Heat-map of predicted-vs-true class counts. |
+| `plot_cv_scores` | function | Per-fold CV scores as bars with the mean line and ±std band. |
+| `plot_feature_importance` | function | Top-N feature importances as horizontal bars. |
+| `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
+| `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
+| `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |
+| `plot_roc_curves` | function | Receiver-operating curves — binary or one-vs-rest multiclass. |
+| `plot_concentration_profile` | function | Plot one PK profile: linear + semi-log panels with AUC shading. |
+| `plot_dose_accumulation` | function | One-compartment superposition of an intermittent IV regimen. |
+| `plot_descriptor_distributions` | function | Histogram grid over the numeric columns of a table. |
+| `plot_similarity_heatmap` | function | Heat-map of a pairwise similarity matrix. |
+| `plot_energy_distribution` | function | Histogram of per-ligand best binding energies (kcal/mol). |
+| `plot_top_ligands` | function | Horizontal bars of the strongest-binding ligands. |
+| `HTMLReport` | class | Builder for a self-contained HTML report. |
+| `TABLE_FORMATS` | constant |  |
+| `export_table` | function | Write a DataFrame in a *visual* format chosen by the extension. |
+| `metrics_to_dataframe` | function | Any report object as a tidy ``metric | value`` DataFrame. |
+| `save_visual_bundle` | function | Render figures + tables + metrics into one directory + HTML report. |
+
 ## `pharmaml.utils.io`
 
 *Safe tabular I/O helpers*
