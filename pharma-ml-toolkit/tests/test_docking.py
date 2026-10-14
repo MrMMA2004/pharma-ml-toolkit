@@ -201,6 +201,26 @@ class TestScoring:
         with pytest.raises(DataValidationError, match="missing columns"):
             consensus_rescore(pd.DataFrame({"x": [1]}), columns=["nope"])
 
+    def test_consensus_negative_weights_raise(self) -> None:
+        # Regression: negative/zero-sum weights used to slip through and
+        # silently produce a NaN Series (pandas divides by zero without
+        # raising), which clip() happily propagated.
+        frame = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [3.0, 2.0, 1.0]})
+        with pytest.raises(DataValidationError, match="non-negative"):
+            consensus_rescore(frame, columns=["a", "b"], weights=[1.0, -1.0])
+
+    def test_consensus_all_zero_weights_raise(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0, 3.0]})
+        with pytest.raises(DataValidationError, match="all be zero"):
+            consensus_rescore(frame, columns=["a"], weights=[0.0])
+
+    def test_consensus_zero_weight_column_ok(self) -> None:
+        # A zero weight is fine as long as others keep the sum positive.
+        frame = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [3.0, 2.0, 1.0]})
+        scores = consensus_rescore(frame, columns=["a", "b"], weights=[1.0, 0.0])
+        assert scores.notna().all()
+        assert ((scores >= 0) & (scores <= 1)).all()
+
     def test_consensus_zero_variance_handled(self) -> None:
         frame = pd.DataFrame({"e": [-9.0, -9.0, -9.0], "n": [1, 5, 9]})
         scores = consensus_rescore(frame, columns=["e", "n"])

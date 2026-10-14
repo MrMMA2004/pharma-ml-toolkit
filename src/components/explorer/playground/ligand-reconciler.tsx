@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeftRight,
   CircleDot,
+  Copy,
   Eraser,
   GitCompare,
   ListChecks,
@@ -193,9 +194,12 @@ function ResultColumn({
           </p>
           <p className="truncate text-[11px] text-muted-foreground/80">{hint}</p>
         </div>
-        <Badge variant="secondary" className="shrink-0 tabular-nums">
-          {items.length}
-        </Badge>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <CopyNamesButton items={items} accent={accent} />
+          <Badge variant="secondary" className="tabular-nums">
+            {items.length}
+          </Badge>
+        </div>
       </div>
       <ul className="thin-scrollbar max-h-72 overflow-y-auto p-2 text-sm">
         {items.length === 0 ? (
@@ -226,6 +230,65 @@ function ResultColumn({
         )}
       </ul>
     </div>
+  );
+}
+
+/** Copy one bucket's names (one per line, like the legacy scripts' CSV
+ * output columns) — with a brief check-mark confirmation state. */
+function CopyNamesButton({
+  items,
+  accent,
+}: {
+  items: Array<{ name: string; smiles: string | null }>;
+  accent: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  const copy = async () => {
+    if (items.length === 0) return;
+    const text = items
+      .map((item) => (item.smiles ? `${item.name},${item.smiles}` : item.name))
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* clipboard unavailable (permissions / http) — silently skip */
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      disabled={items.length === 0}
+      aria-label={
+        copied
+          ? `${items.length} name(s) copied to clipboard`
+          : `Copy the ${items.length} name(s) of this bucket`
+      }
+      title={
+        items.length === 0
+          ? "nothing to copy"
+          : "copy names (name,SMILES when a reference is loaded)"
+      }
+      className={`inline-flex size-6 items-center justify-center rounded-md border border-transparent transition-all hover:border-border hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-35 ${
+        copied ? accent : "text-muted-foreground"
+      }`}
+    >
+      <Copy
+        className="size-3.5 transition-transform"
+        style={copied ? { transform: "scale(1.15)" } : undefined}
+        aria-hidden
+      />
+    </button>
   );
 }
 
@@ -310,9 +373,17 @@ export function LigandReconciler() {
         <CardContent className="grid gap-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="ligands-a" className="text-xs text-muted-foreground">
-                Table A — {nameColumn} column (e.g. the docking summary)
-              </Label>
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor="ligands-a" className="text-xs text-muted-foreground">
+                  Table A — {nameColumn} column (e.g. the docking summary)
+                </Label>
+                <span
+                  className="font-mono text-[11px] tabular-nums text-muted-foreground/70"
+                  aria-live="polite"
+                >
+                  {parseLines(tableA).length} name{parseLines(tableA).length === 1 ? "" : "s"}
+                </span>
+              </div>
               <Textarea
                 id="ligands-a"
                 value={tableA}
@@ -323,9 +394,17 @@ export function LigandReconciler() {
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="ligands-b" className="text-xs text-muted-foreground">
-                Table B — {nameColumn} column (e.g. the ligand library)
-              </Label>
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor="ligands-b" className="text-xs text-muted-foreground">
+                  Table B — {nameColumn} column (e.g. the ligand library)
+                </Label>
+                <span
+                  className="font-mono text-[11px] tabular-nums text-muted-foreground/70"
+                  aria-live="polite"
+                >
+                  {parseLines(tableB).length} name{parseLines(tableB).length === 1 ? "" : "s"}
+                </span>
+              </div>
               <Textarea
                 id="ligands-b"
                 value={tableB}

@@ -44,6 +44,7 @@ from pharmaml.viz import (  # noqa: E402
     plot_residuals,
     plot_roc_curves,
     plot_similarity_heatmap,
+    plot_table_comparison,
     plot_concentration_profile,
     export_table,
     metrics_to_dataframe,
@@ -399,6 +400,46 @@ class TestChemPlots:
     def test_similarity_heatmap_non_square(self, close_all):
         with pytest.raises(DataValidationError):
             plot_similarity_heatmap(np.zeros((2, 3)))
+
+    def test_table_comparison_two_panels(self, close_all):
+        from pharmaml.chem import compare_tables
+
+        a = pd.DataFrame({"Ligand": ["aspirin.pdbqt", "naproxen.pdbqt", "ibuprofen.pdbqt"]})
+        b = pd.DataFrame({"Ligand": ["aspirin", "ketoprofen", "tolmetin"]})
+        comparison = compare_tables(a, b, column="Ligand")
+        fig = plot_table_comparison(
+            comparison, labels=("docking_summary.csv", "library.csv")
+        )
+        assert len(fig.axes) == 2  # overlap bar + per-bucket counts
+        # Bucket names carry the caller's table labels.
+        ylabels = {t.get_text() for t in fig.axes[1].get_yticklabels()}
+        assert "only in docking_summary.csv" in ylabels
+        assert "only in library.csv" in ylabels
+        # The top overlap bar exposes one legend entry per bucket.
+        assert len(fig.axes[0].get_legend_handles_labels()[1]) == 3
+
+    def test_table_comparison_saves_png(self, close_all, tmp_path):
+        from pharmaml.chem import compare_tables
+
+        a = pd.DataFrame({"Ligand": ["l1", "l2", "l3", "l4", "l5"]})
+        b = pd.DataFrame({"Ligand": ["l1", "l2", "l3"]})
+        comparison = compare_tables(a, b, column="Ligand")
+        fig = plot_table_comparison(comparison)
+        out = save_figure(fig, tmp_path / "reconciliation.png")
+        assert out.exists() and out.stat().st_size > 1_000
+
+    def test_table_comparison_rejects_wrong_object(self, close_all):
+        with pytest.raises(DataValidationError, match="TableComparison"):
+            plot_table_comparison({"common": ["x"]})
+
+    def test_table_comparison_rejects_empty_reconciliation(self, close_all):
+        from pharmaml.chem import compare_tables
+
+        empty = compare_tables(
+            pd.DataFrame({"Ligand": []}), pd.DataFrame({"Ligand": []}), column="Ligand"
+        )
+        with pytest.raises(DataValidationError, match="nothing to compare"):
+            plot_table_comparison(empty)
 
 
 # ---------------------------------------------------------------- docking

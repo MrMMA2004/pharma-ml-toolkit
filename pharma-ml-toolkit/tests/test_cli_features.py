@@ -337,6 +337,29 @@ class TestChemTableCommands:
         out = capsys.readouterr().out
         assert "common=0" in out
 
+    def test_compare_figure_flag_writes_overlap_png(self, tmp_path, capsys):
+        import pandas as pd
+
+        table_a = tmp_path / "summary.csv"
+        table_b = tmp_path / "library.csv"
+        pd.DataFrame({"Ligand": ["lig1.pdbqt", "lig2.pdbqt", "lig3.pdbqt"]}).to_csv(
+            table_a, index=False
+        )
+        pd.DataFrame({"Ligand": ["lig2", "lig3", "lig9"]}).to_csv(table_b, index=False)
+        figure = tmp_path / "overlap.png"
+        code = main(
+            ["chem", "compare", "--data-a", str(table_a), "--data-b", str(table_b),
+             "--column", "Ligand", "--figure", str(figure)]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "overlap figure ->" in out and "overlap.png" in out
+        assert figure.is_file() and figure.stat().st_size > 1_000
+        # matplotlib figures must not leak between CLI invocations
+        import matplotlib.pyplot as plt
+
+        assert plt.get_fignums() == []
+
     def test_merge_writes_merged_output(self, tmp_path, capsys):
         import pandas as pd
 

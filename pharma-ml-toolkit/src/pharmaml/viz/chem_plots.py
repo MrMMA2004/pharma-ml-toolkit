@@ -7,12 +7,16 @@ stopped there; this module turns them into figures:
 * :func:`plot_descriptor_distributions` — a histogram grid over the
   numeric descriptor columns of any frame (also fits pIC50 tables);
 * :func:`plot_similarity_heatmap` — a Tanimoto matrix heat-map with
-  optional cell annotations.
+  optional cell annotations;
+* :func:`plot_table_comparison` — the overlap breakdown of a
+  :class:`~pharmaml.chem.tables.TableComparison` (the figure twin of
+  the Explorer's "Ligand Sets" playground tab).
 """
 
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -21,7 +25,11 @@ from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
 from pharmaml.viz._compat import PALETTE, new_figure
 
-__all__ = ["plot_descriptor_distributions", "plot_similarity_heatmap"]
+__all__ = [
+    "plot_descriptor_distributions",
+    "plot_similarity_heatmap",
+    "plot_table_comparison",
+]
 
 _LOG = get_logger(__name__)
 
@@ -168,4 +176,101 @@ def plot_similarity_heatmap(
     ax.set_yticks(range(n), labels, fontsize=8)
     ax.set_title(title)
     ax.grid(False)
+    return fig
+
+
+def plot_table_comparison(
+    comparison: Any,
+    labels: tuple[str, str] | None = None,
+    title: str = "Ligand-set reconciliation",
+) -> Any:
+    """Overlap breakdown of a ligand-table :class:`TableComparison`.
+
+    Renders the set reconciliation produced by
+    :func:`pharmaml.chem.compare_tables` as a two-panel figure: a
+    proportional 100% overlap bar (common / only in A / only in B) on
+    top and per-bucket count bars below — the same visual language as
+    the Explorer's "Ligand Sets" playground tab, so a Python campaign
+    and the web UI tell one story.
+
+    Parameters
+    ----------
+    comparison:
+        A :class:`~pharmaml.chem.tables.TableComparison` (anything
+        exposing ``common`` / ``only_in_a`` / ``only_in_b`` lists and a
+        ``summary()`` mapping works).
+    labels:
+        Optional ``(table_a_name, table_b_name)`` pair used in the
+        bucket names; defaults to ``("A", "B")``.
+    title:
+        Figure title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``comparison`` lacks the comparison attributes, or both
+        tables turned out empty (nothing to draw).
+    """
+    for attr in ("common", "only_in_a", "only_in_b"):
+        if not hasattr(comparison, attr):
+            raise DataValidationError(
+                "comparison must be a pharmaml.chem.tables.TableComparison "
+                f"(missing attribute {attr!r}); get one from compare_tables()"
+            )
+    common = list(comparison.common)
+    only_a = list(comparison.only_in_a)
+    only_b = list(comparison.only_in_b)
+    counts = [len(common), len(only_a), len(only_b)]
+    total = sum(counts)
+    if total == 0:
+        raise DataValidationError(
+            "both tables are empty after normalisation — nothing to compare"
+        )
+
+    name_a, name_b = labels if labels is not None else ("A", "B")
+    buckets = [f"common (both)", f"only in {name_a}", f"only in {name_b}"]
+    colors = [PALETTE[0], PALETTE[1], PALETTE[3]]  # teal / amber / red
+    shares = [100.0 * count / total for count in counts]
+
+    fig, (ax_share, ax_count) = new_figure(
+        nrows=2, ncols=1, figsize=(9.0, 3.1),
+        height_ratios=[1.0, 1.5],
+        gridspec_kw={"hspace": 0.55},
+    )
+
+    # -- Top panel: proportional overlap bar (100% stacked) -------------
+    left = 0.0
+    for count, share, color, bucket in zip(counts, shares, colors, buckets):
+        ax_share.barh(0, share, left=left, height=0.55, color=color,
+                      edgecolor="white", linewidth=1.2, label=f"{bucket}: {count}")
+        if share >= 7.0:  # label only segments wide enough to host text
+            text_color = "white" if color != PALETTE[1] else "#1F2937"
+            ax_share.text(left + share / 2.0, 0, f"{share:.0f}%",
+                          ha="center", va="center", fontsize=9,
+                          fontweight="bold", color=text_color)
+        left += share
+    ax_share.set_xlim(0.0, 100.0)
+    ax_share.set_yticks([])
+    ax_share.set_xlabel("share of unique ligand names (%)", fontsize=9)
+    ax_share.set_title(title, fontsize=11, loc="left", pad=10)
+    ax_share.legend(loc="upper center", bbox_to_anchor=(0.5, -0.55),
+                    ncol=3, fontsize=8, frameon=False)
+    ax_share.tick_params(labelsize=8)
+
+    # -- Bottom panel: per-bucket count bars -----------------------------
+    positions = [2, 1, 0]  # common on top
+    ax_count.barh(positions, counts, height=0.6, color=colors,
+                  edgecolor="white", linewidth=0.8)
+    ax_count.set_yticks(positions, buckets, fontsize=9)
+    ax_count.set_xlim(0, max(counts) * 1.18)
+    for y, count, share in zip(positions, counts, shares):
+        ax_count.text(count + max(counts) * 0.025, y,
+                      f"{count}  ({share:.1f}%)", va="center",
+                      fontsize=9, color="#1F2937")
+    ax_count.set_xlabel("number of unique ligand names", fontsize=9)
+    ax_count.tick_params(labelsize=8)
     return fig

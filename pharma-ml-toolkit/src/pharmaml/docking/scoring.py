@@ -99,7 +99,8 @@ def consensus_rescore(
     Raises
     ------
     DataValidationError
-        On missing columns, weight-length mismatch or all-NaN inputs.
+        On missing columns, weight-length mismatch, invalid weights
+        (negative or all-zero) or all-NaN inputs.
     """
     missing = [c for c in columns if c not in frame.columns]
     if missing:
@@ -110,6 +111,17 @@ def consensus_rescore(
         )
     if not weights:
         weights = [1.0] * len(columns)
+    # Negative or all-zero weights divide by zero inside pandas (a silent
+    # NaN Series, not an exception) -- reject them with a named error.
+    if any(w < 0 for w in weights):
+        raise DataValidationError(
+            "consensus weights must be non-negative, got "
+            f"{weights} (use higher_is_better to flip a column's direction)"
+        )
+    if sum(weights) <= 0:
+        raise DataValidationError(
+            f"consensus weights must not all be zero, got {weights}"
+        )
 
     direction = higher_is_better or {}
     normalised: list[pd.Series] = []

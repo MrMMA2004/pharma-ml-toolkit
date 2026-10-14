@@ -138,6 +138,11 @@ def ec50_for_target_effect(
     """
     validate_positive(ec50, "ec50")
     validate_positive(hill, "hill")
+    if emax == 0:
+        raise DataValidationError(
+            "emax must be non-zero to invert the Emax relationship "
+            "(a zero Emax gives the same effect at every concentration)"
+        )
     fraction = (target_effect - e0) / emax
     if not 0.0 < fraction < 1.0:
         raise DataValidationError(

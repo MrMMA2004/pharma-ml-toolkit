@@ -13,7 +13,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (618 tests).
+exceptions, input validation, and pytest coverage** (626 tests).
 
 ---
 
@@ -87,7 +87,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 618 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 626 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + four executed notebooks (complete ML · complete docking · complete PK/PD · walkthrough) + three no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
@@ -111,7 +111,7 @@ outputs committed (numbers *and* inline figures):
 > descriptors, Morgan/RDKit/atom-pair fingerprints, MACCS keys, Tanimoto
 > similarity heat-map, structures → model demo) → §3 EDA → §4 IC50→pIC50 →
 > §5 split → §6 grid-searched training → §7 evaluation (confusion, ROC) →
-> §8 multiclass → §9 regression (parity, residuals) → §10 leaderboard →
+> §8 multiclass → §9 regression (parity, residuals, outlier-robust Huber demo) → §10 leaderboard →
 > §11 feature importance → §12 save/load & scoring new compounds → §13
 > one-click HTML report + png/svg/pdf + csv/md/json.
 
@@ -167,7 +167,7 @@ PK, docking and chem conversions.)
 
 Each of the three workflow notebooks also ships a **no-output twin**
 (`*_no_output.ipynb`) — identical cells with every output stripped, 4–30 % of
-the executed size (the ML twin is 44 KB vs 1.1 MB), for slow connections; run
+the executed size (the ML twin is 46 KB vs 1.1 MB), for slow connections; run
 it top-to-bottom to produce the results yourself. A pytest drift-guard pins
 the twins' cell sources to the executed originals.
 
@@ -312,7 +312,8 @@ top-to-bottom to see training metrics, NCA results and docking tables).
 
 Registry models: `logistic_regression`, `ridge_classifier`, `svm`, `knn`, `decision_tree`,
 `random_forest`, `adaboost`, `ann`, `lasso`, `ridge`, `elastic_net`, `linear_regression`,
-plus `xgboost` / `lightgbm` / `catboost` when the optional packages are installed.
+`huber_regression` (outlier-robust), plus `xgboost` / `lightgbm` / `catboost` when the
+optional packages are installed.
 `list_models()` shows what is available in *your* environment.
 
 #### Multiclass classification (two or more classes)
@@ -401,6 +402,7 @@ from pharmaml.viz import (
     plot_calibration_curve, plot_learning_curve,
     plot_concentration_profile, plot_dose_accumulation,
     plot_descriptor_distributions, plot_similarity_heatmap,
+    plot_table_comparison,
     plot_energy_distribution, plot_top_ligands,
     HTMLReport, export_table, metrics_to_dataframe, save_visual_bundle, save_figure,
 )
@@ -410,6 +412,7 @@ save_figure(fig, "confusion.png")            # png / svg / pdf by extension
 fig2 = plot_roc_curves(model, X_test, y_test)   # binary or per-class one-vs-rest
 fig3 = plot_calibration_curve(model, X_test, y_test)  # reliability + Brier scores
 fig4 = plot_learning_curve(model, X, y, cv=5)  # is more data still buying accuracy?
+fig5 = plot_table_comparison(comparison)  # ligand-set overlap (compare_tables result)
 
 export_table(leaderboard, "leaderboard.md")  # csv / tsv / markdown / json / html
 
@@ -444,7 +447,7 @@ pharmaml ml train --data my.csv --model rf --cv 5 --plots --keep-categorical
 pharmaml ml compare --data my.csv --target activity --out board.csv --plot
 pharmaml chem pic50 --data data.csv --column "IC50 (nM)" --unit nM
 pharmaml chem descriptors --data data.csv --smiles-col SMILES
-pharmaml chem compare --data-a d_summary.csv --data-b ligands.csv --column Ligand
+pharmaml chem compare --data-a d_summary.csv --data-b ligands.csv --column Ligand --figure overlap.png
 pharmaml chem merge --dir batches/ --first-columns SMILES,pIC50
 pharmaml pharma pk --data conc.csv --time time --conc conc
 pharmaml pharma dose --cl 3.2 --vd 45 --target-css 6.0 --tau 8 --f 1.0
@@ -493,7 +496,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (618 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (626 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

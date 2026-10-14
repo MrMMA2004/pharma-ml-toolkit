@@ -18,7 +18,9 @@ layer for **all** toolkit codes:
                   with shaded AUC), :func:`plot_dose_accumulation`
                   (steady-state envelope);
 * chemistry     — :func:`plot_descriptor_distributions`,
-                  :func:`plot_similarity_heatmap`;
+                  :func:`plot_similarity_heatmap`,
+                  :func:`plot_table_comparison` (the figure twin of
+                  the ligand-set reconciliation utilities);
 * docking       — :func:`plot_energy_distribution`,
                   :func:`plot_top_ligands`,
                   :func:`plot_receptor_atom_types`;
@@ -52,6 +54,7 @@ from pharmaml.viz._compat import (
 from pharmaml.viz.chem_plots import (
     plot_descriptor_distributions,
     plot_similarity_heatmap,
+    plot_table_comparison,
 )
 from pharmaml.viz.docking_plots import (
     plot_energy_distribution,
@@ -109,6 +112,7 @@ __all__ = [
     # chem figures
     "plot_descriptor_distributions",
     "plot_similarity_heatmap",
+    "plot_table_comparison",
     # docking figures
     "plot_energy_distribution",
     "plot_receptor_atom_types",

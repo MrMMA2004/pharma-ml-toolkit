@@ -147,13 +147,14 @@ smiles_to_pdb("CC(=O)OC1=CC=CC=C1C(=O)O", "aspirin.pdb")
 # --- Visual output: figures + HTML report ------------------------
 from pharmaml.viz import (
     plot_confusion_matrix, plot_roc_curves, plot_calibration_curve,
-    plot_learning_curve, save_figure,
+    plot_learning_curve, plot_table_comparison, save_figure,
     export_table, save_visual_bundle,
 )
 
 fig = plot_confusion_matrix(report)        # 2+ classes, annotated cells
 cal  = plot_calibration_curve(model, X_test, y_test)  # Brier scores
 lc   = plot_learning_curve(model, X, y, cv=5)         # more data?
+ovl  = plot_table_comparison(diff)         # ligand overlap bar + counts
 save_figure(fig, "confusion.png")          # png / svg / pdf
 export_table(leaderboard, "board.md")      # csv/tsv/md/json/html
 
@@ -267,7 +268,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "618 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+    after: "626 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Distribution",
@@ -320,8 +321,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "91";
-  const loc = stats ? fmtInt(stats.totalLines) : "34,889";
+  const fileCount = stats ? fmtInt(stats.files) : "92";
+  const loc = stats ? fmtInt(stats.totalLines) : "35,355";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -407,8 +408,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="618"
-                countTo={618}
+                value="626"
+                countTo={626}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

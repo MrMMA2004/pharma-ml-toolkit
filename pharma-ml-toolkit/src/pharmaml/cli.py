@@ -225,6 +225,10 @@ def _build_parser() -> argparse.ArgumentParser:
     chem_compare.add_argument(
         "--out", default=None, help="optional CSV path for the differences report"
     )
+    chem_compare.add_argument(
+        "--figure", default=None,
+        help="optional figure path (png/svg/pdf) for the overlap breakdown",
+    )
 
     chem_merge = chem_sub.add_parser(
         "merge", help="merge every table of one folder into a single file"
@@ -727,6 +731,17 @@ def _cmd_chem_compare(args: argparse.Namespace) -> int:
         )
         frame.to_csv(args.out, index=False)
         print(f"\ndifferences report -> {args.out}")
+    if args.figure:
+        from pharmaml.viz import close_figure, plot_table_comparison, save_figure
+
+        fig = plot_table_comparison(
+            comparison,
+            labels=(Path(args.data_a).name, Path(args.data_b).name),
+            title=f"Ligand-set reconciliation — column {comparison.column!r}",
+        )
+        figure_path = save_figure(fig, args.figure)
+        close_figure(fig)
+        print(f"overlap figure -> {figure_path}")
     return 0
 
 

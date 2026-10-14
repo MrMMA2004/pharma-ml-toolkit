@@ -91,6 +91,11 @@ class TestInverseEmax:
         with pytest.raises(DataValidationError):
             ec50_for_target_effect(-5.0, ec50=10.0, e0=0.0, emax=100.0)  # < E0
 
+    def test_zero_emax_raises_domain_error(self) -> None:
+        # Regression: emax=0 used to escape as a raw ZeroDivisionError.
+        with pytest.raises(DataValidationError, match="non-zero"):
+            ec50_for_target_effect(5.0, ec50=10.0, e0=0.0, emax=0.0)
+
 
 class TestEffectTable:
     def test_parallel_lists(self) -> None:

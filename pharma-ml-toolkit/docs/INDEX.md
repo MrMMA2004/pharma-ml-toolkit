@@ -202,6 +202,7 @@ after adding new public functions.
 | `plot_dose_accumulation` | function | One-compartment superposition of an intermittent IV regimen. |
 | `plot_descriptor_distributions` | function | Histogram grid over the numeric columns of a table. |
 | `plot_similarity_heatmap` | function | Heat-map of a pairwise similarity matrix. |
+| `plot_table_comparison` | function | Overlap breakdown of a ligand-table :class:`TableComparison`. |
 | `plot_energy_distribution` | function | Histogram of per-ligand best binding energies (kcal/mol). |
 | `plot_receptor_atom_types` | function | Bar chart of the AutoDock atom-type census of a receptor. |
 | `plot_top_ligands` | function | Horizontal bars of the strongest-binding ligands. |
