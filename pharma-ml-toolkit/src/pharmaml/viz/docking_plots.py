@@ -6,13 +6,18 @@ module visualises them:
 * :func:`plot_energy_distribution` — histogram of best binding
   energies across a ligand library with the median marked;
 * :func:`plot_top_ligands` — ranked horizontal bars of the strongest
-  binders, ready to drop into a report or presentation.
+  binders, ready to drop into a report or presentation;
+* :func:`plot_receptor_atom_types` — the AutoDock type census of a
+  prepared receptor (donors, acceptors, carbons, metals), the figure
+  behind the ``types A×87 C×526 ...`` line ``gpfer.py`` hard-coded.
 
-Both accept the summary frame produced by
+The first two accept the summary frame produced by
 :func:`~pharmaml.docking.parsing.scan_docking_directory` directly.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -20,12 +25,127 @@ import pandas as pd
 from pharmaml.exceptions import DataValidationError
 from pharmaml.viz._compat import PALETTE, new_figure
 
-__all__ = ["plot_energy_distribution", "plot_top_ligands"]
+__all__ = ["plot_energy_distribution", "plot_top_ligands", "plot_receptor_atom_types"]
 
 #: Column scanned for the per-ligand best affinity.
 _ENERGY_COLUMN = "best_lowest_energy"
 #: Fallback column when the populated-cluster pick is unavailable.
 _TOP_ENERGY_COLUMN = "top_lowest_energy"
+
+
+def _classify_atom_type(atom_type: str) -> str:
+    """Group an AutoDock atom type into a legend-friendly chemistry class."""
+    if atom_type.startswith("H"):
+        return "polar hydrogen (donor)"
+    if atom_type.startswith(("N", "O", "S")):
+        return "heteroatom (acceptor/donor)"
+    if atom_type in ("A", "C"):
+        return "non-polar carbon"
+    return "metal / ion"
+
+
+def _receptor_type_counts(receptor) -> dict[str, int]:
+    """Normalise the supported receptor inputs into a {type: count} dict."""
+    from collections import Counter
+
+    if hasattr(receptor, "atom_types") and hasattr(receptor, "output_pdbqt"):
+        # ProteinReport from pharmaml.docking.prepare_protein
+        counts = dict(getattr(receptor, "atom_types") or {})
+    elif isinstance(receptor, dict):
+        counts = {
+            str(k): int(v) for k, v in receptor.items() if int(v) > 0
+        }
+    else:
+        path = Path(str(receptor))
+        if not path.is_file():
+            raise DataValidationError(f"receptor PDBQT file not found: {path}")
+        census: Counter[str] = Counter()
+        for line in path.read_text(
+            encoding="utf-8", errors="ignore"
+        ).splitlines():
+            if line.startswith(("ATOM", "HETATM")):
+                parts = line.split()
+                if parts and parts[-1].isalpha():
+                    census[parts[-1]] += 1
+        counts = dict(census)
+    if not counts:
+        raise DataValidationError(
+            "no AutoDock atom types found in the receptor "
+            "(empty atom_types dict or PDBQT without ATOM/HETATM records)"
+        )
+    return counts
+
+
+def plot_receptor_atom_types(
+    receptor,
+    title: str = "Receptor AutoDock atom types",
+) -> Any:
+    """Bar chart of the AutoDock atom-type census of a receptor.
+
+    Parameters
+    ----------
+    receptor:
+        Any of: a :class:`~pharmaml.docking.ProteinReport` (its
+        ``atom_types`` dict is used), a plain ``{type: count}`` mapping,
+        or the path to a PDBQT file whose ATOM/HETATM lines are counted
+        on the fly.
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Notes
+    -----
+    Bars are sorted by count and coloured by chemistry — polar
+    hydrogens, heteroatoms, non-polar carbons, metals/ions — so a
+    missing donor population (a classic mis-prepared receptor) is
+    visible at a glance.
+    """
+    counts = _receptor_type_counts(receptor)
+    frame = pd.DataFrame(
+        {"type": list(counts), "count": list(counts.values())}
+    ).sort_values("count", ascending=False)
+    frame["group"] = [_classify_atom_type(t) for t in frame["type"]]
+
+    group_colours = {
+        "polar hydrogen (donor)": PALETTE[2],
+        "heteroatom (acceptor/donor)": PALETTE[1],
+        "non-polar carbon": PALETTE[0],
+        "metal / ion": PALETTE[4],
+    }
+
+    fig, ax = new_figure(figsize=(0.72 * len(frame) + 2.4, 5.0))
+    positions = np.arange(len(frame))
+    bars = ax.bar(
+        positions,
+        frame["count"].to_numpy(),
+        color=[group_colours[g] for g in frame["group"]],
+        alpha=0.9,
+        width=0.66,
+        edgecolor="white",
+    )
+    for bar, value in zip(bars, frame["count"].to_numpy()):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            value,
+            f"{int(value)}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+    ax.set_xticks(positions, frame["type"].tolist())
+    ax.set_ylabel("atoms")
+    total = int(frame["count"].sum())
+    ax.set_title(f"{title} — {total} atoms, {len(frame)} type(s)")
+    # one legend entry per chemistry class actually present
+    seen_groups = frame["group"].drop_duplicates().tolist()
+    handles = [
+        dict(zip(frame["group"], bars))[g] for g in seen_groups
+    ]
+    ax.legend(handles, seen_groups, fontsize=9, loc="best", framealpha=0.9)
+    return fig
 
 
 def _energy_series(summary: pd.DataFrame, energy_column: str | None) -> tuple[pd.Series, str]:

@@ -1,0 +1,836 @@
+     1→"""Tests for the ligand-library import and protein-receptor preparation.
+     2→
+     3→The ligand tests mirror the ``smilestopdbqt.py`` / ``ligand_preparation_
+     4→autodock4.py`` upgrade: CSV import, SMILES validation accounting,
+     5→one-folder-per-ligand campaign trees and ``failed_smiles.csv`` parity.
+     6→
+     7→The receptor tests exercise every cleaning rule (waters, non-protein
+     8→HETATMs, alternate locations, chain selection, hydrogen stripping),
+     9→the Meeko polymer pipeline on a real PDB (crambin 1CRN, public-domain
+    10→structure) and the PDBQT passthrough mode that needs no Meeko at all.
+    11→"""
+    12→
+    13→from __future__ import annotations
+    14→
+    15→from pathlib import Path
+    16→
+    17→import pandas as pd
+    18→import pytest
+    19→
+    20→from pharmaml.docking.ligands import (
+    21→    LigandLibrary,
+    22→    LigandPreparationReport,
+    23→    load_ligand_csv,
+    24→    prepare_ligand_library,
+    25→)
+    26→from pharmaml.docking.receptor import (
+    27→    ProteinReport,
+    28→    distribute_receptor,
+    29→    prepare_protein,
+    30→)
+    31→from pharmaml.exceptions import DataValidationError, DependencyError
+    32→
+    33→rdkit = pytest.importorskip("rdkit")  # noqa: F841  (gates the whole module)
+    34→
+    35→CRAMBIN = Path(__file__).parent / "data" / "1crn.pdb"
+    36→
+    37→
+    38→def atom_line(
+    39→    serial: int,
+    40→    name: str,
+    41→    resname: str,
+    42→    chain: str,
+    43→    resseq: int,
+    44→    x: float,
+    45→    y: float,
+    46→    z: float,
+    47→    element: str,
+    48→    record: str = "ATOM  ",
+    49→    altloc: str = " ",
+    50→) -> str:
+    51→    """Column-exact PDB ATOM/HETATM record (altloc at col 17)."""
+    52→    return (
+    53→        f"{record}{serial:5d} {name:>4s}{altloc}{resname:>3s} {chain}"
+    54→        f"{resseq:4d}    {x:8.3f}{y:8.3f}{z:8.3f}"
+    55→        f"{1.0:6.2f}{0.0:6.2f}          {element:>2s}"
+    56→    )
+    57→
+    58→
+    59→def pdbqt_line(serial: int, name: str, resname: str, chain: str, resseq: int,
+    60→               charge: float, atom_type: str) -> str:
+    61→    """Column-exact PDBQT record (charge at cols 71-76, type last)."""
+    62→    return (
+    63→        f"ATOM  {serial:5d} {name:>4s} {resname:>3s} {chain}{resseq:4d}    "
+    64→        f"{1.0:8.3f}{2.0:8.3f}{3.0:8.3f}{1.0:6.2f}{0.0:6.2f}"
+    65→        f"    {charge:+6.3f}{atom_type:>3s}"
+    66→    )
+    67→
+    68→
+    69→# ---------------------------------------------------------------------------
+    70→# load_ligand_csv
+    71→# ---------------------------------------------------------------------------
+    72→
+    73→
+    74→class TestLoadLigandCsv:
+    75→    def test_happy_path_with_names(self, tmp_path: Path) -> None:
+    76→        csv = tmp_path / "ligands.csv"
+    77→        csv.write_text(
+    78→            "name,SMILES\naspirin,CC(=O)Oc1ccccc1C(=O)O\n,"
+    79→            "CC(C)Cc1ccc(cc1)C(C)C(=O)O\n",
+    80→            encoding="utf-8",
+    81→        )
+    82→        lib = load_ligand_csv(csv)
+    83→        assert len(lib) == 2
+    84→        assert lib.smiles_column == "SMILES"
+    85→        assert lib.name_column == "name"
+    86→        assert lib.validated is True
+    87→        # blank name cell falls back to the row number, not "nan"
+    88→        assert list(lib.frame["name"]) == ["aspirin", "2"]
+    89→        assert list(lib.frame["status"]) == ["valid", "valid"]
+    90→
+    91→    def test_smiles_column_autodetected(self, tmp_path: Path) -> None:
+    92→        csv = tmp_path / "lib.csv"
+    93→        csv.write_text("canonical_smiles\nCCO\nCCC\n", encoding="utf-8")
+    94→        lib = load_ligand_csv(csv)
+    95→        assert lib.smiles_column == "canonical_smiles"
+    96→        # no name column -> 1-based row numbers
+    97→        assert list(lib.frame["name"]) == ["1", "2"]
+    98→
+    99→    def test_case_insensitive_detection(self, tmp_path: Path) -> None:
+   100→        csv = tmp_path / "lib.csv"
+   101→        csv.write_text("Smiles,Drug\nCCO,ethanol\n", encoding="utf-8")
+   102→        lib = load_ligand_csv(csv)
+   103→        assert lib.smiles_column == "Smiles"
+   104→        assert lib.name_column == "Drug"
+   105→
+   106→    def test_tsv_and_sniffing(self, tmp_path: Path) -> None:
+   107→        tsv = tmp_path / "lib.tsv"
+   108→        tsv.write_text("name\tSMILES\nethanol\tCCO\n", encoding="utf-8")
+   109→        lib = load_ligand_csv(tsv)
+   110→        assert len(lib) == 1
+   111→        assert lib.frame.iloc[0]["smiles"] == "CCO"
+   112→
+   113→    def test_invalid_smiles_accounted(self, tmp_path: Path) -> None:
+   114→        csv = tmp_path / "ligands.csv"
+   115→        csv.write_text(
+   116→            "name,SMILES\nok,CCO\nbad,not_a_smiles\nnone,\n",
+   117→            encoding="utf-8",
+   118→        )
+   119→        lib = load_ligand_csv(csv)
+   120→        assert len(lib.invalid_frame) == 2
+   121→        assert "parse" in lib.invalid_frame.iloc[0]["error"].lower()
+   122→        assert "empty" in lib.invalid_frame.iloc[1]["error"]
+   123→        assert len(lib.valid_frame) == 1
+   124→
+   125→    def test_missing_file_raises(self, tmp_path: Path) -> None:
+   126→        with pytest.raises(DataValidationError, match="not found"):
+   127→            load_ligand_csv(tmp_path / "nope.csv")
+   128→
+   129→    def test_no_smiles_column_raises_with_column_list(self, tmp_path: Path) -> None:
+   130→        csv = tmp_path / "lib.csv"
+   131→        csv.write_text("a,b\n1,2\n", encoding="utf-8")
+   132→        with pytest.raises(DataValidationError, match="no SMILES column"):
+   133→            load_ligand_csv(csv)
+   134→
+   135→    def test_explicit_column_missing_raises(self, tmp_path: Path) -> None:
+   136→        csv = tmp_path / "lib.csv"
+   137→        csv.write_text("SMILES\nCCO\n", encoding="utf-8")
+   138→        with pytest.raises(DataValidationError, match="'xyz' not found"):
+   139→            load_ligand_csv(csv, smiles_col="xyz")
+   140→
+   141→    def test_empty_table_raises(self, tmp_path: Path) -> None:
+   142→        csv = tmp_path / "lib.csv"
+   143→        csv.write_text("name,SMILES\n", encoding="utf-8")
+   144→        with pytest.raises(DataValidationError, match="no rows"):
+   145→            load_ligand_csv(csv)
+   146→
+   147→    def test_write_failures_parity(self, tmp_path: Path) -> None:
+   148→        csv = tmp_path / "ligands.csv"
+   149→        csv.write_text("name,SMILES\nok,CCO\nbad,zzz\n", encoding="utf-8")
+   150→        lib = load_ligand_csv(csv)
+   151→        out = tmp_path / "failed_smiles.csv"
+   152→        assert lib.write_failures(out) is not None
+   153→        failed = pd.read_csv(out)
+   154→        assert list(failed["name"]) == ["bad"]
+   155→        # clean library -> nothing written
+   156→        clean = tmp_path / "clean.csv"
+   157→        clean.write_text("name,SMILES\nok,CCO\n", encoding="utf-8")
+   158→        assert load_ligand_csv(clean).write_failures(tmp_path / "x.csv") is None
+   159→
+   160→    def test_audit_str(self, tmp_path: Path) -> None:
+   161→        csv = tmp_path / "lib.csv"
+   162→        csv.write_text("SMILES\nCCO\nzzz\n", encoding="utf-8")
+   163→        text = str(load_ligand_csv(csv))
+   164→        assert "Ligand library" in text
+   165→        assert "rows" in text and "invalid" in text
+   166→
+   167→    def test_numeric_names_lose_trailing_zero(self, tmp_path: Path) -> None:
+   168→        """An integer ID column must not become folders '1.0', '2.0'."""
+   169→        csv = tmp_path / "lib.csv"
+   170→        csv.write_text("id,SMILES\n1,CCO\n2,CCC\n,CCN\n", encoding="utf-8")
+   171→        lib = load_ligand_csv(csv)
+   172→        assert list(lib.frame["name"]) == ["1", "2", "3"]
+   173→
+   174→    def test_xlsx_input(self, tmp_path: Path) -> None:
+   175→        pytest.importorskip("openpyxl")
+   176→        xlsx = tmp_path / "lib.xlsx"
+   177→        frame = pd.DataFrame({"name": ["ethanol"], "SMILES": ["CCO"]})
+   178→        frame.to_excel(xlsx, index=False)
+   179→        lib = load_ligand_csv(xlsx)
+   180→        assert len(lib) == 1
+   181→        assert lib.smiles_column == "SMILES"
+   182→
+   183→
+   184→# ---------------------------------------------------------------------------
+   185→# prepare_ligand_library
+   186→# ---------------------------------------------------------------------------
+   187→
+   188→
+   189→class TestPrepareLigandLibrary:
+   190→    @pytest.fixture()
+   191→    def ligands_csv(self, tmp_path: Path) -> Path:
+   192→        csv = tmp_path / "ligands.csv"
+   193→        csv.write_text(
+   194→            "name,SMILES\n"
+   195→            "aspirin,CC(=O)Oc1ccccc1C(=O)O\n"
+   196→            "caffeine,Cn1cnc2c1c(=O)n(C)c(=O)n2C\n"
+   197→            "broken,not_a_smiles\n",
+   198→            encoding="utf-8",
+   199→        )
+   200→        return csv
+   201→
+   202→    def test_campaign_tree_layout(self, ligands_csv: Path, tmp_path: Path) -> None:
+   203→        report = prepare_ligand_library(ligands_csv, tmp_path / "campaign")
+   204→        assert isinstance(report, LigandPreparationReport)
+   205→        assert report.n_prepared == 2
+   206→        assert report.n_failed == 1
+   207→        folders = sorted(p.name for p in (tmp_path / "campaign").iterdir())
+   208→        assert folders == ["01_aspirin", "02_caffeine", "failed_smiles.csv"]
+   209→        assert (tmp_path / "campaign" / "01_aspirin" / "l.pdbqt").is_file()
+   210→        row = report.frame[report.frame["name"] == "aspirin"].iloc[0]
+   211→        assert row["atoms"] > 0
+   212→        assert row["torsdof"] == 4  # aspirin has 4 rotatable bonds
+   213→
+   214→    def test_index_naming_matches_legacy_scripts(self, ligands_csv: Path, tmp_path: Path) -> None:
+   215→        report = prepare_ligand_library(
+   216→            ligands_csv, tmp_path / "legacy", folder_naming="index"
+   217→        )
+   218→        ok = report.frame[report.frame["ok"]]
+   219→        assert list(ok["folder"]) == ["1", "2"]
+   220→
+   221→    def test_name_naming(self, ligands_csv: Path, tmp_path: Path) -> None:
+   222→        report = prepare_ligand_library(
+   223→            ligands_csv, tmp_path / "named", folder_naming="name"
+   224→        )
+   225→        ok = report.frame[report.frame["ok"]]
+   226→        assert sorted(ok["folder"]) == ["aspirin", "caffeine"]
+   227→
+   228→    def test_invalid_ligand_folders_removed(self, ligands_csv: Path, tmp_path: Path) -> None:
+   229→        report = prepare_ligand_library(ligands_csv, tmp_path / "camp")
+   230→        assert not (tmp_path / "camp" / "03_broken").exists()
+   231→        failed = report.failed_frame
+   232→        assert list(failed["name"]) == ["broken"]
+   233→        assert (failed.iloc[0]["error"]).strip() != ""
+   234→
+   235→    def test_failed_smiles_csv_written_by_default(self, ligands_csv: Path, tmp_path: Path) -> None:
+   236→        report = prepare_ligand_library(ligands_csv, tmp_path / "camp")
+   237→        out = report.write_failures_csv()
+   238→        assert out is not None and out.name == "failed_smiles.csv"
+   239→        failed = pd.read_csv(out)
+   240→        assert list(failed["name"]) == ["broken"]
+   241→
+   242→    def test_accepts_library_object(self, tmp_path: Path) -> None:
+   243→        csv = tmp_path / "l.csv"
+   244→        csv.write_text("name,SMILES\nethanol,CCO\n", encoding="utf-8")
+   245→        lib = load_ligand_csv(csv)
+   246→        report = prepare_ligand_library(lib, tmp_path / "out")
+   247→        assert report.library is lib
+   248→        assert report.n_prepared == 1
+   249→
+   250→    def test_bad_folder_naming_rejected(self, tmp_path: Path) -> None:
+   251→        csv = tmp_path / "l.csv"
+   252→        csv.write_text("SMILES\nCCO\n", encoding="utf-8")
+   253→        with pytest.raises(DataValidationError, match="folder_naming"):
+   254→            prepare_ligand_library(csv, tmp_path / "x", folder_naming="bogus")
+   255→
+   256→    def test_audit_str(self, ligands_csv: Path, tmp_path: Path) -> None:
+   257→        report = prepare_ligand_library(ligands_csv, tmp_path / "c")
+   258→        text = str(report)
+   259→        assert "prepared" in text and "failed_smiles.csv" in text
+   260→
+   261→    def test_duplicate_names_get_suffixed_folders(self, tmp_path: Path) -> None:
+   262→        csv = tmp_path / "l.csv"
+   263→        csv.write_text(
+   264→            "name,SMILES\naspirin,CCO\naspirin,CCC\naspirin,CCN\n",
+   265→            encoding="utf-8",
+   266→        )
+   267→        report = prepare_ligand_library(csv, tmp_path / "dupes", folder_naming="name")
+   268→        folders = sorted(p.name for p in (tmp_path / "dupes").iterdir() if p.is_dir())
+   269→        assert len(folders) == 3
+   270→        assert len(set(folders)) == 3  # no collision
+   271→
+   272→    def test_name_naming_without_name_column_raises(self, tmp_path: Path) -> None:
+   273→        csv = tmp_path / "l.csv"
+   274→        csv.write_text("SMILES\nCCO\n", encoding="utf-8")
+   275→        with pytest.raises(DataValidationError, match="name column"):
+   276→            prepare_ligand_library(csv, tmp_path / "x", folder_naming="name")
+   277→
+   278→    def test_clean_run_writes_no_failures_csv(self, tmp_path: Path) -> None:
+   279→        csv = tmp_path / "l.csv"
+   280→        csv.write_text("name,SMILES\nethanol,CCO\n", encoding="utf-8")
+   281→        report = prepare_ligand_library(csv, tmp_path / "clean")
+   282→        assert report.n_failed == 0
+   283→        assert not (tmp_path / "clean" / "failed_smiles.csv").exists()
+   284→        assert report.write_failures_csv() is None
+   285→
+   286→    def test_dependency_error_fails_fast(self, tmp_path: Path, monkeypatch) -> None:
+   287→        from pharmaml.docking import ligands as ligands_mod
+   288→        from pharmaml.exceptions import DependencyError
+   289→
+   290→        csv = tmp_path / "l.csv"
+   291→        csv.write_text("name,SMILES\nethanol,CCO\nmethanol,CO\n", encoding="utf-8")
+   292→
+   293→        def boom(*args, **kwargs):
+   294→            raise DependencyError("install meeko first")
+   295→
+   296→        monkeypatch.setattr(ligands_mod, "smiles_to_pdbqt", boom)
+   297→        with pytest.raises(DependencyError, match="meeko"):
+   298→            prepare_ligand_library(csv, tmp_path / "x")
+   299→
+   300→
+   301→# ---------------------------------------------------------------------------
+   302→# prepare_protein — PDBQT passthrough (no Meeko needed)
+   303→# ---------------------------------------------------------------------------
+   304→
+   305→
+   306→class TestProteinPdbqtPassthrough:
+   307→    def _receptor(self, tmp_path: Path, extra: list[str] | None = None) -> Path:
+   308→        lines = [
+   309→            "REMARK  prepared receptor",
+   310→            pdbqt_line(1, "CA", "ALA", "A", 1, 0.24, "C"),
+   311→            pdbqt_line(2, "O", "ALA", "A", 1, -0.27, "OA"),
+   312→            pdbqt_line(3, "HD", "ALA", "A", 1, 0.42, "HD"),
+   313→            "TER",
+   314→            "END",
+   315→        ]
+   316→        if extra:
+   317→            lines = lines[:1] + extra + lines[1:]
+   318→        path = tmp_path / "r.pdbqt"
+   319→        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+   320→        return path
+   321→
+   322→    def test_passthrough_keeps_types_and_charges(self, tmp_path: Path) -> None:
+   323→        src = self._receptor(tmp_path)
+   324→        report = prepare_protein(src, tmp_path / "out.pdbqt")
+   325→        assert isinstance(report, ProteinReport)
+   326→        assert report.mode == "pdbqt"
+   327→        assert report.output_atoms == 3
+   328→        assert report.atom_types == {"C": 1, "OA": 1, "HD": 1}
+   329→        assert report.residues == 1
+   330→        assert report.chains == ["A"]
+   331→        assert report.charge_min == pytest.approx(-0.27)
+   332→        assert report.charge_max == pytest.approx(0.42)
+   333→        text = (tmp_path / "out.pdbqt").read_text()
+   334→        assert "+0.240" in text  # charges preserved verbatim
+   335→
+   336→    def test_water_removed_from_pdbqt(self, tmp_path: Path) -> None:
+   337→        water = pdbqt_line(9, "O", "HOH", "A", 99, -0.5, "OA")
+   338→        src = self._receptor(tmp_path, extra=[water])
+   339→        report = prepare_protein(src, tmp_path / "out.pdbqt")
+   340→        assert report.waters_removed == 1
+   341→        assert report.output_atoms == 3
+   342→
+   343→    def test_nonprotein_hetatm_removed_unless_keep(self, tmp_path: Path) -> None:
+   344→        ion = atom_line(10, "CL", "CL", "A", 98, 1.0, 1.0, 1.0, "Cl", record="HETATM")
+   345→        src = self._receptor(tmp_path, extra=[ion])
+   346→        report = prepare_protein(src, tmp_path / "out.pdbqt")
+   347→        assert report.hetatm_removed == 1
+   348→        kept = prepare_protein(src, tmp_path / "keep.pdbqt", keep_hetatm=True)
+   349→        assert kept.hetatm_removed == 0
+   350→        assert kept.output_atoms == 4
+   351→
+   352→    def test_modified_residue_always_kept(self, tmp_path: Path) -> None:
+   353→        mse = atom_line(11, "SE", "MSE", "A", 50, 1.0, 1.0, 1.0, "SE", record="HETATM")
+   354→        src = self._receptor(tmp_path, extra=[mse])
+   355→        report = prepare_protein(src, tmp_path / "out.pdbqt")
+   356→        assert report.hetatm_removed == 0
+   357→        assert report.output_atoms == 4
+   358→
+   359→    def test_missing_file_raises(self, tmp_path: Path) -> None:
+   360→        with pytest.raises(DataValidationError, match="not found"):
+   361→            prepare_protein(tmp_path / "ghost.pdb")
+   362→
+   363→    def test_no_atom_records_raises(self, tmp_path: Path) -> None:
+   364→        path = tmp_path / "empty.pdb"
+   365→        path.write_text("HEADER nothing\n", encoding="utf-8")
+   366→        with pytest.raises(DataValidationError, match="no ATOM/HETATM"):
+   367→            prepare_protein(path)
+   368→
+   369→    def test_default_output_collision_avoided(self, tmp_path: Path) -> None:
+   370→        src = self._receptor(tmp_path)  # r.pdbqt in tmp_path
+   371→        report = prepare_protein(src)  # default output == input path
+   372→        assert report.output_pdbqt.name == "r_clean.pdbqt"
+   373→        assert src.read_text().startswith("REMARK")  # original untouched
+   374→
+   375→    def test_audit_dict_and_str(self, tmp_path: Path) -> None:
+   376→        report = prepare_protein(self._receptor(tmp_path), tmp_path / "o.pdbqt")
+   377→        info = report.as_dict()
+   378→        assert info["mode"] == "pdbqt"
+   379→        assert info["output_atoms"] == 3
+   380→        assert "Protein preparation audit" in str(report)
+   381→
+   382→
+   383→# ---------------------------------------------------------------------------
+   384→# prepare_protein — cleaning rules on synthetic PDB text (no Meeko needed
+   385→# for rules that empty the file; Meeko path tested with the real fixture)
+   386→# ---------------------------------------------------------------------------
+   387→
+   388→
+   389→class TestProteinCleaningRules:
+   390→    def test_altloc_first_conformer_kept(self, tmp_path: Path) -> None:
+   391→        pdb = tmp_path / "alt.pdb"
+   392→        pdb.write_text(
+   393→            "\n".join(
+   394→                [
+   395→                    atom_line(1, "CA", "ALA", "A", 1, 0.0, 0.0, 0.0, "C"),
+   396→                    atom_line(2, "CB", "ALA", "A", 1, 1.0, 0.0, 0.0, "C"),
+   397→                    atom_line(3, "CB", "ALA", "A", 1, 9.9, 0.0, 0.0, "C", altloc="B"),
+   398→                    "END",
+   399→                ]
+   400→            )
+   401→            + "\n",
+   402→            encoding="utf-8",
+   403→        )
+   404→        # PDB mode needs Meeko to finish; assert on the cleaning counters
+   405→        # by using the passthrough suffix instead.
+   406→        pdbqt = tmp_path / "alt.pdbqt"
+   407→        pdbqt.write_text(pdb.read_text(), encoding="utf-8")
+   408→        report = prepare_protein(pdbqt, tmp_path / "out.pdbqt")
+   409→        assert report.altloc_removed == 1
+   410→        assert report.output_atoms == 2
+   411→
+   412→    def test_altloc_explicit_letter(self, tmp_path: Path) -> None:
+   413→        pdbqt = tmp_path / "alt.pdbqt"
+   414→        pdbqt.write_text(
+   415→            "\n".join(
+   416→                [
+   417→                    atom_line(1, "CB", "ALA", "A", 1, 1.0, 0.0, 0.0, "C", altloc="A"),
+   418→                    atom_line(2, "CB", "ALA", "A", 1, 9.9, 0.0, 0.0, "C", altloc="B"),
+   419→                    atom_line(3, "CA", "ALA", "A", 1, 0.5, 0.0, 0.0, "C"),
+   420→                ]
+   421→            )
+   422→            + "\n",
+   423→            encoding="utf-8",
+   424→        )
+   425→        report = prepare_protein(pdbqt, tmp_path / "b.pdbqt", default_altloc="B")
+   426→        # the A conformer is dropped, the B conformer and the
+   427→        # conformer-independent CA are kept
+   428→        assert report.altloc_removed == 1
+   429→        assert report.output_atoms == 2
+   430→
+   431→    def test_chain_selection(self, tmp_path: Path) -> None:
+   432→        pdbqt = tmp_path / "two.pdbqt"
+   433→        pdbqt.write_text(
+   434→            "\n".join(
+   435→                [
+   436→                    pdbqt_line(1, "CA", "ALA", "A", 1, 0.1, "C"),
+   437→                    pdbqt_line(2, "CA", "ALA", "B", 1, 0.1, "C"),
+   438→                    "END",
+   439→                ]
+   440→            )
+   441→            + "\n",
+   442→            encoding="utf-8",
+   443→        )
+   444→        report = prepare_protein(pdbqt, tmp_path / "a.pdbqt", chain="A")
+   445→        assert report.chains == ["A"]
+   446→        assert report.output_atoms == 1
+   447→
+   448→    def test_all_filtered_away_raises(self, tmp_path: Path) -> None:
+   449→        pdbqt = tmp_path / "onlywater.pdbqt"
+   450→        pdbqt.write_text(
+   451→            pdbqt_line(1, "O", "HOH", "A", 1, 0.0, "OA") + "\n",
+   452→            encoding="utf-8",
+   453→        )
+   454→        with pytest.raises(DataValidationError, match="all atoms were filtered"):
+   455→            prepare_protein(pdbqt, tmp_path / "x.pdbqt")
+   456→
+   457→    def test_no_conformer_mixing_per_residue(self, tmp_path: Path) -> None:
+   458→        """'first' altloc must keep ONE conformer per residue, not a
+   459→        hybrid of A and B sidechain atoms (a chemically impossible
+   460→        receptor)."""
+   461→        pdbqt = tmp_path / "alt.pdbqt"
+   462→        pdbqt.write_text(
+   463→            "\n".join(
+   464→                [
+   465→                    atom_line(1, "CA", "ALA", "A", 1, 0.0, 0.0, 0.0, "C"),
+   466→                    atom_line(2, "CB", "ALA", "A", 1, 1.0, 0.0, 0.0, "C", altloc="A"),
+   467→                    atom_line(3, "CB", "ALA", "A", 1, 9.9, 0.0, 0.0, "C", altloc="B"),
+   468→                    atom_line(4, "HB", "ALA", "A", 1, 9.8, 1.0, 0.0, "C", altloc="B"),
+   469→                ]
+   470→            )
+   471→            + "\n",
+   472→            encoding="utf-8",
+   473→        )
+   474→        report = prepare_protein(pdbqt, tmp_path / "out.pdbqt")
+   475→        # residue conformer letter is A (first seen): CA + CB-A survive,
+   476→        # CB-B and HB-B are dropped -- no A/B hybrid
+   477→        assert report.altloc_removed == 2
+   478→        assert report.output_atoms == 2
+   479→
+   480→    def test_multi_model_keeps_first_model(self, tmp_path: Path) -> None:
+   481→        pdbqt = tmp_path / "nmr.pdbqt"
+   482→        pdbqt.write_text(
+   483→            "\n".join(
+   484→                [
+   485→                    "MODEL        1",
+   486→                    pdbqt_line(1, "CA", "ALA", "A", 1, 0.1, "C"),
+   487→                    pdbqt_line(2, "CB", "ALA", "A", 1, 0.1, "C"),
+   488→                    "ENDMDL",
+   489→                    "MODEL        2",
+   490→                    pdbqt_line(3, "CA", "ALA", "A", 1, 0.2, "C"),
+   491→                    pdbqt_line(4, "CB", "ALA", "A", 1, 0.2, "C"),
+   492→                    "ENDMDL",
+   493→                ]
+   494→            )
+   495→            + "\n",
+   496→            encoding="utf-8",
+   497→        )
+   498→        report = prepare_protein(pdbqt, tmp_path / "out.pdbqt")
+   499→        assert report.output_atoms == 2  # only MODEL 1
+   500→        assert report.altloc_removed == 0  # model 2 is not "alt-locations"
+   501→        assert any("MODEL 1 of 2" in note for note in report.notes)
+   502→
+   503→    def test_bad_altloc_argument_raises(self, tmp_path: Path) -> None:
+   504→        src = tmp_path / "r.pdbqt"
+   505→        src.write_text(pdbqt_line(1, "CA", "ALA", "A", 1, 0.1, "C") + "\n")
+   506→        for bad in ("bb", "", "1", "aa"):
+   507→            with pytest.raises(DataValidationError, match="default_altloc"):
+   508→                prepare_protein(src, tmp_path / "x.pdbqt", default_altloc=bad)
+   509→
+   510→    def test_chain_stripped_and_ter_between_chains(self, tmp_path: Path) -> None:
+   511→        pdbqt = tmp_path / "two.pdbqt"
+   512→        pdbqt.write_text(
+   513→            "\n".join(
+   514→                [
+   515→                    pdbqt_line(1, "CA", "ALA", "A", 1, 0.1, "C"),
+   516→                    pdbqt_line(2, "CA", "GLY", "B", 1, 0.1, "C"),
+   517→                    pdbqt_line(3, "CB", "GLY", "B", 1, 0.1, "C"),
+   518→                ]
+   519→            )
+   520→            + "\n",
+   521→            encoding="utf-8",
+   522→        )
+   523→        # chain selection with surrounding whitespace works...
+   524→        report = prepare_protein(pdbqt, tmp_path / "b.pdbqt", chain=" B ")
+   525→        assert report.chains == ["B"]
+   526→        assert report.output_atoms == 2
+   527→        # ...and keeping both chains emits a TER at the chain break
+   528→        both = prepare_protein(pdbqt, tmp_path / "ab.pdbqt")
+   529→        assert both.output_atoms == 3
+   530→        assert both.chains == ["A", "B"]
+   531→        text = (tmp_path / "ab.pdbqt").read_text()
+   532→        assert "\nTER" in text, "chain break TER not emitted"
+   533→
+   534→
+   535→# ---------------------------------------------------------------------------
+   536→# prepare_protein — the real Meeko pipeline (needs the 1CRN fixture)
+   537→# ---------------------------------------------------------------------------
+   538→
+   539→
+   540→class TestProteinMeekoPipeline:
+   541→    @pytest.fixture(scope="class")
+   542→    def crambin_report(self, tmp_path_factory: pytest.TempPathFactory) -> ProteinReport:
+   543→        out = tmp_path_factory.mktemp("receptor") / "r.pdbqt"
+   544→        return prepare_protein(CRAMBIN, out)
+   545→
+   546→    def test_report_contents(self, crambin_report: ProteinReport) -> None:
+   547→        assert crambin_report.mode == "meeko"
+   548→        assert crambin_report.input_atoms == 327
+   549→        assert crambin_report.residues == 46
+   550→        assert crambin_report.chains == ["A"]
+   551→        # polar hydrogens added by the templates
+   552→        assert crambin_report.atom_types.get("HD", 0) == 67
+   553→        assert crambin_report.output_atoms == 394
+   554→        assert crambin_report.charge_min < 0 < crambin_report.charge_max
+   555→
+   556→    def test_written_receptor_is_valid_pdbqt(self, crambin_report: ProteinReport) -> None:
+   557→        from pharmaml.docking.preparation import extract_pdbqt_atom_types
+   558→
+   559→        types = extract_pdbqt_atom_types(crambin_report.output_pdbqt)
+   560→        assert set(types) >= {"A", "C", "HD", "N", "OA", "SA"}
+   561→        assert crambin_report.atom_types.keys() == set(types)
+   562→
+   563→    def test_wet_pdb_full_cleaning(self, tmp_path: Path) -> None:
+   564→        """1CRN + waters + ion + sulfate + altloc clone -> full audit."""
+   565→        lines = CRAMBIN.read_text(encoding="utf-8", errors="ignore").splitlines()
+   566→        atoms = [line for line in lines if line.startswith(("ATOM", "HETATM"))]
+   567→        wet = list(atoms)
+   568→        for i in range(3):  # three waters
+   569→            wet.append(
+   570→                atom_line(900 + i, "O", "HOH", "A", 90 + i, 1.0, 1.0, 1.0, "O", record="HETATM")
+   571→            )
+   572→        wet.append(atom_line(950, "CL", "CL", "A", 95, 2.0, 2.0, 2.0, "Cl", record="HETATM"))
+   573→        clone = list(atoms[5])
+   574→        clone[16] = "B"
+   575→        wet.insert(6, "".join(clone))
+   576→        src = tmp_path / "wet.pdb"
+   577→        src.write_text("\n".join(wet) + "\nTER\nEND\n", encoding="utf-8")
+   578→
+   579→        report = prepare_protein(src, tmp_path / "r.pdbqt")
+   580→        assert report.waters_removed == 3
+   581→        assert report.hetatm_removed == 1
+   582→        assert report.altloc_removed == 1
+   583→        assert report.input_atoms == 328
+   584→        assert report.output_atoms == 394  # identical to the clean run
+   585→        assert report.residues == 46
+   586→
+   587→    def test_input_hydrogens_stripped_then_readded(self, tmp_path: Path) -> None:
+   588→        lines = CRAMBIN.read_text(encoding="utf-8", errors="ignore").splitlines()
+   589→        atoms = [line for line in lines if line.startswith("ATOM")]
+   590→        with_h = atoms + [
+   591→            atom_line(900, "HA", "THR", "A", 1, 0.5, 0.5, 0.5, "H"),
+   592→        ]
+   593→        src = tmp_path / "h.pdb"
+   594→        src.write_text("\n".join(with_h) + "\nEND\n", encoding="utf-8")
+   595→        report = prepare_protein(src, tmp_path / "r.pdbqt")
+   596→        assert report.hydrogens_removed == 1
+   597→        assert report.output_atoms == 394  # template hydrogens replace input ones
+   598→
+   599→    def test_broken_residue_raises_docking_error(self, tmp_path: Path) -> None:
+   600→        from pharmaml.exceptions import DockingError
+   601→
+   602→        src = tmp_path / "broken.pdb"
+   603→        src.write_text(
+   604→            atom_line(1, "N", "XXX", "A", 1, 0.0, 0.0, 0.0, "N") + "\nEND\n",
+   605→            encoding="utf-8",
+   606→        )
+   607→        with pytest.raises(DockingError, match="Meeko could not build"):
+   608→            prepare_protein(src, tmp_path / "x.pdbqt")
+   609→
+   610→
+   611→class TestProteinMmcifImport:
+   612→    """mmCIF (.cif/.mmcif) receptors are converted via gemmi, then take
+   613→    the exact same Meeko cleaning path as .pdb input."""
+   614→
+   615→    @pytest.fixture(scope="class")
+   616→    def crambin_cif(self, tmp_path_factory: pytest.TempPathFactory) -> Path:
+   617→        gemmi = pytest.importorskip("gemmi")
+   618→        structure = gemmi.read_structure(str(CRAMBIN))
+   619→        structure.setup_entities()
+   620→        cif_path = tmp_path_factory.mktemp("cif") / "1crn.cif"
+   621→        structure.make_mmcif_document().write_file(str(cif_path))
+   622→        return cif_path
+   623→
+   624→    @pytest.fixture(scope="class")
+   625→    def crambin_ref(self, tmp_path_factory: pytest.TempPathFactory) -> ProteinReport:
+   626→        out = tmp_path_factory.mktemp("cif_ref") / "r.pdbqt"
+   627→        return prepare_protein(CRAMBIN, out)
+   628→
+   629→    def test_cif_matches_pdb_pipeline(
+   630→        self, crambin_cif: Path, tmp_path: Path, crambin_ref: ProteinReport
+   631→    ) -> None:
+   632→        report = prepare_protein(crambin_cif, tmp_path / "r.pdbqt")
+   633→        assert report.mode == "meeko"
+   634→        assert report.input_atoms == 327
+   635→        assert report.output_atoms == crambin_ref.output_atoms
+   636→        assert report.atom_types == crambin_ref.atom_types
+   637→        assert report.residues == crambin_ref.residues
+   638→        assert any("mmCIF" in note for note in report.notes)
+   639→
+   640→    def test_mmcif_extension_accepted(self, crambin_cif: Path, tmp_path: Path) -> None:
+   641→        renamed = tmp_path / "1crn.mmcif"
+   642→        renamed.write_text(crambin_cif.read_text(encoding="utf-8"), encoding="utf-8")
+   643→        report = prepare_protein(renamed, tmp_path / "r.pdbqt")
+   644→        assert report.mode == "meeko"
+   645→        assert report.output_atoms == 394
+   646→
+   647→    def test_cif_without_gemmi_raises_dependency_error(
+   648→        self, crambin_cif: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+   649→    ) -> None:
+   650→        import sys
+   651→
+   652→        # 'None' in sys.modules makes any later `import gemmi` fail fast
+   653→        monkeypatch.setitem(sys.modules, "gemmi", None)
+   654→        with pytest.raises(DependencyError, match="gemmi"):
+   655→            prepare_protein(crambin_cif, tmp_path / "r.pdbqt")
+   656→
+   657→    def test_non_cif_content_rejected(self, tmp_path: Path) -> None:
+   658→        src = tmp_path / "fake.cif"
+   659→        src.write_text(
+   660→            "this is definitely not mmCIF content\n", encoding="utf-8"
+   661→        )
+   662→        with pytest.raises(DataValidationError, match="mmCIF"):
+   663→            prepare_protein(src, tmp_path / "r.pdbqt")
+   664→
+   665→
+   666→# ---------------------------------------------------------------------------
+   667→# distribute_receptor — the adder.py upgrade
+   668→# ---------------------------------------------------------------------------
+   669→
+   670→
+   671→class TestDistributeReceptor:
+   672→    def _campaign(self, tmp_path: Path) -> Path:
+   673→        root = tmp_path / "campaign"
+   674→        for name in ("01_aspirin", "02_caffeine"):
+   675→            (root / name).mkdir(parents=True)
+   676→        return root
+   677→
+   678→    def _receptor(self, tmp_path: Path) -> Path:
+   679→        path = tmp_path / "r.pdbqt"
+   680→        path.write_text(pdbqt_line(1, "CA", "ALA", "A", 1, 0.1, "C") + "\n")
+   681→        return path
+   682→
+   683→    def test_copies_into_every_folder(self, tmp_path: Path) -> None:
+   684→        root = self._campaign(tmp_path)
+   685→        receptor = self._receptor(tmp_path)
+   686→        targets = distribute_receptor(receptor, root)
+   687→        assert len(targets) == 2
+   688→        assert all(t.name == "r.pdbqt" for t in targets)
+   689→        assert (root / "01_aspirin" / "r.pdbqt").is_file()
+   690→
+   691→    def test_idempotent_skip_existing(self, tmp_path: Path) -> None:
+   692→        root = self._campaign(tmp_path)
+   693→        receptor = self._receptor(tmp_path)
+   694→        distribute_receptor(receptor, root)
+   695→        # modify one copy; the default second call must NOT overwrite it
+   696→        marker = root / "01_aspirin" / "r.pdbqt"
+   697→        marker.write_text("MUTATED\n")
+   698→        targets = distribute_receptor(receptor, root)
+   699→        assert marker.read_text() == "MUTATED\n"
+   700→        assert len(targets) == 2
+   701→        # overwrite=True refreshes it
+   702→        distribute_receptor(receptor, root, overwrite=True)
+   703→        assert marker.read_text() != "MUTATED\n"
+   704→
+   705→    def test_custom_filename(self, tmp_path: Path) -> None:
+   706→        root = self._campaign(tmp_path)
+   707→        receptor = self._receptor(tmp_path)
+   708→        targets = distribute_receptor(receptor, root, filename="receptor.pdbqt")
+   709→        assert all(t.name == "receptor.pdbqt" for t in targets)
+   710→
+   711→    def test_missing_receptor_raises(self, tmp_path: Path) -> None:
+   712→        root = self._campaign(tmp_path)
+   713→        with pytest.raises(DataValidationError, match="receptor file not found"):
+   714→            distribute_receptor(tmp_path / "ghost.pdbqt", root)
+   715→
+   716→    def test_missing_campaign_raises(self, tmp_path: Path) -> None:
+   717→        receptor = self._receptor(tmp_path)
+   718→        with pytest.raises(DataValidationError, match="campaign directory not found"):
+   719→            distribute_receptor(receptor, tmp_path / "nowhere")
+   720→
+   721→    def test_empty_campaign_returns_empty_list(self, tmp_path: Path) -> None:
+   722→        root = tmp_path / "empty"
+   723→        root.mkdir()
+   724→        receptor = self._receptor(tmp_path)
+   725→        assert distribute_receptor(receptor, root) == []
+   726→
+   727→
+   728→# ---------------------------------------------------------------------------
+   729→# CLI — docking prep-ligands / prep-protein
+   730→# ---------------------------------------------------------------------------
+   731→
+   732→
+   733→class TestDockingPrepCli:
+   734→    def test_prep_ligands_cli(self, tmp_path: Path, capsys) -> None:
+   735→        from pharmaml.cli import main
+   736→
+   737→        csv = tmp_path / "ligands.csv"
+   738→        csv.write_text("name,SMILES\naspirin,CCO\nbad,zzz\n", encoding="utf-8")
+   739→        out = tmp_path / "campaign"
+   740→        code = main(
+   741→            ["docking", "prep-ligands", "--ligands", str(csv), "--out", str(out)]
+   742→        )
+   743→        assert code == 1  # failures -> exit 1
+   744→        stdout = capsys.readouterr().out
+   745→        assert "Ligand library" in stdout
+   746→        assert "Ligand batch preparation" in stdout
+   747→        assert "failed ligands ->" in stdout
+   748→        assert (out / "failed_smiles.csv").is_file()
+   749→        assert (out / "01_aspirin" / "l.pdbqt").is_file()
+   750→
+   751→    def test_prep_ligands_cli_clean_exit_zero(self, tmp_path: Path, capsys) -> None:
+   752→        from pharmaml.cli import main
+   753→
+   754→        csv = tmp_path / "ligands.csv"
+   755→        csv.write_text("name,SMILES\nethanol,CCO\n", encoding="utf-8")
+   756→        code = main(
+   757→            [
+   758→                "docking", "prep-ligands", "--ligands", str(csv),
+   759→                "--out", str(tmp_path / "ok"), "--naming", "index",
+   760→            ]
+   761→        )
+   762→        assert code == 0
+   763→        assert (tmp_path / "ok" / "1" / "l.pdbqt").is_file()
+   764→
+   765→    def test_prep_ligands_cli_bad_naming(self, tmp_path: Path, capsys) -> None:
+   766→        from pharmaml.cli import main
+   767→
+   768→        csv = tmp_path / "ligands.csv"
+   769→        csv.write_text("SMILES\nCCO\n", encoding="utf-8")
+   770→        # argparse validates the choices and exits with code 2
+   771→        with pytest.raises(SystemExit) as excinfo:
+   772→            main(
+   773→                [
+   774→                    "docking", "prep-ligands", "--ligands", str(csv),
+   775→                    "--out", str(tmp_path / "x"), "--naming", "nope",
+   776→                ]
+   777→            )
+   778→        assert excinfo.value.code == 2
+   779→        assert "invalid choice" in capsys.readouterr().err
+   780→
+   781→    def test_prep_protein_cli(self, tmp_path: Path, capsys) -> None:
+   782→        from pharmaml.cli import main
+   783→
+   784→        out = tmp_path / "r.pdbqt"
+   785→        code = main(
+   786→            [
+   787→                "docking", "prep-protein",
+   788→                "--protein", str(CRAMBIN),
+   789→                "--out", str(out),
+   790→                "--chain", "A",
+   791→                "--altloc", "first",
+   792→            ]
+   793→        )
+   794→        assert code == 0
+   795→        stdout = capsys.readouterr().out
+   796→        assert "Protein preparation audit" in stdout
+   797→        assert "394 atoms" in stdout
+   798→        assert out.is_file()
+   799→
+   800→    def test_prep_protein_cli_lowercase_altloc_normalized(self, tmp_path: Path) -> None:
+   801→        from pharmaml.cli import main
+   802→
+   803→        # 'b' should be normalized to 'B' instead of dropping everything
+   804→        lines = CRAMBIN.read_text(encoding="utf-8", errors="ignore").splitlines()
+   805→        atoms = [l for l in lines if l.startswith("ATOM")]
+   806→        clone = list(atoms[5])
+   807→        clone[16] = "B"
+   808→        src = tmp_path / "alt.pdb"
+   809→        src.write_text(
+   810→            "\n".join(atoms[:6] + ["".join(clone)] + atoms[6:]) + "\nEND\n",
+   811→            encoding="utf-8",
+   812→        )
+   813→        code = main(
+   814→            [
+   815→                "docking", "prep-protein",
+   816→                "--protein", str(src),
+   817→                "--out", str(tmp_path / "r.pdbqt"),
+   818→                "--altloc", "b",
+   819→            ]
+   820→        )
+   821→        assert code == 0
+   822→
+   823→    def test_prep_protein_cli_bad_altloc(self, tmp_path: Path, capsys) -> None:
+   824→        from pharmaml.cli import main
+   825→
+   826→        code = main(
+   827→            [
+   828→                "docking", "prep-protein",
+   829→                "--protein", str(CRAMBIN),
+   830→                "--out", str(tmp_path / "r.pdbqt"),
+   831→                "--altloc", "zz",
+   832→            ]
+   833→        )
+   834→        assert code == 1
+   835→        assert "default_altloc" in capsys.readouterr().err
+   836→

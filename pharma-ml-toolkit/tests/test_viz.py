@@ -35,6 +35,7 @@ from pharmaml.viz import (  # noqa: E402
     plot_dose_accumulation,
     plot_energy_distribution,
     plot_top_ligands,
+    plot_receptor_atom_types,
     plot_feature_importance,
     plot_model_comparison,
     plot_predicted_vs_actual,
@@ -345,6 +346,60 @@ class TestDockingPlots:
         with pytest.raises(DataValidationError):
             plot_energy_distribution("not a frame")
 
+    def test_receptor_atom_types_from_dict(self, close_all):
+        fig = plot_receptor_atom_types(
+            {"A": 130, "C": 400, "HD": 190, "OA": 120, "NA": 30, "SA": 8}
+        )
+        ax = fig.axes[0]
+        assert len(ax.patches) == 6
+        # every bar carries its count annotation
+        assert sum(1 for t in ax.texts if t.get_text().isdigit()) == 6
+        # chemistry classes present in the legend
+        legend_texts = " | ".join(t.get_text() for t in ax.get_legend().get_texts())
+        assert "polar hydrogen" in legend_texts and "non-polar carbon" in legend_texts
+
+    def test_receptor_atom_types_sorted_desc(self, close_all):
+        fig = plot_receptor_atom_types({"C": 10, "HD": 200, "OA": 50})
+        heights = [p.get_height() for p in fig.axes[0].patches]
+        assert heights == sorted(heights, reverse=True)
+
+    def test_receptor_atom_types_from_pdbqt_file(self, close_all, tmp_path):
+        pdbqt = tmp_path / "receptor.pdbqt"
+        pdbqt.write_text(
+            "ATOM      1  C   LYS A   1     34.741  20.264 -10.844  1.00  0.00    +0.242 C\n"
+            "ATOM      2  O   LYS A   1     33.945  20.813 -10.081  1.00  0.00    -0.273 OA\n"
+            "ATOM      3 HD1  LYS A   1     35.900  20.900 -10.900  1.00  0.00    +0.100 HD\n",
+            encoding="utf-8",
+        )
+        fig = plot_receptor_atom_types(pdbqt)
+        assert len(fig.axes[0].patches) == 3
+
+    def test_receptor_atom_types_ignores_non_alpha_tail(self, close_all, tmp_path):
+        pdbqt = tmp_path / "weird.pdbqt"
+        pdbqt.write_text(
+            "ATOM      1  C   LIG A   1      0.000   0.000   0.000  1.00  0.00    +0.20 C\n"
+            "REMARK   something 123.45\n",
+            encoding="utf-8",
+        )
+        fig = plot_receptor_atom_types(pdbqt)
+        assert len(fig.axes[0].patches) == 1
+
+    def test_receptor_atom_types_empty_dict(self, close_all):
+        with pytest.raises(DataValidationError):
+            plot_receptor_atom_types({})
+
+    def test_receptor_atom_types_missing_file(self, close_all, tmp_path):
+        with pytest.raises(DataValidationError):
+            plot_receptor_atom_types(tmp_path / "nope.pdbqt")
+
+    def test_receptor_atom_types_accepts_report_like_object(self, close_all):
+        class _FakeReport:
+            atom_types = {"C": 12, "OA": 3}
+            output_pdbqt = "unused.pdbqt"
+
+        fig = plot_receptor_atom_types(_FakeReport())
+        assert len(fig.axes[0].patches) == 2
+
 
 # ---------------------------------------------------------------- reports
 class TestTableExport:
@@ -610,3 +665,67 @@ class TestNotebookArtifacts:
             if o.get("output_type") == "stream"
         )
         assert "valid         : 8" in load_text, "ligand library audit changed"
+
+    def test_complete_pk_workflow_notebook(self):
+        nb = self._read("complete_pk_workflow.ipynb")
+        code_cells, errors, figures, executed = self._stats(nb)
+        assert len(code_cells) >= 25
+        assert executed == len(code_cells), "notebook has unexecuted code cells"
+        assert not errors, f"notebook has {len(errors)} committed error output(s)"
+        assert figures >= 2, "PK notebook lost its figures"
+
+        sources = "\n".join(c.source for c in code_cells)
+        for symbol in (
+            # §1 data entry / validation
+            "read_table",
+            "require_columns",
+            "validate_concentration_series",
+            # §2–§7 the PK core
+            "nca_summary",
+            "auc_trapezoid",
+            "aucm_trapezoid",
+            "half_life",
+            "elimination_rate_constant",
+            "clearance",
+            "volume_of_distribution",
+            "oral_cmax",
+            "iv_bolus_concentration",
+            "iv_infusion_steady_state",
+            "accumulation_ratio",
+            "plot_dose_accumulation",
+            # §8–§11 PD / dosage / patient / units
+            "sigmoid_emax_effect",
+            "ec50_for_target_effect",
+            "maintenance_dose",
+            "loading_dose",
+            "creatinine_clearance",
+            "renal_dose_adjustment",
+            "tdm_trough_adjustment",
+            "UnitConverter",
+            "molar_mass",
+            # §12 publish
+            "plot_concentration_profile",
+            "export_table",
+            "save_visual_bundle",
+        ):
+            assert symbol in sources, f"PK notebook lost its {symbol} section"
+
+        # The NCA numbers must stay committed (fixed-seed demo profile:
+        # AUC 17.961 ng·h/mL, terminal half-life 1.623 h).
+        nca_cell = next(
+            (c for c in code_cells if "summary = nca_summary" in c.source), None
+        )
+        assert nca_cell is not None, "notebook lost its nca_summary cell"
+        nca_text = "".join(
+            o.get("text", "") for o in nca_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "AUC" in nca_text, "NCA cell lost its output"
+        assert "17.961" in nca_text, "NCA AUC value changed"
+        assert "1.623" in nca_text, "terminal half-life value changed"
+
+        # The validation guard (§1) and the recap (§13) must stay shipped.
+        assert any(
+            c.cell_type == "markdown" and c.source.startswith("## 13 · Recap")
+            for c in nb.cells
+        ), "notebook lost its recap section"

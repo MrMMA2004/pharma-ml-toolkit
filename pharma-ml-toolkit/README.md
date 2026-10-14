@@ -8,12 +8,12 @@ domains into one coherent package:
 | **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
 | **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry, cross-validated training (binary **and multiclass**), evaluation, persistence |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design |
-| **`pharmaml.docking`** | Molecular docking — ligand/grid preparation, AutoDock4 & Vina batch workflows, result parsing, scoring |
-| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity |
+| **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids, AutoDock4 & Vina batch workflows, result parsing, scoring |
+| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, SMI/CSV/SDF format conversion |
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (402 tests).
+exceptions, input validation, and pytest coverage** (460 tests).
 
 ---
 
@@ -21,7 +21,7 @@ exceptions, input validation, and pytest coverage** (402 tests).
 
 * **Python ≥ 3.10** (union syntax `X | None` used throughout).
 * **Core deps only**: `numpy`, `pandas`, `scikit-learn`, `scipy`, `joblib` — everything else
-  (RDKit, Mordred, XGBoost/LightGBM/CatBoost, Meeko) is **optional and lazily imported**;
+  (RDKit, Mordred, XGBoost/LightGBM/CatBoost, Meeko, gemmi) is **optional and lazily imported**;
   missing packages raise an informative `DependencyError` instead of crashing at import time.
 * **Runs anywhere**: local, Docker (`Dockerfile` included), or CI (GitHub Actions workflow included).
 * **Deterministic examples**: all example scripts run on synthetic data with fixed seeds — no
@@ -87,8 +87,8 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands.py + receptor.py (CSV/PDB in), grids, workflow, parsing, scoring
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 402 pytest cases across all domains (incl. test_docking_prep.py + data/ fixtures)
-├── examples/                # runnable demos + three executed notebooks (complete ML workflow · complete docking workflow · walkthrough)
+├── tests/                   # 460 pytest cases across all domains (incl. test_docking_prep.py, test_format_converters.py + data/ fixtures)
+├── examples/                # runnable demos + four executed notebooks (complete ML · complete docking · complete PK/PD · walkthrough)
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
@@ -142,6 +142,25 @@ Point `DOCKING_DIR` at your real campaign folder and re-run — parsers, rescori
 and plots work unchanged on real `.dlg` trees. §1–§3 need
 `pip install 'pharmaml[docking]'`; a ready-to-use demo receptor ships at
 `examples/data/lysozyme_1aki.pdb`.
+
+### The complete PK/PD process in one notebook
+
+`examples/complete_pk_workflow.ipynb` completes the trilogy — the pharma
+zero-to-one-hundred walkthrough the legacy archive never had, executed with all
+outputs committed (numbers *and* inline figures):
+
+> §1 data entry (your own concentration–time file, validated on the way in) →
+> §2 NCA (AUC/AUMC/MRT/Cmax/Tmax/terminal t½) → §3 the AUC math exposed
+> (linear vs log trapezoid) → §4 derived parameters (CL, CL/F, Vd — with an
+> honest look at what Dose/AUC really is) → §5 analytic 1-compartment checks →
+> §6 IV routes (bolus curve, infusion steady state) → §7 repeated dosing &
+> accumulation → §8 PD (Emax family, EC80 inversion) → §9 dosage design
+> (loading/maintenance/infusion, BSA & weight rules, Clark's & Young's) → §10
+> patient-specific adjustments (Cockcroft-Gault, renal, TDM trough) → §11 units
+> & molar mass → §12 one-click HTML report + multi-format tables.
+
+Replace the demo profile with your own CSV (`time_h`, `conc_ng_ml` columns) and
+re-run; the CLI equivalent is `pharmaml pharma pk --data profile.csv`.
 
 (`examples/pharmaml_walkthrough.ipynb` remains the every-domain tour including
 PK, docking and chem conversions.)
@@ -214,6 +233,8 @@ No-code alternative via the CLI:
 ```bash
 pharmaml data inspect --data my_compounds.csv --target activity --head 5
 pharmaml data split  --data my_compounds.csv --test-size 0.2 --val-size 0.1
+pharmaml data convert --data ligands.csv --to sdf          # CSV -> 3D-embedded SDF
+pharmaml data convert --data library.smi --to csv          # streaming .smi -> CSV
 pharmaml ml train  --data my_compounds.csv --target activity --task auto
 pharmaml ml train  --data my_compounds.csv --model rf --plots --keep-categorical
 pharmaml ml compare --data my_compounds.csv --target activity --plot
@@ -239,6 +260,11 @@ prepare_ligand_library(lib, "ligand_folders")   # upgrades smilestopdbqt.py: fol
 receptor = prepare_protein("protein.pdb", "r.pdbqt")   # waters/HETATM/altlocs cleaned, AD4 types + charges
 distribute_receptor(receptor, "ligand_folders")        # upgrades adder.py: r.pdbqt into every folder
 ```
+
+Modern `.cif`/`.mmcif` entries work too — `prepare_protein("protein.cif",
+"r.pdbqt")` converts them via gemmi (`pip install gemmi`) before the same
+cleaning pipeline; the receptor's AutoDock atom-type census is one command away
+with `pharmaml.viz.plot_receptor_atom_types(receptor)`.
 
 Try it with the shipped demo receptor `examples/data/lysozyme_1aki.pdb`, or go
 no-code: `pharmaml docking prep-ligands` / `pharmaml docking prep-protein`.
@@ -399,6 +425,11 @@ pharmaml --version
 pharmaml models                       # list available registry models
 pharmaml data inspect --data my.csv --target activity --head 5
 pharmaml data split --data my.csv --test-size 0.2 --val-size 0.1
+pharmaml data convert --data ligands.csv --to sdf          # CSV/TSV/Excel -> SDF (3D + UFF, SD tags)
+pharmaml data convert --data ligands.csv --to sdf --no-3d  # fast 2D write
+pharmaml data convert --data library.smi --to csv          # streaming .smi -> CSV (Excel BOM)
+pharmaml data convert --data compounds.sdf --to csv        # SDF -> table (SMILES + SD tags)
+pharmaml data convert --data ligands.csv --to smi          # table -> .smi lines
 pharmaml ml train --data my.csv --target activity --task auto
 pharmaml ml train --data my.csv --model rf --cv 5 --plots --keep-categorical
 pharmaml ml compare --data my.csv --target activity --out board.csv --plot
@@ -445,7 +476,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (402 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (460 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```
@@ -456,8 +487,9 @@ loading (CSV/Excel, delimiter sniffing, target auto-detection, multiclass and re
 inference)**, **multiclass end-to-end flows (3–4 classes, scorer fallbacks, ensembles)**,
 **every plotting function / export format / HTML report path (headless Agg CI proof,
 plus a guard that the shipped notebooks stay executed and error-free)**, docking
-preparation & parsers (ligand CSV import, receptor prep, synthetic DLG/Vina/PDBQT
-fixtures), scoring functions, and converter edge cases.
+preparation & parsers (ligand CSV import, receptor prep incl. the mmCIF/gemmi path,
+synthetic DLG/Vina/PDBQT fixtures), scoring functions, converter edge cases, and the
+SMI/CSV/SDF format-conversion round-trips.
 
 ## CI
 

@@ -2,6 +2,7 @@
 
 from pharmaml.pharma.units import UnitConverter, molar_mass
 from pharmaml.pharma.pk import (
+    PKSummary,
     accumulation_ratio,
     auc_trapezoid,
     aucm_trapezoid,
@@ -11,27 +12,42 @@ from pharmaml.pharma.pk import (
     elimination_rate_constant,
     half_life,
     iv_bolus_concentration,
+    iv_infusion_steady_state,
     mrt,
+    nca_summary,
     oral_cmax,
     oral_tmax,
+    validate_concentration_series,
+    vd_from_dose_auc,
     volume_of_distribution,
 )
 from pharmaml.pharma.pd import (
+    ec50_for_target_effect,
+    effect_table,
     emax_effect,
     inhibitory_emax_effect,
+    linear_effect,
     sigmoid_emax_effect,
 )
 from pharmaml.pharma.dosage import (
     bsa_mosteller,
+    clarks_rule,
     dose_by_bsa,
     dose_by_weight,
+    infusion_rate,
     loading_dose,
     maintenance_dose,
+    renal_dose_adjustment,
+    tdm_trough_adjustment,
+    youngs_rule,
 )
 
 __all__ = [
+    # units
     "UnitConverter",
     "molar_mass",
+    # PK
+    "PKSummary",
     "accumulation_ratio",
     "auc_trapezoid",
     "aucm_trapezoid",
@@ -41,16 +57,30 @@ __all__ = [
     "elimination_rate_constant",
     "half_life",
     "iv_bolus_concentration",
+    "iv_infusion_steady_state",
     "mrt",
+    "nca_summary",
     "oral_cmax",
     "oral_tmax",
+    "validate_concentration_series",
+    "vd_from_dose_auc",
     "volume_of_distribution",
+    # PD
+    "ec50_for_target_effect",
+    "effect_table",
     "emax_effect",
     "inhibitory_emax_effect",
+    "linear_effect",
     "sigmoid_emax_effect",
+    # dosage
     "bsa_mosteller",
+    "clarks_rule",
     "dose_by_bsa",
     "dose_by_weight",
+    "infusion_rate",
     "loading_dose",
     "maintenance_dose",
+    "renal_dose_adjustment",
+    "tdm_trough_adjustment",
+    "youngs_rule",
 ]

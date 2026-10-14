@@ -34,7 +34,7 @@ after adding new public functions.
 
 ## `pharmaml.chem`
 
-*Cheminformatics helpers: endpoint conversion, descriptors, similarity.*
+*Cheminformatics helpers: endpoint and file-format conversion, descriptors, similarity.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -42,6 +42,11 @@ after adding new public functions.
 | `ki_to_pki` | function | Convert an inhibition constant to pKi = -log10(Ki [M]). |
 | `add_pic50_column` | function | Append a pIC50 column to a table of measurements. |
 | `split_table_into_chunks` | function | Stream a large CSV into fixed-size part files. |
+| `SdfWriteReport` | class | Audit of one :func:`table_to_sdf` conversion. |
+| `smi_to_csv` | function | Stream a ``.smi`` file to CSV one line at a time. |
+| `table_to_sdf` | function | Write a SMILES table to an SD file with 3D structures. |
+| `sdf_to_table` | function | Read an SD file back into a table (SMILES, tags and titles). |
+| `table_to_smi` | function | Write a SMILES table to a ``.smi`` list file. |
 | `compute_descriptors` | function | Compute molecular descriptors for a list of SMILES. |
 | `compute_fingerprints` | function | Compute fingerprints for a list of SMILES. |
 | `compute_maccs` | function | Compute the 167-bit MACCS key fingerprints. |
@@ -79,6 +84,7 @@ after adding new public functions.
 |---|---|---|
 | `UnitConverter` | class | Dimension-aware unit converter for pharmaceutical quantities. |
 | `molar_mass` | function | Compute the molar mass (g/mol) of a chemical formula. |
+| `PKSummary` | class | Non-compartmental PK summary for one concentration-time profile. |
 | `accumulation_ratio` | function | Accumulation ratio for regular intermittent dosing. |
 | `auc_trapezoid` | function | Area under the concentration-time curve (trapezoidal rule). |
 | `aucm_trapezoid` | function | Area under the first-moment curve (AUMC = ∫ t·C dt, linear trapezoid). |
@@ -88,18 +94,30 @@ after adding new public functions.
 | `elimination_rate_constant` | function | Elimination rate constant ``ke = ln(2)/t½`` (1/hours). |
 | `half_life` | function | Elimination half-life ``t½ = ln(2)/ke`` (hours). |
 | `iv_bolus_concentration` | function | Concentration after an IV bolus: ``C(t) = C0 · e^(−ke·t)``. |
+| `iv_infusion_steady_state` | function | Steady-state concentration for a constant IV infusion ``Css = R/CL``. |
 | `mrt` | function | Mean residence time ``MRT = AUMC/AUC`` (non-compartmental). |
+| `nca_summary` | function | Full non-compartmental analysis of one profile. |
 | `oral_cmax` | function | Peak concentration after a single oral dose (1-compartment). |
 | `oral_tmax` | function | Time of peak concentration for 1-compartment oral dosing. |
+| `validate_concentration_series` | function | Validate a paired time/concentration series for PK math. |
+| `vd_from_dose_auc` | function | Dose/AUC ratio — and, with ``mrt``, the steady-state volume. |
 | `volume_of_distribution` | function | Apparent volume of distribution ``Vd = CL/ke``. |
+| `ec50_for_target_effect` | function | Inverse Emax: concentration reaching a target effect. |
+| `effect_table` | function | Evaluate the sigmoid Emax model over a concentration grid. |
 | `emax_effect` | function | Simple (hyperbolic) Emax model: ``E = E0 + Emax·C/(EC50 + C)``. |
 | `inhibitory_emax_effect` | function | Inhibitory (inverse) Emax model: ``E = E0 − Imax·C^h/(IC50^h + C^h)``. |
+| `linear_effect` | function | Linear PD model: ``E = intercept + slope·C`` (small-dose region). |
 | `sigmoid_emax_effect` | function | Sigmoid (Hill) Emax model: ``E = E0 + Emax·C^h/(EC50^h + C^h)``. |
 | `bsa_mosteller` | function | Body surface area (m²) by the Mosteller formula. |
+| `clarks_rule` | function | Clark's rule paediatric scaling by body weight in pounds. |
 | `dose_by_bsa` | function | BSA-scaled dose (Mosteller BSA) with an optional ceiling. |
 | `dose_by_weight` | function | Weight-scaled dose (mg/kg regime) with an optional ceiling. |
+| `infusion_rate` | function | Constant IV infusion rate achieving a steady state: ``R = CL·Css``. |
 | `loading_dose` | function | Loading dose to reach target concentration quickly. |
 | `maintenance_dose` | function | Maintenance dose per dosing interval. |
+| `renal_dose_adjustment` | function | Linearly reduce a dose for impaired renal function. |
+| `tdm_trough_adjustment` | function | Proportionally adjust a dose from a measured trough level. |
+| `youngs_rule` | function | Young's rule for paediatric dose scaling (age 1–12). |
 
 ## `pharmaml.docking`
 
@@ -158,6 +176,7 @@ after adding new public functions.
 | `plot_descriptor_distributions` | function | Histogram grid over the numeric columns of a table. |
 | `plot_similarity_heatmap` | function | Heat-map of a pairwise similarity matrix. |
 | `plot_energy_distribution` | function | Histogram of per-ligand best binding energies (kcal/mol). |
+| `plot_receptor_atom_types` | function | Bar chart of the AutoDock atom-type census of a receptor. |
 | `plot_top_ligands` | function | Horizontal bars of the strongest-binding ligands. |
 | `HTMLReport` | class | Builder for a self-contained HTML report. |
 | `TABLE_FORMATS` | constant |  |
@@ -191,9 +210,9 @@ after adding new public functions.
 ## Command-line interface
 
 ```text
-pharmaml models | data inspect | data split | ml train | ml compare
-             | chem pic50 | chem descriptors | pharma pk | pharma dose
-             | docking prep-ligands | docking prep-protein
+pharmaml models | data inspect | data split | data convert | ml train
+             | ml compare | chem pic50 | chem descriptors | pharma pk
+             | pharma dose | docking prep-ligands | docking prep-protein
              | docking scan | docking check
 ```
 

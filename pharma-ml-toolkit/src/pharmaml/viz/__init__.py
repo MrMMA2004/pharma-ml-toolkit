@@ -17,7 +17,8 @@ layer for **all** toolkit codes:
 * chemistry     — :func:`plot_descriptor_distributions`,
                   :func:`plot_similarity_heatmap`;
 * docking       — :func:`plot_energy_distribution`,
-                  :func:`plot_top_ligands`;
+                  :func:`plot_top_ligands`,
+                  :func:`plot_receptor_atom_types`;
 * everywhere    — :class:`HTMLReport` (self-contained report with
                   embedded figures), :func:`export_table`
                   (csv/tsv/markdown/json/html), :func:`save_visual_bundle`.
@@ -51,6 +52,7 @@ from pharmaml.viz.chem_plots import (
 )
 from pharmaml.viz.docking_plots import (
     plot_energy_distribution,
+    plot_receptor_atom_types,
     plot_top_ligands,
 )
 from pharmaml.viz.ml_plots import (
@@ -102,6 +104,7 @@ __all__ = [
     "plot_similarity_heatmap",
     # docking figures
     "plot_energy_distribution",
+    "plot_receptor_atom_types",
     "plot_top_ligands",
     # reports & tables
     "HTMLReport",

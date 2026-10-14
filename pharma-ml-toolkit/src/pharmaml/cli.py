@@ -11,6 +11,7 @@ scans::
     pharmaml ml compare  --data qsar.csv --target Target --task classification --plot
     pharmaml data inspect --data qsar.csv                  # audit your own file
     pharmaml data split  --data qsar.csv --test-size 0.2 --val-size 0.1
+    pharmaml data convert --data ligands.csv --to sdf      # .smi/.csv/.sdf round-trip
     pharmaml chem pic50  --data activity.xlsx --column "IC50 (nM)"
     pharmaml pharma pk   --data profile.csv --time time_h --conc conc_ng_ml
     pharmaml docking prep-ligands --ligands ligands.csv --out ligand_folders/
@@ -98,6 +99,32 @@ def _build_parser() -> argparse.ArgumentParser:
     split.add_argument(
         "--prefix", default=None,
         help="output filename prefix (default: input file stem)",
+    )
+
+    convert = data_sub.add_parser(
+        "convert",
+        help="convert molecular file formats (.smi / .csv / .tsv / .xlsx / .sdf)",
+    )
+    convert.add_argument(
+        "--data", required=True,
+        help="input file: .smi, a CSV/TSV/Excel table, or .sdf",
+    )
+    convert.add_argument(
+        "--to", required=True, choices=("csv", "sdf", "smi"),
+        help="target format",
+    )
+    convert.add_argument("--smiles-col", default="SMILES", help="SMILES column name")
+    convert.add_argument(
+        "--name-col", default=None,
+        help="molecule name column (default: none -> ligand_N titles)",
+    )
+    convert.add_argument(
+        "--no-3d", action="store_true",
+        help="skip 3D embedding + UFF optimisation (table -> SDF only)",
+    )
+    convert.add_argument(
+        "--out", default=None,
+        help="output path (default: input stem + target extension)",
     )
 
     # ---- ml ----------------------------------------------------------
@@ -297,6 +324,110 @@ def _cmd_data_split(args: argparse.Namespace) -> int:
     prefix = args.prefix or Path(args.data).stem
     result.write(out_dir, prefix)
     print(result)
+    return 0
+
+
+def _smi_bridge_frame(path: Path):
+    """Read a ``.smi`` file into a SMILES/ID table (CLI-internal bridge).
+
+    Lets ``--data x.smi --to sdf|smi`` reuse the table converters
+    without a temporary CSV on disk (the legacy two-step workflow).
+    """
+    import pandas as pd
+
+    from pharmaml.exceptions import DataValidationError
+
+    rows: list[tuple[str, str]] = []
+    with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+        for line in handle:
+            parts = line.strip().split()
+            if not parts:
+                continue
+            rows.append((parts[0], " ".join(parts[1:])))
+    frame = pd.DataFrame(rows, columns=["SMILES", "ID"])
+    if frame.empty:
+        raise DataValidationError(f"no SMILES lines found in {path}")
+    return frame
+
+
+def _cmd_data_convert(args: argparse.Namespace) -> int:
+    from pharmaml.chem.converters import (
+        sdf_to_table,
+        smi_to_csv,
+        table_to_sdf,
+        table_to_smi,
+    )
+    from pharmaml.exceptions import DataValidationError
+    from pharmaml.utils.io import read_table, write_table
+
+    src = Path(args.data)
+    target = args.to
+    suffix = src.suffix.lower()
+    out = Path(args.out) if args.out else src.with_suffix(f".{target}")
+
+    if suffix == ".smi":
+        if target == "csv":
+            written = smi_to_csv(src, out)
+            print(f"converted {src.name} -> {written}")
+            return 0
+        if target == "smi":
+            raise DataValidationError(
+                f"input {src.name} is already a .smi file -- nothing to convert"
+            )
+        frame = _smi_bridge_frame(src)
+        report = table_to_sdf(
+            frame,
+            out,
+            smiles_col=args.smiles_col,
+            name_col=args.name_col,
+            embed3d=not args.no_3d,
+        )
+    elif suffix == ".sdf":
+        if target == "sdf":
+            raise DataValidationError(
+                f"input {src.name} is already an SDF file -- use --to csv or --to smi"
+            )
+        if target == "csv":
+            frame = sdf_to_table(src, out=out, smiles_col=args.smiles_col)
+            print(f"converted {src.name} -> {out} ({len(frame)} molecules)")
+            return 0
+        frame = sdf_to_table(src, smiles_col=args.smiles_col)
+        name_col = args.name_col or ("name" if "name" in frame.columns else None)
+        written = table_to_smi(
+            frame, out, smiles_col=args.smiles_col, name_col=name_col
+        )
+        print(f"converted {src.name} -> {written} ({len(frame)} molecules)")
+        return 0
+    else:  # CSV/TSV/Excel table input
+        if target == "smi":
+            written = table_to_smi(
+                src, out, smiles_col=args.smiles_col, name_col=args.name_col
+            )
+            print(f"converted {src.name} -> {written}")
+            return 0
+        if target == "csv":
+            frame = read_table(src)
+            written = write_table(frame, out)
+            print(f"converted {src.name} -> {written} ({len(frame)} rows)")
+            return 0
+        report = table_to_sdf(
+            src,
+            out,
+            smiles_col=args.smiles_col,
+            name_col=args.name_col,
+            embed3d=not args.no_3d,
+        )
+
+    # --to sdf: full audit + output path; invalid SMILES -> exit 1
+    print(report)
+    print(f"output -> {report.output_sdf}")
+    if report.failures:
+        print(
+            f"{report.failures} invalid SMILES skipped: "
+            f"{report.failed_smiles}",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -564,6 +695,7 @@ _HANDLERS = {
     ("models", None): _cmd_models,
     ("data", "inspect"): _cmd_data_inspect,
     ("data", "split"): _cmd_data_split,
+    ("data", "convert"): _cmd_data_convert,
     ("ml", "train"): _cmd_ml_train,
     ("ml", "compare"): _cmd_ml_compare,
     ("chem", "pic50"): _cmd_chem_pic50,

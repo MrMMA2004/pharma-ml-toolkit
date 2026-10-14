@@ -297,7 +297,7 @@ def smiles_to_pdbqt(
     except ImportError as exc:
         raise DependencyError(
             "smiles_to_pdbqt requires RDKit and Meeko. "
-            "Install with:  pip install rdkit-pypi meeko"
+            "Install with:  pip install rdkit meeko"
         ) from exc
 
     mol = Chem.MolFromSmiles(smiles)

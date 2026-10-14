@@ -49,9 +49,9 @@ CLI_SECTION = """\
 ## Command-line interface
 
 ```text
-pharmaml models | data inspect | data split | ml train | ml compare
-             | chem pic50 | chem descriptors | pharma pk | pharma dose
-             | docking prep-ligands | docking prep-protein
+pharmaml models | data inspect | data split | data convert | ml train
+             | ml compare | chem pic50 | chem descriptors | pharma pk
+             | pharma dose | docking prep-ligands | docking prep-protein
              | docking scan | docking check
 ```
 

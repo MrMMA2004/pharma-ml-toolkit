@@ -30,6 +30,8 @@ __all__ = [
     "auc_trapezoid",
     "aucm_trapezoid",
     "mrt",
+    "nca_summary",
+    "validate_concentration_series",
     "clearance",
     "volume_of_distribution",
     "vd_from_dose_auc",
@@ -193,13 +195,21 @@ def volume_of_distribution(clearance_: float, ke: float) -> float:
     return clearance_ / ke
 
 
-def vd_from_dose_auc(dose: float, auc: float) -> float:
-    """Vd via the statistical moment approach: ``Vd = Dose/AUC/ke`` is the
-    usual route; this convenience returns ``Vss = Dose·MRT/AUC`` when the
-    caller passes ``auc = AUC`` and ``dose`` with ``mrt`` pre-multiplied."""
+def vd_from_dose_auc(dose: float, auc: float, mrt: float | None = None) -> float:
+    """Dose/AUC ratio — and, with ``mrt``, the steady-state volume.
+
+    Without ``mrt`` this returns the plain ``Dose/AUC`` ratio, which is
+    the *clearance* CL (for an IV dose, F = 1) — **not a volume**; the
+    name is kept for call-site honesty checks and legacy parity.  The
+    honest volume routes are ``Vd = CL/ke``
+    (:func:`volume_of_distribution`) or the statistical-moment
+    ``Vss = Dose·MRT/AUC`` obtained by passing ``mrt``.
+    """
     dose = validate_positive(dose, "dose")
     auc = validate_positive(auc, "auc")
-    return dose / auc
+    if mrt is None:
+        return dose / auc
+    return dose * validate_positive(mrt, "mrt") / auc
 
 
 def bioavailability(

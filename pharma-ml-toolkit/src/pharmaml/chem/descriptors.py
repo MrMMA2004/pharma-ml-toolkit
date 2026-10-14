@@ -36,7 +36,7 @@ def require_rdkit():
         raise DependencyError(
             "RDKit is required for descriptor/fingerprint computation. "
             "Install it with:  pip install 'pharmaml[chem]'  "
-            "(or pip install rdkit-pypi)"
+            "(or pip install rdkit)"
         ) from exc
     return Chem
 

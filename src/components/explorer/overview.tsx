@@ -70,6 +70,14 @@ desc = compute_descriptors(df["SMILES"])   # 217 RDKit descriptors
 bits, valid = compute_fingerprints(df["SMILES"], kind="morgan")
 sim  = tanimoto_matrix(bits, bits)          # Tanimoto heat-map
 
+# --- Format conversion (SMI / CSV / SDF) ------------------------
+from pharmaml.chem import smi_to_csv, table_to_sdf, sdf_to_table
+
+smi_to_csv("library.smi", "library.csv")   # streaming, Excel-safe BOM
+report = table_to_sdf("ligands.csv", "ligands.sdf",
+                      name_col="ID")        # 3D embed + UFF + SD tags
+frame = sdf_to_table("ligands.sdf")         # back to a DataFrame
+
 # --- Pharmaceutical calculations -------------------------------
 from pharmaml.pharma import (
     creatinine_clearance, bsa_mosteller,
@@ -169,11 +177,11 @@ const DOMAINS: DomainCardSpec[] = [
     title: "Molecular Docking",
     tagline: "pharmaml.docking — AutoDock4 & Vina",
     bullets: [
-      "Ligand CSV import + protein preparation built in — CSV/PDB in, PDBQT out",
+      "Ligand CSV import + protein preparation built in — CSV/PDB/mmCIF in, PDBQT out",
       "Grid-box & GPF prep, SMILES → 3D PDBQT, Vina/DLG parsers",
       "Ligand efficiency + consensus rescoring, one campaign notebook",
     ],
-    apis: ["parse_vina_output()", "write_gpf()", "consensus_rescore()"],
+    apis: ["prepare_protein()", "write_gpf()", "consensus_rescore()"],
     accent: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
   },
   {
@@ -183,9 +191,9 @@ const DOMAINS: DomainCardSpec[] = [
     bullets: [
       "IC50 / Ki → pIC50 / pKi conversions with unit handling",
       "RDKit descriptors & fingerprints behind lazy imports",
-      "Tanimoto similarity scans across compound tables",
+      "SMI / CSV / SDF format conversion (streaming, Excel-safe) + Tanimoto scans",
     ],
-    apis: ["ic50_to_pic50()", "tanimoto_from_sets()", "similarity_scan()"],
+    apis: ["ic50_to_pic50()", "table_to_sdf()", "tanimoto_from_sets()"],
     accent: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   },
   {
@@ -194,10 +202,10 @@ const DOMAINS: DomainCardSpec[] = [
     tagline: "pharmaml.viz — every domain, every format",
     bullets: [
       "Confusion matrices, ROC, parity & residual diagnostics (2+ classes)",
-      "PK profiles, dose accumulation, similarity heat-maps, docking rankings",
+      "PK profiles, dose accumulation, similarity heat-maps, docking rankings + receptor atom-type census",
       "Self-contained HTML reports + csv/tsv/md/json/html table export",
     ],
-    apis: ["plot_confusion_matrix()", "save_visual_bundle()", "export_table()"],
+    apis: ["plot_confusion_matrix()", "plot_receptor_atom_types()", "save_visual_bundle()"],
     accent: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
   },
 ];
@@ -226,7 +234,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "402 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+    after: "460 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Distribution",
@@ -279,8 +287,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "73";
-  const loc = stats ? fmtInt(stats.totalLines) : "21,353";
+  const fileCount = stats ? fmtInt(stats.files) : "76";
+  const loc = stats ? fmtInt(stats.totalLines) : "25,783";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -361,8 +369,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="402"
-                countTo={402}
+                value="460"
+                countTo={460}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

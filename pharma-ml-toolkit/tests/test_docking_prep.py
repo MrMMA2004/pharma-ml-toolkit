@@ -28,7 +28,7 @@ from pharmaml.docking.receptor import (
     distribute_receptor,
     prepare_protein,
 )
-from pharmaml.exceptions import DataValidationError
+from pharmaml.exceptions import DataValidationError, DependencyError
 
 rdkit = pytest.importorskip("rdkit")  # noqa: F841  (gates the whole module)
 
@@ -606,6 +606,61 @@ class TestProteinMeekoPipeline:
         )
         with pytest.raises(DockingError, match="Meeko could not build"):
             prepare_protein(src, tmp_path / "x.pdbqt")
+
+
+class TestProteinMmcifImport:
+    """mmCIF (.cif/.mmcif) receptors are converted via gemmi, then take
+    the exact same Meeko cleaning path as .pdb input."""
+
+    @pytest.fixture(scope="class")
+    def crambin_cif(self, tmp_path_factory: pytest.TempPathFactory) -> Path:
+        gemmi = pytest.importorskip("gemmi")
+        structure = gemmi.read_structure(str(CRAMBIN))
+        structure.setup_entities()
+        cif_path = tmp_path_factory.mktemp("cif") / "1crn.cif"
+        structure.make_mmcif_document().write_file(str(cif_path))
+        return cif_path
+
+    @pytest.fixture(scope="class")
+    def crambin_ref(self, tmp_path_factory: pytest.TempPathFactory) -> ProteinReport:
+        out = tmp_path_factory.mktemp("cif_ref") / "r.pdbqt"
+        return prepare_protein(CRAMBIN, out)
+
+    def test_cif_matches_pdb_pipeline(
+        self, crambin_cif: Path, tmp_path: Path, crambin_ref: ProteinReport
+    ) -> None:
+        report = prepare_protein(crambin_cif, tmp_path / "r.pdbqt")
+        assert report.mode == "meeko"
+        assert report.input_atoms == 327
+        assert report.output_atoms == crambin_ref.output_atoms
+        assert report.atom_types == crambin_ref.atom_types
+        assert report.residues == crambin_ref.residues
+        assert any("mmCIF" in note for note in report.notes)
+
+    def test_mmcif_extension_accepted(self, crambin_cif: Path, tmp_path: Path) -> None:
+        renamed = tmp_path / "1crn.mmcif"
+        renamed.write_text(crambin_cif.read_text(encoding="utf-8"), encoding="utf-8")
+        report = prepare_protein(renamed, tmp_path / "r.pdbqt")
+        assert report.mode == "meeko"
+        assert report.output_atoms == 394
+
+    def test_cif_without_gemmi_raises_dependency_error(
+        self, crambin_cif: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import sys
+
+        # 'None' in sys.modules makes any later `import gemmi` fail fast
+        monkeypatch.setitem(sys.modules, "gemmi", None)
+        with pytest.raises(DependencyError, match="gemmi"):
+            prepare_protein(crambin_cif, tmp_path / "r.pdbqt")
+
+    def test_non_cif_content_rejected(self, tmp_path: Path) -> None:
+        src = tmp_path / "fake.cif"
+        src.write_text(
+            "this is definitely not mmCIF content\n", encoding="utf-8"
+        )
+        with pytest.raises(DataValidationError, match="mmCIF"):
+            prepare_protein(src, tmp_path / "r.pdbqt")
 
 
 # ---------------------------------------------------------------------------

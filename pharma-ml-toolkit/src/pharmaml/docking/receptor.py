@@ -14,7 +14,9 @@ This module closes that gap:
   already-prepared PDBQT receptor), cleans it -- waters, non-protein
   HETATM records, alternate locations, chain selection -- and writes a
   rigid receptor PDBQT with AutoDock4 atom types and partial charges
-  via Meeko's polymer pipeline,
+  via Meeko's polymer pipeline.  Modern ``.cif``/``.mmcif`` entries
+  are accepted too: gemmi (an optional dependency) converts them to
+  PDB records before the same cleaning pipeline runs,
 * :func:`distribute_receptor` copies the prepared receptor into every
   ligand folder of a campaign,
 * :class:`ProteinReport` audits every atom that went in, came out, or
@@ -304,7 +306,8 @@ def prepare_protein(
     Parameters
     ----------
     source:
-        Protein file (``.pdb`` or ``.pdbqt``).
+        Protein file (``.pdb``, ``.pdbqt`` or mmCIF ``.cif``/``.mmcif``;
+        mmCIF is converted with gemmi, ``pip install gemmi``).
     output_pdbqt:
         Receptor destination.  Defaults to ``<source stem>.pdbqt``
         next to the input (``r.pdbqt`` in the docking folder is the
@@ -358,6 +361,8 @@ def prepare_protein(
     if chain is not None:
         chain = chain.strip() or None
     text = src.read_text(encoding="utf-8-sig", errors="ignore")
+    if src.suffix.lower() in (".cif", ".mmcif"):
+        text = _cif_to_pdb_text(src, text)
     if not any(line.startswith(("ATOM", "HETATM")) for line in text.splitlines()):
         raise DataValidationError(f"no ATOM/HETATM records found in {src}")
 
@@ -371,6 +376,10 @@ def prepare_protein(
     report = ProteinReport(source=src, output_pdbqt=out, mode=mode)
     report.input_atoms = sum(1 for line in text.splitlines() if line.startswith("ATOM"))
     report.input_hetatms = sum(1 for line in text.splitlines() if line.startswith("HETATM"))
+    if src.suffix.lower() in (".cif", ".mmcif"):
+        report.notes.append(
+            "input was mmCIF: converted to PDB records via gemmi before cleaning"
+        )
 
     cleaned, counters = _clean_records(
         text,
@@ -427,6 +436,39 @@ def prepare_protein(
         report.waters_removed,
     )
     return report
+
+
+def _cif_to_pdb_text(src: Path, text: str) -> str:
+    """Convert an mmCIF file to PDB ATOM/HETATM records via gemmi.
+
+    Raises :class:`DependencyError` when gemmi is absent and
+    :class:`DataValidationError` when the file is not parseable mmCIF.
+    """
+    try:
+        import gemmi
+    except ImportError as exc:
+        raise DependencyError(
+            f"mmCIF input ({src.name}) requires gemmi:  pip install gemmi  "
+            "-- or convert the file to PDB format first"
+        ) from exc
+    try:
+        document = gemmi.cif.read_string(text)
+        block = document.sole_block()
+        structure = gemmi.make_structure_from_block(block)
+        structure.setup_entities()
+        pdb_text = structure.make_pdb_string()
+    except Exception as exc:  # gemmi raises plain RuntimeError mostly
+        raise DataValidationError(
+            f"could not parse {src} as mmCIF ({type(exc).__name__}: {exc}). "
+            "If this is actually a PDB file, rename it with a .pdb extension."
+        ) from exc
+    if not any(
+        line.startswith(("ATOM", "HETATM")) for line in pdb_text.splitlines()
+    ):
+        raise DataValidationError(
+            f"no atom records found after parsing {src} as mmCIF"
+        )
+    return pdb_text
 
 
 def _meeko_receptor_pdbqt(pdb_text: str) -> str:

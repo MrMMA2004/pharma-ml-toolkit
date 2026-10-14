@@ -46,7 +46,7 @@ pip install -e ".[docking]"
 pip install -e ".[boosting]"
 
 # 3. verify the installation
-python -m pytest          # 402 tests should pass
+python -m pytest          # 460 tests should pass
 pharmaml --version`;
 
 function countFiles(node: TreeNode): number {
@@ -90,6 +90,14 @@ const FEATURED_FILES: Array<{
     badgeClass: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
   },
   {
+    path: "examples/complete_pk_workflow.ipynb",
+    title: "Complete PK/PD workflow (zero → one hundred)",
+    description:
+      "Executed Jupyter notebook — the pharma walkthrough the legacy archive never had: import your concentration–time file, NCA (AUC/t½/Cmax), derived CL & Vd, IV routes, accumulation to steady state, Emax PD, dosage design, renal & TDM adjustments, one-click HTML report. 3 figures committed inline.",
+    icon: NotebookText,
+    badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  },
+  {
     path: "examples/pharmaml_walkthrough.ipynb",
     title: "Interactive walkthrough",
     description:
@@ -110,8 +118,8 @@ const FEATURED_FILES: Array<{
 function collectDirSummary(root: TreeNode): Array<{ name: string; files: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "402 pytest cases across all domains",
-    examples: "three executed notebooks + runnable end-to-end demos",
+    tests: "460 pytest cases across all domains",
+    examples: "four executed notebooks + runnable end-to-end demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
   };
@@ -291,7 +299,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="402" label="passing tests" />
+          <StatChip icon={CircleCheck} value="460" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}

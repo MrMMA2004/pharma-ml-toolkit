@@ -21,6 +21,7 @@ from pharmaml.pharma.pk import (
     nca_summary,
     oral_cmax,
     oral_tmax,
+    vd_from_dose_auc,
     volume_of_distribution,
 )
 
@@ -185,3 +186,49 @@ def test_module_docstring_exports() -> None:
     """The pk module re-exports its public API through pharmaml.pharma."""
     assert callable(pk.auc_trapezoid)
     assert callable(pk.nca_summary)
+
+
+class TestVdFromDoseAuc:
+    def test_plain_ratio_is_clearance_not_volume(self) -> None:
+        # Dose/AUC = CL for an IV dose (F = 1) -- the honest framing
+        assert vd_from_dose_auc(100.0, 20.0) == pytest.approx(5.0)
+
+    def test_mrt_gives_steady_state_volume(self) -> None:
+        # Vss = Dose*MRT/AUC (statistical moments)
+        assert vd_from_dose_auc(100.0, 20.0, mrt=3.0) == pytest.approx(15.0)
+
+    def test_agrees_with_volume_of_distribution(self) -> None:
+        # One-compartment IV bolus: MRT = 1/ke, so Vss == Vd == CL/ke
+        dose, auc, ke = 100.0, 20.0, 0.5
+        cl = clearance(dose, auc)          # 5.0
+        vss = vd_from_dose_auc(dose, auc, mrt=1.0 / ke)
+        assert vss == pytest.approx(volume_of_distribution(cl, ke))
+
+    def test_invalid_inputs_raise(self) -> None:
+        with pytest.raises(DataValidationError):
+            vd_from_dose_auc(-1.0, 2.0)
+        with pytest.raises(DataValidationError):
+            vd_from_dose_auc(1.0, 0.0)
+        with pytest.raises(DataValidationError):
+            vd_from_dose_auc(1.0, 2.0, mrt=0.0)
+
+
+def test_pharma_package_surface() -> None:
+    """`from pharmaml.pharma import X` works for every public symbol."""
+    import pharmaml.pharma as pharma
+
+    expected = {
+        # PK
+        "PKSummary", "nca_summary", "validate_concentration_series",
+        "iv_infusion_steady_state", "vd_from_dose_auc", "mrt",
+        # PD
+        "linear_effect", "ec50_for_target_effect", "effect_table",
+        # dosage
+        "clarks_rule", "youngs_rule", "infusion_rate",
+        "renal_dose_adjustment", "tdm_trough_adjustment",
+    }
+    missing = [name for name in expected if not hasattr(pharma, name)]
+    assert not missing, f"pharmaml.pharma is missing: {missing}"
+    # star-import parity: __all__ lists everything importable
+    for name in expected:
+        assert name in pharma.__all__, name

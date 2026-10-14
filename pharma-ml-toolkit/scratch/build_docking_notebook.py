@@ -309,7 +309,7 @@ would actually run it:
 
 ```bash
 pip install -e ".[reports]"        # core + plotting
-pip install rdkit-pypi meeko       # §1–§3 preparation
+pip install rdkit meeko gemmi       # §1–§3 preparation
 ```
 
 The demo campaign below is *synthetic but structurally identical* to real
