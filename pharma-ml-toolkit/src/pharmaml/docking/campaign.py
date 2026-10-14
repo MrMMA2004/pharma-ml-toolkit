@@ -57,6 +57,16 @@ __all__ = [
 ]
 
 
+def _compile_pattern(pattern: str, *, argument: str) -> re.Pattern[str]:
+    """Compile ``pattern`` or raise a :class:`DockingError` naming it."""
+    try:
+        return re.compile(pattern)
+    except re.error as exc:
+        raise DockingError(
+            f"invalid regex for {argument}: {pattern!r} ({exc})"
+        ) from exc
+
+
 def collect_files(
     base_dir: str | Path,
     filename: str | None = "r.dlg",
@@ -83,8 +93,9 @@ def collect_files(
         Exact filename to collect (``r.dlg`` reproduces the DLG
         extractors).
     pattern:
-        Regex the filename must match (e.g. ``r"^\\d+\\.pdbqt$"`` for
-        the numbered PDBQT collector).
+        Regex the filename must match, anchored at the start like
+        :func:`re.match` (use ``^...$`` anchors for a full-name match,
+        e.g. ``r"^\\d+\\.pdbqt$"`` for the numbered PDBQT collector).
     out_dir:
         Destination folder; defaults to ``<base_dir>/collected``.
     rename_by_folder:
@@ -110,7 +121,7 @@ def collect_files(
         raise DockingError(f"base directory not found: {base}")
     if filename is None and pattern is None:
         raise DockingError("collect_files needs a filename or a pattern to match")
-    regex = re.compile(pattern) if pattern else None
+    regex = _compile_pattern(pattern, argument="pattern") if pattern else None
     out = Path(out_dir) if out_dir is not None else base / "collected"
     out_resolved = out.resolve()
 
@@ -317,7 +328,7 @@ def cleanup_tree(
     if not base.is_dir():
         raise DockingError(f"directory not found: {base}")
     keep_names = set(keep)
-    regex = re.compile(keep_pattern) if keep_pattern else None
+    regex = _compile_pattern(keep_pattern, argument="keep_pattern") if keep_pattern else None
 
     rows: list[dict[str, str]] = []
     deleted_count = 0
@@ -426,7 +437,9 @@ def reindex_by_number(
     start, stop:
         Inclusive ends of the target index range.
     pattern:
-        Regex with exactly one capture group.
+        Regex with at least one capture group (the first group is used
+        when several are present; zero-group patterns raise
+        :class:`DataValidationError`).
 
     Returns
     -------
@@ -436,11 +449,23 @@ def reindex_by_number(
     Raises
     ------
     DataValidationError
-        If ``column`` is not present in ``frame``.
+        If ``column`` is not present in ``frame``, or ``pattern`` is
+        invalid or has no capture group.
     """
     if column not in frame.columns:
         raise DataValidationError(
             f"column {column!r} not found -- available columns: {list(frame.columns)}"
+        )
+    try:
+        compiled = _compile_pattern(pattern, argument="pattern")
+    except DockingError as exc:
+        # reindex_by_number is a table operation -- its contract is
+        # DataValidationError, not the filesystem-flavoured DockingError.
+        raise DataValidationError(str(exc)) from exc
+    if compiled.groups < 1:
+        raise DataValidationError(
+            f"pattern {pattern!r} has no capture group -- exactly one is "
+            f"required (e.g. r'(\\d+)' to extract the ligand number)"
         )
     numbers = frame[column].astype(str).str.extract(pattern, expand=False)
     if isinstance(numbers, pd.DataFrame):  # multi-group pattern

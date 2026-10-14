@@ -282,3 +282,25 @@ class TestMergeTableFolder:
         ghost = tmp_path / "ghost_dir"
         with pytest.raises(DataValidationError, match="not a directory"):
             merge_table_folder(ghost)
+
+
+class TestMissingSentinels:
+    """pd.NA / pd.NaT must collapse to '', never leak '<NA>'/'NaT'."""
+
+    def test_compare_tables_ignores_pd_na_and_nat(self) -> None:
+        a = pd.DataFrame({"Ligand": ["keep.pdbqt", pd.NA, pd.NaT]})
+        b = pd.DataFrame({"Ligand": ["KEEP", pd.NA, "extra"]})
+        comparison = compare_tables(a, b, column="Ligand")
+        assert comparison.common == ["keep"]
+        assert comparison.only_in_a == []
+        assert comparison.only_in_b == ["extra"]
+        assert "<NA>" not in comparison.only_in_b
+        assert "NaT" not in comparison.only_in_a
+
+    def test_annotate_with_smiles_ignores_pd_na_reference_cells(self) -> None:
+        frame = pd.DataFrame({"Ligand": ["lig1", "lig2"]})
+        reference = pd.DataFrame(
+            {"Ligand": ["lig1", pd.NA, "lig2"], "SMILES": ["CCO", "CCN", pd.NA]}
+        )
+        annotated = annotate_with_smiles(frame, reference, name_columns=["Ligand"])
+        assert annotated["Ligand_SMILES"].tolist() == ["CCO", ""]

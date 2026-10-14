@@ -624,3 +624,129 @@ class TestScanVinaDirectory:
     def test_missing_directory_raises(self, tmp_path) -> None:
         with pytest.raises(DockingParseError, match="not found"):
             scan_vina_directory(tmp_path / "nowhere")
+
+
+class TestRound2Fixes:
+    """Regression guards for the review-round engineering fixes."""
+
+    def test_vina_batch_output_name_collision_gets_prefixed(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """Two sub-folders each holding ``l.pdbqt`` must not overwrite
+        each other's output -- the second gets a ``<parent>_l`` prefix."""
+        conf = tmp_path / "conf.txt"
+        conf.write_text("receptor = r.pdbqt\n", encoding="utf-8")
+        (tmp_path / "r.pdbqt").write_text("receptor", encoding="utf-8")
+        ligands = tmp_path / "ligands"
+        (ligands / "alpha").mkdir(parents=True)
+        (ligands / "beta").mkdir(parents=True)
+        (ligands / "alpha" / "l.pdbqt").write_text("a", encoding="utf-8")
+        (ligands / "beta" / "l.pdbqt").write_text("b", encoding="utf-8")
+
+        commands: list[list[str]] = []
+        monkeypatch.setattr(
+            workflow_mod, "_require_executable", lambda name: f"/fake/bin/{name}"
+        )
+
+        def fake_run(cmd, **_kwargs):
+            commands.append(list(cmd))
+
+        monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
+
+        results = run_vina_batch(conf, ligands, out_dir=tmp_path / "out")
+        assert len(results) == 2 and all(r.ok for r in results)
+        out_names = {Path(cmd[cmd.index("--out") + 1]).name for cmd in commands}
+        assert out_names == {"l_out.pdbqt", "beta_l_out.pdbqt"}
+        log_names = {Path(cmd[cmd.index("--log") + 1]).name for cmd in commands}
+        assert log_names == {"l.log", "beta_l.log"}
+
+    def test_collect_files_invalid_pattern_raises_docking_error(
+        self, tmp_path
+    ) -> None:
+        with pytest.raises(DockingError, match="invalid regex for pattern"):
+            collect_files(tmp_path, pattern="([unclosed")
+
+    def test_cleanup_tree_invalid_pattern_raises_docking_error(
+        self, tmp_path
+    ) -> None:
+        with pytest.raises(DockingError, match="invalid regex for keep_pattern"):
+            cleanup_tree(tmp_path, keep_pattern="*bad[")
+
+    def test_reindex_invalid_pattern_raises_docking_error(self) -> None:
+        frame = pd.DataFrame({"f": ["x1"]})
+        with pytest.raises(DataValidationError, match="invalid regex"):
+            reindex_by_number(frame, "f", pattern="([oops")
+
+    def test_reindex_pattern_without_capture_group_raises(self) -> None:
+        frame = pd.DataFrame({"f": ["x1", "x2"]})
+        with pytest.raises(DataValidationError, match="no capture group"):
+            reindex_by_number(frame, "f", pattern=r"\d+")
+
+    def test_reindex_multi_group_pattern_uses_first_group(self) -> None:
+        frame = pd.DataFrame({"f": ["run_07_a", "run_09_b"]})
+        out = reindex_by_number(frame, "f", start=0, stop=10, pattern=r"run_(\d+)_(\w+)")
+        assert len(out) == 11
+        assert out.loc[7, "f"] == "run_07_a"
+        assert out.loc[9, "f"] == "run_09_b"
+
+
+class TestTorsionConventions:
+    """check_torsion_consistency auto-detects the PDBQT writer lineage."""
+
+    MGL_CONTENT = (
+        "REMARK  1  A    between atoms: T1_2-CA   T3_4-CB\n"
+        "REMARK  2  A    between atoms: T5_6-CG   T7_8-CD\n"
+        "ROOT\n"
+        "ATOM      1  C   LIG A   1       0.000   0.000   0.000  1.00  0.00     0.000 C\n"
+        "ENDROOT\n"
+        "BRANCH    1    2\nBRANCH    2    3\n"
+        "TORSDOF {torsdof}\n"
+    )
+
+    MEEKO_CONTENT = (
+        "REMARK SMILES CC(=O)Oc1ccccc1C(=O)O\n"
+        "ROOT\n"
+        "ATOM      1  C   LIG A   1       0.000   0.000   0.000  1.00  0.00     0.000 C\n"
+        "ENDROOT\n"
+        "BRANCH    1    2\nBRANCH    7    8\nBRANCH    6   11\nBRANCH   11   13\n"
+        "TORSDOF {torsdof}\n"
+    )
+
+    def test_meeko_file_passes_with_auto_rule(self, tmp_path) -> None:
+        ligand = tmp_path / "meeko.pdbqt"
+        ligand.write_text(self.MEEKO_CONTENT.format(torsdof=4), encoding="utf-8")
+        check = check_torsion_consistency(ligand)
+        assert check.active_remarks == 0 and check.branches == 4
+        assert check.ok and check.status() == "OK"
+
+    def test_meeko_file_fails_when_torsdof_disagrees(self, tmp_path) -> None:
+        ligand = tmp_path / "meeko_bad.pdbqt"
+        ligand.write_text(self.MEEKO_CONTENT.format(torsdof=3), encoding="utf-8")
+        assert check_torsion_consistency(ligand).status() == "MISMATCH"
+
+    def test_mgltools_file_passes_three_way_rule(self, tmp_path) -> None:
+        ligand = tmp_path / "mgl.pdbqt"
+        ligand.write_text(self.MGL_CONTENT.format(torsdof=2), encoding="utf-8")
+        check = check_torsion_consistency(ligand)
+        assert check.ok and check.active_remarks == 2 and check.branches == 2
+
+    def test_mgltools_mismatch_detected(self, tmp_path) -> None:
+        ligand = tmp_path / "mgl_bad.pdbqt"
+        ligand.write_text(self.MGL_CONTENT.format(torsdof=3), encoding="utf-8")
+        assert check_torsion_consistency(ligand).status() == "MISMATCH"
+
+    def test_explicit_convention_overrides_auto(self, tmp_path) -> None:
+        ligand = tmp_path / "mgl.pdbqt"
+        ligand.write_text(self.MGL_CONTENT.format(torsdof=2), encoding="utf-8")
+        # meeko rule (2 == 2 branches) also passes here:
+        assert check_torsion_consistency(ligand, convention="meeko").ok
+        # mgltools rule on a meeko-style file (0 remarks != 2) fails:
+        meeko = tmp_path / "meeko.pdbqt"
+        meeko.write_text(self.MEEKO_CONTENT.format(torsdof=4), encoding="utf-8")
+        assert not check_torsion_consistency(meeko, convention="mgltools").ok
+
+    def test_unknown_convention_raises(self, tmp_path) -> None:
+        ligand = tmp_path / "any.pdbqt"
+        ligand.write_text("TORSDOF 0\n", encoding="utf-8")
+        with pytest.raises(DockingError, match="convention must be"):
+            check_torsion_consistency(ligand, convention="ad4")

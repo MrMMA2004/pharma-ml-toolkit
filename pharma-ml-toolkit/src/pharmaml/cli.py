@@ -208,6 +208,35 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     descriptors.add_argument("--out", default=None)
 
+    chem_compare = chem_sub.add_parser(
+        "compare", help="reconcile a ligand column across two tables"
+    )
+    chem_compare.add_argument("--data-a", required=True, help="first table (csv/xlsx)")
+    chem_compare.add_argument("--data-b", required=True, help="second table (csv/xlsx)")
+    chem_compare.add_argument("--column", required=True, help="ligand-name column")
+    chem_compare.add_argument(
+        "--keep-case", action="store_true",
+        help="do not fold names to lowercase before comparing",
+    )
+    chem_compare.add_argument(
+        "--keep-extension", action="store_true",
+        help="do not strip file extensions (.pdbqt, ...) before comparing",
+    )
+    chem_compare.add_argument(
+        "--out", default=None, help="optional CSV path for the differences report"
+    )
+
+    chem_merge = chem_sub.add_parser(
+        "merge", help="merge every table of one folder into a single file"
+    )
+    chem_merge.add_argument("--dir", required=True, help="folder to scan (non-recursive)")
+    chem_merge.add_argument("--extension", default=".csv")
+    chem_merge.add_argument(
+        "--first-columns", default=None,
+        help="comma-separated column names to move to the front",
+    )
+    chem_merge.add_argument("--out", default=None, help="output path (default: <dir>/merged_output.csv)")
+
     # ---- pharma ------------------------------------------------------
     pharma_parser = subparsers.add_parser("pharma", help="pharmaceutical calculations")
     pharma_sub = pharma_parser.add_subparsers(dest="pharma_command", required=True)
@@ -224,6 +253,18 @@ def _build_parser() -> argparse.ArgumentParser:
     dose.add_argument("--target-css", type=float, required=True, help="target avg Css")
     dose.add_argument("--tau", type=float, default=12.0, help="interval (h)")
     dose.add_argument("--f", type=float, default=1.0, help="bioavailability fraction")
+
+    approvals = pharma_sub.add_parser(
+        "approvals", help="collect approved drug names from DGIdb-style exports"
+    )
+    approvals.add_argument(
+        "--data", required=True, action="append",
+        help="csv/tsv export (repeat the flag for several files)",
+    )
+    approvals.add_argument("--drug-column", default="drug")
+    approvals.add_argument("--approval-column", default="regulatory approval")
+    approvals.add_argument("--status", default="approved")
+    approvals.add_argument("--out", default=None, help="optional single-column CSV output")
 
     # ---- docking -----------------------------------------------------
     docking_parser = subparsers.add_parser("docking", help="docking utilities")
@@ -652,6 +693,78 @@ def _cmd_chem_descriptors(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_chem_compare(args: argparse.Namespace) -> int:
+    import pandas as pd
+
+    from pharmaml.chem.tables import compare_tables
+
+    comparison = compare_tables(
+        args.data_a,
+        args.data_b,
+        column=args.column,
+        strip_extension=not args.keep_extension,
+        lowercase=not args.keep_case,
+    )
+    counts = comparison.summary()
+    print(f"column {comparison.column!r}: " + ", ".join(
+        f"{key}={counts[key]}" for key in ("common", "only_in_a", "only_in_b")
+    ))
+    for label, values in (
+        ("common", comparison.common),
+        ("only in A", comparison.only_in_a),
+        ("only in B", comparison.only_in_b),
+    ):
+        if values:
+            print(f"\n{label} ({len(values)}):")
+            print("  " + "\n  ".join(values))
+    if args.out:
+        frame = pd.DataFrame(
+            {
+                f"only in {Path(args.data_a).name}": pd.Series(comparison.only_in_a),
+                f"only in {Path(args.data_b).name}": pd.Series(comparison.only_in_b),
+                "common": pd.Series(comparison.common),
+            }
+        )
+        frame.to_csv(args.out, index=False)
+        print(f"\ndifferences report -> {args.out}")
+    return 0
+
+
+def _cmd_chem_merge(args: argparse.Namespace) -> int:
+    from pharmaml.chem.tables import merge_table_folder
+
+    first_columns = (
+        [c.strip() for c in args.first_columns.split(",") if c.strip()]
+        if args.first_columns
+        else None
+    )
+    merged = merge_table_folder(
+        args.dir, extension=args.extension, out_path=args.out,
+        first_columns=first_columns,
+    )
+    out = Path(args.out) if args.out else Path(args.dir) / "merged_output.csv"
+    print(f"merged {len(merged)} rows x {merged.shape[1]} columns -> {out}")
+    return 0
+
+
+def _cmd_pharma_approvals(args: argparse.Namespace) -> int:
+    from pharmaml.pharma.approvals import filter_approved_drugs
+
+    names = filter_approved_drugs(
+        list(args.data),
+        drug_column=args.drug_column,
+        approval_column=args.approval_column,
+        approval_status=args.status,
+        out_path=args.out,
+    )
+    print(f"{len(names)} unique drug name(s) with status {args.status!r}")
+    for name in names:
+        print(f"  {name}")
+    if args.out:
+        print(f"\ndrug list -> {args.out}")
+    return 0
+
+
 def _cmd_pharma_pk(args: argparse.Namespace) -> int:
     import json
 
@@ -815,8 +928,11 @@ _HANDLERS = {
     ("ml", "compare"): _cmd_ml_compare,
     ("chem", "pic50"): _cmd_chem_pic50,
     ("chem", "descriptors"): _cmd_chem_descriptors,
+    ("chem", "compare"): _cmd_chem_compare,
+    ("chem", "merge"): _cmd_chem_merge,
     ("pharma", "pk"): _cmd_pharma_pk,
     ("pharma", "dose"): _cmd_pharma_dose,
+    ("pharma", "approvals"): _cmd_pharma_approvals,
     ("docking", "scan"): _cmd_docking_scan,
     ("docking", "check"): _cmd_docking_check,
     ("docking", "prep-ligands"): _cmd_docking_prep_ligands,

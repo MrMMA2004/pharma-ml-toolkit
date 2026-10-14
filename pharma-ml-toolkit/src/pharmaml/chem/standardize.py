@@ -229,6 +229,11 @@ def smiles_to_pdb(
     from rdkit.Chem import AllChem  # noqa: PLC0415
     from rdkit.Chem.MolStandardize import rdMolStandardize  # noqa: PLC0415
 
+    if num_confs < 1:
+        raise DataValidationError(
+            f"num_confs must be at least 1, got {num_confs}"
+        )
+
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise DataValidationError(f"Cannot parse SMILES: {smiles!r}")

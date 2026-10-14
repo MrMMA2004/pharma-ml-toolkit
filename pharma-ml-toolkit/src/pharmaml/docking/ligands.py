@@ -405,20 +405,37 @@ class TorsionCheck:
         return "OK" if self.ok else "MISMATCH"
 
 
-def check_torsion_consistency(pdbqt_path: str | Path) -> TorsionCheck:
+def check_torsion_consistency(
+    pdbqt_path: str | Path,
+    convention: str = "auto",
+) -> TorsionCheck:
     """Compare TORSDOF, active REMARKs and BRANCH counts of a PDBQT.
 
-    AutoDock's ``prepare_ligand4.py`` writes one ``REMARK ... A ...``
-    torsion definition and one ``BRANCH`` record per rotatable bond,
-    and a final ``TORSDOF`` total -- a prepared ligand is only valid
-    when all three agree.  The original scripts exported this audit to
-    Excel with a red fill on mismatches; pharmaml returns a typed
-    :class:`TorsionCheck` instead.
+    AutoDock's ``prepare_ligand4.py`` (MGLTools) writes one ``REMARK ...
+    A ...`` torsion definition and one ``BRANCH`` record per rotatable
+    bond, and a final ``TORSDOF`` total -- a prepared ligand is only
+    valid when all three agree.  The original scripts exported this
+    audit to Excel with a red fill on mismatches; pharmaml returns a
+    typed :class:`TorsionCheck` instead.
+
+    Meeko-written ligands (what :func:`pharmaml.docking.smiles_to_pdbqt`
+    produces) carry no ``REMARK ... A ...`` lines at all; their torsion
+    tree invariant is ``TORSDOF == BRANCH`` count.  ``convention``
+    selects the rule:
+
+    * ``"auto"`` (default): use the MGLTools three-way rule when the
+      file contains at least one active-torsion REMARK, otherwise the
+      Meeko two-way rule -- so both lineages audit correctly without
+      configuration,
+    * ``"mgltools"``: always require TORSDOF == remarks == branches,
+    * ``"meeko"``: always require TORSDOF == branches.
 
     Parameters
     ----------
     pdbqt_path:
         Ligand PDBQT file.
+    convention:
+        ``"auto"``, ``"mgltools"`` or ``"meeko"``.
 
     Returns
     -------
@@ -427,8 +444,12 @@ def check_torsion_consistency(pdbqt_path: str | Path) -> TorsionCheck:
     Raises
     ------
     DockingError
-        If the PDBQT file is missing.
+        If the PDBQT file is missing or ``convention`` is unknown.
     """
+    if convention not in ("auto", "mgltools", "meeko"):
+        raise DockingError(
+            f"convention must be 'auto', 'mgltools' or 'meeko', got {convention!r}"
+        )
     path = Path(pdbqt_path)
     if not path.is_file():
         raise DockingError(f"ligand PDBQT not found: {path}")
@@ -448,7 +469,14 @@ def check_torsion_consistency(pdbqt_path: str | Path) -> TorsionCheck:
             active_remarks += 1
         elif line.startswith("BRANCH"):
             branches += 1
-    ok = torsdof == active_remarks == branches
+    if convention == "auto":
+        rule = "mgltools" if active_remarks > 0 else "meeko"
+    else:
+        rule = convention
+    if rule == "mgltools":
+        ok = torsdof == active_remarks == branches
+    else:
+        ok = torsdof == branches
     return TorsionCheck(
         ligand=str(path),
         torsdof=torsdof,

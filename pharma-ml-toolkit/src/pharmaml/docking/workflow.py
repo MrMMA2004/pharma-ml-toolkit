@@ -27,6 +27,7 @@ from pathlib import Path
 
 from pharmaml.exceptions import DockingError
 from pharmaml.logger import get_logger
+from pharmaml.utils.io import safe_filename
 
 _LOG = get_logger(__name__)
 
@@ -346,10 +347,33 @@ def run_vina_batch(
         return []
     binary = _require_executable(vina_bin)
 
+    # Flat output names ("l_out.pdbqt") collide when two sub-folders hold
+    # ligands with the same stem -- the second run would silently overwrite
+    # the first.  Colliding stems get a "<parent>_<stem>" prefix (and a
+    # running counter if even that repeats), so no result is ever lost.
+    used_stems: set[str] = set()
+    output_names: dict[Path, str] = {}
+    for ligand in ligands:
+        stem = ligand.stem
+        if stem in used_stems:
+            stem = f"{safe_filename(ligand.parent.name)}_{ligand.stem}"
+            counter = 2
+            while stem in used_stems:
+                stem = f"{safe_filename(ligand.parent.name)}_{ligand.stem}_{counter}"
+                counter += 1
+            _LOG.warning(
+                "output name collision for %s -- writing %s_out.pdbqt instead",
+                ligand,
+                stem,
+            )
+        used_stems.add(stem)
+        output_names[ligand] = stem
+
     def _dock_one(ligand: Path) -> DockingRunResult:
         started = time.perf_counter()
-        out_pdbqt = out / f"{ligand.stem}_out.pdbqt"
-        log_file = out / f"{ligand.stem}.log"
+        stem = output_names[ligand]
+        out_pdbqt = out / f"{stem}_out.pdbqt"
+        log_file = out / f"{stem}.log"
         cmd = [
             binary,
             "--config", str(conf),

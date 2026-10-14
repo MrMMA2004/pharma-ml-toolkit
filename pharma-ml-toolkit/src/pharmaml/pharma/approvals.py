@@ -58,6 +58,21 @@ def _normalized_columns(frame: pd.DataFrame) -> pd.DataFrame:
     return copy
 
 
+def _is_missing(raw: object) -> bool:
+    """True for ``None`` and any pandas missing-value sentinel.
+
+    Covers ``float('nan')``, ``pd.NA`` (nullable string columns) and
+    ``pd.NaT`` -- without this, their ``"<NA>"`` / ``"NaT"`` string
+    reprs would be collected as drug names.
+    """
+    if raw is None:
+        return True
+    try:
+        return bool(pd.isna(raw))
+    except (TypeError, ValueError):  # arrays/lists are not scalars
+        return False
+
+
 def filter_approved_drugs(
     data: ApprovalSource,
     drug_column: str = "drug",
@@ -143,7 +158,7 @@ def filter_approved_drugs(
             frame[approval_key].fillna("").astype(str).str.strip().str.lower() == status
         ]
         for value in approved[drug_key]:
-            if value is None or (isinstance(value, float) and pd.isna(value)):
+            if _is_missing(value):
                 continue
             names.add(str(value).strip())
 

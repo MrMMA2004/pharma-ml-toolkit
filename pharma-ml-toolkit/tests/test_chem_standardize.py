@@ -137,3 +137,20 @@ class TestSmilesToPdb:
         monkeypatch.setitem(sys.modules, "rdkit.Chem", None)
         with pytest.raises(DependencyError, match="pip install rdkit"):
             smiles_to_pdb("CCO", tmp_path / "x.pdb")
+
+
+class TestNumConfsValidation:
+    """num_confs < 1 must fail up-front with an actionable message."""
+
+    def test_zero_confs_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(DataValidationError, match="num_confs must be at least 1"):
+            smiles_to_pdb("CCO", tmp_path / "x.pdb", num_confs=0)
+
+    def test_negative_confs_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(DataValidationError, match="num_confs"):
+            smiles_to_pdb("CCO", tmp_path / "x.pdb", num_confs=-5)
+
+    def test_no_file_written_on_rejection(self, tmp_path: Path) -> None:
+        with pytest.raises(DataValidationError):
+            smiles_to_pdb("CCO", tmp_path / "never.pdb", num_confs=0)
+        assert not (tmp_path / "never.pdb").exists()

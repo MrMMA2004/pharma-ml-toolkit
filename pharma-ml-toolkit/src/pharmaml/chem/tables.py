@@ -74,9 +74,10 @@ def _normalize_name(raw: object, strip_extension: bool, lowercase: bool) -> str:
 
     Whitespace is always stripped; the file extension (``.pdbqt`` etc.)
     and letter case are removed when the corresponding flags are set.
-    ``NaN`` cells collapse to the empty string.
+    Any missing-value sentinel (``None``, ``NaN``, ``NA``, ``NaT``)
+    collapses to the empty string.
     """
-    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+    if _is_missing(raw):
         return ""
     text = str(raw).strip()
     if strip_extension:
@@ -84,6 +85,21 @@ def _normalize_name(raw: object, strip_extension: bool, lowercase: bool) -> str:
     if lowercase:
         text = text.lower()
     return text
+
+
+def _is_missing(raw: object) -> bool:
+    """True for ``None`` and any pandas missing-value sentinel.
+
+    Covers ``float('nan')``, ``pd.NA`` (nullable string columns) and
+    ``pd.NaT`` (datetime columns) without leaking their ``"<NA>"`` /
+    ``"NaT"`` string reprs into comparisons.
+    """
+    if raw is None:
+        return True
+    try:
+        return bool(pd.isna(raw))
+    except (TypeError, ValueError):  # arrays/lists are not scalars
+        return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,7 +282,7 @@ def annotate_with_smiles(
         key = _normalize_name(raw_name, strip_extension=True, lowercase=True)
         if not key:
             continue
-        smiles = "" if raw_smiles is None or pd.isna(raw_smiles) else str(raw_smiles).strip()
+        smiles = "" if _is_missing(raw_smiles) else str(raw_smiles).strip()
         lookup[key] = smiles
 
     result = frame.copy()

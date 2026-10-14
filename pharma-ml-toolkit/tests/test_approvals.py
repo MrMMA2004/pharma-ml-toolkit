@@ -118,3 +118,29 @@ class TestFilterApprovedDrugs:
     def test_missing_file_raises(self, tmp_path: Path) -> None:
         with pytest.raises(DataValidationError, match="not found"):
             filter_approved_drugs(tmp_path / "ghost.tsv")
+
+
+class TestMissingSentinels:
+    """pd.NA drug cells must be skipped, never collected as '<NA>'."""
+
+    def test_pd_na_drug_cell_skipped(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "Drug": ["Aspirin", pd.NA, "Ibuprofen"],
+                "Regulatory Approval": ["Approved", "Approved", "Approved"],
+            }
+        )
+        names = filter_approved_drugs(frame)
+        assert names == ["Aspirin", "Ibuprofen"]
+        assert "<NA>" not in names
+
+    def test_nat_drug_cell_skipped(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "Drug": ["Warfarin", pd.NaT],
+                "Regulatory Approval": ["Approved", "Approved"],
+            }
+        )
+        names = filter_approved_drugs(frame)
+        assert names == ["Warfarin"]
+        assert "NaT" not in names

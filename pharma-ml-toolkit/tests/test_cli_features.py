@@ -297,3 +297,102 @@ class TestDockingCampaignCommands:
         out = capsys.readouterr().out
         assert "ligand_x" in out
         assert "-10.5" in out
+
+
+class TestChemTableCommands:
+    """`pharmaml chem compare` / `chem merge` surface tables.py in the CLI."""
+
+    def test_compare_prints_buckets_and_writes_report(self, tmp_path, capsys):
+        import pandas as pd
+
+        table_a = tmp_path / "summary.csv"
+        table_b = tmp_path / "library.csv"
+        pd.DataFrame({"Ligand": ["lig1.pdbqt", "LIG2.pdbqt", "lig3.pdbqt"]}).to_csv(
+            table_a, index=False
+        )
+        pd.DataFrame({"Ligand": ["lig2", "lig3", "lig9"]}).to_csv(table_b, index=False)
+        report = tmp_path / "diff.csv"
+        code = main(
+            ["chem", "compare", "--data-a", str(table_a), "--data-b", str(table_b),
+             "--column", "Ligand", "--out", str(report)]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "common=2" in out and "only_in_a=1" in out and "only_in_b=1" in out
+        assert "lig1" in out and "lig9" in out
+        assert report.is_file()
+
+    def test_compare_keep_case_flag(self, tmp_path, capsys):
+        import pandas as pd
+
+        table_a = tmp_path / "a.csv"
+        table_b = tmp_path / "b.csv"
+        pd.DataFrame({"Ligand": ["Aspirin"]}).to_csv(table_a, index=False)
+        pd.DataFrame({"Ligand": ["aspirin"]}).to_csv(table_b, index=False)
+        code = main(
+            ["chem", "compare", "--data-a", str(table_a), "--data-b", str(table_b),
+             "--column", "Ligand", "--keep-case", "--keep-extension"]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "common=0" in out
+
+    def test_merge_writes_merged_output(self, tmp_path, capsys):
+        import pandas as pd
+
+        pd.DataFrame({"SMILES": ["CCO"], "zeta": [1]}).to_csv(
+            tmp_path / "one.csv", index=False
+        )
+        pd.DataFrame({"SMILES": ["CCC"], "alpha": [2]}).to_csv(
+            tmp_path / "two.csv", index=False
+        )
+        out = tmp_path / "merged.csv"
+        code = main(
+            ["chem", "merge", "--dir", str(tmp_path), "--out", str(out),
+             "--first-columns", "SMILES,alpha"]
+        )
+        assert code == 0
+        out_text = capsys.readouterr().out
+        assert "2 rows" in out_text and str(out) in out_text
+        frame = pd.read_csv(out)
+        assert list(frame.columns) == ["SMILES", "alpha", "zeta"]
+
+
+class TestPharmaApprovalsCommand:
+    """`pharmaml pharma approvals` surfaces filter_approved_drugs."""
+
+    def test_approvals_prints_sorted_names(self, tmp_path, capsys):
+        export = tmp_path / "interactions.tsv"
+        export.write_text(
+            "drug\tregulatory approval\nWarfarin\tApproved\nCaffeine\tWithdrawn\n"
+            "Aspirin\tapproved\n",
+            encoding="utf-8",
+        )
+        code = main(
+            ["pharma", "approvals", "--data", str(export)]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "2 unique" in out
+        assert out.index("Aspirin") < out.index("Warfarin")
+        assert "Caffeine" not in out
+
+    def test_approvals_multiple_files_and_out(self, tmp_path, capsys):
+        import pandas as pd
+
+        first = tmp_path / "1.tsv"
+        second = tmp_path / "2.tsv"
+        first.write_text("drug\tregulatory approval\nIbuprofen\tApproved\n",
+                         encoding="utf-8")
+        second.write_text("drug\tregulatory approval\nIbuprofen\tApproved\nMetformin\tApproved\n",
+                          encoding="utf-8")
+        out = tmp_path / "approved.csv"
+        code = main(
+            ["pharma", "approvals", "--data", str(first), "--data", str(second),
+             "--out", str(out)]
+        )
+        assert code == 0
+        out_text = capsys.readouterr().out
+        assert "2 unique" in out_text
+        frame = pd.read_csv(out)
+        assert frame["drug"].tolist() == ["Ibuprofen", "Metformin"]

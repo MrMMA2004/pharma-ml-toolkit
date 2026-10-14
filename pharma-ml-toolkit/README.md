@@ -13,7 +13,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (594 tests).
+exceptions, input validation, and pytest coverage** (618 tests).
 
 ---
 
@@ -87,7 +87,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 594 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 618 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + four executed notebooks (complete ML · complete docking · complete PK/PD · walkthrough) + three no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
@@ -444,8 +444,11 @@ pharmaml ml train --data my.csv --model rf --cv 5 --plots --keep-categorical
 pharmaml ml compare --data my.csv --target activity --out board.csv --plot
 pharmaml chem pic50 --data data.csv --column "IC50 (nM)" --unit nM
 pharmaml chem descriptors --data data.csv --smiles-col SMILES
+pharmaml chem compare --data-a d_summary.csv --data-b ligands.csv --column Ligand
+pharmaml chem merge --dir batches/ --first-columns SMILES,pIC50
 pharmaml pharma pk --data conc.csv --time time --conc conc
 pharmaml pharma dose --cl 3.2 --vd 45 --target-css 6.0 --tau 8 --f 1.0
+pharmaml pharma approvals --data 1.tsv --data 2.tsv --out approved.csv
 pharmaml docking prep-ligands --ligands ligands.csv --out ligand_folders/
 pharmaml docking prep-protein --protein protein.pdb --out r.pdbqt
 pharmaml docking dpf --ligand ligand_folders/1/l.pdbqt --ga-runs 100   # AutoDock4 r.dpf
@@ -490,7 +493,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (594 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (618 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```
