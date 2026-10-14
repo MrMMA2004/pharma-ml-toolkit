@@ -1,0 +1,729 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useMemo, useRef } from "react";
+     4→import { motion, useInView } from "framer-motion";
+     5→import {
+     6→  ArrowRight,
+     7→  BookOpen,
+     8→  Boxes,
+     9→  Brain,
+    10→  ChartNoAxesColumn,
+    11→  CircleCheck,
+    12→  Download,
+    13→  Dna,
+    14→  FileArchive,
+    15→  FileCode2,
+    16→  NotebookText,
+    17→  Pill,
+    18→  ShieldCheck,
+    19→  Sigma,
+    20→} from "lucide-react";
+    21→import type { LucideIcon } from "lucide-react";
+    22→import { Badge } from "@/components/ui/badge";
+    23→import { Button } from "@/components/ui/button";
+    24→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+    25→import {
+    26→  Table,
+    27→  TableBody,
+    28→  TableCell,
+    29→  TableHead,
+    30→  TableHeader,
+    31→  TableRow,
+    32→} from "@/components/ui/table";
+    33→import { CodeBlock } from "@/components/explorer/code-block";
+    34→import { StatChip } from "@/components/explorer/stat-chip";
+    35→import { useToolkitStore } from "@/lib/store";
+    36→import { fmtBytes, fmtInt } from "@/lib/format";
+    37→import { cn } from "@/lib/utils";
+    38→import type { TreeNode } from "@/lib/toolkit-types";
+    39→
+    40→/** Depth-first lookup of a node by exact path (hero notebook metadata). */
+    41→function findNode(node: TreeNode, path: string): TreeNode | null {
+    42→  if (node.path === path) return node;
+    43→  for (const child of node.children ?? []) {
+    44→    const hit = findNode(child, path);
+    45→    if (hit) return hit;
+    46→  }
+    47→  return null;
+    48→}
+    49→
+    50→const QUICKSTART = `# --- Bring your own data -----------------------------------------
+    51→from pharmaml.data import load_dataset, split_table
+    52→
+    53→ds = load_dataset("my_compounds.csv", target="activity")
+    54→print(ds.task)          # 'classification' (2+ classes) or 'regression'
+    55→print(ds.class_counts)  # {'active': 120, 'inactive': 190, ...}
+    56→
+    57→# keep string features (assay, cell line) for one-hot encoding:
+    58→ds = load_dataset("my_compounds.csv", keep_categorical=True)
+    59→
+    60→# stratified 3-way split (upgrades 'Split CSV file.py'):
+    61→parts = split_table("my_compounds.csv", test_size=0.2, val_size=0.1)
+    62→parts.write("splits/", prefix="qsar")     # qsar_train/val/test.csv
+    63→
+    64→# --- Feature calculation: SMILES -> descriptors -------------------
+    65→from pharmaml.chem import (
+    66→    compute_descriptors, compute_fingerprints, tanimoto_matrix,
+    67→)
+    68→
+    69→desc = compute_descriptors(df["SMILES"])   # 217 RDKit descriptors
+    70→bits, valid = compute_fingerprints(df["SMILES"], kind="morgan")
+    71→sim  = tanimoto_matrix(bits, bits)          # Tanimoto heat-map
+    72→
+    73→# --- Pharmaceutical calculations -------------------------------
+    74→from pharmaml.pharma import (
+    75→    creatinine_clearance, bsa_mosteller,
+    76→    loading_dose, maintenance_dose, auc_trapezoid,
+    77→)
+    78→import numpy as np
+    79→
+    80→crcl = creatinine_clearance(age_years=68, weight_kg=70,
+    81→                            serum_cr_mg_dl=1.1, sex="male")
+    82→bsa  = bsa_mosteller(height_cm=175, weight_kg=70)      # m^2
+    83→ld   = loading_dose(vd=45.0, target_concentration=12.0)  # mg
+    84→md   = maintenance_dose(clearance_=3.2, target_css=6.0, tau=8.0)
+    85→
+    86→t = np.array([0.0, 1.0, 2.0, 4.0, 8.0, 12.0])
+    87→c = np.array([0.0, 8.2, 6.1, 3.4, 1.1, 0.35])
+    88→auc = auc_trapezoid(t, c)                              # ug*h/mL
+    89→
+    90→# --- QSAR machine learning --------------------------------------
+    91→from pharmaml.ml import (
+    92→    train_model, evaluate_model, compare_models,
+    93→    make_train_test_split,
+    94→)
+    95→
+    96→X_tr, X_te, y_tr, y_te = make_train_test_split(ds.X, ds.y, test_size=0.2)
+    97→result = train_model("random_forest", ds.task,
+    98→                     X_tr, y_tr, cv=5, tune=True)
+    99→print(result.cv_mean, result.cv_std)      # 5-fold ROC-AUC mean +/- std
+   100→report = evaluate_model(result.model, X_te, y_te, ds.task)
+   101→
+   102→# --- Docking -----------------------------------------------------
+   103→from pharmaml.docking import (
+   104→    smiles_to_pdbqt, compute_grid_box, scan_docking_directory,
+   105→    parse_vina_output, ligand_efficiency, consensus_rescore,
+   106→)
+   107→
+   108→ligand = smiles_to_pdbqt("CC(=O)Oc1ccccc1C(=O)O", "ligands/")
+   109→box    = compute_grid_box(ligand, padding=4.0)
+   110→summary = scan_docking_directory("docking_run/")   # one row per ligand
+   111→poses = parse_vina_output(open("vina.out").read())
+   112→cons  = consensus_rescore(summary, columns=["best_lowest_energy"])
+   113→
+   114→# --- Visual output: figures + HTML report ------------------------
+   115→from pharmaml.viz import (
+   116→    plot_confusion_matrix, plot_roc_curves, save_figure,
+   117→    export_table, save_visual_bundle,
+   118→)
+   119→
+   120→fig = plot_confusion_matrix(report)        # 2+ classes, annotated cells
+   121→save_figure(fig, "confusion.png")          # png / svg / pdf
+   122→export_table(leaderboard, "board.md")      # csv/tsv/md/json/html
+   123→
+   124→save_visual_bundle(                        # report.html + all files
+   125→    figures={"confusion": fig},
+   126→    tables={"metrics": metrics_frame},
+   127→    metrics=report, out_dir="reports",
+   128→)`;
+   129→
+   130→interface DomainCardSpec {
+   131→  icon: LucideIcon;
+   132→  title: string;
+   133→  tagline: string;
+   134→  bullets: string[];
+   135→  apis: string[];
+   136→  accent: string;
+   137→}
+   138→
+   139→const DOMAINS: DomainCardSpec[] = [
+   140→  {
+   141→    icon: Brain,
+   142→    title: "Machine Learning",
+   143→    tagline: "pharmaml.ml — QSAR end-to-end",
+   144→    bullets: [
+   145→      "Cross-validated training with optional grid-search tuning",
+   146→      "15-entry model registry: sklearn core + optional XGBoost / LightGBM / CatBoost",
+   147→      "Metrics, comparison leaderboards & joblib persistence",
+   148→    ],
+   149→    apis: ["train_model()", "compare_models()", "list_models()"],
+   150→    accent: "bg-primary/10 text-primary",
+   151→  },
+   152→  {
+   153→    icon: Pill,
+   154→    title: "Pharma Calculations",
+   155→    tagline: "pharmaml.pharma — PK · PD · dosage",
+   156→    bullets: [
+   157→      "Non-compartmental PK: trapezoidal AUC, clearance, half-life",
+   158→      "Renal function (Cockcroft-Gault) & BSA-based dosing",
+   159→      "Loading / maintenance regimen design with bioavailability",
+   160→    ],
+   161→    apis: ["creatinine_clearance()", "auc_trapezoid()", "maintenance_dose()"],
+   162→    accent: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+   163→  },
+   164→  {
+   165→    icon: Boxes,
+   166→    title: "Molecular Docking",
+   167→    tagline: "pharmaml.docking — AutoDock4 & Vina",
+   168→    bullets: [
+   169→      "Grid-box & GPF preparation, SMILES → 3D PDBQT ligand prep",
+   170→      "Pure-Python Vina output & DLG cluster-table parsers",
+   171→      "Ligand efficiency + consensus rescoring, one campaign notebook",
+   172→    ],
+   173→    apis: ["parse_vina_output()", "write_gpf()", "consensus_rescore()"],
+   174→    accent: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
+   175→  },
+   176→  {
+   177→    icon: Dna,
+   178→    title: "Cheminformatics",
+   179→    tagline: "pharmaml.chem — lazy RDKit extras",
+   180→    bullets: [
+   181→      "IC50 / Ki → pIC50 / pKi conversions with unit handling",
+   182→      "RDKit descriptors & fingerprints behind lazy imports",
+   183→      "Tanimoto similarity scans across compound tables",
+   184→    ],
+   185→    apis: ["ic50_to_pic50()", "tanimoto_from_sets()", "similarity_scan()"],
+   186→    accent: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+   187→  },
+   188→  {
+   189→    icon: ChartNoAxesColumn,
+   190→    title: "Visualization & Reports",
+   191→    tagline: "pharmaml.viz — every domain, every format",
+   192→    bullets: [
+   193→      "Confusion matrices, ROC, parity & residual diagnostics (2+ classes)",
+   194→      "PK profiles, dose accumulation, similarity heat-maps, docking rankings",
+   195→      "Self-contained HTML reports + csv/tsv/md/json/html table export",
+   196→    ],
+   197→    apis: ["plot_confusion_matrix()", "save_visual_bundle()", "export_table()"],
+   198→    accent: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+   199→  },
+   200→];
+   201→
+   202→const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
+   203→  {
+   204→    aspect: "Structure",
+   205→    before: "30+ flat, near-duplicate scripts in one folder",
+   206→    after: "Typed package pharmaml with 6 subpackages + CLI",
+   207→  },
+   208→  {
+   209→    aspect: "Typing",
+   210→    before: "No type hints, no docstrings",
+   211→    after: "Full annotations (Python ≥ 3.10 syntax) + Google docstrings",
+   212→  },
+   213→  {
+   214→    aspect: "Logging",
+   215→    before: "Bare print() with mixed Persian/English messages",
+   216→    after: "Structured logger — console + optional file handler",
+   217→  },
+   218→  {
+   219→    aspect: "Paths",
+   220→    before: "Hardcoded C:\\Users\\... Windows paths, os.chdir side effects",
+   221→    after: "ToolConfig paths, CLI arguments, no working-directory mutation",
+   222→  },
+   223→  {
+   224→    aspect: "Testing",
+   225→    before: "0 tests — changes verified by eyeball",
+   226→    after: "344 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+   227→  },
+   228→  {
+   229→    aspect: "Distribution",
+   230→    before: "Copy-paste between machines",
+   231→    after: "pip-installable extras, Dockerfile, GitHub Actions CI matrix",
+   232→  },
+   233→];
+   234→
+   235→const DESIGN_CHOICES: Array<{ title: string; rationale: string }> = [
+   236→  {
+   237→    title: "scikit-learn as the ML backbone",
+   238→    rationale:
+   239→      "QSAR tabular data is the sweet spot for sklearn — the registry covers every family from logistic to random forests, and ann (MLPClassifier) handles the neural case. Trade-off: no GPU training for tabular models, which is rarely needed at this data scale.",
+   240→  },
+   241→  {
+   242→    title: "Lazily-imported optional dependencies",
+   243→    rationale:
+   244→      "The package imports cleanly on a bare Python + numpy/pandas/sklearn environment; RDKit, Mordred, XGBoost/LightGBM/CatBoost and Meeko fail at call time with an informative DependencyError including install hints. Trade-off: a slightly more complex import path, worth it for portability.",
+   245→  },
+   246→  {
+   247→    title: "Pure-Python docking parsers",
+   248→    rationale:
+   249→      "DLG / Vina / PDBQT parsing has zero external dependencies, so result analysis works even on machines without AutoDock installed. Execution wrappers locate binaries via shutil.which and raise DockingError with guidance instead of shell=True surprises.",
+   250→  },
+   251→  {
+   252→    title: "Explicit unit conventions over a unit library",
+   253→    rationale:
+   254→      "PK functions document their units in the docstring instead of pulling in pint. Trade-off: caller responsibility — but zero-dependency math functions are trivially testable and fast.",
+   255→  },
+   256→  {
+   257→    title: "One shared validation layer",
+   258→    rationale:
+   259→      "pharmaml.utils.validation raises the same DataValidationError — with the parameter name in the message — from every domain, so one except PharmaMLError clause catches everything and error messages stay uniform.",
+   260→  },
+   261→];
+   262→
+   263→export function Overview() {
+   264→  const setTab = useToolkitStore((s) => s.setTab);
+   265→  const ensureTree = useToolkitStore((s) => s.ensureTree);
+   266→  const stats = useToolkitStore((s) => s.stats);
+   267→  const treeStatus = useToolkitStore((s) => s.treeStatus);
+   268→  const tree = useToolkitStore((s) => s.tree);
+   269→  const openFileAtLine = useToolkitStore((s) => s.openFileAtLine);
+   270→
+   271→  useEffect(() => {
+   272→    void ensureTree();
+   273→  }, [ensureTree]);
+   274→
+   275→  /* Sparkline animates only once the featured card scrolls into view. */
+   276→  const sparkRef = useRef<HTMLDivElement>(null);
+   277→  const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
+   278→
+   279→  const fileCount = stats ? fmtInt(stats.files) : "63";
+   280→  const loc = stats ? fmtInt(stats.totalLines) : "13,683";
+   281→
+   282→  /* Live metadata for the featured ML workflow notebook in the hero. */
+   283→  const notebookMeta = useMemo(
+   284→    () => (tree ? findNode(tree, "examples/complete_ml_workflow.ipynb") : null),
+   285→    [tree]
+   286→  );
+   287→
+   288→  const heroStagger = {
+   289→    hidden: { opacity: 0, y: 14 },
+   290→    show: (i: number) => ({
+   291→      opacity: 1,
+   292→      y: 0,
+   293→      transition: { delay: 0.08 + i * 0.07, duration: 0.32, ease: "easeOut" as const },
+   294→    }),
+   295→  };
+   296→
+   297→  return (
+   298→    <div className="space-y-10">
+   299→      {/* ------------------------------ Hero ------------------------------ */}
+   300→      <section
+   301→        aria-labelledby="hero-title"
+   302→        className="hero-panel relative space-y-6 rounded-2xl border border-border/70 p-6 shadow-sm sm:p-10"
+   303→      >
+   304→        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+   305→          {/* -- Left: headline, stats, CTAs -- */}
+   306→          <div className="space-y-4">
+   307→            <motion.div variants={heroStagger} initial="hidden" animate="show" custom={0}>
+   308→              <Badge variant="secondary" className="gap-1.5 border border-primary/25 bg-primary/10 text-primary">
+   309→                <ShieldCheck className="size-3.5" aria-hidden />
+   310→                Python ≥ 3.10 · numpy / pandas / sklearn core
+   311→              </Badge>
+   312→            </motion.div>
+   313→            <motion.h1
+   314→              variants={heroStagger}
+   315→              initial="hidden"
+   316→              animate="show"
+   317→              custom={1}
+   318→              id="hero-title"
+   319→              className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl"
+   320→            >
+   321→              One toolkit.{" "}
+   322→              <span className="hero-gradient-text">
+   323→                Three scientific domains.
+   324→              </span>
+   325→            </motion.h1>
+   326→            <motion.p
+   327→              variants={heroStagger}
+   328→              initial="hidden"
+   329→              animate="show"
+   330→              custom={2}
+   331→              className="max-w-2xl text-base text-muted-foreground sm:text-lg"
+   332→            >
+   333→              A production-ready, typed, tested Python package for computational pharmacy — QSAR
+   334→              machine learning, pharmaceutical PK/PD &amp; dosage calculations, and molecular
+   335→              docking workflows, upgraded from a flat collection of research scripts.
+   336→            </motion.p>
+   337→
+   338→            <motion.div
+   339→              variants={heroStagger}
+   340→              initial="hidden"
+   341→              animate="show"
+   342→              custom={3}
+   343→              className="grid grid-cols-2 gap-3 pt-2 lg:grid-cols-4"
+   344→            >
+   345→              <StatChip
+   346→                icon={FileCode2}
+   347→                value={treeStatus === "loading" ? "…" : fileCount}
+   348→                countTo={treeStatus === "loading" ? undefined : stats?.files}
+   349→                label="source files"
+   350→                hint="Whole package: src, tests, examples, CI"
+   351→              />
+   352→              <StatChip
+   353→                icon={Sigma}
+   354→                value={treeStatus === "loading" ? "…" : loc}
+   355→                countTo={treeStatus === "loading" ? undefined : stats?.totalLines}
+   356→                label="lines of code"
+   357→                hint="Counted live from the file tree"
+   358→              />
+   359→              <StatChip
+   360→                icon={CircleCheck}
+   361→                value="344"
+   362→                countTo={344}
+   363→                label="passing tests"
+   364→                hint="pytest suite covering every domain"
+   365→              />
+   366→              <StatChip
+   367→                icon={Brain}
+   368→                value="15"
+   369→                countTo={15}
+   370→                label="registry models"
+   371→                hint="sklearn core + optional boosters"
+   372→              />
+   373→            </motion.div>
+   374→
+   375→            <motion.div
+   376→              variants={heroStagger}
+   377→              initial="hidden"
+   378→              animate="show"
+   379→              custom={4}
+   380→              className="flex flex-wrap gap-3 pt-2"
+   381→            >
+   382→              <Button
+   383→                size="lg"
+   384→                className="group h-11 gap-2"
+   385→                onClick={() => setTab("explorer")}
+   386→              >
+   387→                <BookOpen className="size-4" aria-hidden />
+   388→                Explore the code
+   389→                <ArrowRight
+   390→                  className="size-4 transition-transform duration-200 group-hover:translate-x-1"
+   391→                  aria-hidden
+   392→                />
+   393→              </Button>
+   394→              <Button
+   395→                size="lg"
+   396→                variant="outline"
+   397→                className="group h-11 gap-2"
+   398→                onClick={() => setTab("download")}
+   399→              >
+   400→                <FileArchive
+   401→                  className="size-4 transition-transform duration-200 group-hover:translate-y-[-1px]"
+   402→                  aria-hidden
+   403→                />
+   404→                Download ZIP
+   405→              </Button>
+   406→            </motion.div>
+   407→          </div>
+   408→
+   409→          {/* -- Right: featured complete ML workflow notebook (deep-links into the explorer) -- */}
+   410→          <motion.aside
+   411→            initial={{ opacity: 0, x: 18 }}
+   412→            animate={{ opacity: 1, x: 0 }}
+   413→            transition={{ delay: 0.28, duration: 0.4, ease: "easeOut" }}
+   414→            className="featured-card relative overflow-hidden rounded-xl border bg-card/80 shadow-sm"
+   415→            aria-label="Featured complete ML workflow notebook"
+   416→          >
+   417→            <div className="space-y-3 p-5">
+   418→              <div className="flex items-center gap-3">
+   419→                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+   420→                  <NotebookText className="size-5" aria-hidden />
+   421→                </span>
+   422→                <div className="min-w-0">
+   423→                  <p className="text-sm font-semibold">Complete ML workflow</p>
+   424→                  <p className="break-all font-mono text-[11px] leading-snug text-muted-foreground">
+   425→                    examples/complete_ml_workflow.ipynb
+   426→                  </p>
+   427→                </div>
+   428→              </div>
+   429→              <p className="text-xs leading-relaxed text-muted-foreground">
+   430→                Zero to one hundred in one notebook: import your own file → SMILES →
+   431→                descriptors &amp; fingerprints → EDA → split → grid-searched training →
+   432→                multiclass evaluation → leaderboard → feature importance → save/load →
+   433→                HTML report. All outputs committed, figures inline.
+   434→              </p>
+   435→
+   436→              {/* Mock notebook preview: two cells + animated ROC-AUC sparkline. */}
+   437→              <div
+   438→                ref={sparkRef}
+   439→                className={cn(
+   440→                  "space-y-1.5 rounded-lg border bg-muted/30 p-2.5",
+   441→                  sparkInView && "spark-live"
+   442→                )}
+   443→                aria-hidden
+   444→              >
+   445→                <div className="flex items-center gap-1.5 font-mono text-[9px] leading-none text-muted-foreground">
+   446→                  <span className="rounded-sm bg-emerald-500/15 px-1 py-0.5 text-emerald-600 dark:text-emerald-400">
+   447→                    In [1–37]
+   448→                  </span>
+   449→                  <span className="ml-auto">15 figures · executed top-to-bottom</span>
+   450→                </div>
+   451→                <div className="rounded-md border bg-background/70 px-2.5 py-1.5 font-mono text-[10px] leading-relaxed">
+   452→                  <span className="text-primary">from</span>{" "}
+   453→                  <span className="text-muted-foreground">pharmaml.data</span>{" "}
+   454→                  <span className="text-primary">import</span>{" "}
+   455→                  <span className="text-muted-foreground">load_dataset</span>
+   456→                </div>
+   457→                <div className="space-y-1.5 rounded-md border bg-background/70 px-2.5 py-1.5">
+   458→                  <div className="font-mono text-[10px] leading-relaxed">
+   459→                    <span className="text-primary">plot_confusion_matrix</span>
+   460→                    <span className="text-muted-foreground">(report)</span>
+   461→                  </div>
+   462→                  {/* Sparkline: CV ROC-AUC progression across the workflow stages. */}
+   463→                  <svg
+   464→                    viewBox="0 0 230 36"
+   465→                    className="block h-9 w-full"
+   466→                    preserveAspectRatio="none"
+   467→                    role="presentation"
+   468→                  >
+   469→                    <defs>
+   470→                      <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+   471→                        <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.22" />
+   472→                        <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+   473→                      </linearGradient>
+   474→                    </defs>
+   475→                    <path
+   476→                      d="M0,20.2 L32,16.6 L64,14.4 L96,12.1 L128,9 L160,7.4 L192,5.7 L224,4.8 L224,36 L0,36 Z"
+   477→                      fill="url(#sparkFill)"
+   478→                    />
+   479→                    <polyline
+   480→                      points="0,20.2 32,16.6 64,14.4 96,12.1 128,9 160,7.4 192,5.7 224,4.8"
+   481→                      fill="none"
+   482→                      stroke="var(--primary)"
+   483→                      strokeWidth="1.75"
+   484→                      strokeLinecap="round"
+   485→                      strokeLinejoin="round"
+   486→                      className="sparkline-draw"
+   487→                    />
+   488→                    <circle
+   489→                      cx="224"
+   490→                      cy="4.8"
+   491→                      r="2.75"
+   492→                      fill="var(--primary)"
+   493→                      className="spark-dot"
+   494→                    />
+   495→                    <circle
+   496→                      cx="224"
+   497→                      cy="4.8"
+   498→                      r="5.5"
+   499→                      fill="var(--primary)"
+   500→                      className="spark-dot-pulse"
+   501→                    />
+   502→                  </svg>
+   503→                  <div className="flex items-center justify-between font-mono text-[9px] leading-none text-muted-foreground">
+   504→                    <span>CV ROC-AUC · stages 1→13</span>
+   505→                    <span className="font-semibold text-primary">0.50 → 0.92</span>
+   506→                  </div>
+   507→                </div>
+   508→              </div>
+   509→
+   510→              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   511→                <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono tabular-nums">
+   512→                  {notebookMeta ? fmtBytes(notebookMeta.size) : "…"}
+   513→                </span>
+   514→                {typeof notebookMeta?.lines === "number" ? (
+   515→                  <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono tabular-nums">
+   516→                    {fmtInt(notebookMeta.lines)} lines
+   517→                  </span>
+   518→                ) : null}
+   519→                <span className="rounded-md border bg-primary/10 px-1.5 py-0.5 font-mono text-primary">
+   520→                  Jupyter
+   521→                </span>
+   522→              </div>
+   523→              <Button
+   524→                variant="outline"
+   525→                size="sm"
+   526→                className="h-9 w-full gap-1.5 text-xs"
+   527→                onClick={() => {
+   528→                  openFileAtLine("examples/complete_ml_workflow.ipynb", null);
+   529→                  setTab("explorer");
+   530→                }}
+   531→              >
+   532→                <FileCode2 className="size-3.5" aria-hidden />
+   533→                Open in the Code Explorer
+   534→                <ArrowRight className="size-3.5" aria-hidden />
+   535→              </Button>
+   536→            </div>
+   537→          </motion.aside>
+   538→        </div>
+   539→      </section>
+   540→
+   541→      {/* --------------------------- Domain cards --------------------------- */}
+   542→      <section aria-labelledby="domains-title" className="space-y-4">
+   543→        <div className="flex items-end justify-between gap-4">
+   544→          <div>
+   545→            <p className="eyebrow">The package</p>
+   546→            <h2 id="domains-title" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
+   547→              Five subpackages, one import
+   548→            </h2>
+   549→            <p className="mt-1 text-sm text-muted-foreground">
+   550→              Every module ships with type hints, docstrings, structured logging and tests.
+   551→            </p>
+   552→          </div>
+   553→        </div>
+   554→        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+   555→          {DOMAINS.map((d, i) => (
+   556→            <motion.div
+   557→              key={d.title}
+   558→              initial={{ opacity: 0, y: 12 }}
+   559→              animate={{ opacity: 1, y: 0 }}
+   560→              transition={{ delay: i * 0.06, duration: 0.25 }}
+   561→              whileHover={{ y: -4 }}
+   562→              className="h-full"
+   563→            >
+   564→              <Card className="h-full border-border/80 shadow-sm">
+   565→                <CardHeader className="pb-3">
+   566→                  <span
+   567→                    className={`mb-2 flex size-10 items-center justify-center rounded-lg ${d.accent}`}
+   568→                  >
+   569→                    <d.icon className="size-5" aria-hidden />
+   570→                  </span>
+   571→                  <CardTitle className="text-base">{d.title}</CardTitle>
+   572→                  <CardDescription className="font-mono text-xs">{d.tagline}</CardDescription>
+   573→                </CardHeader>
+   574→                <CardContent className="space-y-3 pb-4">
+   575→                  <ul className="space-y-1.5 text-sm text-muted-foreground">
+   576→                    {d.bullets.map((b) => (
+   577→                      <li key={b} className="flex gap-2">
+   578→                        <CircleCheck className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
+   579→                        <span>{b}</span>
+   580→                      </li>
+   581→                    ))}
+   582→                  </ul>
+   583→                  <div className="flex flex-wrap gap-1.5 pt-1">
+   584→                    {d.apis.map((api) => (
+   585→                      <code
+   586→                        key={api}
+   587→                        className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground/80"
+   588→                      >
+   589→                        {api}
+   590→                      </code>
+   591→                    ))}
+   592→                  </div>
+   593→                </CardContent>
+   594→              </Card>
+   595→            </motion.div>
+   596→          ))}
+   597→        </div>
+   598→      </section>
+   599→
+   600→      {/* ------------------------- Upgrade comparison ------------------------- */}
+   601→      <section aria-labelledby="upgrade-title" className="space-y-4">
+   602→        <div>
+   603→          <p className="eyebrow">The re-engineering</p>
+   604→          <h2 id="upgrade-title" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
+   605→            Before → After: the upgrade
+   606→          </h2>
+   607→          <p className="mt-1 text-sm text-muted-foreground">
+   608→            What changed when the flat script collection was re-engineered into the{" "}
+   609→            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">pharmaml</code>{" "}
+   610→            package.
+   611→          </p>
+   612→        </div>
+   613→        <Card className="overflow-hidden py-0 shadow-sm">
+   614→          <div className="thin-scrollbar overflow-x-auto">
+   615→            <Table className="data-table">
+   616→              <TableHeader>
+   617→                <TableRow className="bg-muted/40 hover:bg-muted/40">
+   618→                  <TableHead className="w-[110px] font-semibold">Aspect</TableHead>
+   619→                  <TableHead className="font-semibold text-rose-600 dark:text-rose-400">
+   620→                    Before — flat scripts
+   621→                  </TableHead>
+   622→                  <TableHead className="font-semibold text-primary">
+   623→                    After — pharmaml package
+   624→                  </TableHead>
+   625→                </TableRow>
+   626→              </TableHeader>
+   627→              <TableBody>
+   628→                {UPGRADE_ROWS.map((row) => (
+   629→                  <TableRow key={row.aspect}>
+   630→                    <TableCell className="whitespace-nowrap font-medium">{row.aspect}</TableCell>
+   631→                    <TableCell className="text-muted-foreground">{row.before}</TableCell>
+   632→                    <TableCell>{row.after}</TableCell>
+   633→                  </TableRow>
+   634→                ))}
+   635→              </TableBody>
+   636→            </Table>
+   637→          </div>
+   638→        </Card>
+   639→      </section>
+   640→
+   641→      {/* --------------------------- Design choices --------------------------- */}
+   642→      <section aria-labelledby="design-title" className="space-y-4">
+   643→        <div>
+   644→          <p className="eyebrow">Architecture rationale</p>
+   645→          <h2 id="design-title" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
+   646→            Design choices &amp; trade-offs
+   647→          </h2>
+   648→          <p className="mt-1 text-sm text-muted-foreground">
+   649→            The reasoning behind the architecture — straight from the README.
+   650→          </p>
+   651→        </div>
+   652→        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+   653→          {DESIGN_CHOICES.map((choice, i) => (
+   654→            <motion.div
+   655→              key={choice.title}
+   656→              initial={{ opacity: 0, y: 12 }}
+   657→              animate={{ opacity: 1, y: 0 }}
+   658→              transition={{ delay: i * 0.05, duration: 0.25 }}
+   659→              whileHover={{ y: -3 }}
+   660→            >
+   661→              <Card className="h-full border-border/80 shadow-sm">
+   662→                <CardHeader className="pb-2">
+   663→                  <CardTitle className="flex items-start gap-2 text-sm leading-snug">
+   664→                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary">
+   665→                      {i + 1}
+   666→                    </span>
+   667→                    {choice.title}
+   668→                  </CardTitle>
+   669→                </CardHeader>
+   670→                <CardContent>
+   671→                  <p className="text-sm leading-relaxed text-muted-foreground">
+   672→                    {choice.rationale}
+   673→                  </p>
+   674→                </CardContent>
+   675→              </Card>
+   676→            </motion.div>
+   677→          ))}
+   678→        </div>
+   679→      </section>
+   680→
+   681→      {/* ------------------------------ Quickstart ------------------------------ */}
+   682→      <section aria-labelledby="quickstart-title" className="space-y-4">
+   683→        <div>
+   684→          <p className="eyebrow">Get running</p>
+   685→          <h2 id="quickstart-title" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
+   686→            Quickstart
+   687→          </h2>
+   688→          <p className="mt-1 text-sm text-muted-foreground">
+   689→            One import per domain — deterministic examples, no external datasets required.
+   690→          </p>
+   691→        </div>
+   692→        <CodeBlock code={QUICKSTART} language="python" fileName="quickstart.py" showLineNumbers maxHeightClass="max-h-[520px]" />
+   693→        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground sm:gap-x-4">
+   694→          <span>Want the full picture?</span>
+   695→          <Button variant="link" className="h-auto gap-1 p-0 text-sm" onClick={() => setTab("explorer")}>
+   696→            Browse the actual source <ArrowRight className="size-3.5" aria-hidden />
+   697→          </Button>
+   698→          <span aria-hidden className="hidden text-border sm:inline">·</span>
+   699→          <Button variant="link" className="h-auto gap-1 p-0 text-sm" onClick={() => setTab("reference")}>
+   700→            Browse the API reference <ArrowRight className="size-3.5" aria-hidden />
+   701→          </Button>
+   702→        </div>
+   703→      </section>
+   704→
+   705→      {/* ------------------------------ Download CTA ------------------------------ */}
+   706→      <section
+   707→        aria-labelledby="dl-cta-title"
+   708→        className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-transparent to-amber-500/5 p-6 sm:p-8"
+   709→      >
+   710→        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+   711→          <div className="space-y-1">
+   712→            <h2 id="dl-cta-title" className="flex items-center gap-2 text-lg font-semibold">
+   713→              <Download className="size-5 text-primary" aria-hidden />
+   714→              Get the whole toolkit
+   715→            </h2>
+   716→            <p className="text-sm text-muted-foreground">
+   717→              Full source, tests, examples, Dockerfile and CI — packaged as a single ZIP.
+   718→            </p>
+   719→          </div>
+   720→          <Button size="lg" className="h-11 gap-2" onClick={() => setTab("download")}>
+   721→            <FileArchive className="size-4" aria-hidden />
+   722→            Go to download
+   723→          </Button>
+   724→        </div>
+   725→      </section>
+   726→    </div>
+   727→  );
+   728→}
+   729→

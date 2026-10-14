@@ -13,7 +13,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (227 tests).
+exceptions, input validation, and pytest coverage** (402 tests).
 
 ---
 
@@ -84,11 +84,12 @@ pharma-ml-toolkit/
 │   ├── chem/                # converters, descriptors, similarity
 │   ├── ml/                  # preprocessing, models, training, evaluation, persistence
 │   ├── pharma/              # units, pk, pd, dosage
-│   ├── docking/             # preparation, workflow, parsing, scoring
+│   ├── docking/             # ligands.py + receptor.py (CSV/PDB in), grids, workflow, parsing, scoring
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 344 pytest cases across all domains
+├── tests/                   # 402 pytest cases across all domains (incl. test_docking_prep.py + data/ fixtures)
 ├── examples/                # runnable demos + three executed notebooks (complete ML workflow · complete docking workflow · walkthrough)
+│   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
 ├── Dockerfile
@@ -121,18 +122,26 @@ own SMILES column), and re-run all cells. §2 needs RDKit —
 ### The complete docking process in one notebook
 
 `examples/complete_docking_workflow.ipynb` is the docking **zero-to-one-hundred**
-walkthrough — a full virtual-screening campaign, executed end-to-end without a
-docking engine (the demo campaign tree uses the real AutoDock4 `.dlg` format):
+walkthrough — a full virtual-screening campaign that now starts from the two
+data-entry stages (CSV and PDB in), executed end-to-end without a docking engine
+(the demo campaign tree uses the real AutoDock4 `.dlg` format):
 
-> §1 ligand preparation (SMILES → 3D PDBQT via Meeko) → §2 grid box + GPF →
-> §3 running the engines (AutoDock4 / Vina, guarded failures) → §4 parsing
-> (cluster tables, completion audit, campaign scan, idempotent batch re-run) →
-> §5 Vina pose tables → §6 rescoring (ligand efficiency + consensus) → §7
-> energy-distribution & top-ligand figures → §8 one-click HTML report.
+> §1 ligand-library import (`load_ligand_csv` on a 10-row demo `ligands.csv` —
+> SMILES column auto-detected, RDKit validation, invalid rows exported to
+> `failed_smiles.csv`, then `prepare_ligand_library` builds the folder-per-ligand
+> campaign tree) → §2 protein import & preparation (`prepare_protein` on a real
+> lysozyme PDB — waters/HETATM/altlocs cleaned, Meeko-typed + charged receptor,
+> `distribute_receptor` copies it into every ligand folder) → §3 ligand
+> preparation (SMILES → 3D PDBQT via Meeko) → §4 grid box + GPF → §5 running
+> the engines (AutoDock4 / Vina, guarded failures) → §6 parsing (cluster tables,
+> completion audit, campaign scan, idempotent batch re-run) → §7 Vina pose
+> tables → §8 rescoring (ligand efficiency + consensus) → §9 energy-distribution
+> & top-ligand figures → §10 one-click HTML report.
 
 Point `DOCKING_DIR` at your real campaign folder and re-run — parsers, rescoring
-and plots work unchanged on real `.dlg` trees. §1 needs
-`pip install 'pharmaml[docking]'`.
+and plots work unchanged on real `.dlg` trees. §1–§3 need
+`pip install 'pharmaml[docking]'`; a ready-to-use demo receptor ships at
+`examples/data/lysozyme_1aki.pdb`.
 
 (`examples/pharmaml_walkthrough.ipynb` remains the every-domain tour including
 PK, docking and chem conversions.)
@@ -212,6 +221,27 @@ pharmaml ml compare --data my_compounds.csv --target activity --plot
 
 `--task auto` (the default) infers classification vs regression from the target column, so
 the same command works for a binary, multiclass or pIC50 endpoint file.
+
+### Import your docking inputs (ligands CSV + protein PDB)
+
+Docking campaigns now start at data entry too — point the package at your ligand
+table and your protein file instead of the legacy `smilestopdbqt.py` /
+`adder.py` scripts:
+
+```python
+from pharmaml.docking import (
+    load_ligand_csv, prepare_ligand_library,
+    prepare_protein, distribute_receptor,
+)
+
+lib = load_ligand_csv("ligands.csv")            # SMILES col auto-detected, bad rows -> failed_smiles.csv
+prepare_ligand_library(lib, "ligand_folders")   # upgrades smilestopdbqt.py: folder-per-ligand + l.pdbqt
+receptor = prepare_protein("protein.pdb", "r.pdbqt")   # waters/HETATM/altlocs cleaned, AD4 types + charges
+distribute_receptor(receptor, "ligand_folders")        # upgrades adder.py: r.pdbqt into every folder
+```
+
+Try it with the shipped demo receptor `examples/data/lysozyme_1aki.pdb`, or go
+no-code: `pharmaml docking prep-ligands` / `pharmaml docking prep-protein`.
 
 ### Machine learning (QSAR)
 
@@ -376,6 +406,8 @@ pharmaml chem pic50 --data data.csv --column "IC50 (nM)" --unit nM
 pharmaml chem descriptors --data data.csv --smiles-col SMILES
 pharmaml pharma pk --data conc.csv --time time --conc conc
 pharmaml pharma dose --cl 3.2 --vd 45 --target-css 6.0 --tau 8 --f 1.0
+pharmaml docking prep-ligands --ligands ligands.csv --out ligand_folders/
+pharmaml docking prep-protein --protein protein.pdb --out r.pdbqt
 pharmaml docking scan --directory runs/ --log-name r.dlg
 pharmaml docking check --directory runs/
 ```
@@ -413,7 +445,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (344 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (402 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```
@@ -423,8 +455,9 @@ round-trips, ML pipeline behaviour (splits, metrics, persistence round-trip), **
 loading (CSV/Excel, delimiter sniffing, target auto-detection, multiclass and regression
 inference)**, **multiclass end-to-end flows (3–4 classes, scorer fallbacks, ensembles)**,
 **every plotting function / export format / HTML report path (headless Agg CI proof,
-plus a guard that the shipped notebooks stay executed and error-free)**, docking parsers
-(synthetic DLG/Vina/PDBQT fixtures), scoring functions, and converter edge cases.
+plus a guard that the shipped notebooks stay executed and error-free)**, docking
+preparation & parsers (ligand CSV import, receptor prep, synthetic DLG/Vina/PDBQT
+fixtures), scoring functions, and converter edge cases.
 
 ## CI
 

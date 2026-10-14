@@ -101,12 +101,15 @@ report = evaluate_model(result.model, X_te, y_te, ds.task)
 
 # --- Docking -----------------------------------------------------
 from pharmaml.docking import (
-    smiles_to_pdbqt, compute_grid_box, scan_docking_directory,
-    parse_vina_output, ligand_efficiency, consensus_rescore,
+    load_ligand_csv, prepare_ligand_library, prepare_protein,
+    compute_grid_box, scan_docking_directory, parse_vina_output,
+    ligand_efficiency, consensus_rescore,
 )
 
-ligand = smiles_to_pdbqt("CC(=O)Oc1ccccc1C(=O)O", "ligands/")
-box    = compute_grid_box(ligand, padding=4.0)
+lib = load_ligand_csv("ligands.csv")          # SMILES col auto-detected
+prepare_ligand_library(lib, "ligand_folders") # folder-per-ligand + l.pdbqt
+prepare_protein("protein.pdb", "r.pdbqt")     # cleaned AD4 receptor
+box    = compute_grid_box("ligand_folders/1_aspirin/l.pdbqt", padding=4.0)
 summary = scan_docking_directory("docking_run/")   # one row per ligand
 poses = parse_vina_output(open("vina.out").read())
 cons  = consensus_rescore(summary, columns=["best_lowest_energy"])
@@ -166,8 +169,8 @@ const DOMAINS: DomainCardSpec[] = [
     title: "Molecular Docking",
     tagline: "pharmaml.docking — AutoDock4 & Vina",
     bullets: [
-      "Grid-box & GPF preparation, SMILES → 3D PDBQT ligand prep",
-      "Pure-Python Vina output & DLG cluster-table parsers",
+      "Ligand CSV import + protein preparation built in — CSV/PDB in, PDBQT out",
+      "Grid-box & GPF prep, SMILES → 3D PDBQT, Vina/DLG parsers",
       "Ligand efficiency + consensus rescoring, one campaign notebook",
     ],
     apis: ["parse_vina_output()", "write_gpf()", "consensus_rescore()"],
@@ -223,7 +226,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "344 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+    after: "402 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Distribution",
@@ -276,8 +279,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "63";
-  const loc = stats ? fmtInt(stats.totalLines) : "13,683";
+  const fileCount = stats ? fmtInt(stats.files) : "73";
+  const loc = stats ? fmtInt(stats.totalLines) : "21,353";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -358,8 +361,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="344"
-                countTo={344}
+                value="402"
+                countTo={402}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

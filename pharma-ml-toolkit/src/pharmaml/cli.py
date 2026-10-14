@@ -13,6 +13,8 @@ scans::
     pharmaml data split  --data qsar.csv --test-size 0.2 --val-size 0.1
     pharmaml chem pic50  --data activity.xlsx --column "IC50 (nM)"
     pharmaml pharma pk   --data profile.csv --time time_h --conc conc_ng_ml
+    pharmaml docking prep-ligands --ligands ligands.csv --out ligand_folders/
+    pharmaml docking prep-protein --protein protein.pdb --out r.pdbqt
     pharmaml docking scan --directory docking_run/
     pharmaml models list
 
@@ -204,6 +206,35 @@ def _build_parser() -> argparse.ArgumentParser:
     check.add_argument("--directory", required=True)
     check.add_argument("--log-name", default="r.dlg")
     check.add_argument("--out", default=None)
+
+    prep_ligands = docking_sub.add_parser(
+        "prep-ligands",
+        help="import a ligand CSV and prepare PDBQT folders",
+    )
+    prep_ligands.add_argument("--ligands", required=True, help="ligand table (CSV/TSV/Excel)")
+    prep_ligands.add_argument("--out", required=True, help="campaign output directory")
+    prep_ligands.add_argument("--smiles-col", default=None, help="SMILES column (auto-detected)")
+    prep_ligands.add_argument("--name-col", default=None, help="ligand name column (auto-detected)")
+    prep_ligands.add_argument(
+        "--naming",
+        default="index_name",
+        choices=("index", "index_name", "name"),
+        help="folder naming scheme (index reproduces the legacy scripts)",
+    )
+
+    prep_protein = docking_sub.add_parser(
+        "prep-protein",
+        help="import a protein PDB and prepare a receptor PDBQT",
+    )
+    prep_protein.add_argument("--protein", required=True, help="protein file (.pdb or .pdbqt)")
+    prep_protein.add_argument("--out", default=None, help="receptor PDBQT path (default <stem>.pdbqt)")
+    prep_protein.add_argument("--keep-hetatm", action="store_true", help="keep non-water HETATM records")
+    prep_protein.add_argument("--chain", default=None, help="keep only this chain (e.g. A)")
+    prep_protein.add_argument(
+        "--altloc",
+        default="first",
+        help="alternate-location conformer: 'first' or a letter like A",
+    )
 
     return parser
 
@@ -490,6 +521,45 @@ def _cmd_docking_check(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def _cmd_docking_prep_ligands(args: argparse.Namespace) -> int:
+    from pharmaml.docking import prepare_ligand_library
+
+    report = prepare_ligand_library(
+        args.ligands,
+        args.out,
+        smiles_col=args.smiles_col,
+        name_col=args.name_col,
+        folder_naming=args.naming,
+    )
+    print(report.library)
+    print()
+    print(report)
+    if report.n_failed:
+        # prepare_ligand_library already wrote failed_smiles.csv next to
+        # the campaign (rar parity); just point the user at it.
+        print(f"failed ligands -> {report.root / 'failed_smiles.csv'}")
+        return 1
+    return 0
+
+
+def _cmd_docking_prep_protein(args: argparse.Namespace) -> int:
+    from pharmaml.docking import prepare_protein
+
+    altloc = args.altloc
+    if altloc and altloc.lower() != "first":
+        altloc = altloc.strip().upper()  # accept 'b' as 'B'
+    report = prepare_protein(
+        args.protein,
+        args.out,
+        keep_hetatm=args.keep_hetatm,
+        chain=args.chain,
+        default_altloc=altloc,
+    )
+    print(report)
+    print(f"receptor -> {report.output_pdbqt}")
+    return 0
+
+
 _HANDLERS = {
     ("models", None): _cmd_models,
     ("data", "inspect"): _cmd_data_inspect,
@@ -502,6 +572,8 @@ _HANDLERS = {
     ("pharma", "dose"): _cmd_pharma_dose,
     ("docking", "scan"): _cmd_docking_scan,
     ("docking", "check"): _cmd_docking_check,
+    ("docking", "prep-ligands"): _cmd_docking_prep_ligands,
+    ("docking", "prep-protein"): _cmd_docking_prep_protein,
 }
 
 

@@ -557,13 +557,19 @@ class TestNotebookArtifacts:
     def test_complete_docking_workflow_notebook(self):
         nb = self._read("complete_docking_workflow.ipynb")
         code_cells, errors, figures, executed = self._stats(nb)
-        assert len(code_cells) >= 18
+        assert len(code_cells) >= 30
         assert executed == len(code_cells), "notebook has unexecuted code cells"
         assert not errors, f"notebook has {len(errors)} committed error output(s)"
         assert figures >= 2, "docking notebook lost its figures"
 
         sources = "\n".join(c.source for c in code_cells)
         for symbol in (
+            # §1 CSV ligand import / §2 protein import & preparation
+            "load_ligand_csv",
+            "prepare_ligand_library",
+            "distribute_receptor",
+            "prepare_protein",
+            # §3+ the original workflow
             "smiles_to_pdbqt",
             "compute_grid_box",
             "write_gpf",
@@ -580,3 +586,27 @@ class TestNotebookArtifacts:
             "save_visual_bundle",
         ):
             assert symbol in sources, f"docking notebook lost its {symbol} section"
+
+        # The protein-preparation audit output must stay committed
+        # (1262-atom lysozyme receptor, 78 waters removed).
+        prep_cell = next(
+            (c for c in code_cells if "protein = prepare_protein" in c.source), None
+        )
+        assert prep_cell is not None, "notebook lost its prepare_protein cell"
+        prep_text = "".join(
+            o.get("text", "") for o in prep_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "1262 atoms" in prep_text, "receptor audit output changed"
+        assert "78 water" in prep_text, "water-removal accounting lost"
+
+        # The ligand-library audit must stay committed too.
+        load_cell = next(
+            (c for c in code_cells if "library = load_ligand_csv" in c.source), None
+        )
+        assert load_cell is not None, "notebook lost its load_ligand_csv cell"
+        load_text = "".join(
+            o.get("text", "") for o in load_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "valid         : 8" in load_text, "ligand library audit changed"

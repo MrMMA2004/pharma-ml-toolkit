@@ -112,6 +112,13 @@ after adding new public functions.
 | `extract_pdbqt_atom_types` | function | Collect sorted unique AutoDock atom types from a PDBQT ligand. |
 | `write_gpf` | function | Write an AutoDock4 grid parameter file (GPF) for one ligand. |
 | `smiles_to_pdbqt` | function | Convert one SMILES to a 3D PDBQT ligand (Meeko + RDKit). |
+| `LigandLibrary` | class | A validated ligand library loaded from a table file. |
+| `LigandPreparationReport` | class | Audit of one :func:`prepare_ligand_library` batch. |
+| `load_ligand_csv` | function | Load a ligand library from CSV/TSV (or Excel). |
+| `prepare_ligand_library` | function | Prepare every ligand of a CSV library into a campaign tree. |
+| `ProteinReport` | class | Audit of one :func:`prepare_protein` run. |
+| `prepare_protein` | function | Import a protein and prepare a docking-ready receptor PDBQT. |
+| `distribute_receptor` | function | Copy a prepared receptor into every ligand folder of a campaign. |
 | `run_autodock4` | function | Run autogrid4 + autodock4 for one ligand directory. |
 | `run_vina` | function | Run a single AutoDock Vina docking. |
 | `batch_run_directories` | function | Dock every prepared ligand sub-directory in parallel. |
@@ -186,6 +193,7 @@ after adding new public functions.
 ```text
 pharmaml models | data inspect | data split | ml train | ml compare
              | chem pic50 | chem descriptors | pharma pk | pharma dose
+             | docking prep-ligands | docking prep-protein
              | docking scan | docking check
 ```
 
