@@ -2,8 +2,9 @@
 
 Upgrades ``readerwithdetails.py`` (cluster-table regex parser with
 "most populated cluster" logic), ``reader.py``/``reader_at_same_folder.py``
-(iterative summary), ``checker.py`` (completion audit) and
-``dlg_extracter.py``/``Prettier_extracted_dlgs.py``.
+(iterative summary), ``checker.py`` (completion audit),
+``dlg_extracter.py``/``Prettier_extracted_dlgs.py`` and
+``others/Vina/vina_reader.py`` (best-affinity scan of a results tree).
 
 All parsers accept *text or paths* and return typed dataclasses or
 DataFrames, so they are unit-testable without a docking engine.
@@ -30,6 +31,7 @@ __all__ = [
     "parse_vina_output",
     "check_docking_completion",
     "scan_docking_directory",
+    "scan_vina_directory",
 ]
 
 
@@ -268,3 +270,51 @@ def scan_docking_directory(
                 record.update({"status": f"PARSE_ERROR: {exc}"})
         rows.append(record)
     return pd.DataFrame(rows)
+
+
+def scan_vina_directory(directory: str | Path) -> pd.DataFrame:
+    """Summarise every Vina ``.log`` under a results tree.
+
+    Upgrades ``others/Vina/vina_reader.py``: each log found recursively
+    is parsed with :func:`parse_vina_output`, the best (minimum)
+    affinity and pose count are reported per ligand, and the table is
+    sorted by best affinity ascending so the strongest binders are at
+    the top.  Logs without a parseable mode table keep their row with
+    a ``None`` affinity (the original crashed on those) -- NaN rows
+    sort last.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``ligand`` (log file stem), ``log`` (path relative to
+        ``directory``), ``best_affinity`` (kcal/mol) and ``n_poses``.
+
+    Raises
+    ------
+    DockingParseError
+        If ``directory`` is not a directory.
+    """
+    base = Path(directory)
+    if not base.is_dir():
+        raise DockingParseError(f"directory not found: {base}")
+
+    rows: list[dict] = []
+    for log in sorted(base.rglob("*.log")):
+        record: dict = {"ligand": log.stem, "log": str(log.relative_to(base))}
+        try:
+            poses = parse_vina_output(log)
+        except DockingParseError as exc:
+            _LOG.warning("Skipping pose table of %s: %s", log, exc)
+            record.update({"best_affinity": None, "n_poses": 0})
+        else:
+            record.update(
+                {
+                    "best_affinity": min(pose.affinity for pose in poses),
+                    "n_poses": len(poses),
+                }
+            )
+        rows.append(record)
+    frame = pd.DataFrame(rows, columns=["ligand", "log", "best_affinity", "n_poses"])
+    return frame.sort_values(
+        "best_affinity", ascending=True, na_position="last"
+    ).reset_index(drop=True)

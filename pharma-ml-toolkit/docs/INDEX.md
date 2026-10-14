@@ -34,7 +34,7 @@ after adding new public functions.
 
 ## `pharmaml.chem`
 
-*Cheminformatics helpers: endpoint and file-format conversion, descriptors, similarity.*
+*Cheminformatics helpers: conversion, descriptors, similarity, tables, standardization.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -53,6 +53,15 @@ after adding new public functions.
 | `tanimoto_from_bitarrays` | function | Tanimoto coefficient for two equal-length binary arrays. |
 | `tanimoto_from_sets` | function | Tanimoto coefficient for two feature sets: |A∩B| / |A∪B|. |
 | `tanimoto_matrix` | function | All-vs-all Tanimoto similarities between two bit-matrix batches. |
+| `TableComparison` | class | Set reconciliation of one ligand column across two tables. |
+| `compare_tables` | function | Compare one ligand-name column across two tables. |
+| `annotate_with_smiles` | function | Annotate ligand-name columns with SMILES from a reference table. |
+| `merge_tables` | function | Row-wise merge of several tables, ignoring the index. |
+| `merge_table_folder` | function | Merge every table of one extension directly inside ``directory``. |
+| `UNSUPPORTED_METALS` | constant |  |
+| `PdbLigandReport` | class | Audit record for one :func:`smiles_to_pdb` conversion. |
+| `canonicalize_tautomer` | function | Return the canonical-tautomer SMILES of ``smiles``. |
+| `smiles_to_pdb` | function | Generate an optimised 3D PDB ligand from a SMILES string. |
 
 ## `pharmaml.ml`
 
@@ -78,7 +87,7 @@ after adding new public functions.
 
 ## `pharmaml.pharma`
 
-*Pharmaceutical calculations: units, PK, PD, dosage design.*
+*Pharmaceutical calculations: units, PK, PD, dosage design, regulatory-approval filtering.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -118,10 +127,11 @@ after adding new public functions.
 | `renal_dose_adjustment` | function | Linearly reduce a dose for impaired renal function. |
 | `tdm_trough_adjustment` | function | Proportionally adjust a dose from a measured trough level. |
 | `youngs_rule` | function | Young's rule for paediatric dose scaling (age 1–12). |
+| `filter_approved_drugs` | function | Collect the drug names whose regulatory approval matches a status. |
 
 ## `pharmaml.docking`
 
-*Molecular-docking workflows: preparation, execution, parsing, scoring.*
+*Molecular-docking workflows: preparation, execution, parsing, scoring*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -129,22 +139,37 @@ after adding new public functions.
 | `compute_grid_box` | function | Compute a grid box enclosing a reference ligand plus padding. |
 | `extract_pdbqt_atom_types` | function | Collect sorted unique AutoDock atom types from a PDBQT ligand. |
 | `write_gpf` | function | Write an AutoDock4 grid parameter file (GPF) for one ligand. |
+| `read_gpf` | function | Parse an AutoDock4 grid parameter file (GPF) into a dict. |
+| `write_dpf` | function | Write an AutoDock4 docking parameter file (DPF) for one ligand. |
 | `smiles_to_pdbqt` | function | Convert one SMILES to a 3D PDBQT ligand (Meeko + RDKit). |
 | `LigandLibrary` | class | A validated ligand library loaded from a table file. |
 | `LigandPreparationReport` | class | Audit of one :func:`prepare_ligand_library` batch. |
 | `load_ligand_csv` | function | Load a ligand library from CSV/TSV (or Excel). |
 | `prepare_ligand_library` | function | Prepare every ligand of a CSV library into a campaign tree. |
+| `TorsionCheck` | class | Torsion-consistency audit of one prepared ligand PDBQT. |
+| `check_torsion_consistency` | function | Compare TORSDOF, active REMARKs and BRANCH counts of a PDBQT. |
+| `scan_torsion_consistency` | function | Audit every ``.pdbqt`` under a tree for torsion consistency. |
+| `collect_files` | function | Collect matching files from a campaign tree into one folder. |
+| `list_file_names` | function | List the stems of all files with ``extension`` in a directory. |
+| `distribute_files` | function | Copy each file into every immediate sub-directory of ``target_dir``. |
+| `cleanup_tree` | function | Delete every file not on the allowlist, bottom-up. |
+| `delete_named_files` | function | Delete every file named ``filename`` anywhere under ``directory``. |
+| `reindex_by_number` | function | Reindex a frame onto the full ligand-number range. |
+| `scan_gpf_ligand_types` | function | Report the ``ligand_types`` of every sub-directory's ``r.gpf``. |
 | `ProteinReport` | class | Audit of one :func:`prepare_protein` run. |
 | `prepare_protein` | function | Import a protein and prepare a docking-ready receptor PDBQT. |
 | `distribute_receptor` | function | Copy a prepared receptor into every ligand folder of a campaign. |
 | `run_autodock4` | function | Run autogrid4 + autodock4 for one ligand directory. |
 | `run_vina` | function | Run a single AutoDock Vina docking. |
+| `run_vina_batch` | function | Dock every ``.pdbqt`` under a directory with one Vina config. |
+| `parse_vina_config` | function | Parse an AutoDock Vina config file into a ``key -> value`` dict. |
 | `batch_run_directories` | function | Dock every prepared ligand sub-directory in parallel. |
 | `parse_dlg_cluster_table` | function | Parse the ``CLUSTERING HISTOGRAM`` table of an AutoDock4 DLG. |
 | `parse_dlg_summary` | function | Summarise one DLG: best cluster, most populated cluster, extremes. |
 | `parse_vina_output` | function | Parse the mode table of a Vina output (stdout log or PDBQT REMARKs). |
 | `check_docking_completion` | function | Audit a docking tree for missing/failed runs (upgrades checker.py). |
 | `scan_docking_directory` | function | Build the docking summary table for every sub-directory. |
+| `scan_vina_directory` | function | Summarise every Vina ``.log`` under a results tree. |
 | `ligand_efficiency` | function | Ligand efficiency ``LE = |ΔG| / N_heavy`` (kcal/mol per atom). |
 | `ligand_efficiency_series` | function | Vectorised ligand-efficiency column for a docking summary table. |
 | `consensus_rescore` | function | Combine several docking evidence columns into a 0–1 consensus. |

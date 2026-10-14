@@ -30,6 +30,7 @@ from sklearn.ensemble import (
 )
 from sklearn.linear_model import (
     ElasticNet,
+    HuberRegressor,
     Lasso,
     LinearRegression,
     LogisticRegression,
@@ -186,6 +187,13 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         param_grid={},
         notes="OLS baseline (upgrades Linear regression.py)",
     ),
+    "huber_regression": ModelSpec(
+        name="huber_regression",
+        task="regression",
+        factory=lambda: HuberRegressor(),
+        param_grid={"epsilon": [1.1, 1.35, 1.75, 2.0], "alpha": [0.0001, 0.001, 0.01]},
+        notes="Robust regression with Huber loss (upgrades Huber.py)",
+    ),
     "knn": ModelSpec(
         name="knn",
         task="both",
@@ -289,6 +297,8 @@ MODEL_ALIASES: dict[str, str] = {
     "adaboost": "adaboost",
     "linreg": "linear_regression",
     "ols": "linear_regression",
+    "huber": "huber_regression",
+    "huberreg": "huber_regression",
     "ridge": "ridge",
     "ridge_cls": "ridge_classifier",
     "lasso": "lasso",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.linear_model import HuberRegressor
 
 from pharmaml.exceptions import ModelError, PersistenceError
 from pharmaml.ml.evaluation import ClassificationReport, RegressionReport, evaluate_model
@@ -14,6 +15,7 @@ from pharmaml.ml.models import (
     build_stacking,
     build_voting,
     list_models,
+    resolve_model_name,
 )
 from pharmaml.ml.persistence import load_model, save_model
 from pharmaml.ml.preprocessing import (
@@ -61,6 +63,26 @@ class TestRegistry:
         vote = build_voting("classification", ["logistic_regression", "knn"])
         assert hasattr(stack, "fit")
         assert hasattr(vote, "fit")
+
+    def test_huber_regression_registered(self) -> None:
+        spec = MODEL_REGISTRY["huber_regression"]
+        assert spec.task == "regression"
+        assert spec.available  # plain scikit-learn -- no optional backend
+        assert "epsilon" in spec.param_grid and "alpha" in spec.param_grid
+
+    def test_huber_factory_and_fit(self) -> None:
+        model = build_model("huber_regression", "regression")
+        assert isinstance(model, HuberRegressor)
+        rng = np.random.default_rng(0)
+        X = rng.normal(size=(60, 3))
+        y = 2.0 * X[:, 0] - 1.0 * X[:, 1] + 0.1 * rng.normal(size=60)
+        model.fit(X, y)
+        assert model.score(X, y) > 0.9
+
+    def test_huber_alias_and_task_mismatch(self) -> None:
+        assert resolve_model_name("huber") == "huber_regression"
+        with pytest.raises(ModelError):
+            build_model("huber_regression", "classification")
 
 
 class TestPreprocessing:

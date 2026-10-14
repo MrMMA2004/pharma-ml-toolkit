@@ -1,4 +1,4 @@
-"""Cheminformatics helpers: endpoint and file-format conversion, descriptors, similarity."""
+"""Cheminformatics helpers: conversion, descriptors, similarity, tables, standardization."""
 
 from pharmaml.chem.converters import (
     SdfWriteReport,
@@ -21,6 +21,19 @@ from pharmaml.chem.similarity import (
     tanimoto_from_sets,
     tanimoto_matrix,
 )
+from pharmaml.chem.tables import (
+    TableComparison,
+    annotate_with_smiles,
+    compare_tables,
+    merge_table_folder,
+    merge_tables,
+)
+from pharmaml.chem.standardize import (
+    UNSUPPORTED_METALS,
+    PdbLigandReport,
+    canonicalize_tautomer,
+    smiles_to_pdb,
+)
 
 __all__ = [
     "ic50_to_pic50",
@@ -38,4 +51,13 @@ __all__ = [
     "tanimoto_from_bitarrays",
     "tanimoto_from_sets",
     "tanimoto_matrix",
+    "TableComparison",
+    "compare_tables",
+    "annotate_with_smiles",
+    "merge_tables",
+    "merge_table_folder",
+    "UNSUPPORTED_METALS",
+    "PdbLigandReport",
+    "canonicalize_tautomer",
+    "smiles_to_pdb",
 ]

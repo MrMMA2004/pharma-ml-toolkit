@@ -7,13 +7,13 @@ domains into one coherent package:
 |---|---|
 | **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
 | **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry, cross-validated training (binary **and multiclass**), evaluation, persistence |
-| **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design |
-| **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids, AutoDock4 & Vina batch workflows, result parsing, scoring |
-| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, SMI/CSV/SDF format conversion |
+| **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
+| **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management |
+| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, SMI/CSV/SDF format conversion, tautomer standardization + 3D ligand generation (SMILES→PDB), ligand-table reconciliation & merging |
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (486 tests).
+exceptions, input validation, and pytest coverage** (594 tests).
 
 ---
 
@@ -81,13 +81,13 @@ pharma-ml-toolkit/
 │   ├── config.py            # ToolConfig: paths, random seed, verbosity
 │   ├── data.py              # bring your own data: load_dataset, infer_task, summarize
 │   ├── cli.py               # `pharmaml` command-line interface
-│   ├── chem/                # converters, descriptors, similarity
-│   ├── ml/                  # preprocessing, models, training, evaluation, persistence
-│   ├── pharma/              # units, pk, pd, dosage
-│   ├── docking/             # ligands.py + receptor.py (CSV/PDB in), grids, workflow, parsing, scoring
+│   ├── chem/                # converters, descriptors, similarity, tables, standardize
+│   ├── ml/                  # preprocessing, models (16 incl. Huber), training, evaluation, persistence
+│   ├── pharma/              # units, pk, pd, dosage, approvals
+│   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 486 pytest cases across all domains (incl. test_docking_prep.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 594 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + four executed notebooks (complete ML · complete docking · complete PK/PD · walkthrough) + three no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
@@ -448,8 +448,13 @@ pharmaml pharma pk --data conc.csv --time time --conc conc
 pharmaml pharma dose --cl 3.2 --vd 45 --target-css 6.0 --tau 8 --f 1.0
 pharmaml docking prep-ligands --ligands ligands.csv --out ligand_folders/
 pharmaml docking prep-protein --protein protein.pdb --out r.pdbqt
+pharmaml docking dpf --ligand ligand_folders/1/l.pdbqt --ga-runs 100   # AutoDock4 r.dpf
 pharmaml docking scan --directory runs/ --log-name r.dlg
 pharmaml docking check --directory runs/
+pharmaml docking torsion --dir ligand_folders/    # TORSDOF/REMARK/BRANCH consistency
+pharmaml docking gpf-scan --dir runs/             # ligand_types census per r.gpf
+pharmaml docking vina-scan --dir vina_results/    # best affinity per .log
+pharmaml docking collect --dir runs/ --pattern '^\\d+\\.pdbqt$'  # gather artifacts
 ```
 
 `--model` accepts registry names and aliases (`rf`, `logistic`, `xgb`,
@@ -485,7 +490,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (486 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (594 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

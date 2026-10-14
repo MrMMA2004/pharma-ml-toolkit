@@ -1,8 +1,10 @@
 """Ligand and grid preparation for AutoDock4 / Vina docking.
 
 Upgrades ``others/Docking/gpfer.py`` (GPF generation with per-ligand
-atom-type extraction), ``smilestopdbqt.py`` (SMILES -> 3D PDBQT via
-Meeko with AD4 atom-type repair) and the ligand-folder conventions of
+atom-type extraction), ``others/dpfer.py`` (DPF generation with the
+about-centroid, TORSDOF and the full AutoDock4 GA parameter block) and
+``smilestopdbqt.py`` (SMILES -> 3D PDBQT via Meeko with AD4 atom-type
+repair), plus the ligand-folder conventions of
 ``ligand generation/*.py``.
 
 Key safety improvements over the originals:
@@ -34,6 +36,8 @@ __all__ = [
     "compute_grid_box",
     "extract_pdbqt_atom_types",
     "write_gpf",
+    "read_gpf",
+    "write_dpf",
     "smiles_to_pdbqt",
     "RECEPTOR_TYPES",
 ]
@@ -252,6 +256,228 @@ def write_gpf(
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     _LOG.debug("Wrote GPF %s (ligand types: %s)", out, ligand_types)
+    return out
+
+
+def read_gpf(gpf_path: str | Path) -> dict[str, object]:
+    """Parse an AutoDock4 grid parameter file (GPF) into a dict.
+
+    Companion reader for :func:`write_gpf` (and a typed replacement for
+    the line-scraping in ``others/Docking/gpfreader.py``).  Inline ``#``
+    comments are stripped before tokenising, and the affinity-map lines
+    accumulate into the ``maps`` list.
+
+    Returns
+    -------
+    dict
+        Keys: ``ligand_types`` (list[str]), ``receptor_types``
+        (list[str]), ``npts`` (3 ints), ``spacing`` (float),
+        ``gridcenter`` (3 floats or ``None`` when absent), ``receptor``
+        (str), ``maps`` (list[str]), ``smooth`` (float) and
+        ``dielectric`` (float).
+
+    Raises
+    ------
+    DockingParseError
+        If the file is unreadable or contains no ``ligand_types`` line.
+    """
+    path = Path(gpf_path)
+    if not path.is_file():
+        raise DockingParseError(f"GPF file not found: {path}")
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError as exc:
+        raise DockingParseError(f"cannot read GPF {path}: {exc}") from exc
+
+    parsed: dict[str, object] = {
+        "ligand_types": [],
+        "receptor_types": [],
+        "npts": (0, 0, 0),
+        "spacing": 0.375,
+        "gridcenter": None,
+        "receptor": "",
+        "maps": [],
+        "smooth": 0.5,
+        "dielectric": -0.1465,
+    }
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        parts = line.split()
+        key, rest = parts[0], parts[1:]
+        if key == "ligand_types":
+            parsed["ligand_types"] = rest
+        elif key == "receptor_types":
+            parsed["receptor_types"] = rest
+        elif key == "npts" and len(rest) >= 3:
+            try:
+                parsed["npts"] = (int(rest[0]), int(rest[1]), int(rest[2]))
+            except ValueError:
+                continue
+        elif key == "spacing" and rest:
+            parsed["spacing"] = float(rest[0])
+        elif key == "gridcenter" and len(rest) >= 3:
+            try:
+                parsed["gridcenter"] = (
+                    float(rest[0]),
+                    float(rest[1]),
+                    float(rest[2]),
+                )
+            except ValueError:
+                continue
+        elif key == "receptor" and rest:
+            parsed["receptor"] = rest[0]
+        elif key == "map" and rest:
+            parsed["maps"] = [*parsed["maps"], rest[0]]
+        elif key == "smooth" and rest:
+            parsed["smooth"] = float(rest[0])
+        elif key == "dielectric" and rest:
+            parsed["dielectric"] = float(rest[0])
+
+    if not parsed["ligand_types"]:
+        raise DockingParseError(f"no ligand_types line found in {path}")
+    return parsed
+
+
+def write_dpf(
+    ligand_pdbqt: str | Path,
+    receptor_file: str = "r.pdbqt",
+    output_path: str | Path | None = None,
+    ga_run: int = 100,
+    ga_pop_size: int = 150,
+    ga_num_evals: int = 2500000,
+    ga_num_generations: int = 27000,
+    ga_elitism: int = 1,
+    ga_mutation_rate: float = 0.02,
+    ga_crossover_rate: float = 0.8,
+    ga_window_size: int = 10,
+    ga_cauchy_alpha: float = 0.0,
+    ga_cauchy_beta: float = 1.0,
+    sw_max_its: int = 300,
+    sw_max_succ: int = 4,
+    sw_max_fail: int = 4,
+    sw_rho: float = 1.0,
+    sw_lb_rho: float = 0.01,
+    ls_search_freq: float = 0.06,
+) -> Path:
+    """Write an AutoDock4 docking parameter file (DPF) for one ligand.
+
+    Faithful upgrade of ``others/dpfer.py``: the ligand atom types, the
+    ``about`` centre (centroid of the ligand atoms) and the TORSDOF are
+    read from the PDBQT, then the classic AutoDock4 parameter block is
+    emitted verbatim -- Lamarckian GA settings, Solis-Wets local search,
+    ``unbound_model bound`` and a final ``analysis`` section.  Unlike
+    the original, the ligand is an explicit path (no folder guessing)
+    and every GA/local-search knob is a keyword argument.
+
+    Parameters
+    ----------
+    ligand_pdbqt:
+        Path to the prepared ligand PDBQT.
+    receptor_file:
+        Receptor PDBQT filename; kept for parity with
+        :func:`write_gpf` (the DPF itself only references the
+        pre-computed maps).
+    output_path:
+        Where to write the DPF; defaults next to the ligand
+        (``<ligand_dir>/r.dpf``).
+    ga_run:
+        Number of GA runs (``ga_run``).
+    ga_pop_size, ga_num_evals, ga_num_generations, ...:
+        Genetic-algorithm and Solis-Wets local-search parameters,
+        defaulting to the values the original script used.
+
+    Returns
+    -------
+    Path
+        The written DPF path.
+
+    Raises
+    ------
+    DockingError
+        If the ligand file is missing or has no atom types.
+    """
+    ligand = Path(ligand_pdbqt)
+    if not ligand.is_file():
+        raise DockingError(f"ligand PDBQT not found: {ligand}")
+    if ligand.name == receptor_file:
+        _LOG.warning(
+            "ligand %s has the receptor filename %r -- docking the receptor "
+            "against itself?",
+            ligand,
+            receptor_file,
+        )
+    ligand_types = extract_pdbqt_atom_types(ligand)
+    if not ligand_types:
+        raise DockingError(f"no atom types found in {ligand}")
+
+    coords = _read_coordinates(ligand)
+    centre = coords.mean(axis=0)
+    cx, cy, cz = (round(float(value), 3) for value in centre)
+
+    torsdof = 0
+    for line in ligand.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if line.startswith("TORSDOF"):
+            parts = line.split()
+            if len(parts) == 2 and parts[1].isdigit():
+                torsdof = int(parts[1])
+
+    lines = [
+        "autodock_parameter_version 4.2",
+        "outlev 1",
+        "intelec",
+        "seed pid time",
+        f"ligand_types {' '.join(ligand_types)}",
+        "fld r.maps.fld",
+    ]
+    lines += [f"map r.{atom_type}.map" for atom_type in ligand_types]
+    lines += [
+        "elecmap r.e.map",
+        "desolvmap r.d.map",
+        f"move {ligand.name}",
+        f"about {cx} {cy} {cz}",
+        "tran0 random",
+        "quaternion0 random",
+        "dihe0 random",
+        f"torsdof {torsdof}",
+        "rmstol 2.0",
+        "extnrg 1000.0",
+        "e0max 0.0 10000",
+        f"ga_pop_size {ga_pop_size}",
+        f"ga_num_evals {ga_num_evals}",
+        f"ga_num_generations {ga_num_generations}",
+        f"ga_elitism {ga_elitism}",
+        f"ga_mutation_rate {ga_mutation_rate}",
+        f"ga_crossover_rate {ga_crossover_rate}",
+        f"ga_window_size {ga_window_size}",
+        f"ga_cauchy_alpha {ga_cauchy_alpha}",
+        f"ga_cauchy_beta {ga_cauchy_beta}",
+        "set_ga",
+        f"sw_max_its {sw_max_its}",
+        f"sw_max_succ {sw_max_succ}",
+        f"sw_max_fail {sw_max_fail}",
+        f"sw_rho {sw_rho}",
+        f"sw_lb_rho {sw_lb_rho}",
+        f"ls_search_freq {ls_search_freq}",
+        "set_psw1",
+        "unbound_model bound",
+        f"ga_run {ga_run}",
+        "analysis",
+    ]
+
+    out = Path(output_path) if output_path else ligand.parent / "r.dpf"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _LOG.debug(
+        "Wrote DPF %s (ligand types: %s, torsdof %d, about %.3f %.3f %.3f)",
+        out,
+        ligand_types,
+        torsdof,
+        cx,
+        cy,
+        cz,
+    )
     return out
 
 

@@ -122,6 +122,28 @@ summary = scan_docking_directory("docking_run/")   # one row per ligand
 poses = parse_vina_output(open("vina.out").read())
 cons  = consensus_rescore(summary, columns=["best_lowest_energy"])
 
+# --- Campaign management & Vina batches -------------------------
+from pharmaml.docking import (
+    write_dpf, check_torsion_consistency, scan_torsion_consistency,
+    collect_files, scan_vina_directory, parse_vina_config,
+)
+
+write_dpf("ligand_folders/1/l.pdbqt", ga_run=100)   # AutoDock4 r.dpf
+qa = scan_torsion_consistency("ligand_folders/")    # TORSDOF QA frame
+scan_vina_directory("vina_results/")               # best affinity per log
+collect_files("docking_run/", filename="r.dlg")     # gather artifacts
+
+# --- Ligand-table reconciliation & standardization ---------------
+from pharmaml.chem import (
+    compare_tables, annotate_with_smiles, merge_table_folder,
+    canonicalize_tautomer, smiles_to_pdb,
+)
+
+diff = compare_tables("d_summary.csv", "ligands.csv", column="Ligand")
+merge_table_folder("batches/", first_columns=["SMILES", "pIC50"])
+canonicalize_tautomer("CC(=O)CC(C)=O")   # one canonical tautomer
+smiles_to_pdb("CC(=O)OC1=CC=CC=C1C(=O)O", "aspirin.pdb")
+
 # --- Visual output: figures + HTML report ------------------------
 from pharmaml.viz import (
     plot_confusion_matrix, plot_roc_curves, plot_calibration_curve,
@@ -157,7 +179,7 @@ const DOMAINS: DomainCardSpec[] = [
     tagline: "pharmaml.ml — QSAR end-to-end",
     bullets: [
       "Cross-validated training with optional grid-search tuning",
-      "15-entry model registry: sklearn core + optional XGBoost / LightGBM / CatBoost",
+      "16-entry model registry: sklearn core + optional XGBoost / LightGBM / CatBoost",
       "Metrics, comparison leaderboards & joblib persistence",
     ],
     apis: ["train_model()", "compare_models()", "list_models()"],
@@ -171,8 +193,9 @@ const DOMAINS: DomainCardSpec[] = [
       "Non-compartmental PK: trapezoidal AUC, clearance, half-life",
       "Renal function (Cockcroft-Gault) & BSA-based dosing",
       "Loading / maintenance regimen design with bioavailability",
+      "Regulatory-approval filtering from DGIdb TSV exports",
     ],
-    apis: ["creatinine_clearance()", "auc_trapezoid()", "maintenance_dose()"],
+    apis: ["creatinine_clearance()", "auc_trapezoid()", "filter_approved_drugs()"],
     accent: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
   {
@@ -181,10 +204,11 @@ const DOMAINS: DomainCardSpec[] = [
     tagline: "pharmaml.docking — AutoDock4 & Vina",
     bullets: [
       "Ligand CSV import + protein preparation built in — CSV/PDB/mmCIF in, PDBQT out",
-      "Grid-box & GPF prep, SMILES → 3D PDBQT, Vina/DLG parsers",
+      "Grid-box, GPF & DPF prep, SMILES → 3D PDBQT, Vina/DLG parsers",
       "Ligand efficiency + consensus rescoring, one campaign notebook",
+      "Torsion QA, campaign file management, config-driven Vina batches",
     ],
-    apis: ["prepare_protein()", "write_gpf()", "consensus_rescore()"],
+    apis: ["prepare_protein()", "write_gpf()", "write_dpf()", "scan_torsion_consistency()"],
     accent: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
   },
   {
@@ -195,8 +219,9 @@ const DOMAINS: DomainCardSpec[] = [
       "IC50 / Ki → pIC50 / pKi conversions with unit handling",
       "RDKit descriptors & fingerprints behind lazy imports",
       "SMI / CSV / SDF format conversion (streaming, Excel-safe) + Tanimoto scans",
+      "Tautomer standardization, SMILES → 3D PDB ligands, table reconciliation",
     ],
-    apis: ["ic50_to_pic50()", "table_to_sdf()", "tanimoto_from_sets()"],
+    apis: ["ic50_to_pic50()", "compare_tables()", "smiles_to_pdb()", "tanimoto_from_sets()"],
     accent: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   },
   {
@@ -242,7 +267,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "486 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+    after: "594 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Distribution",
@@ -295,8 +320,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "82";
-  const loc = stats ? fmtInt(stats.totalLines) : "30,073";
+  const fileCount = stats ? fmtInt(stats.files) : "90";
+  const loc = stats ? fmtInt(stats.totalLines) : "33,899";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -382,15 +407,15 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="486"
-                countTo={486}
+                value="594"
+                countTo={594}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
               <StatChip
                 icon={Brain}
-                value="15"
-                countTo={15}
+                value="16"
+                countTo={16}
                 label="registry models"
                 hint="sklearn core + optional boosters"
               />

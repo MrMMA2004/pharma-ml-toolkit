@@ -1,4 +1,4 @@
-"""Pharmaceutical calculations: units, PK, PD, dosage design."""
+"""Pharmaceutical calculations: units, PK, PD, dosage design, regulatory-approval filtering."""
 
 from pharmaml.pharma.units import UnitConverter, molar_mass
 from pharmaml.pharma.pk import (
@@ -41,6 +41,7 @@ from pharmaml.pharma.dosage import (
     tdm_trough_adjustment,
     youngs_rule,
 )
+from pharmaml.pharma.approvals import filter_approved_drugs
 
 __all__ = [
     # units
@@ -83,4 +84,6 @@ __all__ = [
     "renal_dose_adjustment",
     "tdm_trough_adjustment",
     "youngs_rule",
+    # approvals
+    "filter_approved_drugs",
 ]

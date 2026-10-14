@@ -1,8 +1,10 @@
 """Docking execution workflows (AutoDock4 and Vina).
 
-Upgrades ``others/Docking/main.py`` and the batch-run conventions.
+Upgrades ``others/Docking/main.py``, the batch-run conventions, and
+``others/Vina/vinar.py`` / ``vinar_multiple.py`` (config-driven Vina
+batch docking).
 
-Design changes vs. the original:
+Design changes vs. the originals:
 
 * No ``os.chdir``: each run gets an explicit working directory passed
   to subprocess via ``cwd`` -- thread/process safe.
@@ -11,13 +13,15 @@ Design changes vs. the original:
 * Availability checks (``shutil.which``) with actionable errors before
   burning hours of queue time.
 * Idempotency: existing output files are skipped unless overwritten.
+* Parallelism via ``ThreadPoolExecutor`` instead of spawning one CMD
+  console per ligand and polling ``.done`` signal files.
 """
 
 from __future__ import annotations
 
 import shutil
 import subprocess
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,7 +30,14 @@ from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
 
-__all__ = ["run_autodock4", "run_vina", "batch_run_directories", "DockingRunResult"]
+__all__ = [
+    "run_autodock4",
+    "run_vina",
+    "run_vina_batch",
+    "parse_vina_config",
+    "batch_run_directories",
+    "DockingRunResult",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +231,158 @@ def _run_one(directory: str) -> DockingRunResult:
         return run_autodock4(directory)
     except DockingError as exc:
         return DockingRunResult(Path(directory), False, None, 0.0, str(exc))
+
+
+def parse_vina_config(conf_path: str | Path) -> dict[str, str]:
+    """Parse an AutoDock Vina config file into a ``key -> value`` dict.
+
+    Upgrades the ``get_receptor_from_config`` helper of
+    ``others/Vina/vinar.py`` into a general reader: lines of the form
+    ``key = value`` are collected with ``#`` comments and blank lines
+    stripped, and values stay strings (Vina itself parses them).  Keys
+    typically include ``receptor``, ``center_x/y/z``, ``size_x/y/z``,
+    ``exhaustiveness`` and ``num_modes``.
+
+    Parameters
+    ----------
+    conf_path:
+        Path to the config file.
+
+    Returns
+    -------
+    dict of str to str
+
+    Raises
+    ------
+    DockingError
+        If the config file is missing.
+    """
+    path = Path(conf_path)
+    if not path.is_file():
+        raise DockingError(f"config file not found: {path}")
+    config: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if key and value:
+            config[key] = value
+    return config
+
+
+def run_vina_batch(
+    conf_path: str | Path,
+    ligands_dir: str | Path,
+    out_dir: str | Path = "vina_results",
+    max_parallel: int = 1,
+    vina_bin: str = "vina",
+    timeout_s: float = 3600.0,
+) -> list[DockingRunResult]:
+    """Dock every ``.pdbqt`` under a directory with one Vina config.
+
+    Upgrades ``others/Vina/vinar.py`` (sequential) and
+    ``vinar_multiple.py`` (six detached CMD consoles polled via
+    ``.done`` signal files): the receptor is read from the config,
+    resolved relative to the config's own directory, and every ligand
+    found recursively under ``ligands_dir`` is docked with the config
+    file itself (``--config``), producing ``<name>_out.pdbqt`` and
+    ``<name>.log`` in ``out_dir``.  ``max_parallel > 1`` runs the
+    subprocesses through a ``ThreadPoolExecutor`` (subprocesses
+    release the GIL, so threads are enough).
+
+    Parameters
+    ----------
+    conf_path:
+        Vina config file (must contain a ``receptor = ...`` line).
+    ligands_dir:
+        Tree with ligand PDBQTs (searched recursively).
+    out_dir:
+        Output folder for poses and logs (created when missing).
+    max_parallel:
+        Maximum concurrent Vina processes (1 = sequential).
+    vina_bin:
+        Vina executable name or path.
+    timeout_s:
+        Per-ligand subprocess timeout.
+
+    Returns
+    -------
+    list of DockingRunResult
+        One result per ligand, in ligand-sorted order.
+
+    Raises
+    ------
+    DockingError
+        If the config lacks a ``receptor`` key (the same error the
+        original raised), the receptor file is not next to the config,
+        or the ligands directory is missing.
+    """
+    import time
+
+    conf = Path(conf_path)
+    config = parse_vina_config(conf)
+    if "receptor" not in config:
+        raise DockingError(
+            f"no receptor found in config file {conf} (missing 'receptor = ...')"
+        )
+    receptor = conf.parent / config["receptor"]
+    if not receptor.is_file():
+        raise DockingError(
+            f"receptor '{config['receptor']}' not found -- expected next to "
+            f"the config ({conf.parent}) or give a full path"
+        )
+    ligands_root = Path(ligands_dir)
+    if not ligands_root.is_dir():
+        raise DockingError(f"ligands directory not found: {ligands_root}")
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    ligands = sorted(p for p in ligands_root.rglob("*.pdbqt") if p.is_file())
+    if not ligands:
+        _LOG.warning("no .pdbqt ligands found under %s", ligands_root)
+        return []
+    binary = _require_executable(vina_bin)
+
+    def _dock_one(ligand: Path) -> DockingRunResult:
+        started = time.perf_counter()
+        out_pdbqt = out / f"{ligand.stem}_out.pdbqt"
+        log_file = out / f"{ligand.stem}.log"
+        cmd = [
+            binary,
+            "--config", str(conf),
+            "--ligand", str(ligand),
+            "--out", str(out_pdbqt),
+            "--log", str(log_file),
+        ]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, timeout=timeout_s)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            return DockingRunResult(
+                out, False, None, time.perf_counter() - started, str(exc)
+            )
+        return DockingRunResult(out, True, log_file, time.perf_counter() - started)
+
+    _LOG.info(
+        "Vina batch: %d ligand(s) from %s with config %s (parallel=%d)",
+        len(ligands),
+        ligands_root,
+        conf,
+        max_parallel,
+    )
+    if max_parallel > 1:
+        with ThreadPoolExecutor(max_workers=max_parallel) as executor:
+            futures = [executor.submit(_dock_one, ligand) for ligand in ligands]
+            results = [future.result() for future in futures]
+    else:
+        results = [_dock_one(ligand) for ligand in ligands]
+
+    failures = [r for r in results if not r.ok]
+    if failures:
+        _LOG.warning("%d/%d Vina runs failed", len(failures), len(results))
+    return results
 
 
 def batch_run_directories(

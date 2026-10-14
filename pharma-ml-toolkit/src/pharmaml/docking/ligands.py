@@ -14,6 +14,12 @@ the library (column auto-detection included), and
 :func:`prepare_ligand_library` turns it into the one-folder-per-ligand
 campaign tree every other docking utility expects.  Invalid SMILES are
 reported, written to ``failed_smiles.csv`` and never abort the batch.
+
+It also carries the torsion-consistency audit of
+``others/Docking/ligand generation/niggamatch.py`` and
+``mismatch2.py``: a prepared PDBQT is only trustworthy when its
+TORSDOF equals both the count of active ``REMARK`` torsion definitions
+and the count of ``BRANCH`` records.
 """
 
 from __future__ import annotations
@@ -25,7 +31,7 @@ from typing import Union
 import pandas as pd
 
 from pharmaml.docking.preparation import smiles_to_pdbqt
-from pharmaml.exceptions import DataValidationError, DependencyError
+from pharmaml.exceptions import DataValidationError, DependencyError, DockingError
 from pharmaml.logger import get_logger
 from pharmaml.utils.io import read_table, safe_filename, write_table
 
@@ -36,6 +42,9 @@ __all__ = [
     "LigandPreparationReport",
     "load_ligand_csv",
     "prepare_ligand_library",
+    "TorsionCheck",
+    "check_torsion_consistency",
+    "scan_torsion_consistency",
     "SMILES_COLUMN_CANDIDATES",
     "NAME_COLUMN_CANDIDATES",
 ]
@@ -361,6 +370,142 @@ def _pdbqt_stats(pdbqt_path: Path) -> tuple[int, int]:
             if len(parts) == 2 and parts[1].lstrip("-").isdigit():
                 torsdof = int(parts[1])
     return atoms, torsdof
+
+
+@dataclass(frozen=True, slots=True)
+class TorsionCheck:
+    """Torsion-consistency audit of one prepared ligand PDBQT.
+
+    Mirrors the mismatch report columns of
+    ``others/Docking/ligand generation/niggamatch.py`` / ``mismatch2.py``.
+
+    Attributes
+    ----------
+    ligand:
+        Path of the audited PDBQT.
+    torsdof:
+        Value of the ``TORSDOF`` record (0 when absent).
+    active_remarks:
+        Number of ``REMARK`` lines marking an active torsion
+        (the ``" A "`` convention of the originals).
+    branches:
+        Number of ``BRANCH`` records.
+    ok:
+        ``True`` when all three counts agree.
+    """
+
+    ligand: str
+    torsdof: int
+    active_remarks: int
+    branches: int
+    ok: bool
+
+    def status(self) -> str:
+        """``"OK"`` when consistent, ``"MISMATCH"`` otherwise."""
+        return "OK" if self.ok else "MISMATCH"
+
+
+def check_torsion_consistency(pdbqt_path: str | Path) -> TorsionCheck:
+    """Compare TORSDOF, active REMARKs and BRANCH counts of a PDBQT.
+
+    AutoDock's ``prepare_ligand4.py`` writes one ``REMARK ... A ...``
+    torsion definition and one ``BRANCH`` record per rotatable bond,
+    and a final ``TORSDOF`` total -- a prepared ligand is only valid
+    when all three agree.  The original scripts exported this audit to
+    Excel with a red fill on mismatches; pharmaml returns a typed
+    :class:`TorsionCheck` instead.
+
+    Parameters
+    ----------
+    pdbqt_path:
+        Ligand PDBQT file.
+
+    Returns
+    -------
+    TorsionCheck
+
+    Raises
+    ------
+    DockingError
+        If the PDBQT file is missing.
+    """
+    path = Path(pdbqt_path)
+    if not path.is_file():
+        raise DockingError(f"ligand PDBQT not found: {path}")
+    torsdof = 0
+    active_remarks = 0
+    branches = 0
+    for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.strip()
+        if line.startswith("TORSDOF"):
+            parts = line.split()
+            if len(parts) >= 2:
+                try:
+                    torsdof = int(parts[1])
+                except ValueError:
+                    pass
+        elif line.startswith("REMARK") and " A " in line:
+            active_remarks += 1
+        elif line.startswith("BRANCH"):
+            branches += 1
+    ok = torsdof == active_remarks == branches
+    return TorsionCheck(
+        ligand=str(path),
+        torsdof=torsdof,
+        active_remarks=active_remarks,
+        branches=branches,
+        ok=ok,
+    )
+
+
+def scan_torsion_consistency(directory: str | Path) -> pd.DataFrame:
+    """Audit every ``.pdbqt`` under a tree for torsion consistency.
+
+    Walks ``directory`` recursively and applies
+    :func:`check_torsion_consistency` to each ligand, producing the
+    mismatch report of ``niggamatch.py`` as a DataFrame (unparseable
+    files are skipped with a warning instead of aborting the scan).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``ligand`` (path relative to ``directory``),
+        ``torsdof``, ``active_remarks``, ``branches`` and ``status``.
+
+    Raises
+    ------
+    DockingError
+        If ``directory`` is not a directory.
+    """
+    base = Path(directory)
+    if not base.is_dir():
+        raise DockingError(f"directory not found: {base}")
+    rows: list[dict[str, object]] = []
+    for path in sorted(base.rglob("*.pdbqt")):
+        try:
+            check = check_torsion_consistency(path)
+        except DockingError as exc:
+            _LOG.warning("Skipping %s: %s", path, exc)
+            continue
+        rows.append(
+            {
+                "ligand": str(path.relative_to(base)),
+                "torsdof": check.torsdof,
+                "active_remarks": check.active_remarks,
+                "branches": check.branches,
+                "status": check.status(),
+            }
+        )
+    mismatches = sum(1 for row in rows if row["status"] == "MISMATCH")
+    _LOG.info(
+        "Torsion audit of %s: %d ligand(s), %d mismatch(es)",
+        base,
+        len(rows),
+        mismatches,
+    )
+    return pd.DataFrame(
+        rows, columns=["ligand", "torsdof", "active_remarks", "branches", "status"]
+    )
 
 
 def prepare_ligand_library(

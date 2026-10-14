@@ -1,8 +1,10 @@
 """CLI-level tests for the new commands and flags.
 
 Exercises ``pharmaml.data split``, ``ml train --plots/--keep-categorical``,
-``ml compare --out/--plot`` and model aliases through :func:`pharmaml.cli.main`
-exactly the way a shell would invoke them.
+``ml compare --out/--plot``, model aliases and the docking campaign
+subcommands (``dpf``/``collect``/``torsion``/``gpf-scan``/``vina-scan``)
+through :func:`pharmaml.cli.main` exactly the way a shell would invoke
+them.
 """
 
 from __future__ import annotations
@@ -176,3 +178,122 @@ class TestInspectShowsCategorical:
         out = capsys.readouterr().out
         assert "dropped cols" in out          # default view drops 'assay'
         assert "first 2 row(s)" in out
+
+
+class TestDockingCampaignCommands:
+    """Upgrades of the rar campaign scripts exposed as CLI verbs."""
+
+    @staticmethod
+    def _ligand_pdbqt(tmp_path: Path) -> Path:
+        carbon = "ATOM      1  C   LIG A   1       1.000   2.000   3.000  1.00  0.00    0.000 C"
+        oxygen = "ATOM      2  O   LIG A   1       4.000   2.000   3.000  1.00  0.00    0.000 OA"
+        ligand = tmp_path / "l.pdbqt"
+        ligand.write_text(
+            "\n".join(
+                [
+                    "REMARK  Name = cli_ligand",
+                    "ROOT",
+                    carbon,
+                    oxygen,
+                    "ENDROOT",
+                    "TORSDOF 1",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return ligand
+
+    def test_dpf_writes_parameter_file(self, tmp_path, capsys):
+        ligand = self._ligand_pdbqt(tmp_path)
+        code = main(
+            ["docking", "dpf", "--ligand", str(ligand), "--ga-runs", "5"]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "dpf ->" in out
+        dpf = tmp_path / "r.dpf"
+        assert dpf.is_file()
+        text = dpf.read_text(encoding="utf-8")
+        assert "ga_run 5" in text
+        assert "ligand_types C OA" in text
+        assert "move l.pdbqt" in text
+
+    def test_dpf_missing_ligand_reports_error(self, tmp_path, capsys):
+        code = main(["docking", "dpf", "--ligand", str(tmp_path / "ghost.pdbqt")])
+        assert code == 1
+        assert "error:" in capsys.readouterr().err
+
+    def test_collect_prints_report(self, tmp_path, capsys):
+        folder = tmp_path / "campaign" / "ligand_01"
+        folder.mkdir(parents=True)
+        (folder / "r.dlg").write_text("dlg", encoding="utf-8")
+        code = main(["docking", "collect", "--dir", str(tmp_path / "campaign")])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "ligand_01.dlg" in out
+        assert "1 match(es), 1 copied" in out
+        assert (tmp_path / "campaign" / "collected" / "ligand_01.dlg").is_file()
+
+    def test_collect_dry_run_copies_nothing(self, tmp_path, capsys):
+        folder = tmp_path / "campaign" / "ligand_01"
+        folder.mkdir(parents=True)
+        (folder / "r.dlg").write_text("dlg", encoding="utf-8")
+        code = main(
+            ["docking", "collect", "--dir", str(tmp_path / "campaign"), "--dry-run"]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "dry run" in out
+        assert not (tmp_path / "campaign" / "collected").exists()
+
+    def test_collect_pattern_mode(self, tmp_path, capsys):
+        folder = tmp_path / "campaign" / "7"
+        folder.mkdir(parents=True)
+        (folder / "7.pdbqt").write_text("ligand", encoding="utf-8")
+        code = main(
+            [
+                "docking", "collect", "--dir", str(tmp_path / "campaign"),
+                "--pattern", r"^\d+\.pdbqt$",
+            ]
+        )
+        assert code == 0
+        assert (tmp_path / "campaign" / "collected" / "7.pdbqt").is_file()
+
+    def test_torsion_prints_audit(self, tmp_path, capsys):
+        ligand = tmp_path / "l.pdbqt"
+        ligand.write_text(
+            "TORSDOF 1\nREMARK torsion: A 1\nBRANCH 1 2\n", encoding="utf-8"
+        )
+        code = main(["docking", "torsion", "--dir", str(tmp_path)])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "l.pdbqt" in out
+        assert "OK" in out
+
+    def test_gpf_scan_prints_ligand_types(self, tmp_path, sample_ligand_pdbqt, capsys):
+        folder = tmp_path / "ligand_01"
+        folder.mkdir()
+        ligand = folder / "l.pdbqt"
+        ligand.write_text(sample_ligand_pdbqt, encoding="utf-8")
+        from pharmaml.docking import write_gpf
+
+        write_gpf(ligand)
+        code = main(["docking", "gpf-scan", "--dir", str(tmp_path)])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "ligand_01" in out
+        assert "C HD N OA" in out
+
+    def test_vina_scan_prints_ranking(self, tmp_path, capsys):
+        log = tmp_path / "ligand_x.log"
+        log.write_text(
+            "   1      -10.5          0          0\n"
+            "   2       -9.5      1.000      2.000\n",
+            encoding="utf-8",
+        )
+        code = main(["docking", "vina-scan", "--dir", str(tmp_path)])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "ligand_x" in out
+        assert "-10.5" in out

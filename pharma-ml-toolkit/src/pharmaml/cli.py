@@ -17,6 +17,11 @@ scans::
     pharmaml docking prep-ligands --ligands ligands.csv --out ligand_folders/
     pharmaml docking prep-protein --protein protein.pdb --out r.pdbqt
     pharmaml docking scan --directory docking_run/
+    pharmaml docking dpf --ligand ligand_folders/1/l.pdbqt --ga-runs 50
+    pharmaml docking collect --dir docking_run/ --pattern '^\\d+\\.pdbqt$'
+    pharmaml docking torsion --dir ligand_folders/
+    pharmaml docking gpf-scan --dir docking_run/
+    pharmaml docking vina-scan --dir vina_results/
     pharmaml models list
 
 ``--model`` accepts registry names and their aliases (``rf``,
@@ -262,6 +267,57 @@ def _build_parser() -> argparse.ArgumentParser:
         default="first",
         help="alternate-location conformer: 'first' or a letter like A",
     )
+
+    dpf = docking_sub.add_parser(
+        "dpf",
+        help="write an AutoDock4 docking parameter file (r.dpf) for a ligand",
+    )
+    dpf.add_argument("--ligand", required=True, help="ligand PDBQT to dock")
+    dpf.add_argument(
+        "--receptor", default="r.pdbqt",
+        help="receptor PDBQT filename (parity with the GPF generator)",
+    )
+    dpf.add_argument("--ga-runs", type=int, default=100, help="number of GA runs (ga_run)")
+    dpf.add_argument("--out", default=None, help="DPF path (default <ligand_dir>/r.dpf)")
+
+    collect = docking_sub.add_parser(
+        "collect",
+        help="collect matching files (r.dlg dialogs, numbered PDBQTs) into one folder",
+    )
+    collect.add_argument("--dir", required=True, help="campaign directory to scan recursively")
+    collect.add_argument(
+        "--filename",
+        default=None,
+        help="exact filename to collect (default r.dlg when no pattern is given)",
+    )
+    collect.add_argument(
+        "--pattern",
+        default=None,
+        help="regex the filename must match, e.g. '^\\d+\\.pdbqt$'",
+    )
+    collect.add_argument("--out", default=None, help="output folder (default <dir>/collected)")
+    collect.add_argument(
+        "--dry-run", action="store_true",
+        help="report the copies without performing them",
+    )
+
+    torsion = docking_sub.add_parser(
+        "torsion",
+        help="audit TORSDOF / active REMARK / BRANCH consistency of ligand PDBQTs",
+    )
+    torsion.add_argument("--dir", required=True, help="directory tree with .pdbqt ligands")
+
+    gpf_scan = docking_sub.add_parser(
+        "gpf-scan",
+        help="report the ligand_types line of every sub-directory's r.gpf",
+    )
+    gpf_scan.add_argument("--dir", required=True, help="campaign directory")
+
+    vina_scan = docking_sub.add_parser(
+        "vina-scan",
+        help="rank Vina .log files of a results tree by best affinity",
+    )
+    vina_scan.add_argument("--dir", required=True, help="directory tree with Vina logs")
 
     return parser
 
@@ -691,6 +747,65 @@ def _cmd_docking_prep_protein(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_docking_dpf(args: argparse.Namespace) -> int:
+    from pharmaml.docking import write_dpf
+
+    dpf_path = write_dpf(
+        args.ligand,
+        receptor_file=args.receptor,
+        output_path=args.out,
+        ga_run=args.ga_runs,
+    )
+    print(f"dpf -> {dpf_path}")
+    return 0
+
+
+def _cmd_docking_collect(args: argparse.Namespace) -> int:
+    from pharmaml.docking import collect_files
+
+    filename = args.filename
+    if filename is None and args.pattern is None:
+        filename = "r.dlg"  # rar default (extaacer.py / dlg_extracter.py)
+    report = collect_files(
+        args.dir,
+        filename=filename,
+        pattern=args.pattern,
+        out_dir=args.out,
+        dry_run=args.dry_run,
+    )
+    print(report.to_string(index=False))
+    n_copied = int(report["copied"].sum()) if not report.empty else 0
+    print(
+        f"{len(report)} match(es), {n_copied} copied"
+        + (" (dry run)" if args.dry_run else "")
+    )
+    return 0
+
+
+def _cmd_docking_torsion(args: argparse.Namespace) -> int:
+    from pharmaml.docking import scan_torsion_consistency
+
+    report = scan_torsion_consistency(args.dir)
+    print(report.to_string(index=False))
+    return 0
+
+
+def _cmd_docking_gpf_scan(args: argparse.Namespace) -> int:
+    from pharmaml.docking import scan_gpf_ligand_types
+
+    report = scan_gpf_ligand_types(args.dir)
+    print(report.to_string(index=False))
+    return 0
+
+
+def _cmd_docking_vina_scan(args: argparse.Namespace) -> int:
+    from pharmaml.docking import scan_vina_directory
+
+    report = scan_vina_directory(args.dir)
+    print(report.to_string(index=False))
+    return 0
+
+
 _HANDLERS = {
     ("models", None): _cmd_models,
     ("data", "inspect"): _cmd_data_inspect,
@@ -706,6 +821,11 @@ _HANDLERS = {
     ("docking", "check"): _cmd_docking_check,
     ("docking", "prep-ligands"): _cmd_docking_prep_ligands,
     ("docking", "prep-protein"): _cmd_docking_prep_protein,
+    ("docking", "dpf"): _cmd_docking_dpf,
+    ("docking", "collect"): _cmd_docking_collect,
+    ("docking", "torsion"): _cmd_docking_torsion,
+    ("docking", "gpf-scan"): _cmd_docking_gpf_scan,
+    ("docking", "vina-scan"): _cmd_docking_vina_scan,
 }
 
 
