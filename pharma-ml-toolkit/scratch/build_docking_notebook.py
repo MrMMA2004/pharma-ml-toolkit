@@ -261,6 +261,18 @@ print("receptor atom types:", extract_pdbqt_atom_types(RECEPTOR))
 pd.Series(protein.atom_types).sort_values(ascending=False).to_frame("count")"""
     )
 
+    figure = code(
+        """\
+from pharmaml.viz import plot_receptor_atom_types
+
+# The same census as a figure, colour-coded by chemistry — donor
+# hydrogens, heteroatoms, non-polar carbons, metals/ions. A missing HD
+# (donor) population is the classic symptom of a mis-prepared receptor:
+receptor_fig = plot_receptor_atom_types(
+    RECEPTOR, title="Lysozyme receptor — AutoDock atom types"
+)"""
+    )
+
     distribute = code(
         """\
 from pharmaml.docking import distribute_receptor
@@ -281,7 +293,8 @@ print(f"mode={passthrough.mode}, {passthrough.output_atoms} atoms, "
     )
 
     return [
-        header, write_pdb, census, sprinkle, prepare, peek, distribute, passthrough
+        header, write_pdb, census, sprinkle, prepare, peek, figure,
+        distribute, passthrough
     ]
 
 

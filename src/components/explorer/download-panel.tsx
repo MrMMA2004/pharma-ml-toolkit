@@ -46,7 +46,7 @@ pip install -e ".[docking]"
 pip install -e ".[boosting]"
 
 # 3. verify the installation
-python -m pytest          # 460 tests should pass
+python -m pytest          # 486 tests should pass
 pharmaml --version`;
 
 function countFiles(node: TreeNode): number {
@@ -98,6 +98,14 @@ const FEATURED_FILES: Array<{
     badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
   {
+    path: "examples/complete_ml_workflow_no_output.ipynb",
+    title: "No-output notebook twins (lightweight)",
+    description:
+      "Bandwidth-friendly twins of the three workflows — identical cells, every output stripped: ML 44 KB (4% of the executed original), docking 80 KB, PK 42 KB. Open the full twin to read results, run this one to produce them yourself.",
+    icon: NotebookText,
+    badgeClass: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
+  },
+  {
     path: "examples/pharmaml_walkthrough.ipynb",
     title: "Interactive walkthrough",
     description:
@@ -118,8 +126,8 @@ const FEATURED_FILES: Array<{
 function collectDirSummary(root: TreeNode): Array<{ name: string; files: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "460 pytest cases across all domains",
-    examples: "four executed notebooks + runnable end-to-end demos",
+    tests: "486 pytest cases across all domains",
+    examples: "four executed notebooks + three no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
   };
@@ -299,7 +307,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="460" label="passing tests" />
+          <StatChip icon={CircleCheck} value="486" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}
@@ -401,9 +409,12 @@ export function DownloadPanel() {
           ) : dirSummary.length > 0 ? (
             <ul className="divide-y divide-border">
               {dirSummary.map((d) => (
-                <li key={d.name} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2">
+                <li
+                  key={d.name}
+                  className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 transition-colors hover:bg-muted/40"
+                >
                   <code className="font-mono text-sm font-medium">{d.name}/</code>
-                  <span className="text-sm tabular-nums text-muted-foreground">
+                  <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono text-xs tabular-nums text-muted-foreground">
                     {fmtInt(d.files)} {d.files === 1 ? "file" : "files"}
                   </span>
                   {d.note ? (

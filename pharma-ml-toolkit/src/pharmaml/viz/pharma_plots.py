@@ -52,6 +52,7 @@ def plot_concentration_profile(
     -------
     matplotlib.figure.Figure
     """
+    from pharmaml.pharma.pk import auc_trapezoid
     from pharmaml.utils.validation import validate_concentration_series
 
     t, c = validate_concentration_series(times, conc, require_positive_conc=False)
@@ -62,7 +63,9 @@ def plot_concentration_profile(
         t_max = float(summary.t_max)
         half_life = summary.half_life_terminal
     else:
-        auc_value = float(auc) if auc is not None else float(np.trapezoid(c, t))
+        # the package's own trapezoid (np.trapezoid would need numpy>=2,
+        # but pyproject supports numpy>=1.24 where only np.trapz exists)
+        auc_value = float(auc) if auc is not None else float(auc_trapezoid(t, c))
         c_max = float(np.max(c))
         t_max = float(t[int(np.argmax(c))])
         half_life = None
@@ -146,6 +149,7 @@ def plot_dose_accumulation(
     matplotlib.figure.Figure
     """
     from pharmaml.pharma.pk import accumulation_ratio, elimination_rate_constant, half_life
+    from pharmaml.utils.validation import validate_positive
 
     if (t_half is None) == (ke is None):
         raise DataValidationError("pass exactly one of t_half or ke")
@@ -155,6 +159,16 @@ def plot_dose_accumulation(
         raise DataValidationError("vd is required to convert dose to concentration")
     if n_doses < 1:
         raise DataValidationError(f"n_doses must be >= 1, got {n_doses}")
+    # validate up front (not deep inside accumulation_ratio) so a typo'd
+    # regimen fails before any curve is computed
+    dose = validate_positive(dose, "dose")
+    tau = validate_positive(tau, "tau")
+    vd = validate_positive(vd, "vd")
+    f = validate_positive(f, "f (bioavailability)")
+    if f > 1.0:
+        raise DataValidationError(
+            f"bioavailability f must be <= 1, got {f}"
+        )
 
     ke = float(ke)
     c0 = f * dose / vd

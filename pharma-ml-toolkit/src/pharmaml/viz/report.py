@@ -93,7 +93,8 @@ def _escape(value: Any) -> str:
 
 def _frame_to_html(frame: pd.DataFrame, max_rows: int | None = None) -> str:
     """Render a DataFrame as a styled HTML table (no external CSS)."""
-    shown = frame.head(max_rows) if max_rows else frame
+    # ``is not None`` (not truthiness): max_rows=0 is a valid "show nothing"
+    shown = frame.head(max_rows) if max_rows is not None else frame
     header = "".join(f"<th>{_escape(col)}</th>" for col in shown.columns)
     rows = []
     for _, row in shown.iterrows():
@@ -101,7 +102,7 @@ def _frame_to_html(frame: pd.DataFrame, max_rows: int | None = None) -> str:
         rows.append(f"<tr>{cells}</tr>")
     extra = (
         f"\n<p class='subtitle'>… {len(frame) - len(shown)} more row(s) truncated</p>"
-        if max_rows and len(frame) > max_rows
+        if max_rows is not None and len(frame) > len(shown)
         else ""
     )
     return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>{extra}"
@@ -109,7 +110,7 @@ def _frame_to_html(frame: pd.DataFrame, max_rows: int | None = None) -> str:
 
 def _frame_to_markdown(frame: pd.DataFrame, max_rows: int | None = None) -> str:
     """Markdown table writer (avoids the ``tabulate`` dependency)."""
-    shown = frame.head(max_rows) if max_rows else frame
+    shown = frame.head(max_rows) if max_rows is not None else frame
 
     def cell(value: Any) -> str:
         text = "—" if (isinstance(value, float) and np.isnan(value)) else (

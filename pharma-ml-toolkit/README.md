@@ -13,7 +13,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (460 tests).
+exceptions, input validation, and pytest coverage** (486 tests).
 
 ---
 
@@ -87,8 +87,8 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands.py + receptor.py (CSV/PDB in), grids, workflow, parsing, scoring
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 460 pytest cases across all domains (incl. test_docking_prep.py, test_format_converters.py + data/ fixtures)
-├── examples/                # runnable demos + four executed notebooks (complete ML · complete docking · complete PK/PD · walkthrough)
+├── tests/                   # 486 pytest cases across all domains (incl. test_docking_prep.py, test_format_converters.py + data/ fixtures)
+├── examples/                # runnable demos + four executed notebooks (complete ML · complete docking · complete PK/PD · walkthrough) + three no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
@@ -164,6 +164,12 @@ re-run; the CLI equivalent is `pharmaml pharma pk --data profile.csv`.
 
 (`examples/pharmaml_walkthrough.ipynb` remains the every-domain tour including
 PK, docking and chem conversions.)
+
+Each of the three workflow notebooks also ships a **no-output twin**
+(`*_no_output.ipynb`) — identical cells with every output stripped, 4–30 % of
+the executed size (the ML twin is 44 KB vs 1.1 MB), for slow connections; run
+it top-to-bottom to produce the results yourself. A pytest drift-guard pins
+the twins' cell sources to the executed originals.
 
 ### Bringing your own data (CSV / TSV / Excel)
 
@@ -392,6 +398,7 @@ from pharmaml.viz import (
     plot_confusion_matrix, plot_roc_curves, plot_predicted_vs_actual,
     plot_residuals, plot_model_comparison, plot_class_distribution,
     plot_feature_importance, plot_cv_scores,
+    plot_calibration_curve, plot_learning_curve,
     plot_concentration_profile, plot_dose_accumulation,
     plot_descriptor_distributions, plot_similarity_heatmap,
     plot_energy_distribution, plot_top_ligands,
@@ -401,6 +408,8 @@ from pharmaml.viz import (
 fig = plot_confusion_matrix(report)          # ClassificationReport -> heat-map (2+ classes)
 save_figure(fig, "confusion.png")            # png / svg / pdf by extension
 fig2 = plot_roc_curves(model, X_test, y_test)   # binary or per-class one-vs-rest
+fig3 = plot_calibration_curve(model, X_test, y_test)  # reliability + Brier scores
+fig4 = plot_learning_curve(model, X, y, cv=5)  # is more data still buying accuracy?
 
 export_table(leaderboard, "leaderboard.md")  # csv / tsv / markdown / json / html
 
@@ -476,7 +485,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (460 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (486 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

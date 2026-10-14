@@ -163,10 +163,12 @@ after adding new public functions.
 | `new_figure` | function | Create a styled ``(figure, axes)`` pair (grid + soft spines). |
 | `require_matplotlib` | function | Import matplotlib lazily and pick the right backend. |
 | `save_figure` | function | Save a figure to ``png``/``svg``/``pdf`` (chosen by extension). |
+| `plot_calibration_curve` | function | Reliability diagram — are the predicted probabilities honest? |
 | `plot_class_distribution` | function | Bar chart of class balance (accepts a mapping or a ``Dataset``). |
 | `plot_confusion_matrix` | function | Heat-map of predicted-vs-true class counts. |
 | `plot_cv_scores` | function | Per-fold CV scores as bars with the mean line and ±std band. |
 | `plot_feature_importance` | function | Top-N feature importances as horizontal bars. |
+| `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |

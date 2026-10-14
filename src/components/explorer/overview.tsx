@@ -124,11 +124,14 @@ cons  = consensus_rescore(summary, columns=["best_lowest_energy"])
 
 # --- Visual output: figures + HTML report ------------------------
 from pharmaml.viz import (
-    plot_confusion_matrix, plot_roc_curves, save_figure,
+    plot_confusion_matrix, plot_roc_curves, plot_calibration_curve,
+    plot_learning_curve, save_figure,
     export_table, save_visual_bundle,
 )
 
 fig = plot_confusion_matrix(report)        # 2+ classes, annotated cells
+cal  = plot_calibration_curve(model, X_test, y_test)  # Brier scores
+lc   = plot_learning_curve(model, X, y, cv=5)         # more data?
 save_figure(fig, "confusion.png")          # png / svg / pdf
 export_table(leaderboard, "board.md")      # csv/tsv/md/json/html
 
@@ -201,11 +204,16 @@ const DOMAINS: DomainCardSpec[] = [
     title: "Visualization & Reports",
     tagline: "pharmaml.viz — every domain, every format",
     bullets: [
-      "Confusion matrices, ROC, parity & residual diagnostics (2+ classes)",
+      "Confusion, ROC, parity, residual, calibration (Brier) & learning-curve diagnostics",
       "PK profiles, dose accumulation, similarity heat-maps, docking rankings + receptor atom-type census",
       "Self-contained HTML reports + csv/tsv/md/json/html table export",
     ],
-    apis: ["plot_confusion_matrix()", "plot_receptor_atom_types()", "save_visual_bundle()"],
+    apis: [
+      "plot_confusion_matrix()",
+      "plot_calibration_curve()",
+      "plot_receptor_atom_types()",
+      "save_visual_bundle()",
+    ],
     accent: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
   },
 ];
@@ -234,7 +242,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "460 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+    after: "486 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Distribution",
@@ -287,12 +295,17 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "76";
-  const loc = stats ? fmtInt(stats.totalLines) : "25,783";
+  const fileCount = stats ? fmtInt(stats.files) : "82";
+  const loc = stats ? fmtInt(stats.totalLines) : "30,073";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
     () => (tree ? findNode(tree, "examples/complete_ml_workflow.ipynb") : null),
+    [tree]
+  );
+  /* ...and for its bandwidth-friendly no-output twin. */
+  const twinMeta = useMemo(
+    () => (tree ? findNode(tree, "examples/complete_ml_workflow_no_output.ipynb") : null),
     [tree]
   );
 
@@ -369,8 +382,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="460"
-                countTo={460}
+                value="486"
+                countTo={486}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
@@ -518,7 +531,7 @@ export function Overview() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                 <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono tabular-nums">
                   {notebookMeta ? fmtBytes(notebookMeta.size) : "…"}
                 </span>
@@ -527,6 +540,12 @@ export function Overview() {
                     {fmtInt(notebookMeta.lines)} lines
                   </span>
                 ) : null}
+                <span
+                  className="rounded-md border border-primary/25 bg-primary/5 px-1.5 py-0.5 font-mono tabular-nums text-primary"
+                  title="Same cells, all outputs stripped — the lightweight twin shipped next to the executed notebook"
+                >
+                  {twinMeta ? `${fmtBytes(twinMeta.size)} no-output twin` : "no-output twin available"}
+                </span>
                 <span className="rounded-md border bg-primary/10 px-1.5 py-0.5 font-mono text-primary">
                   Jupyter
                 </span>

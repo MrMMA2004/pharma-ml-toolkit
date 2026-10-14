@@ -35,6 +35,8 @@ from pharmaml.viz._compat import PALETTE, new_figure
 __all__ = [
     "plot_confusion_matrix",
     "plot_roc_curves",
+    "plot_calibration_curve",
+    "plot_learning_curve",
     "plot_predicted_vs_actual",
     "plot_residuals",
     "plot_model_comparison",
@@ -97,7 +99,6 @@ def plot_confusion_matrix(
     matrix, labels = _unwrap_confusion(confusion, labels)
     n = matrix.shape[0]
     display = matrix / matrix.sum(axis=1, keepdims=True) if normalize else matrix
-    fmt = "{:.2f}" if normalize else "{:d}"
 
     fig, ax = new_figure(figsize=(2.2 + 1.1 * n, 2.2 + 1.0 * n))
     image = ax.imshow(display, cmap="YlGnBu", vmin=0)
@@ -107,7 +108,10 @@ def plot_confusion_matrix(
     for i in range(n):
         for j in range(n):
             share = matrix[i, j] / matrix[i].sum() if matrix[i].sum() else 0.0
-            annotation = fmt.format(display[i, j]) + f"\n({share:.0%})"
+            # a float-dtype matrix (e.g. re-plotted normalized counts) must
+            # not hit the ":d" format code — cast integer annotations
+            cell = f"{display[i, j]:.2f}" if normalize else f"{int(round(float(display[i, j]))):d}"
+            annotation = cell + f"\n({share:.0%})"
             ax.text(
                 j, i, annotation, ha="center", va="center", fontsize=9,
                 color="white" if display[i, j] > threshold else "#1F2937",
@@ -191,6 +195,165 @@ def plot_roc_curves(
     ax.set_title(title)
     ax.set_xlim(-0.02, 1.02)
     ax.set_ylim(-0.02, 1.05)
+    ax.legend(loc="lower right", fontsize=9)
+    return fig
+
+
+def plot_calibration_curve(
+    model: Any,
+    X_test: np.ndarray | pd.DataFrame,
+    y_test: np.ndarray | pd.Series | list,
+    n_bins: int = 10,
+    title: str = "Calibration (reliability diagram)",
+) -> Any:
+    """Reliability diagram — are the predicted probabilities honest?
+
+    A diagnostic the legacy scripts never drew: discrimination (ROC)
+    says *whether* the model ranks actives above inactives, calibration
+    says whether a predicted ``0.8`` really means 80 % positives. Poorly
+    calibrated probabilities quietly corrupt threshold choices, expected
+    cost calculations and consensus rescoring.
+
+    * binary targets    → one curve (positive class) with its Brier score;
+    * 3+ class targets  → one one-vs-rest curve per class, each with its
+      Brier score, sharing the diagonal reference.
+
+    Parameters
+    ----------
+    model:
+        Fitted estimator or Pipeline exposing ``predict_proba``.
+    X_test, y_test:
+        Held-out features and labels.
+    n_bins:
+        Probability bins for the diagram (classic: 10).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    ModelError
+        If the model lacks ``predict_proba``.
+    """
+    from sklearn.calibration import calibration_curve
+    from sklearn.metrics import brier_score_loss
+
+    if not hasattr(model, "predict_proba"):
+        raise ModelError(
+            "plot_calibration_curve needs a model with predict_proba; "
+            "fit a probabilistic classifier (logistic_regression, random_forest, ...)"
+        )
+    if n_bins < 2:
+        raise DataValidationError(f"n_bins must be >= 2, got {n_bins}")
+
+    proba = np.asarray(model.predict_proba(X_test))
+    classes = list(model.classes_)
+    y_true = np.asarray(y_test)
+
+    if len(classes) == 2:
+        curves = [(classes[1], (y_true == classes[1]).astype(int), proba[:, 1])]
+    else:
+        curves = [
+            (cls, (y_true == cls).astype(int), proba[:, index])
+            for index, cls in enumerate(classes)
+        ]
+
+    fig, ax = new_figure(figsize=(6.6, 6.0))
+    ax.plot([0, 1], [0, 1], linestyle="--", color="#9CA3AF",
+            label="perfectly calibrated")
+
+    for index, (cls, truth, scores) in enumerate(curves):
+        fraction_positive, mean_predicted = calibration_curve(
+            truth, scores, n_bins=n_bins, strategy="uniform"
+        )
+        brier = brier_score_loss(truth, scores)
+        ax.plot(
+            mean_predicted, fraction_positive, marker="o", lw=1.9,
+            color=PALETTE[index % len(PALETTE)],
+            label=f"{cls} — Brier {brier:.3f}",
+        )
+
+    ax.set_xlabel("mean predicted probability")
+    ax.set_ylabel("observed fraction of positives")
+    ax.set_title(title)
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(-0.02, 1.05)
+    ax.legend(loc="upper left", fontsize=9)
+    return fig
+
+
+def plot_learning_curve(
+    model: Any,
+    X: np.ndarray | pd.DataFrame,
+    y: np.ndarray | pd.Series | list,
+    cv: int = 5,
+    scoring: str | None = None,
+    train_sizes: np.ndarray | list[float] | None = None,
+    title: str = "Learning curve",
+) -> Any:
+    """Training-set size vs CV score — is more data still buying accuracy?
+
+    The honest answer to "should we assay 500 more compounds?" that a
+    single CV number cannot give:
+
+    * both curves converging to a plateau → more data will not help much;
+    * validation still climbing at the right edge → more data *will* help;
+    * a persistent gap between the curves → variance/overfitting, not a
+      data problem.
+
+    Parameters
+    ----------
+    model:
+        Any scikit-learn compatible estimator (cloned per fold).
+    X, y:
+        Full training features and labels.
+    cv:
+        Fold count for the cross-validation at each size.
+    scoring:
+        Scorer name (default: estimator's ``score``).
+    train_sizes:
+        Absolute or fractional sizes; default ``10 % … 100 %`` in 8 steps.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    from sklearn.model_selection import learning_curve as sklearn_learning_curve
+
+    if cv < 2:
+        raise DataValidationError(f"cv must be >= 2, got {cv}")
+    if train_sizes is None:
+        train_sizes = np.linspace(0.1, 1.0, 8)
+
+    sizes, train_scores, val_scores = sklearn_learning_curve(
+        model, X, y, cv=cv, scoring=scoring, train_sizes=train_sizes, n_jobs=None,
+    )
+    train_mean = train_scores.mean(axis=1)
+    train_std = train_scores.std(axis=1)
+    val_mean = val_scores.mean(axis=1)
+    val_std = val_scores.std(axis=1)
+
+    fig, ax = new_figure(figsize=(8.4, 5.4))
+    ax.fill_between(sizes, train_mean - train_std, train_mean + train_std,
+                    alpha=0.15, color=PALETTE[0], linewidth=0)
+    ax.plot(sizes, train_mean, marker="o", lw=1.9, color=PALETTE[0],
+            label=f"training score ({train_mean[-1]:.3g})")
+    ax.fill_between(sizes, val_mean - val_std, val_mean + val_std,
+                    alpha=0.15, color=PALETTE[1], linewidth=0)
+    ax.plot(sizes, val_mean, marker="s", lw=1.9, color=PALETTE[1],
+            label=f"CV score ({val_mean[-1]:.3g})")
+
+    gap = float(train_mean[-1] - val_mean[-1])
+    verdict = (
+        "gap ≈ %.2f — overfitting dominates, more data alone will not close it"
+        % gap
+        if gap > 0.15
+        else "curves converging — additional data has diminishing returns"
+    )
+    ax.set_xlabel("training samples")
+    ax.set_ylabel(scoring or "score")
+    ax.set_title(f"{title}\n{verdict}")
     ax.legend(loc="lower right", fontsize=9)
     return fig
 

@@ -235,7 +235,13 @@ def plot_top_ligands(
     ax.barh(positions, frame["energy"].to_numpy(), color=PALETTE[0], alpha=0.88,
             height=0.62, edgecolor="white")
     for pos, value in zip(positions, frame["energy"].to_numpy()):
-        ax.text(value, pos, f" {value:.3g}", va="center", ha="left", fontsize=9)
+        # energies are negative in practice: annotate OUTSIDE the bar tip
+        # (ha="right" puts the label left of a negative bar end) instead
+        # of on top of the coloured bar
+        ax.text(
+            value, pos, f" {value:.3g}", va="center",
+            ha="right" if value < 0 else "left", fontsize=9,
+        )
     ax.set_yticks(positions, frame["ligand"].tolist())
     ax.set_xlabel("best binding energy (kcal/mol) — lower is stronger")
     ax.set_title(title)

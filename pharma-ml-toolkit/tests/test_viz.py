@@ -28,6 +28,7 @@ from pharmaml.ml import (  # noqa: E402
 )
 from pharmaml.viz import (  # noqa: E402
     HTMLReport,
+    plot_calibration_curve,
     plot_class_distribution,
     plot_confusion_matrix,
     plot_cv_scores,
@@ -37,6 +38,7 @@ from pharmaml.viz import (  # noqa: E402
     plot_top_ligands,
     plot_receptor_atom_types,
     plot_feature_importance,
+    plot_learning_curve,
     plot_model_comparison,
     plot_predicted_vs_actual,
     plot_residuals,
@@ -119,6 +121,13 @@ class TestConfusionMatrix:
         with pytest.raises(DataValidationError):
             plot_confusion_matrix([[1, 0], [0, 1]], labels=["a", "b", "c"])
 
+    def test_float_dtype_matrix(self, close_all):
+        """Regression: a float-dtype matrix used to hit the ':d' format
+        code and raise ``ValueError: Unknown format code 'd'``."""
+        fig = plot_confusion_matrix(np.array([[4.0, 1.0], [0.0, 5.0]]))
+        annotations = [t.get_text() for t in fig.axes[0].texts]
+        assert any("4" in text for text in annotations)
+
 
 class TestRocCurves:
     def test_binary(self, trained_classifier, close_all):
@@ -143,6 +152,62 @@ class TestRocCurves:
         model = RidgeClassifier().fit([[0], [1], [2], [3]], [0, 1, 0, 1])
         with pytest.raises(ModelError):
             plot_roc_curves(model, [[0], [1]], [0, 1])
+
+
+class TestCalibrationCurve:
+    def test_binary_with_brier(self, trained_classifier, close_all):
+        result, _, X_test, y_test = trained_classifier
+        fig = plot_calibration_curve(result.model, X_test, y_test)
+        labels = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+        assert any("Brier" in label for label in labels)
+        assert any("perfectly calibrated" in label for label in labels)
+
+    def test_multiclass_one_curve_per_class(self, close_all):
+        from sklearn.datasets import make_classification as mk
+        from sklearn.linear_model import LogisticRegression
+
+        X, y = mk(n_samples=150, n_features=5, n_informative=4, n_redundant=0,
+                   n_classes=3, n_clusters_per_class=1, random_state=3)
+        model = LogisticRegression(max_iter=2000).fit(X, y)
+        fig = plot_calibration_curve(model, X, y)
+        labels = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+        assert len(labels) == 4  # 3 one-vs-rest curves + the diagonal reference
+
+    def test_model_without_proba_rejected(self, close_all):
+        from sklearn.linear_model import RidgeClassifier
+
+        model = RidgeClassifier().fit([[0], [1], [2], [3]], [0, 1, 0, 1])
+        with pytest.raises(ModelError):
+            plot_calibration_curve(model, [[0], [1]], [0, 1])
+
+    def test_rejects_single_bin(self, trained_classifier, close_all):
+        result, _, X_test, y_test = trained_classifier
+        with pytest.raises(DataValidationError, match="n_bins"):
+            plot_calibration_curve(result.model, X_test, y_test, n_bins=1)
+
+
+class TestLearningCurve:
+    def test_curves_and_verdict(self, close_all):
+        from sklearn.datasets import make_classification as mk
+        from sklearn.ensemble import RandomForestClassifier
+
+        X, y = mk(n_samples=120, n_features=6, n_informative=4, random_state=7)
+        model = RandomForestClassifier(n_estimators=25, random_state=0)
+        fig = plot_learning_curve(model, X, y, cv=3, scoring="accuracy",
+                                  train_sizes=np.linspace(0.3, 1.0, 4))
+        labels = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+        assert any(label.startswith("training score") for label in labels)
+        assert any(label.startswith("CV score") for label in labels)
+        title = fig.axes[0].get_title()
+        assert "converging" in title or "overfitting" in title  # the verdict line
+        assert len(fig.axes[0].collections) == 2  # ± std bands
+
+    def test_rejects_single_fold(self, close_all):
+        from sklearn.datasets import make_classification as mk
+
+        X, y = mk(n_samples=40, n_features=4, random_state=1)
+        with pytest.raises(DataValidationError, match="cv"):
+            plot_learning_curve("not a model", X, y, cv=1)  # type: ignore[arg-type]
 
 
 class TestRegressionPlots:
@@ -273,6 +338,28 @@ class TestPharmaPlots:
         with pytest.raises(DataValidationError):
             plot_dose_accumulation(dose=100, tau=8, vd=40)
 
+    def test_dose_accumulation_validates_regimen_up_front(self, close_all):
+        """Regression: a typo'd regimen (negative dose, impossible
+        bioavailability) used to be caught deep inside accumulation_ratio
+        or plotted silently as negative concentrations."""
+        with pytest.raises(DataValidationError, match="dose"):
+            plot_dose_accumulation(dose=-500, tau=8, t_half=6, vd=40)
+        with pytest.raises(DataValidationError, match="tau"):
+            plot_dose_accumulation(dose=500, tau=0, t_half=6, vd=40)
+        with pytest.raises(DataValidationError, match="vd"):
+            plot_dose_accumulation(dose=500, tau=8, t_half=6, vd=-40)
+        with pytest.raises(DataValidationError, match="bioavailability"):
+            plot_dose_accumulation(dose=500, tau=8, t_half=6, vd=40, f=1.5)
+
+    def test_concentration_profile_default_auc_uses_package_trapezoid(self, close_all):
+        """The no-summary/no-auc path must go through pharmaml's own
+        auc_trapezoid (numpy>=1.24 has no np.trapezoid)."""
+        t = np.array([0.0, 2.0, 4.0])
+        c = np.array([0.0, 6.0, 0.0])
+        fig = plot_concentration_profile(t, c)
+        legend_texts = [text.get_text() for text in fig.axes[0].get_legend().get_texts()]
+        assert any(text.startswith("AUC = 12") for text in legend_texts)  # triangle: ½·4·6
+
 
 # ---------------------------------------------------------------- chem
 class TestChemPlots:
@@ -332,6 +419,13 @@ class TestDockingPlots:
         summary = self._summary()
         fig = plot_top_ligands(summary, top_n=5)
         assert len(fig.axes[0].patches) == 5
+
+    def test_top_ligands_annotate_outside_negative_bars(self, close_all):
+        """Regression: value labels used to be drawn on top of the bar
+        for the usual negative energies — they must sit outside the tip."""
+        fig = plot_top_ligands(self._summary(), top_n=5)
+        alignments = [text.get_ha() for text in fig.axes[0].texts]
+        assert alignments and set(alignments) == {"right"}  # all energies < 0
 
     def test_energy_fallback_column(self, close_all):
         summary = self._summary().rename(columns={"best_lowest_energy": "top_lowest_energy"})
@@ -446,6 +540,15 @@ class TestTableExport:
         export_table(frame, tmp_path / "t.md", max_rows=5)
         body = (tmp_path / "t.md").read_text().splitlines()
         assert len([ln for ln in body if ln.startswith("|")]) == 7  # header+rule+5
+
+    def test_max_rows_zero_is_not_falsy_shows_all(self, tmp_path):
+        """Regression: ``if max_rows`` treated 0 as None and showed every
+        row; ``max_rows=0`` is a valid show-nothing request."""
+        frame = pd.DataFrame({"a": range(3)})
+        export_table(frame, tmp_path / "t.html", max_rows=0)
+        html_text = (tmp_path / "t.html").read_text()
+        assert "<td>" not in html_text          # no data rows rendered
+        assert "3 more row(s) truncated" in html_text
 
 
 class TestHTMLReport:

@@ -10,7 +10,10 @@ layer for **all** toolkit codes:
                   :func:`plot_model_comparison`,
                   :func:`plot_class_distribution`,
                   :func:`plot_feature_importance`,
-                  :func:`plot_cv_scores`;
+                  :func:`plot_cv_scores`,
+                  :func:`plot_calibration_curve` (reliability diagram
+                  + Brier score), :func:`plot_learning_curve`
+                  (data-size vs CV score);
 * pharmaceutics — :func:`plot_concentration_profile` (linear + semi-log
                   with shaded AUC), :func:`plot_dose_accumulation`
                   (steady-state envelope);
@@ -56,10 +59,12 @@ from pharmaml.viz.docking_plots import (
     plot_top_ligands,
 )
 from pharmaml.viz.ml_plots import (
+    plot_calibration_curve,
     plot_class_distribution,
     plot_confusion_matrix,
     plot_cv_scores,
     plot_feature_importance,
+    plot_learning_curve,
     plot_model_comparison,
     plot_predicted_vs_actual,
     plot_residuals,
@@ -88,10 +93,12 @@ __all__ = [
     "require_matplotlib",
     "save_figure",
     # ML figures
+    "plot_calibration_curve",
     "plot_class_distribution",
     "plot_confusion_matrix",
     "plot_cv_scores",
     "plot_feature_importance",
+    "plot_learning_curve",
     "plot_model_comparison",
     "plot_predicted_vs_actual",
     "plot_residuals",
