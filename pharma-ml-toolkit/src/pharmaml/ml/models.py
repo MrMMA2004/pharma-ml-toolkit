@@ -427,9 +427,20 @@ def build_voting(
     """Build a voting ensemble (upgrades Voting.py / Voting reg.py).
 
     ``voting='soft'`` (probability averaging) requires all members to
-    expose ``predict_proba``.
+    expose ``predict_proba``; ``voting='hard'`` (majority vote) works
+    for every estimator and for **any number of classes**.
     """
     estimators = [(name, build_model(name, task)) for name in base_models]
     if task == "classification":
+        if voting == "soft":
+            unsupported = [
+                name for name, est in estimators if not hasattr(est, "predict_proba")
+            ]
+            if unsupported:
+                raise ModelError(
+                    f"voting='soft' needs predict_proba on every member; "
+                    f"{unsupported} lack it. Use voting='hard' (works for "
+                    "binary and multiclass) or drop those models."
+                )
         return VotingClassifier(estimators=estimators, voting=voting, weights=weights)
     return VotingRegressor(estimators=estimators, weights=weights)

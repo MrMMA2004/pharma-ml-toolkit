@@ -64,6 +64,33 @@ _PRIMARY_METRIC = {
     "regression": "neg_root_mean_squared_error",
 }
 
+#: Multiclass-safe fallback for classifiers without ``predict_proba``
+#: (e.g. ``ridge_classifier``): ``roc_auc_*`` needs probability (or at
+#: least decision-function) scores, so those models are scored by
+#: balanced accuracy instead of silently producing NaN folds.
+_CLASSIFICATION_FALLBACK_METRIC = "balanced_accuracy"
+
+
+def _select_scorer(pipeline: Pipeline, task: str) -> str:
+    """Pick the CV metric for ``pipeline``.
+
+    Classification estimators exposing ``predict_proba`` (logistic
+    regression, forests, SVM with ``probability=True``, ...) are scored
+    by one-vs-one ROC-AUC, which works for **binary and multiclass**
+    targets alike.  Estimators without probabilities fall back to
+    balanced accuracy, a label-only metric that also supports any
+    number of classes.
+    """
+    if task == "classification" and not hasattr(pipeline, "predict_proba"):
+        _LOG.info(
+            "Estimator lacks predict_proba; scoring CV folds with %s "
+            "instead of %s",
+            _CLASSIFICATION_FALLBACK_METRIC,
+            _PRIMARY_METRIC["classification"],
+        )
+        return _CLASSIFICATION_FALLBACK_METRIC
+    return _PRIMARY_METRIC[task]
+
 
 def train_model(
     name: str,
@@ -122,7 +149,7 @@ def train_model(
 
     started = time.perf_counter()
     if tune and prefixed:
-        scorer = _PRIMARY_METRIC[task]
+        scorer = _select_scorer(pipeline, task)
         _LOG.info("Tuning %s (%s) over %d parameter combinations",
                   name, task, int(np.prod([len(v) for v in prefixed.values()])))
         search = GridSearchCV(
@@ -191,7 +218,11 @@ def compare_models(
         Workers per estimator evaluation.
     scoring:
         Primary metric; defaults to ROC-AUC (one-vs-one) for
-        classification and negative RMSE for regression.
+        classification and negative RMSE for regression.  When the
+        default is used and *any* compared classifier lacks
+        ``predict_proba`` (e.g. ``ridge_classifier``), the whole board
+        falls back to balanced accuracy so every row stays comparable
+        — both metrics support binary **and multiclass** targets.
 
     Returns
     -------
@@ -226,14 +257,29 @@ def compare_models(
             if spec.task not in {task, "both"}:
                 raise ModelError(f"Model {name!r} does not support {task}")
 
-    metric = scoring or _PRIMARY_METRIC[task]
+    # All models in one leaderboard must be scored by the same metric:
+    # when *any* member lacks predict_proba (ridge_classifier ...) the
+    # whole board falls back to balanced accuracy (multiclass-safe).
+    pipelines: dict[str, Pipeline] = {
+        name: Pipeline([("prep", build_preprocessor()), ("est", build_model(name, task))])
+        for name in models
+    }
+    metric = scoring or _select_scorer(pipelines[models[0]], task)
+    if (
+        scoring is None
+        and task == "classification"
+        and any(not hasattr(p, "predict_proba") for p in pipelines.values())
+    ):
+        metric = _CLASSIFICATION_FALLBACK_METRIC
+        _LOG.info(
+            "Leaderboard contains classifier(s) without predict_proba; "
+            "scoring all models with %s", metric
+        )
+
     rows: list[dict[str, Any]] = []
     for name in models:
+        pipeline = pipelines[name]
         try:
-            estimator = build_model(name, task)
-            pipeline = Pipeline(
-                [("prep", build_preprocessor()), ("est", estimator)]
-            )
             result = cross_validate(
                 pipeline, X, y, cv=cv, scoring=metric, n_jobs=n_jobs
             )

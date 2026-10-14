@@ -5,7 +5,9 @@ the hardcoded CSV filename at the bottom, run it".  One command covers
 training, comparison, conversion, PK analysis and docking scans::
 
     pharmaml ml train    --data qsar.csv --target Target --model random_forest
+    pharmaml ml train    --data qsar.csv --task auto        # infer classification/regression
     pharmaml ml compare  --data qsar.csv --target Target --task classification
+    pharmaml data inspect --data qsar.csv                  # audit your own file
     pharmaml chem pic50  --data activity.xlsx --column "IC50 (nM)"
     pharmaml pharma pk   --data profile.csv --time time_h --conc conc_ng_ml
     pharmaml docking scan --directory docking_run/
@@ -42,16 +44,35 @@ def _build_parser() -> argparse.ArgumentParser:
     models_parser = subparsers.add_parser("models", help="model registry utilities")
     models_parser.add_argument("action", choices=["list"], help="list available models")
 
+    # ---- data --------------------------------------------------------
+    data_parser = subparsers.add_parser(
+        "data", help="bring-your-own-data utilities (inspect user files)"
+    )
+    data_sub = data_parser.add_subparsers(dest="data_command", required=True)
+
+    inspect = data_sub.add_parser(
+        "inspect", help="audit a user CSV/Excel file before training"
+    )
+    inspect.add_argument("--data", required=True, help="CSV/TSV/Excel file to inspect")
+    inspect.add_argument(
+        "--target", default=None, help="target column (auto-detected when omitted)"
+    )
+    inspect.add_argument(
+        "--head", type=int, default=0, metavar="N",
+        help="also print the first N rows of the table",
+    )
+
     # ---- ml ----------------------------------------------------------
     ml_parser = subparsers.add_parser("ml", help="machine-learning workflows")
     ml_sub = ml_parser.add_subparsers(dest="ml_command", required=True)
 
     train = ml_sub.add_parser("train", help="train one model end-to-end")
     train.add_argument("--data", required=True, help="CSV/Excel with features+target")
-    train.add_argument("--target", default="Target", help="target column name")
+    train.add_argument("--target", default=None, help="target column (auto-detected)")
     train.add_argument("--model", default="random_forest", help="registry model name")
     train.add_argument(
-        "--task", choices=["classification", "regression"], default="classification"
+        "--task", choices=["classification", "regression", "auto"], default="auto",
+        help="task type; 'auto' infers it from the target column (default)",
     )
     train.add_argument("--test-size", type=float, default=0.2)
     train.add_argument("--cv", type=int, default=5)
@@ -60,9 +81,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     compare = ml_sub.add_parser("compare", help="cross-validated model leaderboard")
     compare.add_argument("--data", required=True)
-    compare.add_argument("--target", default="Target")
+    compare.add_argument("--target", default=None)
     compare.add_argument(
-        "--task", choices=["classification", "regression"], required=True
+        "--task", choices=["classification", "regression", "auto"], default="auto"
     )
     compare.add_argument("--cv", type=int, default=5)
     compare.add_argument("--models", nargs="*", default=None, help="subset of models")
@@ -134,41 +155,62 @@ def _cmd_models(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_cli_dataset(args: argparse.Namespace):
+    """Load the ``--data`` file via :mod:`pharmaml.data` with task inference.
+
+    Both ``ml train`` and ``ml compare`` accept ``--task auto`` (the
+    default), which lets :func:`pharmaml.data.load_dataset` decide
+    classification (2+ classes) vs regression from the target column.
+    """
+    from pharmaml.data import load_dataset
+
+    task = None if getattr(args, "task", "auto") == "auto" else args.task
+    return load_dataset(args.data, target=getattr(args, "target", None), task=task)
+
+
+def _cmd_data_inspect(args: argparse.Namespace) -> int:
+    from pharmaml.data import load_dataset
+
+    dataset = load_dataset(args.data, target=args.target)
+    print(dataset.summary())
+    if args.head > 0:
+        print(f"\nfirst {args.head} row(s):")
+        print(dataset.frame.head(args.head).to_string(index=False))
+    return 0
+
+
 def _cmd_ml_train(args: argparse.Namespace) -> int:
     from pharmaml.config import PipelineConfig
     from pharmaml.ml.evaluation import evaluate_model
     from pharmaml.ml.persistence import save_model
-    from pharmaml.ml.preprocessing import (
-        clean_numeric_frame,
-        make_train_test_split,
-        split_features_target,
-    )
+    from pharmaml.ml.preprocessing import make_train_test_split
     from pharmaml.ml.training import train_model
-    from pharmaml.utils.io import read_table
 
-    frame = read_table(args.data)
-    frame = clean_numeric_frame(frame, target_col=args.target)
-    X, y = split_features_target(frame, target_col=args.target)
+    dataset = _load_cli_dataset(args)
     X_train, X_test, y_train, y_test = make_train_test_split(
-        X, y, test_size=args.test_size
+        dataset.X, dataset.y, test_size=args.test_size
     )
 
     result = train_model(
-        args.model, args.task, X_train, y_train, tune=not args.no_tune, cv=args.cv
+        args.model, dataset.task, X_train, y_train, tune=not args.no_tune, cv=args.cv
     )
-    report = evaluate_model(result.model, X_test, y_test, args.task)
+    report = evaluate_model(result.model, X_test, y_test, dataset.task)
 
     config = PipelineConfig()
-    model_path = config.output_path(f"{args.model}_{args.task}.joblib")
+    model_path = config.output_path(f"{args.model}_{dataset.task}.joblib")
     save_model(
         result.model,
         model_path,
         name=result.name,
-        task=args.task,
-        features=list(X.columns),
+        task=dataset.task,
+        features=dataset.feature_names,
         best_params=result.best_params,
         metrics=report.as_dict(),
     )
+    print(f"dataset:  {dataset.n_samples} rows x {dataset.n_features} features")
+    if dataset.class_counts:
+        print(f"classes:  {dataset.class_counts}")
+    print(f"task:     {dataset.task}")
     print(f"model:    {result.name}")
     print(f"best:     {result.best_params or '(defaults)'}")
     print(f"held-out: {report}")
@@ -178,14 +220,12 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
 
 def _cmd_ml_compare(args: argparse.Namespace) -> int:
     from pharmaml.ml.models import list_models
-    from pharmaml.ml.preprocessing import clean_numeric_frame, split_features_target
     from pharmaml.ml.training import compare_models
-    from pharmaml.utils.io import read_table
 
-    frame = read_table(args.data)
-    frame = clean_numeric_frame(frame, target_col=args.target)
-    X, y = split_features_target(frame, target_col=args.target)
-    leaderboard = compare_models(X, y, args.task, models=args.models, cv=args.cv)
+    dataset = _load_cli_dataset(args)
+    leaderboard = compare_models(
+        dataset.X, dataset.y, dataset.task, models=args.models, cv=args.cv
+    )
     print(leaderboard.to_string(index=False))
 
     if not args.models:
@@ -285,6 +325,7 @@ def _cmd_docking_check(args: argparse.Namespace) -> int:
 
 _HANDLERS = {
     ("models", None): _cmd_models,
+    ("data", "inspect"): _cmd_data_inspect,
     ("ml", "train"): _cmd_ml_train,
     ("ml", "compare"): _cmd_ml_compare,
     ("chem", "pic50"): _cmd_chem_pic50,

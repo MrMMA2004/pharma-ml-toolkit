@@ -9,11 +9,13 @@ This notebook exercises **every domain** of the `pharmaml` package on synthetic 
 
 | Section | Domain | What you see |
 |---|---|---|
-| 1 | `pharmaml.ml` | dataset → split → cross-validated training → evaluation → save/load |
-| 2 | `pharmaml.ml` | model-comparison leaderboard |
-| 3 | `pharmaml.pharma` | non-compartmental PK, renal function, dosage design |
-| 4 | `pharmaml.docking` | Vina output parsing + ligand-efficiency scoring |
-| 5 | `pharmaml.chem` | IC50 → pIC50 endpoint conversion |
+| 1 | `pharmaml.data` | **bring your own file**: CSV → target auto-detection → task inference (multiclass / regression) |
+| 2 | `pharmaml.ml` | dataset → split → cross-validated training → evaluation → save/load |
+| 3 | `pharmaml.ml` | multiclass classification (3 classes) end-to-end |
+| 4 | `pharmaml.ml` | model-comparison leaderboard |
+| 5 | `pharmaml.pharma` | non-compartmental PK, renal function, dosage design |
+| 6 | `pharmaml.docking` | Vina output parsing + ligand-efficiency scoring |
+| 7 | `pharmaml.chem` | IC50 → pIC50 endpoint conversion |
 
 **Setup** — install the package first:
 
@@ -25,36 +27,61 @@ No external datasets are required; every number below is generated with fixed se
 so the notebook is fully reproducible.
 """
 
+MD_DATA = """\
+## 1 · Bring your own data
+
+`pharmaml.data.load_dataset` is the entry point for **your own files** (CSV/TSV/Excel):
+it auto-detects the target column, infers whether the endpoint is classification
+(**any number of classes**, string or integer labels) or regression, drops
+non-numeric feature columns visibly, and reports class balance before training.
+
+CLI equivalent:
+
+```bash
+pharmaml data inspect --data my_compounds.csv --target activity
+pharmaml ml train   --data my_compounds.csv --task auto
+```
+"""
+
 MD_ML = """\
-## 1 · Machine learning (QSAR)
+## 2 · Machine learning (QSAR)
 
 Synthetic binary-activity table → stratified split → `random_forest` with 5-fold
 cross-validated grid search → held-out evaluation → artifact round-trip.
 """
 
+MD_MULTICLASS = """\
+## 3 · Multiclass classification (two or more classes)
+
+A target with 3+ distinct values is handled natively: stratified splits keep every
+class in both partitions, metrics are macro-averaged, the confusion matrix is k×k
+and ROC-AUC switches to one-vs-rest.
+"""
+
 MD_LEADERBOARD = """\
-## 2 · Model leaderboard
+## 4 · Model leaderboard
 
 `compare_models` cross-validates several registry models and returns a
-`DataFrame` sorted by the primary metric (ROC-AUC, one-vs-one).
+`DataFrame` sorted by the primary metric (ROC-AUC, one-vs-one — falling back to
+balanced accuracy when a member lacks `predict_proba`).
 """
 
 MD_PHARMA = """\
-## 3 · Pharmaceutical calculations
+## 5 · Pharmaceutical calculations
 
 Non-compartmental analysis of a plasma profile, then renal function
 (Cockcroft–Gault), BSA scaling (Mosteller) and regimen design.
 """
 
 MD_DOCKING = """\
-## 4 · Molecular docking
+## 6 · Molecular docking
 
 Parsing a Vina output table and adding **ligand efficiency**
 (`LE = |ΔG| / N_heavy`) — the size-normalised affinity metric.
 """
 
 MD_CHEM = """\
-## 5 · Endpoint conversion
+## 7 · Endpoint conversion
 
 pIC50 is the log-transformed IC50 that QSAR models actually regress on.
 """
@@ -70,6 +97,31 @@ import pandas as pd
 from pharmaml import __version__
 
 print(f"pharmaml {__version__}")"""
+))
+
+cells.append(nbformat.v4.new_markdown_cell(MD_DATA))
+
+cells.append(nbformat.v4.new_code_cell(
+"""import tempfile
+from pathlib import Path
+
+from pharmaml.data import infer_task, load_dataset
+
+# Simulate a user file: descriptors + string target + SMILES metadata column.
+rng = np.random.default_rng(5)
+user = pd.DataFrame(rng.normal(size=(180, 6)), columns=[f"descr_{i}" for i in range(6)])
+user["activity"] = rng.choice(["inactive", "weak", "active"], size=180, p=[0.45, 0.35, 0.20])
+user["SMILES"] = "CCO(C)C"
+
+tmp = Path(tempfile.mkdtemp()) / "my_compounds.csv"
+user.to_csv(tmp, index=False)          # <- replace with your own path
+
+ds = load_dataset(tmp)                  # target auto-detected -> 'activity'
+print(ds.summary())
+print("\\nclasses:", ds.classes)
+print("dropped non-numeric columns:", ds.dropped_columns)
+print("task inference on a pIC50-like target:",
+      infer_task(pd.Series(np.linspace(4, 9, 100))))"""
 ))
 
 cells.append(nbformat.v4.new_markdown_cell(MD_ML))
@@ -123,6 +175,30 @@ save_model(
 )
 loaded_model, metadata = load_model("artifacts/rf_demo.joblib")
 print("Reloaded:", metadata["name"], "| accuracy", round(metadata["metrics"]["accuracy"], 3))"""
+))
+
+cells.append(nbformat.v4.new_markdown_cell(MD_MULTICLASS))
+
+cells.append(nbformat.v4.new_code_cell(
+"""from sklearn.datasets import make_classification as _mk
+
+X3, y3 = _mk(
+    n_samples=300, n_features=8, n_informative=6, n_redundant=0,
+    n_classes=3, n_clusters_per_class=1, random_state=8,
+)
+multi = pd.DataFrame(X3, columns=[f"descr_{i:02d}" for i in range(X3.shape[1])])
+multi["Target"] = y3
+
+X_tr, X_te, y_tr, y_te = make_train_test_split(
+    multi.drop(columns=["Target"]), multi["Target"], test_size=0.25
+)
+mc = train_model("logistic_regression", "classification", X_tr, y_tr, tune=False)
+mc_report = evaluate_model(mc.model, X_te, y_te, "classification")
+
+print(f"3-class accuracy={mc_report.accuracy:.3f}  f1_macro={mc_report.f1_macro:.3f}  "
+      f"roc_auc(ovr)={mc_report.roc_auc:.3f}")
+print("classes present in train and test folds:", sorted(y_tr.unique()), sorted(y_te.unique()))
+print("k x k confusion matrix:\\n", mc_report.confusion)"""
 ))
 
 cells.append(nbformat.v4.new_markdown_cell(MD_LEADERBOARD))

@@ -46,7 +46,14 @@ function findNode(node: TreeNode, path: string): TreeNode | null {
   return null;
 }
 
-const QUICKSTART = `# --- Pharmaceutical calculations -------------------------------
+const QUICKSTART = `# --- Bring your own data -----------------------------------------
+from pharmaml.data import load_dataset
+
+ds = load_dataset("my_compounds.csv", target="activity")
+print(ds.task)          # 'classification' (2+ classes) or 'regression'
+print(ds.class_counts)  # {'active': 120, 'inactive': 190, ...}
+
+# --- Pharmaceutical calculations -------------------------------
 from pharmaml.pharma import (
     creatinine_clearance, bsa_mosteller,
     loading_dose, maintenance_dose, auc_trapezoid,
@@ -69,11 +76,11 @@ from pharmaml.ml import (
     make_train_test_split,
 )
 
-X_tr, X_te, y_tr, y_te = make_train_test_split(X, y, test_size=0.2)
-result = train_model("random_forest", "classification",
+X_tr, X_te, y_tr, y_te = make_train_test_split(ds.X, ds.y, test_size=0.2)
+result = train_model("random_forest", ds.task,
                      X_tr, y_tr, cv=5, tune=True)
 print(result.cv_mean, result.cv_std)      # 5-fold ROC-AUC mean +/- std
-report = evaluate_model(result.model, X_te, y_te, "classification")
+report = evaluate_model(result.model, X_te, y_te, ds.task)
 
 # --- Docking -----------------------------------------------------
 from pharmaml.docking import (
@@ -169,7 +176,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "177 passing pytest cases across every domain",
+    after: "227 passing pytest cases across every domain",
   },
   {
     aspect: "Distribution",
@@ -222,8 +229,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "51";
-  const loc = stats ? fmtInt(stats.totalLines) : "8,258";
+  const fileCount = stats ? fmtInt(stats.files) : "58";
+  const loc = stats ? fmtInt(stats.totalLines) : "10,670";
 
   /* Live metadata for the featured walkthrough notebook in the hero. */
   const notebookMeta = useMemo(
@@ -304,8 +311,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="177"
-                countTo={177}
+                value="227"
+                countTo={227}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

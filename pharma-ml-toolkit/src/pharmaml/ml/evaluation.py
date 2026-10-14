@@ -131,7 +131,9 @@ def evaluate_model(
         On invalid task or prediction-length mismatch.
     """
     y_true = np.asarray(y_test)
-    y_pred = model.predict(X_test)
+    # Some backends (notably CatBoost) return predictions shaped (n, 1)
+    # instead of (n,) — flatten so label concatenation always works.
+    y_pred = np.asarray(model.predict(X_test)).reshape(-1)
     if len(y_pred) != len(y_true):
         raise ModelError(
             f"prediction length {len(y_pred)} != target length {len(y_true)}"
@@ -159,7 +161,9 @@ def evaluate_model(
             balanced_accuracy=float(balanced_accuracy_score(y_true, y_pred)),
             f1_macro=float(f1_score(y_true, y_pred, average="macro")),
             f1_weighted=float(f1_score(y_true, y_pred, average="weighted")),
-            precision_macro=float(precision_score(y_true, y_pred, average="macro", zero_division=0)),
+            precision_macro=float(
+                precision_score(y_true, y_pred, average="macro", zero_division=0)
+            ),
             recall_macro=float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
             mcc=float(matthews_corrcoef(y_true, y_pred)),
             roc_auc=roc_auc,

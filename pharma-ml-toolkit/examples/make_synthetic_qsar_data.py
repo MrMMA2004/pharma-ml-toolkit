@@ -24,21 +24,60 @@ def make_classification_table(
     n_informative: int = 8,
     n_noise: int = 12,
     seed: int = 42,
+    n_classes: int = 2,
+    class_labels: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Synthetic descriptor table with a binary ``Target`` column."""
+    """Synthetic descriptor table with a ``Target`` column of 2+ classes.
+
+    ``n_classes=2`` (default) reproduces the original binary table
+    exactly; ``n_classes=3`` or more produces a multiclass target so the
+    full pipeline (comparison, tuning, metrics, stratified splits) can
+    be exercised on multi-label endpoints.
+
+    class_labels:
+        Optional string names mapped onto the integer classes (e.g.
+        ``['low', 'medium', 'high']``); must match ``n_classes``.
+    """
     from sklearn.datasets import make_classification
 
-    X, y = make_classification(
-        n_samples=n_samples,
-        n_features=n_informative + n_noise,
-        n_informative=n_informative,
-        n_redundant=0,
-        weights=[0.55, 0.45],
-        random_state=seed,
-    )
+    if n_classes < 2:
+        raise ValueError(f"n_classes must be >= 2, got {n_classes}")
+    if class_labels is not None and len(class_labels) != n_classes:
+        raise ValueError(
+            f"class_labels has {len(class_labels)} entries but n_classes={n_classes}"
+        )
+
+    if n_classes == 2:
+        # Keep the historical binary generation untouched.
+        X, y = make_classification(
+            n_samples=n_samples,
+            n_features=n_informative + n_noise,
+            n_informative=n_informative,
+            n_redundant=0,
+            weights=[0.55, 0.45],
+            random_state=seed,
+        )
+    else:
+        # Slightly imbalanced multiclass weights (e.g. 40/35/25 for 3).
+        raw = np.linspace(1.4, 0.6, n_classes)
+        weights = list(raw / raw.sum())
+        X, y = make_classification(
+            n_samples=n_samples,
+            n_features=n_informative + n_noise,
+            n_informative=max(n_informative, n_classes),
+            n_redundant=0,
+            n_classes=n_classes,
+            n_clusters_per_class=1,
+            weights=weights,
+            random_state=seed,
+        )
+
     feature_names = [f"descr_{i:03d}" for i in range(X.shape[1])]
     frame = pd.DataFrame(X, columns=feature_names)
-    frame["Target"] = y
+    if class_labels is not None:
+        frame["Target"] = [class_labels[int(label)] for label in y]
+    else:
+        frame["Target"] = y
     return frame
 
 
@@ -81,12 +120,16 @@ def main() -> None:
     parser.add_argument("--out", default="data", help="output directory")
     parser.add_argument("--n", type=int, default=400, help="samples per table")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--classes", type=int, default=2, metavar="K",
+        help="number of classes for the classification table (>= 2)",
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    cls_table = make_classification_table(args.n, seed=args.seed)
+    cls_table = make_classification_table(args.n, seed=args.seed, n_classes=args.classes)
     cls_table.to_csv(out_dir / "synthetic_classification.csv", index=False)
 
     reg_table = make_regression_table(args.n, seed=args.seed)
@@ -95,8 +138,9 @@ def main() -> None:
     pk_table = make_pk_profile()
     pk_table.to_csv(out_dir / "synthetic_pk_profile.csv", index=False)
 
-    print(f"Wrote {len(cls_table)} classification rows, {len(reg_table)} "
-          f"regression rows and a {len(pk_table)}-point PK profile to '{out_dir}'.")
+    print(f"Wrote {len(cls_table)} classification rows ({args.classes} classes), "
+          f"{len(reg_table)} regression rows and a {len(pk_table)}-point PK profile "
+          f"to '{out_dir}'.")
 
 
 if __name__ == "__main__":

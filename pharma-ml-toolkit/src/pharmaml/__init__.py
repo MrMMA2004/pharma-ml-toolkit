@@ -3,6 +3,10 @@
 The package consolidates three domains into one coherent, typed and
 tested codebase:
 
+* :mod:`pharmaml.data`     -- bring your own data: ``load_dataset``
+  reads user CSV/TSV/Excel files, auto-detects the target column,
+  infers classification (2+ classes) vs regression and audits data
+  quality.
 * :mod:`pharmaml.chem`     -- cheminformatics helpers (unit/endpoint
   conversion, descriptors, fingerprints, Tanimoto similarity).
 * :mod:`pharmaml.ml`       -- QSAR machine learning (preprocessing,

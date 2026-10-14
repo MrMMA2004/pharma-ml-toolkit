@@ -5,14 +5,15 @@ domains into one coherent package:
 
 | Domain | What it does |
 |---|---|
-| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry, cross-validated training, evaluation, persistence |
+| **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
+| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry, cross-validated training (binary **and multiclass**), evaluation, persistence |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design |
 | **`pharmaml.docking`** | Molecular docking — ligand/grid preparation, AutoDock4 & Vina batch workflows, result parsing, scoring |
 | **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity |
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (177 tests).
+exceptions, input validation, and pytest coverage** (227 tests).
 
 ---
 
@@ -75,13 +76,14 @@ pharma-ml-toolkit/
 │   ├── exceptions.py        # PharmaMLError hierarchy
 │   ├── logger.py            # configured logging (console + optional file)
 │   ├── config.py            # ToolConfig: paths, random seed, verbosity
+│   ├── data.py              # bring your own data: load_dataset, infer_task, summarize
 │   ├── cli.py               # `pharmaml` command-line interface
 │   ├── chem/                # converters, descriptors, similarity
 │   ├── ml/                  # preprocessing, models, training, evaluation, persistence
 │   ├── pharma/              # units, pk, pd, dosage
 │   ├── docking/             # preparation, workflow, parsing, scoring
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 177 pytest cases across all domains
+├── tests/                   # 227 pytest cases across all domains
 ├── examples/                # runnable demos + pharmaml_walkthrough.ipynb (executed notebook)
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
@@ -94,33 +96,87 @@ pharma-ml-toolkit/
 
 ## Quickstart
 
+### Bringing your own data (CSV / TSV / Excel)
+
+`pharmaml.data` is the single entry point for **your own files** — the legacy scripts
+hardcoded dataset filenames in ~30 places, so using a different file meant editing source
+code. Point `load_dataset()` at any file instead:
+
+```python
+from pharmaml.data import load_dataset
+
+# 1. Load the file (CSV/TSV/TXT/XLSX/XLS; delimiter sniffed automatically,
+#    semicolon- and tab-separated European exports included).
+ds = load_dataset("my_compounds.csv", target="activity")
+
+# 2. Inspect before training.
+print(ds.summary())
+# source        : my_compounds.csv
+# shape         : 350 rows x 41 columns (40 numeric features)
+# target        : activity
+# task          : classification
+# classes (3)   : 'active': 120, 'inactive': 190, 'partial': 40
+# dropped cols  : SMILES, Name  [non-numeric]
+
+# 3. Train — ds.X / ds.y are ready for any pharmaml.ml function.
+from pharmaml.ml import train_model, evaluate_model
+from pharmaml.ml.preprocessing import make_train_test_split
+
+X_train, X_test, y_train, y_test = make_train_test_split(ds.X, ds.y)
+result = train_model("random_forest", ds.task, X_train, y_train)
+report = evaluate_model(result.model, X_test, y_test, ds.task)
+```
+
+What it does for you:
+
+* **Target auto-detection** — when `target` is omitted, common column names
+  (`Target`, `class`, `label`, `activity`, `pIC50`, `y`, …) are tried, case-insensitively.
+* **Task inference** — `infer_task()` treats any non-numeric target (or a numeric target
+  with 2–`max_class_count` distinct values) as classification and continuous targets as
+  regression; pass `task=` explicitly to override.
+* **Multiclass out of the box** — 2, 3, 10 classes: string or integer labels both work.
+* **Visible cleanup** — rows with a missing target are dropped (logged), non-numeric
+  feature columns (SMILES, IDs) are excluded and reported in `dropped_columns`.
+
+No-code alternative via the CLI:
+
+```bash
+pharmaml data inspect --data my_compounds.csv --target activity --head 5
+pharmaml ml train  --data my_compounds.csv --target activity --task auto
+pharmaml ml compare --data my_compounds.csv --target activity
+```
+
+`--task auto` (the default) infers classification vs regression from the target column, so
+the same command works for a binary, multiclass or pIC50 endpoint file.
+
 ### Machine learning (QSAR)
 
 ```python
 import pandas as pd
+from pharmaml.data import load_dataset
 from pharmaml.ml import (
     clean_numeric_frame, make_train_test_split, train_model,
     evaluate_model, compare_models, save_model, load_model,
 )
 
-frame = clean_numeric_frame(pd.read_csv("dataset.csv"), target_col="Target")
+ds = load_dataset("dataset.csv", target="Target")   # or build frames yourself:
+frame = ds.frame                                        # clean_numeric_frame etc.
 X_train, X_test, y_train, y_test = make_train_test_split(
-    frame.drop(columns=["Target"]), frame["Target"], test_size=0.2
+    ds.X, ds.y, test_size=0.2
 )
 
-result = train_model("random_forest", "classification", X_train, y_train, cv=5, tune=True)
+result = train_model("random_forest", ds.task, X_train, y_train, cv=5, tune=True)
 print(f"CV ROC-AUC {result.cv_mean:.3f} ± {result.cv_std:.3f} in {result.fit_seconds:.1f}s")
 print("Best params:", result.best_params)
 
-report = evaluate_model(result.model, X_test, y_test, "classification")
+report = evaluate_model(result.model, X_test, y_test, ds.task)
 print(f"accuracy={report.accuracy:.3f}  f1={report.f1_macro:.3f}  roc_auc={report.roc_auc:.3f}")
 
 save_model(result.model, "artifacts/rf.joblib", name="random_forest",
            task="classification", metrics={"accuracy": report.accuracy})
 model, metadata = load_model("artifacts/rf.joblib")
 
-leaderboard = compare_models(frame.drop(columns=["Target"]), frame["Target"],
-                             "classification", cv=5)
+leaderboard = compare_models(ds.X, ds.y, ds.task, cv=5)
 print(leaderboard.head())   # one row per model, sorted by CV metric
 ```
 
@@ -132,6 +188,37 @@ Registry models: `logistic_regression`, `ridge_classifier`, `svm`, `knn`, `decis
 `random_forest`, `adaboost`, `ann`, `lasso`, `ridge`, `elastic_net`, `linear_regression`,
 plus `xgboost` / `lightgbm` / `catboost` when the optional packages are installed.
 `list_models()` shows what is available in *your* environment.
+
+#### Multiclass classification (two or more classes)
+
+Every classification component supports **any number of classes**, not just binary:
+
+```python
+from pharmaml.data import load_dataset
+from pharmaml.ml import train_model, evaluate_model
+from pharmaml.ml.preprocessing import make_train_test_split
+
+# A target column with 3+ distinct values is automatically multiclass.
+ds = load_dataset("my_compounds.csv", target="activity")   # e.g. low/medium/high
+X_train, X_test, y_train, y_test = make_train_test_split(ds.X, ds.y)  # stratified
+
+result = train_model("random_forest", "classification", X_train, y_train)
+report = evaluate_model(result.model, X_test, y_test, "classification")
+print(report.confusion)   # k x k confusion matrix
+print(report.roc_auc)     # one-vs-rest multiclass AUC
+```
+
+* Splits are **stratified**, so every class appears in train *and* test folds.
+* Metrics are macro/weighted-averaged (`f1_macro`, `precision_macro`, …) plus a k×k
+  confusion matrix and one-vs-rest ROC-AUC; MCC and balanced accuracy are multiclass-native.
+* `compare_models()` scores with one-vs-one ROC-AUC — and falls back to balanced accuracy
+  when a compared model lacks `predict_proba` (e.g. `ridge_classifier`), so leaderboards
+  never silently fill with NaN.
+* `build_voting(..., voting="hard")` works for any classifier and any class count;
+  `voting="soft"` validates that every member exposes `predict_proba` and tells you which
+  ones don’t.
+* Generate multiclass demo data: `python examples/make_synthetic_qsar_data.py --classes 3`
+  or `python examples/run_classification.py --classes 3`.
 
 ### Pharmaceutical calculations
 
@@ -185,8 +272,10 @@ consensus = consensus_rescore(scores, columns=["vina", "ad4"])     # 0–1 combi
 ```
 pharmaml --version
 pharmaml models                       # list available registry models
-pharmaml ml train --data data.csv --target Target --model random_forest --cv 5
-pharmaml ml compare --data data.csv --target Target
+pharmaml data inspect --data my.csv --target activity --head 5
+pharmaml ml train --data my.csv --target activity --task auto
+pharmaml ml train --data my.csv --model random_forest --cv 5
+pharmaml ml compare --data my.csv --target activity
 pharmaml chem pic50 --data data.csv --column "IC50 (nM)" --unit nM
 pharmaml chem descriptors --data data.csv --smiles-col SMILES
 pharmaml pharma pk --data conc.csv --time time --conc conc
@@ -217,14 +306,17 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (177 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (227 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```
 
 The suite covers: PK/PD/dosage math (against hand-computed references), unit conversion
-round-trips, ML pipeline behaviour (splits, metrics, persistence round-trip), docking parsers
-(synthetic DLG/Vina/PDBQT fixtures), scoring functions, and converter edge cases.
+round-trips, ML pipeline behaviour (splits, metrics, persistence round-trip), **user-data
+loading (CSV/Excel, delimiter sniffing, target auto-detection, multiclass and regression
+inference)**, **multiclass end-to-end flows (3–4 classes, scorer fallbacks, ensembles)**,
+docking parsers (synthetic DLG/Vina/PDBQT fixtures), scoring functions, and converter
+edge cases.
 
 ## CI
 

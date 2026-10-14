@@ -43,7 +43,7 @@ pip install -e ".[chem]"
 pip install -e ".[boosting]"
 
 # 3. verify the installation
-python -m pytest          # 177 tests should pass
+python -m pytest          # 227 tests should pass
 pharmaml --version`;
 
 function countFiles(node: TreeNode): number {
@@ -90,8 +90,8 @@ const FEATURED_FILES: Array<{
 
 function collectDirSummary(root: TreeNode): Array<{ name: string; files: number; note: string }> {
   const notes: Record<string, string> = {
-    src: "the pharmaml package (chem, ml, pharma, docking, utils + CLI)",
-    tests: "177 pytest cases across all domains",
+    src: "the pharmaml package (data, chem, ml, pharma, docking, utils + CLI)",
+    tests: "227 pytest cases across all domains",
     examples: "runnable end-to-end demos on synthetic data",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -272,7 +272,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="177" label="passing tests" />
+          <StatChip icon={CircleCheck} value="227" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}

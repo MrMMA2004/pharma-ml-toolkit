@@ -29,6 +29,30 @@ _CSV_LIKE = {".csv", ".tsv", ".txt"}
 _EXCEL_LIKE = {".xlsx", ".xls", ".xlsm"}
 
 
+def _read_csv_sniffing(file_path: Path) -> pd.DataFrame:
+    """Read a delimited text file, sniffing the separator when needed.
+
+    ``pd.read_csv`` defaults to comma and only raises ``ParserError``
+    on *malformed* files — a purely semicolon- or tab-delimited file
+    silently parses as one giant column (common with European-locale
+    Excel exports).  When that happens, re-read with the separator
+    found inside the mangled header.
+    """
+    try:
+        frame = pd.read_csv(file_path)
+    except pd.errors.ParserError:
+        frame = pd.read_csv(file_path, sep=";")
+    if frame.shape[1] == 1:
+        header = str(frame.columns[0])
+        for sep in (";", "\t", "|"):
+            if sep in header:
+                try:
+                    return pd.read_csv(file_path, sep=sep)
+                except pd.errors.ParserError:
+                    continue
+    return frame
+
+
 def read_table(path: str | Path, sheet_name: str | int = 0) -> pd.DataFrame:
     """Read a CSV/TSV or Excel file into a DataFrame.
 
@@ -36,7 +60,7 @@ def read_table(path: str | Path, sheet_name: str | int = 0) -> pd.DataFrame:
     ----------
     path:
         Input file path.  The reader is chosen by extension; CSV files
-        are sniffed for their delimiter (comma/semicolon/tab).
+        are sniffed for their delimiter (comma/semicolon/tab/pipe).
     sheet_name:
         Excel sheet to read (ignored for CSV-like inputs).
 
@@ -58,12 +82,7 @@ def read_table(path: str | Path, sheet_name: str | int = 0) -> pd.DataFrame:
     suffix = file_path.suffix.lower()
     try:
         if suffix in _CSV_LIKE:
-            # Try comma first, fall back to semicolon (common with
-            # European-locale exports) then tab.
-            try:
-                frame = pd.read_csv(file_path)
-            except pd.errors.ParserError:
-                frame = pd.read_csv(file_path, sep=";")
+            frame = _read_csv_sniffing(file_path)
         elif suffix in _EXCEL_LIKE:
             frame = pd.read_excel(file_path, sheet_name=sheet_name)
         else:

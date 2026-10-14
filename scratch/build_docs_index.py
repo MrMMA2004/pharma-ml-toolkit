@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 MODULES = [
     ("pharmaml", "Package root: exceptions + version"),
+    ("pharmaml.data", "Bring your own data: load user CSV/TSV/Excel files"),
     ("pharmaml.chem", "Cheminformatics: converters, descriptors, similarity"),
     ("pharmaml.ml", "QSAR machine learning: preprocessing → training → evaluation → persistence"),
     ("pharmaml.pharma", "Pharmaceutical calculations: units, PK, PD, dosage"),
@@ -67,8 +68,9 @@ lines += [
     "## Command-line interface",
     "",
     "```text",
-    "pharmaml models | ml train | ml compare | chem pic50 | chem descriptors",
-    "             | pharma pk | pharma dose | docking scan | docking check",
+    "pharmaml models | data inspect | ml train | ml compare | chem pic50",
+    "             | chem descriptors | pharma pk | pharma dose | docking scan",
+    "             | docking check",
     "```",
     "",
     "See `pharmaml/cli.py` for every flag, and `README.md` for the full manual.",

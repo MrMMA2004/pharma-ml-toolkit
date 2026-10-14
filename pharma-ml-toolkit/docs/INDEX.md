@@ -18,6 +18,19 @@ after adding new public functions.
 | `UnitConversionError` | class | Raised for unknown units or dimensionally invalid conversions. |
 | `__version__` | constant |  |
 
+## `pharmaml.data`
+
+*Bring your own data: load user CSV/TSV/Excel files*
+
+| Symbol | Kind | Summary |
+|---|---|---|
+| `TARGET_CANDIDATES` | constant |  |
+| `Dataset` | class | A user-supplied dataset split into features and target. |
+| `DatasetSummary` | class | Human-readable audit of a loaded dataset. |
+| `load_dataset` | function | Load **your own** data file and split it ready for training. |
+| `summarize_dataset` | function | Audit a :class:`Dataset` for obvious data-quality problems. |
+| `infer_task` | function | Decide ``'classification'`` or ``'regression'`` from a target column. |
+
 ## `pharmaml.chem`
 
 *Cheminformatics: converters, descriptors, similarity*
@@ -127,8 +140,9 @@ after adding new public functions.
 ## Command-line interface
 
 ```text
-pharmaml models | ml train | ml compare | chem pic50 | chem descriptors
-             | pharma pk | pharma dose | docking scan | docking check
+pharmaml models | data inspect | ml train | ml compare | chem pic50
+             | chem descriptors | pharma pk | pharma dose | docking scan
+             | docking check
 ```
 
 See `pharmaml/cli.py` for every flag, and `README.md` for the full manual.

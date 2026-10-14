@@ -45,10 +45,11 @@ REGENERATE_HINT = (
     "    python scratch/build_docs_index.py"
 )
 
-#: Modules that must always keep a section in the index (the five public
+#: Modules that must always keep a section in the index (the six public
 #: top-level modules plus the two documented ``utils`` submodules).
 REQUIRED_MODULES: tuple[str, ...] = (
     "pharmaml",
+    "pharmaml.data",
     "pharmaml.chem",
     "pharmaml.ml",
     "pharmaml.pharma",
