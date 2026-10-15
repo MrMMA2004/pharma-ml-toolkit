@@ -41,6 +41,26 @@ export async function GET() {
         "*/src/*.egg-info/*",
         "*.egg-info",
         "*.egg-info/*",
+        // Local virtualenvs / tool caches must never ship — a stray `uv venv`
+        // inside the toolkit once added 265 MB to the archive.
+        ".venv/*",
+        "*/.venv/*",
+        "venv/*",
+        "*/venv/*",
+        "env/*",
+        "*/env/*",
+        ".git/*",
+        "*/.git/*",
+        ".ruff_cache/*",
+        "*/.ruff_cache/*",
+        ".mypy_cache/*",
+        "*/.mypy_cache/*",
+        ".tox/*",
+        "*/.tox/*",
+        ".idea/*",
+        "*/.idea/*",
+        ".vscode/*",
+        "*/.vscode/*",
       ],
       { cwd: TOOLKIT_ROOT }
     );

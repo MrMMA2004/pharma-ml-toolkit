@@ -159,7 +159,10 @@ def compare_tables(
         When ``True`` (default) names are whitespace-stripped, file
         extensions (``.pdbqt``, ...) removed and letter case folded
         before comparing, so ``LIGAND1.pdbqt`` equals ``ligand1``.
-        The two flags below fine-tune which steps run.
+        The two flags below fine-tune which steps run.  Names that
+        normalise to the empty string (blank or whitespace-only cells)
+        are dropped from the comparison instead of being reported as a
+        phantom empty ligand shared by both tables.
     strip_extension:
         Strip the file extension during normalization (default ``True``).
     lowercase:
@@ -194,10 +197,17 @@ def compare_tables(
         series = frame[column].dropna().astype(str)
         if not normalize:
             return set(series)
-        return {
+        normalized = {
             _normalize_name(value, strip_extension=strip_extension, lowercase=lowercase)
             for value in series
         }
+        # Blank cells (whitespace-only, or empty strings) normalise to ""
+        # -- they are not ligand names and must not surface as a phantom
+        # "" ligand shared by both tables.  A bare ".pdbqt" cell keeps
+        # splitext dotfile semantics (it stays a literal name, matching
+        # the rar-era scripts).
+        normalized.discard("")
+        return normalized
 
     set_a = _values(frame_a)
     set_b = _values(frame_b)

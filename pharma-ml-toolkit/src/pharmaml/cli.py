@@ -364,6 +364,76 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     vina_scan.add_argument("--dir", required=True, help="directory tree with Vina logs")
 
+    campaign = docking_sub.add_parser(
+        "campaign",
+        help="campaign-tree file management (distribute / cleanup / delete-named / list)",
+    )
+    campaign_sub = campaign.add_subparsers(dest="campaign_command", required=True)
+
+    campaign_list = campaign_sub.add_parser(
+        "list", help="list file stems of one folder (optionally to a CSV)"
+    )
+    campaign_list.add_argument("--dir", required=True, help="folder whose files are listed")
+    campaign_list.add_argument(
+        "--ext", default=".csv", help="file extension to filter by (default .csv)"
+    )
+    campaign_list.add_argument(
+        "--out", default=None, help="optional single-column CSV (name header)"
+    )
+
+    campaign_distribute = campaign_sub.add_parser(
+        "distribute",
+        help="copy files into every immediate sub-directory (receptor/binaries push)",
+    )
+    campaign_distribute.add_argument(
+        "--dir", required=True, help="target directory whose sub-directories receive copies"
+    )
+    campaign_distribute.add_argument(
+        "--file",
+        action="append",
+        required=True,
+        dest="files",
+        help="source file to distribute (repeatable)",
+    )
+    campaign_distribute.add_argument(
+        "--overwrite", action="store_true", help="replace existing destination files"
+    )
+
+    campaign_cleanup = campaign_sub.add_parser(
+        "cleanup",
+        help="delete every file not on the keep-list (allowlist + regex)",
+    )
+    campaign_cleanup.add_argument("--dir", required=True, help="tree to clean")
+    campaign_cleanup.add_argument(
+        "--keep",
+        action="append",
+        default=[],
+        help="filename to preserve (repeatable)",
+    )
+    campaign_cleanup.add_argument(
+        "--keep-pattern",
+        default=None,
+        help="regex filenames must match to survive, e.g. '^\\d+\\.pdbqt$'",
+    )
+    campaign_cleanup.add_argument(
+        "--remove-empty",
+        action="store_true",
+        help="also remove directories left (or already) empty",
+    )
+    campaign_cleanup.add_argument(
+        "--dry-run", action="store_true", help="preview without deleting anything"
+    )
+
+    campaign_delete = campaign_sub.add_parser(
+        "delete-named",
+        help="delete every file with one name anywhere under a tree",
+    )
+    campaign_delete.add_argument("--dir", required=True, help="tree to sweep")
+    campaign_delete.add_argument("--name", required=True, help="filename to remove")
+    campaign_delete.add_argument(
+        "--dry-run", action="store_true", help="count without deleting"
+    )
+
     return parser
 
 
@@ -934,6 +1004,57 @@ def _cmd_docking_vina_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_docking_campaign(args: argparse.Namespace) -> int:
+    """Dispatch ``pharmaml docking campaign <verb>`` sub-commands."""
+    from pharmaml.docking import (
+        cleanup_tree,
+        delete_named_files,
+        distribute_files,
+        list_file_names,
+    )
+
+    verb = args.campaign_command
+    if verb == "list":
+        names = list_file_names(args.dir, extension=args.ext, out_path=args.out)
+        for name in names:
+            print(name)
+        print(f"{len(names)} file stem(s)")
+        return 0
+    if verb == "distribute":
+        written = distribute_files(args.files, args.dir, overwrite=args.overwrite)
+        for destination in written:
+            print(destination)
+        print(
+            f"{len(written)} cop(y/ies) written"
+            + (" (overwrite on)" if args.overwrite else "")
+        )
+        return 0
+    if verb == "cleanup":
+        report = cleanup_tree(
+            args.dir,
+            keep=args.keep,
+            keep_pattern=args.keep_pattern,
+            remove_empty=args.remove_empty,
+            dry_run=args.dry_run,
+        )
+        print(report.to_string(index=False))
+        n_deleted = int((report["action"] == "deleted").sum())
+        n_dirs = int((report["action"] == "removed_dir").sum())
+        print(
+            f"{n_deleted} file(s) deleted, {n_dirs} director(y/ies) removed"
+            + (" (dry run)" if args.dry_run else "")
+        )
+        return 0
+    if verb == "delete-named":
+        deleted = delete_named_files(args.dir, filename=args.name, dry_run=args.dry_run)
+        print(
+            f"{deleted} file(s) named {args.name!r} "
+            + ("would be deleted (dry run)" if args.dry_run else "deleted")
+        )
+        return 0
+    return 2  # pragma: no cover - argparse guards this
+
+
 _HANDLERS = {
     ("models", None): _cmd_models,
     ("data", "inspect"): _cmd_data_inspect,
@@ -957,6 +1078,7 @@ _HANDLERS = {
     ("docking", "torsion"): _cmd_docking_torsion,
     ("docking", "gpf-scan"): _cmd_docking_gpf_scan,
     ("docking", "vina-scan"): _cmd_docking_vina_scan,
+    ("docking", "campaign"): _cmd_docking_campaign,
 }
 
 

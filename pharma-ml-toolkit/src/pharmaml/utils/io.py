@@ -96,6 +96,18 @@ def read_table(path: str | Path, sheet_name: str | int = 0) -> pd.DataFrame:
         raise DataValidationError(f"Failed to parse '{file_path}': {exc}") from exc
 
     frame.columns = [str(col).strip() for col in frame.columns]
+    duplicated = sorted(
+        {col for col in frame.columns if list(frame.columns).count(col) > 1}
+    )
+    if duplicated:
+        # Two headers that differed only in surrounding whitespace ("Ligand"
+        # vs "Ligand ") collapse here; pandas would then hand every
+        # column access a DataFrame instead of a Series and fail far away
+        # from the real cause.
+        raise DataValidationError(
+            f"Duplicate column name(s) after stripping whitespace in {file_path}: "
+            f"{duplicated} -- rename the conflicting header(s) in the source file"
+        )
     _LOG.debug("Read %d rows x %d columns from %s", len(frame), frame.shape[1], file_path)
     return frame
 
@@ -133,6 +145,15 @@ def ensure_directory(path: str | Path) -> Path:
 
 _UNSAFE_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
 
+#: Windows reserved device names -- a file named e.g. ``CON.csv`` cannot be
+#: created on Windows (and is a nuisance in several archives/cloud drives).
+#: Map every reserved bare name to a safe prefixed variant.
+_RESERVED_WINDOWS = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+
 
 def safe_filename(name: str, replacement: str = "_") -> str:
     """Sanitise a string into a portable filename.
@@ -140,7 +161,23 @@ def safe_filename(name: str, replacement: str = "_") -> str:
     Replaces whitespace, unicode and reserved characters with
     ``replacement`` and collapses repeats, so artefacts created from
     ligand names or SMILES remain valid across operating systems.
+
+    Portability guards beyond the character whitelist:
+
+    * Windows reserved device names (``CON``, ``PRN``, ``AUX``, ``NUL``,
+      ``COM1``..``COM9``, ``LPT1``..``LPT9``) are prefixed with an
+      underscore -- with or without an extension (``CON.csv`` counts);
+    * trailing dots or spaces are stripped (Windows silently drops them,
+      which breaks round-trips on other systems);
+    * names consisting only of dots (``.``/``..``/``...``) fall back to
+      ``unnamed``.
     """
     cleaned = _UNSAFE_CHARS.sub(replacement, name.strip())
     cleaned = replacement.join(part for part in cleaned.split(replacement) if part)
-    return cleaned[:200] or "unnamed"
+    cleaned = cleaned[:200].rstrip(". ")
+    if len(replacement) == 1:
+        cleaned = cleaned.rstrip(replacement)
+    stem = cleaned.split(".", 1)[0].upper()
+    if stem in _RESERVED_WINDOWS:
+        cleaned = f"_{cleaned}"
+    return cleaned or "unnamed"

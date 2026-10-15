@@ -763,3 +763,259 @@ Stage Summary:
 - Files NEW: scratch/patch_ml_notebook.py. Files EDITED: pharma/pd.py, docking/scoring.py, viz/chem_plots.py (+ typing import fix), viz/__init__.py, cli.py, README.md (registry list, §9 outline, twin size, CLI fence, viz fence, counts), docs/INDEX.md (regen, 169), tests/test_pd.py, tests/test_docking.py, tests/test_viz.py, tests/test_cli_features.py, examples/complete_ml_workflow.ipynb (re-executed + twins), overview.tsx (QUICKSTART + fallbacks), page.tsx (fallbacks + footer count), download-panel.tsx (counts), ligand-reconciler.tsx (copy buttons + counters).
 - Unresolved/risks: (1) sandbox resets recur (3rd time this project) — recovery = uv pip install rdkit meeko gemmi + `-e . --no-deps` + re-fetch tests/data/1crn.pdb & examples/data/lysozyme_1aki.pdb; (2) cron vanished 6× — check `cron list` (currently job 460039, alive); (3) after any notebook rebuild re-run scratch/strip_notebook_outputs.py (parity guard); (4) the patch scripts are idempotent (re-running is a no-op once inserted).
 - Next-phase candidates: (1) surface the Huber demo + plot_table_comparison in the Explorer's ML-notebook hero card copy; (2) a `pharmaml campaign` CLI group consolidating the file-management verbs (collect/cleanup/distribute/reindex); (3) Playground "Docking Parser" tab could gain a torsion-QA mini-widget mirroring check_torsion_consistency; (4) consider a calibration mini-widget for plot_calibration_curve (older candidate, still open); (5) keep frontend fallbacks in sync (92/35,355/627) as the tree grows.
+
+---
+Task ID: 100x-tracker
+Agent: Main orchestrator (Z.ai Code) — trace 1a13c9846693d609
+Task: "Do 100 rounds long run task" — review → troubleshoot → improve engineering details, 100 consecutive rounds.
+
+Work Log:
+- Baseline verified: 627 passed / 2 skipped (exit 0); live tree 92 files / 35,355 LOC via /api/toolkit/tree; dev server HTTP 200; rdkit 2026.09.1 present (no sandbox reset this session); ZIP 108 entries.
+- cron job 460153 recreated (7th recreation — vanished again overnight); every future session MUST check `cron list` first.
+- Round tracker established: rounds are recorded below as Task IDs `100x-NN` (NN = 01..100). Each round = substantive review + improvement + verification. The 15-min cron (460153) counts toward rounds too — it should number its work as the next unused `100x-NN`.
+- Round themes pool: (1) deep review of newest modules (tables/standardize/approvals/campaign); (2) `pharmaml campaign` CLI group; (3) torsion-QA playground widget; (4) calibration mini-widget; (5) notebook sections (torsion-QA + campaign); (6) styling detail passes; (7) docs/INDEX consistency sweeps; (8) error-message typing/docstring sweeps on older modules; (9) test-coverage gaps in CLI; (10) frontend fallback sync after count changes.
+
+Stage Summary:
+- 100-round loop initialized at baseline 627/2, 92 files, 35,355 LOC, 169 API symbols, 19 CLI subcommands, ZIP 108.
+- Rounds completed so far: 0 / 100.
+
+---
+Task ID: 100x-01
+Agent: Main orchestrator (Z.ai Code) — trace 1a13c9846693d609
+Task: Round 1/100 — deep review of chem/tables.py + pharma/approvals.py.
+
+Work Log:
+- Reviewed tables.py and approvals.py line by line; approvals.py clean (normalization, error messages, sentinel handling all correct).
+- Found + fixed a real defect in compare_tables: whitespace-only cells normalise to "" and could surface as a phantom "" ligand in `common` (two blank cells in different tables counted as a *shared* ligand). Fix: `normalized.discard("")` in `_values`; docstring documents blank-name dropping.
+- Kept splitext dotfile semantics for bare ".pdbqt" cells (parity with rar originals) — pinned by a dedicated test.
+- +3 regression tests (TestMissingSentinels): blank-name drop, bare-extension dotfile semantics, all-blank buckets empty.
+
+Stage Summary:
+- Suite 627 → 630 passed / 2 skipped (exit 0). 1 silent-correctness bug fixed with regression pins.
+
+---
+Task ID: 100x-02
+Agent: Main orchestrator (Z.ai Code) — trace 1a13c9846693d609
+Task: Round 2/100 — campaign.py review + `pharmaml docking campaign` CLI group.
+
+Work Log:
+- Reviewed campaign.py line by line. Found one real inconsistency: cleanup_tree(dry_run=True, remove_empty=True) reported file deletions but silently skipped dir-removal previews — users couldn't see which folders would disappear.
+- Fixed: bottom-up would-be-empty computation during the same os.walk (planned_deleted + would_be_empty sets); dry-run now emits "removed_dir" rows for folders that are empty already or whose entire contents are slated for deletion. Real-run path untouched (same live-filesystem checks). Docstring documents the preview semantics.
+- NEW CLI group `pharmaml docking campaign` with 4 verbs (list / distribute / cleanup / delete-named), completing CLI coverage of campaign.py alongside existing `docking collect` + `gpf-scan`. Dispatched via _cmd_docking_campaign on a third-level campaign_command dest.
+- +7 tests: 2 campaign.py (preview w/o touching disk incl. nested subtree; preview == real-run outcome) + 5 CLI (list w/ CSV out, distribute w/ skip-existing re-run, cleanup dry-run + real, delete-named dry-run + real).
+- README: CLI fence gained the 4 campaign verbs; tests count 626 → 637.
+- Smoke-tested all verbs end-to-end in /tmp (preview matched real run exactly; distribute skip-existing verified).
+
+Stage Summary:
+- Suite 630 → 637 passed / 2 skipped (exit 0). CLI now has 23 subcommands (19 docking-family incl. the new 4-verb campaign group).
+- Files EDITED: docking/campaign.py, cli.py, README.md, tests/test_campaign.py, tests/test_cli_features.py.
+
+---
+Task ID: 100x-03
+Agent: frontend-styling-expert subagent
+Task: Round 3/100 — Torsion QA mini-widget in the Docking Parser playground tab.
+
+Work Log:
+- Read worklog tail (100x-tracker/01/02), the full docking-parser.tsx, playground.tsx, ligand-reconciler.tsx (presentational idioms), and the Python reference pharmaml/docking/ligands.py::check_torsion_consistency to mirror its counting rules line by line (trimmed-line TORSDOF last-wins/ignore-malformed, `REMARK` + `" A "` substring, `BRANCH` prefix, auto→mgltools-when-remarks>0-else-meeko, three-way vs two-way invariant).
+- Implemented the widget inside src/components/explorer/playground/docking-parser.tsx as a new card below the results block: textarea (aria-label "Paste ligand PDBQT content", thin-scrollbar min-h-[140px] max-h-64, live useMemo recompute), Load example / Load mismatch / Clear buttons, an accessible RadioGroup convention selector (auto/mgltools/meeko with per-option hints), three count chips (text-[10px] uppercase label + font-mono text-lg font-semibold tabular-nums value), detected-convention readout, dot-indicator status badge (emerald tokens for OK, destructive for MISMATCH — no blue/indigo anywhere), one-line invariant explanation (role=status), dashed muted empty-state hint, and the footer parity line "pharmaml.docking.check_torsion_consistency(path, convention=…) / pharmaml docking torsion --dir <folder>" with the live convention interpolated.
+- Matched the tab's existing idioms: Card overflow-hidden py-0 shadow-sm + CardHeader border-b bg-muted/30 py-3 + icon box pattern, h-8 px-2.5 text-[11px] sample buttons, sessionStorage persistence under "pharmaml.torsionQa" following the exact loadDockingInput failure-tolerant pattern, toast.success on sample loads, grid-cols-1 → sm:grid-cols-[minmax(0,1fr)_212px] responsive layout.
+- Mismatch example picked per the verification spec (overrides the earlier "TORSDOF 3" suggestion): TORSDOF 2 / 1 active REMARK / 2 BRANCH — MISMATCH under auto & mgltools, OK under meeko, so the meeko flip is demonstrable; the OK example is a 2/2/2 MGLTools-style ligand (8 ATOM lines, 2 `REMARK … A …` lines, 2 BRANCH/ENDBRANCH pairs, TORSDOF 2).
+- Parity-tested the JS mirror against the real Python API: both designed samples across all 3 conventions, a handcrafted edge-case file (malformed/bare/indented/negative TORSDOF, last-wins, "REMARK A" without trailing space, lowercase brANCH, ENDBRANCH) and a 200-file randomized fuzz — 200/200 identical [torsdof, remarks, branches, ok] tuples (an initial apparent mismatch wave was a sort-order bug in the comparison harness, not the logic).
+- Verified in agent-browser: Playground → Docking Parser tab → Load example shows chips 2/2/2 + OK badge + "TORSDOF 2 = 2 active torsion remarks = 2 BRANCH records — the torsion tree is consistent."; Load mismatch shows MISMATCH + "TORSDOF 2 ≠ 1 active torsion remarks — the torsion tree is inconsistent."; switching the radio to meeko flips it to OK with the Meeko-convention note; pinned mgltools stays MISMATCH; Clear returns the dashed empty hint; reload+re-navigate restores the persisted input with no hydration errors. Zero console/page errors throughout; keyboard Tab from the textarea lands on the checked radio (radix roving tabindex, focus-visible ring present); mobile 390px: scrollWidth 390 == clientWidth, zero child elements beyond the viewport, VLM screenshot review passes (chips aligned, badge unclipped, radios legible) on desktop and mobile.
+- bun run lint exit 0; bunx tsc --noEmit reports zero errors for docking-parser.tsx (remaining project errors are pre-existing in examples/, skills/, src/lib/store.ts — untouched).
+
+Stage Summary:
+- Docking Parser playground tab gained the client-side Torsion QA mini-widget: a faithful mirror of pharmaml.docking.check_torsion_consistency (200/200 fuzz parity vs the Python API), with count chips, convention radiogroup, OK/MISMATCH badge, mismatch explanations, two teaching examples and the CLI parity footer. Layout, a11y (aria-label/radiogroup/role=status/aria-live), responsiveness (390px overflow-free) and sessionStorage persistence all verified live in the browser with a clean console; lint exit 0.
+- Files EDITED: src/components/explorer/playground/docking-parser.tsx (only file changed; +2 imports: lucide ListTree, ui RadioGroup/RadioGroupItem).
+
+
+---
+Task ID: 100x-04
+Agent: Main orchestrator (Z.ai Code) — trace 1a13c9846693d609
+Task: Round 4/100 — frontend sync for the Round-2/3 backend+widget work.
+
+Work Log:
+- overview.tsx QUICKSTART "Campaign management" stanza extended with distribute_files + cleanup_tree lines (mirror of the new CLI verbs); upgrade-table "Testing" row 626 → 637; passing-tests StatChip value/countTo 626 → 637; LOC fallback 35,355 → 35,686.
+- page.tsx hero "626 tests" → 637; FALLBACK_STATS lines 35,355 → 35,686 (live tree: 92 files / 35,686 LOC after this round's edits).
+- download-panel.tsx: three 626 references → 637 (pytest fence comment, meta description, StatChip).
+- bun run lint exit 0.
+
+Stage Summary:
+- All frontend count surfaces now agree with the live tree (92 / 35,686 / 637). Suite unchanged at 637 passed / 2 skipped.
+
+
+---
+Task ID: 100x-05
+Agent: general-purpose subagent
+Task: Round 5/100 — docking notebook torsion-QA + campaign-housekeeping section.
+
+Work Log:
+- Read worklog tail (100x-tracker/01–04), the existing patch scripts (patch_docking_notebook.py/2.py, patch_ml_notebook.py), strip_notebook_outputs.py, pharmaml/docking/campaign.py + ligands.py (TorsionCheck/scan semantics), and the full 48-cell docking notebook to find the real variable names (WORK, LIGAND_DIR from §3, LIGAND_FOLDERS from §1, DOCKING_DIR + DOCKING_DIR/collected from §6).
+- Probed both new code cells standalone against the live API before patching: aspirin audits 4/0/4 OK (Meeko rule), the crafted bad PDBQT (TORSDOF 3 / 2 active REMARKs / 2 BRANCHes) audits MISMATCH under auto (MGLTools three-way rule); cleanup_tree(dry_run, keep={"r.dlg"}, remove_empty) preview over the §6 tree gives kept 13 / deleted 26 / removed_dir 2 (08_benzocaine + collected/), and collect_files dry-run reports 13 files / 0 copied.
+- Wrote idempotent scratch/patch_docking_notebook3.py (modeled on patch_docking_notebook2.py + patch_ml_notebook.py's NotebookClient resources-path cwd fix): inserts markdown intro + torsion-QA cell + campaign-housekeeping cell + CLI-twin outro before the old §7 header; renumbers headers §7–§11 → §8–§12 (exact-match, uniqueness-checked); renumbers the title stage table (new §7 row, §7–§10 → §8–§11); adds the "Campaign sweep" recap row; re-executes the whole notebook in-place (nbclient, timeout 900, thread-limit env) and re-runs strip_notebook_outputs.py. Re-running the script prints "already present — nothing to do".
+- New §7 content: scan_torsion_consistency(LIGAND_DIR) + check_torsion_consistency on a temp bad_torsions.pdbqt combined into one 4-row report (3 OK + 1 MISMATCH, pinned by two asserts); collect_files(dry_run=True) preview (13 files, 0 copied), cleanup_tree(keep={"r.dlg"}, remove_empty=True, dry_run=True) 41-row preview DataFrame with the removed_dir rows, distribute_files of campaign_notes.txt into §1's 8 ligand folders + delete_named_files sweep (8 pushed / 8 swept — the notebook stays idempotent). Markdown intro explains the MGLTools TORSDOF==REMARKs==BRANCHes vs Meeko TORSDOF==BRANCHes invariants and cites the rar originals (niggamatch.py/mismatch2.py, dlg_extracter.py, adder.py, delete.py); outro lists the CLI twins (docking torsion / collect / campaign list-distribute-cleanup-delete-named).
+- Verified: 52 cells (48+4), 38 code cells, 0 error outputs; no-output twin regenerated (92 KB from 300 KB, sources parity-checked); tests/test_notebook_variants.py + tests/test_docs_index.py all green; full suite via junitxml: 639 tests, 0 failures, 0 errors, 2 skipped = 637 passed, exit code 0.
+- README docking-notebook §-outline updated: new §7 entry + §8–§11 renumber (+ stale "§4 grid box + GPF" corrected to GPF/DPF). README's CLI fence already carried all campaign verbs from 100x-02; no docking twin size was mentioned, so no size edit needed.
+- Dev-server tree after edits: 93 files (+1: the new patch script itself), 36,691 totalLines (was 92 / 35,686) — frontend fallbacks need the orchestrator's sync.
+
+Stage Summary:
+- Docking notebook: 48 → 52 cells, new §7 "Torsion QA & campaign housekeeping" (markdown intro + torsion-QA cell with deliberate MISMATCH row + dry-run campaign sweep cell + CLI outro), §7–§11 renumbered to §8–§12 in headers/title table, recap gains the Campaign sweep row. Executed with 0 error outputs; no-output twin regenerated; guards pass.
+- Suite: 637 passed / 2 skipped (exit 0, junitxml-verified). Tree: 93 files / 36,691 lines via /api/toolkit/tree (orchestrator to sync 92→93 files + 35,686→36,691 LOC fallbacks).
+- Files NEW: scratch/patch_docking_notebook3.py. Files EDITED: examples/complete_docking_workflow.ipynb, examples/complete_docking_workflow_no_output.ipynb (regenerated), README.md (docking outline), worklog.md (this section).
+
+---
+Task ID: 100x-06
+Agent: Main orchestrator (Z.ai Code) — trace 1a13c9846693d609
+Task: Round 6/100 — frontend fallback sync + full E2E verification for rounds 2-5.
+
+Work Log:
+- Synced fallbacks to live tree 93 files / 36,691 LOC (page.tsx FALLBACK_STATS, overview.tsx loc fallback); test count 637 everywhere (already done in round 4).
+- ZIP re-downloaded via /api/toolkit/download: 109 entries (108 → 109, +scratch/patch_docking_notebook3.py); zipped notebook verified to contain the torsion section, MISMATCH demo, CLI-twins outro, and the "Campaign sweep" recap row.
+- E2E (agent-browser): hero renders 93 / 36,691 / 637 live; Playground → Docking Parser → Torsion QA widget exercised (Load example → OK, Load mismatch → MISMATCH + "TORSDOF 2 ≠ 1 active torsion remarks" explanation); console zero errors; mobile 390px scrollWidth==clientWidth, footer bottom 843.5/844 (flush).
+- bun run lint exit 0.
+
+Stage Summary:
+- Rounds 2-5 fully verified end-to-end. Baseline now: 637 passed / 2 skipped · 93 files / 36,691 LOC · ZIP 109 entries · 23 CLI subcommands.
+
+---
+Task ID: 100x-07
+Agent: frontend-styling-expert subagent (code) + Main orchestrator (verification, after subagent context-deadline timeout)
+Task: Round 7/100 — Probability Calibration mini-widget (reliability diagram) in the ML playground.
+
+Work Log:
+- NEW src/components/explorer/playground/calibration-widget.tsx (598 lines): paste `probability,label` pairs → uniform-strategy binned reliability diagram (recharts LineChart w/ dots + dashed perfect-calibration diagonal, domain [0,1]), Brier score chip, rows chip, non-empty-bins chip, bin-occupancy mini bars, n_bins select (5/10/15), Load example / Load overconfident example / Clear buttons, inline validation naming the first bad line, sessionStorage persistence (pharmaml.calibration), parity footer with live n_bins.
+- Mounted in ml-playground.tsx as a bottom card "Probability Calibration".
+- Subagent hit context deadline before verification/worklog → orchestrator verified instead:
+  - bun run lint exit 0.
+  - agent-browser: ML Training tab → widget exercised (example → chart svg + Brier 0.225 + 40 rows + legend; overconfident → 2 non-empty bins, Brier 0.46; console zero errors, only benign Fast Refresh logs).
+  - Python parity check: extracted the widget's overconfident input via eval and computed sklearn calibration_curve(strategy="uniform", n_bins=10) + brier_score_loss in the venv → rows 40, non-empty bins 2, Brier 0.46 — EXACT match with the widget's displayed values.
+  - Mobile 390px: scrollWidth == clientWidth (no overflow).
+
+Stage Summary:
+- Playground now has 6 widgets across 5 tabs (calculators, PK, ML train, torsion QA, calibration, ligand sets). Suite unchanged 637/2; tree grew by 1 file (calibration-widget.tsx) — next round must re-sync frontend fallback file/LOC counts.
+
+---
+Task ID: 100x-08
+Agent: Main orchestrator (Z.ai Code) — trace 1a13c9846693d609
+Task: Round 8/100 — incident-driven hardening: stray-venv exclusion in explorer tree + ZIP.
+
+Work Log:
+- Incident: the Round-7 subagent ran a stray `uv venv`/install inside pharma-ml-toolkit/ (creating .venv 265 MB / 7,238 files + regenerating egg-info + uv.lock). Live /api/toolkit/tree stats exploded to 6,732 files / 1.95M LOC; the ZIP route had the same exposure (zip -x list lacked venv patterns — a download in that window would have shipped 265 MB).
+- Cleanup: removed pharma-ml-toolkit/.venv and the incidentally-created uv.lock (project dependency story stays pyproject.toml + requirements.txt). Stats recovered to 93 / 36,691.
+- Hardened EXCLUDED_DIRS in src/lib/toolkit-fs.ts: + .venv, venv, env, .git, .ruff_cache, .mypy_cache, .tox, .idea, .vscode, .cache (with an explanatory comment documenting the incident).
+- Hardened the ZIP route exclusion list with matching .venv/venv/env/.git/.ruff_cache/.mypy_cache/.tox/.idea/.vscode patterns (+ incident comment).
+- Verified with a planted dummy .venv (bin/junk.txt + junk.py): tree stayed 93 files / 36,691 LOC, ZIP stayed 109 entries with zero .venv leakage; notebook + campaign CLI code confirmed intact in the served ZIP. Removed the dummy afterwards.
+- bun run lint exit 0.
+
+Stage Summary:
+- Robustness fix pinned by live test: local environments/tool caches can never again inflate explorer stats or ship inside downloads. Baseline restored: 93 files / 36,691 LOC / 637 tests / ZIP 109.
+
+---
+Task ID: 100x-09
+Agent: Main orchestrator (Z.ai Code) — trace 1a13c9846693d609
+Task: Round 9/100 — deep review of utils/io.py (+ new dedicated test module).
+
+Work Log:
+- Reviewed utils/io.py line by line. Found 2 real traps + 1 cosmetic wart:
+  1) safe_filename had no Windows-reserved-name guard (CON/PRN/AUX/NUL/COM1-9/LPT1-9, incl. "CON.csv" forms), no trailing-dot/space stripping (Windows silently drops them), and bare-dots names ("."/".."/"...") passed through. Fixed with _RESERVED_WINDOWS prefixing + rstrip guards + unnamed fallback; also strips a trailing replacement separator (single-char replacement only).
+  2) read_table's header stripping could create duplicate column labels from Excel files ("Ligand" + "Ligand ") — pandas then returns a DataFrame for every column access and downstream code fails far from the cause. Now raises DataValidationError naming the duplicated columns (CSV headers are auto-deduplicated by pandas itself, so no false positives there).
+  Cosmetic: trailing separator left behind by stripped trailing dots ("ligand . " → "ligand_" before, "ligand" now).
+- NEW tests/test_io.py — 41 tests: read_table (extension dispatch, semicolon/tab/pipe sniffing, header stripping, xlsx, missing/unsupported/malformed errors, extra-fields truncation, duplicate-header refusal), write_table (csv/xlsx/parents/unknown-ext fallback), ensure_directory, safe_filename (full guard matrix incl. 11 reserved-name parametrizations, lookalikes like "console"/"lpt" untouched, 200-char truncation).
+- Full suite 637 → 678 passed / 2 skipped (exit 0). README 637 → 678; frontend synced (94 files / 36,928 LOC / 678 tests; lint exit 0).
+
+Stage Summary:
+- The I/O foundation now has direct, dedicated coverage (was: only incidental). 2 portability/correctness traps fixed. Baseline: 678/2 · 94 files · 36,928 LOC.
+
+---
+Task ID: 100x-10
+Agent: Main orchestrator (Z.ai Code) — trace 1a13c9846693d609
+Task: Round 10/100 — E2E + ZIP verification of rounds 7-9.
+
+Work Log:
+- ZIP re-downloaded: 110 entries (109 → 110, +tests/test_io.py); zipped io.py contains both new guards (_RESERVED_WINDOWS, duplicate-column refusal); calibration widget correctly NOT in ZIP (it lives in the Next.js src tree, served by the explorer only).
+- E2E (agent-browser): fresh page renders 94 files / 36,928 LOC / 678 tests live; console zero errors; mobile 390px no horizontal overflow; footer flush (gap 0.5px).
+- bun run lint exit 0 (verified in round 9 after sync).
+
+Stage Summary:
+- Rounds 7-9 verified end-to-end. Milestone: 10/100 rounds complete. Baseline: 678 passed / 2 skipped · 94 files / 36,928 LOC · ZIP 110 · 23 CLI subcommands · 6 playground widgets.
+
+---
+Task ID: 100x-11
+Agent: general-purpose subagent
+Task: Round 11/100 — deep review of ml/training.py + ml/evaluation.py.
+
+Work Log:
+- Read the worklog tail (100x-tracker … 100x-10) for conventions/baseline; reviewed src/pharmaml/ml/training.py and src/pharmaml/ml/evaluation.py line by line (models.py + preprocessing.py read for context); probed 12 edge scenarios empirically in the venv BEFORE touching code (all defects confirmed reproducible first).
+- Defects found & fixed in compare_models (training.py):
+  1. HIGH: `models=[]` crashed with a raw `IndexError` at `pipelines[models[0]]` → now raises ModelError "models list is empty — pass registry names (see pharmaml.ml.list_models()) or None …" (also covers a hypothetical empty default list).
+  2. HIGH (silent NaN poisoning): a typo'd `scoring=` string (e.g. "acuracy") made every per-model cross_validate fail inside the broad except → the user got an all-NaN leaderboard while sklearn's informative error only reached the log → upfront validation against sklearn.metrics.get_scorer_names() raising ModelError that names the bad value.
+  3. HIGH (same family): `cv=1` produced an all-NaN leaderboard the same way → upfront guard `cv must be >= 2 folds, got 1` (message mirrors config.py + viz style).
+  4. MEDIUM: alias duplicates ("rf" + "random_forest") resolved to the same registry key and produced TWO identical leaderboard rows → resolved list deduped via dict.fromkeys (order-preserving).
+  5. LOW (error-message quality): the unknown-model re-raise degraded resolve_model_name's "Registered models: …" list to a bare "Unknown model 'x'" → try/except removed, the informative ModelError propagates verbatim.
+  6. MEDIUM: cross_validate can RETURN NaN fold scores without raising (proba-based scorers on degenerate targets — verified: single-class y + knn) so a NaN row appeared with zero pharmaml-level explanation → now logs a warning naming the model + metric ("produced NaN CV scores … keeping the row as NaN") while preserving the deliberate board-survives design.
+  7. Docstring promised "registry availability notes" in the returned frame — no such column exists (unavailable models raise; defaults only list available ones) → docstring corrected; Returns/Raises now also document the NaN-row semantics, alias collapsing, cv/scoring guards.
+- evaluation.py:
+  8. LOW-MED (error-message quality): empty y_test surfaced as a cryptic `ValueError: Found array with 0 sample(s) … required by SimpleImputer` from deep inside the fitted pipeline → explicit ModelError "y_test is empty — evaluate_model needs at least one held-out sample" raised before predict; docstring Raises updated.
+  9. Doc-level: X_test/y_test annotations (`np.ndarray` / `np.ndarray | list`) were narrower than the documented, tested and notebook-blessed inputs → widened to `pd.DataFrame | np.ndarray` / `pd.Series | np.ndarray | list` (parity with train_model); no runtime change (existing suite already exercised DataFrames).
+- Hunt categories that came up EMPTY after inspection (no defect, no invented fix): train_model is loud on every bad input (unknown model/task → ModelError with registry list; cv=1 → sklearn InvalidParameterError; single-class/1-row data → clear sklearn errors); all-NaN feature columns are dropped by SimpleImputer's own UserWarning naming the column (in-pipeline, train/test consistent); duplicate indices are positional-safe end-to-end; string labels in regression convert when numeric and raise naming the offending value ('high') otherwise; 1-row r2=NaN matches sklearn semantics (UndefinedMetricWarning + n_samples=1 visible); single-class y_test in evaluate_model yields an honest degenerate report (mcc=0, roc_auc=None, degenerate confusion + warning) — left as designed.
+- +7 regression tests appended to tests/test_ml_pipeline.py (TestTrainingEdgeCases ×6, TestEvaluationEdgeCases ×1). Every test verified to FAIL against pre-fix sources (git checkout round-trip of both modules: 7/7 failed pre-fix, 7/7 pass post-fix). The caplog-based NaN-warning test needed a `pharmaml`-logger propagate=True save/restore because CLI tests call configure_logging() which switches propagation off (pytest's caplog handler lives on the root logger) — documented inline.
+- Full suite: `/home/z/.venv/bin/python -m pytest tests/ -q --tb=short -W ignore` → exit 0, 685 passed / 2 skipped (junitxml-verified; baseline 678 + 7 new). Live tree via /api/toolkit/tree after edits: 94 files / 37,072 totalLines (was 94 / 36,928 → +144 net: training.py 325→365, evaluation.py 185→192, test_ml_pipeline.py 218→315).
+- README untouched: no documented behavior was contradicted (fixes are strictly error-path hardening — README's "leaderboards never silently fill with NaN" promise is now backed by the guards).
+
+Stage Summary:
+- Suite 678 → 685 passed / 2 skipped (exit 0). Files changed: src/pharmaml/ml/training.py, src/pharmaml/ml/evaluation.py, tests/test_ml_pipeline.py (no new files; ZIP entry count unchanged at 110).
+- LOC delta +144 (36,928 → 37,072; file count unchanged at 94). Next for orchestrator: frontend fallback sync (36,928 → 37,072 LOC, 678 → 685 tests in page.tsx FALLBACK_STATS / overview.tsx / download-panel.tsx).
+
+---
+Task ID: 100x-12
+Agent: Main orchestrator (Z.ai Code) — trace 1a13c9846693d609
+Task: Round 12/100 — frontend + README count sync for Round-11 fixes.
+
+Work Log:
+- Synced 685 tests / 94 files / 37,072 LOC across page.tsx (FALLBACK_STATS + hero), overview.tsx (loc fallback, upgrade-table row, StatChip), download-panel.tsx (3 spots), README.md (tests line). bun run lint exit 0. No stale 678/36,928 references remain.
+
+Stage Summary:
+- All surfaces agree with live tree. Baseline: 685 passed / 2 skipped · 94 files / 37,072 LOC · ZIP 110.
+
+---
+Task ID: 100x-13
+Agent: frontend-styling-expert subagent
+Task: Round 13/100 — styling detail pass (Download + API Reference tabs).
+
+Work Log:
+- Read the worklog tail (100x-tracker … 100x-12), download-panel.tsx + api-reference.tsx in full, plus code-block.tsx, stat-chip.tsx, card.tsx/button.tsx, toolkit-types.ts, format.ts, the tree/reference/download API routes and globals.css (.featured-card/.eyebrow idioms). Confirmed what exists: NO checksum/entry-verify block (only the "What's inside" card + a single INSTALL CodeBlock), module counts as plain text (no badge), empty-filter state already present (bare Search icon + "classs only" typo latent), clear-search X button missing a focus-visible ring.
+- stat-chip.tsx: flipped the label ABOVE the value with the app's micro-label idiom (text-[10px] font-medium uppercase leading-tight tracking-wide text-muted-foreground; value stays text-lg font-semibold tabular-nums) — now consistent with the playground count-chip pattern across overview hero, download CTA, docking parser and ligand reconciler.
+- download-panel.tsx (major polish):
+  - NEW local CommandStrip component (terminal-context header strip: TerminalSquare icon + mono uppercase context label "terminal" / "terminal · macOS" / "terminal · linux" + icon-only copy button with aria-label, aria-pressed, Copy→Check swap, sr-only aria-live "Copied to clipboard", focus-visible ring; body: `$` prompt + break-all mono command; optional muted hint strip).
+  - NEW "Verify the archive" card (ShieldCheck): `unzip -t` strip with CRC-32 hint, `shasum -a 256` (macOS) + `sha256sum` (linux) strips side-by-side, and an expected-contents readout (micro-labels ENTRIES/FILES/FOLDERS above mono tabular values 110/94/16, derived client-side from the EXISTING /api/toolkit/tree stats — 94 files + 16 folders == the worklog's verified ZIP entry count 110) + honest note that the ZIP is regenerated per request so its SHA-256 differs between downloads. No checksum value is displayed (would require fetching the ZIP client-side or a new API route — both forbidden), so the copy buttons copy the verification commands.
+  - Install section rebuilt as numbered steps: self-numbering circles (size-6 rounded-full border-primary/30 bg-primary/10 mono tabular-nums) joined by a connector line via self-stretch flex column; steps 1 Unpack / 2 Install (+ three pip-extras copy chips `.[chem]` `.[docking]` `.[boosting]` under a micro "EXTRAS" label, each with aria-label/title + Check feedback) / 3 Verify (`python -m pytest` + `pharmaml --version` as two compact strips). Replaces the old single INSTALL CodeBlock; 685-test count preserved in the step description.
+  - "What's inside" rows upgraded: file-count chip + NEW size chip (fmtBytes of the dir's aggregate tree size) + share % (mono, title "n of m files") + thin h-1 share bar (aria-hidden, bg-primary/35); added the missing scratch/ note; fixed the pre-existing "(root)/" trailing-slash cosmetic bug.
+  - CTA size pill gained font-mono tabular-nums. Removed now-unused CodeBlock import + unused RotateCcw import.
+- api-reference.tsx (polish):
+  - Module symbol counts upgraded from plain text to an outline Badge (mono text-[10px] tabular-nums) that shows "N symbols" normally and "N of M symbols" while a filter/search is active (moduleTotals memo from existing reference data).
+  - Subtle group separators between module cards: centered 2×(40px hairline) + Braces glyph, aria-hidden, my-2 rhythm.
+  - Symbol names get a jumpable hover/focus hint: underline (decoration-primary/40 decoration-2 underline-offset-4) on group-hover/group-focus-visible, complementing the existing arrow slide-in.
+  - Empty-filter state polished: SearchX icon in a rounded tinted circle, role="status" for SR announcement, copy split into headline + detail (fixes the latent "(classs only)" typo by using KIND_FILTERS labels; handles the empty-query + kind-filter-only case), fuzzy-typing hint line; existing Clear-filters button retained.
+  - Clear-search X button gained the missing focus-visible:ring-2 classes.
+- Fixed one JSX quote bug introduced mid-edit (stray trailing quote in the unzip -t hint attribute) caught by tsc before browser testing.
+
+Stage Summary:
+- Download tab: full verification affordance story (unzip -t CRC test + platform SHA-256 commands with copy buttons, expected-contents readout), numbered install steps with terminal strips + copyable extras chips, enriched What's-inside breakdown (sizes, share bars, scratch note). API Reference tab: module count badges with n-of-m filtering, group separators, hover-underline jump hints, polished empty-filter state. Shared StatChip now uses the micro-label-above-value idiom app-wide.
+- Verification: bun run lint exit 0; bunx tsc --noEmit clean for all touched files (only pre-existing src/lib/store.ts errors remain, untouched). agent-browser: Download tab — new details render (VLM-confirmed: terminal strips with TERMINAL header + copy buttons, 1-2-3 circles + connector line, share bars, micro-labels above stat values), copy button click → aria-pressed=true + Check icon + sr-only "Copied to clipboard" + toast, resets after 1.6s; real keyboard Tab focus shows a visible ring (VLM-confirmed teal halo). API Reference — badges "7 symbols"…"37 symbols" (9 modules, 8 separators), query "class" → "1 of 7 symbols"/"2 of 8"/"4 of 31" + "7 shown"; nonsense query "zzqxv" → empty state with SearchX + friendly copy + Clear filters button (resets both query and kind); 169/169 symbol rows carry the underline affordance. Console: ZERO errors and ZERO page errors across the whole session (only benign Fast Refresh logs). Mobile 390×844: scrollWidth == clientWidth == 390 on BOTH tabs (only the intentionally overflow-auto nav strip extends past the edge), VLM-confirmed clean single-column stacking, wrapping command strips, aligned step circles; viewport restored to 1280×800. Overview hero re-checked after the StatChip change — renders correctly with no layout problems.
+- Files EDITED: src/components/explorer/download-panel.tsx, src/components/explorer/api-reference.tsx, src/components/explorer/stat-chip.tsx. No new files, no API changes, Python package untouched.
+
+---
+Task ID: 100x-session-status (not a numbered round)
+Agent: Main orchestrator (Z.ai Code) — trace 1a13c9846693d609
+Task: Session wrap-up status for the 100-round loop (rounds 1-13 complete in this context).
+
+Work Log:
+- Rounds 100x-01 … 100x-13 completed and verified in this session (see individual sections above).
+- Final session verification: full suite 685 passed / 2 skipped (exit 0); live tree 94 files / 37,072 LOC; ZIP 110 entries with all new code confirmed inside; bun run lint exit 0; fresh-page E2E console zero errors; hero renders 94 / 37,072 / 685; mobile 390px overflow-free with flush footer.
+- cron maintenance: job 460153 had been auto-disabled ("exec limits exceeded") — deleted and recreated as job 460273 (same 15-min schedule, payload now includes the 100x-NN numbering instruction). Future sessions MUST check `cron list` first and recreate if missing/disabled.
+- Round-numbering status: next unused round ID is 100x-14.
+
+Stage Summary:
+- Progress: 13/100 rounds complete. Baseline evolution this session: 627 → 685 tests passed (+58) · 92 → 94 files · 35,355 → 37,072 LOC · ZIP 108 → 110 · CLI 19 → 23 subcommands · 5 → 6 playground widgets.
+- Major work: 3 silent-correctness bugs fixed (compare_tables phantom "" ligand; compare_models NaN-poisoned leaderboards ×2 + opaque empty-models crash); cleanup_tree dry-run dir preview; `pharmaml docking campaign` CLI group; Torsion QA + Probability Calibration playground widgets (Python-parity verified); docking notebook §7 (52 cells, 0 errors); io.py portability/correctness guards + first dedicated io tests (41); stray-venv hardening of tree+ZIP; Download/API-Reference styling detail pass.
+- Next-phase candidates for rounds 100x-14+: (a) deep review of ml/models.py + ml/persistence.py + ml/preprocessing.py (same method as 100x-11); (b) deep review of docking/parsing.py + docking/scoring.py; (c) chem/descriptors.py + chem/similarity.py review; (d) PK/PD modules review; (e) Code Explorer tab styling detail pass; (f) a `pharmaml campaign reindex` CLI verb (reindex_by_number is the only campaign.py function without a CLI twin); (g) overview QUICKSTART stanza for approvals/DGIdb if missing.

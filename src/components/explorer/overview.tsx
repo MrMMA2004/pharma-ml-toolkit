@@ -126,12 +126,15 @@ cons  = consensus_rescore(summary, columns=["best_lowest_energy"])
 from pharmaml.docking import (
     write_dpf, check_torsion_consistency, scan_torsion_consistency,
     collect_files, scan_vina_directory, parse_vina_config,
+    distribute_files, cleanup_tree,
 )
 
 write_dpf("ligand_folders/1/l.pdbqt", ga_run=100)   # AutoDock4 r.dpf
 qa = scan_torsion_consistency("ligand_folders/")    # TORSDOF QA frame
 scan_vina_directory("vina_results/")               # best affinity per log
 collect_files("docking_run/", filename="r.dlg")     # gather artifacts
+distribute_files(["receptor.pdbqt"], "ligand_folders/")  # push receptor
+cleanup_tree("docking_run/", keep={"r.dlg"}, dry_run=True)  # safe sweep
 
 # --- Ligand-table reconciliation & standardization ---------------
 from pharmaml.chem import (
@@ -268,7 +271,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "626 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+    after: "685 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Distribution",
@@ -322,7 +325,7 @@ export function Overview() {
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
   const fileCount = stats ? fmtInt(stats.files) : "92";
-  const loc = stats ? fmtInt(stats.totalLines) : "35,355";
+  const loc = stats ? fmtInt(stats.totalLines) : "37,072";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -408,8 +411,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="626"
-                countTo={626}
+                value="685"
+                countTo={685}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

@@ -62,6 +62,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CHART } from "@/components/explorer/playground/calc-ui";
+import { ProbabilityCalibration } from "@/components/explorer/playground/calibration-widget";
 import {
   MAX_CSV_FEATURES,
   MAX_CSV_TEXT,
@@ -1968,6 +1969,9 @@ export function MlPlayground() {
             </CardContent>
           </Card>
         ) : null}
+
+        {/* --------------------- Probability calibration --------------------- */}
+        <ProbabilityCalibration />
       </div>
     </div>
   );

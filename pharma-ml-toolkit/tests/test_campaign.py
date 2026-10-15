@@ -330,6 +330,53 @@ class TestCleanupTree:
         # the root itself is never removed
         assert tmp_path.is_dir()
 
+    def test_dry_run_previews_removed_dirs_without_touching_disk(self, tmp_path) -> None:
+        """dry_run + remove_empty must *preview* dir removals, not skip them."""
+        emptied = tmp_path / "emptied"          # becomes empty after junk.log dies
+        emptied.mkdir()
+        (emptied / "junk.log").write_text("x", encoding="utf-8")
+        already = tmp_path / "already_empty"   # empty from the start
+        already.mkdir()
+        kept = tmp_path / "kept"               # keeps r.dlg -> survives
+        kept.mkdir()
+        (kept / "r.dlg").write_text("x", encoding="utf-8")
+        nested = tmp_path / "nested"           # whole subtree dies -> dir goes too
+        (nested / "inner").mkdir(parents=True)
+        (nested / "inner" / "junk.log").write_text("x", encoding="utf-8")
+
+        report = cleanup_tree(
+            tmp_path, keep={"r.dlg"}, remove_empty=True, dry_run=True,
+        )
+        actions = {row["path"]: row["action"] for row in report.to_dict("records")}
+        assert actions[str(emptied)] == "removed_dir"
+        assert actions[str(already)] == "removed_dir"
+        assert actions[str(nested)] == "removed_dir"
+        assert actions[str(nested / "inner")] == "removed_dir"
+        assert str(kept) not in actions or actions[str(kept)] != "removed_dir"
+        assert actions[str(kept / "r.dlg")] == "kept"
+        # nothing was actually deleted
+        assert (emptied / "junk.log").is_file()
+        assert (nested / "inner" / "junk.log").is_file()
+        assert kept.is_dir() and (kept / "r.dlg").is_file()
+        assert tmp_path.is_dir()
+
+    def test_dry_run_preview_matches_real_run_outcome(self, tmp_path) -> None:
+        """The previewed file/dir actions must equal what a real run would do."""
+        for name in ("ligand_01", "ligand_02", "scratch"):
+            (tmp_path / name).mkdir()
+        (tmp_path / "ligand_01" / "r.dlg").write_text("x", encoding="utf-8")
+        (tmp_path / "ligand_01" / "junk.txt").write_text("x", encoding="utf-8")
+        (tmp_path / "ligand_02" / "junk.txt").write_text("x", encoding="utf-8")
+        (tmp_path / "scratch" / "junk.txt").write_text("x", encoding="utf-8")
+
+        preview = cleanup_tree(
+            tmp_path, keep={"r.dlg"}, remove_empty=True, dry_run=True
+        )
+        preview_actions = {row["path"]: row["action"] for row in preview.to_dict("records")}
+        real = cleanup_tree(tmp_path, keep={"r.dlg"}, remove_empty=True)
+        real_actions = {row["path"]: row["action"] for row in real.to_dict("records")}
+        assert preview_actions == real_actions
+
     def test_missing_directory_raises(self, tmp_path) -> None:
         with pytest.raises(DockingError, match="not found"):
             cleanup_tree(tmp_path / "nowhere")

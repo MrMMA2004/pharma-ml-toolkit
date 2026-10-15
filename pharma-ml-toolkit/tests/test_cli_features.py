@@ -298,6 +298,99 @@ class TestDockingCampaignCommands:
         assert "ligand_x" in out
         assert "-10.5" in out
 
+    def test_campaign_list_prints_stems_and_writes_csv(self, tmp_path, capsys):
+        for name in ("lig01.csv", "lig02.csv", "notes.txt"):
+            (tmp_path / name).write_text("x", encoding="utf-8")
+        out_csv = tmp_path / "names.csv"
+        code = main(
+            ["docking", "campaign", "list", "--dir", str(tmp_path), "--out", str(out_csv)]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "lig01" in out and "lig02" in out
+        assert "2 file stem(s)" in out
+        content = out_csv.read_text(encoding="utf-8").splitlines()
+        assert content[0] == "name"
+        assert "lig01" in content[1:]
+
+    def test_campaign_distribute_copies_into_subdirs(self, tmp_path, capsys):
+        for name in ("ligand_01", "ligand_02"):
+            (tmp_path / name).mkdir()
+        receptor = tmp_path / "receptor.pdbqt"
+        receptor.write_text("ATOM", encoding="utf-8")
+        code = main(
+            ["docking", "campaign", "distribute", "--dir", str(tmp_path),
+             "--file", str(receptor)]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "2 cop(y/ies) written" in out
+        assert (tmp_path / "ligand_01" / "receptor.pdbqt").is_file()
+        assert (tmp_path / "ligand_02" / "receptor.pdbqt").is_file()
+        # re-run without --overwrite skips existing copies
+        code = main(
+            ["docking", "campaign", "distribute", "--dir", str(tmp_path),
+             "--file", str(receptor)]
+        )
+        assert code == 0
+        assert "0 cop(y/ies) written" in capsys.readouterr().out
+
+    def test_campaign_cleanup_dry_run_previews_dirs(self, tmp_path, capsys):
+        ligand = tmp_path / "ligand_01"
+        ligand.mkdir()
+        (ligand / "r.dlg").write_text("x", encoding="utf-8")
+        (ligand / "junk.txt").write_text("x", encoding="utf-8")
+        scratch = tmp_path / "scratch"
+        scratch.mkdir()
+        (scratch / "junk.txt").write_text("x", encoding="utf-8")
+        code = main(
+            ["docking", "campaign", "cleanup", "--dir", str(tmp_path),
+             "--keep", "r.dlg", "--remove-empty", "--dry-run"]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "removed_dir" in out
+        assert "(dry run)" in out
+        # nothing was deleted
+        assert (scratch / "junk.txt").is_file()
+        assert (ligand / "junk.txt").is_file()
+
+    def test_campaign_cleanup_real_run(self, tmp_path, capsys):
+        ligand = tmp_path / "ligand_01"
+        ligand.mkdir()
+        (ligand / "r.dlg").write_text("x", encoding="utf-8")
+        (ligand / "junk.txt").write_text("x", encoding="utf-8")
+        scratch = tmp_path / "scratch"
+        scratch.mkdir()
+        (scratch / "junk.txt").write_text("x", encoding="utf-8")
+        code = main(
+            ["docking", "campaign", "cleanup", "--dir", str(tmp_path),
+             "--keep", "r.dlg", "--remove-empty"]
+        )
+        assert code == 0
+        assert (ligand / "r.dlg").is_file()
+        assert not (ligand / "junk.txt").exists()
+        assert not scratch.exists()
+
+    def test_campaign_delete_named_counts_and_deletes(self, tmp_path, capsys):
+        for name in ("ligand_01", "ligand_02"):
+            folder = tmp_path / name
+            folder.mkdir()
+            (folder / "r.gpf").write_text("x", encoding="utf-8")
+        code = main(
+            ["docking", "campaign", "delete-named", "--dir", str(tmp_path),
+             "--name", "r.gpf", "--dry-run"]
+        )
+        assert code == 0
+        assert "2 file(s) named 'r.gpf' would be deleted (dry run)" in capsys.readouterr().out
+        assert (tmp_path / "ligand_01" / "r.gpf").is_file()
+        code = main(
+            ["docking", "campaign", "delete-named", "--dir", str(tmp_path), "--name", "r.gpf"]
+        )
+        assert code == 0
+        assert "2 file(s) named 'r.gpf' deleted" in capsys.readouterr().out
+        assert not (tmp_path / "ligand_01" / "r.gpf").exists()
+
 
 class TestChemTableCommands:
     """`pharmaml chem compare` / `chem merge` surface tables.py in the CLI."""

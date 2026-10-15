@@ -87,7 +87,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 626 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 685 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + four executed notebooks (complete ML · complete docking · complete PK/PD · walkthrough) + three no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
@@ -132,11 +132,13 @@ data-entry stages (CSV and PDB in), executed end-to-end without a docking engine
 > campaign tree) → §2 protein import & preparation (`prepare_protein` on a real
 > lysozyme PDB — waters/HETATM/altlocs cleaned, Meeko-typed + charged receptor,
 > `distribute_receptor` copies it into every ligand folder) → §3 ligand
-> preparation (SMILES → 3D PDBQT via Meeko) → §4 grid box + GPF → §5 running
+> preparation (SMILES → 3D PDBQT via Meeko) → §4 grid box + GPF/DPF → §5 running
 > the engines (AutoDock4 / Vina, guarded failures) → §6 parsing (cluster tables,
-> completion audit, campaign scan, idempotent batch re-run) → §7 Vina pose
-> tables → §8 rescoring (ligand efficiency + consensus) → §9 energy-distribution
-> & top-ligand figures → §10 one-click HTML report.
+> completion audit, campaign scan, idempotent batch re-run) → §7 torsion QA &
+> campaign housekeeping (tree-wide TORSDOF/BRANCH audit with one deliberate
+> mismatch, plus dry-run collect/cleanup/distribute/delete previews) → §8 Vina
+> pose tables → §9 rescoring (ligand efficiency + consensus) → §10
+> energy-distribution & top-ligand figures → §11 one-click HTML report.
 
 Point `DOCKING_DIR` at your real campaign folder and re-run — parsers, rescoring
 and plots work unchanged on real `.dlg` trees. §1–§3 need
@@ -461,6 +463,10 @@ pharmaml docking torsion --dir ligand_folders/    # TORSDOF/REMARK/BRANCH consis
 pharmaml docking gpf-scan --dir runs/             # ligand_types census per r.gpf
 pharmaml docking vina-scan --dir vina_results/    # best affinity per .log
 pharmaml docking collect --dir runs/ --pattern '^\\d+\\.pdbqt$'  # gather artifacts
+pharmaml docking campaign list --dir ligand_folders/ --ext .pdbqt --out names.csv
+pharmaml docking campaign distribute --dir ligand_folders/ --file receptor.pdbqt
+pharmaml docking campaign cleanup --dir runs/ --keep r.dlg --remove-empty --dry-run
+pharmaml docking campaign delete-named --dir runs/ --name r.gpf --dry-run
 ```
 
 `--model` accepts registry names and aliases (`rf`, `logistic`, `xgb`,

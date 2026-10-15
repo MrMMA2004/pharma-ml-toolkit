@@ -309,7 +309,10 @@ def cleanup_tree(
     keep_pattern:
         Regex the filenames must match to be preserved.
     remove_empty:
-        Remove directories that are (or become) empty.
+        Remove directories that are (or become) empty.  With
+        ``dry_run=True`` the report *previews* the directories that
+        would be removed -- i.e. folders that are empty already or
+        whose entire contents are slated for deletion.
     dry_run:
         Report the planned deletions without touching the filesystem.
 
@@ -333,6 +336,11 @@ def cleanup_tree(
     rows: list[dict[str, str]] = []
     deleted_count = 0
     removed_dirs = 0
+    # Dry-run preview support: files slated for deletion, and directories
+    # that would end up empty (filled bottom-up, so every directory is
+    # classified before its parent is visited by os.walk).
+    planned_deleted: set[Path] = set()
+    would_be_empty: set[Path] = set()
     for root, dirs, files in os.walk(base, topdown=False):
         root_path = Path(root)
         for name in sorted(files):
@@ -341,6 +349,7 @@ def cleanup_tree(
                 rows.append({"path": str(path), "action": "kept"})
                 continue
             rows.append({"path": str(path), "action": "deleted"})
+            planned_deleted.add(path)
             if dry_run:
                 continue
             try:
@@ -348,19 +357,36 @@ def cleanup_tree(
                 deleted_count += 1
             except OSError as exc:
                 _LOG.warning("Could not delete %s: %s", path, exc)
-        if remove_empty and not dry_run:
-            for name in sorted(dirs):
-                dir_path = root_path / name
-                if not dir_path.is_dir():
-                    continue
-                if any(dir_path.iterdir()):
-                    continue
-                rows.append({"path": str(dir_path), "action": "removed_dir"})
-                try:
-                    dir_path.rmdir()
-                    removed_dirs += 1
-                except OSError as exc:
-                    _LOG.warning("Could not remove empty directory %s: %s", dir_path, exc)
+        if remove_empty:
+            if dry_run:
+                # Preview: mark this root as would-be-empty when every
+                # direct file is slated for deletion and every sub-directory
+                # already qualified (bottom-up walk guarantees sub-dirs were
+                # visited first).  Already-empty folders qualify trivially.
+                if all((root_path / n) in planned_deleted for n in files) and all(
+                    (root_path / n) in would_be_empty for n in dirs
+                ):
+                    would_be_empty.add(root_path)
+                for name in sorted(dirs):
+                    if (root_path / name) in would_be_empty:
+                        rows.append(
+                            {"path": str(root_path / name), "action": "removed_dir"}
+                        )
+            else:
+                for name in sorted(dirs):
+                    dir_path = root_path / name
+                    if not dir_path.is_dir():
+                        continue
+                    if any(dir_path.iterdir()):
+                        continue
+                    rows.append({"path": str(dir_path), "action": "removed_dir"})
+                    try:
+                        dir_path.rmdir()
+                        removed_dirs += 1
+                    except OSError as exc:
+                        _LOG.warning(
+                            "Could not remove empty directory %s: %s", dir_path, exc
+                        )
 
     _LOG.info(
         "Cleanup of %s: %d file deletion(s), %d empty directory(ies) removed%s",

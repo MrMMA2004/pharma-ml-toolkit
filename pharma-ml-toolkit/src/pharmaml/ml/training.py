@@ -14,6 +14,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import get_scorer_names
 from sklearn.model_selection import GridSearchCV, cross_validate
 from sklearn.pipeline import Pipeline
 
@@ -220,9 +221,11 @@ def compare_models(
         ``'classification'`` or ``'regression'``.
     models:
         Registry names to compare; defaults to every *available*
-        model supporting the task.
+        model supporting the task.  Aliases that resolve to the same
+        registry key (``'rf'`` and ``'random_forest'``) collapse into a
+        single row.
     cv:
-        Fold count.
+        Fold count (at least 2).
     n_jobs:
         Workers per estimator evaluation.
     scoring:
@@ -232,20 +235,37 @@ def compare_models(
         ``predict_proba`` (e.g. ``ridge_classifier``), the whole board
         falls back to balanced accuracy so every row stays comparable
         — both metrics support binary **and multiclass** targets.
+        A string must be a scikit-learn scorer name (see
+        :func:`sklearn.metrics.get_scorer_names`).
 
     Returns
     -------
     pandas.DataFrame
-        One row per model with mean/std CV metric, fit time and
-        registry availability notes, sorted by the primary metric.
+        One row per model with mean/std CV metric and mean fit time,
+        sorted by the primary metric (descending).  A model that fails
+        to cross-validate keeps its row with a NaN score and sinks to
+        the bottom instead of killing the leaderboard.
 
     Raises
     ------
     ModelError
-        If any requested model is unavailable or task-incompatible.
+        If any requested model is unavailable or task-incompatible,
+        the models list is empty, ``cv < 2``, or ``scoring`` is not a
+        scikit-learn scorer name.
     """
     if task not in {"classification", "regression"}:
         raise ModelError(f"task must be 'classification' or 'regression', got {task!r}")
+    if isinstance(cv, int) and cv < 2:
+        raise ModelError(f"cv must be >= 2 folds, got {cv}")
+    # Guard the metric name up front: a typo would otherwise fail inside
+    # every per-model try/except below and surface as an all-NaN
+    # leaderboard instead of an actionable error.
+    if isinstance(scoring, str) and scoring not in get_scorer_names():
+        raise ModelError(
+            f"Unknown scoring {scoring!r}; valid metric names are listed by "
+            "sklearn.metrics.get_scorer_names() (e.g. 'roc_auc', "
+            "'balanced_accuracy', 'neg_root_mean_squared_error')"
+        )
 
     if models is None:
         models = [
@@ -256,10 +276,9 @@ def compare_models(
     else:
         resolved: list[str] = []
         for name in models:
-            try:
-                key = resolve_model_name(name)
-            except ModelError:
-                raise ModelError(f"Unknown model {name!r}") from None
+            # resolve_model_name's own ModelError already lists the
+            # registered names — propagate it verbatim.
+            key = resolve_model_name(name)
             spec = MODEL_REGISTRY[key]
             resolved.append(spec.name)
             if not spec.available:
@@ -269,7 +288,17 @@ def compare_models(
                 )
             if spec.task not in {task, "both"}:
                 raise ModelError(f"Model {name!r} does not support {task}")
-        models = resolved
+        # Aliases may resolve to the same registry key ('rf' and
+        # 'random_forest'); collapse duplicates so the leaderboard keeps
+        # one row per distinct model.
+        models = list(dict.fromkeys(resolved))
+
+    if not models:
+        raise ModelError(
+            "models list is empty — pass registry names (see "
+            "pharmaml.ml.list_models()) or None to compare every available "
+            "model for the task"
+        )
 
     encode = has_categorical_columns(X)
     if encode:
@@ -307,6 +336,17 @@ def compare_models(
                 pipeline, X, y, cv=cv, scoring=metric, n_jobs=n_jobs
             )
             scores = result["test_score"]
+            if np.isnan(scores).any():
+                # cross_validate can return NaN folds without raising
+                # (e.g. a single-class target breaks proba-based scorers)
+                # — make the silent poisoning visible in the log.
+                _LOG.warning(
+                    "Model %s produced NaN CV scores for metric %r "
+                    "(degenerate folds — e.g. a single-class target); "
+                    "keeping the row as NaN",
+                    name,
+                    metric,
+                )
             rows.append(
                 {
                     "model": name,

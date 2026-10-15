@@ -1,0 +1,806 @@
+     1→/**
+     2→ * Client-side app state (single-page tab navigation + toolkit tree cache
+     3→ * + selected file in the code explorer). Zustand keeps the selected file
+     4→ * and loaded tree alive across tab switches.
+     5→ */
+     6→
+     7→import { create } from "zustand";
+     8→import { MAX_CSV_TEXT } from "@/lib/csv";
+     9→import type {
+    10→  TreeNode,
+    11→  TreeResponse,
+    12→  TreeStats,
+    13→  MLTrainResponse,
+    14→  DatasetPreviewResponse,
+    15→  CsvSourceMeta,
+    16→} from "@/lib/toolkit-types";
+    17→
+    18→export type TabId = "overview" | "explorer" | "reference" | "playground" | "download";
+    19→
+    20→/** Persisted one-compartment PK regimen (survives playground tab switches). */
+    21→export interface PkParams {
+    22→  route: "iv" | "oral";
+    23→  dose: number; // mg
+    24→  vd: number; // L
+    25→  cl: number; // L/h
+    26→  tau: number; // h
+    27→  doses: number;
+    28→  f: number; // bioavailability (oral)
+    29→  ka: number; // 1/h (oral)
+    30→}
+    31→
+    32→export const DEFAULT_PK_PARAMS: PkParams = {
+    33→  route: "iv",
+    34→  dose: 250,
+    35→  vd: 45,
+    36→  cl: 3.2,
+    37→  tau: 8,
+    38→  doses: 6,
+    39→  f: 0.9,
+    40→  ka: 1.2,
+    41→};
+    42→
+    43→/** Max entries kept in the "recently viewed" strip. */
+    44→export const RECENT_LIMIT = 8;
+    45→
+    46→/** sessionStorage key for the recently-viewed strip (survives reloads). */
+    47→const RECENT_STORAGE_KEY = "pharmaml.recentFiles";
+    48→
+    49→/** sessionStorage key for playground state (PK regimen + ML setup + sub-tab). */
+    50→const PLAYGROUND_STORAGE_KEY = "pharmaml.playground";
+    51→
+    52→/** sessionStorage key for the last ML training result (metrics + chart series). */
+    53→const ML_RESULT_STORAGE_KEY = "pharmaml.mlResult";
+    54→
+    55→/** Hard cap on the persisted ML result JSON size (bytes). */
+    56→const ML_RESULT_MAX_BYTES = 400_000;
+    57→
+    58→/** sessionStorage key for the ML run history (newest first). */
+    59→const ML_HISTORY_STORAGE_KEY = "pharmaml.mlHistory";
+    60→
+    61→/** Maximum training runs kept in the history strip. */
+    62→export const ML_HISTORY_LIMIT = 5;
+    63→
+    64→/** One completed training run: config snapshot + full result, for restore. */
+    65→export interface MlRunRecord {
+    66→  /** Epoch-milliseconds id (also the creation time). */
+    67→  id: number;
+    68→  /** ISO timestamp of when the run finished. */
+    69→  at: string;
+    70→  task: "regression" | "classification";
+    71→  model: string;
+    72→  /** Display name of the headline metric, e.g. "R²" or "Accuracy". */
+    73→  keyMetric: string;
+    74→  /** Value of the headline metric. */
+    75→  keyValue: number;
+    76→  /** Config snapshot that produced the run. */
+    77→  config: MlConfig;
+    78→  /** Full training response (restored verbatim). */
+    79→  result: MLTrainResponse;
+    80→  /** Present for runs trained on an uploaded CSV (display + column restore). */
+    81→  csv?: {
+    82→    fileName: string;
+    83→    featureColumns: string[];
+    84→    targetColumn: string;
+    85→  };
+    86→}
+    87→
+    88→/** The user-uploaded CSV currently loaded in the playground (text + name). */
+    89→export interface MlCsvState {
+    90→  fileName: string;
+    91→  text: string;
+    92→}
+    93→
+    94→/** Read the persisted recent-files list (client only, failure-tolerant). */
+    95→function loadRecentFiles(): string[] {
+    96→  if (typeof window === "undefined") return [];
+    97→  try {
+    98→    const raw = window.sessionStorage.getItem(RECENT_STORAGE_KEY);
+    99→    if (!raw) return [];
+   100→    const parsed: unknown = JSON.parse(raw);
+   101→    if (!Array.isArray(parsed)) return [];
+   102→    return parsed
+   103→      .filter((p): p is string => typeof p === "string")
+   104→      .slice(0, RECENT_LIMIT);
+   105→  } catch {
+   106→    return []; // private mode / quota / corrupted JSON — start fresh
+   107→  }
+   108→}
+   109→
+   110→/** Persist the recent-files list (client only, best-effort). */
+   111→function saveRecentFiles(recent: string[]): void {
+   112→  if (typeof window === "undefined") return;
+   113→  try {
+   114→    window.sessionStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recent));
+   115→  } catch {
+   116→    /* quota exceeded or private mode — persistence is optional */
+   117→  }
+   118→}
+   119→
+   120→/* ---- Playground persistence (PK regimen + ML config + active sub-tab) ----
+   121→ * Hydration-safe for the same reason as recentFiles: every component that
+   122→ * reads these values renders only inside the Playground tab, which is never
+   123→ * the SSR/hydration render (the default top-level tab is Overview). */
+   124→
+   125→interface PlaygroundPersisted {
+   126→  playgroundTab: string;
+   127→  pkParams: PkParams;
+   128→  mlConfig: MlConfig;
+   129→  mlCsv: MlCsvState | null;
+   130→}
+   131→
+   132→/** Validate a persisted PK regimen field-by-field, falling back to defaults. */
+   133→function validatePk(raw: unknown): PkParams {
+   134→  const base = DEFAULT_PK_PARAMS;
+   135→  if (typeof raw !== "object" || raw === null) return base;
+   136→  const p = raw as Partial<PkParams>;
+   137→  const num = (v: unknown, def: number, lo: number, hi: number) =>
+   138→    typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi ? v : def;
+   139→  return {
+   140→    route: p.route === "oral" ? "oral" : "iv",
+   141→    dose: num(p.dose, base.dose, 0.1, 10_000),
+   142→    vd: num(p.vd, base.vd, 0.1, 1_000),
+   143→    cl: num(p.cl, base.cl, 0.01, 100),
+   144→    tau: num(p.tau, base.tau, 0.25, 168),
+   145→    doses: Math.round(num(p.doses, base.doses, 1, 48)),
+   146→    f: num(p.f, base.f, 0.05, 1),
+   147→    ka: num(p.ka, base.ka, 0.01, 12),
+   148→  };
+   149→}
+   150→
+   151→/** Validate a persisted ML config field-by-field, falling back to defaults. */
+   152→function validateMl(raw: unknown): MlConfig {
+   153→  const base = DEFAULT_ML_CONFIG;
+   154→  if (typeof raw !== "object" || raw === null) return base;
+   155→  const p = raw as Partial<MlConfig>;
+   156→  const str = (v: unknown, def: string) =>
+   157→    typeof v === "string" && v.length <= 12 ? v : def;
+   158→  const str128 = (v: unknown, def: string) =>
+   159→    typeof v === "string" && v.length <= 128 ? v : def;
+   160→  const strArr = (v: unknown): string[] =>
+   161→    Array.isArray(v)
+   162→      ? v.filter((c): c is string => typeof c === "string" && c.length > 0 && c.length <= 128).slice(0, 8)
+   163→      : [];
+   164→  return {
+   165→    task: p.task === "classification" ? "classification" : "regression",
+   166→    samples:
+   167→      typeof p.samples === "number" && Number.isFinite(p.samples) && p.samples >= 100 && p.samples <= 1000
+   168→        ? Math.round(p.samples)
+   169→        : base.samples,
+   170→    noise:
+   171→      typeof p.noise === "number" && Number.isFinite(p.noise) && p.noise >= 0 && p.noise <= 2
+   172→        ? p.noise
+   173→        : base.noise,
+   174→    regModel:
+   175→      p.regModel === "polynomial" || p.regModel === "ridge" ? p.regModel : "linear",
+   176→    alpha: str(p.alpha, base.alpha),
+   177→    l2: str(p.l2, base.l2),
+   178→    testSizePct:
+   179→      typeof p.testSizePct === "number" && Number.isFinite(p.testSizePct) && p.testSizePct >= 5 && p.testSizePct <= 50
+   180→        ? p.testSizePct
+   181→        : base.testSizePct,
+   182→    cv: str(p.cv, base.cv),
+   183→    seed: str(p.seed, base.seed),
+   184→    source: p.source === "csv" ? "csv" : "synthetic",
+   185→    featureColumn: str128(p.featureColumn, ""),
+   186→    featureColumn2: str128(p.featureColumn2, ""),
+   187→    targetColumn: str128(p.targetColumn, ""),
+   188→    featureColumns: strArr(p.featureColumns),
+   189→  };
+   190→}
+   191→
+   192→/* ---- ML result persistence (last training run: metrics + chart series) ----
+   193→ * Restored field-by-field with the same defensive validation as the rest of
+   194→ * the persisted state; anything malformed falls back to "no result". */
+   195→
+   196→function finiteArray(raw: unknown, cap: number, validate: (v: unknown) => boolean): unknown[] | null {
+   197→  if (!Array.isArray(raw) || raw.length === 0 || raw.length > cap) return null;
+   198→  return raw.every(validate) ? raw : null;
+   199→}
+   200→
+   201→const isFiniteNumber = (v: unknown): v is number =>
+   202→  typeof v === "number" && Number.isFinite(v);
+   203→
+   204→const isPoint = (v: unknown): boolean => {
+   205→  if (typeof v !== "object" || v === null) return false;
+   206→  const p = v as Record<string, unknown>;
+   207→  return isFiniteNumber(p.x) && isFiniteNumber(p.y);
+   208→};
+   209→
+   210→const isCurvePoint = (v: unknown): boolean => {
+   211→  if (typeof v !== "object" || v === null) return false;
+   212→  const p = v as Record<string, unknown>;
+   213→  return isFiniteNumber(p.x) && isFiniteNumber(p.yhat);
+   214→};
+   215→
+   216→const isBoundaryPoint = (v: unknown): boolean => {
+   217→  if (typeof v !== "object" || v === null) return false;
+   218→  const p = v as Record<string, unknown>;
+   219→  return isFiniteNumber(p.x) && isFiniteNumber(p.y) && isFiniteNumber(p.pred);
+   220→};
+   221→
+   222→/** Validate a persisted ML train response; null when unusable. */
+   223→function validateMlResult(raw: unknown): MLTrainResponse | null {
+   224→  if (typeof raw !== "object" || raw === null) return null;
+   225→  const r = raw as Record<string, unknown>;
+   226→  if (r.task !== "regression" && r.task !== "classification") return null;
+   227→  if (typeof r.model !== "string" || r.model.length > 40) return null;
+   228→
+   229→  const metricsRaw = r.metrics;
+   230→  if (typeof metricsRaw !== "object" || metricsRaw === null) return null;
+   231→  const metrics: Record<string, number> = {};
+   232→  for (const [k, v] of Object.entries(metricsRaw as Record<string, unknown>)) {
+   233→    if (isFiniteNumber(v) && k.length <= 24) metrics[k] = v;
+   234→  }
+   235→  if (Object.keys(metrics).length === 0) return null;
+   236→
+   237→  const coefsRaw = r.coefficients;
+   238→  if (typeof coefsRaw !== "object" || coefsRaw === null) return null;
+   239→  const c = coefsRaw as Record<string, unknown>;
+   240→  const coefsArr = finiteArray(c.coefs, 512, isFiniteNumber);
+   241→  if (!isFiniteNumber(c.intercept) || !coefsArr || typeof c.standardized !== "boolean") {
+   242→    return null;
+   243→  }
+   244→
+   245→  const seriesRaw = r.series;
+   246→  if (typeof seriesRaw !== "object" || seriesRaw === null) return null;
+   247→  const s = seriesRaw as Record<string, unknown>;
+   248→  const test = finiteArray(s.test, 1200, isPoint);
+   249→  if (!test) return null;
+   250→  const curve = finiteArray(s.curve, 400, isCurvePoint);
+   251→  const boundary = finiteArray(s.boundary, 400, isBoundaryPoint);
+   252→
+   253→  const metaRaw = r.datasetMeta;
+   254→  if (typeof metaRaw !== "object" || metaRaw === null) return null;
+   255→  const m = metaRaw as Record<string, unknown>;
+   256→  const features = Array.isArray(m.features)
+   257→    ? m.features.filter((f): f is string => typeof f === "string" && f.length <= 24).slice(0, 12)
+   258→    : [];
+   259→  if (
+   260→    !isFiniteNumber(m.nTotal) ||
+   261→    !isFiniteNumber(m.nTrain) ||
+   262→    !isFiniteNumber(m.nTest) ||
+   263→    !isFiniteNumber(m.noise) ||
+   264→    !isFiniteNumber(m.seed)
+   265→  ) {
+   266→    return null;
+   267→  }
+   268→
+   269→  // Optional CSV provenance — preserved when well-formed, dropped otherwise.
+   270→  let source: CsvSourceMeta | undefined;
+   271→  if (typeof m.source === "object" && m.source !== null) {
+   272→    const s = m.source as Record<string, unknown>;
+   273→    const colList = (v: unknown, cap: number): string[] =>
+   274→      Array.isArray(v)
+   275→        ? v.filter((c): c is string => typeof c === "string" && c.length <= 128).slice(0, cap)
+   276→        : [];
+   277→    const columns = colList(s.columns, 64);
+   278→    const featureColumns = colList(s.featureColumns, 10);
+   279→    const targetColumn = typeof s.targetColumn === "string" ? s.targetColumn.slice(0, 128) : "";
+   280→    if (
+   281→      s.kind === "csv" &&
+   282→      columns.length > 0 &&
+   283→      featureColumns.length > 0 &&
+   284→      targetColumn !== "" &&
+   285→      isFiniteNumber(s.nRows) &&
+   286→      isFiniteNumber(s.droppedRows)
+   287→    ) {
+   288→      const labelMap =
+   289→        Array.isArray(s.labelMap) &&
+   290→        s.labelMap.length === 2 &&
+   291→        s.labelMap.every((v) => typeof v === "string" && v.length <= 64)
+   292→          ? (s.labelMap as [string, string])
+   293→          : undefined;
+   294→      source = {
+   295→        kind: "csv",
+   296→        fileName: typeof s.fileName === "string" ? s.fileName.slice(0, 128) : undefined,
+   297→        columns,
+   298→        featureColumns,
+   299→        targetColumn,
+   300→        nRows: s.nRows,
+   301→        droppedRows: s.droppedRows,
+   302→        ...(labelMap ? { labelMap } : {}),
+   303→      };
+   304→    }
+   305→  }
+   306→
+   307→  // Optional cross-validation summary — dropped when malformed.
+   308→  let cv: MLTrainResponse["cv"];
+   309→  if (typeof r.cv === "object" && r.cv !== null) {
+   310→    const cvRaw = r.cv as Record<string, unknown>;
+   311→    const folds = Array.isArray(cvRaw.folds)
+   312→      ? cvRaw.folds.filter(
+   313→          (f): f is { fold: number; value: number } =>
+   314→            typeof f === "object" &&
+   315→            f !== null &&
+   316→            isFiniteNumber((f as Record<string, unknown>).fold) &&
+   317→            isFiniteNumber((f as Record<string, unknown>).value)
+   318→        )
+   319→      : [];
+   320→    if (
+   321→      (cvRaw.k === 3 || cvRaw.k === 5 || cvRaw.k === 10) &&
+   322→      typeof cvRaw.metricName === "string" &&
+   323→      folds.length === cvRaw.k &&
+   324→      isFiniteNumber(cvRaw.mean) &&
+   325→      isFiniteNumber(cvRaw.std)
+   326→    ) {
+   327→      cv = {
+   328→        k: cvRaw.k,
+   329→        metricName: cvRaw.metricName,
+   330→        folds,
+   331→        mean: cvRaw.mean,
+   332→        std: cvRaw.std,
+   333→      };
+   334→    }
+   335→  }
+   336→
+   337→  return {
+   338→    task: r.task,
+   339→    model: r.model,
+   340→    metrics,
+   341→    cv,
+   342→    coefficients: {
+   343→      intercept: c.intercept as number,
+   344→      coefs: coefsArr as number[],
+   345→      standardized: c.standardized,
+   346→    },
+   347→    series: {
+   348→      test: test as { x: number; y: number; label?: number }[],
+   349→      ...(curve ? { curve: curve as { x: number; yhat: number }[] } : {}),
+   350→      ...(boundary ? { boundary: boundary as { x: number; y: number; pred: number }[] } : {}),
+   351→    },
+   352→    datasetMeta: {
+   353→      nTotal: m.nTotal,
+   354→      nTrain: m.nTrain,
+   355→      nTest: m.nTest,
+   356→      noise: m.noise,
+   357→      seed: m.seed,
+   358→      features,
+   359→      ...(source ? { source } : {}),
+   360→    },
+   361→  };
+   362→}
+   363→
+   364→/** Read the persisted ML training result (client only, failure-tolerant). */
+   365→function loadMlResult(): MLTrainResponse | null {
+   366→  if (typeof window === "undefined") return null;
+   367→  try {
+   368→    const raw = window.sessionStorage.getItem(ML_RESULT_STORAGE_KEY);
+   369→    if (!raw) return null;
+   370→    return validateMlResult(JSON.parse(raw));
+   371→  } catch {
+   372→    return null; // corrupted JSON / private mode — start fresh
+   373→  }
+   374→}
+   375→
+   376→/** Validate a persisted run-history payload; malformed entries are skipped.
+   377→ * Accepts both the current `{ currentId, runs }` shape and the legacy bare
+   378→ * array (current run = newest). */
+   379→function validateMlHistoryPayload(raw: unknown): {
+   380→  runs: MlRunRecord[];
+   381→  currentId: number | null;
+   382→} {
+   383→  const body = Array.isArray(raw) ? { runs: raw, currentId: undefined } : raw;
+   384→  if (typeof body !== "object" || body === null || !Array.isArray((body as { runs?: unknown }).runs)) {
+   385→    return { runs: [], currentId: null };
+   386→  }
+   387→  const runs: MlRunRecord[] = [];
+   388→  for (const item of ((body as { runs: unknown[] }).runs).slice(0, ML_HISTORY_LIMIT)) {
+   389→    if (typeof item !== "object" || item === null) continue;
+   390→    const r = item as Record<string, unknown>;
+   391→    const result = validateMlResult(r.result);
+   392→    if (
+   393→      !result ||
+   394→      typeof r.id !== "number" ||
+   395→      !Number.isFinite(r.id) ||
+   396→      typeof r.at !== "string" ||
+   397→      r.at.length > 40 ||
+   398→      (r.task !== "regression" && r.task !== "classification") ||
+   399→      typeof r.model !== "string" ||
+   400→      r.model.length > 40 ||
+   401→      typeof r.keyMetric !== "string" ||
+   402→      r.keyMetric.length > 16 ||
+   403→      typeof r.keyValue !== "number" ||
+   404→      !Number.isFinite(r.keyValue)
+   405→    ) {
+   406→      continue;
+   407→    }
+   408→    runs.push({
+   409→      id: r.id,
+   410→      at: r.at,
+   411→      task: r.task,
+   412→      model: r.model,
+   413→      keyMetric: r.keyMetric,
+   414→      keyValue: r.keyValue,
+   415→      config: validateMl(r.config),
+   416→      result,
+   417→      ...(typeof r.csv === "object" && r.csv !== null
+   418→        ? {
+   419→            csv: {
+   420→              fileName:
+   421→                typeof (r.csv as Record<string, unknown>).fileName === "string"
+   422→                  ? (r.csv as Record<string, unknown>).fileName.slice(0, 128) || "pasted.csv"
+   423→                  : "pasted.csv",
+   424→              featureColumns: Array.isArray((r.csv as Record<string, unknown>).featureColumns)
+   425→                ? ((r.csv as Record<string, unknown>).featureColumns as unknown[])
+   426→                    .filter((c): c is string => typeof c === "string" && c.length <= 128)
+   427→                    .slice(0, 8)
+   428→                : [],
+   429→              targetColumn:
+   430→                typeof (r.csv as Record<string, unknown>).targetColumn === "string"
+   431→                  ? (r.csv as Record<string, unknown>).targetColumn.slice(0, 128)
+   432→                  : "",
+   433→            },
+   434→          }
+   435→        : {}),
+   436→    });
+   437→  }
+   438→  const rawId = (body as { currentId?: unknown }).currentId;
+   439→  const currentId =
+   440→    typeof rawId === "number" && Number.isFinite(rawId) && runs.some((h) => h.id === rawId)
+   441→      ? rawId
+   442→      : (runs[0]?.id ?? null);
+   443→  return { runs, currentId };
+   444→}
+   445→
+   446→/** Read the persisted run history (client only, failure-tolerant). */
+   447→function loadMlHistory(): { runs: MlRunRecord[]; currentId: number | null } {
+   448→  if (typeof window === "undefined") return { runs: [], currentId: null };
+   449→  try {
+   450→    const raw = window.sessionStorage.getItem(ML_HISTORY_STORAGE_KEY);
+   451→    if (!raw) return { runs: [], currentId: null };
+   452→    return validateMlHistoryPayload(JSON.parse(raw));
+   453→  } catch {
+   454→    return { runs: [], currentId: null }; // corrupted JSON / private mode — start fresh
+   455→  }
+   456→}
+   457→
+   458→/** Persist the run history + current-run pointer (client only, best-effort). */
+   459→function saveMlHistory(history: MlRunRecord[], currentId: number | null): void {
+   460→  if (typeof window === "undefined") return;
+   461→  try {
+   462→    const json = JSON.stringify({ currentId, runs: history });
+   463→    if (json.length > 1_200_000) return; // oversized — persistence is optional
+   464→    window.sessionStorage.setItem(ML_HISTORY_STORAGE_KEY, json);
+   465→  } catch {
+   466→    /* quota exceeded or private mode — persistence is optional */
+   467→  }
+   468→}
+   469→
+   470→/** Persist the ML training result (client only, size-capped, best-effort). */
+   471→function saveMlResult(result: MLTrainResponse | null): void {
+   472→  if (typeof window === "undefined") return;
+   473→  try {
+   474→    if (result === null) {
+   475→      window.sessionStorage.removeItem(ML_RESULT_STORAGE_KEY);
+   476→      return;
+   477→    }
+   478→    const json = JSON.stringify(result);
+   479→    if (json.length > ML_RESULT_MAX_BYTES) return; // oversized — persistence is optional
+   480→    window.sessionStorage.setItem(ML_RESULT_STORAGE_KEY, json);
+   481→  } catch {
+   482→    /* quota exceeded or private mode — persistence is optional */
+   483→  }
+   484→}
+   485→
+   486→/** Read the persisted playground snapshot (client only, failure-tolerant). */
+   487→function loadPlayground(): Partial<PlaygroundPersisted> {
+   488→  if (typeof window === "undefined") return {};
+   489→  try {
+   490→    const raw = window.sessionStorage.getItem(PLAYGROUND_STORAGE_KEY);
+   491→    if (!raw) return {};
+   492→    const parsed: unknown = JSON.parse(raw);
+   493→    if (typeof parsed !== "object" || parsed === null) return {};
+   494→    const p = parsed as Partial<PlaygroundPersisted>;
+   495→    return {
+   496→      playgroundTab: typeof p.playgroundTab === "string" ? p.playgroundTab.slice(0, 32) : undefined,
+   497→      pkParams: validatePk(p.pkParams),
+   498→      mlConfig: validateMl(p.mlConfig),
+   499→      mlCsv: validMlCsv(p.mlCsv),
+   500→    };
+   501→  } catch {
+   502→    return {}; // corrupted JSON / private mode — start fresh
+   503→  }
+   504→}
+   505→
+   506→/** Persist the current playground snapshot (client only, best-effort). */
+   507→function savePlayground(state: {
+   508→  playgroundTab: string;
+   509→  pkParams: PkParams;
+   510→  mlConfig: MlConfig;
+   511→  mlCsv: MlCsvState | null;
+   512→}): void {
+   513→  if (typeof window === "undefined") return;
+   514→  try {
+   515→    window.sessionStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(state));
+   516→  } catch {
+   517→    /* quota exceeded or private mode — persistence is optional */
+   518→  }
+   519→}
+   520→
+   521→/** Validate a persisted uploaded-CSV payload; null when unusable. */
+   522→function validMlCsv(raw: unknown): MlCsvState | null {
+   523→  if (typeof raw !== "object" || raw === null) return null;
+   524→  const c = raw as Partial<MlCsvState>;
+   525→  if (
+   526→    typeof c.text !== "string" ||
+   527→    c.text.length === 0 ||
+   528→    c.text.length > MAX_CSV_TEXT ||
+   529→    typeof c.fileName !== "string" ||
+   530→    c.fileName.length > 128
+   531→  ) {
+   532→    return null;
+   533→  }
+   534→  return { fileName: c.fileName, text: c.text };
+   535→}
+   536→
+   537→/** ML playground experiment configuration (survives tab switches). */
+   538→export interface MlConfig {
+   539→  task: "regression" | "classification";
+   540→  /** Where the training data comes from. */
+   541→  source: "synthetic" | "csv";
+   542→  samples: number;
+   543→  noise: number;
+   544→  regModel: "linear" | "polynomial" | "ridge";
+   545→  /** Ridge α as raw input text (validated before use). */
+   546→  alpha: string;
+   547→  /** Logistic L2 strength as raw input text (validated before use). */
+   548→  l2: string;
+   549→  testSizePct: number;
+   550→  cv: string;
+   551→  seed: string;
+   552→  /** CSV mode: single feature pick for classification ("" = auto). */
+   553→  featureColumn: string;
+   554→  /** CSV mode: second feature column for classification ("" = auto). */
+   555→  featureColumn2: string;
+   556→  /** CSV regression mode: feature column picks ([] = auto → all numeric). */
+   557→  featureColumns: string[];
+   558→  /** CSV mode: target/label column pick ("" = auto). */
+   559→  targetColumn: string;
+   560→}
+   561→
+   562→export const DEFAULT_ML_CONFIG: MlConfig = {
+   563→  task: "regression",
+   564→  source: "synthetic",
+   565→  samples: 300,
+   566→  noise: 0.4,
+   567→  regModel: "linear",
+   568→  alpha: "1.0",
+   569→  l2: "1.0",
+   570→  testSizePct: 20,
+   571→  cv: "5",
+   572→  seed: "42",
+   573→  featureColumn: "",
+   574→  featureColumn2: "",
+   575→  featureColumns: [],
+   576→  targetColumn: "",
+   577→};
+   578→
+   579→export const TABS: Array<{ id: TabId; label: string }> = [
+   580→  { id: "overview", label: "Overview" },
+   581→  { id: "explorer", label: "Code Explorer" },
+   582→  { id: "reference", label: "API Reference" },
+   583→  { id: "playground", label: "Playground" },
+   584→  { id: "download", label: "Download" },
+   585→];
+   586→
+   587→type TreeStatus = "idle" | "loading" | "ready" | "error";
+   588→
+   589→interface ToolkitStore {
+   590→  tab: TabId;
+   591→  setTab: (tab: TabId) => void;
+   592→
+   593→  /** Command palette open state (Ctrl/Cmd+K or the header button). */
+   594→  paletteOpen: boolean;
+   595→  setPaletteOpen: (open: boolean) => void;
+   596→
+   597→  /** Currently selected file (relative path) in the code explorer. */
+   598→  selectedFile: string;
+   599→  setSelectedFile: (path: string) => void;
+   600→
+   601→  /** Definition line to highlight + scroll to (API-reference deep links). */
+   602→  targetLine: number | null;
+   603→  setTargetLine: (line: number | null) => void;
+   604→  /** Open a file and (optionally) jump to a definition line. */
+   605→  openFileAtLine: (path: string, line: number | null) => void;
+   606→
+   607→  /** Most-recently-viewed files (newest first, deduplicated). */
+   608→  recentFiles: string[];
+   609→  /** Clear the recent-files strip. */
+   610→  clearRecentFiles: () => void;
+   611→
+   612→  /** Active playground sub-tab (restored when returning to Playground). */
+   613→  playgroundTab: string;
+   614→  setPlaygroundTab: (tab: string) => void;
+   615→
+   616→  /** PK simulator regimen — persisted so sliders survive tab switches. */
+   617→  pkParams: PkParams;
+   618→  setPkParam: <K extends keyof PkParams>(key: K, value: PkParams[K]) => void;
+   619→  resetPkParams: () => void;
+   620→
+   621→  /** ML playground experiment config — persisted so the setup survives tab switches. */
+   622→  mlConfig: MlConfig;
+   623→  setMlConfig: (patch: Partial<MlConfig>) => void;
+   624→  resetMlConfig: () => void;
+   625→  /** User-uploaded CSV (file name + full text); null = not loaded. */
+   626→  mlCsv: MlCsvState | null;
+   627→  setMlCsv: (csv: MlCsvState | null) => void;
+   628→  /** Last training result (rendered until the config changes; survives reloads). */
+   629→  mlResult: MLTrainResponse | null;
+   630→  setMlResult: (result: MLTrainResponse | null) => void;
+   631→  /** Last dataset-preview payload. */
+   632→  mlPreview: DatasetPreviewResponse | null;
+   633→  setMlPreview: (preview: DatasetPreviewResponse | null) => void;
+   634→
+   635→  /** Recent training runs (newest first) — persisted so the strip survives reloads. */
+   636→  mlHistory: MlRunRecord[];
+   637→  pushMlRun: (record: MlRunRecord) => void;
+   638→  clearMlHistory: () => void;
+   639→  /** Id of the run whose result is currently displayed (drives the badge). */
+   640→  mlCurrentRunId: number | null;
+   641→  setMlCurrentRun: (id: number | null) => void;
+   642→
+   643→  tree: TreeNode | null;
+   644→  stats: TreeStats | null;
+   645→  treeStatus: TreeStatus;
+   646→  treeError: string | null;
+   647→  /** Fetch the toolkit tree once; concurrent calls are collapsed. */
+   648→  ensureTree: () => Promise<void>;
+   649→}
+   650→
+   651→/** Newest-first, deduplicated, capped recent list (pure helper). */
+   652→function pushRecent(recent: string[], path: string): string[] {
+   653→  const next = [path, ...recent.filter((p) => p !== path)];
+   654→  return next.slice(0, RECENT_LIMIT);
+   655→}
+   656→
+   657→/** Session-restored playground snapshot ({} on the server / fresh session). */
+   658→const persistedPlayground = loadPlayground();
+   659→
+   660→/** Session-restored ML run history (empty on the server / fresh session). */
+   661→const persistedMlHistory = loadMlHistory();
+   662→
+   663→export const useToolkitStore = create<ToolkitStore>((set, get) => ({
+   664→  tab: "overview",
+   665→  setTab: (tab) => set({ tab }),
+   666→
+   667→  paletteOpen: false,
+   668→  setPaletteOpen: (open) => set({ paletteOpen: open }),
+   669→
+   670→  selectedFile: "README.md",
+   671→  setSelectedFile: (path) =>
+   672→    set((s) => {
+   673→      const recentFiles = pushRecent(s.recentFiles, path);
+   674→      saveRecentFiles(recentFiles);
+   675→      return { selectedFile: path, targetLine: null, recentFiles };
+   676→    }),
+   677→
+   678→  targetLine: null,
+   679→  setTargetLine: (line) => set({ targetLine: line }),
+   680→  openFileAtLine: (path, line) =>
+   681→    set((s) => {
+   682→      const recentFiles = pushRecent(s.recentFiles, path);
+   683→      saveRecentFiles(recentFiles);
+   684→      return { selectedFile: path, targetLine: line, recentFiles };
+   685→    }),
+   686→
+   687→  recentFiles: loadRecentFiles(),
+   688→  clearRecentFiles: () => {
+   689→    saveRecentFiles([]);
+   690→    set({ recentFiles: [] });
+   691→  },
+   692→
+   693→  playgroundTab: persistedPlayground.playgroundTab ?? "calculators",
+   694→  setPlaygroundTab: (tab) => {
+   695→    set({ playgroundTab: tab });
+   696→    savePlayground({
+   697→      playgroundTab: tab,
+   698→      pkParams: get().pkParams,
+   699→      mlConfig: get().mlConfig,
+   700→      mlCsv: get().mlCsv,
+   701→    });
+   702→  },
+   703→
+   704→  pkParams: persistedPlayground.pkParams ?? DEFAULT_PK_PARAMS,
+   705→  setPkParam: (key, value) => {
+   706→    const pkParams = { ...get().pkParams, [key]: value };
+   707→    set({ pkParams });
+   708→    savePlayground({
+   709→      playgroundTab: get().playgroundTab,
+   710→      pkParams,
+   711→      mlConfig: get().mlConfig,
+   712→    });
+   713→  },
+   714→  resetPkParams: () => {
+   715→    set({ pkParams: DEFAULT_PK_PARAMS });
+   716→    savePlayground({
+   717→      playgroundTab: get().playgroundTab,
+   718→      pkParams: DEFAULT_PK_PARAMS,
+   719→      mlConfig: get().mlConfig,
+   720→      mlCsv: get().mlCsv,
+   721→    });
+   722→  },
+   723→
+   724→  mlConfig: persistedPlayground.mlConfig ?? DEFAULT_ML_CONFIG,
+   725→  setMlConfig: (patch) => {
+   726→    const mlConfig = { ...get().mlConfig, ...patch };
+   727→    set({ mlConfig });
+   728→    savePlayground({
+   729→      playgroundTab: get().playgroundTab,
+   730→      pkParams: get().pkParams,
+   731→      mlConfig,
+   732→      mlCsv: get().mlCsv,
+   733→    });
+   734→  },
+   735→  resetMlConfig: () => {
+   736→    set({ mlConfig: DEFAULT_ML_CONFIG });
+   737→    savePlayground({
+   738→      playgroundTab: get().playgroundTab,
+   739→      pkParams: get().pkParams,
+   740→      mlConfig: DEFAULT_ML_CONFIG,
+   741→      mlCsv: get().mlCsv,
+   742→    });
+   743→  },
+   744→
+   745→  mlCsv: persistedPlayground.mlCsv ?? null,
+   746→  setMlCsv: (csv) => {
+   747→    set({ mlCsv: csv });
+   748→    savePlayground({
+   749→      playgroundTab: get().playgroundTab,
+   750→      pkParams: get().pkParams,
+   751→      mlConfig: get().mlConfig,
+   752→      mlCsv: csv,
+   753→    });
+   754→  },
+   755→  mlResult: loadMlResult(),
+   756→  setMlResult: (result) => {
+   757→    set({ mlResult: result });
+   758→    saveMlResult(result);
+   759→  },
+   760→  mlPreview: null,
+   761→  setMlPreview: (preview) => set({ mlPreview: preview }),
+   762→
+   763→  mlHistory: persistedMlHistory.runs,
+   764→  pushMlRun: (record) => {
+   765→    const mlHistory = [
+   766→      record,
+   767→      ...get().mlHistory.filter((h) => h.id !== record.id),
+   768→    ].slice(0, ML_HISTORY_LIMIT);
+   769→    set({ mlHistory, mlCurrentRunId: record.id });
+   770→    saveMlHistory(mlHistory, record.id);
+   771→  },
+   772→  clearMlHistory: () => {
+   773→    saveMlHistory([], null);
+   774→    set({ mlHistory: [], mlCurrentRunId: null });
+   775→  },
+   776→  mlCurrentRunId: persistedMlHistory.currentId,
+   777→  setMlCurrentRun: (id) => {
+   778→    set({ mlCurrentRunId: id });
+   779→    saveMlHistory(get().mlHistory, id);
+   780→  },
+   781→
+   782→  tree: null,
+   783→  stats: null,
+   784→  treeStatus: "idle",
+   785→  treeError: null,
+   786→  ensureTree: async () => {
+   787→    const { treeStatus, tree } = get();
+   788→    if (treeStatus === "loading" || tree) return;
+   789→    set({ treeStatus: "loading", treeError: null });
+   790→    try {
+   791→      const res = await fetch("/api/toolkit/tree");
+   792→      if (!res.ok) {
+   793→        throw new Error(`Tree API responded with HTTP ${res.status}`);
+   794→      }
+   795→      const data = (await res.json()) as TreeResponse;
+   796→      set({ tree: data.root, stats: data.stats, treeStatus: "ready" });
+   797→    } catch (err) {
+   798→      set({
+   799→        treeStatus: "error",
+   800→        treeError:
+   801→          err instanceof Error ? err.message : "Unknown error while loading the file tree.",
+   802→      });
+   803→    }
+   804→  },
+   805→}));
+   806→

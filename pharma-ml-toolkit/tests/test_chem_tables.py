@@ -304,3 +304,32 @@ class TestMissingSentinels:
         )
         annotated = annotate_with_smiles(frame, reference, name_columns=["Ligand"])
         assert annotated["Ligand_SMILES"].tolist() == ["CCO", ""]
+
+    def test_compare_tables_drops_blank_names_not_phantom_common(self) -> None:
+        """Whitespace-only cells must not become a shared '' ligand."""
+        a = pd.DataFrame({"Ligand": ["ligand1", "   ", "\t", "ligand2"]})
+        b = pd.DataFrame({"Ligand": ["ligand1", " ", "ligand3"]})
+        comparison = compare_tables(a, b, column="Ligand")
+        assert comparison.common == ["ligand1"]
+        assert comparison.only_in_a == ["ligand2"]
+        assert comparison.only_in_b == ["ligand3"]
+        assert "" not in comparison.common
+        assert "" not in comparison.only_in_a
+        assert "" not in comparison.only_in_b
+
+    def test_compare_tables_bare_extension_keeps_dotfile_semantics(self) -> None:
+        """splitext treats a leading-dot cell as a hidden filename, not an extension."""
+        a = pd.DataFrame({"Ligand": [".pdbqt"]})
+        b = pd.DataFrame({"Ligand": ["ligand3"]})
+        comparison = compare_tables(a, b, column="Ligand")
+        assert comparison.only_in_a == [".pdbqt"]
+        assert comparison.common == []
+
+    def test_compare_tables_all_blank_names_yield_empty_buckets(self) -> None:
+        a = pd.DataFrame({"Ligand": ["  ", "", None]})
+        b = pd.DataFrame({"Ligand": ["\t"]})
+        comparison = compare_tables(a, b, column="Ligand")
+        assert comparison.common == []
+        assert comparison.only_in_a == []
+        assert comparison.only_in_b == []
+        assert comparison.summary() == {"common": 0, "only_in_a": 0, "only_in_b": 0}

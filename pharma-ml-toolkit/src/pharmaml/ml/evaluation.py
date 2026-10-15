@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
@@ -102,8 +103,8 @@ class RegressionReport:
 
 def evaluate_model(
     model: Any,
-    X_test: np.ndarray,
-    y_test: np.ndarray | list,
+    X_test: pd.DataFrame | np.ndarray,
+    y_test: pd.Series | np.ndarray | list,
     task: str,
     keep_predictions: bool = False,
 ) -> ClassificationReport | RegressionReport:
@@ -128,9 +129,15 @@ def evaluate_model(
     Raises
     ------
     ModelError
-        On invalid task or prediction-length mismatch.
+        On invalid task, empty ``y_test``, or prediction-length
+        mismatch.
     """
     y_true = np.asarray(y_test)
+    if y_true.size == 0:
+        raise ModelError(
+            "y_test is empty — evaluate_model needs at least one held-out "
+            "sample"
+        )
     # Some backends (notably CatBoost) return predictions shaped (n, 1)
     # instead of (n,) — flatten so label concatenation always works.
     y_pred = np.asarray(model.predict(X_test)).reshape(-1)

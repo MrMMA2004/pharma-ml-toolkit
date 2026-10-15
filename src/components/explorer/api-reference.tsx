@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -11,6 +11,7 @@ import {
   FileCode2,
   RefreshCw,
   Search,
+  SearchX,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -88,6 +89,14 @@ export function ApiReference() {
       }
     }
     return counts;
+  }, [data]);
+
+  /** Unfiltered symbol count per module — powers the "n of m" badge while filtering. */
+  const moduleTotals = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!data) return map;
+    for (const mod of data.modules) map.set(mod.name, mod.symbols.length);
+    return map;
   }, [data]);
 
   const filtered = useMemo(() => {
@@ -256,7 +265,7 @@ export function ApiReference() {
                   type="button"
                   onClick={() => setQuery("")}
                   aria-label="Clear symbol search"
-                  className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="size-3.5" aria-hidden />
                 </button>
@@ -326,16 +335,37 @@ export function ApiReference() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <Card className="py-0 shadow-sm">
+        <Card className="py-0 shadow-sm" role="status">
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <Search className="size-7 text-muted-foreground/50" aria-hidden />
-            <p className="text-sm text-muted-foreground">
-              No symbols match{" "}
-              <span className="font-mono font-medium text-foreground">
-                {query.trim()}
-              </span>
-              {kindFilter !== "all" ? ` (${kindFilter}s only)` : ""}.
-            </p>
+            <span className="flex size-12 items-center justify-center rounded-full border bg-muted/50">
+              <SearchX className="size-6 text-muted-foreground" aria-hidden />
+            </span>
+            <div className="max-w-md space-y-1.5">
+              <p className="text-sm font-medium">
+                {searchActive ? "No symbols match your search" : "No symbols in this view"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {searchActive ? (
+                  <>
+                    Nothing matches{" "}
+                    <span className="font-mono font-medium text-foreground">{query.trim()}</span>
+                    {kindFilter !== "all"
+                      ? ` with the ${KIND_FILTERS.find((f) => f.id === kindFilter)?.label.toLowerCase()} filter`
+                      : ""}
+                    .
+                  </>
+                ) : (
+                  <>
+                    The{" "}
+                    {KIND_FILTERS.find((f) => f.id === kindFilter)?.label.toLowerCase()} filter hides every
+                    symbol.
+                  </>
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground/80">
+                Fuzzy search tolerates typos and partial words — try a shorter query.
+              </p>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -351,107 +381,124 @@ export function ApiReference() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {filtered.map((mod, i) => (
-            <motion.div
-              key={mod.name}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(i * 0.05, 0.25), duration: 0.2 }}
-            >
-              <Card className="overflow-hidden py-0 shadow-sm">
-                <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/30 py-3">
-                  <div className="min-w-0">
-                    <p className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-mono text-sm font-semibold">{mod.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {mod.symbols.length} symbol{mod.symbols.length === 1 ? "" : "s"}
-                      </span>
-                    </p>
-                    <p className="mt-0.5 break-words text-xs leading-snug text-muted-foreground">{mod.blurb}</p>
+        <div>
+          {filtered.map((mod, i) => {
+            const moduleTotal = moduleTotals.get(mod.name);
+            return (
+              <Fragment key={mod.name}>
+                {/* Subtle separator between module groups (decorative). */}
+                {i > 0 ? (
+                  <div aria-hidden className="my-2 flex items-center justify-center gap-2">
+                    <span className="h-px w-10 bg-border/70" />
+                    <Braces className="size-3 text-muted-foreground/40" />
+                    <span className="h-px w-10 bg-border/70" />
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 shrink-0 gap-1.5 text-xs"
-                    onClick={() => viewSource(mod.sourcePath, mod.name)}
-                    aria-label={`View source of ${mod.name}`}
-                  >
-                    <FileCode2 className="size-3.5" aria-hidden />
-                    View source
-                  </Button>
-                </CardHeader>
-                <CardContent className="py-0">
-                  <ul className="divide-y">
-                    {mod.symbols.map((sym) => {
-                      const symPath = sym.sourcePath ?? mod.sourcePath;
-                      const symRef = sym.line ? `${symPath}#L${sym.line}` : symPath;
-                      const copied = copiedSym === sym.name;
-                      return (
-                        <li key={sym.name} className="group/row flex items-stretch">
-                          <button
-                            type="button"
-                            onClick={() => viewSource(symPath, mod.name, sym.line)}
-                            aria-label={
-                              sym.line
-                                ? `Jump to ${sym.name} definition at line ${sym.line} of ${mod.name}`
-                                : `Open source of ${mod.name} (${sym.name})`
-                            }
-                            className="group flex min-w-0 flex-1 flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:bg-primary/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-3"
+                ) : null}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(i * 0.05, 0.25), duration: 0.2 }}
+                >
+                  <Card className="overflow-hidden py-0 shadow-sm">
+                    <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/30 py-3">
+                      <div className="min-w-0">
+                        <p className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-sm font-semibold">{mod.name}</span>
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 bg-muted/40 px-1.5 font-mono text-[10px] tabular-nums text-muted-foreground"
                           >
-                            <div className="flex min-w-0 items-center gap-2 sm:w-[240px] sm:shrink-0">
-                              <code className="break-all font-mono text-[13px] font-medium text-foreground">
-                                <HighlightText text={sym.name} query={query} />
-                              </code>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "px-1.5 py-0 font-mono text-[10px] uppercase tracking-wide",
-                                  KIND_STYLES[sym.kind]
-                                )}
+                            {moduleTotal !== undefined && moduleTotal !== mod.symbols.length
+                              ? `${fmtInt(mod.symbols.length)} of ${fmtInt(moduleTotal)} symbols`
+                              : `${fmtInt(mod.symbols.length)} symbol${mod.symbols.length === 1 ? "" : "s"}`}
+                          </Badge>
+                        </p>
+                        <p className="mt-0.5 break-words text-xs leading-snug text-muted-foreground">{mod.blurb}</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 shrink-0 gap-1.5 text-xs"
+                        onClick={() => viewSource(mod.sourcePath, mod.name)}
+                        aria-label={`View source of ${mod.name}`}
+                      >
+                        <FileCode2 className="size-3.5" aria-hidden />
+                        View source
+                      </Button>
+                    </CardHeader>
+                    <CardContent className="py-0">
+                      <ul className="divide-y">
+                        {mod.symbols.map((sym) => {
+                          const symPath = sym.sourcePath ?? mod.sourcePath;
+                          const symRef = sym.line ? `${symPath}#L${sym.line}` : symPath;
+                          const copied = copiedSym === sym.name;
+                          return (
+                            <li key={sym.name} className="group/row flex items-stretch">
+                              <button
+                                type="button"
+                                onClick={() => viewSource(symPath, mod.name, sym.line)}
+                                aria-label={
+                                  sym.line
+                                    ? `Jump to ${sym.name} definition at line ${sym.line} of ${mod.name}`
+                                    : `Open source of ${mod.name} (${sym.name})`
+                                }
+                                className="group flex min-w-0 flex-1 flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:bg-primary/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-3"
                               >
-                                {sym.kind}
-                              </Badge>
-                              {sym.line ? (
-                                <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">
-                                  L{sym.line}
-                                </span>
-                              ) : null}
-                            </div>
-                            <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
-                              {sym.summary || "—"}
-                            </p>
-                            <ArrowRight
-                              className="hidden size-3.5 shrink-0 -translate-x-1 text-primary opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 sm:block"
-                              aria-hidden
-                            />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void copyReference(sym.name, symPath, sym.line)}
-                            aria-label={`Copy line reference ${symRef}`}
-                            title={`Copy ${symRef}`}
-                            className={cn(
-                              "flex w-10 shrink-0 items-center justify-center border-l border-transparent text-muted-foreground/60 transition-all hover:border-l-border hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:bg-primary/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring sm:opacity-0 sm:group-hover/row:opacity-100 sm:group-focus-within/row:opacity-100 sm:focus-visible:opacity-100",
-                              copied && "text-primary sm:opacity-100"
-                            )}
-                          >
-                            {copied ? (
-                              <Check className="size-3.5" aria-hidden />
-                            ) : (
-                              <ClipboardCopy className="size-3.5" aria-hidden />
-                            )}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                                <div className="flex min-w-0 items-center gap-2 sm:w-[240px] sm:shrink-0">
+                                  <code className="break-all font-mono text-[13px] font-medium text-foreground underline decoration-primary/40 decoration-2 underline-offset-4 group-hover:underline group-focus-visible:underline">
+                                    <HighlightText text={sym.name} query={query} />
+                                  </code>
+                                </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "px-1.5 py-0 font-mono text-[10px] uppercase tracking-wide",
+                                    KIND_STYLES[sym.kind]
+                                  )}
+                                >
+                                  {sym.kind}
+                                </Badge>
+                                {sym.line ? (
+                                  <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">
+                                    L{sym.line}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+                                {sym.summary || "—"}
+                              </p>
+                              <ArrowRight
+                                className="hidden size-3.5 shrink-0 -translate-x-1 text-primary opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 sm:block"
+                                aria-hidden
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void copyReference(sym.name, symPath, sym.line)}
+                              aria-label={`Copy line reference ${symRef}`}
+                              title={`Copy ${symRef}`}
+                              className={cn(
+                                "flex w-10 shrink-0 items-center justify-center border-l border-transparent text-muted-foreground/60 transition-all hover:border-l-border hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:bg-primary/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring sm:opacity-0 sm:group-hover/row:opacity-100 sm:group-focus-within/row:opacity-100 sm:focus-visible:opacity-100",
+                                copied && "text-primary sm:opacity-100"
+                              )}
+                            >
+                              {copied ? (
+                                <Check className="size-3.5" aria-hidden />
+                              ) : (
+                                <ClipboardCopy className="size-3.5" aria-hidden />
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </Fragment>
+            );
+          })}
         </div>
       )}
 

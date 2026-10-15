@@ -1,0 +1,1975 @@
+     1→"use client";
+     2→
+     3→import { useMemo, useRef, useState } from "react";
+     4→import {
+     5→  Brain,
+     6→  Check,
+     7→  ChevronDown,
+     8→  ClipboardPaste,
+     9→  Download,
+    10→  Eraser,
+    11→  FileSpreadsheet,
+    12→  FileUp,
+    13→  History,
+    14→  Loader2,
+    15→  Play,
+    16→  RotateCcw,
+    17→  Sigma,
+    18→  Table2,
+    19→  TrendingDown,
+    20→  TrendingUp,
+    21→  TriangleAlert,
+    22→  X,
+    23→  ZoomIn,
+    24→} from "lucide-react";
+    25→import {
+    26→  CartesianGrid,
+    27→  ComposedChart,
+    28→  Legend,
+    29→  Line,
+    30→  ResponsiveContainer,
+    31→  Scatter,
+    32→  ScatterChart,
+    33→  Tooltip,
+    34→  XAxis,
+    35→  YAxis,
+    36→} from "recharts";
+    37→import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+    38→import { Button } from "@/components/ui/button";
+    39→import {
+    40→  Card,
+    41→  CardContent,
+    42→  CardDescription,
+    43→  CardHeader,
+    44→  CardTitle,
+    45→} from "@/components/ui/card";
+    46→import { Input } from "@/components/ui/input";
+    47→import { Label } from "@/components/ui/label";
+    48→import {
+    49→  Select,
+    50→  SelectContent,
+    51→  SelectItem,
+    52→  SelectTrigger,
+    53→  SelectValue,
+    54→} from "@/components/ui/select";
+    55→import { Slider } from "@/components/ui/slider";
+    56→import {
+    57→  Table,
+    58→  TableBody,
+    59→  TableCell,
+    60→  TableHead,
+    61→  TableHeader,
+    62→  TableRow,
+    63→} from "@/components/ui/table";
+    64→import { CHART } from "@/components/explorer/playground/calc-ui";
+    65→import {
+    66→  MAX_CSV_FEATURES,
+    67→  MAX_CSV_TEXT,
+    68→  MIN_CSV_ROWS,
+    69→  numericColumnNames,
+    70→  parseCsv,
+    71→} from "@/lib/csv";
+    72→import { fmtBytes, fmtNum, fmtTick } from "@/lib/format";
+    73→import { cn } from "@/lib/utils";
+    74→import { toast } from "sonner";
+    75→import { DEFAULT_ML_CONFIG, useToolkitStore, type MlRunRecord } from "@/lib/store";
+    76→import type {
+    77→  DatasetPreviewResponse,
+    78→  MLTrainResponse,
+    79→  MLTrainRequest,
+    80→} from "@/lib/toolkit-types";
+    81→
+    82→type Task = "regression" | "classification";
+    83→type RegModel = "linear" | "polynomial" | "ridge";
+    84→
+    85→const REG_METRICS: Array<{ key: string; label: string }> = [
+    86→  { key: "r2", label: "R²" },
+    87→  { key: "rmse", label: "RMSE" },
+    88→  { key: "mae", label: "MAE" },
+    89→];
+    90→
+    91→const CLS_METRICS: Array<{ key: string; label: string }> = [
+    92→  { key: "accuracy", label: "Accuracy" },
+    93→  { key: "precision", label: "Precision" },
+    94→  { key: "recall", label: "Recall" },
+    95→  { key: "f1", label: "F1" },
+    96→];
+    97→
+    98→function MetricCard({ label, value }: { label: string; value: number }) {
+    99→  return (
+   100→    <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+   101→      <p className="text-xs text-muted-foreground">{label}</p>
+   102→      <p className="font-mono text-xl font-semibold tabular-nums">{fmtNum(value, 4)}</p>
+   103→    </div>
+   104→  );
+   105→}
+   106→
+   107→/** Factory for tiny boundary dot renderers (60×60 grid → 3600 points). */
+   108→function TinyDot(color: string) {
+   109→  return function renderTinyDot(props: unknown) {
+   110→    const { cx, cy } = props as { cx?: number; cy?: number };
+   111→    if (cx === undefined || cy === undefined) return <g />;
+   112→    return <circle cx={cx} cy={cy} r={1.5} fill={color} fillOpacity={0.3} />;
+   113→  };
+   114→}
+   115→
+   116→/** Factory for the larger moon-class dots. */
+   117→function MoonDot(color: string) {
+   118→  return function renderMoonDot(props: unknown) {
+   119→    const { cx, cy } = props as { cx?: number; cy?: number };
+   120→    if (cx === undefined || cy === undefined) return <g />;
+   121→    return <circle cx={cx} cy={cy} r={3.2} fill={color} fillOpacity={0.9} stroke={color} strokeWidth={0.6} />;
+   122→  };
+   123→}
+   124→
+   125→/** Qualitative label for a Pearson correlation coefficient. */
+   126→function corrStrength(r: number): string {
+   127→  const a = Math.abs(r);
+   128→  if (a >= 0.9) return "very strong";
+   129→  if (a >= 0.7) return "strong";
+   130→  if (a >= 0.5) return "moderate";
+   131→  return "weak";
+   132→}
+   133→
+   134→/** Compact "time ago" label for run-history rows (client-side only). */
+   135→function timeAgo(iso: string): string {
+   136→  const t = Date.parse(iso);
+   137→  if (!Number.isFinite(t)) return "";
+   138→  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+   139→  if (s < 60) return `${s}s ago`;
+   140→  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+   141→  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+   142→  return `${Math.floor(s / 86400)}d ago`;
+   143→}
+   144→
+   145→export function MlPlayground() {
+   146→  /* Experiment setup + results live in the store, so the whole playground
+   147→   * (config, trained model, dataset preview) survives tab switches. */
+   148→  const mlConfig = useToolkitStore((s) => s.mlConfig);
+   149→  const setMlConfig = useToolkitStore((s) => s.setMlConfig);
+   150→  const resetMlConfig = useToolkitStore((s) => s.resetMlConfig);
+   151→  const result = useToolkitStore((s) => s.mlResult);
+   152→  const setResult = useToolkitStore((s) => s.setMlResult);
+   153→  const preview = useToolkitStore((s) => s.mlPreview);
+   154→  const setPreview = useToolkitStore((s) => s.setMlPreview);
+   155→  const mlHistory = useToolkitStore((s) => s.mlHistory);
+   156→  const pushMlRun = useToolkitStore((s) => s.pushMlRun);
+   157→  const clearMlHistory = useToolkitStore((s) => s.clearMlHistory);
+   158→  const mlCurrentRunId = useToolkitStore((s) => s.mlCurrentRunId);
+   159→  const setMlCurrentRun = useToolkitStore((s) => s.setMlCurrentRun);
+   160→  const mlCsv = useToolkitStore((s) => s.mlCsv);
+   161→  const setMlCsv = useToolkitStore((s) => s.setMlCsv);
+   162→
+   163→  const {
+   164→    task,
+   165→    source,
+   166→    samples,
+   167→    noise,
+   168→    regModel,
+   169→    alpha,
+   170→    l2,
+   171→    testSizePct,
+   172→    cv,
+   173→    seed,
+   174→    featureColumn,
+   175→    featureColumn2,
+   176→    featureColumns,
+   177→    targetColumn,
+   178→  } = mlConfig;
+   179→
+   180→  /* Multivariate mode: regression result with ≥2 standardized features
+   181→   * (uploaded CSV only) → the chart switches to predicted-vs-actual. */
+   182→  const predActual =
+   183→    result !== null &&
+   184→    result.task === "regression" &&
+   185→    result.datasetMeta.features.length > 1;
+   186→
+   187→  /* Transient request state — not worth persisting across tab switches. */
+   188→  const [status, setStatus] = useState<"idle" | "running" | "done" | "error">(
+   189→    "idle"
+   190→  );
+   191→  const [error, setError] = useState<string | null>(null);
+   192→  const [previewLoading, setPreviewLoading] = useState(false);
+   193→  const [csvLoading, setCsvLoading] = useState(false);
+   194→  const [previewOpen, setPreviewOpen] = useState(true);
+   195→
+   196→  /* X-range zoom on the preview scatter — null = full range. */
+   197→  const [xZoom, setXZoom] = useState<[number, number] | null>(null);
+   198→
+   199→  /* Uploaded-CSV state: drag feedback, paste area, hidden file input. */
+   200→  const [dragOver, setDragOver] = useState(false);
+   201→  const [pasteOpen, setPasteOpen] = useState(false);
+   202→  const [pasteText, setPasteText] = useState("");
+   203→  const fileInputRef = useRef<HTMLInputElement>(null);
+   204→
+   205→  /* The loaded CSV parsed once per file (memoized) + client-side sanity. */
+   206→  const csvTable = useMemo(() => {
+   207→    if (!mlCsv) return null;
+   208→    try {
+   209→      const table = parseCsv(mlCsv.text);
+   210→      return table.columns.length > 0 && table.rows.length > 0 ? table : null;
+   211→    } catch {
+   212→      return null;
+   213→    }
+   214→  }, [mlCsv]);
+   215→  const csvNumericCols = useMemo(
+   216→    () => (csvTable ? numericColumnNames(csvTable) : []),
+   217→    [csvTable]
+   218→  );
+   219→  const csvUsable =
+   220→    csvTable !== null &&
+   221→    csvTable.rows.length >= MIN_CSV_ROWS &&
+   222→    csvNumericCols.length >= 2;
+   223→
+   224→  /* Effective target for chip exclusion: explicit pick, or the auto rule
+   225→   * (last numeric column) the server applies when none is picked. */
+   226→  const effectiveTarget =
+   227→    targetColumn || csvNumericCols[csvNumericCols.length - 1] || "";
+   228→
+   229→  /** Classification preview: the sampled points split by class for the chart. */
+   230→  const previewClasses = useMemo(() => {
+   231→    if (!preview || preview.task !== "classification") return null;
+   232→    return {
+   233→      cls0: preview.points.filter((p) => p.label === 0),
+   234→      cls1: preview.points.filter((p) => p.label === 1),
+   235→    };
+   236→  }, [preview]);
+   237→
+   238→  /** Windowed view of the preview dataset (a true brush): the x-window
+   239→   *  filters the series data AND re-derives both axis domains, so zooming
+   240→   *  rescales the plot instead of merely clipping it. */
+   241→  const previewView = useMemo(() => {
+   242→    if (!preview || preview.points.length === 0) return null;
+   243→    const xs = preview.points.map((p) => p.x);
+   244→    const fullX: [number, number] = [Math.min(...xs), Math.max(...xs)];
+   245→    const yPad = preview.task === "regression" ? 0.4 : 0.3;
+   246→    const zoomed = xZoom !== null && (xZoom[0] > fullX[0] || xZoom[1] < fullX[1]);
+   247→    const win: [number, number] = xZoom ?? fullX;
+   248→
+   249→    const inside =
+   250→      zoomed ? preview.points.filter((p) => p.x >= win[0] && p.x <= win[1]) : preview.points;
+   251→    const ySource = inside.length > 0 ? inside : preview.points;
+   252→    const ys = ySource.map((p) => p.y);
+   253→    // Pad the window slightly so edge dots aren't cut by the plot boundary.
+   254→    const xPad = zoomed ? Math.max((win[1] - win[0]) * 0.04, 0.05) : yPad;
+   255→
+   256→    const inWin = (p: { x: number }) => !zoomed || (p.x >= win[0] && p.x <= win[1]);
+   257→    return {
+   258→      fullX,
+   259→      win,
+   260→      zoomed,
+   261→      xDomain: [win[0] - xPad, win[1] + xPad] as [number, number],
+   262→      yDomain: [Math.min(...ys) - yPad, Math.max(...ys) + yPad] as [number, number],
+   263→      points: inside,
+   264→      cls0: previewClasses ? previewClasses.cls0.filter(inWin) : [],
+   265→      cls1: previewClasses ? previewClasses.cls1.filter(inWin) : [],
+   266→      trend: (preview.trend ?? []).filter(inWin),
+   267→    };
+   268→  }, [preview, previewClasses, xZoom]);
+   269→
+   270→  /** Export the full deterministic dataset (all rows) as a CSV file. */
+   271→  async function downloadCsv() {
+   272→    if (!seedValid) {
+   273→      setError("Seed must be a non-negative integer (0 – 2147483647).");
+   274→      return;
+   275→    }
+   276→    setCsvLoading(true);
+   277→    setError(null);
+   278→    const seedNum = Number.parseInt(seed, 10) || 0;
+   279→    const fileName = `pharmaml_${task}_n${samples}_seed${seedNum}.csv`;
+   280→    try {
+   281→      const qs = new URLSearchParams({
+   282→        task,
+   283→        samples: String(samples),
+   284→        noise: String(noise),
+   285→        seed: String(seedNum),
+   286→      });
+   287→      const res = await fetch(`/api/ml/dataset/csv?${qs.toString()}`);
+   288→      if (!res.ok) {
+   289→        let message = `HTTP ${res.status}`;
+   290→        try {
+   291→          const data: unknown = await res.json();
+   292→          if (typeof data === "object" && data !== null && "error" in data) {
+   293→            message = String((data as { error: unknown }).error);
+   294→          }
+   295→        } catch {
+   296→          /* body wasn't JSON — keep the status message */
+   297→        }
+   298→        throw new Error(message);
+   299→      }
+   300→      const blob = await res.blob();
+   301→      const url = URL.createObjectURL(blob);
+   302→      const anchor = document.createElement("a");
+   303→      anchor.href = url;
+   304→      anchor.download = fileName;
+   305→      document.body.appendChild(anchor);
+   306→      anchor.click();
+   307→      document.body.removeChild(anchor);
+   308→      URL.revokeObjectURL(url);
+   309→      toast.success("Dataset exported", {
+   310→        description: `${fileName} · ${samples} rows · ${fmtBytes(blob.size)}`,
+   311→      });
+   312→    } catch (err) {
+   313→      setError(err instanceof Error ? err.message : "CSV export failed.");
+   314→    } finally {
+   315→      setCsvLoading(false);
+   316→    }
+   317→  }
+   318→
+   319→  const noiseMax = task === "regression" ? 2 : 1.5;
+   320→  const metricSpecs = task === "regression" ? REG_METRICS : CLS_METRICS;
+   321→
+   322→  function switchTask(next: Task) {
+   323→    setMlConfig({ task: next });
+   324→    if (next === "classification" && noise > 1.5) setMlConfig({ noise: 0.3 });
+   325→    if (next === "regression" && regModel !== "ridge" && regModel !== "linear" && regModel !== "polynomial") {
+   326→      setMlConfig({ regModel: "linear" });
+   327→    }
+   328→    setStatus("idle");
+   329→    setResult(null);
+   330→    setError(null);
+   331→    setPreview(null);
+   332→    setXZoom(null);
+   333→  }
+   334→
+   335→  /** Restore the default experiment setup and drop any stored results. */
+   336→  function resetSetup() {
+   337→    resetMlConfig();
+   338→    setStatus("idle");
+   339→    setResult(null);
+   340→    setPreview(null);
+   341→    setError(null);
+   342→    setXZoom(null);
+   343→  }
+   344→
+   345→  /* ------------------------- CSV data loading ------------------------- */
+   346→
+   347→  /** Load CSV text into the store, reset column picks, drop stale results.
+   348→   *  Returns false (with a toast) when the text is unusable. */
+   349→  function loadCsv(fileName: string, text: string): boolean {
+   350→    if (text.trim().length < 4 || text.length > MAX_CSV_TEXT) {
+   351→      toast.error("CSV not loaded", {
+   352→        description: "Expected a non-empty file of at most 256 KB.",
+   353→      });
+   354→      return false;
+   355→    }
+   356→    const table = parseCsv(text);
+   357→    if (table.columns.length === 0 || table.rows.length === 0) {
+   358→      toast.error("Could not parse the CSV", {
+   359→        description: "Expected a header row followed by data rows.",
+   360→      });
+   361→      return false;
+   362→    }
+   363→    setMlCsv({ fileName, text });
+   364→    setMlConfig({ featureColumn: "", featureColumn2: "", targetColumn: "" });
+   365→    setStatus("idle");
+   366→    setResult(null);
+   367→    setPreview(null);
+   368→    setError(null);
+   369→    setXZoom(null);
+   370→    toast.success("CSV loaded", {
+   371→      description: `${fileName} — ${table.rows.length} rows × ${table.columns.length} columns · ${numericColumnNames(table).length} numeric`,
+   372→    });
+   373→    return true;
+   374→  }
+   375→
+   376→  /** Read a picked/dropped File as text and load it. */
+   377→  function handleFile(file: File) {
+   378→    if (file.size > MAX_CSV_TEXT) {
+   379→      toast.error("File too large", {
+   380→        description: `CSV uploads are capped at 256 KB — this file is ${fmtBytes(file.size)}.`,
+   381→      });
+   382→      return;
+   383→    }
+   384→    const reader = new FileReader();
+   385→    reader.onload = () => loadCsv(file.name, String(reader.result ?? ""));
+   386→    reader.onerror = () =>
+   387→      toast.error("Could not read the file", {
+   388→        description: "Try re-saving it as a plain UTF-8 CSV.",
+   389→      });
+   390→    reader.readAsText(file);
+   391→  }
+   392→
+   393→  /** Load the pasted textarea contents as "pasted.csv". */
+   394→  function loadPasted() {
+   395→    const text = pasteText.trim();
+   396→    if (text.length >= 4 && loadCsv("pasted.csv", text)) {
+   397→      setPasteOpen(false);
+   398→      setPasteText("");
+   399→    }
+   400→  }
+   401→
+   402→  /** Drop the loaded CSV and return to the empty upload state. */
+   403→  function removeCsv() {
+   404→    setMlCsv(null);
+   405→    setMlConfig({ featureColumn: "", featureColumn2: "", targetColumn: "" });
+   406→    setStatus("idle");
+   407→    setResult(null);
+   408→    setPreview(null);
+   409→    setError(null);
+   410→    setXZoom(null);
+   411→  }
+   412→
+   413→  /** Switch the data source; stale results/previews are dropped. */
+   414→  function switchSource(next: "synthetic" | "csv") {
+   415→    if (source === next) return;
+   416→    setMlConfig({ source: next });
+   417→    setStatus("idle");
+   418→    setResult(null);
+   419→    setPreview(null);
+   420→    setError(null);
+   421→    setXZoom(null);
+   422→  }
+   423→
+   424→  /** Toggle a feature chip for multivariate regression (capped at 8). */
+   425→  function toggleFeature(col: string) {
+   426→    const next = featureColumns.includes(col)
+   427→      ? featureColumns.filter((c) => c !== col)
+   428→      : [...featureColumns, col].slice(0, MAX_CSV_FEATURES);
+   429→    setMlConfig({ featureColumns: next });
+   430→  }
+   431→
+   432→  const seedValid = /^\d{1,10}$/.test(seed.trim());
+   433→  const alphaValid = Number.isFinite(Number.parseFloat(alpha)) && Number.parseFloat(alpha) >= 0;
+   434→  const l2Valid = Number.isFinite(Number.parseFloat(l2)) && Number.parseFloat(l2) >= 0;
+   435→
+   436→  async function run() {
+   437→    if (source === "synthetic" && !seedValid) {
+   438→      setError("Seed must be a non-negative integer (0 – 2147483647).");
+   439→      return;
+   440→    }
+   441→    if (source === "csv" && (!mlCsv || !csvUsable)) {
+   442→      setError(
+   443→        `Load a CSV with at least ${MIN_CSV_ROWS} rows and 2 numeric columns before training.`
+   444→      );
+   445→      return;
+   446→    }
+   447→    if (task === "regression" && regModel === "ridge" && !alphaValid) {
+   448→      setError("Ridge alpha must be a number ≥ 0.");
+   449→      return;
+   450→    }
+   451→    if (task === "classification" && !l2Valid) {
+   452→      setError("L2 strength must be a number ≥ 0.");
+   453→      return;
+   454→    }
+   455→    setStatus("running");
+   456→    setError(null);
+   457→    const body: MLTrainRequest = {
+   458→      task,
+   459→      samples,
+   460→      noise,
+   461→      model: task === "regression" ? regModel : "logistic",
+   462→      testSize: testSizePct / 100,
+   463→      cv: (Number.parseInt(cv, 10) || 0) as 0 | 3 | 5 | 10,
+   464→      seed: Number.parseInt(seed, 10) || 0,
+   465→    };
+   466→    if (task === "regression" && regModel === "ridge") body.alpha = Number.parseFloat(alpha);
+   467→    if (task === "classification") body.l2 = Number.parseFloat(l2);
+   468→    if (source === "csv" && mlCsv) {
+   469→      body.csv = mlCsv.text;
+   470→      body.csvName = mlCsv.fileName;
+   471→      if (task === "regression") {
+   472→        if (featureColumns.length > 0) body.featureColumns = featureColumns;
+   473→        if (targetColumn) body.targetColumn = targetColumn;
+   474→      } else {
+   475→        if (featureColumn) body.featureColumn = featureColumn;
+   476→        if (featureColumn2) body.featureColumn2 = featureColumn2;
+   477→        if (targetColumn) body.targetColumn = targetColumn;
+   478→      }
+   479→    }
+   480→
+   481→    try {
+   482→      const res = await fetch("/api/ml/train", {
+   483→        method: "POST",
+   484→        headers: { "Content-Type": "application/json" },
+   485→        body: JSON.stringify(body),
+   486→      });
+   487→      const data: unknown = await res.json();
+   488→      if (!res.ok) {
+   489→        const message =
+   490→          typeof data === "object" && data !== null && "error" in data
+   491→            ? `${String((data as { error: unknown }).error)}${
+   492→                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+   493→                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+   494→                  : ""
+   495→              }`
+   496→            : `HTTP ${res.status}`;
+   497→        throw new Error(message);
+   498→      }
+   499→      const payload = data as MLTrainResponse;
+   500→      setResult(payload);
+   501→      setStatus("done");
+   502→      /* Record the completed run in the history strip (restorable). */
+   503→      const key = payload.task === "regression" ? "r2" : "accuracy";
+   504→      const keyValue = payload.metrics[key];
+   505→      if (typeof keyValue === "number" && Number.isFinite(keyValue)) {
+   506→        pushMlRun({
+   507→          id: Date.now(),
+   508→          at: new Date().toISOString(),
+   509→          task: payload.task,
+   510→          model: payload.model,
+   511→          keyMetric: payload.task === "regression" ? "R²" : "Accuracy",
+   512→          keyValue,
+   513→          config: { ...mlConfig },
+   514→          result: payload,
+   515→          ...(source === "csv" && mlCsv
+   516→            ? {
+   517→                csv: {
+   518→                  fileName: mlCsv.fileName,
+   519→                  featureColumns:
+   520→                    task === "regression"
+   521→                      ? featureColumns
+   522→                      : [featureColumn, featureColumn2].filter(Boolean),
+   523→                  targetColumn,
+   524→                },
+   525→              }
+   526→            : {}),
+   527→        });
+   528→      }
+   529→    } catch (err) {
+   530→      setStatus("error");
+   531→      const message = err instanceof Error ? err.message : "Training request failed.";
+   532→      setError(message);
+   533→    }
+   534→  }
+   535→
+   536→  /** Restore a previous run: config snapshot + full result + charts. */
+   537→  function restoreRun(rec: MlRunRecord) {
+   538→    setMlConfig(rec.config);
+   539→    setResult(rec.result);
+   540→    setMlCurrentRun(rec.id);
+   541→    setStatus("done");
+   542→    setError(null);
+   543→    setXZoom(null);
+   544→    toast.success("Run restored", {
+   545→      description: `${rec.model} · ${rec.csv ? rec.csv.fileName : `seed ${rec.config.seed}`} · ${
+   546→        rec.keyMetric
+   547→      } ${fmtNum(rec.keyValue, 4)}`,
+   548→    });
+   549→  }  /** Fetch the first rows + summary stats of the (deterministic) dataset. */
+   550→  async function previewDataset() {
+   551→    if (source === "synthetic" && !seedValid) {
+   552→      setError("Seed must be a non-negative integer (0 – 2147483647).");
+   553→      return;
+   554→    }
+   555→    if (source === "csv" && (!mlCsv || !csvUsable)) {
+   556→      setError(
+   557→        `Load a CSV with at least ${MIN_CSV_ROWS} rows and 2 numeric columns before previewing.`
+   558→      );
+   559→      return;
+   560→    }
+   561→    setPreviewLoading(true);
+   562→    setError(null);
+   563→    try {
+   564→      const res = await fetch("/api/ml/dataset", {
+   565→        method: "POST",
+   566→        headers: { "Content-Type": "application/json" },
+   567→        body: JSON.stringify({
+   568→          task,
+   569→          samples,
+   570→          noise,
+   571→          seed: Number.parseInt(seed, 10) || 0,
+   572→          ...(source === "csv" && mlCsv
+   573→            ? {
+   574→                csv: mlCsv.text,
+   575→                csvName: mlCsv.fileName,
+   576→                ...(task === "regression"
+   577→                  ? {
+   578→                      ...(featureColumns.length > 0 ? { featureColumns } : {}),
+   579→                      ...(targetColumn ? { targetColumn } : {}),
+   580→                    }
+   581→                  : {
+   582→                      ...(featureColumn ? { featureColumn } : {}),
+   583→                      ...(featureColumn2 ? { featureColumn2 } : {}),
+   584→                      ...(targetColumn ? { targetColumn } : {}),
+   585→                    }),
+   586→              }
+   587→            : {}),
+   588→        }),
+   589→      });
+   590→      const data: unknown = await res.json();
+   591→      if (!res.ok) {
+   592→        const message =
+   593→          typeof data === "object" && data !== null && "error" in data
+   594→            ? `${String((data as { error: unknown }).error)}${
+   595→                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+   596→                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+   597→                  : ""
+   598→              }`
+   599→            : `HTTP ${res.status}`;
+   600→        throw new Error(message);
+   601→      }
+   602→      setPreview(data as DatasetPreviewResponse);
+   603→      setPreviewOpen(true);
+   604→      setXZoom(null); // fresh dataset — reset the x-range zoom
+   605→    } catch (err) {
+   606→      setError(err instanceof Error ? err.message : "Preview request failed.");
+   607→    } finally {
+   608→      setPreviewLoading(false);
+   609→    }
+   610→  }
+   611→
+   612→  const running = status === "running";
+   613→
+   614→  /* Chart series (memoized splits so recharts gets stable references). */
+   615→  const clsSeries = useMemo(() => {
+   616→    if (!result || result.task !== "classification") return null;
+   617→    const boundary = result.series.boundary ?? [];
+   618→    return {
+   619→      grid0: boundary.filter((p) => p.pred === 0),
+   620→      grid1: boundary.filter((p) => p.pred === 1),
+   621→      moon0: result.series.test.filter((p) => p.label === 0),
+   622→      moon1: result.series.test.filter((p) => p.label === 1),
+   623→    };
+   624→  }, [result]);
+   625→
+   626→  const coefficientsText = useMemo(() => {
+   627→    if (!result) return null;
+   628→    const { intercept, coefs } = result.coefficients;
+   629→    if (result.task === "regression") {
+   630→      /* Multivariate: one weight per named feature (uploaded CSV mode). */
+   631→      const names = result.datasetMeta.source?.featureColumns;
+   632→      if (names && names.length > 1) {
+   633→        const terms = coefs
+   634→          .map((c, i) => `${fmtNum(c, 4)}·x̂${names[i] ? `[${names[i]}]` : String(i + 1)}`)
+   635→          .join(" + ");
+   636→        return `ŷ = ${fmtNum(intercept, 4)} + ${terms}   (x̂ = standardized features)`;
+   637→      }
+   638→      const terms = coefs
+   639→        .map((c, i) => `${fmtNum(c, 4)}·x̂${coefs.length > 1 ? `^${i + 1}` : ""}`)
+   640→        .join(" + ");
+   641→      return `ŷ = ${fmtNum(intercept, 4)} + ${terms}   (x̂ = standardized x)`;
+   642→    }
+   643→    return `σ(b₀ + w₁x̂₁ + w₂x̂₂)   b₀=${fmtNum(intercept, 4)}, w=[${coefs
+   644→      .map((c) => fmtNum(c, 4))
+   645→      .join(", ")}]`;
+   646→  }, [result]);
+   647→
+   648→  return (
+   649→    <div className="grid gap-4 xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
+   650→      {/* ------------------------------ Controls ------------------------------ */}
+   651→      <Card className="h-fit overflow-hidden py-0 shadow-sm xl:sticky xl:top-24">
+   652→        <CardHeader className="border-b bg-muted/30 py-3">
+   653→          <div className="flex items-center gap-2.5">
+   654→            <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+   655→              <Brain className="size-4.5" aria-hidden />
+   656→            </span>
+   657→            <div>
+   658→              <CardTitle className="text-base">Experiment setup</CardTitle>
+   659→              <CardDescription className="text-xs">
+   660→                Seeded generator or your own CSV — setup & results survive reloads
+   661→              </CardDescription>
+   662→            </div>
+   663→          </div>
+   664→        </CardHeader>
+   665→        <CardContent className="space-y-5 pb-4">
+   666→          {/* Task */}
+   667→          <div className="space-y-1.5">
+   668→            <Label className="text-xs font-medium">Task</Label>
+   669→            <div className="grid grid-cols-2 gap-1 rounded-lg border bg-muted/40 p-1" role="tablist" aria-label="ML task">
+   670→              {(["regression", "classification"] as const).map((t) => (
+   671→                <button
+   672→                  key={t}
+   673→                  type="button"
+   674→                  role="tab"
+   675→                  aria-selected={task === t}
+   676→                  onClick={() => switchTask(t)}
+   677→                  className={`h-9 rounded-md text-sm font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+   678→                    task === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+   679→                  }`}
+   680→                >
+   681→                  {t}
+   682→                </button>
+   683→              ))}
+   684→            </div>
+   685→          </div>
+   686→
+   687→          {/* Data source: seeded generator or the user's own CSV */}
+   688→          <div className="space-y-1.5">
+   689→            <Label className="text-xs font-medium">Data source</Label>
+   690→            <div className="grid grid-cols-2 gap-1 rounded-lg border bg-muted/40 p-1" role="tablist" aria-label="Data source">
+   691→              {(["synthetic", "csv"] as const).map((s) => (
+   692→                <button
+   693→                  key={s}
+   694→                  type="button"
+   695→                  role="tab"
+   696→                  aria-selected={source === s}
+   697→                  onClick={() => switchSource(s)}
+   698→                  className={`h-9 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+   699→                    source === s ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+   700→                  }`}
+   701→                >
+   702→                  {s === "synthetic" ? "Synthetic" : "My CSV"}
+   703→                </button>
+   704→              ))}
+   705→            </div>
+   706→          </div>
+   707→
+   708→          {/* Uploaded CSV dataset (drop / browse / paste + column picks) */}
+   709→          {source === "csv" ? (
+   710→            <div className="space-y-2.5">
+   711→              <Label className="text-xs font-medium">Your dataset</Label>
+   712→              {mlCsv ? (
+   713→                <div className="space-y-2.5">
+   714→                  <div className="rounded-lg border bg-muted/20 p-2.5">
+   715→                    <div className="flex items-center gap-2.5">
+   716→                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+   717→                        <FileSpreadsheet className="size-4" aria-hidden />
+   718→                      </span>
+   719→                      <div className="min-w-0 flex-1">
+   720→                        <p className="truncate font-mono text-xs font-medium" title={mlCsv.fileName}>
+   721→                          {mlCsv.fileName}
+   722→                        </p>
+   723→                        <p className="text-[11px] leading-snug text-muted-foreground">
+   724→                          {csvTable
+   725→                            ? `${csvTable.rows.length} rows × ${csvTable.columns.length} cols · ${csvNumericCols.length} numeric`
+   726→                            : "Unreadable — re-upload the file"}
+   727→                        </p>
+   728→                      </div>
+   729→                      <button
+   730→                        type="button"
+   731→                        onClick={removeCsv}
+   732→                        aria-label="Remove the loaded CSV"
+   733→                        title="Remove CSV"
+   734→                        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+   735→                      >
+   736→                        <X className="size-3.5" aria-hidden />
+   737→                      </button>
+   738→                    </div>
+   739→                    {csvTable && !csvUsable ? (
+   740→                      <p className="mt-2 rounded-md border border-destructive/25 bg-destructive/5 px-2 py-1.5 text-[11px] leading-snug text-destructive">
+   741→                        Needs ≥ {MIN_CSV_ROWS} rows and ≥ 2 numeric columns to train.
+   742→                      </p>
+   743→                    ) : null}
+   744→                  </div>
+   745→
+   746→                  {csvTable ? (
+   747→                    task === "regression" ? (
+   748→                      <div className="space-y-2">
+   749→                        {/* Feature chips — multi-select, ≥2 picks = multivariate */}
+   750→                        <div className="space-y-1.5">
+   751→                          <div className="flex items-center justify-between">
+   752→                            <Label className="text-[11px] font-medium">Features (x)</Label>
+   753→                            <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+   754→                              {featureColumns.length > 0
+   755→                                ? `${featureColumns.length} picked · multi`
+   756→                                : "auto · all numeric"}
+   757→                            </span>
+   758→                          </div>
+   759→                          <div
+   760→                            role="group"
+   761→                            aria-label="Feature columns"
+   762→                            className="flex flex-wrap gap-1.5"
+   763→                          >
+   764→                            {csvNumericCols
+   765→                              .filter((c) => c !== effectiveTarget)
+   766→                              .map((col) => {
+   767→                                const active = featureColumns.includes(col);
+   768→                                return (
+   769→                                  <button
+   770→                                    key={col}
+   771→                                    type="button"
+   772→                                    onClick={() => toggleFeature(col)}
+   773→                                    aria-pressed={active}
+   774→                                    className={cn(
+   775→                                      "group inline-flex h-7 items-center gap-1 rounded-full border px-2.5 font-mono text-[11px] transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+   776→                                      active
+   777→                                        ? "border-primary/40 bg-primary/10 text-primary shadow-sm"
+   778→                                        : "border-border bg-muted/30 text-muted-foreground hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
+   779→                                    )}
+   780→                                    title={
+   781→                                      featureColumns.length >= MAX_CSV_FEATURES && !active
+   782→                                        ? `Maximum ${MAX_CSV_FEATURES} features`
+   783→                                        : `Toggle feature “${col}”`
+   784→                                    }
+   785→                                  >
+   786→                                    <span
+   787→                                      className={cn(
+   788→                                        "flex size-3.5 items-center justify-center rounded-full transition-colors",
+   789→                                        active
+   790→                                          ? "bg-primary text-primary-foreground"
+   791→                                          : "border border-current opacity-40 group-hover:opacity-70"
+   792→                                      )}
+   793→                                      aria-hidden
+   794→                                    >
+   795→                                      {active ? <Check className="size-2.5" /> : null}
+   796→                                    </span>
+   797→                                    {col}
+   798→                                  </button>
+   799→                                );
+   800→                              })}
+   801→                            {csvNumericCols.filter((c) => c !== effectiveTarget).length === 0 ? (
+   802→                              <p className="text-[11px] leading-snug text-muted-foreground">
+   803→                                No numeric column left besides the target — pick a different target.
+   804→                              </p>
+   805→                            ) : null}
+   806→                          </div>
+   807→                          <p className="text-[10px] leading-snug text-muted-foreground">
+   808→                            Pick 1 for a single-feature fit · pick ≥ 2 for multivariate
+   809→                            (≤ {MAX_CSV_FEATURES}) · none = all numeric columns
+   810→                          </p>
+   811→                        </div>
+   812→                        {/* Target */}
+   813→                        <div className="space-y-1">
+   814→                          <Label className="text-[11px] font-medium">Target (y)</Label>
+   815→                          <Select
+   816→                            value={targetColumn || "auto"}
+   817→                            onValueChange={(v) =>
+   818→                              setMlConfig({ targetColumn: v === "auto" ? "" : v })
+   819→                            }
+   820→                          >
+   821→                            <SelectTrigger className="h-9 text-xs" aria-label="Target column">
+   822→                              <SelectValue />
+   823→                            </SelectTrigger>
+   824→                            <SelectContent>
+   825→                              <SelectItem value="auto">Auto · last numeric</SelectItem>
+   826→                              {csvNumericCols.map((c) => (
+   827→                                <SelectItem key={c} value={c} className="font-mono text-xs">
+   828→                                  {c}
+   829→                                </SelectItem>
+   830→                              ))}
+   831→                            </SelectContent>
+   832→                          </Select>
+   833→                        </div>
+   834→                      </div>
+   835→                    ) : (
+   836→                      <div className="space-y-2">
+   837→                        <div className="space-y-1">
+   838→                          <Label className="text-[11px] font-medium">Feature x₁</Label>
+   839→                          <Select
+   840→                            value={featureColumn || "auto"}
+   841→                            onValueChange={(v) =>
+   842→                              setMlConfig({ featureColumn: v === "auto" ? "" : v })
+   843→                            }
+   844→                          >
+   845→                            <SelectTrigger className="h-9 text-xs" aria-label="First feature column">
+   846→                              <SelectValue />
+   847→                            </SelectTrigger>
+   848→                            <SelectContent>
+   849→                              <SelectItem value="auto">Auto · first numeric</SelectItem>
+   850→                              {csvNumericCols.map((c) => (
+   851→                                <SelectItem key={c} value={c} className="font-mono text-xs">
+   852→                                  {c}
+   853→                                </SelectItem>
+   854→                              ))}
+   855→                            </SelectContent>
+   856→                          </Select>
+   857→                        </div>
+   858→                        <div className="space-y-1">
+   859→                          <Label className="text-[11px] font-medium">Feature x₂</Label>
+   860→                          <Select
+   861→                            value={featureColumn2 || "auto"}
+   862→                            onValueChange={(v) =>
+   863→                              setMlConfig({ featureColumn2: v === "auto" ? "" : v })
+   864→                            }
+   865→                          >
+   866→                            <SelectTrigger className="h-9 text-xs" aria-label="Second feature column">
+   867→                              <SelectValue />
+   868→                            </SelectTrigger>
+   869→                            <SelectContent>
+   870→                              <SelectItem value="auto">Auto · second numeric</SelectItem>
+   871→                              {csvNumericCols.map((c) => (
+   872→                                <SelectItem key={c} value={c} className="font-mono text-xs">
+   873→                                  {c}
+   874→                                </SelectItem>
+   875→                              ))}
+   876→                            </SelectContent>
+   877→                          </Select>
+   878→                        </div>
+   879→                        <div className="space-y-1">
+   880→                          <Label className="text-[11px] font-medium">Label (2 classes)</Label>
+   881→                          <Select
+   882→                            value={targetColumn || "auto"}
+   883→                            onValueChange={(v) =>
+   884→                              setMlConfig({ targetColumn: v === "auto" ? "" : v })
+   885→                            }
+   886→                          >
+   887→                            <SelectTrigger className="h-9 text-xs" aria-label="Label column">
+   888→                              <SelectValue />
+   889→                            </SelectTrigger>
+   890→                            <SelectContent>
+   891→                              <SelectItem value="auto">Auto · 2-value column</SelectItem>
+   892→                              {csvTable.columns.map((c) => (
+   893→                                <SelectItem key={c} value={c} className="font-mono text-xs">
+   894→                                  {c}
+   895→                                </SelectItem>
+   896→                              ))}
+   897→                            </SelectContent>
+   898→                          </Select>
+   899→                        </div>
+   900→                      </div>
+   901→                    )
+   902→                  ) : null}
+   903→                </div>
+   904→              ) : (
+   905→                <div className="space-y-2">
+   906→                  <div
+   907→                    role="button"
+   908→                    tabIndex={0}
+   909→                    aria-label="Upload a CSV file"
+   910→                    onClick={() => fileInputRef.current?.click()}
+   911→                    onKeyDown={(e) => {
+   912→                      if (e.key === "Enter" || e.key === " ") {
+   913→                        e.preventDefault();
+   914→                        fileInputRef.current?.click();
+   915→                      }
+   916→                    }}
+   917→                    onDragOver={(e) => {
+   918→                      e.preventDefault();
+   919→                      setDragOver(true);
+   920→                    }}
+   921→                    onDragLeave={() => setDragOver(false)}
+   922→                    onDrop={(e) => {
+   923→                      e.preventDefault();
+   924→                      setDragOver(false);
+   925→                      const file = e.dataTransfer.files?.[0];
+   926→                      if (file) void handleFile(file);
+   927→                    }}
+   928→                    className={cn(
+   929→                      "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-6 text-center outline-none transition-all duration-200 focus-visible:ring-1 focus-visible:ring-ring",
+   930→                      dragOver
+   931→                        ? "scale-[1.01] border-primary bg-primary/10 shadow-sm"
+   932→                        : "border-border bg-muted/20 hover:border-primary/40 hover:bg-primary/5"
+   933→                    )}
+   934→                  >
+   935→                    <FileUp className="size-5 text-primary" aria-hidden />
+   936→                    <p className="text-xs font-medium">Drop a CSV here or click to browse</p>
+   937→                    <p className="text-[11px] leading-snug text-muted-foreground">
+   938→                      .csv · .tsv · .txt · ≤ 256 KB · parsed in your browser
+   939→                    </p>
+   940→                  </div>
+   941→                  <input
+   942→                    ref={fileInputRef}
+   943→                    type="file"
+   944→                    accept=".csv,.tsv,.txt,text/csv,text/plain"
+   945→                    className="sr-only"
+   946→                    aria-label="Choose a CSV file"
+   947→                    onChange={(e) => {
+   948→                      const file = e.target.files?.[0];
+   949→                      if (file) void handleFile(file);
+   950→                      e.target.value = "";
+   951→                    }}
+   952→                  />
+   953→                  <button
+   954→                    type="button"
+   955→                    onClick={() => setPasteOpen((v) => !v)}
+   956→                    aria-expanded={pasteOpen}
+   957→                    className="w-full rounded-sm text-center text-[11px] font-medium text-primary underline-offset-2 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+   958→                  >
+   959→                    {pasteOpen ? "Hide paste area" : "…or paste CSV text instead"}
+   960→                  </button>
+   961→                  {pasteOpen ? (
+   962→                    <div className="space-y-1.5">
+   963→                      <textarea
+   964→                        value={pasteText}
+   965→                        onChange={(e) => setPasteText(e.target.value)}
+   966→                        rows={5}
+   967→                        spellCheck={false}
+   968→                        placeholder={"dose,clearance\n250,3.2\n180,2.4\n…"}
+   969→                        aria-label="Paste CSV text"
+   970→                        className="thin-scrollbar w-full resize-y rounded-md border bg-background p-2 font-mono text-[11px] leading-relaxed outline-none focus-visible:ring-1 focus-visible:ring-ring"
+   971→                      />
+   972→                      <Button
+   973→                        size="sm"
+   974→                        className="h-8 w-full gap-1.5 text-xs"
+   975→                        onClick={loadPasted}
+   976→                        disabled={pasteText.trim().length < 4}
+   977→                      >
+   978→                        <ClipboardPaste className="size-3.5" aria-hidden />
+   979→                        Load pasted CSV
+   980→                      </Button>
+   981→                    </div>
+   982→                  ) : null}
+   983→                </div>
+   984→              )}
+   985→            </div>
+   986→          ) : null}
+   987→
+   988→          {/* Samples + noise — synthetic mode only (CSV rows come from the file) */}
+   989→          {source === "synthetic" ? (
+   990→            <>
+   991→              <div className="space-y-2">
+   992→                <div className="flex items-center justify-between">
+   993→                  <Label htmlFor="ml-samples" className="text-xs font-medium">
+   994→                    Samples
+   995→                  </Label>
+   996→                  <span className="font-mono text-xs tabular-nums text-muted-foreground">{samples}</span>
+   997→                </div>
+   998→                <Slider
+   999→                  id="ml-samples"
+  1000→                  min={100}
+  1001→                  max={1000}
+  1002→                  step={50}
+  1003→                  value={[samples]}
+  1004→                  onValueChange={(v) => setMlConfig({ samples: v[0] ?? samples })}
+  1005→                />
+  1006→              </div>
+  1007→
+  1008→              <div className="space-y-2">
+  1009→                <div className="flex items-center justify-between">
+  1010→                  <Label htmlFor="ml-noise" className="text-xs font-medium">
+  1011→                    Noise {task === "classification" ? "(moons)" : "σ"}
+  1012→                  </Label>
+  1013→                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
+  1014→                    {noise.toFixed(2)}
+  1015→                  </span>
+  1016→                </div>
+  1017→                <Slider
+  1018→                  id="ml-noise"
+  1019→                  min={0}
+  1020→                  max={noiseMax}
+  1021→                  step={0.05}
+  1022→                  value={[Math.min(noise, noiseMax)]}
+  1023→                  onValueChange={(v) => setMlConfig({ noise: v[0] ?? noise })}
+  1024→                />
+  1025→              </div>
+  1026→            </>
+  1027→          ) : null}
+  1028→
+  1029→          {/* Model */}
+  1030→          <div className="space-y-1.5">
+  1031→            <Label className="text-xs font-medium">Model</Label>
+  1032→            {task === "regression" ? (
+  1033→              <Select value={regModel} onValueChange={(v) => setMlConfig({ regModel: v as RegModel })}>
+  1034→                <SelectTrigger className="h-10" aria-label="Regression model">
+  1035→                  <SelectValue />
+  1036→                </SelectTrigger>
+  1037→                <SelectContent>
+  1038→                  <SelectItem value="linear">Linear regression</SelectItem>
+  1039→                  <SelectItem value="polynomial">Polynomial (degree 2)</SelectItem>
+  1040→                  <SelectItem value="ridge">Ridge (α regularized)</SelectItem>
+  1041→                </SelectContent>
+  1042→              </Select>
+  1043→            ) : (
+  1044→              <div className="space-y-2">
+  1045→                <div className="flex h-10 items-center rounded-md border bg-muted/30 px-3 text-sm text-muted-foreground">
+  1046→                  Logistic regression (batch GD, 800 epochs)
+  1047→                </div>
+  1048→                <div className="space-y-1.5">
+  1049→                  <Label htmlFor="ml-l2" className="text-xs font-medium">
+  1050→                    L2 strength λ
+  1051→                  </Label>
+  1052→                  <Input
+  1053→                    id="ml-l2"
+  1054→                    inputMode="decimal"
+  1055→                    value={l2}
+  1056→                    onChange={(e) => setMlConfig({ l2: e.target.value })}
+  1057→                    aria-invalid={l2Valid ? undefined : true}
+  1058→                    className={`h-10 font-mono text-sm tabular-nums ${l2Valid ? "" : "border-destructive/60"}`}
+  1059→                  />
+  1060→                  {!l2Valid ? (
+  1061→                    <p className="text-[11px] text-destructive">Must be a number ≥ 0.</p>
+  1062→                  ) : null}
+  1063→                </div>
+  1064→              </div>
+  1065→            )}
+  1066→          </div>
+  1067→
+  1068→          {task === "regression" && regModel === "ridge" ? (
+  1069→            <div className="space-y-1.5">
+  1070→              <Label htmlFor="ml-alpha" className="text-xs font-medium">
+  1071→                Ridge α
+  1072→              </Label>
+  1073→              <Input
+  1074→                id="ml-alpha"
+  1075→                inputMode="decimal"
+  1076→                value={alpha}
+  1077→                onChange={(e) => setMlConfig({ alpha: e.target.value })}
+  1078→                aria-invalid={alphaValid ? undefined : true}
+  1079→                className={`h-10 font-mono text-sm tabular-nums ${alphaValid ? "" : "border-destructive/60"}`}
+  1080→              />
+  1081→              {!alphaValid ? <p className="text-[11px] text-destructive">Must be a number ≥ 0.</p> : null}
+  1082→            </div>
+  1083→          ) : null}
+  1084→
+  1085→          {/* Test size */}
+  1086→          <div className="space-y-2">
+  1087→            <div className="flex items-center justify-between">
+  1088→              <Label htmlFor="ml-test" className="text-xs font-medium">
+  1089→                Test split
+  1090→              </Label>
+  1091→              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+  1092→                {testSizePct}%
+  1093→              </span>
+  1094→            </div>
+  1095→            <Slider
+  1096→              id="ml-test"
+  1097→              min={10}
+  1098→              max={50}
+  1099→              step={5}
+  1100→              value={[testSizePct]}
+  1101→              onValueChange={(v) => setMlConfig({ testSizePct: v[0] ?? testSizePct })}
+  1102→            />
+  1103→          </div>
+  1104→
+  1105→          {/* CV + seed */}
+  1106→          <div className="grid grid-cols-2 gap-3">
+  1107→            <div className="space-y-1.5">
+  1108→              <Label className="text-xs font-medium">k-fold CV</Label>
+  1109→              <Select value={cv} onValueChange={(v) => setMlConfig({ cv: v })}>
+  1110→                <SelectTrigger className="h-10" aria-label="Cross-validation folds">
+  1111→                  <SelectValue />
+  1112→                </SelectTrigger>
+  1113→                <SelectContent>
+  1114→                  <SelectItem value="0">Off</SelectItem>
+  1115→                  <SelectItem value="3">3-fold</SelectItem>
+  1116→                  <SelectItem value="5">5-fold</SelectItem>
+  1117→                  <SelectItem value="10">10-fold</SelectItem>
+  1118→                </SelectContent>
+  1119→              </Select>
+  1120→            </div>
+  1121→            {source === "synthetic" ? (
+  1122→              <div className="space-y-1.5">
+  1123→                <Label htmlFor="ml-seed" className="text-xs font-medium">
+  1124→                  Seed
+  1125→                </Label>
+  1126→                <Input
+  1127→                  id="ml-seed"
+  1128→                  inputMode="numeric"
+  1129→                  value={seed}
+  1130→                  onChange={(e) => setMlConfig({ seed: e.target.value })}
+  1131→                  aria-invalid={seedValid ? undefined : true}
+  1132→                  className={`h-10 font-mono text-sm tabular-nums ${seedValid ? "" : "border-destructive/60"}`}
+  1133→                />
+  1134→                {!seedValid ? (
+  1135→                  <p className="text-[11px] text-destructive">Non-negative integer.</p>
+  1136→                ) : null}
+  1137→              </div>
+  1138→            ) : (
+  1139→              <div className="space-y-1.5">
+  1140→                <Label className="text-xs font-medium">Rows</Label>
+  1141→                <div
+  1142→                  className="flex h-10 items-center rounded-md border bg-muted/30 px-3 font-mono text-sm tabular-nums text-muted-foreground"
+  1143→                  title={mlCsv?.fileName ?? "No CSV loaded"}
+  1144→                >
+  1145→                  {csvTable ? `${csvTable.rows.length} rows` : "No CSV loaded"}
+  1146→                </div>
+  1147→              </div>
+  1148→            )}
+  1149→          </div>
+  1150→
+  1151→          <div className="flex gap-2">
+  1152→            <Button
+  1153→              size="lg"
+  1154→              className="h-11 flex-1 gap-2"
+  1155→              onClick={() => void run()}
+  1156→              disabled={running}
+  1157→            >
+  1158→              {running ? (
+  1159→                <>
+  1160→                  <Loader2 className="size-4 animate-spin" aria-hidden />
+  1161→                  Training…
+  1162→                </>
+  1163→              ) : (
+  1164→                <>
+  1165→                  <Play className="size-4" aria-hidden />
+  1166→                  Train model
+  1167→                </>
+  1168→              )}
+  1169→            </Button>
+  1170→            <Button
+  1171→              size="lg"
+  1172→              variant="outline"
+  1173→              className="h-11 shrink-0 gap-2"
+  1174→              onClick={() => void previewDataset()}
+  1175→              disabled={previewLoading}
+  1176→              aria-label="Preview the dataset before training"
+  1177→            >
+  1178→              {previewLoading ? (
+  1179→                <Loader2 className="size-4 animate-spin" aria-hidden />
+  1180→              ) : (
+  1181→                <Table2 className="size-4" aria-hidden />
+  1182→              )}
+  1183→              <span className="hidden sm:inline">Preview data</span>
+  1184→              <span className="sm:hidden">Data</span>
+  1185→            </Button>
+  1186→            <Button
+  1187→              size="lg"
+  1188→              variant="outline"
+  1189→              className="h-11 shrink-0 gap-2"
+  1190→              onClick={resetSetup}
+  1191→              disabled={running || previewLoading}
+  1192→              aria-label="Reset the experiment setup to defaults"
+  1193→              title="Reset setup to defaults"
+  1194→            >
+  1195→              <RotateCcw className="size-4" aria-hidden />
+  1196→              <span className="hidden xl:inline">Reset</span>
+  1197→            </Button>
+  1198→          </div>
+  1199→
+  1200→          {error ? (
+  1201→            <Alert variant="destructive">
+  1202→              <TriangleAlert className="size-4" aria-hidden />
+  1203→              <AlertTitle>Request failed</AlertTitle>
+  1204→              <AlertDescription>{error}</AlertDescription>
+  1205→            </Alert>
+  1206→          ) : null}
+  1207→        </CardContent>
+  1208→      </Card>
+  1209→
+  1210→      {/* ------------------------------ Results ------------------------------ */}
+  1211→      <div className="min-w-0 space-y-4">
+  1212→        {preview ? (
+  1213→          <Card className="overflow-hidden py-0 shadow-sm">
+  1214→            <CardHeader className="border-b bg-muted/30 py-3">
+  1215→              <div className="flex items-center justify-between gap-2">
+  1216→                <div className="min-w-0">
+  1217→                  <CardTitle className="text-sm">Dataset preview</CardTitle>
+  1218→                  <CardDescription className="text-xs">
+  1219→                    {preview.source
+  1220→                      ? `First ${preview.rows.length} of ${preview.source.nRows} usable rows · ${
+  1221→                          preview.source.fileName ?? "pasted.csv"
+  1222→                        } · ${preview.source.droppedRows} malformed row${
+  1223→                          preview.source.droppedRows === 1 ? "" : "s"
+  1224→                        } dropped — raw column values`
+  1225→                      : `First ${preview.rows.length} of ${preview.nTotal} rows · seed ${preview.seed} ·
+  1226→                    noise σ ${preview.noise.toFixed(2)} — same generator the trainer uses`}
+  1227→                  </CardDescription>
+  1228→                </div>
+  1229→                <div className="flex items-center gap-1.5">
+  1230→                {!preview.source ? (
+  1231→                  <Button
+  1232→                    variant="ghost"
+  1233→                    size="sm"
+  1234→                    className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
+  1235→                    onClick={() => void downloadCsv()}
+  1236→                    disabled={csvLoading}
+  1237→                    aria-label="Download the full dataset as CSV"
+  1238→                    title="Download the full dataset as CSV"
+  1239→                  >
+  1240→                    {csvLoading ? (
+  1241→                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+  1242→                    ) : (
+  1243→                      <Download className="size-3.5" aria-hidden />
+  1244→                    )}
+  1245→                    <span className="hidden sm:inline">CSV</span>
+  1246→                  </Button>
+  1247→                ) : null}
+  1248→                <Button
+  1249→                  variant="ghost"
+  1250→                  size="sm"
+  1251→                  className="h-8 w-8 shrink-0 p-0"
+  1252→                  onClick={() => setPreviewOpen((v) => !v)}
+  1253→                  aria-expanded={previewOpen}
+  1254→                  aria-label={previewOpen ? "Collapse dataset preview" : "Expand dataset preview"}
+  1255→                >
+  1256→                  <ChevronDown
+  1257→                    className={cn(
+  1258→                      "size-4 transition-transform duration-200",
+  1259→                      previewOpen ? "" : "-rotate-90"
+  1260→                    )}
+  1261→                    aria-hidden
+  1262→                  />
+  1263→                </Button>
+  1264→                </div>
+  1265→              </div>
+  1266→            </CardHeader>
+  1267→            {previewOpen ? (
+  1268→              <CardContent className="space-y-3 p-3 sm:p-4">
+  1269→                <div className="grid gap-3 lg:grid-cols-2">
+  1270→                  <div className="thin-scrollbar max-h-72 overflow-auto rounded-md border">
+  1271→                    <Table className="data-table">
+  1272→                      <TableHeader>
+  1273→                        <TableRow className="bg-muted/40 hover:bg-muted/40">
+  1274→                          {preview.columns.map((c) => (
+  1275→                            <TableHead key={c} className="h-8 font-mono text-[11px]">
+  1276→                              {c}
+  1277→                            </TableHead>
+  1278→                          ))}
+  1279→                        </TableRow>
+  1280→                      </TableHeader>
+  1281→                      <TableBody>
+  1282→                        {preview.rows.map((row, idx) => (
+  1283→                          <TableRow key={String(row[preview.columns[0] ?? "i"] ?? idx)}>
+  1284→                            {preview.columns.map((c) => (
+  1285→                              <TableCell key={c} className="py-1.5 font-mono text-xs tabular-nums">
+  1286→                                {c === (preview.source?.targetColumn ?? "label") ? (
+  1287→                                  <span className="inline-flex items-center gap-1.5">
+  1288→                                    <span
+  1289→                                      className={cn(
+  1290→                                        "size-1.5 rounded-full",
+  1291→                                        row[c] === 1 ? "bg-chart-1" : "bg-chart-2"
+  1292→                                      )}
+  1293→                                      aria-hidden
+  1294→                                    />
+  1295→                                    {row[c]}
+  1296→                                  </span>
+  1297→                                ) : (
+  1298→                                  fmtNum(row[c] ?? 0, 4)
+  1299→                                )}
+  1300→                              </TableCell>
+  1301→                            ))}
+  1302→                          </TableRow>
+  1303→                        ))}
+  1304→                      </TableBody>
+  1305→                    </Table>
+  1306→                  </div>
+  1307→                  <div className="flex flex-col rounded-md border bg-muted/10 p-2">
+  1308→                    <p className="px-1 pb-1 font-mono text-[11px] leading-snug text-muted-foreground">
+  1309→                      all {preview.nTotal} points · {preview.nPoints} evenly-spaced shown
+  1310→                      {preview.task === "regression" ? " · true line dashed" : ""}
+  1311→                      {preview.source && preview.source.featureColumns.length > 1
+  1312→                        ? ` · x = ${preview.source.featureColumns[0]} (of ${preview.source.featureColumns.length} features)`
+  1313→                        : ""}
+  1314→                    </p>
+  1315→                    <div className="h-56 min-h-0 lg:h-auto lg:flex-1">
+  1316→                      <ResponsiveContainer width="100%" height="100%">
+  1317→                        {preview.task === "regression" ? (
+  1318→                          <ComposedChart margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+  1319→                            <CartesianGrid
+  1320→                              stroke={CHART.gridStroke}
+  1321→                              strokeOpacity={CHART.gridStrokeOpacity}
+  1322→                            />
+  1323→                            <XAxis
+  1324→                              type="number"
+  1325→                              dataKey="x"
+  1326→                              domain={previewView?.xDomain ?? ["dataMin - 0.4", "dataMax + 0.4"]}
+  1327→                              tick={CHART.axisTick}
+  1328→                              tickFormatter={fmtTick}
+  1329→                              tickLine={false}
+  1330→                              axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+  1331→                              label={{
+  1332→                                value:
+  1333→                                  preview.source?.featureColumns[0] ??
+  1334→                                  preview.columns[1] ??
+  1335→                                  "x",
+  1336→                                position: "insideBottomRight",
+  1337→                                offset: -2,
+  1338→                                fill: "#78716c",
+  1339→                                fontSize: 11,
+  1340→                              }}
+  1341→                            />
+  1342→                            <YAxis
+  1343→                              type="number"
+  1344→                              dataKey="y"
+  1345→                              width={44}
+  1346→                              domain={previewView?.yDomain ?? ["dataMin - 0.4", "dataMax + 0.4"]}
+  1347→                              tick={CHART.axisTick}
+  1348→                              tickFormatter={fmtTick}
+  1349→                              tickLine={false}
+  1350→                              axisLine={false}
+  1351→                            />
+  1352→                            <Tooltip
+  1353→                              cursor={{ strokeDasharray: "3 3" }}
+  1354→                              contentStyle={CHART.tooltipStyle}
+  1355→                              formatter={(value) => fmtNum(Number(value), 4)}
+  1356→                            />
+  1357→                            <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+  1358→                            <Scatter
+  1359→                              name="sampled points"
+  1360→                              data={previewView?.points ?? preview.points}
+  1361→                              fill={CHART.stone}
+  1362→                              fillOpacity={0.7}
+  1363→                              isAnimationActive={false}
+  1364→                            />
+  1365→                            <Line
+  1366→                              name="true line (noiseless)"
+  1367→                              data={previewView?.trend ?? preview.trend ?? []}
+  1368→                              dataKey="y"
+  1369→                              stroke={CHART.emerald}
+  1370→                              strokeWidth={2}
+  1371→                              strokeDasharray="6 3"
+  1372→                              dot={false}
+  1373→                              activeDot={false}
+  1374→                              isAnimationActive={false}
+  1375→                            />
+  1376→                          </ComposedChart>
+  1377→                        ) : (
+  1378→                          <ScatterChart margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+  1379→                            <CartesianGrid
+  1380→                              stroke={CHART.gridStroke}
+  1381→                              strokeOpacity={CHART.gridStrokeOpacity}
+  1382→                            />
+  1383→                            <XAxis
+  1384→                              type="number"
+  1385→                              dataKey="x"
+  1386→                              domain={previewView?.xDomain ?? ["dataMin - 0.3", "dataMax + 0.3"]}
+  1387→                              tick={CHART.axisTick}
+  1388→                              tickFormatter={fmtTick}
+  1389→                              tickLine={false}
+  1390→                              axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+  1391→                            />
+  1392→                            <YAxis
+  1393→                              type="number"
+  1394→                              dataKey="y"
+  1395→                              width={44}
+  1396→                              domain={previewView?.yDomain ?? ["dataMin - 0.3", "dataMax + 0.3"]}
+  1397→                              tick={CHART.axisTick}
+  1398→                              tickFormatter={fmtTick}
+  1399→                              tickLine={false}
+  1400→                              axisLine={false}
+  1401→                            />
+  1402→                            <Tooltip
+  1403→                              cursor={{ strokeDasharray: "3 3" }}
+  1404→                              contentStyle={CHART.tooltipStyle}
+  1405→                              formatter={(value) => fmtNum(Number(value), 3)}
+  1406→                            />
+  1407→                            <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+  1408→                            {previewView ? (
+  1409→                              <Scatter
+  1410→                                name={
+  1411→                                  preview.source?.labelMap
+  1412→                                    ? `class 0 · ${preview.source.labelMap[0]}`
+  1413→                                    : "class 0 (outer moon)"
+  1414→                                }
+  1415→                                data={previewView.cls0}
+  1416→                                fill={CHART.emerald}
+  1417→                                fillOpacity={0.75}
+  1418→                                isAnimationActive={false}
+  1419→                              />
+  1420→                            ) : null}
+  1421→                            {previewView ? (
+  1422→                              <Scatter
+  1423→                                name={
+  1424→                                  preview.source?.labelMap
+  1425→                                    ? `class 1 · ${preview.source.labelMap[1]}`
+  1426→                                    : "class 1 (inner moon)"
+  1427→                                }
+  1428→                                data={previewView.cls1}
+  1429→                                fill={CHART.rose}
+  1430→                                fillOpacity={0.75}
+  1431→                                isAnimationActive={false}
+  1432→                              />
+  1433→                            ) : null}
+  1434→                          </ScatterChart>
+  1435→                        )}
+  1436→                      </ResponsiveContainer>
+  1437→                    </div>
+  1438→                    {previewView ? (
+  1439→                      <div className="mt-1.5 rounded-md border border-primary/15 bg-primary/5 px-2.5 pb-1.5 pt-2">
+  1440→                        <div className="flex items-center justify-between gap-2 pb-1">
+  1441→                          <p className="flex items-center gap-1.5 font-mono text-[11px] font-medium text-primary">
+  1442→                            <ZoomIn className="size-3 shrink-0" aria-hidden />
+  1443→                            x-window zoom
+  1444→                          </p>
+  1445→                          <div className="flex min-w-0 items-center gap-2">
+  1446→                            <span
+  1447→                              className="truncate font-mono text-[10px] tabular-nums text-muted-foreground"
+  1448→                              aria-live="polite"
+  1449→                            >
+  1450→                              [{fmtNum(previewView.win[0], 2)} … {fmtNum(previewView.win[1], 2)}]
+  1451→                              <span className="sr-only">
+  1452→                                ; drag the handles to zoom the chart
+  1453→                              </span>
+  1454→                            </span>
+  1455→                            {previewView.zoomed ? (
+  1456→                              <button
+  1457→                                type="button"
+  1458→                                onClick={() => setXZoom(null)}
+  1459→                                aria-label="Reset the chart zoom window"
+  1460→                                title="Reset zoom"
+  1461→                                className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+  1462→                              >
+  1463→                                <RotateCcw className="size-3" aria-hidden />
+  1464→                              </button>
+  1465→                            ) : null}
+  1466→                          </div>
+  1467→                        </div>
+  1468→                        <Slider
+  1469→                          aria-label="Zoom the preview chart x-axis window"
+  1470→                          min={previewView.fullX[0]}
+  1471→                          max={previewView.fullX[1]}
+  1472→                          step={(previewView.fullX[1] - previewView.fullX[0]) / 200}
+  1473→                          value={[previewView.win[0], previewView.win[1]]}
+  1474→                          onValueChange={(v) =>
+  1475→                            setXZoom([
+  1476→                              v[0] ?? previewView.fullX[0],
+  1477→                              v[1] ?? previewView.fullX[1],
+  1478→                            ])
+  1479→                          }
+  1480→                        />
+  1481→                      </div>
+  1482→                    ) : null}
+  1483→                  </div>
+  1484→                </div>
+  1485→                <div className="grid gap-2 sm:grid-cols-2">
+  1486→                  {preview.stats.map((s) => (
+  1487→                    <div key={s.column} className="rounded-md border bg-muted/20 px-3 py-2">
+  1488→                      <p className="font-mono text-xs font-medium">{s.column}</p>
+  1489→                      <p className="mt-0.5 font-mono text-[11px] leading-snug tabular-nums text-muted-foreground">
+  1490→                        mean {fmtNum(s.mean, 4)} · σ {fmtNum(s.std, 4)} · min {fmtNum(s.min, 4)} ·
+  1491→                        max {fmtNum(s.max, 4)}
+  1492→                      </p>
+  1493→                    </div>
+  1494→                  ))}
+  1495→                  {typeof preview.correlation === "number" ? (
+  1496→                    <div className="rounded-md border border-primary/25 bg-primary/5 px-3 py-2">
+  1497→                      <p className="font-mono text-xs font-medium text-primary">Pearson r(x, y)</p>
+  1498→                      <p className="mt-0.5 font-mono text-[11px] tabular-nums text-primary/90">
+  1499→                        {fmtNum(preview.correlation, 4)} — {corrStrength(preview.correlation)} linear
+  1500→                        signal
+  1501→                      </p>
+  1502→                    </div>
+  1503→                  ) : null}
+  1504→                  {preview.classBalance ? (
+  1505→                    <div className="rounded-md border border-primary/25 bg-primary/5 px-3 py-2">
+  1506→                      <p className="font-mono text-xs font-medium text-primary">Class balance</p>
+  1507→                      <p className="mt-0.5 font-mono text-[11px] tabular-nums text-primary/90">
+  1508→                        {preview.classBalance
+  1509→                          .map(
+  1510→                            (c) =>
+  1511→                              `class ${c.label}: ${c.count} (${c.pct.toFixed(1)}%)`
+  1512→                          )
+  1513→                          .join(" · ")}
+  1514→                      </p>
+  1515→                    </div>
+  1516→                  ) : null}
+  1517→                </div>
+  1518→              </CardContent>
+  1519→            ) : null}
+  1520→          </Card>
+  1521→        ) : null}
+  1522→
+  1523→        {!result && status !== "running" ? (
+  1524→          <Card className="py-0 shadow-sm">
+  1525→            <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+  1526→              <span className="ping-ring flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+  1527→                <Brain className="size-6" aria-hidden />
+  1528→              </span>
+  1529→              <p className="text-sm font-medium">No results yet</p>
+  1530→              <p className="max-w-sm text-xs text-muted-foreground">
+  1531→                Pick a data source — the seeded server-side generator or your own CSV — then press{" "}
+  1532→                <strong className="font-semibold text-foreground">Train model</strong>. Regression
+  1533→                fits a closed-form least-squares model; classification trains logistic regression
+  1534→                on the chosen columns.
+  1535→              </p>
+  1536→            </CardContent>
+  1537→          </Card>
+  1538→        ) : null}
+  1539→
+  1540→        {status === "running" ? (
+  1541→          <Card className="py-0 shadow-sm">
+  1542→            <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+  1543→              <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
+  1544→              <p className="text-sm font-medium">Training…</p>
+  1545→              <p className="text-xs text-muted-foreground">
+  1546→                {source === "csv" && mlCsv
+  1547→                  ? `Training on ${mlCsv.fileName} (${csvTable?.rows.length ?? 0} rows), fitting the model, evaluating the held-out split${
+  1548→                      cv !== "0" ? ` and running ${cv}-fold CV` : ""
+  1549→                    }.`
+  1550→                  : `Generating ${samples} samples, fitting the model, evaluating the held-out split${
+  1551→                      cv !== "0" ? ` and running ${cv}-fold CV` : ""
+  1552→                    }.`}
+  1553→              </p>
+  1554→            </CardContent>
+  1555→          </Card>
+  1556→        ) : null}
+  1557→
+  1558→        {result && status !== "running" ? (
+  1559→          <>
+  1560→            {/* Metrics */}
+  1561→            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+  1562→              {metricSpecs.map((m) => (
+  1563→                <MetricCard key={m.key} label={m.label} value={result.metrics[m.key] ?? Number.NaN} />
+  1564→              ))}
+  1565→              {result.cv ? (
+  1566→                <div className="col-span-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5 shadow-sm sm:col-span-4">
+  1567→                  <p className="text-xs text-muted-foreground">
+  1568→                    {result.cv.k}-fold CV {result.cv.metricName}
+  1569→                  </p>
+  1570→                  <p className="font-mono text-xl font-semibold tabular-nums text-primary">
+  1571→                    {fmtNum(result.cv.mean, 4)}{" "}
+  1572→                    <span className="text-sm font-normal">± {fmtNum(result.cv.std, 3)}</span>
+  1573→                  </p>
+  1574→                </div>
+  1575→              ) : null}
+  1576→            </div>
+  1577→
+  1578→            {/* Chart */}
+  1579→            <Card className="overflow-hidden py-0 shadow-sm">
+  1580→              <CardHeader className="border-b bg-muted/30 py-3">
+  1581→                <CardTitle className="text-sm">
+  1582→                  {result.task === "regression"
+  1583→                    ? predActual
+  1584→                      ? "Predicted vs actual (test set)"
+  1585→                      : "Test points & fitted curve"
+  1586→                    : result.datasetMeta.source
+  1587→                      ? "Test points & decision boundary"
+  1588→                      : "Two moons & decision boundary"}
+  1589→                </CardTitle>
+  1590→                <CardDescription className="text-xs">
+  1591→                  {result.datasetMeta.source
+  1592→                    ? `${result.datasetMeta.nTotal} rows from ${
+  1593→                        result.datasetMeta.source.fileName ?? "pasted.csv"
+  1594→                      } · ${result.datasetMeta.nTrain} train · ${result.datasetMeta.nTest} test · ${
+  1595→                        result.datasetMeta.source.droppedRows
+  1596→                      } dropped${
+  1597→                        predActual
+  1598→                          ? ` · ${result.datasetMeta.features.length} features`
+  1599→                          : ""
+  1600→                      }`
+  1601→                    : `${result.datasetMeta.nTotal} samples · ${result.datasetMeta.nTrain} train · ${
+  1602→                        result.datasetMeta.nTest
+  1603→                      } test · seed ${result.datasetMeta.seed}`}
+  1604→                </CardDescription>
+  1605→              </CardHeader>
+  1606→              <CardContent className="p-3 sm:p-4">
+  1607→                <div
+  1608→                  className="h-[340px] w-full"
+  1609→                  role="img"
+  1610→                  aria-label={
+  1611→                    result.task === "regression"
+  1612→                      ? predActual
+  1613→                        ? "Scatter plot of model predictions versus actual values on the test set, with the perfect-prediction reference line"
+  1614→                        : "Scatter plot of test points with the fitted regression curve"
+  1615→                      : result.datasetMeta.source
+  1616→                        ? "Scatter plot of the uploaded-data test classes with the model decision boundary"
+  1617→                        : "Scatter plot of the two moon classes with model decision boundary"
+  1618→                  }
+  1619→                >
+  1620→                  <ResponsiveContainer width="100%" height="100%">
+  1621→                    {result.task === "regression" ? (
+  1622→                      <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+  1623→                        <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+  1624→                        <XAxis
+  1625→                          type="number"
+  1626→                          dataKey="x"
+  1627→                          domain={["auto", "auto"]}
+  1628→                          tick={CHART.axisTick}
+  1629→                          tickFormatter={fmtTick}
+  1630→                          tickLine={false}
+  1631→                          axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+  1632→                          label={{
+  1633→                            value: predActual
+  1634→                              ? "ŷ (predicted)"
+  1635→                              : result.datasetMeta.source?.featureColumns[0] ?? "x",
+  1636→                            position: "insideBottomRight",
+  1637→                            offset: -2,
+  1638→                            fill: "#78716c",
+  1639→                            fontSize: 11,
+  1640→                          }}
+  1641→                        />
+  1642→                        <YAxis
+  1643→                          type="number"
+  1644→                          dataKey="y"
+  1645→                          width={44}
+  1646→                          tick={CHART.axisTick}
+  1647→                          tickFormatter={fmtTick}
+  1648→                          tickLine={false}
+  1649→                          axisLine={false}
+  1650→                          label={
+  1651→                            predActual
+  1652→                              ? {
+  1653→                                  value: result.datasetMeta.source?.targetColumn ?? "y (actual)",
+  1654→                                  angle: -90,
+  1655→                                  position: "insideBottomLeft",
+  1656→                                  offset: 18,
+  1657→                                  fill: "#78716c",
+  1658→                                  fontSize: 11,
+  1659→                                }
+  1660→                              : undefined
+  1661→                          }
+  1662→                        />
+  1663→                        <Tooltip
+  1664→                          cursor={{ strokeDasharray: "3 3" }}
+  1665→                          contentStyle={CHART.tooltipStyle}
+  1666→                          formatter={(value) => fmtNum(Number(value), 4)}
+  1667→                        />
+  1668→                        <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+  1669→                        <Scatter
+  1670→                          name={predActual ? "perfect prediction (ŷ = y)" : "fitted curve"}
+  1671→                          data={result.series.curve ?? []}
+  1672→                          line={{ stroke: CHART.emerald, strokeWidth: 2.5 }}
+  1673→                          shape="square"
+  1674→                          fill={CHART.emerald}
+  1675→                          fillOpacity={0.5}
+  1676→                          isAnimationActive={false}
+  1677→                        />
+  1678→                        <Scatter
+  1679→                          name={predActual ? "test predictions" : "test points"}
+  1680→                          data={result.series.test}
+  1681→                          fill={CHART.stone}
+  1682→                          fillOpacity={0.8}
+  1683→                          isAnimationActive={false}
+  1684→                        />
+  1685→                      </ScatterChart>
+  1686→                    ) : (
+  1687→                      <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+  1688→                        <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+  1689→                        <XAxis
+  1690→                          type="number"
+  1691→                          dataKey="x"
+  1692→                          domain={["auto", "auto"]}
+  1693→                          tick={CHART.axisTick}
+  1694→                          tickFormatter={fmtTick}
+  1695→                          tickLine={false}
+  1696→                          axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+  1697→                        />
+  1698→                        <YAxis
+  1699→                          type="number"
+  1700→                          dataKey="y"
+  1701→                          width={44}
+  1702→                          tick={CHART.axisTick}
+  1703→                          tickFormatter={fmtTick}
+  1704→                          tickLine={false}
+  1705→                          axisLine={false}
+  1706→                        />
+  1707→                        <Tooltip
+  1708→                          cursor={{ strokeDasharray: "3 3" }}
+  1709→                          contentStyle={CHART.tooltipStyle}
+  1710→                          formatter={(value) => fmtNum(Number(value), 3)}
+  1711→                        />
+  1712→                        <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+  1713→                        {clsSeries ? (
+  1714→                          <Scatter
+  1715→                            name="boundary: class 0"
+  1716→                            data={clsSeries.grid0}
+  1717→                            fill={CHART.teal}
+  1718→                            shape={TinyDot(CHART.teal)}
+  1719→                            isAnimationActive={false}
+  1720→                          />
+  1721→                        ) : null}
+  1722→                        {clsSeries ? (
+  1723→                          <Scatter
+  1724→                            name="boundary: class 1"
+  1725→                            data={clsSeries.grid1}
+  1726→                            fill={CHART.amber}
+  1727→                            shape={TinyDot(CHART.amber)}
+  1728→                            isAnimationActive={false}
+  1729→                          />
+  1730→                        ) : null}
+  1731→                        {clsSeries ? (
+  1732→                          <Scatter
+  1733→                            name={
+  1734→                              result.datasetMeta.source?.labelMap
+  1735→                                ? `class 0 · ${result.datasetMeta.source.labelMap[0]} (test)`
+  1736→                                : "moon 0 (test)"
+  1737→                            }
+  1738→                            data={clsSeries.moon0}
+  1739→                            fill={CHART.emerald}
+  1740→                            shape={MoonDot(CHART.emerald)}
+  1741→                            isAnimationActive={false}
+  1742→                          />
+  1743→                        ) : null}
+  1744→                        {clsSeries ? (
+  1745→                          <Scatter
+  1746→                            name={
+  1747→                              result.datasetMeta.source?.labelMap
+  1748→                                ? `class 1 · ${result.datasetMeta.source.labelMap[1]} (test)`
+  1749→                                : "moon 1 (test)"
+  1750→                            }
+  1751→                            data={clsSeries.moon1}
+  1752→                            fill={CHART.rose}
+  1753→                            shape={MoonDot(CHART.rose)}
+  1754→                            isAnimationActive={false}
+  1755→                          />
+  1756→                        ) : null}
+  1757→                      </ScatterChart>
+  1758→                    )}
+  1759→                  </ResponsiveContainer>
+  1760→                </div>
+  1761→                <p className="mt-1 text-center text-[11px] text-muted-foreground">
+  1762→                  {result.task === "regression"
+  1763→                    ? predActual
+  1764→                      ? "Stone dots = (ŷ, y) pairs on the held-out test rows; emerald line = perfect prediction."
+  1765→                      : "Stone dots = held-out test points; emerald line = model prediction (100-point sweep)."
+  1766→                    : result.datasetMeta.source
+  1767→                      ? "Emerald/rose = test-set classes; faint teal/amber dots = 60×60 grid classified by the model."
+  1768→                      : "Emerald/rose = test-set moons; faint teal/amber dots = 60×60 grid classified by the model."}
+  1769→                </p>
+  1770→              </CardContent>
+  1771→            </Card>
+  1772→
+  1773→            {/* CV folds + coefficients */}
+  1774→            <div className="grid gap-4 lg:grid-cols-2">
+  1775→              {result.cv ? (
+  1776→                <Card className="overflow-hidden py-0 shadow-sm">
+  1777→                  <CardHeader className="border-b bg-muted/30 py-3">
+  1778→                    <CardTitle className="text-sm">
+  1779→                      {result.cv.k}-fold CV — {result.cv.metricName} per fold
+  1780→                    </CardTitle>
+  1781→                  </CardHeader>
+  1782→                  <div className="thin-scrollbar max-h-72 overflow-y-auto">
+  1783→                    <Table className="data-table">
+  1784→                      <TableHeader className="sticky top-0 bg-muted/60 backdrop-blur">
+  1785→                        <TableRow className="hover:bg-transparent">
+  1786→                          <TableHead className="h-9">Fold</TableHead>
+  1787→                          <TableHead className="h-9 text-right">{result.cv.metricName}</TableHead>
+  1788→                        </TableRow>
+  1789→                      </TableHeader>
+  1790→                      <TableBody>
+  1791→                        {result.cv.folds.map((f) => (
+  1792→                          <TableRow key={f.fold}>
+  1793→                            <TableCell className="py-2 font-mono text-xs">fold {f.fold}</TableCell>
+  1794→                            <TableCell className="py-2 text-right font-mono text-xs tabular-nums">
+  1795→                              {fmtNum(f.value, 4)}
+  1796→                            </TableCell>
+  1797→                          </TableRow>
+  1798→                        ))}
+  1799→                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+  1800→                          <TableCell className="py-2 text-xs font-medium">mean ± std</TableCell>
+  1801→                          <TableCell className="py-2 text-right font-mono text-xs font-semibold tabular-nums text-primary">
+  1802→                            {fmtNum(result.cv?.mean ?? 0, 4)} ± {fmtNum(result.cv?.std ?? 0, 3)}
+  1803→                          </TableCell>
+  1804→                        </TableRow>
+  1805→                      </TableBody>
+  1806→                    </Table>
+  1807→                  </div>
+  1808→                </Card>
+  1809→              ) : null}
+  1810→
+  1811→              <Card className="overflow-hidden py-0 shadow-sm">
+  1812→                <CardHeader className="border-b bg-muted/30 py-3">
+  1813→                  <CardTitle className="text-sm flex items-center gap-1.5">
+  1814→                    {predActual ? <Sigma className="size-3.5 text-primary" aria-hidden /> : null}
+  1815→                    Learned parameters
+  1816→                  </CardTitle>
+  1817→                  <CardDescription className="text-xs">
+  1818→                    Standardized feature space (train-set μ, σ)
+  1819→                  </CardDescription>
+  1820→                </CardHeader>
+  1821→                <CardContent className="pb-4">
+  1822→                  {coefficientsText ? (
+  1823→                    <pre className="thin-scrollbar overflow-x-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+  1824→                      {coefficientsText}
+  1825→                    </pre>
+  1826→                  ) : null}
+  1827→                  <p className="mt-2 text-[11px] text-muted-foreground">
+  1828→                    {result.task === "regression"
+  1829→                      ? predActual
+  1830→                        ? "Multivariate least squares: k features standardized on train statistics, solved in closed form via normal equations; ridge adds α to the diagonal, skipping the intercept."
+  1831→                        : "Solved in closed form via normal equations (Gaussian elimination with partial pivoting); ridge adds α to the diagonal, skipping the intercept."
+  1832→                      : "Batch gradient descent: lr = 0.1, 800 epochs, L2-penalized weights (bias exempt)."}
+  1833→                  </p>
+  1834→                </CardContent>
+  1835→              </Card>
+  1836→            </div>
+  1837→          </>
+  1838→        ) : null}
+  1839→
+  1840→        {/* ------------------------------ Run history ------------------------------ */}
+  1841→        {mlHistory.length > 0 ? (
+  1842→          <Card className="overflow-hidden py-0 shadow-sm">
+  1843→            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/30 py-3">
+  1844→              <div className="flex min-w-0 items-center gap-2.5">
+  1845→                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+  1846→                  <History className="size-4.5" aria-hidden />
+  1847→                </span>
+  1848→                <div className="min-w-0">
+  1849→                  <CardTitle className="text-base">Run history</CardTitle>
+  1850→                  <CardDescription className="text-xs">
+  1851→                    Last {mlHistory.length} training{" "}
+  1852→                    {mlHistory.length === 1 ? "run" : "runs"} · survives reloads · Restore
+  1853→                    reloads the config and results
+  1854→                  </CardDescription>
+  1855→                </div>
+  1856→              </div>
+  1857→              <Button
+  1858→                variant="ghost"
+  1859→                size="sm"
+  1860→                className="h-8 shrink-0 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+  1861→                onClick={clearMlHistory}
+  1862→                aria-label="Clear the run history"
+  1863→              >
+  1864→                <Eraser className="size-3.5" aria-hidden />
+  1865→                Clear
+  1866→              </Button>
+  1867→            </CardHeader>
+  1868→            <CardContent className="py-0">
+  1869→              <ul className="divide-y">
+  1870→                {mlHistory.map((rec, i) => {
+  1871→                  /* Newest-first list: the run *before* this one is i + 1. */
+  1872→                  const prev = mlHistory[i + 1];
+  1873→                  const delta = prev ? rec.keyValue - prev.keyValue : null;
+  1874→                  const isCurrent = result !== null && rec.id === mlCurrentRunId;
+  1875→                  const up = delta !== null && delta >= 0;
+  1876→                  return (
+  1877→                    <li
+  1878→                      key={rec.id}
+  1879→                      className={cn(
+  1880→                        "flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-primary/5",
+  1881→                        isCurrent && "bg-primary/5"
+  1882→                      )}
+  1883→                    >
+  1884→                      <span
+  1885→                        className={cn(
+  1886→                          "flex size-8 shrink-0 items-center justify-center rounded-md border font-mono text-[10px] font-semibold uppercase",
+  1887→                          isCurrent
+  1888→                            ? "border-primary/30 bg-primary/10 text-primary"
+  1889→                            : "bg-muted/40 text-muted-foreground"
+  1890→                        )}
+  1891→                        title={rec.task}
+  1892→                      >
+  1893→                        {rec.task === "regression" ? "reg" : "cls"}
+  1894→                      </span>
+  1895→                      <div className="min-w-0 flex-1">
+  1896→                        <p className="truncate font-mono text-xs font-medium">
+  1897→                          {rec.model}
+  1898→                          <span className="font-normal text-muted-foreground">
+  1899→                            {" "}
+  1900→                            {rec.csv
+  1901→                              ? ` · ${rec.csv.fileName} · ${
+  1902→                                  rec.csv.featureColumns.length > 0
+  1903→                                    ? `${rec.csv.featureColumns.length} feat${
+  1904→                                        rec.csv.featureColumns.length > 1 ? "s" : ""
+  1905→                                      }`
+  1906→                                    : "auto feats"
+  1907→                                } · target: ${rec.csv.targetColumn || "auto"}`
+  1908→                              : ` · seed ${rec.config.seed} · n${rec.config.samples} · noise ${
+  1909→                                  rec.config.noise
+  1910→                                }`}
+  1911→                          </span>
+  1912→                        </p>
+  1913→                        <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+  1914→                          {timeAgo(rec.at)}
+  1915→                          {isCurrent ? (
+  1916→                            <span className="rounded-sm border border-primary/30 bg-primary/10 px-1 font-mono text-[9px] font-semibold uppercase text-primary">
+  1917→                              current
+  1918→                            </span>
+  1919→                          ) : null}
+  1920→                        </p>
+  1921→                      </div>
+  1922→                      <div className="shrink-0 text-right">
+  1923→                        <p className="font-mono text-sm font-semibold tabular-nums">
+  1924→                          {fmtNum(rec.keyValue, 4)}
+  1925→                          <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+  1926→                            {rec.keyMetric}
+  1927→                          </span>
+  1928→                        </p>
+  1929→                        {delta !== null ? (
+  1930→                          <p
+  1931→                            className={cn(
+  1932→                              "flex items-center justify-end gap-0.5 font-mono text-[10px] tabular-nums",
+  1933→                              up ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+  1934→                            )}
+  1935→                            title="Change vs the previous run"
+  1936→                          >
+  1937→                            {up ? (
+  1938→                              <TrendingUp className="size-3" aria-hidden />
+  1939→                            ) : (
+  1940→                              <TrendingDown className="size-3" aria-hidden />
+  1941→                            )}
+  1942→                            {up ? "+" : "−"}
+  1943→                            {fmtNum(Math.abs(delta), 3)}
+  1944→                          </p>
+  1945→                        ) : (
+  1946→                          <p className="font-mono text-[10px] text-muted-foreground/60">—</p>
+  1947→                        )}
+  1948→                      </div>
+  1949→                      <Button
+  1950→                        variant="outline"
+  1951→                        size="sm"
+  1952→                        className="h-8 shrink-0 px-2.5 text-xs"
+  1953→                        onClick={() => restoreRun(rec)}
+  1954→                        aria-label={`Restore run ${rec.model}${
+  1955→                          rec.csv ? ` from ${rec.csv.fileName}` : ` seed ${rec.config.seed}`
+  1956→                        }`}
+  1957→                        disabled={isCurrent}
+  1958→                      >
+  1959→                        <RotateCcw className="size-3.5" aria-hidden />
+  1960→                        <span className="hidden sm:inline">
+  1961→                          {isCurrent ? "Current" : "Restore"}
+  1962→                        </span>
+  1963→                      </Button>
+  1964→                    </li>
+  1965→                  );
+  1966→                })}
+  1967→              </ul>
+  1968→            </CardContent>
+  1969→          </Card>
+  1970→        ) : null}
+  1971→      </div>
+  1972→    </div>
+  1973→  );
+  1974→}
+  1975→

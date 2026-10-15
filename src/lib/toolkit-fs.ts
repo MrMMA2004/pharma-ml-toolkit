@@ -10,8 +10,26 @@ import type { TreeNode, TreeStats } from "@/lib/toolkit-types";
 export const TOOLKIT_ROOT = path.join(process.cwd(), "pharma-ml-toolkit");
 export const TOOLKIT_NAME = "pharma-ml-toolkit";
 
-/** Generated artifacts that should never appear in the explorer or ZIP. */
-export const EXCLUDED_DIRS = new Set([".pytest_cache", "__pycache__", "node_modules", "catboost_info"]);
+/** Generated artifacts that should never appear in the explorer or ZIP.
+ * The virtualenv entries matter: a stray `uv venv` / `python -m venv` inside
+ * the toolkit once inflated the live stats from 93 to 6,732 files — local
+ * environments must never leak into the served tree. */
+export const EXCLUDED_DIRS = new Set([
+  ".pytest_cache",
+  "__pycache__",
+  "node_modules",
+  "catboost_info",
+  ".venv",
+  "venv",
+  "env",
+  ".git",
+  ".ruff_cache",
+  ".mypy_cache",
+  ".tox",
+  ".idea",
+  ".vscode",
+  ".cache",
+]);
 
 const ALLOWED_EXTENSIONS = new Set([
   ".py",

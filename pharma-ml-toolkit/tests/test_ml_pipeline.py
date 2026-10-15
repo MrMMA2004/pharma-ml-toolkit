@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -216,3 +218,98 @@ class TestPersistence:
         result = train_model("logistic_regression", "classification", X, y, tune=False)
         with pytest.raises(ModelError, match="length"):
             evaluate_model(result.model, X, y.iloc[:5], "classification")
+
+
+class TestTrainingEdgeCases:
+    """Regression tests from the ml/training.py deep review (100x-11).
+
+    Each test pins a guard or behaviour that previously failed
+    silently (all-NaN leaderboards, duplicated rows) or crashed with an
+    opaque built-in error.
+    """
+
+    def test_compare_empty_models_raises(self, classification_frame) -> None:
+        # Before the guard: raw ``IndexError: list index out of range``
+        # from the metric selection on ``pipelines[models[0]]``.
+        X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        with pytest.raises(ModelError, match="models list is empty"):
+            compare_models(X, y, "classification", models=[])
+
+    def test_compare_unknown_model_error_keeps_registry_list(
+        self, classification_frame
+    ) -> None:
+        # The wrapper used to degrade resolve_model_name's ModelError to
+        # a bare ``Unknown model 'x'`` without the registered-name list.
+        X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        with pytest.raises(ModelError, match="Registered models"):
+            compare_models(X, y, "classification", models=["definitely_not_a_model"])
+
+    def test_compare_unknown_scoring_raises(self, classification_frame) -> None:
+        # A typo'd metric name used to produce an all-NaN leaderboard:
+        # every per-model cross_validate failed and the except handler
+        # swallowed the informative sklearn error into a log warning.
+        X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        with pytest.raises(ModelError, match="Unknown scoring 'acuracy'"):
+            compare_models(
+                X, y, "classification", models=["knn"], cv=3, scoring="acuracy"
+            )
+
+    def test_compare_cv_below_two_raises(self, classification_frame) -> None:
+        # cv=1 used to yield an all-NaN leaderboard for the same
+        # swallow-everything reason as the scoring typo above.
+        X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        with pytest.raises(ModelError, match="cv must be >= 2"):
+            compare_models(X, y, "classification", models=["knn"], cv=1)
+
+    def test_compare_collapses_alias_duplicates(self, classification_frame) -> None:
+        # 'rf' and 'random_forest' resolve to the same registry key; the
+        # leaderboard used to carry two identical rows for them.
+        X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        board = compare_models(
+            X, y, "classification", models=["rf", "random_forest"], cv=3
+        )
+        assert board["model"].tolist() == ["random_forest"]
+        assert len(board) == 1
+
+    def test_compare_keeps_nan_row_and_warns_on_degenerate_target(
+        self, classification_frame, caplog
+    ) -> None:
+        """Single-class target: board survives with NaN row + a warning.
+
+        cross_validate can *return* NaN fold scores without raising
+        (proba-based scorers on degenerate targets), so the row must be
+        kept and the poisoning made visible in the log.
+        """
+        X, _ = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        y_single = pd.Series([0] * len(X))
+        # caplog.at_level re-enables logging if it was globally disabled
+        # (test_cli_features does that at import time), but the CLI tests
+        # also call configure_logging(), which sets propagate=False on
+        # the "pharmaml" logger — re-enable propagation so the record can
+        # reach caplog's root-logger handler, and restore it afterwards.
+        pharma_root = logging.getLogger("pharmaml")
+        prev_propagate = pharma_root.propagate
+        pharma_root.propagate = True
+        try:
+            with caplog.at_level(logging.WARNING, logger="pharmaml.ml.training"):
+                board = compare_models(
+                    X, y_single, "classification", models=["knn"], cv=3
+                )
+        finally:
+            pharma_root.propagate = prev_propagate
+        assert board["model"].tolist() == ["knn"]
+        assert board["roc_auc_ovo_mean"].isna().all()
+        assert "NaN CV scores" in caplog.text
+
+
+class TestEvaluationEdgeCases:
+    """Regression tests from the ml/evaluation.py deep review (100x-11)."""
+
+    def test_evaluate_empty_y_test_raises(self, classification_frame) -> None:
+        # Used to surface as a cryptic ``ValueError: Found array with 0
+        # sample(s) ... required by SimpleImputer`` from deep inside the
+        # fitted pipeline instead of naming the offending input.
+        X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        result = train_model("logistic_regression", "classification", X, y, tune=False)
+        with pytest.raises(ModelError, match="y_test is empty"):
+            evaluate_model(result.model, X.iloc[:0], y.iloc[:0], "classification")

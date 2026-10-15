@@ -68,8 +68,15 @@ export function StatChip({
         <Icon className="size-4.5" aria-hidden />
       </span>
       <div className="min-w-0">
+        {/* Muted micro-label above the stat value (app-wide stat idiom). */}
         <p
-          className="break-words text-lg font-semibold leading-tight tabular-nums"
+          className="break-words text-[10px] font-medium uppercase leading-tight tracking-wide text-muted-foreground"
+          title={hint ?? label}
+        >
+          {label}
+        </p>
+        <p
+          className="mt-0.5 break-words text-lg font-semibold leading-tight tabular-nums"
           title={value}
         >
           {typeof countTo === "number" && Number.isFinite(countTo) ? (
@@ -77,9 +84,6 @@ export function StatChip({
           ) : (
             value
           )}
-        </p>
-        <p className="break-words text-xs leading-snug text-muted-foreground" title={hint ?? label}>
-          {label}
         </p>
       </div>
     </motion.div>
