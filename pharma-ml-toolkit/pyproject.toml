@@ -54,6 +54,9 @@ boosting = [
     "lightgbm>=4.0",
     "catboost>=1.2",
 ]
+deep = [
+    "torch>=2.0",
+]
 reports = [
     "matplotlib>=3.7",
     "seaborn>=0.13",

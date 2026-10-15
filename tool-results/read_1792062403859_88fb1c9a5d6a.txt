@@ -1,0 +1,702 @@
+    30→    30→
+    31→    31→from __future__ import annotations
+    32→    32→
+    33→    33→import argparse
+    34→    34→import sys
+    35→    35→from pathlib import Path
+    36→    36→from typing import Any
+    37→    37→
+    38→    38→from pharmaml import __version__
+    39→    39→from pharmaml.logger import configure_logging, get_logger
+    40→    40→
+    41→    41→_LOG = get_logger("cli")
+    42→    42→
+    43→    43→
+    44→    44→def _build_parser() -> argparse.ArgumentParser:
+    45→    45→    parser = argparse.ArgumentParser(
+    46→    46→        prog="pharmaml",
+    47→    47→        description="PharmaML toolkit — QSAR ML, pharma calculations, docking.",
+    48→    48→    )
+    49→    49→    parser.add_argument("--version", action="version", version=f"pharmaml {__version__}")
+    50→    50→    parser.add_argument(
+    51→    51→        "-v", "--verbose", action="store_true", help="enable debug logging"
+    52→    52→    )
+    53→    53→    parser.add_argument(
+    54→    54→        "--log-file", type=Path, default=None, help="also write logs to this file"
+    55→    55→    )
+    56→    56→    subparsers = parser.add_subparsers(dest="command", required=True)
+    57→    57→
+    58→    58→    # ---- models list ------------------------------------------------
+    59→    59→    models_parser = subparsers.add_parser("models", help="model registry utilities")
+    60→    60→    models_parser.add_argument("action", choices=["list"], help="list available models")
+    61→    61→
+    62→    62→    # ---- data --------------------------------------------------------
+    63→    63→    data_parser = subparsers.add_parser(
+    64→    64→        "data", help="bring-your-own-data utilities (inspect user files)"
+    65→    65→    )
+    66→    66→    data_sub = data_parser.add_subparsers(dest="data_command", required=True)
+    67→    67→
+    68→    68→    inspect = data_sub.add_parser(
+    69→    69→        "inspect", help="audit a user CSV/Excel file before training"
+    70→    70→    )
+    71→    71→    inspect.add_argument("--data", required=True, help="CSV/TSV/Excel file to inspect")
+    72→    72→    inspect.add_argument(
+    73→    73→        "--target", default=None, help="target column (auto-detected when omitted)"
+    74→    74→    )
+    75→    75→    inspect.add_argument(
+    76→    76→        "--head", type=int, default=0, metavar="N",
+    77→    77→        help="also print the first N rows of the table",
+    78→    78→    )
+    79→    79→
+    80→    80→    split = data_sub.add_parser(
+    81→    81→        "split",
+    82→    82→        help="split a table into stratified train/val/test files "
+    83→    83→        "(upgrades 'Split CSV file.py')",
+    84→    84→    )
+    85→    85→    split.add_argument("--data", required=True, help="CSV/TSV/Excel file to split")
+    86→    86→    split.add_argument(
+    87→    87→        "--target", default=None,
+    88→    88→        help="column to stratify on (auto-detected when omitted)",
+    89→    89→    )
+    90→    90→    split.add_argument("--test-size", type=float, default=0.2, metavar="FRAC")
+    91→    91→    split.add_argument(
+    92→    92→        "--val-size", type=float, default=None, metavar="FRAC",
+    93→    93→        help="also carve a validation set of this fraction",
+    94→    94→    )
+    95→    95→    split.add_argument(
+    96→    96→        "--no-stratify", action="store_true",
+    97→    97→        help="plain random split (no class balancing)",
+    98→    98→    )
+    99→    99→    split.add_argument("--seed", type=int, default=42)
+   100→   100→    split.add_argument(
+   101→   101→        "--out-dir", default=None,
+   102→   102→        help="output directory (default: alongside --data)",
+   103→   103→    )
+   104→   104→    split.add_argument(
+   105→   105→        "--prefix", default=None,
+   106→   106→        help="output filename prefix (default: input file stem)",
+   107→   107→    )
+   108→   108→
+   109→   109→    convert = data_sub.add_parser(
+   110→   110→        "convert",
+   111→   111→        help="convert molecular file formats (.smi / .csv / .tsv / .xlsx / .sdf)",
+   112→   112→    )
+   113→   113→    convert.add_argument(
+   114→   114→        "--data", required=True,
+   115→   115→        help="input file: .smi, a CSV/TSV/Excel table, or .sdf",
+   116→   116→    )
+   117→   117→    convert.add_argument(
+   118→   118→        "--to", required=True, choices=("csv", "sdf", "smi"),
+   119→   119→        help="target format",
+   120→   120→    )
+   121→   121→    convert.add_argument("--smiles-col", default="SMILES", help="SMILES column name")
+   122→   122→    convert.add_argument(
+   123→   123→        "--name-col", default=None,
+   124→   124→        help="molecule name column (default: none -> ligand_N titles)",
+   125→   125→    )
+   126→   126→    convert.add_argument(
+   127→   127→        "--no-3d", action="store_true",
+   128→   128→        help="skip 3D embedding + UFF optimisation (table -> SDF only)",
+   129→   129→    )
+   130→   130→    convert.add_argument(
+   131→   131→        "--out", default=None,
+   132→   132→        help="output path (default: input stem + target extension)",
+   133→   133→    )
+   134→   134→
+   135→   135→    # ---- ml ----------------------------------------------------------
+   136→   136→    ml_parser = subparsers.add_parser("ml", help="machine-learning workflows")
+   137→   137→    ml_sub = ml_parser.add_subparsers(dest="ml_command", required=True)
+   138→   138→
+   139→   139→    train = ml_sub.add_parser("train", help="train one model end-to-end")
+   140→   140→    train.add_argument("--data", required=True, help="CSV/Excel with features+target")
+   141→   141→    train.add_argument("--target", default=None, help="target column (auto-detected)")
+   142→   142→    train.add_argument(
+   143→   143→        "--model", default="random_forest",
+   144→   144→        help="registry model name or alias (rf, logistic, xgb, ...)",
+   145→   145→    )
+   146→   146→    train.add_argument(
+   147→   147→        "--task", choices=["classification", "regression", "auto"], default="auto",
+   148→   148→        help="task type; 'auto' infers it from the target column (default)",
+   149→   149→    )
+   150→   150→    train.add_argument("--test-size", type=float, default=0.2)
+   151→   151→    train.add_argument("--cv", type=int, default=5)
+   152→   152→    train.add_argument("--no-tune", action="store_true", help="skip grid search")
+   153→   153→    train.add_argument(
+   154→   154→        "--keep-categorical", action="store_true",
+   155→   155→        help="keep string feature columns and one-hot encode them "
+   156→   156→        "(default: numeric columns only)",
+   157→   157→    )
+   158→   158→    train.add_argument(
+   159→   159→        "--plots", action="store_true",
+   160→   160→        help="emit the full visual bundle (report.html + figures + "
+   161→   161→        "tables) into <out>/report/ — requires pharmaml[reports]",
+   162→   162→    )
+   163→   163→    train.add_argument("--out", default="artifacts", help="artifact output directory")
+   164→   164→
+   165→   165→    compare = ml_sub.add_parser("compare", help="cross-validated model leaderboard")
+   166→   166→    compare.add_argument("--data", required=True)
+   167→   167→    compare.add_argument("--target", default=None)
+   168→   168→    compare.add_argument(
+   169→   169→        "--task", choices=["classification", "regression", "auto"], default="auto"
+   170→   170→    )
+   171→   171→    compare.add_argument("--cv", type=int, default=5)
+   172→   172→    compare.add_argument("--models", nargs="*", default=None, help="subset of models")
+   173→   173→    compare.add_argument(
+   174→   174→        "--keep-categorical", action="store_true",
+   175→   175→        help="keep string feature columns and one-hot encode them",
+   176→   176→    )
+   177→   177→    compare.add_argument(
+   178→   178→        "--out", default=None,
+   179→   179→        help="write the leaderboard table to this path (csv/tsv/md/json/html)",
+   180→   180→    )
+   181→   181→    compare.add_argument(
+   182→   182→        "--plot", action="store_true",
+   183→   183→        help="save the leaderboard bar chart + report bundle into <out-dir>/ "
+   184→   184→        "— requires pharmaml[reports]",
+   185→   185→    )
+   186→   186→    compare.add_argument(
+   187→   187→        "--out-dir", default="reports", help="directory for --plot artifacts"
+   188→   188→    )
+   189→   189→
+   190→   190→    # ---- chem --------------------------------------------------------
+   191→   191→    chem_parser = subparsers.add_parser("chem", help="cheminformatics utilities")
+   192→   192→    chem_sub = chem_parser.add_subparsers(dest="chem_command", required=True)
+   193→   193→
+   194→   194→    pic50 = chem_sub.add_parser("pic50", help="add a pIC50 column to a table")
+   195→   195→    pic50.add_argument("--data", required=True)
+   196→   196→    pic50.add_argument("--column", default="IC50 (nM)")
+   197→   197→    pic50.add_argument("--unit", default="nM", choices=["M", "mM", "uM", "nM", "pM"])
+   198→   198→    pic50.add_argument("--out", default=None, help="output path (default: <stem>_pic50.csv)")
+   199→   199→
+   200→   200→    descriptors = chem_sub.add_parser(
+   201→   201→        "descriptors", help="compute RDKit descriptors for a SMILES table"
+   202→   202→    )
+   203→   203→    descriptors.add_argument("--data", required=True)
+   204→   204→    descriptors.add_argument("--smiles-col", default="SMILES")
+   205→   205→    descriptors.add_argument(
+   206→   206→        "--set", dest="descriptor_set",
+   207→   207→        choices=["rdkit_all", "morgan", "mordred"], default="rdkit_all",
+   208→   208→    )
+   209→   209→    descriptors.add_argument("--out", default=None)
+   210→   210→
+   211→   211→    chem_compare = chem_sub.add_parser(
+   212→   212→        "compare", help="reconcile a ligand column across two tables"
+   213→   213→    )
+   214→   214→    chem_compare.add_argument("--data-a", required=True, help="first table (csv/xlsx)")
+   215→   215→    chem_compare.add_argument("--data-b", required=True, help="second table (csv/xlsx)")
+   216→   216→    chem_compare.add_argument("--column", required=True, help="ligand-name column")
+   217→   217→    chem_compare.add_argument(
+   218→   218→        "--keep-case", action="store_true",
+   219→   219→        help="do not fold names to lowercase before comparing",
+   220→   220→    )
+   221→   221→    chem_compare.add_argument(
+   222→   222→        "--keep-extension", action="store_true",
+   223→   223→        help="do not strip file extensions (.pdbqt, ...) before comparing",
+   224→   224→    )
+   225→   225→    chem_compare.add_argument(
+   226→   226→        "--out", default=None, help="optional CSV path for the differences report"
+   227→   227→    )
+   228→   228→    chem_compare.add_argument(
+   229→   229→        "--figure", default=None,
+   230→   230→        help="optional figure path (png/svg/pdf) for the overlap breakdown",
+   231→   231→    )
+   232→   232→
+   233→   233→    chem_merge = chem_sub.add_parser(
+   234→   234→        "merge", help="merge every table of one folder into a single file"
+   235→   235→    )
+   236→   236→    chem_merge.add_argument("--dir", required=True, help="folder to scan (non-recursive)")
+   237→   237→    chem_merge.add_argument("--extension", default=".csv")
+   238→   238→    chem_merge.add_argument(
+   239→   239→        "--first-columns", default=None,
+   240→   240→        help="comma-separated column names to move to the front",
+   241→   241→    )
+   242→   242→    chem_merge.add_argument("--out", default=None, help="output path (default: <dir>/merged_output.csv)")
+   243→   243→
+   244→   244→    # ---- pharma ------------------------------------------------------
+   245→   245→    pharma_parser = subparsers.add_parser("pharma", help="pharmaceutical calculations")
+   246→   246→    pharma_sub = pharma_parser.add_subparsers(dest="pharma_command", required=True)
+   247→   247→
+   248→   248→    pk = pharma_sub.add_parser("pk", help="non-compartmental PK summary")
+   249→   249→    pk.add_argument("--data", required=True, help="CSV with time & concentration columns")
+   250→   250→    pk.add_argument("--time", default="time", help="time column name")
+   251→   251→    pk.add_argument("--conc", default="conc", help="concentration column name")
+   252→   252→    pk.add_argument("--out", default=None, help="optional JSON output path")
+   253→   253→
+   254→   254→    dose = pharma_sub.add_parser("dose", help="design a dosing regimen")
+   255→   255→    dose.add_argument("--cl", type=float, required=True, help="clearance (L/h)")
+   256→   256→    dose.add_argument("--vd", type=float, required=True, help="volume (L)")
+   257→   257→    dose.add_argument("--target-css", type=float, required=True, help="target avg Css")
+   258→   258→    dose.add_argument("--tau", type=float, default=12.0, help="interval (h)")
+   259→   259→    dose.add_argument("--f", type=float, default=1.0, help="bioavailability fraction")
+   260→   260→
+   261→   261→    approvals = pharma_sub.add_parser(
+   262→   262→        "approvals", help="collect approved drug names from DGIdb-style exports"
+   263→   263→    )
+   264→   264→    approvals.add_argument(
+   265→   265→        "--data", required=True, action="append",
+   266→   266→        help="csv/tsv export (repeat the flag for several files)",
+   267→   267→    )
+   268→   268→    approvals.add_argument("--drug-column", default="drug")
+   269→   269→    approvals.add_argument("--approval-column", default="regulatory approval")
+   270→   270→    approvals.add_argument("--status", default="approved")
+   271→   271→    approvals.add_argument("--out", default=None, help="optional single-column CSV output")
+   272→   272→
+   273→   273→    # ---- docking -----------------------------------------------------
+   274→   274→    docking_parser = subparsers.add_parser("docking", help="docking utilities")
+   275→   275→    docking_sub = docking_parser.add_subparsers(dest="docking_command", required=True)
+   276→   276→
+   277→   277→    scan = docking_sub.add_parser("scan", help="summarise a docking run directory")
+   278→   278→    scan.add_argument("--directory", required=True)
+   279→   279→    scan.add_argument("--log-name", default="r.dlg")
+   280→   280→    scan.add_argument("--out", default=None, help="output CSV path")
+   281→   281→
+   282→   282→    check = docking_sub.add_parser("check", help="audit docking completion")
+   283→   283→    check.add_argument("--directory", required=True)
+   284→   284→    check.add_argument("--log-name", default="r.dlg")
+   285→   285→    check.add_argument("--out", default=None)
+   286→   286→
+   287→   287→    prep_ligands = docking_sub.add_parser(
+   288→   288→        "prep-ligands",
+   289→   289→        help="import a ligand CSV and prepare PDBQT folders",
+   290→   290→    )
+   291→   291→    prep_ligands.add_argument("--ligands", required=True, help="ligand table (CSV/TSV/Excel)")
+   292→   292→    prep_ligands.add_argument("--out", required=True, help="campaign output directory")
+   293→   293→    prep_ligands.add_argument("--smiles-col", default=None, help="SMILES column (auto-detected)")
+   294→   294→    prep_ligands.add_argument("--name-col", default=None, help="ligand name column (auto-detected)")
+   295→   295→    prep_ligands.add_argument(
+   296→   296→        "--naming",
+   297→   297→        default="index_name",
+   298→   298→        choices=("index", "index_name", "name"),
+   299→   299→        help="folder naming scheme (index reproduces the legacy scripts)",
+   300→   300→    )
+   301→   301→
+   302→   302→    prep_protein = docking_sub.add_parser(
+   303→   303→        "prep-protein",
+   304→   304→        help="import a protein PDB and prepare a receptor PDBQT",
+   305→   305→    )
+   306→   306→    prep_protein.add_argument("--protein", required=True, help="protein file (.pdb or .pdbqt)")
+   307→   307→    prep_protein.add_argument("--out", default=None, help="receptor PDBQT path (default <stem>.pdbqt)")
+   308→   308→    prep_protein.add_argument("--keep-hetatm", action="store_true", help="keep non-water HETATM records")
+   309→   309→    prep_protein.add_argument("--chain", default=None, help="keep only this chain (e.g. A)")
+   310→   310→    prep_protein.add_argument(
+   311→   311→        "--altloc",
+   312→   312→        default="first",
+   313→   313→        help="alternate-location conformer: 'first' or a letter like A",
+   314→   314→    )
+   315→   315→
+   316→   316→    dpf = docking_sub.add_parser(
+   317→   317→        "dpf",
+   318→   318→        help="write an AutoDock4 docking parameter file (r.dpf) for a ligand",
+   319→   319→    )
+   320→   320→    dpf.add_argument("--ligand", required=True, help="ligand PDBQT to dock")
+   321→   321→    dpf.add_argument(
+   322→   322→        "--receptor", default="r.pdbqt",
+   323→   323→        help="receptor PDBQT filename (parity with the GPF generator)",
+   324→   324→    )
+   325→   325→    dpf.add_argument("--ga-runs", type=int, default=100, help="number of GA runs (ga_run)")
+   326→   326→    dpf.add_argument("--out", default=None, help="DPF path (default <ligand_dir>/r.dpf)")
+   327→   327→
+   328→   328→    collect = docking_sub.add_parser(
+   329→   329→        "collect",
+   330→   330→        help="collect matching files (r.dlg dialogs, numbered PDBQTs) into one folder",
+   331→   331→    )
+   332→   332→    collect.add_argument("--dir", required=True, help="campaign directory to scan recursively")
+   333→   333→    collect.add_argument(
+   334→   334→        "--filename",
+   335→   335→        default=None,
+   336→   336→        help="exact filename to collect (default r.dlg when no pattern is given)",
+   337→   337→    )
+   338→   338→    collect.add_argument(
+   339→   339→        "--pattern",
+   340→   340→        default=None,
+   341→   341→        help="regex the filename must match, e.g. '^\\d+\\.pdbqt$'",
+   342→   342→    )
+   343→   343→    collect.add_argument("--out", default=None, help="output folder (default <dir>/collected)")
+   344→   344→    collect.add_argument(
+   345→   345→        "--dry-run", action="store_true",
+   346→   346→        help="report the copies without performing them",
+   347→   347→    )
+   348→   348→
+   349→   349→    torsion = docking_sub.add_parser(
+   350→   350→        "torsion",
+   351→   351→        help="audit TORSDOF / active REMARK / BRANCH consistency of ligand PDBQTs",
+   352→   352→    )
+   353→   353→    torsion.add_argument("--dir", required=True, help="directory tree with .pdbqt ligands")
+   354→   354→
+   355→   355→    gpf_scan = docking_sub.add_parser(
+   356→   356→        "gpf-scan",
+   357→   357→        help="report the ligand_types line of every sub-directory's r.gpf",
+   358→   358→    )
+   359→   359→    gpf_scan.add_argument("--dir", required=True, help="campaign directory")
+   360→   360→
+   361→   361→    vina_scan = docking_sub.add_parser(
+   362→   362→        "vina-scan",
+   363→   363→        help="rank Vina .log files of a results tree by best affinity",
+   364→   364→    )
+   365→   365→    vina_scan.add_argument("--dir", required=True, help="directory tree with Vina logs")
+   366→   366→
+   367→   367→    campaign = docking_sub.add_parser(
+   368→   368→        "campaign",
+   369→   369→        help="campaign-tree file management (distribute / cleanup / delete-named / list / reindex)",
+   370→   370→    )
+   371→   371→    campaign_sub = campaign.add_subparsers(dest="campaign_command", required=True)
+   372→   372→
+   373→   373→    campaign_list = campaign_sub.add_parser(
+   374→   374→        "list", help="list file stems of one folder (optionally to a CSV)"
+   375→   375→    )
+   376→   376→    campaign_list.add_argument("--dir", required=True, help="folder whose files are listed")
+   377→   377→    campaign_list.add_argument(
+   378→   378→        "--ext", default=".csv", help="file extension to filter by (default .csv)"
+   379→   379→    )
+   380→   380→    campaign_list.add_argument(
+   381→   381→        "--out", default=None, help="optional single-column CSV (name header)"
+   382→   382→    )
+   383→   383→
+   384→   384→    campaign_distribute = campaign_sub.add_parser(
+   385→   385→        "distribute",
+   386→   386→        help="copy files into every immediate sub-directory (receptor/binaries push)",
+   387→   387→    )
+   388→   388→    campaign_distribute.add_argument(
+   389→   389→        "--dir", required=True, help="target directory whose sub-directories receive copies"
+   390→   390→    )
+   391→   391→    campaign_distribute.add_argument(
+   392→   392→        "--file",
+   393→   393→        action="append",
+   394→   394→        required=True,
+   395→   395→        dest="files",
+   396→   396→        help="source file to distribute (repeatable)",
+   397→   397→    )
+   398→   398→    campaign_distribute.add_argument(
+   399→   399→        "--overwrite", action="store_true", help="replace existing destination files"
+   400→   400→    )
+   401→   401→
+   402→   402→    campaign_cleanup = campaign_sub.add_parser(
+   403→   403→        "cleanup",
+   404→   404→        help="delete every file not on the keep-list (allowlist + regex)",
+   405→   405→    )
+   406→   406→    campaign_cleanup.add_argument("--dir", required=True, help="tree to clean")
+   407→   407→    campaign_cleanup.add_argument(
+   408→   408→        "--keep",
+   409→   409→        action="append",
+   410→   410→        default=[],
+   411→   411→        help="filename to preserve (repeatable)",
+   412→   412→    )
+   413→   413→    campaign_cleanup.add_argument(
+   414→   414→        "--keep-pattern",
+   415→   415→        default=None,
+   416→   416→        help="regex filenames must match to survive, e.g. '^\\d+\\.pdbqt$'",
+   417→   417→    )
+   418→   418→    campaign_cleanup.add_argument(
+   419→   419→        "--remove-empty",
+   420→   420→        action="store_true",
+   421→   421→        help="also remove directories left (or already) empty",
+   422→   422→    )
+   423→   423→    campaign_cleanup.add_argument(
+   424→   424→        "--dry-run", action="store_true", help="preview without deleting anything"
+   425→   425→    )
+   426→   426→
+   427→   427→    campaign_delete = campaign_sub.add_parser(
+   428→   428→        "delete-named",
+   429→   429→        help="delete every file with one name anywhere under a tree",
+   430→   430→    )
+   431→   431→    campaign_delete.add_argument("--dir", required=True, help="tree to sweep")
+   432→   432→    campaign_delete.add_argument("--name", required=True, help="filename to remove")
+   433→   433→    campaign_delete.add_argument(
+   434→   434→        "--dry-run", action="store_true", help="count without deleting"
+   435→   435→    )
+   436→   436→
+   437→   437→    campaign_reindex = campaign_sub.add_parser(
+   438→   438→        "reindex",
+   439→   439→        help="reindex a results table onto the full ligand-number range "
+   440→   440→        "(missing ligands appear as blank rows instead of silently absent)",
+   441→   441→    )
+   442→   442→    campaign_reindex.add_argument(
+   443→   443→        "--data", required=True, help="results table to reindex (CSV/XLSX)"
+   444→   444→    )
+   445→   445→    campaign_reindex.add_argument(
+   446→   446→        "--column",
+   447→   447→        required=True,
+   448→   448→        help="column whose values embed the ligand number (e.g. '5_result.dlg')",
+   449→   449→    )
+   450→   450→    campaign_reindex.add_argument(
+   451→   451→        "--start", type=int, default=0, help="first ligand number (default 0)"
+   452→   452→    )
+   453→   453→    campaign_reindex.add_argument(
+   454→   454→        "--stop", type=int, default=300, help="last ligand number (default 300)"
+   455→   455→    )
+   456→   456→    campaign_reindex.add_argument(
+   457→   457→        "--pattern",
+   458→   458→        default=r"(\d+)",
+   459→   459→        help="regex whose first capture group extracts the number (default r'(\\d+)')",
+   460→   460→    )
+   461→   461→    campaign_reindex.add_argument(
+   462→   462→        "--out",
+   463→   463→        default=None,
+   464→   464→        help="optional output CSV/XLSX (index written as a 'number' column)",
+   465→   465→    )
+   466→   466→
+   467→   467→    return parser
+   468→   468→
+   469→   469→
+   470→   470→def _cmd_models(args: argparse.Namespace) -> int:
+   471→   471→    from pharmaml.ml.models import list_models
+   472→   472→
+   473→   473→    entries = list_models(only_available=False)
+   474→   474→    print(f"{'model':<22} {'task':<16} {'available':<10} notes")
+   475→   475→    print("-" * 78)
+   476→   476→    for entry in entries:
+   477→   477→        flag = "yes" if entry["available"] else f"needs {entry['requires']}"
+   478→   478→        print(f"{entry['name']:<22} {entry['task']:<16} {flag:<10} {entry['notes']}")
+   479→   479→    return 0
+   480→   480→
+   481→   481→
+   482→   482→def _load_cli_dataset(args: argparse.Namespace):
+   483→   483→    """Load the ``--data`` file via :mod:`pharmaml.data` with task inference.
+   484→   484→
+   485→   485→    Both ``ml train`` and ``ml compare`` accept ``--task auto`` (the
+   486→   486→    default), which lets :func:`pharmaml.data.load_dataset` decide
+   487→   487→    classification (2+ classes) vs regression from the target column,
+   488→   488→    and ``--keep-categorical`` to keep string feature columns for
+   489→   489→    one-hot encoding.
+   490→   490→    """
+   491→   491→    from pharmaml.data import load_dataset
+   492→   492→
+   493→   493→    task = None if getattr(args, "task", "auto") == "auto" else args.task
+   494→   494→    return load_dataset(
+   495→   495→        args.data,
+   496→   496→        target=getattr(args, "target", None),
+   497→   497→        task=task,
+   498→   498→        keep_categorical=getattr(args, "keep_categorical", False),
+   499→   499→    )
+   500→   500→
+   501→   501→
+   502→   502→def _cmd_data_inspect(args: argparse.Namespace) -> int:
+   503→   503→    from pharmaml.data import load_dataset
+   504→   504→
+   505→   505→    dataset = load_dataset(args.data, target=args.target)
+   506→   506→    print(dataset.summary())
+   507→   507→    if args.head > 0:
+   508→   508→        print(f"\nfirst {args.head} row(s):")
+   509→   509→        print(dataset.frame.head(args.head).to_string(index=False))
+   510→   510→    return 0
+   511→   511→
+   512→   512→
+   513→   513→def _cmd_data_split(args: argparse.Namespace) -> int:
+   514→   514→    from pharmaml.data import split_table
+   515→   515→
+   516→   516→    result = split_table(
+   517→   517→        path=args.data,
+   518→   518→        target=args.target,
+   519→   519→        test_size=args.test_size,
+   520→   520→        val_size=args.val_size,
+   521→   521→        stratify=not args.no_stratify,
+   522→   522→        random_state=args.seed,
+   523→   523→    )
+   524→   524→    out_dir = args.out_dir or str(Path(args.data).parent)
+   525→   525→    prefix = args.prefix or Path(args.data).stem
+   526→   526→    result.write(out_dir, prefix)
+   527→   527→    print(result)
+   528→   528→    return 0
+   529→   529→
+   530→   530→
+   531→   531→def _smi_bridge_frame(path: Path):
+   532→   532→    """Read a ``.smi`` file into a SMILES/ID table (CLI-internal bridge).
+   533→   533→
+   534→   534→    Lets ``--data x.smi --to sdf|smi`` reuse the table converters
+   535→   535→    without a temporary CSV on disk (the legacy two-step workflow).
+   536→   536→    """
+   537→   537→    import pandas as pd
+   538→   538→
+   539→   539→    from pharmaml.exceptions import DataValidationError
+   540→   540→
+   541→   541→    rows: list[tuple[str, str]] = []
+   542→   542→    with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+   543→   543→        for line in handle:
+   544→   544→            parts = line.strip().split()
+   545→   545→            if not parts:
+   546→   546→                continue
+   547→   547→            rows.append((parts[0], " ".join(parts[1:])))
+   548→   548→    frame = pd.DataFrame(rows, columns=["SMILES", "ID"])
+   549→   549→    if frame.empty:
+   550→   550→        raise DataValidationError(f"no SMILES lines found in {path}")
+   551→   551→    return frame
+   552→   552→
+   553→   553→
+   554→   554→def _cmd_data_convert(args: argparse.Namespace) -> int:
+   555→   555→    from pharmaml.chem.converters import (
+   556→   556→        sdf_to_table,
+   557→   557→        smi_to_csv,
+   558→   558→        table_to_sdf,
+   559→   559→        table_to_smi,
+   560→   560→    )
+   561→   561→    from pharmaml.exceptions import DataValidationError
+   562→   562→    from pharmaml.utils.io import read_table, write_table
+   563→   563→
+   564→   564→    src = Path(args.data)
+   565→   565→    target = args.to
+   566→   566→    suffix = src.suffix.lower()
+   567→   567→    out = Path(args.out) if args.out else src.with_suffix(f".{target}")
+   568→   568→
+   569→   569→    if suffix == ".smi":
+   570→   570→        if target == "csv":
+   571→   571→            written = smi_to_csv(src, out)
+   572→   572→            print(f"converted {src.name} -> {written}")
+   573→   573→            return 0
+   574→   574→        if target == "smi":
+   575→   575→            raise DataValidationError(
+   576→   576→                f"input {src.name} is already a .smi file -- nothing to convert"
+   577→   577→            )
+   578→   578→        frame = _smi_bridge_frame(src)
+   579→   579→        report = table_to_sdf(
+   580→   580→            frame,
+   581→   581→            out,
+   582→   582→            smiles_col=args.smiles_col,
+   583→   583→            name_col=args.name_col,
+   584→   584→            embed3d=not args.no_3d,
+   585→   585→        )
+   586→   586→    elif suffix == ".sdf":
+   587→   587→        if target == "sdf":
+   588→   588→            raise DataValidationError(
+   589→   589→                f"input {src.name} is already an SDF file -- use --to csv or --to smi"
+   590→   590→            )
+   591→   591→        if target == "csv":
+   592→   592→            frame = sdf_to_table(src, out=out, smiles_col=args.smiles_col)
+   593→   593→            print(f"converted {src.name} -> {out} ({len(frame)} molecules)")
+   594→   594→            return 0
+   595→   595→        frame = sdf_to_table(src, smiles_col=args.smiles_col)
+   596→   596→        name_col = args.name_col or ("name" if "name" in frame.columns else None)
+   597→   597→        written = table_to_smi(
+   598→   598→            frame, out, smiles_col=args.smiles_col, name_col=name_col
+   599→   599→        )
+   600→   600→        print(f"converted {src.name} -> {written} ({len(frame)} molecules)")
+   601→   601→        return 0
+   602→   602→    else:  # CSV/TSV/Excel table input
+   603→   603→        if target == "smi":
+   604→   604→            written = table_to_smi(
+   605→   605→                src, out, smiles_col=args.smiles_col, name_col=args.name_col
+   606→   606→            )
+   607→   607→            print(f"converted {src.name} -> {written}")
+   608→   608→            return 0
+   609→   609→        if target == "csv":
+   610→   610→            frame = read_table(src)
+   611→   611→            written = write_table(frame, out)
+   612→   612→            print(f"converted {src.name} -> {written} ({len(frame)} rows)")
+   613→   613→            return 0
+   614→   614→        report = table_to_sdf(
+   615→   615→            src,
+   616→   616→            out,
+   617→   617→            smiles_col=args.smiles_col,
+   618→   618→            name_col=args.name_col,
+   619→   619→            embed3d=not args.no_3d,
+   620→   620→        )
+   621→   621→
+   622→   622→    # --to sdf: full audit + output path; invalid SMILES -> exit 1
+   623→   623→    print(report)
+   624→   624→    print(f"output -> {report.output_sdf}")
+   625→   625→    if report.failures:
+   626→   626→        print(
+   627→   627→            f"{report.failures} invalid SMILES skipped: "
+   628→   628→            f"{report.failed_smiles}",
+   629→   629→            file=sys.stderr,
+   630→   630→        )
+   631→   631→        return 1
+   632→   632→    return 0
+   633→   633→
+   634→   634→
+   635→   635→def _train_figure_bundle(result, report, dataset, X_test, y_test):
+   636→   636→    """Collect the standard figure/table set for ``ml train --plots``."""
+   637→   637→    import pandas as pd
+   638→   638→
+   639→   639→    from pharmaml.viz import metrics_to_dataframe, ml_plots
+   640→   640→
+   641→   641→    figures: dict[str, Any] = {}
+   642→   642→    tables: dict[str, Any] = {}
+   643→   643→
+   644→   644→    if dataset.task == "classification":
+   645→   645→        figures["confusion_matrix"] = ml_plots.plot_confusion_matrix(report)
+   646→   646→        if hasattr(result.model, "predict_proba"):
+   647→   647→            figures["roc_curves"] = ml_plots.plot_roc_curves(
+   648→   648→                result.model, X_test, y_test
+   649→   649→            )
+   650→   650→        if dataset.class_counts:
+   651→   651→            figures["class_distribution"] = ml_plots.plot_class_distribution(
+   652→   652→                dataset.class_counts
+   653→   653→            )
+   654→   654→            tables["class_counts"] = pd.DataFrame(
+   655→   655→                {"class": list(dataset.class_counts),
+   656→   656→                 "count": list(dataset.class_counts.values())}
+   657→   657→            )
+   658→   658→    else:
+   659→   659→        y_pred = result.model.predict(X_test)
+   660→   660→        figures["predicted_vs_actual"] = ml_plots.plot_predicted_vs_actual(
+   661→   661→            y_test, y_pred, metrics=report.as_dict()
+   662→   662→        )
+   663→   663→        figures["residuals"] = ml_plots.plot_residuals(y_test, y_pred)
+   664→   664→
+   665→   665→    if result.cv_scores is not None:
+   666→   666→        figures["cv_scores"] = ml_plots.plot_cv_scores(result)
+   667→   667→    try:
+   668→   668→        figures["feature_importance"] = ml_plots.plot_feature_importance(result.model)
+   669→   669→    except Exception:  # noqa: BLE001 - estimator exposes no importances
+   670→   670→        pass  # e.g. kernel SVM / KNN — importance plot is simply skipped
+   671→   671→
+   672→   672→    tables.setdefault(
+   673→   673→        "held_out_metrics", metrics_to_dataframe(report)
+   674→   674→    )
+   675→   675→    return figures, tables
+   676→   676→
+   677→   677→
+   678→   678→def _cmd_ml_train(args: argparse.Namespace) -> int:
+   679→   679→    from pharmaml.config import PipelineConfig
+   680→   680→    from pharmaml.ml.evaluation import evaluate_model
+   681→   681→    from pharmaml.ml.persistence import save_model
+   682→   682→    from pharmaml.ml.preprocessing import make_train_test_split
+   683→   683→    from pharmaml.ml.training import train_model
+   684→   684→
+   685→   685→    dataset = _load_cli_dataset(args)
+   686→   686→    X_train, X_test, y_train, y_test = make_train_test_split(
+   687→   687→        dataset.X, dataset.y, test_size=args.test_size
+   688→   688→    )
+   689→   689→
+   690→   690→    result = train_model(
+   691→   691→        args.model, dataset.task, X_train, y_train, tune=not args.no_tune, cv=args.cv
+   692→   692→    )
+   693→   693→    report = evaluate_model(result.model, X_test, y_test, dataset.task)
+   694→   694→
+   695→   695→    config = PipelineConfig()
+   696→   696→    model_path = config.output_path(f"{result.name}_{dataset.task}.joblib")
+   697→   697→    save_model(
+   698→   698→        result.model,
+   699→   699→        model_path,
+   700→   700→        name=result.name,
+   701→   701→        task=dataset.task,
+   702→   702→        features=dataset.feature_names,
+   703→   703→        best_params=result.best_params,
+   704→   704→        metrics=report.as_dict(),
+   705→   705→    )
+   706→   706→    print(f"dataset:  {dataset.n_samples} rows x {dataset.n_features} features")
+   707→   707→    if dataset.class_counts:
+   708→   708→        print(f"classes:  {dataset.class_counts}")
+   709→   709→    print(f"task:     {dataset.task}")
+   710→   710→    print(f"model:    {result.name}")
+   711→   711→    print(f"best:     {result.best_params or '(defaults)'}")
+   712→   712→    print(f"held-out: {report}")
+   713→   713→    print(f"saved:    {model_path}")
+   714→   714→
+   715→   715→    if args.plots:
+   716→   716→        from pharmaml.viz import save_visual_bundle
+   717→   717→
+   718→   718→        figures, tables = _train_figure_bundle(result, report, dataset, X_test, y_test)
+   719→   719→        bundle_dir = Path(args.out) / "report"
+   720→   720→        written = save_visual_bundle(
+   721→   721→            figures,
+   722→   722→            tables,
+   723→   723→            metrics=report,
+   724→   724→            out_dir=bundle_dir,
+   725→   725→            title=f"pharmaml ml train — {result.name} ({dataset.task})",
+   726→   726→            subtitle=str(args.data),
+   727→   727→        )
+   728→   728→        print(f"plots:    {bundle_dir / 'report.html'} (+{len(written) - 1} files)")
+   729→   729→    return 0
+
+[showing lines 30-729 of 1170; use offset=730 with limit to continue reading]

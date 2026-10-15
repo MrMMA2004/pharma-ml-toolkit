@@ -74,6 +74,10 @@ after adding new public functions.
 | `list_models` | function | List registry entries with availability information. |
 | `build_model` | function | Instantiate an unfitted estimator from the registry. |
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
+| `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
+| `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
+| `ResidualMLPClassifier` | class | Residual (skip-connection) deep-network classifier (PyTorch). |
+| `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
 | `build_preprocessor` | function | Build the (impute -> scale) preprocessing pipeline. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |

@@ -6,14 +6,15 @@ domains into one coherent package:
 | Domain | What it does |
 |---|---|
 | **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
-| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry, cross-validated training (binary **and multiclass**), evaluation, persistence |
+| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (16 classical + **2 deep-learning families**), cross-validated training (binary **and multiclass**), evaluation, persistence |
+| **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
 | **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management |
 | **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, SMI/CSV/SDF format conversion, tautomer standardization + 3D ligand generation (SMILES→PDB), ligand-table reconciliation & merging |
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (626 tests).
+exceptions, input validation, and pytest coverage** (847 tests).
 
 ---
 
@@ -82,13 +83,14 @@ pharma-ml-toolkit/
 │   ├── data.py              # bring your own data: load_dataset, infer_task, summarize
 │   ├── cli.py               # `pharmaml` command-line interface
 │   ├── chem/                # converters, descriptors, similarity, tables, standardize
-│   ├── ml/                  # preprocessing, models (16 incl. Huber), training, evaluation, persistence
+│   ├── ml/                  # preprocessing, models (18: incl. dnn + dnn_residual PyTorch), neural.py, training, evaluation, persistence
+│   ├── biology/             # NEW: response screens, omics, biomarkers — cell line analysis
 │   ├── pharma/              # units, pk, pd, dosage, approvals
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 724 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
-├── examples/                # runnable demos + four executed notebooks (complete ML · complete docking · complete PK/PD · walkthrough) + three no-output twins
+├── tests/                   # 847 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_format_converters.py + data/ fixtures)
+├── examples/                # runnable demos + five executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · walkthrough) + four no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
@@ -167,11 +169,31 @@ re-run; the CLI equivalent is `pharmaml pharma pk --data profile.csv`.
 (`examples/pharmaml_walkthrough.ipynb` remains the every-domain tour including
 PK, docking and chem conversions.)
 
-Each of the three workflow notebooks also ships a **no-output twin**
+Each of the four workflow notebooks also ships a **no-output twin**
 (`*_no_output.ipynb`) — identical cells with every output stripped, 4–30 % of
 the executed size (the ML twin is 46 KB vs 1.1 MB), for slow connections; run
 it top-to-bottom to produce the results yourself. A pytest drift-guard pins
 the twins' cell sources to the executed originals.
+
+### The complete cell line process in one notebook
+
+`examples/complete_cellline_workflow.ipynb` — the cell line zero-to-one-hundred
+walkthrough, executed with all outputs committed (24 cell lines, 8 compounds,
+300 genes, planted structure that the analysis genuinely recovers):
+
+> §1 data entry (GDSC-style response screen, validated on the way in) → §2 QC
+> audit (missing values, duplicate pairs, replicate collapse) → §3 normalization
+> (LN_IC50 → pIC50, distributions) → §4 the cell × compound potency matrix +
+> per-compound ranking → §5 sensitive/resistant calling by quantiles → §6 omics
+> features (log2 + z, MAD gene selection) → §7 **biomarker discovery**
+> (per-gene Spearman vs response, BH-FDR — the planted EGFR → erlotinib
+> association is recovered at rho=+0.978, FDR=2e-13) → §8 classical response
+> model → §9 **deep learning** (`dnn` / `dnn_residual` in the same
+> `compare_models` leaderboard) → §10 recap.
+
+Point §1 at your own GDSC/CCLE export (same columns) and §6 at a CCLE
+expression matrix; the CLI equivalents are `pharmaml biology response-audit`
+and `pharmaml biology top-biomarkers`.
 
 ### Bringing your own data (CSV / TSV / Excel)
 
@@ -315,8 +337,35 @@ top-to-bottom to see training metrics, NCA results and docking tables).
 Registry models: `logistic_regression`, `ridge_classifier`, `svm`, `knn`, `decision_tree`,
 `random_forest`, `adaboost`, `ann`, `lasso`, `ridge`, `elastic_net`, `linear_regression`,
 `huber_regression` (outlier-robust), plus `xgboost` / `lightgbm` / `catboost` when the
-optional packages are installed.
+optional packages are installed — and two **deep-learning families**: `dnn` (deep
+feed-forward MLP) and `dnn_residual` (residual net with learned skip projections),
+both classification **and** regression, powered by PyTorch (`pip install 'pharmaml[deep]'`).
+They are full sklearn-API citizens — `train_model("dnn", …)`, `compare_models(models=[…,
+"dnn"])` and grid search work unchanged; without torch installed they simply report
+unavailable instead of breaking anything.
 `list_models()` shows what is available in *your* environment.
+
+#### Deep learning (`dnn` / `dnn_residual` — PyTorch)
+
+```python
+from pharmaml.ml import train_model, evaluate_model
+
+# A deep feed-forward net — same call as every classical model.
+result = train_model("dnn", "classification", X_train, y_train, tune=True)
+report = evaluate_model(result.model, X_test, y_test, "classification")
+
+# Or the residual architecture (skip connections, deeper stacks):
+result = train_model("dnn_residual", "regression", X_train, y_train)
+
+# Or side-by-side in one leaderboard, classical vs deep:
+board = compare_models(X, y, task="regression",
+                       models=["elastic_net", "random_forest", "ann", "dnn", "dnn_residual"])
+```
+
+Both families: minibatch Adam with weight decay, dropout, early stopping on a
+validation split, per-feature standardization fitted inside `fit`, deterministic under
+`random_state`, multiclass softmax, and sklearn `clone`/`GridSearchCV`/pickle compatible.
+Aliases: `deep_mlp` → `dnn`, `resnet` / `residual_dnn` → `dnn_residual`.
 
 #### Classification — two recipes: exactly 2 classes, or K classes of your choosing
 
@@ -380,6 +429,62 @@ print(report.roc_auc)     # one-vs-rest multiclass AUC
   `python examples/make_synthetic_qsar_data.py --classes 4` or
   `python examples/run_classification.py --classes 4` (a cached synthetic table is
   regenerated automatically when its class count differs from the requested one).
+
+### Cell line data analysis (from 0 to 100)
+
+A complete workflow for **cell line pharmacology** — GDSC/CCLE-style drug-response
+screens paired with expression data — in the same "Zero to One Hundred" style as the
+other domains. A fully executed notebook walks every stage:
+`examples/complete_cellline_workflow.ipynb` (24 cell lines, 8 compounds, planted
+EGFR → erlotinib biomarker recovered with rho=+0.978, FDR=2e-13).
+
+```python
+from pharmaml.biology import (
+    load_response_table, audit_response_table, collapse_replicates,
+    ln_ic50_to_pic50, response_matrix, summarize_compounds,
+    call_sensitive_resistant, normalize_expression, most_variable_genes,
+    sensitivity_associations, top_biomarkers, direction_of_association,
+)
+
+# 1) Load + audit a GDSC-style screen (long format: cell line, compound, LN_IC50).
+screen = load_response_table("screen.csv", tissue_column="tissue")
+print(screen.summary())
+audit_response_table(screen)          # missing values, duplicate pairs, ...
+clean = collapse_replicates(screen)   # median per (cell line, compound)
+
+# 2) Normalize: GDSC LN_IC50 (ln of µM) -> pIC50 (bigger = more potent).
+clean.frame["pIC50"] = ln_ic50_to_pic50(clean.frame["LN_IC50"])
+
+# 3) The cell x compound potency landscape + per-compound ranking.
+matrix = response_matrix(clean, "LN_IC50")       # cell lines x compounds
+summary = summarize_compounds(clean, "LN_IC50")  # median/min/max/spread per drug
+
+# 4) Call sensitive vs resistant cell lines by response quantiles.
+labels = call_sensitive_resistant(matrix["erlotinib"], lower_is_sensitive=True)
+
+# 5) Omics: expression matrix (rows = cell lines, columns = genes), log2 + z,
+#    then pick the MAD-most-variable genes.
+expr = normalize_expression(expression_frame)
+genes = most_variable_genes(expr, n=40)
+
+# 6) Biomarker discovery: every gene vs one drug's response, BH-FDR adjusted.
+hits = sensitivity_associations(expr, matrix["erlotinib"].dropna(), method="spearman")
+top = top_biomarkers(hits, n=10)               # gene, rho, p_value, fdr, significant
+print(direction_of_association(top.iloc[0]["rho"], lower_is_sensitive=True))
+```
+
+* `ResponseScreen` carries the screen (cell lines, compounds, metrics, tissue);
+  `response_matrix` pivots it for heat-map-style analyses.
+* Sensitive/resistant calling is **direction-aware** (LN_IC50: lower = sensitive;
+  pIC50: higher = sensitive) and documented per function.
+* `sensitivity_associations` is the omics → biomarker step: per-gene Spearman/Pearson
+  correlation against one drug's response vector, Benjamini–Hochberg FDR, sorted by
+  effect size — the notebook's planted EGFR biomarker survives FDR=2e-13.
+* CLI twins: `pharmaml biology response-audit` and `pharmaml biology top-biomarkers`.
+* The notebook closes by predicting erlotinib response from expression with
+  classical ML **and the `dnn` / `dnn_residual` deep-learning models in one
+  `compare_models` leaderboard** — cell line data is where deep learning earns its
+  keep.
 
 ### Pharmaceutical calculations
 
@@ -500,6 +605,8 @@ pharmaml docking campaign distribute --dir ligand_folders/ --file receptor.pdbqt
 pharmaml docking campaign cleanup --dir runs/ --keep r.dlg --remove-empty --dry-run
 pharmaml docking campaign delete-named --dir runs/ --name r.gpf --dry-run
 pharmaml docking campaign reindex --data results.csv --column name --start 1 --stop 300  # gap audit + reindex
+pharmaml biology response-audit --data screen.csv --tissue-column tissue --metric LN_IC50
+pharmaml biology top-biomarkers --expression expr.csv --response resp.csv --response-column pIC50 --compound erlotinib --top 15
 ```
 
 `--model` accepts registry names and aliases (`rf`, `logistic`, `xgb`,

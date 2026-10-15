@@ -7,9 +7,9 @@ estimator factory, the task(s) it supports, a tuned default parameter
 grid and an availability probe.  One generic trainer then serves every
 algorithm.
 
-Optional backends (XGBoost, LightGBM, CatBoost, Keras-style MLP is
-sklearn-based here) are imported lazily and reported as unavailable
-rather than crashing the registry import.
+Optional backends (XGBoost, LightGBM, CatBoost, PyTorch deep nets) are
+imported lazily and reported as unavailable rather than crashing the
+registry import.
 """
 
 from __future__ import annotations
@@ -146,6 +146,41 @@ def _cat_reg():
     return CatBoostRegressor(random_state=42, verbose=False)
 
 
+def _dnn_cls():
+    from pharmaml.ml.neural import DeepMLPClassifier  # noqa: PLC0415 - lazy, torch-free import
+
+    return DeepMLPClassifier(random_state=42)
+
+
+def _dnn_reg():
+    from pharmaml.ml.neural import DeepMLPRegressor  # noqa: PLC0415 - lazy, torch-free import
+
+    return DeepMLPRegressor(random_state=42)
+
+
+def _res_dnn_cls():
+    from pharmaml.ml.neural import ResidualMLPClassifier  # noqa: PLC0415 - lazy, torch-free import
+
+    return ResidualMLPClassifier(random_state=42)
+
+
+def _res_dnn_reg():
+    from pharmaml.ml.neural import ResidualMLPRegressor  # noqa: PLC0415 - lazy, torch-free import
+
+    return ResidualMLPRegressor(random_state=42)
+
+
+#: Optional requirement -> pip extra that installs it (used by the
+#: DependencyError hint in :func:`build_model` so every backend names
+#: its own extra instead of a hard-coded one).
+_REQUIREMENT_EXTRAS = {
+    "xgboost": "boosting",
+    "lightgbm": "boosting",
+    "catboost": "boosting",
+    "torch": "deep",
+}
+
+
 MODEL_REGISTRY: dict[str, ModelSpec] = {
     "logistic_regression": ModelSpec(
         name="logistic_regression",
@@ -269,6 +304,30 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         param_grid={"iterations": [200, 400], "depth": [6, 8]},
         notes="CatBoost (upgrades CATboost.py)",
     ),
+    "dnn": ModelSpec(
+        name="dnn",
+        task="both",
+        factory=None,
+        requires="torch",
+        param_grid={
+            "hidden_layers": [(64, 32), (128, 64, 32)],
+            "dropout": [0.0, 0.1],
+            "learning_rate": [1e-3, 3e-4],
+        },
+        notes="deep feed-forward network (PyTorch) — needs `pip install 'pharmaml[deep]'`",
+    ),
+    "dnn_residual": ModelSpec(
+        name="dnn_residual",
+        task="both",
+        factory=None,
+        requires="torch",
+        param_grid={
+            "hidden_layers": [(64, 32), (128, 64, 32)],
+            "dropout": [0.0, 0.1],
+            "learning_rate": [1e-3, 3e-4],
+        },
+        notes="residual deep network (PyTorch) — needs `pip install 'pharmaml[deep]'`",
+    ),
 }
 
 
@@ -306,6 +365,11 @@ MODEL_ALIASES: dict[str, str] = {
     "lasso": "lasso",
     "enet": "elastic_net",
     "elasticnet": "elastic_net",
+    "dnn": "dnn",
+    "deep_mlp": "dnn",
+    "dnn_residual": "dnn_residual",
+    "resnet": "dnn_residual",
+    "residual_dnn": "dnn_residual",
 }
 
 
@@ -366,6 +430,14 @@ _TASK_FACTORIES: dict[str, dict[str, Callable[[], Any]]] = {
     "catboost": {
         "classification": _cat_cls,
         "regression": _cat_reg,
+    },
+    "dnn": {
+        "classification": _dnn_cls,
+        "regression": _dnn_reg,
+    },
+    "dnn_residual": {
+        "classification": _res_dnn_cls,
+        "regression": _res_dnn_reg,
     },
 }
 
@@ -443,9 +515,10 @@ def build_model(
     if task != "both" and spec.task != "both" and spec.task != task:
         raise ModelError(f"Model {key!r} supports {spec.task!r}, not {task!r}")
     if not spec.available:
+        extra = _REQUIREMENT_EXTRAS.get(spec.requires, spec.requires)
         raise DependencyError(
             f"Model {key!r} requires the optional package '{spec.requires}'. "
-            f"Install with:  pip install 'pharmaml[boosting]'"
+            f"Install with:  pip install 'pharmaml[{extra}]'"
         )
 
     if spec.name in _TASK_FACTORIES:

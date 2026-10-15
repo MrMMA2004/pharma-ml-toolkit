@@ -579,3 +579,133 @@ class TestPharmaApprovalsCommand:
         assert "2 unique" in out_text
         frame = pd.read_csv(out)
         assert frame["drug"].tolist() == ["Ibuprofen", "Metformin"]
+
+
+class TestBiologyCommands:
+    """`pharmaml biology` verbs: response screens and biomarker discovery."""
+
+    @staticmethod
+    def _screen_csv(tmp_path: Path, name: str = "screen.csv") -> Path:
+        """6 cell lines x 4 compounds, one duplicate pair, one missing value."""
+        import numpy as np
+        import pandas as pd
+
+        rng = np.random.default_rng(17)
+        cells = ["A549", "HCT116", "HL60", "K562", "MCF7", "U87"]
+        compounds = ["cisplatin", "doxorubicin", "erlotinib", "imatinib"]
+        tissue = {"A549": "lung", "HCT116": "colon", "HL60": "haematopoietic",
+                  "K562": "haematopoietic", "MCF7": "breast", "U87": "brain"}
+        rows = [
+            {
+                "cell_line": cell,
+                "compound": compound,
+                "tissue": tissue[cell],
+                "LN_IC50": round(float(rng.uniform(-2.0, 4.0)), 4),
+                "AUC": round(float(rng.uniform(0.1, 1.0)), 4),
+            }
+            for cell in cells
+            for compound in compounds
+        ]
+        frame = pd.DataFrame(rows)
+        extra = frame.iloc[2].copy()  # duplicate (A549, erlotinib)
+        extra["LN_IC50"] = 1.5
+        frame = pd.concat([frame, pd.DataFrame([extra])], ignore_index=True)
+        frame.loc[3, "LN_IC50"] = float("nan")  # one missing value
+        path = tmp_path / name
+        frame.to_csv(path, index=False)
+        return path
+
+    def test_response_audit_prints_summary_audit_and_compounds(
+        self, tmp_path, capsys
+    ):
+        screen_csv = self._screen_csv(tmp_path)
+        code = main(
+            [
+                "biology", "response-audit", "--data", str(screen_csv),
+                "--tissue-column", "tissue", "--metric", "LN_IC50",
+            ]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "6 cell line(s) x 4 compound(s)" in out
+        assert "audit:" in out
+        assert "duplicate pairs" in out and "A549 / erlotinib" in out
+        assert "missing metric values" in out
+        assert "per-compound summary (metric 'LN_IC50')" in out
+        assert "sensitive_spread" in out
+        assert "most_sensitive_cell_line" in out
+        for compound in ("cisplatin", "doxorubicin", "erlotinib", "imatinib"):
+            assert compound in out
+
+    def test_response_audit_bad_column_reports_error(self, tmp_path, capsys):
+        screen_csv = self._screen_csv(tmp_path)
+        code = main(
+            ["biology", "response-audit", "--data", str(screen_csv),
+             "--cell-column", "bogus"]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "error:" in err
+        assert "bogus" in err
+
+    def test_top_biomarkers_end_to_end_with_planted_gene(
+        self, tmp_path, capsys
+    ):
+        import numpy as np
+        import pandas as pd
+
+        rng = np.random.default_rng(21)
+        cells = [f"CELL{i}" for i in range(10)]
+        genes = ["KRAS", "BRAF", "TP53", "MYC", "ALK", "PTEN", "RB1", "CDKN2A"]
+        expression = pd.DataFrame(
+            rng.normal(50, 10, size=(len(cells), len(genes))), columns=genes
+        )
+        expression.insert(0, "cell_line", cells)
+
+        # planted biomarker: high EGFR <-> high pIC50 (sensitive, pIC50 style)
+        pic50 = pd.Series(rng.uniform(4.0, 8.0, size=len(cells)))
+        expression["EGFR"] = 10.0 + 5.0 * pic50
+        expression_csv = tmp_path / "expression.csv"
+        expression.to_csv(expression_csv, index=False)
+
+        response_rows = []
+        for i, cell in enumerate(cells):
+            response_rows.append(
+                {"cell_line": cell, "compound": "erlotinib",
+                 "pIC50": round(float(pic50.iloc[i]), 4)}
+            )
+            # a second compound that must be filtered out via --compound
+            response_rows.append(
+                {"cell_line": cell, "compound": "sorafenib",
+                 "pIC50": round(float(rng.uniform(4.0, 8.0)), 4)}
+            )
+        response_csv = tmp_path / "response.csv"
+        pd.DataFrame(response_rows).to_csv(response_csv, index=False)
+
+        hits_csv = tmp_path / "hits.csv"
+        code = main(
+            [
+                "biology", "top-biomarkers",
+                "--expression", str(expression_csv),
+                "--response", str(response_csv),
+                "--response-column", "pIC50",
+                "--compound", "erlotinib",
+                "--higher-is-sensitive",
+                "--top", "5",
+                "--out", str(hits_csv),
+            ]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "compound : erlotinib (10 cell line(s))" in out
+        # the planted biomarker ranks first and is called sensitive
+        first = out.splitlines()
+        egfr_lines = [line for line in first if line.startswith("EGFR")]
+        assert egfr_lines, "planted EGFR row missing from the CLI output"
+        assert "expression high -> more sensitive" in egfr_lines[0]
+        assert hits_csv.is_file()
+        frame = pd.read_csv(hits_csv)
+        assert frame.iloc[0]["gene"] == "EGFR"
+        assert bool(frame.iloc[0]["significant"])
+        assert "direction" in frame.columns
+        assert len(frame) == 5

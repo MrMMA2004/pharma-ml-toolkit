@@ -22,6 +22,8 @@ scans::
     pharmaml docking torsion --dir ligand_folders/
     pharmaml docking gpf-scan --dir docking_run/
     pharmaml docking vina-scan --dir vina_results/
+    pharmaml biology response-audit --data screen.csv --metric LN_IC50
+    pharmaml biology top-biomarkers --expression expr.csv --response resp.csv --response-column pIC50
     pharmaml models list
 
 ``--model`` accepts registry names and their aliases (``rf``,
@@ -462,6 +464,88 @@ def _build_parser() -> argparse.ArgumentParser:
         "--out",
         default=None,
         help="optional output CSV/XLSX (index written as a 'number' column)",
+    )
+
+    # ---- biology -----------------------------------------------------
+    biology_parser = subparsers.add_parser(
+        "biology", help="cell line data utilities (drug-response screens, omics)"
+    )
+    biology_sub = biology_parser.add_subparsers(
+        dest="biology_command", required=True
+    )
+
+    bio_audit = biology_sub.add_parser(
+        "response-audit",
+        help="audit a GDSC/CCLE-style drug-response table",
+    )
+    bio_audit.add_argument(
+        "--data", required=True,
+        help="long-format response table (CSV/TSV/Excel), one row per "
+        "(cell line, compound) pair",
+    )
+    bio_audit.add_argument(
+        "--cell-column", default="cell_line", help="cell line column name",
+    )
+    bio_audit.add_argument(
+        "--compound-column", default="compound", help="compound column name",
+    )
+    bio_audit.add_argument(
+        "--tissue-column", default=None,
+        help="optional tissue annotation column (kept out of the metrics)",
+    )
+    bio_audit.add_argument(
+        "--metric", default=None,
+        help="metric for the per-compound summary (default: first metric)",
+    )
+
+    bio_top = biology_sub.add_parser(
+        "top-biomarkers",
+        help="correlate gene expression with one drug's response",
+    )
+    bio_top.add_argument(
+        "--expression", required=True,
+        help="expression table: rows = cell lines, columns = genes "
+        "(first column may hold the cell-line identifiers)",
+    )
+    bio_top.add_argument(
+        "--response", required=True,
+        help="long-format response table (cell line, compound, metric)",
+    )
+    bio_top.add_argument(
+        "--response-column", required=True,
+        help="metric column in the response table (e.g. pIC50 or LN_IC50)",
+    )
+    bio_top.add_argument(
+        "--compound", default=None,
+        help="compound to analyse (required when the table holds several)",
+    )
+    bio_top.add_argument(
+        "--cell-column", default="cell_line",
+        help="cell line column name in both tables",
+    )
+    bio_top.add_argument(
+        "--compound-column", default="compound",
+        help="compound column name in the response table",
+    )
+    bio_top.add_argument(
+        "--method", choices=("spearman", "pearson"), default="spearman",
+        help="correlation method (default spearman)",
+    )
+    bio_top.add_argument(
+        "--lower-is-sensitive", action="store_true",
+        help="low response values mean sensitive (LN_IC50 style, default)",
+    )
+    bio_top.add_argument(
+        "--higher-is-sensitive", action="store_true",
+        help="high response values mean sensitive (pIC50 style)",
+    )
+    bio_top.add_argument(
+        "--top", type=int, default=15, metavar="N",
+        help="number of biomarkers to report (default 15)",
+    )
+    bio_top.add_argument(
+        "--out", default=None,
+        help="write the hits table to this path (csv/tsv/xlsx)",
     )
 
     return parser
@@ -1114,6 +1198,129 @@ def _cmd_docking_campaign(args: argparse.Namespace) -> int:
     return 2  # pragma: no cover - argparse guards this
 
 
+def _cmd_biology_response_audit(args: argparse.Namespace) -> int:
+    """``pharmaml biology response-audit``: screen summary + audit + stats."""
+    from pharmaml.biology import (
+        audit_response_table,
+        load_response_table,
+        summarize_compounds,
+    )
+
+    screen = load_response_table(
+        args.data,
+        cell_column=args.cell_column,
+        compound_column=args.compound_column,
+        tissue_column=args.tissue_column,
+    )
+    print(screen.summary())
+    print("\naudit:")
+    print(audit_response_table(screen).to_string(index=False))
+    metric = args.metric if args.metric is not None else screen.metrics[0]
+    print(f"\nper-compound summary (metric {metric!r}):")
+    print(summarize_compounds(screen, metric).to_string())
+    return 0
+
+
+def _cmd_biology_top_biomarkers(args: argparse.Namespace) -> int:
+    """``pharmaml biology top-biomarkers``: expression vs. one drug."""
+    import pandas as pd
+
+    from pharmaml.biology import (
+        direction_of_association,
+        sensitivity_associations,
+        top_biomarkers,
+    )
+    from pharmaml.biology.response import load_response_table
+    from pharmaml.exceptions import DataValidationError
+    from pharmaml.utils.io import read_table, write_table
+
+    if args.lower_is_sensitive and args.higher_is_sensitive:
+        raise DataValidationError(
+            "pass at most one of --lower-is-sensitive / "
+            "--higher-is-sensitive (they are opposites)"
+        )
+    lower_is_sensitive = not args.higher_is_sensitive
+
+    screen = load_response_table(
+        args.response,
+        cell_column=args.cell_column,
+        compound_column=args.compound_column,
+        metrics=[args.response_column],
+    )
+    compounds = screen.compounds
+    if args.compound is not None:
+        if args.compound not in compounds:
+            raise DataValidationError(
+                f"compound {args.compound!r} not found in the response table "
+                f"-- available compounds: {compounds}"
+            )
+        chosen = args.compound
+    elif len(compounds) == 1:
+        chosen = compounds[0]
+    else:
+        shown = ", ".join(compounds[:5])
+        more = " ..." if len(compounds) > 5 else ""
+        raise DataValidationError(
+            f"response table holds {len(compounds)} compound(s) ({shown}{more}) "
+            "-- pass --compound to pick one"
+        )
+
+    subset = screen.frame[screen.frame[screen.compound_col] == chosen]
+    if subset[screen.cell_col].duplicated().any():
+        n_dup = int(subset[screen.cell_col].duplicated().sum())
+        _LOG.warning(
+            "%d replicate row(s) for compound %r -- collapsed by median",
+            n_dup,
+            chosen,
+        )
+        subset = subset.groupby(screen.cell_col, as_index=False).agg(
+            {args.response_column: "median"}
+        )
+    response = subset.set_index(screen.cell_col)[args.response_column]
+    if int(response.notna().sum()) < 3:
+        raise DataValidationError(
+            f"only {int(response.notna().sum())} non-NaN response value(s) for "
+            f"compound {chosen!r} -- at least 3 are needed to correlate"
+        )
+
+    expression = read_table(args.expression)
+    if args.cell_column in expression.columns:
+        expression = expression.set_index(args.cell_column)
+    elif not pd.api.types.is_numeric_dtype(expression[expression.columns[0]]):
+        first = expression.columns[0]
+        _LOG.debug(
+            "Using expression column %r as the cell-line index", first
+        )
+        expression = expression.set_index(first)
+    else:
+        raise DataValidationError(
+            "cannot identify a cell-line column in the expression table -- "
+            f"name it {args.cell_column!r} or make the first column hold the "
+            "cell-line identifiers"
+        )
+
+    associations = sensitivity_associations(
+        expression, response, method=args.method
+    )
+    hits = top_biomarkers(associations, n=args.top).copy()
+    hits["direction"] = [
+        direction_of_association(rho, lower_is_sensitive=lower_is_sensitive)
+        for rho in hits["rho"]
+    ]
+    print(f"compound : {chosen} ({len(response)} cell line(s))")
+    print(f"response : column {args.response_column!r}, method {args.method}")
+    print(
+        f"genes    : {expression.shape[1]} correlated, "
+        f"{int(associations['significant'].sum())} significant (FDR)"
+    )
+    print()
+    print(hits.to_string(index=False))
+    if args.out:
+        written = write_table(hits, args.out)
+        print(f"\nbiomarkers -> {written}")
+    return 0
+
+
 _HANDLERS = {
     ("models", None): _cmd_models,
     ("data", "inspect"): _cmd_data_inspect,
@@ -1138,6 +1345,8 @@ _HANDLERS = {
     ("docking", "gpf-scan"): _cmd_docking_gpf_scan,
     ("docking", "vina-scan"): _cmd_docking_vina_scan,
     ("docking", "campaign"): _cmd_docking_campaign,
+    ("biology", "response-audit"): _cmd_biology_response_audit,
+    ("biology", "top-biomarkers"): _cmd_biology_top_biomarkers,
 }
 
 

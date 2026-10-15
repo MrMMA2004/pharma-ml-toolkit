@@ -20,6 +20,7 @@ VARIANTS = (
     "complete_ml_workflow",
     "complete_docking_workflow",
     "complete_pk_workflow",
+    "complete_cellline_workflow",
 )
 
 

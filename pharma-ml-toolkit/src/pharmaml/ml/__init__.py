@@ -14,6 +14,12 @@ from pharmaml.ml.models import (
     build_model,
     resolve_model_name,
 )
+from pharmaml.ml.neural import (
+    DeepMLPClassifier,
+    DeepMLPRegressor,
+    ResidualMLPClassifier,
+    ResidualMLPRegressor,
+)
 from pharmaml.ml.training import train_model, compare_models
 from pharmaml.ml.evaluation import evaluate_model
 from pharmaml.ml.persistence import save_model, load_model
@@ -24,6 +30,10 @@ __all__ = [
     "list_models",
     "build_model",
     "resolve_model_name",
+    "DeepMLPClassifier",
+    "DeepMLPRegressor",
+    "ResidualMLPClassifier",
+    "ResidualMLPRegressor",
     "clean_numeric_frame",
     "build_preprocessor",
     "has_categorical_columns",

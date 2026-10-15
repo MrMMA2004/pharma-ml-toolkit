@@ -890,3 +890,56 @@ class TestNotebookArtifacts:
             c.cell_type == "markdown" and c.source.startswith("## 13 · Recap")
             for c in nb.cells
         ), "notebook lost its recap section"
+
+    def test_complete_cellline_workflow_notebook(self):
+        nb = self._read("complete_cellline_workflow.ipynb")
+        code_cells, errors, figures, executed = self._stats(nb)
+        assert len(code_cells) >= 15
+        assert executed == len(code_cells), "notebook has unexecuted code cells"
+        assert not errors, f"notebook has {len(errors)} committed error output(s)"
+        assert figures >= 3, "cell-line notebook lost its figures"
+
+        sources = "\n".join(c.source for c in code_cells)
+        for symbol in (
+            # §1–§5 response-screen core
+            "load_response_table",
+            "audit_response_table",
+            "collapse_replicates",
+            "ln_ic50_to_pic50",
+            "response_matrix",
+            "summarize_compounds",
+            "call_sensitive_resistant",
+            # §6–§7 omics + biomarkers
+            "normalize_expression",
+            "most_variable_genes",
+            "sensitivity_associations",
+            "top_biomarkers",
+            "direction_of_association",
+            # §8–§9 modelling + deep learning
+            "train_model",
+            "compare_models",
+            "dnn",
+            "dnn_residual",
+            "plot_predicted_vs_actual",
+            "plot_model_comparison",
+        ):
+            assert symbol in sources, f"cell-line notebook lost its {symbol} section"
+
+        # The biomarker verdict must stay committed: the planted EGFR ->
+        # erlotinib association is the notebook's headline result.
+        verdict_cell = next(
+            (c for c in code_cells if "EGFR vs erlotinib" in c.source), None
+        )
+        assert verdict_cell is not None, "notebook lost its biomarker verdict cell"
+        verdict_text = "".join(
+            o.get("text", "") for o in verdict_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "rho=+0.978" in verdict_text, "EGFR/erlotinib rho changed"
+        assert "significant=True" in verdict_text, "planted biomarker no longer significant"
+
+        # The §10 recap must stay shipped.
+        assert any(
+            c.cell_type == "markdown" and c.source.startswith("## 10 · Recap")
+            for c in nb.cells
+        ), "notebook lost its recap section"
