@@ -267,23 +267,46 @@ def most_variable_genes(frame: pd.DataFrame, n: int = 500) -> list[str]:
 
 def _align_response(
     expression_frame: pd.DataFrame, response_series: pd.Series
-) -> pd.Series:
-    """Align ``response_series`` onto the expression frame's rows.
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Align both inputs onto their shared cell-line labels.
 
-    Exact index matches pass straight through; otherwise the shared
-    labels are used (with a warning when rows are dropped on either
-    side).  No overlap at all raises :class:`DataValidationError`.
+    Returns the expression frame and the response subset to the same
+    rows (identical label order).  Exact index matches (without NaN
+    labels) pass straight through; otherwise both inputs are subset to
+    the shared labels, with a warning whenever rows are dropped on
+    either side.  Labels that are NaN never match (a row without an
+    identifier cannot be paired) and count as dropped.  Duplicate
+    labels on either side raise :class:`DataValidationError` -- the
+    gene/response pairing would be ambiguous.  No overlap at all
+    likewise raises.
     """
-    if response_series.index.equals(expression_frame.index):
-        return response_series
-    shared = expression_frame.index.intersection(response_series.index)
+    for kind, index in (
+        ("expression", expression_frame.index),
+        ("response", response_series.index),
+    ):
+        if index.duplicated().any():
+            labels = sorted({str(label) for label in index[index.duplicated()]})
+            raise DataValidationError(
+                f"{kind} index has duplicate cell-line label(s) {labels} -- "
+                "the correlation pairing would be ambiguous; aggregate or "
+                "deduplicate those rows first"
+            )
+    if (
+        response_series.index.equals(expression_frame.index)
+        and not expression_frame.index.hasnans
+    ):
+        return expression_frame, response_series
+    # labels that are NaN cannot be paired -- drop them before matching
+    frame_labels = expression_frame.index.dropna()
+    response_labels = response_series.index.dropna()
+    shared = frame_labels.intersection(response_labels)
     if len(shared) == 0:
         raise DataValidationError(
             "no overlap between expression rows and response values -- "
             f"expression index holds {list(expression_frame.index[:3])!r} ... "
             f"while the response holds {list(response_series.index[:3])!r} ..."
         )
-    if len(shared) < min(len(expression_frame), len(response_series)):
+    if len(shared) < len(expression_frame) or len(shared) < len(response_series):
         _LOG.warning(
             "response alignment uses %d shared cell line(s) (%d expression "
             "row(s) and %d response value(s) unmatched)",
@@ -291,7 +314,7 @@ def _align_response(
             len(expression_frame) - len(shared),
             len(response_series) - len(shared),
         )
-    return response_series.loc[shared]
+    return expression_frame.loc[shared], response_series.loc[shared]
 
 
 def correlate_with_response(
@@ -308,8 +331,9 @@ def correlate_with_response(
     response_series:
         One drug's response values indexed by cell line (e.g. a column
         of :func:`pharmaml.biology.response_matrix`).  Aligned with the
-        expression rows by index; partial overlap warns about the
-        dropped rows, no overlap raises.
+        expression rows by index: partial overlap warns about the
+        dropped rows and correlates on the shared cell lines, labels
+        that are NaN never match, and no overlap raises.
     method:
         ``"spearman"`` (default) or ``"pearson"``.
 
@@ -326,8 +350,9 @@ def correlate_with_response(
     Raises
     ------
     DataValidationError
-        If ``method`` is unknown or no cell line is shared between the
-        two inputs.
+        If ``method`` is unknown, no cell line is shared between the
+        two inputs, or either index holds duplicate cell-line labels
+        (the pairing would be ambiguous).
     """
     if method not in _CORRELATION_METHODS:
         raise DataValidationError(
@@ -343,7 +368,7 @@ def correlate_with_response(
         else pd.Series(response_series)
     )
     response = pd.to_numeric(response, errors="coerce")
-    response = _align_response(values, response)
+    values, response = _align_response(values, response)
     y = response.to_numpy(dtype=float)
 
     rows: list[dict[str, object]] = []

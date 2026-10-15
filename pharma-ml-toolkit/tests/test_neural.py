@@ -24,8 +24,10 @@ import pandas as pd
 import pytest
 from sklearn.base import clone
 from sklearn.datasets import make_blobs, make_classification
+from sklearn.exceptions import NotFittedError
 from sklearn.metrics import accuracy_score, r2_score
 from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.utils.validation import check_is_fitted
 
 import pharmaml.ml.models as models_module
 from pharmaml.exceptions import DataValidationError, DependencyError, ModelError
@@ -666,3 +668,225 @@ class TestResidualMLP:
         assert ResidualMLPClassifier().hidden_layers == (64, 64, 64)
         assert ResidualMLPRegressor().hidden_layers == (64, 64, 64)
         assert DeepMLPClassifier().hidden_layers == (64, 32)
+
+
+# ---------------------------------------------------------------------------
+# Regression tests from the ml/neural.py deep review (100x-18-b)
+# ---------------------------------------------------------------------------
+class TestEarlyStoppingRegression:
+    """Early stopping / best-weight restore / refit state (100x-18-b)."""
+
+    def test_best_epoch_weights_restored_not_last(self, binary_data: tuple) -> None:
+        # A deliberately hot learning rate makes the validation loss dip
+        # early and then WORSEN; the stored weights must be the ones from
+        # the best epoch, not the final one.  A second estimator trained
+        # for exactly best_epoch epochs (same seed -> identical epoch
+        # sequence) ends up holding those best-epoch weights.
+        X_train, _, y_train, _ = binary_data
+        common: dict[str, Any] = {
+            "hidden_layers": (16, 8),
+            "epochs": 60,
+            "patience": 60,
+            "val_split": 0.2,
+            "random_state": 7,
+            "learning_rate": 0.05,
+        }
+        full = DeepMLPClassifier(**common).fit(X_train, y_train)
+        val_losses = [entry["val_loss"] for entry in full.history_]
+        best_epoch = int(np.argmin(val_losses)) + 1
+        # meaningfulness precondition: the curve really does worsen
+        assert val_losses[-1] > val_losses[best_epoch - 1]
+        truncated = DeepMLPClassifier(
+            **{**common, "epochs": best_epoch, "patience": best_epoch}
+        ).fit(X_train, y_train)
+        assert full._weights.keys() == truncated._weights.keys()
+        assert all(
+            np.allclose(full._weights[key], truncated._weights[key])
+            for key in full._weights
+        )
+
+    def test_small_patience_stops_before_max_epochs(self, binary_data: tuple) -> None:
+        X_train, _, y_train, _ = binary_data
+        model = DeepMLPClassifier(
+            hidden_layers=(16, 8),
+            epochs=40,
+            patience=1,
+            val_split=0.2,
+            random_state=7,
+            learning_rate=0.05,
+        ).fit(X_train, y_train)
+        # n_iter_ documents the epochs RUN (not the best epoch)
+        assert model.n_iter_ == len(model.history_) <= 40
+        assert model.n_iter_ < 40  # early stopping actually fired
+
+    def test_diverged_training_raises_model_error(self) -> None:
+        # Extreme learning rate -> NaN weights: fit must refuse loudly
+        # instead of leaving a silently-NaN estimator (predict used to
+        # return all-NaN with no error).
+        rng = np.random.default_rng(0)
+        X = rng.normal(size=(120, 6))
+        y = 3.0 * X[:, 0] - 2.0 * X[:, 1] + 0.1 * rng.normal(size=120)
+        model = DeepMLPRegressor(
+            hidden_layers=(16, 8),
+            epochs=12,
+            patience=12,
+            val_split=0.15,
+            random_state=3,
+            learning_rate=1e9,
+        )
+        with pytest.raises(ModelError, match="diverged"):
+            model.fit(X, y)
+        # a refused fit must not leave a usable-but-NaN estimator behind
+        with pytest.raises(ModelError, match="not been fitted"):
+            model.predict(X[:3])
+
+    def test_refit_resets_history_and_n_iter(self, binary_data: tuple) -> None:
+        # fit() twice on the same instance: history_ must be REPLACED,
+        # never appended to.
+        X_train, X_test, y_train, _ = binary_data
+        model = DeepMLPClassifier(
+            hidden_layers=(8,), epochs=6, patience=6, val_split=0.2, random_state=5
+        ).fit(X_train, y_train)
+        assert len(model.history_) == 6
+        model.fit(X_train, y_train)  # second fit, same instance
+        assert len(model.history_) == 6  # NOT 12
+        assert model.n_iter_ == len(model.history_)
+        assert model.n_features_in_ == X_train.shape[1]
+        assert np.isfinite(model.predict(X_test[:5])).all()
+
+
+class TestValidationSplitRegression:
+    """Stratification edges + train-only standardisation (100x-18-b)."""
+
+    def test_single_member_class_stays_in_training_fold(self) -> None:
+        # class 2 has exactly one row; a large val_split used to move that
+        # row to the validation fold, leaving the class untrainable.
+        X = np.random.default_rng(0).normal(size=(13, 4))
+        y = np.array([0] * 6 + [1] * 6 + [2])
+        est = DeepMLPClassifier(
+            hidden_layers=(4,), epochs=1, val_split=0.6, random_state=7
+        )
+        train_idx, val_idx = est._train_val_split(y, len(y), np.random.default_rng(7))
+        assert set(y[train_idx].tolist()) == {0, 1, 2}  # every class trainable
+        # end-to-end fit still works with the tiny stratified split
+        fitted = DeepMLPClassifier(
+            hidden_layers=(4,), epochs=3, val_split=0.6, random_state=7
+        ).fit(X, y)
+        assert fitted.history_[-1]["val_loss"] is not None
+        assert np.isfinite(fitted.predict_proba(X)).all()
+
+    def test_standardisation_fitted_on_training_rows_only(self) -> None:
+        # The scaler must be fitted on the TRAINING rows only — the
+        # early-stopping validation rows (here: a x500 outlier) must not
+        # leak into mean/std.
+        rng = np.random.default_rng(5)
+        X = rng.normal(size=(40, 3))
+        y = (X[:, 0] > 0).astype(int)
+        X[0, 0] = 500.0  # giant outlier
+        model = DeepMLPClassifier(
+            hidden_layers=(4,), epochs=2, val_split=0.15, random_state=11
+        ).fit(X, y)
+        # replicate the split to know which rows trained
+        train_idx, val_idx = model._train_val_split(y, len(y), np.random.default_rng(11))
+        assert 0 in set(val_idx.tolist())  # outlier really is in the val fold
+        assert np.isclose(model._mean_[0], X[train_idx][:, 0].mean())
+        assert not np.isclose(model._mean_[0], X[:, 0].mean())  # no full-data leak
+
+
+class TestInputContractRegression:
+    """Error contracts for X/y shapes and dtypes (100x-18-b)."""
+
+    def test_predict_rejects_wrong_feature_count(self, binary_data: tuple) -> None:
+        # Too FEW columns used to *broadcast* silently against the
+        # per-feature mean (garbage predictions); too MANY raised a raw
+        # numpy broadcast error.  Both must be typed DataValidationErrors.
+        X_train, X_test, y_train, _ = binary_data
+        model = DeepMLPClassifier(
+            hidden_layers=(8,), epochs=2, random_state=1
+        ).fit(X_train, y_train)
+        n_features = X_train.shape[1]
+        with pytest.raises(DataValidationError, match=f"{n_features - 1} feature"):
+            model.predict(X_test[:, : n_features - 1])
+        with pytest.raises(DataValidationError, match=f"{n_features + 1} feature"):
+            model.predict(np.hstack([X_test, np.zeros((len(X_test), 1))]))
+        with pytest.raises(DataValidationError, match="fitted with"):
+            model.predict_proba(X_test[:, :1])
+
+    def test_classifier_rejects_none_labels(self, binary_data: tuple) -> None:
+        # None mixed with string labels used to escape as a raw
+        # TypeError from np.unique's sort.
+        X_train, _, _, _ = binary_data
+        y = ["a"] * 10 + ["b"] * 9 + [None]
+        with pytest.raises(DataValidationError, match="label-encoded"):
+            DeepMLPClassifier(
+                hidden_layers=(4,), epochs=1, random_state=1
+            ).fit(X_train[:20], y)
+
+    def test_hidden_layers_generator_does_not_degenerate(self) -> None:
+        # A generator used to be consumed by validation, so the training
+        # loop saw an EMPTY architecture and silently built a single
+        # linear layer.
+        X, y = make_blobs(
+            n_samples=60, centers=[(-3.0, -3.0), (3.0, 3.0)], random_state=1
+        )
+        model = DeepMLPClassifier(
+            hidden_layers=(w for w in (16, 8)), epochs=2, random_state=1
+        ).fit(X, y)
+        assert model._net_spec_["hidden"] == (16, 8)
+        # three weight matrices (two hidden layers + head), not the one a
+        # degenerate single-linear-layer model would have
+        assert sum(key.endswith(".weight") for key in model._weights) == 3
+
+    def test_failed_fit_leaves_estimator_unfitted(
+        self, monkeypatch: pytest.MonkeyPatch, binary_data: tuple
+    ) -> None:
+        # A DependencyError from a missing torch used to leave
+        # classes_/n_features_in_/_mean_ behind, so sklearn's
+        # check_is_fitted considered the estimator fitted.
+        X_train, _, y_train, _ = binary_data
+        _hide_torch(monkeypatch)
+        model = DeepMLPClassifier(
+            hidden_layers=(4,), epochs=1, random_state=1
+        )
+        with pytest.raises(DependencyError, match="torch"):
+            model.fit(X_train, y_train)
+        for attr in ("classes_", "n_features_in_", "feature_names_in_", "_mean_"):
+            assert not hasattr(model, attr)
+        with pytest.raises(NotFittedError):
+            check_is_fitted(model)
+
+    def test_proba_columns_follow_sorted_classes_multiclass(self) -> None:
+        # y values arrive UNsorted ('b','a','c'): classes_ must be sorted
+        # and predict_proba column j must be P(classes_[j]).
+        X, y_int = make_blobs(
+            n_samples=90,
+            centers=[(-4.0, -4.0), (0.0, 4.0), (4.0, -4.0)],
+            cluster_std=0.6,
+            random_state=2,
+        )
+        mapping = {0: "b", 1: "a", 2: "c"}  # 'a' lives at centre (0, 4)
+        y = np.array([mapping[v] for v in y_int])
+        model = DeepMLPClassifier(
+            hidden_layers=(16,), epochs=60, patience=10, random_state=2
+        ).fit(X, y)
+        assert [str(c) for c in model.classes_] == ["a", "b", "c"]
+        centers = np.array([(-4.0, -4.0), (0.0, 4.0), (4.0, -4.0)])
+        proba = model.predict_proba(centers)
+        # column 0 == P('a') must win at the 'a' centre (0, 4), etc.
+        assert int(np.argmax(proba[1])) == 0
+        assert int(np.argmax(proba[0])) == 1
+        assert int(np.argmax(proba[2])) == 2
+        assert model.predict(centers[[1, 0, 2]]).tolist() == ["a", "b", "c"]
+
+    def test_dropout_disabled_at_predict_time(self) -> None:
+        # Repeated predict_proba calls must be identical: the live
+        # network runs in eval mode (dropout off).
+        X, y = make_blobs(
+            n_samples=60, centers=[(-3.0, -3.0), (3.0, 3.0)], random_state=4
+        )
+        model = DeepMLPClassifier(
+            hidden_layers=(32, 32), dropout=0.5, epochs=3, random_state=4
+        ).fit(X, y)
+        first = model.predict_proba(X)
+        second = model.predict_proba(X)
+        assert np.array_equal(first, second)

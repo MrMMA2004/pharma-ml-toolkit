@@ -219,8 +219,16 @@ class _BaseDeepEstimator(BaseEstimator):
     _residual: bool = False
 
     # -- validation -----------------------------------------------------
-    def _validate_hyperparameters(self) -> None:
-        """Raise :class:`ModelError` early for bad constructor values.
+    def _validate_hyperparameters(self) -> tuple[int, ...]:
+        """Validate constructor values and return the hidden-layer widths.
+
+        Returns
+        -------
+        tuple of int
+            ``hidden_layers`` materialised as a tuple — generators are
+            consumed exactly once here, so the training loop never sees
+            an exhausted iterable (which would silently build a single
+            linear layer).
 
         Raises
         ------
@@ -237,6 +245,7 @@ class _BaseDeepEstimator(BaseEstimator):
             raise ModelError(
                 f"hidden_layers must be a sequence of positive ints, got {hidden!r}"
             )
+        hidden = tuple(hidden)
         for width in hidden:
             if isinstance(width, bool) or not isinstance(width, (int, np.integer)) or width < 1:
                 raise ModelError(
@@ -270,6 +279,7 @@ class _BaseDeepEstimator(BaseEstimator):
                 f"random_state must be an integer seed (determinism contract), "
                 f"got {self.random_state!r}"
             )
+        return hidden
 
     def _check_X(self, X: Any) -> np.ndarray:
         """Validate and convert ``X`` to a finite float64 matrix.
@@ -342,11 +352,14 @@ class _BaseDeepEstimator(BaseEstimator):
             When torch is not installed (see ``pip install
             'pharmaml[deep]'``).
         ModelError
-            For invalid hyperparameters (validated before any work) or
-            when predicting before fitting.
+            For invalid hyperparameters (validated before any work),
+            when predicting before fitting, or when the training
+            diverged (weights became NaN/inf — typically an extreme
+            ``learning_rate``).
         DataValidationError
             For empty/mismatched/non-numeric ``X``/``y``, NaN targets,
-            or a single-class classification target.
+            a single-class classification target, unorderable labels,
+            or a feature-count mismatch at predict time.
 
         Notes
         -----
@@ -354,7 +367,7 @@ class _BaseDeepEstimator(BaseEstimator):
         ``random_state`` at fit start, so the same seed + data always
         yields the same fitted network on CPU.
         """
-        self._validate_hyperparameters()
+        hidden = self._validate_hyperparameters()
         X_arr = self._check_X(X)
 
         y_arr = np.asarray(y)
@@ -373,7 +386,13 @@ class _BaseDeepEstimator(BaseEstimator):
             )
 
         if self._is_classifier:
-            classes, y_enc = np.unique(y_arr, return_inverse=True)
+            try:
+                classes, y_enc = np.unique(y_arr, return_inverse=True)
+            except TypeError as exc:  # e.g. None mixed with labels
+                raise DataValidationError(
+                    "classification targets could not be label-encoded — they "
+                    f"contain unorderable values (e.g. None): {exc}"
+                ) from exc
             if classes.size < 2:
                 raise DataValidationError(
                     "classification needs at least 2 distinct classes, got "
@@ -383,7 +402,6 @@ class _BaseDeepEstimator(BaseEstimator):
                 raise DataValidationError(
                     "classification targets contain NaN — drop those rows first"
                 )
-            self.classes_ = classes
             n_out = int(classes.size)
         else:
             try:
@@ -399,22 +417,36 @@ class _BaseDeepEstimator(BaseEstimator):
                 )
             n_out = 1
 
+        # torch is imported BEFORE any fitted attribute is written, so a
+        # failed fit (missing torch / unusable device) leaves the
+        # estimator unfitted for sklearn's check_is_fitted as well.
+        torch = _require_torch()
+        device = self._resolve_device(torch)
+
+        if self._is_classifier:
+            self.classes_ = classes
         self.n_features_in_ = int(X_arr.shape[1])
         if isinstance(X, pd.DataFrame):
             self.feature_names_in_ = np.asarray(X.columns, dtype=object)
 
-        # Per-feature standardisation, fitted on the training block only
-        # (constant columns get std 1 to avoid division by zero).
-        mean = X_arr.mean(axis=0)
-        std = X_arr.std(axis=0)
+        seed = int(self.random_state)
+        rng = np.random.default_rng(seed)
+        n = int(X_arr.shape[0])
+        train_idx, val_idx = self._train_val_split(y_enc, n, rng)
+
+        # Per-feature standardisation, fitted on the training rows only
+        # (the early-stopping validation rows never touch the scaler;
+        # constant columns get std 1 to avoid division by zero).
+        mean = X_arr[train_idx].mean(axis=0)
+        std = X_arr[train_idx].std(axis=0)
         std = np.where(std > 0, std, 1.0)
         self._mean_ = mean
         self._std_ = std
         X_scaled = (X_arr - mean) / std
 
-        torch = _require_torch()
-        device = self._resolve_device(torch)
-        self._train_torch(X_scaled, y_enc, n_out, device, torch)
+        self._train_torch(
+            X_scaled, y_enc, n_out, device, torch, hidden, train_idx, val_idx, rng
+        )
         return self
 
     def _resolve_device(self, torch: "torch") -> str:
@@ -439,8 +471,9 @@ class _BaseDeepEstimator(BaseEstimator):
     ) -> tuple[np.ndarray, np.ndarray | None]:
         """Split row indices into (train, validation) index arrays.
 
-        Classification splits are *stratified* (every class keeps at
-        least one training row); regression uses a plain random split.
+        Classification splits are *stratified* — every class keeps at
+        least one training row (single-member classes stay in the
+        training fold entirely); regression uses a plain random split.
         Returns ``(all_rows, None)`` when ``val_split`` is 0, the data
         is a single row, or the split would be degenerate — in that
         case training runs for all ``epochs`` with no early stopping.
@@ -454,8 +487,9 @@ class _BaseDeepEstimator(BaseEstimator):
                 members = np.flatnonzero(y_enc == cls)
                 members = members[rng.permutation(members.size)]
                 k = int(round(val_split * members.size))
-                if members.size > 1:
-                    k = min(k, members.size - 1)  # keep >= 1 training row per class
+                # every class keeps >= 1 training row, even when it has
+                # a single member (val_split can otherwise steal it).
+                k = min(k, max(members.size - 1, 0))
                 parts.append(members[:k])
             val_idx = np.concatenate(parts).astype(int) if parts else np.array([], dtype=int)
         else:
@@ -474,15 +508,24 @@ class _BaseDeepEstimator(BaseEstimator):
         n_out: int,
         device: str,
         torch: "torch",
+        hidden: tuple[int, ...],
+        train_idx: np.ndarray,
+        val_idx: np.ndarray | None,
+        rng: np.random.Generator,
     ) -> None:
-        """Run the minibatch Adam training loop with early stopping."""
+        """Run the minibatch Adam training loop with early stopping.
+
+        ``hidden`` is the materialised layer-width tuple from
+        :meth:`_validate_hyperparameters` (one-time consumption of the
+        ``hidden_layers`` iterable), and ``train_idx``/``val_idx`` (chosen
+        in :meth:`fit` before the standardisation was fitted) plus the
+        seeded ``rng`` keep the whole fit one deterministic random
+        stream.
+        """
         from torch import nn  # noqa: PLC0415 - lazy import
 
-        seed = int(self.random_state)
-        torch.manual_seed(seed)
-        rng = np.random.default_rng(seed)
+        torch.manual_seed(int(self.random_state))
 
-        hidden = tuple(int(w) for w in self.hidden_layers)
         dropout = float(self.dropout)
         # Snapshot of the *fitted* architecture — later set_params calls
         # cannot desynchronise the weight rebuild.
@@ -513,7 +556,6 @@ class _BaseDeepEstimator(BaseEstimator):
         )
 
         n = X_scaled.shape[0]
-        train_idx, val_idx = self._train_val_split(y_enc, n, rng)
         train_t = torch.as_tensor(train_idx, dtype=torch.long, device=device)
         X_tr, y_tr = X_t[train_t], y_t[train_t]
         X_val = y_val = None
@@ -577,13 +619,21 @@ class _BaseDeepEstimator(BaseEstimator):
             network.load_state_dict(best_state)
         network.eval()
 
-        self.history_ = history
-        self.n_iter_ = len(history)
         # Portable CPU weights — pickles never embed torch classes.
-        self._weights = {
+        weights = {
             key: value.detach().cpu().numpy().copy()
             for key, value in network.state_dict().items()
         }
+        if not all(np.isfinite(value).all() for value in weights.values()):
+            # Diverged training (typically an extreme learning_rate):
+            # refuse to leave a silently-NaN estimator behind.
+            raise ModelError(
+                "training diverged — the fitted weights contain NaN/inf "
+                "values; lower learning_rate (e.g. 1e-3) and refit"
+            )
+        self.history_ = history
+        self.n_iter_ = len(history)
+        self._weights = weights
         self._network = network
 
         last = history[-1]
@@ -606,10 +656,12 @@ class _BaseDeepEstimator(BaseEstimator):
     def _ensure_network(self) -> Any:
         """Return the live torch network, rebuilding it when needed.
 
-        After unpickling (or a ``set_params`` mutation) the live module
-        is ``None``; it is reconstructed from the fitted architecture
-        snapshot and the stored NumPy weights — deterministic, because
-        ``load_state_dict`` overwrites every parameter.
+        After unpickling the live module is ``None``; it is
+        reconstructed from the fitted architecture snapshot and the
+        stored NumPy weights — deterministic, because
+        ``load_state_dict`` overwrites every parameter.  (A
+        ``set_params`` mutation keeps the *old* live network, so
+        predictions keep working until the next ``fit``.)
         """
         network = getattr(self, "_network", None)
         if network is None:
@@ -629,6 +681,15 @@ class _BaseDeepEstimator(BaseEstimator):
         """Standardise ``X`` and forward it through the network (eval mode)."""
         self._check_fitted()
         X_arr = self._check_X(X)
+        if X_arr.shape[1] != self.n_features_in_:
+            # Without this guard a wrong-width X silently *broadcasts*
+            # against the per-feature mean/std (NumPy pads the missing
+            # columns) and yields garbage predictions.
+            raise DataValidationError(
+                f"X has {X_arr.shape[1]} feature column(s), but "
+                f"{type(self).__name__} was fitted with "
+                f"{self.n_features_in_} — pass the same features as to fit()"
+            )
         torch = _require_torch()
         network = self._ensure_network()
         network.eval()  # disable dropout at inference time

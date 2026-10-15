@@ -1273,9 +1273,12 @@ def _cmd_biology_top_biomarkers(args: argparse.Namespace) -> int:
             n_dup,
             chosen,
         )
-        subset = subset.groupby(screen.cell_col, as_index=False).agg(
-            {args.response_column: "median"}
-        )
+        # dropna=False keeps rows whose cell-line identifier is missing
+        # as their own group (warn-don't-drop); the correlation
+        # alignment then reports them as unmatched.
+        subset = subset.groupby(
+            screen.cell_col, as_index=False, dropna=False
+        ).agg({args.response_column: "median"})
     response = subset.set_index(screen.cell_col)[args.response_column]
     if int(response.notna().sum()) < 3:
         raise DataValidationError(

@@ -709,3 +709,87 @@ class TestBiologyCommands:
         assert bool(frame.iloc[0]["significant"])
         assert "direction" in frame.columns
         assert len(frame) == 5
+
+    def test_response_audit_reports_missing_identifiers(self, tmp_path, capsys):
+        screen_csv = self._screen_csv(tmp_path)
+        import pandas as pd
+
+        frame = pd.read_csv(screen_csv)
+        frame.loc[0, "cell_line"] = ""   # one row loses its cell-line identifier
+        frame.loc[1, "compound"] = ""    # one row loses its compound identifier
+        missing_csv = tmp_path / "screen_missing_ids.csv"
+        frame.to_csv(missing_csv, index=False)
+        code = main(
+            [
+                "biology", "response-audit", "--data", str(missing_csv),
+                "--tissue-column", "tissue",
+            ]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "missing identifier" in out
+        assert "column 'cell_line'" in out
+        assert "column 'compound'" in out
+
+    def test_top_biomarkers_keeps_missing_cell_line_rows_visible(
+        self, tmp_path, capsys
+    ):
+        """A NaN cell-line row must not vanish from the reported panel size.
+
+        The replicate-collapse groupby used pandas' default dropna=True,
+        so rows without a cell-line identifier were dropped silently;
+        they now survive as their own group and the correlation
+        alignment reports them as unmatched.
+        """
+        import numpy as np
+        import pandas as pd
+
+        rng = np.random.default_rng(23)
+        cells = ["A", "B", "C"]
+        expression = pd.DataFrame(
+            rng.normal(50, 5, size=(len(cells), 2)), columns=["G1", "G2"]
+        )
+        expression.insert(0, "cell_line", cells)
+        expression_csv = tmp_path / "expression.csv"
+        expression.to_csv(expression_csv, index=False)
+
+        rows = [
+            {"cell_line": "A", "compound": "d", "pIC50": 1.0},
+            {"cell_line": "A", "compound": "d", "pIC50": 3.0},   # replicate
+            {"cell_line": None, "compound": "d", "pIC50": 9.0},  # no identifier
+            {"cell_line": "B", "compound": "d", "pIC50": 5.0},
+            {"cell_line": "C", "compound": "d", "pIC50": 7.0},
+        ]
+        response_csv = tmp_path / "response.csv"
+        pd.DataFrame(rows).to_csv(response_csv, index=False)
+
+        code = main(
+            [
+                "biology", "top-biomarkers",
+                "--expression", str(expression_csv),
+                "--response", str(response_csv),
+                "--response-column", "pIC50",
+            ]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        # 4 response rows survive the collapse (A, NaN, B, C), not 3
+        assert "compound : d (4 cell line(s))" in out
+
+    def test_top_biomarkers_conflicting_direction_flags_error(
+        self, tmp_path, capsys
+    ):
+        screen_csv = self._screen_csv(tmp_path)
+        code = main(
+            [
+                "biology", "top-biomarkers",
+                "--expression", str(screen_csv),
+                "--response", str(screen_csv),
+                "--response-column", "LN_IC50",
+                "--lower-is-sensitive", "--higher-is-sensitive",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "error:" in err
+        assert "at most one of --lower-is-sensitive / --higher-is-sensitive" in err

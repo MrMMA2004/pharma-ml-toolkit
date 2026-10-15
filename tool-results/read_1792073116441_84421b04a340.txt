@@ -1,0 +1,669 @@
+     1→"""Tests for the PyTorch deep-learning estimators (``pharmaml.ml.neural``).
+     2→
+     3→Covers import-safety without torch (lazy-import contract), the
+     4→``'dnn'``/``'dnn_residual'`` registry wiring, fit/predict determinism,
+     5→softmax ``predict_proba`` (binary + multiclass), sklearn compatibility
+     6→(get_params/clone/GridSearchCV/joblib pickle), pipeline integration
+     7→(train_model/evaluate_model/compare_models), validation guards, and
+     8→the residual architecture (identity skips vs learned projections).
+     9→
+    10→Every test keeps the data tiny and ``epochs`` small — the sandbox runs
+    11→on CPU only.
+    12→"""
+    13→
+    14→from __future__ import annotations
+    15→
+    16→import importlib
+    17→import importlib.util
+    18→import sys
+    19→from typing import Any
+    20→
+    21→import joblib
+    22→import numpy as np
+    23→import pandas as pd
+    24→import pytest
+    25→from sklearn.base import clone
+    26→from sklearn.datasets import make_blobs, make_classification
+    27→from sklearn.metrics import accuracy_score, r2_score
+    28→from sklearn.model_selection import GridSearchCV, train_test_split
+    29→
+    30→import pharmaml.ml.models as models_module
+    31→from pharmaml.exceptions import DataValidationError, DependencyError, ModelError
+    32→from pharmaml.ml import (
+    33→    DeepMLPClassifier,
+    34→    DeepMLPRegressor,
+    35→    ResidualMLPClassifier,
+    36→    ResidualMLPRegressor,
+    37→    build_model,
+    38→    compare_models,
+    39→    evaluate_model,
+    40→    list_models,
+    41→    resolve_model_name,
+    42→    train_model,
+    43→)
+    44→from pharmaml.ml.models import MODEL_REGISTRY
+    45→
+    46→
+    47→# ---------------------------------------------------------------------------
+    48→# Helpers: tiny data + fast estimator configs
+    49→# ---------------------------------------------------------------------------
+    50→def fast_classifier(**overrides: Any) -> DeepMLPClassifier:
+    51→    """DeepMLPClassifier tuned for test speed (small net, few epochs)."""
+    52→    params: dict[str, Any] = {
+    53→        "hidden_layers": (16, 8),
+    54→        "epochs": 30,
+    55→        "patience": 6,
+    56→        "random_state": 7,
+    57→    }
+    58→    params.update(overrides)
+    59→    return DeepMLPClassifier(**params)
+    60→
+    61→
+    62→def fast_regressor(**overrides: Any) -> DeepMLPRegressor:
+    63→    """DeepMLPRegressor tuned for test speed."""
+    64→    params: dict[str, Any] = {
+    65→        "hidden_layers": (16, 8),
+    66→        "epochs": 30,
+    67→        "patience": 6,
+    68→        "random_state": 7,
+    69→    }
+    70→    params.update(overrides)
+    71→    return DeepMLPRegressor(**params)
+    72→
+    73→
+    74→@pytest.fixture(scope="module")
+    75→def binary_data() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    76→    """Small two-class problem (train + test split)."""
+    77→    X, y = make_classification(
+    78→        n_samples=160, n_features=12, n_informative=8, random_state=0
+    79→    )
+    80→    return train_test_split(X, y, test_size=0.25, random_state=0, stratify=y)
+    81→
+    82→
+    83→@pytest.fixture(scope="module")
+    84→def multiclass_data() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    85→    """Small three-class problem (train + test split)."""
+    86→    X, y = make_classification(
+    87→        n_samples=180,
+    88→        n_features=12,
+    89→        n_informative=9,
+    90→        n_classes=3,
+    91→        n_clusters_per_class=1,
+    92→        random_state=3,
+    93→    )
+    94→    return train_test_split(X, y, test_size=0.25, random_state=3, stratify=y)
+    95→
+    96→
+    97→@pytest.fixture(scope="module")
+    98→def regression_data() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    99→    """Nearly linear regression problem (train + test split)."""
+   100→    rng = np.random.default_rng(1)
+   101→    X = rng.normal(size=(200, 8))
+   102→    y = 3.0 * X[:, 0] - 2.0 * X[:, 1] + 1.5 * X[:, 2] + 0.2 * rng.normal(size=200)
+   103→    return train_test_split(X, y, test_size=0.25, random_state=1)
+   104→
+   105→
+   106→def _hide_torch(monkeypatch: pytest.MonkeyPatch) -> None:
+   107→    """Simulate a torch-less machine (import of torch raises ImportError)."""
+   108→    monkeypatch.setitem(sys.modules, "torch", None)
+   109→
+   110→
+   111→def _hide_torch_spec(monkeypatch: pytest.MonkeyPatch) -> None:
+   112→    """Simulate torch being undetectable by the registry availability probe."""
+   113→    real = models_module._module_available
+   114→
+   115→    def fake(name: str) -> bool:
+   116→        return False if name == "torch" else real(name)
+   117→
+   118→    monkeypatch.setattr(models_module, "_module_available", fake)
+   119→
+   120→
+   121→# ---------------------------------------------------------------------------
+   122→# Import safety (lazy torch contract)
+   123→# ---------------------------------------------------------------------------
+   124→class TestImportSafety:
+   125→    def test_module_imports_without_torch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+   126→        # Executing the module source with torch "missing" must succeed:
+   127→        # all torch imports live inside functions (or TYPE_CHECKING).
+   128→        _hide_torch(monkeypatch)
+   129→        spec = importlib.util.find_spec("pharmaml.ml.neural")
+   130→        assert spec is not None and spec.loader is not None
+   131→        module = importlib.util.module_from_spec(spec)
+   132→        spec.loader.exec_module(module)
+   133→        for name in (
+   134→            "DeepMLPClassifier",
+   135→            "DeepMLPRegressor",
+   136→            "ResidualMLPClassifier",
+   137→            "ResidualMLPRegressor",
+   138→        ):
+   139→            assert hasattr(module, name)
+   140→
+   141→    def test_fit_raises_dependency_error_without_torch(
+   142→        self, monkeypatch: pytest.MonkeyPatch, binary_data: tuple
+   143→    ) -> None:
+   144→        # The lazy import fires at fit time with an actionable message.
+   145→        X_train, _, y_train, _ = binary_data
+   146→        _hide_torch(monkeypatch)
+   147→        with pytest.raises(DependencyError, match="torch"):
+   148→            fast_classifier().fit(X_train, y_train)
+   149→
+   150→    def test_dependency_error_names_the_deep_extra(
+   151→        self, monkeypatch: pytest.MonkeyPatch, binary_data: tuple
+   152→    ) -> None:
+   153→        X_train, _, y_train, _ = binary_data
+   154→        _hide_torch(monkeypatch)
+   155→        with pytest.raises(DependencyError, match=r"pharmaml\[deep\]"):
+   156→            fast_classifier().fit(X_train, y_train)
+   157→
+   158→    def test_build_model_raises_dependency_error_when_torch_missing(
+   159→        self, monkeypatch: pytest.MonkeyPatch
+   160→    ) -> None:
+   161→        _hide_torch_spec(monkeypatch)
+   162→        with pytest.raises(DependencyError, match="torch"):
+   163→            build_model("dnn", "classification")
+   164→        with pytest.raises(DependencyError, match=r"pharmaml\[deep\]"):
+   165→            build_model("dnn_residual", "regression")
+   166→
+   167→
+   168→# ---------------------------------------------------------------------------
+   169→# Registry wiring
+   170→# ---------------------------------------------------------------------------
+   171→class TestRegistry:
+   172→    def test_dnn_entries_registered(self) -> None:
+   173→        for key in ("dnn", "dnn_residual"):
+   174→            assert key in MODEL_REGISTRY
+   175→            spec = MODEL_REGISTRY[key]
+   176→            assert spec.task == "both"
+   177→            assert spec.requires == "torch"
+   178→            assert "PyTorch" in spec.notes
+   179→
+   180→    def test_registry_has_eighteen_entries(self) -> None:
+   181→        entries = list_models(only_available=False)
+   182→        assert len(entries) == 18
+   183→        dnn_entries = [e for e in entries if e["name"] in {"dnn", "dnn_residual"}]
+   184→        assert len(dnn_entries) == 2
+   185→        if not all(e["available"] for e in dnn_entries):
+   186→            pytest.skip("torch not installed in this environment")
+   187→        assert len(list_models()) == 18
+   188→
+   189→    def test_aliases_resolve(self) -> None:
+   190→        assert resolve_model_name("deep_mlp") == "dnn"
+   191→        assert resolve_model_name("resnet") == "dnn_residual"
+   192→        assert resolve_model_name("residual_dnn") == "dnn_residual"
+   193→        assert resolve_model_name("dnn") == "dnn"
+   194→        assert resolve_model_name("DNN-Residual") == "dnn_residual"
+   195→
+   196→    def test_build_model_dispatches_per_task(self) -> None:
+   197→        assert isinstance(build_model("dnn", "classification"), DeepMLPClassifier)
+   198→        assert isinstance(build_model("dnn", "regression"), DeepMLPRegressor)
+   199→        assert isinstance(
+   200→            build_model("dnn_residual", "classification"), ResidualMLPClassifier
+   201→        )
+   202→        assert isinstance(
+   203→            build_model("dnn_residual", "regression"), ResidualMLPRegressor
+   204→        )
+   205→        # random_state is threaded through the factories (registry convention)
+   206→        assert build_model("dnn", "classification").random_state == 42
+   207→        assert build_model("dnn_residual", "regression").random_state == 42
+   208→
+   209→    def test_param_grid_keys_match_constructor_params(self) -> None:
+   210→        constructor_keys = set(DeepMLPClassifier().get_params())
+   211→        for key in ("dnn", "dnn_residual"):
+   212→            assert set(MODEL_REGISTRY[key].param_grid) <= constructor_keys
+   213→        # tuples are legal grid values for hidden_layers
+   214→        assert MODEL_REGISTRY["dnn"].param_grid["hidden_layers"] == [
+   215→            (64, 32),
+   216→            (128, 64, 32),
+   217→        ]
+   218→
+   219→    def test_unavailable_simulation_flags_and_excludes(
+   220→        self, monkeypatch: pytest.MonkeyPatch
+   221→    ) -> None:
+   222→        _hide_torch_spec(monkeypatch)
+   223→        entries = list_models(only_available=False)
+   224→        flagged = {e["name"]: e["available"] for e in entries}
+   225→        assert flagged["dnn"] is False and flagged["dnn_residual"] is False
+   226→        # only_available=True drops them (16 core/boosting entries remain)
+   227→        assert len(list_models()) == 16
+   228→        with pytest.raises(DependencyError, match="torch"):
+   229→            build_model("dnn", "classification")
+   230→
+   231→
+   232→# ---------------------------------------------------------------------------
+   233→# Determinism
+   234→# ---------------------------------------------------------------------------
+   235→class TestDeterminism:
+   236→    def test_classifier_same_seed_identical_predictions(self, binary_data: tuple) -> None:
+   237→        X_train, X_test, y_train, _ = binary_data
+   238→        first = fast_classifier(random_state=7).fit(X_train, y_train)
+   239→        second = fast_classifier(random_state=7).fit(X_train, y_train)
+   240→        assert np.array_equal(first.predict(X_test), second.predict(X_test))
+   241→        assert np.array_equal(first.predict_proba(X_test), second.predict_proba(X_test))
+   242→
+   243→    def test_regressor_same_seed_identical_predictions(
+   244→        self, regression_data: tuple
+   245→    ) -> None:
+   246→        X_train, X_test, y_train, _ = regression_data
+   247→        first = fast_regressor(random_state=11).fit(X_train, y_train)
+   248→        second = fast_regressor(random_state=11).fit(X_train, y_train)
+   249→        assert np.array_equal(first.predict(X_test), second.predict(X_test))
+   250→
+   251→    def test_different_seed_changes_predictions(self, binary_data: tuple) -> None:
+   252→        X_train, X_test, y_train, _ = binary_data
+   253→        first = fast_classifier(random_state=1).fit(X_train, y_train)
+   254→        second = fast_classifier(random_state=2).fit(X_train, y_train)
+   255→        assert not np.array_equal(first.predict(X_test), second.predict(X_test))
+   256→
+   257→
+   258→# ---------------------------------------------------------------------------
+   259→# predict_proba semantics
+   260→# ---------------------------------------------------------------------------
+   261→class TestPredictProba:
+   262→    def test_binary_proba_rows_sum_to_one(self, binary_data: tuple) -> None:
+   263→        X_train, X_test, y_train, y_test = binary_data
+   264→        model = fast_classifier().fit(X_train, y_train)
+   265→        proba = model.predict_proba(X_test)
+   266→        assert proba.shape == (len(X_test), 2)
+   267→        assert np.allclose(proba.sum(axis=1), 1.0)
+   268→        assert (proba >= 0).all()
+   269→
+   270→    def test_proba_columns_match_classes_order(self, binary_data: tuple) -> None:
+   271→        X_train, X_test, y_train, _ = binary_data
+   272→        model = fast_classifier().fit(X_train, y_train)
+   273→        assert list(model.classes_) == [0, 1]
+   274→        # argmax of proba == predict
+   275→        assert np.array_equal(
+   276→            model.classes_[np.argmax(model.predict_proba(X_test), axis=1)],
+   277→            model.predict(X_test),
+   278→        )
+   279→
+   280→    def test_multiclass_proba(self, multiclass_data: tuple) -> None:
+   281→        X_train, X_test, y_train, _ = multiclass_data
+   282→        model = fast_classifier(epochs=40, patience=8).fit(X_train, y_train)
+   283→        proba = model.predict_proba(X_test)
+   284→        assert proba.shape == (len(X_test), 3)
+   285→        assert np.allclose(proba.sum(axis=1), 1.0)
+   286→        assert set(model.classes_) == {0, 1, 2}
+   287→        assert np.array_equal(
+   288→            model.classes_[np.argmax(proba, axis=1)], model.predict(X_test)
+   289→        )
+   290→
+   291→    def test_string_labels_are_label_encoded(self, binary_data: tuple) -> None:
+   292→        X_train, X_test, y_train, _ = binary_data
+   293→        y_strings = np.where(y_train == 0, "inactive", "active")
+   294→        model = fast_classifier().fit(X_train, y_strings)
+   295→        assert list(model.classes_) == ["active", "inactive"]
+   296→        predicted = model.predict(X_test)
+   297→        assert set(predicted) <= {"active", "inactive"}
+   298→        assert model.predict_proba(X_test).shape == (len(X_test), 2)
+   299→
+   300→
+   301→# ---------------------------------------------------------------------------
+   302→# Learning quality (small data, few epochs)
+   303→# ---------------------------------------------------------------------------
+   304→class TestQuality:
+   305→    def test_multiclass_blobs_accuracy(self) -> None:
+   306→        # Explicit well-separated centres (make_blobs' own random centres
+   307→        # can nearly coincide — with random_state=5 logistic regression
+   308→        # tops out at 0.844, which would cap any model).
+   309→        X, y = make_blobs(
+   310→            n_samples=180,
+   311→            centers=[(-4.0, -4.0), (0.0, 4.0), (4.0, -4.0)],
+   312→            cluster_std=0.8,
+   313→            random_state=5,
+   314→        )
+   315→        X_train, X_test, y_train, y_test = train_test_split(
+   316→            X, y, test_size=0.25, random_state=5, stratify=y
+   317→        )
+   318→        model = fast_classifier(epochs=40, patience=8).fit(X_train, y_train)
+   319→        assert accuracy_score(y_test, model.predict(X_test)) > 0.85
+   320→
+   321→    def test_regression_r2_on_linear_function(self, regression_data: tuple) -> None:
+   322→        X_train, X_test, y_train, y_test = regression_data
+   323→        model = fast_regressor(epochs=60, patience=10).fit(X_train, y_train)
+   324→        assert r2_score(y_test, model.predict(X_test)) > 0.7
+   325→
+   326→    def test_mixin_scores(self, binary_data: tuple, regression_data: tuple) -> None:
+   327→        Xc_train, Xc_test, yc_train, yc_test = binary_data
+   328→        clf = fast_classifier().fit(Xc_train, yc_train)
+   329→        assert np.isclose(
+   330→            clf.score(Xc_test, yc_test),
+   331→            accuracy_score(yc_test, clf.predict(Xc_test)),
+   332→        )
+   333→        Xr_train, Xr_test, yr_train, yr_test = regression_data
+   334→        reg = fast_regressor().fit(Xr_train, yr_train)
+   335→        assert np.isclose(
+   336→            reg.score(Xr_test, yr_test),
+   337→            r2_score(yr_test, reg.predict(Xr_test)),
+   338→        )
+   339→
+   340→    def test_history_and_n_iter_exposed(self, binary_data: tuple) -> None:
+   341→        X_train, _, y_train, _ = binary_data
+   342→        model = fast_classifier(epochs=25, val_split=0.15).fit(X_train, y_train)
+   343→        assert isinstance(model.history_, list) and len(model.history_) >= 1
+   344→        assert {"epoch", "train_loss", "val_loss"} == set(model.history_[0])
+   345→        assert model.n_iter_ == len(model.history_) <= 25
+   346→        assert model.n_features_in_ == X_train.shape[1]
+   347→        assert model.history_[-1]["val_loss"] is not None  # val split active
+   348→
+   349→    def test_val_split_zero_disables_early_stopping(self, binary_data: tuple) -> None:
+   350→        X_train, X_test, y_train, _ = binary_data
+   351→        model = fast_classifier(epochs=5, val_split=0.0).fit(X_train, y_train)
+   352→        assert model.n_iter_ == 5
+   353→        assert all(entry["val_loss"] is None for entry in model.history_)
+   354→        assert model.predict(X_test).shape == (len(X_test),)
+   355→
+   356→
+   357→# ---------------------------------------------------------------------------
+   358→# sklearn compatibility
+   359→# ---------------------------------------------------------------------------
+   360→class TestSklearnCompatibility:
+   361→    def test_get_params_has_all_constructor_keys(self) -> None:
+   362→        expected = {
+   363→            "hidden_layers",
+   364→            "dropout",
+   365→            "activation",
+   366→            "epochs",
+   367→            "batch_size",
+   368→            "learning_rate",
+   369→            "weight_decay",
+   370→            "patience",
+   371→            "val_split",
+   372→            "random_state",
+   373→            "device",
+   374→        }
+   375→        for estimator in (
+   376→            DeepMLPClassifier(),
+   377→            DeepMLPRegressor(),
+   378→            ResidualMLPClassifier(),
+   379→            ResidualMLPRegressor(),
+   380→        ):
+   381→            assert set(estimator.get_params()) == expected
+   382→
+   383→    def test_clone_round_trip(self) -> None:
+   384→        original = DeepMLPClassifier(hidden_layers=(9,), epochs=3, dropout=0.25)
+   385→        duplicated = clone(original)
+   386→        assert isinstance(duplicated, DeepMLPClassifier)
+   387→        assert duplicated is not original
+   388→        assert duplicated.get_params() == original.get_params()
+   389→
+   390→    def test_clone_works_for_all_four_estimators(self) -> None:
+   391→        for original in (
+   392→            DeepMLPRegressor(epochs=2),
+   393→            ResidualMLPClassifier(epochs=2),
+   394→            ResidualMLPRegressor(epochs=2),
+   395→        ):
+   396→            assert clone(original).get_params() == original.get_params()
+   397→
+   398→    def test_grid_search_cv(self, binary_data: tuple) -> None:
+   399→        X_train, X_test, y_train, y_test = binary_data
+   400→        grid = {
+   401→            "hidden_layers": [(16,), (32,)],
+   402→            "learning_rate": [1e-3],
+   403→        }
+   404→        search = GridSearchCV(
+   405→            fast_classifier(epochs=15, patience=4),
+   406→            grid,
+   407→            cv=3,
+   408→            scoring="accuracy",
+   409→        )
+   410→        search.fit(X_train, y_train)
+   411→        assert search.best_params_["hidden_layers"] in {(16,), (32,)}
+   412→        # refit=True: the search predicts with the winning configuration
+   413→        assert accuracy_score(y_test, search.predict(X_test)) > 0.5
+   414→        assert np.isfinite(search.best_score_)
+   415→
+   416→    def test_grid_search_cv_with_pipeline_predict_proba(
+   417→        self, binary_data: tuple
+   418→    ) -> None:
+   419→        # roc_auc scoring (the train_model default) needs predict_proba.
+   420→        X_train, _, y_train, _ = binary_data
+   421→        search = GridSearchCV(
+   422→            fast_classifier(epochs=10, patience=4),
+   423→            {"hidden_layers": [(16,)]},
+   424→            cv=3,
+   425→            scoring="roc_auc",
+   426→        )
+   427→        search.fit(X_train, y_train)
+   428→        assert np.isfinite(search.best_score_)
+   429→
+   430→    def test_joblib_round_trip(
+   431→        self, tmp_path: Any, binary_data: tuple, regression_data: tuple
+   432→    ) -> None:
+   433→        Xc_train, Xc_test, yc_train, _ = binary_data
+   434→        clf = fast_classifier().fit(Xc_train, yc_train)
+   435→        path = tmp_path / "deep_clf.joblib"
+   436→        joblib.dump(clf, path)
+   437→        loaded = joblib.load(path)
+   438→        assert np.array_equal(loaded.predict(Xc_test), clf.predict(Xc_test))
+   439→        assert np.array_equal(
+   440→            loaded.predict_proba(Xc_test), clf.predict_proba(Xc_test)
+   441→        )
+   442→
+   443→        Xr_train, Xr_test, yr_train, _ = regression_data
+   444→        reg = fast_regressor().fit(Xr_train, yr_train)
+   445→        path = tmp_path / "deep_reg.joblib"
+   446→        joblib.dump(reg, path)
+   447→        assert np.array_equal(joblib.load(path).predict(Xr_test), reg.predict(Xr_test))
+   448→
+   449→    def test_pickle_contains_no_torch_objects(self, binary_data: tuple) -> None:
+   450→        X_train, _, y_train, _ = binary_data
+   451→        clf = fast_classifier().fit(X_train, y_train)
+   452→        state = clf.__getstate__()
+   453→        # weights survive as plain numpy arrays -> portable pickles
+   454→        assert state["_network"] is None
+   455→        assert all(isinstance(v, np.ndarray) for v in clf._weights.values())
+   456→
+   457→    def test_set_params_after_fit_keeps_predictions_working(
+   458→        self, binary_data: tuple
+   459→    ) -> None:
+   460→        # The live network is rebuilt from the *fitted* architecture
+   461→        # snapshot, so a later set_params cannot desynchronise it.
+   462→        X_train, X_test, y_train, _ = binary_data
+   463→        model = fast_classifier().fit(X_train, y_train)
+   464→        before = model.predict(X_test)
+   465→        model.set_params(hidden_layers=(99,))
+   466→        assert np.array_equal(model.predict(X_test), before)
+   467→
+   468→
+   469→# ---------------------------------------------------------------------------
+   470→# Pipeline integration (registry -> train -> evaluate -> compare)
+   471→# ---------------------------------------------------------------------------
+   472→class TestPipelineIntegration:
+   473→    def test_train_and_evaluate_dnn_classification(self, binary_data: tuple) -> None:
+   474→        X_train, X_test, y_train, y_test = binary_data
+   475→        result = train_model("dnn", "classification", X_train, y_train, tune=False)
+   476→        assert result.name == "dnn"
+   477→        assert result.task == "classification"
+   478→        report = evaluate_model(result.model, X_test, y_test, "classification")
+   479→        assert 0.0 <= report.accuracy <= 1.0
+   480→        assert report.roc_auc is not None and 0.0 <= report.roc_auc <= 1.0
+   481→
+   482→    def test_train_and_evaluate_dnn_residual_regression(
+   483→        self, regression_data: tuple
+   484→    ) -> None:
+   485→        X_train, X_test, y_train, y_test = regression_data
+   486→        result = train_model(
+   487→            "dnn_residual", "regression", X_train, y_train, tune=False
+   488→        )
+   489→        assert result.name == "dnn_residual"
+   490→        report = evaluate_model(result.model, X_test, y_test, "regression")
+   491→        assert np.isfinite(report.r2)
+   492→        assert report.r2 > 0.5  # nearly linear synthetic target
+   493→
+   494→    def test_train_model_with_dataframes(self, binary_data: tuple) -> None:
+   495→        # train_model feeds DataFrames through a Pipeline (impute+scale).
+   496→        X_train, _, y_train, _ = binary_data
+   497→        frame = pd.DataFrame(X_train, columns=[f"descr_{i:02d}" for i in range(X_train.shape[1])])
+   498→        target = pd.Series(y_train, name="Target")
+   499→        result = train_model("dnn", "classification", frame, target, tune=False)
+   500→        report = evaluate_model(result.model, frame.iloc[:10], target.iloc[:10], "classification")
+   501→        assert report.n_samples == 10
+   502→
+   503→    def test_compare_models_with_dnn(self, regression_data: tuple) -> None:
+   504→        X, _, y, _ = regression_data
+   505→        board = compare_models(X, y, "regression", models=["elastic_net", "dnn"], cv=3)
+   506→        assert len(board) == 2
+   507→        assert set(board["model"]) == {"elastic_net", "dnn"}
+   508→        metric_col = [c for c in board.columns if c.endswith("_mean")][0]
+   509→        dnn_row = board[board["model"] == "dnn"]
+   510→        assert dnn_row[metric_col].notna().all()
+   511→        assert np.isfinite(float(dnn_row[metric_col].iloc[0]))
+   512→
+   513→    def test_compare_models_classification_with_dnn(self, binary_data: tuple) -> None:
+   514→        X, _, y, _ = binary_data
+   515→        board = compare_models(
+   516→            X, y, "classification", models=["logistic_regression", "dnn"], cv=3
+   517→        )
+   518→        assert len(board) == 2
+   519→        metric_col = [c for c in board.columns if c.endswith("_mean")][0]
+   520→        assert metric_col == "roc_auc_ovo_mean"
+   521→        assert board[metric_col].notna().all()
+   522→
+   523→
+   524→# ---------------------------------------------------------------------------
+   525→# Validation guards
+   526→# ---------------------------------------------------------------------------
+   527→class TestEdgeGuards:
+   528→    def test_empty_hidden_layers_builds_linear_model(self, binary_data: tuple) -> None:
+   529→        # Documented behaviour: () == a single linear layer (regularised
+   530→        # logistic/linear regression), not an error.
+   531→        X_train, X_test, y_train, _ = binary_data
+   532→        model = fast_classifier(hidden_layers=()).fit(X_train, y_train)
+   533→        assert model.predict_proba(X_test).shape == (len(X_test), 2)
+   534→        assert np.allclose(model.predict_proba(X_test).sum(axis=1), 1.0)
+   535→        assert model.n_iter_ >= 1
+   536→
+   537→    def test_epochs_zero_raises(self, binary_data: tuple) -> None:
+   538→        X_train, _, y_train, _ = binary_data
+   539→        with pytest.raises(ModelError, match="epochs"):
+   540→            fast_classifier(epochs=0).fit(X_train, y_train)
+   541→
+   542→    def test_unknown_activation_raises(self, binary_data: tuple) -> None:
+   543→        X_train, _, y_train, _ = binary_data
+   544→        with pytest.raises(ModelError, match="activation"):
+   545→            fast_classifier(activation="leaky_relu").fit(X_train, y_train)
+   546→
+   547→    @pytest.mark.parametrize("hidden", [(0,), (8, -1), (4, 2.5), ("wide",)])
+   548→    def test_bad_hidden_layers_raises(
+   549→        self, binary_data: tuple, hidden: Any
+   550→    ) -> None:
+   551→        X_train, _, y_train, _ = binary_data
+   552→        with pytest.raises(ModelError, match="hidden_layers"):
+   553→            fast_classifier(hidden_layers=hidden).fit(X_train, y_train)
+   554→
+   555→    def test_batch_size_and_patience_guards(self, binary_data: tuple) -> None:
+   556→        X_train, _, y_train, _ = binary_data
+   557→        with pytest.raises(ModelError, match="batch_size"):
+   558→            fast_classifier(batch_size=0).fit(X_train, y_train)
+   559→        with pytest.raises(ModelError, match="patience"):
+   560→            fast_classifier(patience=0).fit(X_train, y_train)
+   561→
+   562→    def test_bad_device_token_raises(self, binary_data: tuple) -> None:
+   563→        X_train, _, y_train, _ = binary_data
+   564→        with pytest.raises(ModelError, match="device"):
+   565→            fast_classifier(device="tpu").fit(X_train, y_train)
+   566→
+   567→    def test_empty_X_raises(self) -> None:
+   568→        model = fast_classifier()
+   569→        with pytest.raises(DataValidationError, match="0 rows"):
+   570→            model.fit(np.empty((0, 4)), np.array([], dtype=int))
+   571→        with pytest.raises(DataValidationError, match="0 feature columns"):
+   572→            model.fit(np.empty((5, 0)), np.zeros(5))
+   573→
+   574→    def test_length_mismatch_raises(self, binary_data: tuple) -> None:
+   575→        X_train, _, y_train, _ = binary_data
+   576→        with pytest.raises(DataValidationError, match="inconsistent lengths"):
+   577→            fast_classifier().fit(X_train, y_train[:-3])
+   578→
+   579→    def test_nan_features_raise(self, binary_data: tuple) -> None:
+   580→        X_train, _, y_train, _ = binary_data
+   581→        X_nan = X_train.astype(float).copy()
+   582→        X_nan[0, 0] = np.nan
+   583→        with pytest.raises(DataValidationError, match="NaN"):
+   584→            fast_classifier().fit(X_nan, y_train)
+   585→
+   586→    def test_nan_regression_target_raises(self, regression_data: tuple) -> None:
+   587→        X_train, _, y_train, _ = regression_data
+   588→        y_nan = y_train.astype(float).copy()
+   589→        y_nan[0] = np.nan
+   590→        with pytest.raises(DataValidationError, match="NaN"):
+   591→            fast_regressor().fit(X_train, y_nan)
+   592→
+   593→    def test_single_class_target_raises(self, binary_data: tuple) -> None:
+   594→        X_train, _, y_train, _ = binary_data
+   595→        with pytest.raises(DataValidationError, match="2 distinct classes"):
+   596→            fast_classifier().fit(X_train, np.zeros(len(y_train), dtype=int))
+   597→
+   598→    def test_predict_before_fit_raises(self, binary_data: tuple) -> None:
+   599→        _, X_test, _, _ = binary_data
+   600→        with pytest.raises(ModelError, match="not been fitted"):
+   601→            DeepMLPClassifier().predict(X_test)
+   602→        with pytest.raises(ModelError, match="not been fitted"):
+   603→            DeepMLPRegressor().predict(X_test)
+   604→        with pytest.raises(ModelError, match="not been fitted"):
+   605→            DeepMLPClassifier().predict_proba(X_test)
+   606→
+   607→    def test_predict_proba_missing_on_regressor(self) -> None:
+   608→        # Regressors have no predict_proba (voting='soft' guard relies on it)
+   609→        assert not hasattr(DeepMLPRegressor(), "predict_proba")
+   610→
+   611→
+   612→# ---------------------------------------------------------------------------
+   613→# Residual architecture
+   614→# ---------------------------------------------------------------------------
+   615→class TestResidualMLP:
+   616→    def test_classifier_fit_predict_smoke(self, binary_data: tuple) -> None:
+   617→        X_train, X_test, y_train, y_test = binary_data
+   618→        model = ResidualMLPClassifier(
+   619→            hidden_layers=(16, 16), epochs=30, patience=6, random_state=5
+   620→        ).fit(X_train, y_train)
+   621→        assert accuracy_score(y_test, model.predict(X_test)) > 0.6
+   622→        proba = model.predict_proba(X_test)
+   623→        assert np.allclose(proba.sum(axis=1), 1.0)
+   624→
+   625→    def test_regressor_fit_predict_smoke(self, regression_data: tuple) -> None:
+   626→        X_train, X_test, y_train, y_test = regression_data
+   627→        model = ResidualMLPRegressor(
+   628→            hidden_layers=(16, 16), epochs=40, patience=8, random_state=5
+   629→        ).fit(X_train, y_train)
+   630→        assert r2_score(y_test, model.predict(X_test)) > 0.7
+   631→
+   632→    def test_determinism(self, regression_data: tuple) -> None:
+   633→        X_train, X_test, y_train, _ = regression_data
+   634→        first = ResidualMLPRegressor(
+   635→            hidden_layers=(16, 16), epochs=20, patience=5, random_state=9
+   636→        ).fit(X_train, y_train)
+   637→        second = ResidualMLPRegressor(
+   638→            hidden_layers=(16, 16), epochs=20, patience=5, random_state=9
+   639→        ).fit(X_train, y_train)
+   640→        assert np.array_equal(first.predict(X_test), second.predict(X_test))
+   641→
+   642→    def test_changing_widths_exercise_projection_path(self, binary_data: tuple) -> None:
+   643→        # (32, 64, 16) changes width at every block -> learned linear
+   644→        # skip projections instead of identity shortcuts.
+   645→        X_train, X_test, y_train, _ = binary_data
+   646→        model = ResidualMLPClassifier(
+   647→            hidden_layers=(32, 64, 16), epochs=25, patience=5, random_state=4
+   648→        ).fit(X_train, y_train)
+   649→        assert model._net_spec_["hidden"] == (32, 64, 16)
+   650→        assert any("skip.weight" in key for key in model._weights)
+   651→        assert np.isfinite(model.predict(X_test)).all()
+   652→        assert np.allclose(model.predict_proba(X_test).sum(axis=1), 1.0)
+   653→
+   654→    def test_matching_widths_use_identity_skips(self, binary_data: tuple) -> None:
+   655→        # 12 features -> (12, 12): every block skips by identity, so no
+   656→        # learnable projection parameters exist in the state dict.
+   657→        X_train, _, y_train, _ = binary_data
+   658→        model = ResidualMLPClassifier(
+   659→            hidden_layers=(12, 12), epochs=5, patience=2, random_state=4
+   660→        ).fit(X_train, y_train)
+   661→        assert not any("skip.weight" in key for key in model._weights)
+   662→
+   663→    def test_default_hidden_layers_are_uniform(self) -> None:
+   664→        # The shipped default (64, 64, 64) is a uniform-width residual
+   665→        # stack (identity skips inside; projection only at the stem).
+   666→        assert ResidualMLPClassifier().hidden_layers == (64, 64, 64)
+   667→        assert ResidualMLPRegressor().hidden_layers == (64, 64, 64)
+   668→        assert DeepMLPClassifier().hidden_layers == (64, 32)
+   669→

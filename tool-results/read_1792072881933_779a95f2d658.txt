@@ -1,0 +1,718 @@
+     1→     1→"""Drug-response screens: GDSC/CCLE-style pharmacology tables.
+     2→     2→
+     3→     3→A *response screen* is a long-format table with one row per
+     4→     4→(cell line, compound) pair and one or more numeric metric columns --
+     5→     5→the layout popularised by the GDSC and CCLE sensitivity datasets
+     6→     6→(``LN_IC50``, ``AUC``, ``RMSE`` ...).  This module loads, audits and
+     7→     7→reshapes such tables:
+     8→     8→
+     9→     9→* :func:`load_response_table` accepts a DataFrame or a csv/xlsx path,
+    10→    10→  validates the identifier columns, auto-detects the metric columns
+    11→    11→  (every remaining numeric column) and coerces stray non-numeric
+    12→    12→  entries to NaN *with a warning* (round-11/16 semantics: warn, keep
+    13→    13→  NaN -- never drop rows silently),
+    14→    14→* :class:`ResponseScreen` is the immutable container carrying the
+    15→    15→  frame plus the column configuration, with a ``summary()`` in the
+    16→    16→  package's audit style,
+    17→    17→* :func:`audit_response_table` reports the classic screen hygiene
+    18→    18→  issues (missing metrics, duplicate pairs, cell lines claimed by two
+    19→    19→  tissues, under-tested compounds),
+    20→    20→* :func:`collapse_replicates` resolves duplicated pairs by the median
+    21→    21→  per metric,
+    22→    22→* :func:`ln_ic50_to_pic50` / :func:`pic50_to_ln_ic50` convert between
+    23→    23→  GDSC's ``LN_IC50`` (natural log of the IC50 in micromolar) and the
+    24→    24→  chemist's pIC50 scale,
+    25→    25→* :func:`response_matrix` pivots one metric into the classic
+    26→    26→  cell-line x compound sensitivity matrix (untested pairs stay NaN),
+    27→    27→* :func:`summarize_compounds` gives per-compound potency statistics
+    28→    28→  across the panel, and
+    29→    29→* :func:`call_sensitive_resistant` thresholds one compound's response
+    30→    30→  vector into sensitive / intermediate / resistant calls.
+    31→    31→
+    32→    32→Direction conventions matter everywhere here: for ``LN_IC50``-style
+    33→    33→metrics *lower* means more sensitive, for pIC50-style metrics *higher*
+    34→    34→means more sensitive.  Every direction-sensitive function documents
+    35→    35→its assumption and exposes a switch.
+    36→    36→"""
+    37→    37→
+    38→    38→from __future__ import annotations
+    39→    39→
+    40→    40→import math
+    41→    41→from dataclasses import dataclass, field
+    42→    42→from pathlib import Path
+    43→    43→from typing import Union
+    44→    44→
+    45→    45→import numpy as np
+    46→    46→import pandas as pd
+    47→    47→
+    48→    48→from pharmaml.exceptions import DataValidationError
+    49→    49→from pharmaml.logger import get_logger
+    50→    50→from pharmaml.utils.io import read_table
+    51→    51→from pharmaml.utils.validation import require_columns
+    52→    52→
+    53→    53→_LOG = get_logger(__name__)
+    54→    54→
+    55→    55→__all__ = [
+    56→    56→    "ResponseScreen",
+    57→    57→    "load_response_table",
+    58→    58→    "audit_response_table",
+    59→    59→    "collapse_replicates",
+    60→    60→    "ln_ic50_to_pic50",
+    61→    61→    "pic50_to_ln_ic50",
+    62→    62→    "response_matrix",
+    63→    63→    "summarize_compounds",
+    64→    64→    "call_sensitive_resistant",
+    65→    65→]
+    66→    66→
+    67→    67→#: What a table argument may be: an in-memory frame or a csv/xlsx path.
+    68→    68→ResponseTableSource = Union[pd.DataFrame, str, Path]
+    69→    69→
+    70→    70→#: ``ln(10)`` -- the natural-log/decade conversion factor.
+    71→    71→_LN10 = math.log(10.0)
+    72→    72→
+    73→    73→
+    74→    74→def _detect_metric_columns(
+    75→    75→    frame: pd.DataFrame, exclude: list[str]
+    76→    76→) -> list[str]:
+    77→    77→    """Return the remaining columns that hold numeric measurements.
+    78→    78→
+    79→    79→    A column qualifies when its dtype is numeric or when at least one
+    80→    80→    value parses as a number (``pd.to_numeric`` with coercion) -- the
+    81→    81→    latter keeps a ``LN_IC50`` column that went ``object`` dtype
+    82→    82→    because of a few stray strings in an otherwise numeric export.
+    83→    83→    """
+    84→    84→    metrics: list[str] = []
+    85→    85→    for column in frame.columns:
+    86→    86→        if column in exclude:
+    87→    87→            continue
+    88→    88→        series = frame[column]
+    89→    89→        if pd.api.types.is_numeric_dtype(series):
+    90→    90→            metrics.append(column)
+    91→    91→            continue
+    92→    92→        coerced = pd.to_numeric(series, errors="coerce")
+    93→    93→        if coerced.notna().any():
+    94→    94→            metrics.append(column)
+    95→    95→    return metrics
+    96→    96→
+    97→    97→
+    98→    98→def _coerce_metrics(frame: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
+    99→    99→    """Coerce metric columns to numeric dtype, warning per column.
+   100→   100→
+   101→   101→    Values that fail to parse become NaN *after* a warning names the
+   102→   102→    column and the affected count (round-11/16 semantics: warn, keep
+   103→   103→    NaN).  Already-numeric columns pass through unchanged.
+   104→   104→    """
+   105→   105→    for metric in metrics:
+   106→   106→        series = frame[metric]
+   107→   107→        if pd.api.types.is_numeric_dtype(series):
+   108→   108→            continue
+   109→   109→        coerced = pd.to_numeric(series, errors="coerce")
+   110→   110→        lost = int((series.notna() & coerced.isna()).sum())
+   111→   111→        if lost:
+   112→   112→            _LOG.warning(
+   113→   113→                "%d non-numeric value(s) in metric column %r coerced to NaN",
+   114→   114→                lost,
+   115→   115→                metric,
+   116→   116→            )
+   117→   117→        frame[metric] = coerced
+   118→   118→    return frame
+   119→   119→
+   120→   120→
+   121→   121→@dataclass(frozen=True, slots=True)
+   122→   122→class ResponseScreen:
+   123→   123→    """One loaded drug-response screen.
+   124→   124→
+   125→   125→    Attributes
+   126→   126→    ----------
+   127→   127→    frame:
+   128→   128→        The long-format table: one row per (cell line, compound) pair
+   129→   129→        with the metric columns already coerced to numeric dtype.
+   130→   130→    cell_col:
+   131→   131→        Name of the cell-line identifier column.
+   132→   132→    compound_col:
+   133→   133→        Name of the compound identifier column.
+   134→   134→    tissue_col:
+   135→   135→        Name of the optional tissue/lineage annotation column.
+   136→   136→    metrics:
+   137→   137→        Names of the numeric response-metric columns (``LN_IC50``,
+   138→   138→        ``AUC`` ...).  When empty at construction time the numeric
+   139→   139→        non-identifier columns are auto-detected.
+   140→   140→
+   141→   141→    Raises
+   142→   142→    ------
+   143→   143→    DataValidationError
+   144→   144→        If no metric column can be auto-detected.
+   145→   145→    """
+   146→   146→
+   147→   147→    frame: pd.DataFrame
+   148→   148→    cell_col: str
+   149→   149→    compound_col: str
+   150→   150→    tissue_col: str | None = None
+   151→   151→    metrics: list[str] = field(default_factory=list)
+   152→   152→
+   153→   153→    def __post_init__(self) -> None:
+   154→   154→        if not self.metrics:
+   155→   155→            detected = _detect_metric_columns(
+   156→   156→                self.frame,
+   157→   157→                exclude=[self.cell_col, self.compound_col, self.tissue_col],
+   158→   158→            )
+   159→   159→            if not detected:
+   160→   160→                raise DataValidationError(
+   161→   161→                    "no metric columns detected in the response table -- "
+   162→   162→                    "pass metrics=[...] explicitly. Available columns: "
+   163→   163→                    f"{list(self.frame.columns)}"
+   164→   164→                )
+   165→   165→            object.__setattr__(self, "metrics", detected)
+   166→   166→
+   167→   167→    @property
+   168→   168→    def cell_lines(self) -> list[str]:
+   169→   169→        """Sorted unique cell-line identifiers."""
+   170→   170→        return sorted(self.frame[self.cell_col].astype(str).unique().tolist())
+   171→   171→
+   172→   172→    @property
+   173→   173→    def compounds(self) -> list[str]:
+   174→   174→        """Sorted unique compound identifiers."""
+   175→   175→        return sorted(self.frame[self.compound_col].astype(str).unique().tolist())
+   176→   176→
+   177→   177→    @property
+   178→   178→    def n_pairs(self) -> int:
+   179→   179→        """Number of unique (cell line, compound) pairs."""
+   180→   180→        return int(
+   181→   181→            len(self.frame[[self.cell_col, self.compound_col]].drop_duplicates())
+   182→   182→        )
+   183→   183→
+   184→   184→    def _duplicate_pairs(self) -> list[tuple[str, str]]:
+   185→   185→        """(cell, compound) pairs that occupy more than one row."""
+   186→   186→        counts = self.frame.groupby(
+   187→   187→            [self.cell_col, self.compound_col], sort=True
+   188→   188→        ).size()
+   189→   189→        return [pair for pair, count in counts.items() if count > 1]
+   190→   190→
+   191→   191→    def summary(self) -> str:
+   192→   192→        """Multi-line audit summary (the package's ``inspect`` style)."""
+   193→   193→        lines = [
+   194→   194→            f"screen        : {len(self.cell_lines)} cell line(s) x "
+   195→   195→            f"{len(self.compounds)} compound(s) -> {self.n_pairs} (cell, compound) pair(s)"
+   196→   196→        ]
+   197→   197→        if len(self.frame) != self.n_pairs:
+   198→   198→            lines.append(
+   199→   199→                f"rows          : {len(self.frame)} "
+   200→   200→                f"({len(self.frame) - self.n_pairs} duplicate row(s))"
+   201→   201→            )
+   202→   202→        if self.tissue_col is not None:
+   203→   203→            tissues = sorted(
+   204→   204→                self.frame[self.tissue_col].dropna().astype(str).unique().tolist()
+   205→   205→            )
+   206→   206→            shown = ", ".join(tissues[:8])
+   207→   207→            extra = len(tissues) - 8
+   208→   208→            more = f" (+{extra} more)" if extra > 0 else ""
+   209→   209→            lines.append(
+   210→   210→                f"tissue        : {len(tissues)} value(s) in {self.tissue_col!r}: "
+   211→   211→                f"{shown}{more}"
+   212→   212→            )
+   213→   213→        lines.append(f"metrics       : {', '.join(self.metrics) or '(none)'}")
+   214→   214→        for metric in self.metrics:
+   215→   215→            present = int(self.frame[metric].notna().sum())
+   216→   216→            total = len(self.frame)
+   217→   217→            missing = total - present
+   218→   218→            note = f" ({missing} missing)" if missing else ""
+   219→   219→            lines.append(f"  {metric:<13s}: {present}/{total} value(s) present{note}")
+   220→   220→        duplicates = self._duplicate_pairs()
+   221→   221→        if duplicates:
+   222→   222→            shown = ", ".join(f"({cell} + {compound})" for cell, compound in duplicates[:3])
+   223→   223→            extra = len(duplicates) - 3
+   224→   224→            more = f" (+{extra} more)" if extra > 0 else ""
+   225→   225→            lines.append(f"dup. pairs    : {len(duplicates)}: {shown}{more}")
+   226→   226→        else:
+   227→   227→            lines.append("dup. pairs    : 0")
+   228→   228→        return "\n".join(lines)
+   229→   229→
+   230→   230→
+   231→   231→def load_response_table(
+   232→   232→    data: ResponseTableSource,
+   233→   233→    cell_column: str = "cell_line",
+   234→   234→    compound_column: str = "compound",
+   235→   235→    tissue_column: str | None = None,
+   236→   236→    metrics: list[str] | None = None,
+   237→   237→) -> ResponseScreen:
+   238→   238→    """Load a drug-response screen from a DataFrame or csv/xlsx path.
+   239→   239→
+   240→   240→    Parameters
+   241→   241→    ----------
+   242→   242→    data:
+   243→   243→        Long-format table (one row per cell line x compound pair) as a
+   244→   244→        DataFrame or a path read via
+   245→   245→        :func:`pharmaml.utils.io.read_table`.
+   246→   246→    cell_column, compound_column:
+   247→   247→        Names of the identifier columns.
+   248→   248→    tissue_column:
+   249→   249→        Optional tissue annotation column (kept out of the metrics).
+   250→   250→    metrics:
+   251→   251→        Response-metric column names.  When ``None`` (the default) all
+   252→   252→        remaining numeric columns are used -- including ``object``
+   253→   253→        columns that hold at least one parseable number, so a stray
+   254→   254→        string in an otherwise numeric export degrades to NaN instead
+   255→   255→        of hiding the whole metric.
+   256→   256→
+   257→   257→    Returns
+   258→   258→    -------
+   259→   259→    ResponseScreen
+   260→   260→        The validated screen.  Metric columns are coerced to numeric
+   261→   261→        dtype on a *copy* of the frame (the caller's frame is never
+   262→   262→        mutated); non-numeric values become NaN after a warning that
+   263→   263→        names the column and the count.
+   264→   264→
+   265→   265→    Raises
+   266→   266→    ------
+   267→   267→    DataValidationError
+   268→   268→        If an identifier column is missing (all offenders listed at
+   269→   269→        once), an explicit metric column is missing, or no metric
+   270→   270→        column can be detected at all.
+   271→   271→    """
+   272→   272→    if isinstance(data, pd.DataFrame):
+   273→   273→        frame = data.copy()
+   274→   274→    elif isinstance(data, (str, Path)):
+   275→   275→        frame = read_table(data)
+   276→   276→    else:
+   277→   277→        raise DataValidationError(
+   278→   278→            "data must be a pandas DataFrame or a path to a csv/xlsx file, "
+   279→   279→            f"got {type(data).__name__}"
+   280→   280→        )
+   281→   281→
+   282→   282→    required = [cell_column, compound_column]
+   283→   283→    if tissue_column is not None:
+   284→   284→        required.append(tissue_column)
+   285→   285→    require_columns(frame, required)
+   286→   286→
+   287→   287→    if metrics is None:
+   288→   288→        detected = _detect_metric_columns(frame, exclude=required)
+   289→   289→        if not detected:
+   290→   290→            raise DataValidationError(
+   291→   291→                "no metric columns detected in the response table -- pass "
+   292→   292→                "metrics=[...] explicitly. Available columns: "
+   293→   293→                f"{list(frame.columns)}"
+   294→   294→            )
+   295→   295→        metrics = detected
+   296→   296→        _LOG.debug("Auto-detected metric column(s): %s", metrics)
+   297→   297→    else:
+   298→   298→        require_columns(frame, list(metrics))
+   299→   299→
+   300→   300→    frame = _coerce_metrics(frame, list(metrics))
+   301→   301→    _LOG.info(
+   302→   302→        "Loaded response screen: %d row(s), %d cell line(s), %d compound(s), "
+   303→   303→        "metric(s) %s",
+   304→   304→        len(frame),
+   305→   305→        frame[cell_column].nunique(),
+   306→   306→        frame[compound_column].nunique(),
+   307→   307→        metrics,
+   308→   308→    )
+   309→   309→    return ResponseScreen(
+   310→   310→        frame=frame,
+   311→   311→        cell_col=cell_column,
+   312→   312→        compound_col=compound_column,
+   313→   313→        tissue_col=tissue_column,
+   314→   314→        metrics=list(metrics),
+   315→   315→    )
+   316→   316→
+   317→   317→
+   318→   318→def audit_response_table(screen: ResponseScreen, n_min: int = 3) -> pd.DataFrame:
+   319→   319→    """Audit a response screen for the classic hygiene issues.
+   320→   320→
+   321→   321→    One row per concrete issue with columns ``issue``, ``detail`` and
+   322→   322→    ``count``:
+   323→   323→
+   324→   324→    * ``missing metric values`` -- per metric column with missing
+   325→   325→      entries; ``count`` is the number of missing values,
+   326→   326→    * ``duplicate pairs`` -- per (cell line, compound) pair occupying
+   327→   327→      more than one row; ``count`` is the number of rows for the pair,
+   328→   328→    * ``ambiguous tissue`` -- per cell line mapped to more than one
+   329→   329→      tissue; ``count`` is the number of distinct tissues,
+   330→   330→    * ``under-tested compound`` -- per compound measured on fewer than
+   331→   331→      ``n_min`` cell lines; ``count`` is the number of cell lines.
+   332→   332→
+   333→   333→    A clean screen returns the single row ``("ok", "no issues found",
+   334→   334→    0)``.  ``to_string()`` on the result is print-friendly.
+   335→   335→
+   336→   336→    Parameters
+   337→   337→    ----------
+   338→   338→    screen:
+   339→   339→        The screen to audit.
+   340→   340→    n_min:
+   341→   341→        Minimum number of cell lines a compound should be measured on
+   342→   342→        (GDSC-style panels use 3 as the floor for any per-compound
+   343→   343→        statistic).
+   344→   344→    """
+   345→   345→    rows: list[dict[str, object]] = []
+   346→   346→
+   347→   347→    for metric in screen.metrics:
+   348→   348→        missing = int(screen.frame[metric].isna().sum())
+   349→   349→        if missing:
+   350→   350→            rows.append(
+   351→   351→                {
+   352→   352→                    "issue": "missing metric values",
+   353→   353→                    "detail": f"metric {metric!r}",
+   354→   354→                    "count": missing,
+   355→   355→                }
+   356→   356→            )
+   357→   357→
+   358→   358→    pair_counts = screen.frame.groupby(
+   359→   359→        [screen.cell_col, screen.compound_col], sort=True
+   360→   360→    ).size()
+   361→   361→    for (cell, compound), count in pair_counts.items():
+   362→   362→        if count > 1:
+   363→   363→            rows.append(
+   364→   364→                {
+   365→   365→                    "issue": "duplicate pairs",
+   366→   366→                    "detail": f"{cell} / {compound}",
+   367→   367→                    "count": int(count),
+   368→   368→                }
+   369→   369→            )
+   370→   370→
+   371→   371→    if screen.tissue_col is not None:
+   372→   372→        tissues = (
+   373→   373→            screen.frame[[screen.cell_col, screen.tissue_col]]
+   374→   374→            .dropna(subset=[screen.tissue_col])
+   375→   375→            .groupby(screen.cell_col, sort=True)[screen.tissue_col]
+   376→   376→            .agg(lambda values: sorted(set(values.astype(str))))
+   377→   377→        )
+   378→   378→        for cell, tissue_list in tissues.items():
+   379→   379→            if len(tissue_list) > 1:
+   380→   380→                rows.append(
+   381→   381→                    {
+   382→   382→                        "issue": "ambiguous tissue",
+   383→   383→                        "detail": f"{cell}: {', '.join(tissue_list)}",
+   384→   384→                        "count": len(tissue_list),
+   385→   385→                    }
+   386→   386→                )
+   387→   387→
+   388→   388→    n_cells = screen.frame.groupby(screen.compound_col, sort=True)[
+   389→   389→        screen.cell_col
+   390→   390→    ].nunique()
+   391→   391→    for compound, count in n_cells.items():
+   392→   392→        if count < n_min:
+   393→   393→            rows.append(
+   394→   394→                {
+   395→   395→                    "issue": "under-tested compound",
+   396→   396→                    "detail": f"{compound}",
+   397→   397→                    "count": int(count),
+   398→   398→                }
+   399→   399→            )
+   400→   400→
+   401→   401→    if not rows:
+   402→   402→        rows.append({"issue": "ok", "detail": "no issues found", "count": 0})
+   403→   403→    report = pd.DataFrame(rows, columns=["issue", "detail", "count"])
+   404→   404→    _LOG.info("Response-table audit: %d issue row(s)", len(report))
+   405→   405→    return report
+   406→   406→
+   407→   407→
+   408→   408→def collapse_replicates(screen: ResponseScreen) -> ResponseScreen:
+   409→   409→    """Collapse duplicated (cell line, compound) pairs by the median.
+   410→   410→
+   411→   411→    Every pair is reduced to a single row: metric columns take the
+   412→   412→    median over the replicates, annotation columns (tissue, study ...)
+   413→   413→    keep the first value.  Pairs without duplicates pass through
+   414→   414→    untouched.  The collapsed pairs are logged at DEBUG level.
+   415→   415→
+   416→   416→    Returns
+   417→   417→    -------
+   418→   418→    ResponseScreen
+   419→   419→        A new screen (the input is never mutated) with at most one row
+   420→   420→        per pair, preserving first-appearance row order.
+   421→   421→    """
+   422→   422→    frame = screen.frame
+   423→   423→    aggregations: dict[str, str] = {}
+   424→   424→    for column in frame.columns:
+   425→   425→        aggregations[column] = (
+   426→   426→            "median" if column in screen.metrics else "first"
+   427→   427→        )
+   428→   428→    collapsed = frame.groupby(
+   429→   429→        [screen.cell_col, screen.compound_col], sort=False, as_index=False
+   430→   430→    ).agg(aggregations)
+   431→   431→
+   432→   432→    duplicate_pairs = screen._duplicate_pairs()
+   433→   433→    if duplicate_pairs:
+   434→   434→        shown = ", ".join(f"({cell} + {compound})" for cell, compound in duplicate_pairs[:10])
+   435→   435→        extra = len(duplicate_pairs) - 10
+   436→   436→        more = f" (+{extra} more)" if extra > 0 else ""
+   437→   437→        _LOG.debug(
+   438→   438→            "Collapsed %d duplicate pair(s) by median: %s%s",
+   439→   439→            len(duplicate_pairs),
+   440→   440→            shown,
+   441→   441→            more,
+   442→   442→        )
+   443→   443→    _LOG.info(
+   444→   444→        "collapse_replicates: %d row(s) -> %d row(s)", len(frame), len(collapsed)
+   445→   445→    )
+   446→   446→    return ResponseScreen(
+   447→   447→        frame=collapsed,
+   448→   448→        cell_col=screen.cell_col,
+   449→   449→        compound_col=screen.compound_col,
+   450→   450→        tissue_col=screen.tissue_col,
+   451→   451→        metrics=list(screen.metrics),
+   452→   452→    )
+   453→   453→
+   454→   454→
+   455→   455→def ln_ic50_to_pic50(ln_ic50):
+   456→   456→    """Convert GDSC ``LN_IC50`` values to pIC50.
+   457→   457→
+   458→   458→    GDSC reports the natural log of the IC50 in micromolar, so
+   459→   459→    ``LN_IC50 = 0`` (IC50 = 1 uM) maps to ``pIC50 = 6`` via
+   460→   460→    ``pIC50 = 6 - ln(IC50_uM) / ln(10)``.
+   461→   461→
+   462→   462→    Parameters
+   463→   463→    ----------
+   464→   464→    ln_ic50:
+   465→   465→        Scalar, list/array or :class:`pandas.Series` of ``LN_IC50``
+   466→   466→        values.  NaN passes through; a Series keeps its index.
+   467→   467→
+   468→   468→    Returns
+   469→   469→    -------
+   470→   470→    Same kind as the input (float for scalars, ndarray for arrays,
+   471→   471→    Series for Series) with the converted values.
+   472→   472→    """
+   473→   473→    if isinstance(ln_ic50, pd.Series):
+   474→   474→        numeric = pd.to_numeric(ln_ic50, errors="coerce")
+   475→   475→        return 6.0 - numeric / _LN10
+   476→   476→    values = np.asarray(ln_ic50, dtype=float)
+   477→   477→    result = 6.0 - values / _LN10
+   478→   478→    if result.ndim == 0:
+   479→   479→        return float(result)
+   480→   480→    return result
+   481→   481→
+   482→   482→
+   483→   483→def pic50_to_ln_ic50(pic50):
+   484→   484→    """Convert pIC50 values back to GDSC ``LN_IC50`` (the exact inverse).
+   485→   485→
+   486→   486→    ``ln(IC50_uM) = (6 - pIC50) * ln(10)``; a 1 uM IC50 (pIC50 6)
+   487→   487→    maps back to ``LN_IC50 = 0``.  Accepts the same input kinds as
+   488→   488→    :func:`ln_ic50_to_pic50` with NaN passthrough.
+   489→   489→    """
+   490→   490→    if isinstance(pic50, pd.Series):
+   491→   491→        numeric = pd.to_numeric(pic50, errors="coerce")
+   492→   492→        return (6.0 - numeric) * _LN10
+   493→   493→    values = np.asarray(pic50, dtype=float)
+   494→   494→    result = (6.0 - values) * _LN10
+   495→   495→    if result.ndim == 0:
+   496→   496→        return float(result)
+   497→   497→    return result
+   498→   498→
+   499→   499→
+   500→   500→def response_matrix(screen: ResponseScreen, metric: str) -> pd.DataFrame:
+   501→   501→    """Pivot one metric into a cell-line x compound sensitivity matrix.
+   502→   502→
+   503→   503→    Rows are cell lines, columns are compounds (both sorted); untested
+   504→   504→    pairs hold NaN.  Duplicated pairs are *not* silently averaged --
+   505→   505→    collapse them first with :func:`collapse_replicates`.
+   506→   506→
+   507→   507→    Parameters
+   508→   508→    ----------
+   509→   509→    screen:
+   510→   510→        The screen to pivot.
+   511→   511→    metric:
+   512→   512→        Metric column to place in the matrix.
+   513→   513→
+   514→   514→    Returns
+   515→   515→    -------
+   516→   516→    pandas.DataFrame
+   517→   517→        The pivoted matrix.
+   518→   518→
+   519→   519→    Raises
+   520→   520→    ------
+   521→   521→    DataValidationError
+   522→   522→        If ``metric`` is not one of the screen's metrics, or duplicate
+   523→   523→        (cell line, compound) pairs are present.
+   524→   524→    """
+   525→   525→    if metric not in screen.metrics:
+   526→   526→        raise DataValidationError(
+   527→   527→            f"metric {metric!r} is not part of the screen -- available "
+   528→   528→            f"metrics: {list(screen.metrics)}"
+   529→   529→        )
+   530→   530→    duplicates = screen._duplicate_pairs()
+   531→   531→    if duplicates:
+   532→   532→        shown = ", ".join(f"({cell} + {compound})" for cell, compound in duplicates[:5])
+   533→   533→        extra = len(duplicates) - 5
+   534→   534→        more = f" (+{extra} more)" if extra > 0 else ""
+   535→   535→        raise DataValidationError(
+   536→   536→            f"{len(duplicates)} duplicate (cell, compound) pair(s) prevent "
+   537→   537→            f"pivoting: {shown}{more} -- collapse_replicates() first"
+   538→   538→        )
+   539→   539→    matrix = screen.frame.pivot(
+   540→   540→        index=screen.cell_col, columns=screen.compound_col, values=metric
+   541→   541→    )
+   542→   542→    matrix.index.name = screen.cell_col
+   543→   543→    matrix.columns.name = screen.compound_col
+   544→   544→    return matrix.sort_index().sort_index(axis=1)
+   545→   545→
+   546→   546→
+   547→   547→def summarize_compounds(
+   548→   548→    screen: ResponseScreen,
+   549→   549→    metric: str,
+   550→   550→    higher_is_more_sensitive: bool = False,
+   551→   551→) -> pd.DataFrame:
+   552→   552→    """Per-compound potency statistics across the cell-line panel.
+   553→   553→
+   554→   554→    Rows are compounds (sorted) with columns ``n_cell_lines`` (number of
+   555→   555→    distinct cell lines measured, replicates counted once -- missing
+   556→   556→    metric values are the audit's business), ``median``, ``min``,
+   557→   557→    ``max``, ``std`` (sample standard deviation, ddof=1) and
+   558→   558→    ``sensitive_spread`` = ``max - min`` -- the potency range across
+   559→   559→    the panel, i.e. how selectively the compound hits the panel
+   560→   560→    regardless of direction.
+   561→   561→
+   562→   562→    Parameters
+   563→   563→    ----------
+   564→   564→    screen:
+   565→   565→        The screen to summarise.
+   566→   566→    metric:
+   567→   567→        Metric column to summarise.
+   568→   568→    higher_is_more_sensitive:
+   569→   569→        Direction of ``metric``: ``False`` (default) for LN_IC50-style
+   570→   570→        metrics where *lower* means more potent; ``True`` for
+   571→   571→        pIC50-style metrics where *higher* means more potent.  It only
+   572→   572→        affects the ``most_sensitive_cell_line`` column -- the cell
+   573→   573→        line with the strongest response under that direction.
+   574→   574→
+   575→   575→    Raises
+   576→   576→    ------
+   577→   577→    DataValidationError
+   578→   578→        If ``metric`` is not one of the screen's metrics.
+   579→   579→    """
+   580→   580→    if metric not in screen.metrics:
+   581→   581→        raise DataValidationError(
+   582→   582→            f"metric {metric!r} is not part of the screen -- available "
+   583→   583→            f"metrics: {list(screen.metrics)}"
+   584→   584→        )
+   585→   585→    grouped = screen.frame.groupby(screen.compound_col, sort=True)[metric]
+   586→   586→    summary = pd.DataFrame(
+   587→   587→        {
+   588→   588→            # distinct cell lines (replicates counted once); missing
+   589→   589→            # metric values stay the audit's job to report.
+   590→   590→            "n_cell_lines": screen.frame.groupby(screen.compound_col, sort=True)[
+   591→   591→                screen.cell_col
+   592→   592→            ].nunique(),
+   593→   593→            "median": grouped.median(),
+   594→   594→            "min": grouped.min(),
+   595→   595→            "max": grouped.max(),
+   596→   596→            "std": grouped.std(),
+   597→   597→        }
+   598→   598→    )
+   599→   599→    summary["sensitive_spread"] = summary["max"] - summary["min"]
+   600→   600→
+   601→   601→    # Direction-aware pick of the strongest-responding cell line per
+   602→   602→    # compound (NaN metric rows cannot win by construction).
+   603→   603→    lookup = screen.frame[
+   604→   604→        [screen.compound_col, screen.cell_col, metric]
+   605→   605→    ].dropna(subset=[metric])
+   606→   606→    if higher_is_more_sensitive:
+   607→   607→        positions = lookup.groupby(screen.compound_col, sort=True)[metric].idxmax()
+   608→   608→    else:
+   609→   609→        positions = lookup.groupby(screen.compound_col, sort=True)[metric].idxmin()
+   610→   610→    # ``positions`` maps compound -> winning row label; re-align the picked
+   611→   611→    # cell lines onto the compound index before assigning into the summary.
+   612→   612→    summary["most_sensitive_cell_line"] = pd.Series(
+   613→   613→        lookup.loc[positions, screen.cell_col].to_numpy(), index=positions.index
+   614→   614→    )
+   615→   615→    summary = summary[
+   616→   616→        [
+   617→   617→            "n_cell_lines",
+   618→   618→            "median",
+   619→   619→            "min",
+   620→   620→            "max",
+   621→   621→            "std",
+   622→   622→            "sensitive_spread",
+   623→   623→            "most_sensitive_cell_line",
+   624→   624→        ]
+   625→   625→    ]
+   626→   626→    summary.index.name = screen.compound_col
+   627→   627→    return summary
+   628→   628→
+   629→   629→
+   630→   630→def call_sensitive_resistant(
+   631→   631→    response_series,
+   632→   632→    sensitive_quantile: float = 0.25,
+   633→   633→    resistant_quantile: float = 0.75,
+   634→   634→    lower_is_sensitive: bool = True,
+   635→   635→):
+   636→   636→    """Threshold a response vector into sensitivity calls.
+   637→   637→
+   638→   638→    The lowest ``sensitive_quantile`` fraction of cells is called
+   639→   639→    ``"sensitive"``, the highest ``resistant_quantile`` fraction
+   640→   640→    ``"resistant"`` and everything in between ``"intermediate"``
+   641→   641→    (thresholds are inclusive, so tied values stay on the boundary
+   642→   642→    side).  NaN entries are labelled ``"not tested"``.
+   643→   643→
+   644→   644→    Parameters
+   645→   645→    ----------
+   646→   646→    response_series:
+   647→   647→        Response values, typically one compound's column of a
+   648→   648→        :func:`response_matrix` pivot.
+   649→   649→    sensitive_quantile, resistant_quantile:
+   650→   650→        Quantile cuts; must satisfy
+   651→   651→        ``0 < sensitive_quantile < resistant_quantile < 1``.
+   652→   652→    lower_is_sensitive:
+   653→   653→        Direction of the metric: ``True`` (default) for LN_IC50-style
+   654→   654→        metrics where *lower* means more sensitive; ``False`` for
+   655→   655→        pIC50-style metrics where *higher* means more sensitive (the
+   656→   656→        quantile cuts are mirrored accordingly).
+   657→   657→
+   658→   658→    Returns
+   659→   659→    -------
+   660→   660→    pandas.Series
+   661→   661→        Labels ``"sensitive"`` / ``"resistant"`` / ``"intermediate"``
+   662→   662→        / ``"not tested"``, indexed like the input.
+   663→   663→
+   664→   664→    Raises
+   665→   665→    ------
+   666→   666→    DataValidationError
+   667→   667→        If the quantile ordering is violated.
+   668→   668→    """
+   669→   669→    if not (
+   670→   670→        0.0 < sensitive_quantile < resistant_quantile < 1.0
+   671→   671→    ):
+   672→   672→        raise DataValidationError(
+   673→   673→            "quantiles must satisfy 0 < sensitive_quantile < "
+   674→   674→            f"resistant_quantile < 1, got {sensitive_quantile} and "
+   675→   675→            f"{resistant_quantile}"
+   676→   676→        )
+   677→   677→    series = (
+   678→   678→        response_series
+   679→   679→        if isinstance(response_series, pd.Series)
+   680→   680→        else pd.Series(response_series)
+   681→   681→    )
+   682→   682→    numeric = pd.to_numeric(series, errors="coerce")
+   683→   683→    labels = pd.Series("not tested", index=numeric.index, dtype=object)
+   684→   684→
+   685→   685→    valid = numeric.dropna()
+   686→   686→    if valid.empty:
+   687→   687→        _LOG.warning(
+   688→   688→            "call_sensitive_resistant: no non-NaN values -- every cell line "
+   689→   689→            "labelled 'not tested'"
+   690→   690→        )
+   691→   691→        return labels
+   692→   692→
+   693→   693→    if lower_is_sensitive:
+   694→   694→        sensitive_cut = valid.quantile(sensitive_quantile)
+   695→   695→        resistant_cut = valid.quantile(resistant_quantile)
+   696→   696→        is_sensitive = numeric <= sensitive_cut
+   697→   697→        is_resistant = numeric >= resistant_cut
+   698→   698→    else:
+   699→   699→        # High values are the sensitive ones: mirror the quantile cuts.
+   700→   700→        sensitive_cut = valid.quantile(1.0 - sensitive_quantile)
+   701→   701→        resistant_cut = valid.quantile(1.0 - resistant_quantile)
+   702→   702→        is_sensitive = numeric >= sensitive_cut
+   703→   703→        is_resistant = numeric <= resistant_cut
+   704→   704→
+   705→   705→    labels[is_sensitive] = "sensitive"
+   706→   706→    labels[is_resistant & ~is_sensitive] = "resistant"
+   707→   707→    intermediate = numeric.notna() & ~is_sensitive & ~is_resistant
+   708→   708→    labels[intermediate] = "intermediate"
+   709→   709→    _LOG.debug(
+   710→   710→        "Sensitivity calls: %d sensitive, %d resistant, %d intermediate, "
+   711→   711→        "%d not tested",
+   712→   712→        int((labels == "sensitive").sum()),
+   713→   713→        int((labels == "resistant").sum()),
+   714→   714→        int((labels == "intermediate").sum()),
+   715→   715→        int((labels == "not tested").sum()),
+   716→   716→    )
+   717→   717→    return labels
+   718→   718→

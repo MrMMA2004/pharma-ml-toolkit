@@ -15,10 +15,11 @@ reshapes such tables:
   frame plus the column configuration, with a ``summary()`` in the
   package's audit style,
 * :func:`audit_response_table` reports the classic screen hygiene
-  issues (missing metrics, duplicate pairs, cell lines claimed by two
-  tissues, under-tested compounds),
+  issues (missing identifiers, missing metrics, duplicate pairs, cell
+  lines claimed by two tissues, under-tested compounds),
 * :func:`collapse_replicates` resolves duplicated pairs by the median
-  per metric,
+  per metric (rows with a missing identifier are kept as their own
+  NaN-keyed group, never silently dropped),
 * :func:`ln_ic50_to_pic50` / :func:`pic50_to_ln_ic50` convert between
   GDSC's ``LN_IC50`` (natural log of the IC50 in micromolar) and the
   chemist's pIC50 scale,
@@ -80,14 +81,29 @@ def _detect_metric_columns(
     value parses as a number (``pd.to_numeric`` with coercion) -- the
     latter keeps a ``LN_IC50`` column that went ``object`` dtype
     because of a few stray strings in an otherwise numeric export.
+
+    Boolean columns never qualify: ``pandas`` counts ``bool`` as a
+    numeric dtype, but an ``msi_status``-style flag is an annotation,
+    not a measurement.  The rule covers both ``bool`` dtype and an
+    ``object`` column holding only ``True``/``False`` (with missing
+    entries -- what a csv round-trip of a flag column produces).
+    Pass such a column explicitly via ``metrics=[...]`` to treat its
+    ``True``/``False`` values as 1/0.
     """
     metrics: list[str] = []
     for column in frame.columns:
         if column in exclude:
             continue
         series = frame[column]
+        if pd.api.types.is_bool_dtype(series):
+            continue
         if pd.api.types.is_numeric_dtype(series):
             metrics.append(column)
+            continue
+        non_missing = series.dropna()
+        if not non_missing.empty and non_missing.map(
+            lambda value: isinstance(value, (bool, np.bool_))
+        ).all():
             continue
         coerced = pd.to_numeric(series, errors="coerce")
         if coerced.notna().any():
@@ -100,10 +116,17 @@ def _coerce_metrics(frame: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
 
     Values that fail to parse become NaN *after* a warning names the
     column and the affected count (round-11/16 semantics: warn, keep
-    NaN).  Already-numeric columns pass through unchanged.
+    NaN).  Already-numeric columns pass through unchanged.  Boolean
+    metric columns (only reachable through the explicit ``metrics=``
+    path -- auto-detection skips them) are converted to 0/1 floats:
+    ``pd.to_numeric`` passes ``bool`` dtype through unchanged, but a
+    metric column must support arithmetic.
     """
     for metric in metrics:
         series = frame[metric]
+        if pd.api.types.is_bool_dtype(series):
+            frame[metric] = series.astype("float64")
+            continue
         if pd.api.types.is_numeric_dtype(series):
             continue
         coerced = pd.to_numeric(series, errors="coerce")
@@ -166,13 +189,15 @@ class ResponseScreen:
 
     @property
     def cell_lines(self) -> list[str]:
-        """Sorted unique cell-line identifiers."""
-        return sorted(self.frame[self.cell_col].astype(str).unique().tolist())
+        """Sorted unique cell-line identifiers (missing ones excluded)."""
+        return sorted(self.frame[self.cell_col].dropna().astype(str).unique().tolist())
 
     @property
     def compounds(self) -> list[str]:
-        """Sorted unique compound identifiers."""
-        return sorted(self.frame[self.compound_col].astype(str).unique().tolist())
+        """Sorted unique compound identifiers (missing ones excluded)."""
+        return sorted(
+            self.frame[self.compound_col].dropna().astype(str).unique().tolist()
+        )
 
     @property
     def n_pairs(self) -> int:
@@ -182,9 +207,14 @@ class ResponseScreen:
         )
 
     def _duplicate_pairs(self) -> list[tuple[str, str]]:
-        """(cell, compound) pairs that occupy more than one row."""
+        """(cell, compound) pairs that occupy more than one row.
+
+        Uses ``dropna=False`` so pairs keyed by a missing identifier
+        are counted too -- silently dropping them would hide
+        duplicated unusable rows from every audit.
+        """
         counts = self.frame.groupby(
-            [self.cell_col, self.compound_col], sort=True
+            [self.cell_col, self.compound_col], sort=True, dropna=False
         ).size()
         return [pair for pair, count in counts.items() if count > 1]
 
@@ -252,7 +282,9 @@ def load_response_table(
         remaining numeric columns are used -- including ``object``
         columns that hold at least one parseable number, so a stray
         string in an otherwise numeric export degrades to NaN instead
-        of hiding the whole metric.
+        of hiding the whole metric.  Boolean columns (flags like
+        ``msi_status``) are *never* auto-detected; pass one explicitly
+        to have its ``True``/``False`` values treated as 1/0.
 
     Returns
     -------
@@ -321,10 +353,14 @@ def audit_response_table(screen: ResponseScreen, n_min: int = 3) -> pd.DataFrame
     One row per concrete issue with columns ``issue``, ``detail`` and
     ``count``:
 
+    * ``missing identifier`` -- per identifier column (cell line /
+      compound) holding NaN entries; ``count`` is the number of rows
+      without the identifier,
     * ``missing metric values`` -- per metric column with missing
       entries; ``count`` is the number of missing values,
     * ``duplicate pairs`` -- per (cell line, compound) pair occupying
-      more than one row; ``count`` is the number of rows for the pair,
+      more than one row (pairs keyed by a missing identifier included);
+      ``count`` is the number of rows for the pair,
     * ``ambiguous tissue`` -- per cell line mapped to more than one
       tissue; ``count`` is the number of distinct tissues,
     * ``under-tested compound`` -- per compound measured on fewer than
@@ -344,6 +380,17 @@ def audit_response_table(screen: ResponseScreen, n_min: int = 3) -> pd.DataFrame
     """
     rows: list[dict[str, object]] = []
 
+    for column in (screen.cell_col, screen.compound_col):
+        missing_ids = int(screen.frame[column].isna().sum())
+        if missing_ids:
+            rows.append(
+                {
+                    "issue": "missing identifier",
+                    "detail": f"column {column!r}",
+                    "count": missing_ids,
+                }
+            )
+
     for metric in screen.metrics:
         missing = int(screen.frame[metric].isna().sum())
         if missing:
@@ -356,7 +403,7 @@ def audit_response_table(screen: ResponseScreen, n_min: int = 3) -> pd.DataFrame
             )
 
     pair_counts = screen.frame.groupby(
-        [screen.cell_col, screen.compound_col], sort=True
+        [screen.cell_col, screen.compound_col], sort=True, dropna=False
     ).size()
     for (cell, compound), count in pair_counts.items():
         if count > 1:
@@ -372,7 +419,7 @@ def audit_response_table(screen: ResponseScreen, n_min: int = 3) -> pd.DataFrame
         tissues = (
             screen.frame[[screen.cell_col, screen.tissue_col]]
             .dropna(subset=[screen.tissue_col])
-            .groupby(screen.cell_col, sort=True)[screen.tissue_col]
+            .groupby(screen.cell_col, sort=True, dropna=False)[screen.tissue_col]
             .agg(lambda values: sorted(set(values.astype(str))))
         )
         for cell, tissue_list in tissues.items():
@@ -385,7 +432,7 @@ def audit_response_table(screen: ResponseScreen, n_min: int = 3) -> pd.DataFrame
                     }
                 )
 
-    n_cells = screen.frame.groupby(screen.compound_col, sort=True)[
+    n_cells = screen.frame.groupby(screen.compound_col, sort=True, dropna=False)[
         screen.cell_col
     ].nunique()
     for compound, count in n_cells.items():
@@ -411,7 +458,11 @@ def collapse_replicates(screen: ResponseScreen) -> ResponseScreen:
     Every pair is reduced to a single row: metric columns take the
     median over the replicates, annotation columns (tissue, study ...)
     keep the first value.  Pairs without duplicates pass through
-    untouched.  The collapsed pairs are logged at DEBUG level.
+    untouched.  Rows whose cell-line or compound identifier is missing
+    are kept as their own (NaN-keyed) group instead of being dropped
+    (pandas' ``groupby`` default would silently discard them); a
+    warning names the count of such rows.  The collapsed pairs are
+    logged at DEBUG level.
 
     Returns
     -------
@@ -420,13 +471,24 @@ def collapse_replicates(screen: ResponseScreen) -> ResponseScreen:
         per pair, preserving first-appearance row order.
     """
     frame = screen.frame
+    missing_ids = frame[screen.cell_col].isna() | frame[screen.compound_col].isna()
+    if missing_ids.any():
+        _LOG.warning(
+            "%d row(s) have a missing cell-line/compound identifier -- kept "
+            "as their own (NaN) group instead of being dropped "
+            "(audit_response_table reports them)",
+            int(missing_ids.sum()),
+        )
     aggregations: dict[str, str] = {}
     for column in frame.columns:
         aggregations[column] = (
             "median" if column in screen.metrics else "first"
         )
     collapsed = frame.groupby(
-        [screen.cell_col, screen.compound_col], sort=False, as_index=False
+        [screen.cell_col, screen.compound_col],
+        sort=False,
+        as_index=False,
+        dropna=False,
     ).agg(aggregations)
 
     duplicate_pairs = screen._duplicate_pairs()
@@ -557,7 +619,9 @@ def summarize_compounds(
     ``max``, ``std`` (sample standard deviation, ddof=1) and
     ``sensitive_spread`` = ``max - min`` -- the potency range across
     the panel, i.e. how selectively the compound hits the panel
-    regardless of direction.
+    regardless of direction.  Rows whose compound identifier is missing
+    form their own trailing ``NaN`` row instead of being dropped
+    (:func:`audit_response_table` reports them).
 
     Parameters
     ----------
@@ -582,14 +646,16 @@ def summarize_compounds(
             f"metric {metric!r} is not part of the screen -- available "
             f"metrics: {list(screen.metrics)}"
         )
-    grouped = screen.frame.groupby(screen.compound_col, sort=True)[metric]
+    grouped = screen.frame.groupby(
+        screen.compound_col, sort=True, dropna=False
+    )[metric]
     summary = pd.DataFrame(
         {
             # distinct cell lines (replicates counted once); missing
             # metric values stay the audit's job to report.
-            "n_cell_lines": screen.frame.groupby(screen.compound_col, sort=True)[
-                screen.cell_col
-            ].nunique(),
+            "n_cell_lines": screen.frame.groupby(
+                screen.compound_col, sort=True, dropna=False
+            )[screen.cell_col].nunique(),
             "median": grouped.median(),
             "min": grouped.min(),
             "max": grouped.max(),
@@ -604,9 +670,13 @@ def summarize_compounds(
         [screen.compound_col, screen.cell_col, metric]
     ].dropna(subset=[metric])
     if higher_is_more_sensitive:
-        positions = lookup.groupby(screen.compound_col, sort=True)[metric].idxmax()
+        positions = lookup.groupby(
+            screen.compound_col, sort=True, dropna=False
+        )[metric].idxmax()
     else:
-        positions = lookup.groupby(screen.compound_col, sort=True)[metric].idxmin()
+        positions = lookup.groupby(
+            screen.compound_col, sort=True, dropna=False
+        )[metric].idxmin()
     # ``positions`` maps compound -> winning row label; re-align the picked
     # cell lines onto the compound index before assigning into the summary.
     summary["most_sensitive_cell_line"] = pd.Series(

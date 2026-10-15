@@ -651,3 +651,233 @@ class TestDirectionOfAssociation:
         assert direction_of_association(float("nan")) == "no association"
         assert direction_of_association("junk") == "no association"
         assert direction_of_association(None) == "no association"
+
+
+class TestMetricAutoDetectionExcludesBooleans:
+    """Boolean annotation flags must never be auto-detected as metrics.
+
+    ``pandas`` counts ``bool`` dtype as numeric, so without an explicit
+    exclusion a screen's ``msi_status``-style flag column would sneak
+    into ``screen.metrics`` and pollute every per-metric statistic.
+    """
+
+    def test_bool_dtype_column_is_not_a_metric(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A549", "HCT116", "MCF7"],
+                "compound": ["cisplatin"] * 3,
+                "msi_status": [True, False, True],
+                "LN_IC50": [1.0, 2.0, 3.0],
+            }
+        )
+        screen = load_response_table(frame)
+        assert screen.metrics == ["LN_IC50"]
+        # the flag column survives as passthrough data, just not as a metric
+        assert "msi_status" in screen.frame.columns
+
+    def test_nullable_boolean_object_column_is_not_a_metric(self) -> None:
+        # [True, False, None] lands in object dtype -- the case a csv
+        # round-trip of a partially-missing flag column produces
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A549", "HCT116", "MCF7"],
+                "compound": ["cisplatin"] * 3,
+                "msi_status": [True, False, None],
+                "LN_IC50": [1.0, 2.0, 3.0],
+            }
+        )
+        assert frame["msi_status"].dtype == object
+        screen = load_response_table(frame)
+        assert screen.metrics == ["LN_IC50"]
+
+    def test_explicit_bool_metric_is_still_allowed(self) -> None:
+        # explicit metrics are the caller's call: True/False act as 1/0
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A549", "HCT116"],
+                "compound": ["cisplatin"] * 2,
+                "flag": [True, False],
+            }
+        )
+        screen = load_response_table(frame, metrics=["flag"])
+        assert screen.metrics == ["flag"]
+        summary = summarize_compounds(screen, "flag")
+        assert summary.loc["cisplatin", "median"] == 0.5
+
+
+class TestNaNIdentifierRows:
+    """Rows with a missing cell/compound identifier: warn + keep, never drop.
+
+    ``pandas`` ``groupby`` drops NaN-key rows by default; every reshaping
+    site in :mod:`pharmaml.biology.response` must keep them (as their own
+    NaN-keyed group / row) and the audit must make them visible instead.
+    """
+
+    @staticmethod
+    def _frame() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "cell_line": ["A", "A", None, "B"],
+                "compound": ["d", "d", "d", None],
+                "v": [1.0, 3.0, 99.0, 42.0],
+            }
+        )
+
+    def test_cell_lines_and_compounds_never_stringify_nan(self) -> None:
+        screen = load_response_table(self._frame(), metrics=["v"])
+        assert screen.cell_lines == ["A", "B"]  # no "nan"/"None" junk entries
+        assert screen.compounds == ["d"]
+        assert "nan" not in screen.cell_lines + screen.compounds
+        assert "None" not in screen.cell_lines + screen.compounds
+
+    def test_n_pairs_counts_nan_key_pairs(self) -> None:
+        screen = load_response_table(self._frame(), metrics=["v"])
+        # 4 rows: (A, d) twice, (nan, d), (B, nan) -> 3 distinct pairs
+        assert screen.n_pairs == 3
+        assert len(screen.frame) == 4
+
+    def test_collapse_replicates_keeps_nan_key_rows(self, caplog) -> None:
+        screen = load_response_table(self._frame(), metrics=["v"])
+        with _pharmaml_logs_visible():
+            with caplog.at_level(
+                logging.WARNING, logger="pharmaml.biology.response"
+            ):
+                collapsed = collapse_replicates(screen)
+        assert len(collapsed.frame) == 3  # (A,d) median + (nan,d) + (B,nan)
+        assert collapsed.frame[collapsed.frame["cell_line"] == "A"][
+            "v"
+        ].tolist() == [2.0]
+        kept = collapsed.frame[collapsed.frame["cell_line"].isna()]
+        assert kept["v"].tolist() == [99.0]
+        kept_b = collapsed.frame[collapsed.frame["compound"].isna()]
+        assert kept_b["v"].tolist() == [42.0]
+        assert (
+            "2 row(s) have a missing cell-line/compound identifier" in caplog.text
+        )
+
+    def test_audit_reports_missing_identifiers(self) -> None:
+        screen = load_response_table(self._frame(), metrics=["v"])
+        report = audit_response_table(screen)
+        missing = report[report["issue"] == "missing identifier"]
+        assert missing["detail"].tolist() == [
+            "column 'cell_line'",
+            "column 'compound'",
+        ]
+        assert missing["count"].tolist() == [1, 1]
+
+    def test_audit_sees_nan_key_duplicate_pairs(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "A", None, None],
+                "compound": ["d", "d", "d", "d"],
+                "v": [1.0, 2.0, 3.0, 4.0],
+            }
+        )
+        screen = load_response_table(frame, metrics=["v"])
+        report = audit_response_table(screen)
+        duplicates = report[report["issue"] == "duplicate pairs"]
+        assert set(duplicates["detail"]) == {"A / d", "nan / d"}
+        assert set(duplicates["count"]) == {2}
+
+    def test_summarize_compounds_keeps_nan_compound_rows(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "B", "C", "A", "B"],
+                "compound": ["d", "d", "d", None, None],
+                "v": [1.0, 2.0, 3.0, 7.0, 9.0],
+            }
+        )
+        screen = load_response_table(frame, metrics=["v"])
+        summary = summarize_compounds(screen, "v")
+        assert len(summary) == 2  # the NaN compound is kept, not dropped
+        nan_row = summary.loc[summary.index.isna()]
+        assert len(nan_row) == 1
+        assert nan_row["n_cell_lines"].iloc[0] == 2
+        assert nan_row["median"].iloc[0] == 8.0  # median of [7, 9]
+        # lower-is-sensitive default: the min (7.0, on cell line A) wins
+        assert nan_row["most_sensitive_cell_line"].iloc[0] == "A"
+
+    def test_response_matrix_keeps_nan_keys_after_collapse(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "A", None],
+                "compound": ["x", "x", "y"],
+                "v": [1.0, 3.0, 9.0],
+            }
+        )
+        screen = load_response_table(frame, metrics=["v"])
+        matrix = response_matrix(collapse_replicates(screen), "v")
+        assert matrix.loc["A", "x"] == 2.0  # median of the duplicate pair
+        nan_row = matrix.loc[matrix.index.isna()]
+        assert nan_row["y"].iloc[0] == 9.0  # NaN-key row survives the pivot
+
+
+class TestCorrelateAlignmentEdges:
+    """Index alignment edge cases for ``correlate_with_response``.
+
+    The docstring promises partial-overlap support (warn + correlate on
+    the shared cell lines); duplicate labels make the pairing ambiguous
+    and must raise a typed error instead of crashing downstream.
+    """
+
+    def test_expression_rows_without_response_warn_and_skip(
+        self, caplog
+    ) -> None:
+        rng = np.random.default_rng(31)
+        response = pd.Series(rng.normal(size=3), index=["c0", "c1", "c2"])
+        frame = pd.DataFrame(
+            rng.normal(size=(5, 2)),
+            index=["c0", "c1", "c2", "c3", "c4"],
+            columns=["planted", "random"],
+        )
+        frame.loc[frame.index[:3], "planted"] = 10.0 + 3.0 * response.to_numpy()
+        with _pharmaml_logs_visible():
+            with caplog.at_level(logging.WARNING, logger="pharmaml.biology.omics"):
+                result = correlate_with_response(frame, response)
+        planted = result[result["gene"] == "planted"].iloc[0]
+        assert abs(planted["rho"]) == pytest.approx(1.0, abs=1e-12)
+        assert "3 shared cell line(s) (2 expression row(s)" in caplog.text
+
+    def test_response_rows_without_expression_warn(self, caplog) -> None:
+        rng = np.random.default_rng(33)
+        response = pd.Series(rng.normal(size=4), index=["c0", "c1", "c2", "zzz"])
+        frame = pd.DataFrame(
+            rng.normal(size=(3, 1)), index=["c0", "c1", "c2"], columns=["planted"]
+        )
+        frame["planted"] = 10.0 + 3.0 * response.loc[frame.index].to_numpy()
+        with _pharmaml_logs_visible():
+            with caplog.at_level(logging.WARNING, logger="pharmaml.biology.omics"):
+                result = correlate_with_response(frame, response)
+        planted = result[result["gene"] == "planted"].iloc[0]
+        assert abs(planted["rho"]) == pytest.approx(1.0, abs=1e-12)
+        assert "1 response value(s) unmatched" in caplog.text
+
+    def test_duplicate_expression_labels_raise(self) -> None:
+        rng = np.random.default_rng(35)
+        frame = pd.DataFrame(
+            rng.normal(size=(3, 1)), index=["a", "a", "b"], columns=["G"]
+        )
+        response = pd.Series(rng.normal(size=2), index=["a", "b"])
+        with pytest.raises(DataValidationError, match="duplicate cell-line label"):
+            correlate_with_response(frame, response)
+
+    def test_duplicate_response_labels_raise(self) -> None:
+        rng = np.random.default_rng(37)
+        frame = pd.DataFrame(
+            rng.normal(size=(2, 1)), index=["a", "b"], columns=["G"]
+        )
+        response = pd.Series(rng.normal(size=3), index=["a", "a", "b"])
+        with pytest.raises(DataValidationError, match="duplicate cell-line label"):
+            correlate_with_response(frame, response)
+
+    def test_nan_labelled_rows_never_match(self, caplog) -> None:
+        rng = np.random.default_rng(39)
+        frame = pd.DataFrame(
+            rng.normal(size=(4, 1)), index=["a", "b", "c", np.nan], columns=["G"]
+        )
+        response = pd.Series(rng.normal(size=3), index=["a", "b", "c"])
+        with _pharmaml_logs_visible():
+            with caplog.at_level(logging.WARNING, logger="pharmaml.biology.omics"):
+                result = correlate_with_response(frame, response)
+        assert len(result) == 1  # the gene itself still gets its row
+        assert "1 expression row(s) and 0 response value(s) unmatched" in caplog.text
