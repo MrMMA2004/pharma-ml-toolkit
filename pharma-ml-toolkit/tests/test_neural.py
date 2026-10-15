@@ -890,3 +890,77 @@ class TestInputContractRegression:
         first = model.predict_proba(X)
         second = model.predict_proba(X)
         assert np.array_equal(first, second)
+
+
+# ---------------------------------------------------------------------------
+# Target standardisation (pharmaceutical endpoints are far from zero)
+# ---------------------------------------------------------------------------
+class TestTargetStandardisation:
+    """Regression targets are z-scaled internally and mapped back at predict.
+
+    Real pharma endpoints (pIC50 ~ 5, LN_IC50 ~ 2-4, AUC in [0, 1]) are
+    never zero-centred: on a raw-scale MSE the output bias crawls toward
+    the target mean at ~learning_rate per step and early stopping fires
+    long before the intercept is learned.  Pre-fix repro (this exact
+    test's data, 60 epochs): rmse 4.39 -> post-fix 0.36.
+    """
+
+    def test_pic50_scale_target_is_learnable(self) -> None:
+        rng = np.random.default_rng(11)
+        X = rng.normal(size=(120, 6))
+        # pIC50-style target: informative signal + noise, centred ~5.3.
+        y = 5.3 + 0.4 * X[:, 0] - 0.3 * X[:, 1] + 0.05 * rng.normal(size=120)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.25, random_state=11
+        )
+        model = fast_regressor(epochs=60, patience=10).fit(X_train, y_train)
+        rmse = float(np.sqrt(np.mean((model.predict(X_test) - y_test) ** 2)))
+        # A linear baseline reaches ~0.05; the pre-fix network sat at
+        # ~4.4 (never learned the intercept).  1.0 is generous but
+        # still fails the pre-fix code by 4x.
+        assert rmse < 1.0, f"off-centre target not learned: rmse={rmse:.3f}"
+
+    def test_predictions_come_back_on_target_scale(self) -> None:
+        rng = np.random.default_rng(12)
+        X = rng.normal(size=(80, 4))
+        y = 6.0 + 0.5 * X[:, 0] + 0.02 * rng.normal(size=80)
+        model = fast_regressor(epochs=20).fit(X, y)
+        predictions = model.predict(X)
+        assert predictions.shape == (80,)
+        # Predictions live on the y scale, not the z scale.
+        assert predictions.min() > 3.0 and predictions.max() < 9.0
+
+    def test_y_scaling_attributes_fitted_on_training_rows(self) -> None:
+        rng = np.random.default_rng(13)
+        X = rng.normal(size=(100, 3))
+        y = 4.0 + X[:, 0]
+        model = fast_regressor(epochs=3, val_split=0.25).fit(X, y)
+        assert isinstance(model._y_mean_, float)
+        assert isinstance(model._y_std_, float) and model._y_std_ > 0
+        # ~75 training rows of y centred at 4.0.
+        assert 3.9 < model._y_mean_ < 4.1
+
+    def test_constant_target_predicts_the_constant(self) -> None:
+        rng = np.random.default_rng(14)
+        X = rng.normal(size=(40, 3))
+        y = np.full(40, 5.5)
+        # Early stopping disabled (constant target has no signal to
+        # validate on) and enough epochs for the output to reach 0 on
+        # the z scale == 5.5 on the target scale.
+        model = fast_regressor(epochs=40, val_split=0.0).fit(X, y)
+        assert np.allclose(model.predict(X), 5.5, atol=0.05)
+
+    def test_classifier_has_no_y_scaling(self, binary_data: tuple) -> None:
+        X_train, _, y_train, _ = binary_data
+        model = fast_classifier(epochs=2).fit(X_train, y_train)
+        assert model._y_mean_ is None and model._y_std_ is None
+
+    def test_residual_regressor_maps_back_to_target_scale(self) -> None:
+        rng = np.random.default_rng(15)
+        X = rng.normal(size=(90, 5))
+        y = 2.7 + 0.6 * X[:, 2] + 0.05 * rng.normal(size=90)
+        model = ResidualMLPRegressor(
+            hidden_layers=(16, 16), epochs=40, patience=10, random_state=7
+        ).fit(X, y)
+        rmse = float(np.sqrt(np.mean((model.predict(X) - y) ** 2)))
+        assert rmse < 0.5, f"residual regressor off-centre target: rmse={rmse:.3f}"

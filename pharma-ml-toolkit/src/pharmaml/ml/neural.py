@@ -444,6 +444,26 @@ class _BaseDeepEstimator(BaseEstimator):
         self._std_ = std
         X_scaled = (X_arr - mean) / std
 
+        # Regression targets are standardised too (training rows only):
+        # pharmaceutical endpoints (pIC50 ~ 5, LN_IC50 ~ 2-4, AUC in
+        # [0, 1]) live far from zero, and on a raw-scale MSE the output
+        # bias crawls toward the target mean at ~learning_rate per
+        # step -- early stopping fires long before the intercept is
+        # learned (a linear baseline then beats the network by orders
+        # of magnitude).  Training on z-scaled targets keeps the loss
+        # O(1) and the intercept one step away; ``predict`` inverts
+        # the scaling.  A constant target keeps std 1 (predict returns
+        # the constant).
+        if self._is_classifier:
+            self._y_mean_: float | None = None
+            self._y_std_: float | None = None
+        else:
+            y_train = y_enc[train_idx]
+            self._y_mean_ = float(y_train.mean())
+            y_std = float(y_train.std())
+            self._y_std_ = y_std if y_std > 0 else 1.0
+            y_enc = (y_enc - self._y_mean_) / self._y_std_
+
         self._train_torch(
             X_scaled, y_enc, n_out, device, torch, hidden, train_idx, val_idx, rng
         )
@@ -900,6 +920,10 @@ class DeepMLPRegressor(RegressorMixin, _BaseDeepEstimator):
     def predict(self, X: Any) -> np.ndarray:
         """Predict continuous targets for ``X``.
 
+        The network's z-scaled output is mapped back to the target's
+        original scale (``_y_mean_`` / ``_y_std_`` were fitted on the
+        training rows).
+
         Parameters
         ----------
         X:
@@ -910,7 +934,7 @@ class DeepMLPRegressor(RegressorMixin, _BaseDeepEstimator):
         numpy.ndarray
             Shape ``(n_samples,)``.
         """
-        return self._forward(X).reshape(-1)
+        return self._forward(X).reshape(-1) * self._y_std_ + self._y_mean_
 
 
 # ---------------------------------------------------------------------------
@@ -1037,6 +1061,7 @@ class ResidualMLPRegressor(RegressorMixin, _BaseDeepEstimator):
         Returns
         -------
         numpy.ndarray
-            Shape ``(n_samples,)``.
+            Shape ``(n_samples,)`` — mapped back to the target's
+            original scale (see :meth:`DeepMLPRegressor.predict`).
         """
-        return self._forward(X).reshape(-1)
+        return self._forward(X).reshape(-1) * self._y_std_ + self._y_mean_

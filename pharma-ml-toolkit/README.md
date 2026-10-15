@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (847 tests).
+exceptions, input validation, and pytest coverage** (900 tests).
 
 ---
 
@@ -89,7 +89,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 847 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 900 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + five executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · walkthrough) + four no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
@@ -189,7 +189,22 @@ walkthrough, executed with all outputs committed (24 cell lines, 8 compounds,
 > (per-gene Spearman vs response, BH-FDR — the planted EGFR → erlotinib
 > association is recovered at rho=+0.978, FDR=2e-13) → §8 classical response
 > model → §9 **deep learning** (`dnn` / `dnn_residual` in the same
-> `compare_models` leaderboard) → §10 recap.
+> `compare_models` leaderboard — where `dnn` tops the table, see the
+> target-standardisation note under *Deep learning*) → §10 recap.
+
+Two runnable scripts back the notebook: `examples/make_synthetic_cellline_data.py`
+generates the demo tables (24 cell lines × 8 compounds with the planted EGFR
+biomarker, optional `--clean` to skip the hygiene issues), and
+`examples/run_cellline_analysis.py` runs the whole flow on synthetic or user
+data — audit → collapse → pIC50 ranking → sensitivity calls → biomarkers →
+classical (+ `--deep`) response model:
+
+```bash
+python examples/run_cellline_analysis.py                 # synthetic data
+python examples/run_cellline_analysis.py --deep           # + dnn / dnn_residual
+python examples/run_cellline_analysis.py --screen my_screen.csv \
+    --expression my_expr.csv --compound cisplatin        # your own tables
+```
 
 Point §1 at your own GDSC/CCLE export (same columns) and §6 at a CCLE
 expression matrix; the CLI equivalents are `pharmaml biology response-audit`
@@ -366,6 +381,16 @@ Both families: minibatch Adam with weight decay, dropout, early stopping on a
 validation split, per-feature standardization fitted inside `fit`, deterministic under
 `random_state`, multiclass softmax, and sklearn `clone`/`GridSearchCV`/pickle compatible.
 Aliases: `deep_mlp` → `dnn`, `resnet` / `residual_dnn` → `dnn_residual`.
+
+**Target standardisation for regression.** Regression targets are z-scaled inside
+`fit` (on the training rows only) and mapped back at `predict`. Pharmaceutical
+endpoints live far from zero — pIC50 ≈ 5, LN_IC50 ≈ 2–4, AUC ∈ [0, 1] — and on a
+raw-scale MSE the output bias crawls toward the target mean at roughly one
+learning-rate step per epoch, so early stopping fires long before the intercept
+is learned (a plain `MLPRegressor`-style net then loses to linear regression by
+an order of magnitude). With internal scaling the deep models are competitive
+from the first epochs: in the cell line notebook's leaderboard `dnn` posts the
+best CV RMSE (0.47 vs 0.49 for the tuned elastic net).
 
 #### Classification — two recipes: exactly 2 classes, or K classes of your choosing
 

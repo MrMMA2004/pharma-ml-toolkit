@@ -271,7 +271,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "847 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+    after: "900 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Distribution",
@@ -324,8 +324,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "92";
-  const loc = stats ? fmtInt(stats.totalLines) : "45,339";
+  const fileCount = stats ? fmtInt(stats.files) : "122";
+  const loc = stats ? fmtInt(stats.totalLines) : "47,885";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -411,17 +411,17 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="847"
-                countTo={847}
+                value="900"
+                countTo={900}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
               <StatChip
                 icon={Brain}
-                value="16"
-                countTo={16}
+                value="18"
+                countTo={18}
                 label="registry models"
-                hint="sklearn core + optional boosters"
+                hint="16 classical + 2 PyTorch deep families"
               />
             </motion.div>
 

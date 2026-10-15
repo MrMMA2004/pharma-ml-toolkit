@@ -92,9 +92,16 @@ _TISSUE_EFFECTS: dict[str, dict[str, float]] = {
 }
 
 
-def _egfr_levels(seed: int) -> dict[str, float]:
+#: EGFR levels are a property of the *cell line*, not of either table,
+#: so they are drawn from their own fixed seed: the response screen and
+#: the expression matrix then agree on them regardless of the caller's
+#: ``--seed`` and the planted biomarker stays recoverable.
+_EGFR_SEED = 2024
+
+
+def _egfr_levels() -> dict[str, float]:
     """EGFR log2-expression per cell line (lung lines run hot)."""
-    rng = np.random.default_rng(seed)
+    rng = np.random.default_rng(_EGFR_SEED)
     return {
         name: float(rng.normal(9.0, 0.8) if tissue == "lung" else rng.normal(5.5, 0.9))
         for name, tissue in CELL_LINES
@@ -134,7 +141,7 @@ def make_response_screen(
         panel = CELL_LINES[:n_cell_lines]
 
     rng = np.random.default_rng(seed)
-    egfr = _egfr_levels(seed)
+    egfr = _egfr_levels()
     egfr_values = np.array([egfr[name] for name, _ in panel])
     egfr_z = (egfr_values - egfr_values.mean()) / egfr_values.std(ddof=0)
 
@@ -199,7 +206,7 @@ def make_expression_matrix(
         raise ValueError(f"n_genes must be >= 3, got {n_genes}")
 
     rng = np.random.default_rng(seed)
-    egfr = _egfr_levels(seed)
+    egfr = _egfr_levels()
 
     noise_genes = [f"GENE_{i:03d}" for i in range(1, n_genes - 1)]
     genes = noise_genes + ["EGFR", "KRT8"]
