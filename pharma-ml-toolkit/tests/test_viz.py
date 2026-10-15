@@ -753,6 +753,23 @@ class TestNotebookArtifacts:
         )
         assert "valid molecules" in desc_text, "descriptor cell lost its output"
 
+        # §7/§8 classification recipes: binary (2 classes) + multiclass
+        # with a selectable class count (N_CLASSES).
+        for symbol in (
+            "make_classification_table",
+            "N_CLASSES",
+        ):
+            assert symbol in sources, f"notebook lost its {symbol} section"
+        recipe_cell = next(
+            (c for c in code_cells if "N_CLASSES = " in c.source), None
+        )
+        assert recipe_cell is not None, "notebook lost its selectable-K cell"
+        recipe_text = "".join(
+            o.get("text", "") for o in recipe_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "classes (4)" in recipe_text, "selectable-K cell lost its class census"
+
     def test_complete_docking_workflow_notebook(self):
         nb = self._read("complete_docking_workflow.ipynb")
         code_cells, errors, figures, executed = self._stats(nb)

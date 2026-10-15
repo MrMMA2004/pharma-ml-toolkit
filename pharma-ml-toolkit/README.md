@@ -87,7 +87,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 703 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 708 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + four executed notebooks (complete ML · complete docking · complete PK/PD · walkthrough) + three no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
@@ -318,25 +318,55 @@ Registry models: `logistic_regression`, `ridge_classifier`, `svm`, `knn`, `decis
 optional packages are installed.
 `list_models()` shows what is available in *your* environment.
 
-#### Multiclass classification (two or more classes)
+#### Classification — two recipes: exactly 2 classes, or K classes of your choosing
 
-Every classification component supports **any number of classes**, not just binary:
+**Recipe A — binary classification (two classes).** The classic
+active/inactive screen; any target column with exactly 2 distinct values
+(`0/1`, `Y/N`, `active/inactive`, …) takes this path:
 
 ```python
 from pharmaml.data import load_dataset
 from pharmaml.ml import train_model, evaluate_model
 from pharmaml.ml.preprocessing import make_train_test_split
 
-# A target column with 3+ distinct values is automatically multiclass.
-ds = load_dataset("my_compounds.csv", target="activity")   # e.g. low/medium/high
-X_train, X_test, y_train, y_test = make_train_test_split(ds.X, ds.y)  # stratified
+# Your file: a target column with exactly 2 distinct values.
+ds = load_dataset("my_compounds.csv", target="activity")   # e.g. active/inactive
+X_train, X_test, y_train, y_test = make_train_test_split(ds.X, ds.y)   # stratified
 
 result = train_model("random_forest", "classification", X_train, y_train)
 report = evaluate_model(result.model, X_test, y_test, "classification")
-print(report.confusion)   # k x k confusion matrix
+print(report.roc_auc)     # single ROC-AUC for the positive class
+print(report.confusion)   # 2 x 2 confusion matrix
+```
+
+**Recipe B — multiclass classification (you select the number of classes).**
+Set `N_CLASSES` to any value ≥ 2 — 3 (`low/medium/high`), 4, 5, … — and
+every component adapts automatically:
+
+```python
+from pharmaml.data import load_dataset
+from pharmaml.ml import train_model, evaluate_model
+from pharmaml.ml.preprocessing import make_train_test_split
+
+N_CLASSES = 4   # <-- select the class count: 2, 3, 4, 5, ...
+
+# From your own file: a target with K distinct values is automatically
+# multiclass. Or generate a demo table with exactly K classes:
+#   from make_synthetic_qsar_data import make_classification_table
+#   demo = make_classification_table(n_classes=N_CLASSES,
+#                                    class_labels=["low", "medium", "high", "very_high"])
+ds = load_dataset("my_compounds.csv", target="activity")   # K distinct values
+X_train, X_test, y_train, y_test = make_train_test_split(ds.X, ds.y)   # every class stratified
+
+result = train_model("random_forest", "classification", X_train, y_train)
+report = evaluate_model(result.model, X_test, y_test, "classification")
+print(report.confusion)   # K x K confusion matrix
 print(report.roc_auc)     # one-vs-rest multiclass AUC
 ```
 
+* Both recipes share one pipeline — the only difference is the number of
+  distinct values in the target column (`load_dataset` reports it as
+  `classes (K): …`).
 * Splits are **stratified**, so every class appears in train *and* test folds.
 * Metrics are macro/weighted-averaged (`f1_macro`, `precision_macro`, …) plus a k×k
   confusion matrix and one-vs-rest ROC-AUC; MCC and balanced accuracy are multiclass-native.
@@ -346,8 +376,10 @@ print(report.roc_auc)     # one-vs-rest multiclass AUC
 * `build_voting(..., voting="hard")` works for any classifier and any class count;
   `voting="soft"` validates that every member exposes `predict_proba` and tells you which
   ones don’t.
-* Generate multiclass demo data: `python examples/make_synthetic_qsar_data.py --classes 3`
-  or `python examples/run_classification.py --classes 3`.
+* Generate demo data with a selected class count:
+  `python examples/make_synthetic_qsar_data.py --classes 4` or
+  `python examples/run_classification.py --classes 4` (a cached synthetic table is
+  regenerated automatically when its class count differs from the requested one).
 
 ### Pharmaceutical calculations
 

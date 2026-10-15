@@ -10,8 +10,11 @@ Runs the full production flow — on **your own file** or on synthetic data:
 6. persist the model with provenance metadata.
 
 Classification targets with **two or more classes** are fully supported:
-``--classes 3`` generates a 3-class table, and a user CSV whose target
-column holds 2+ distinct values is treated as multiclass automatically.
+``--classes 2`` (the default) is the binary recipe; ``--classes 3``
+(or 4, 5, ...) generates a K-class table — a cached synthetic table
+is regenerated automatically when its class count differs from the
+requested one — and a user CSV whose target column holds 2+ distinct
+values is treated as multiclass automatically.
 
 Usage::
 
@@ -35,6 +38,43 @@ from pharmaml.ml.preprocessing import make_train_test_split
 from pharmaml.ml.training import compare_models, train_model
 
 DATA = Path(__file__).parent / "data" / "synthetic_classification.csv"
+
+
+def ensure_synthetic_table(
+    path: Path, n_classes: int, n_samples: int = 400, seed: int = 42
+) -> Path:
+    """Return a synthetic classification table with exactly ``n_classes`` classes.
+
+    ``--classes K`` must never be silently ignored, so a cached table is
+    only reused when its ``Target`` column already holds exactly ``K``
+    distinct values; otherwise (file missing, unreadable, or generated
+    with a different class count) it is regenerated deterministically.
+    """
+    import pandas as pd
+
+    if path.is_file():
+        try:
+            cached = pd.read_csv(path)
+            if "Target" in cached.columns and cached["Target"].nunique() == n_classes:
+                print(f"Using cached synthetic table ({n_classes} classes): {path}")
+                return path
+            found = cached["Target"].nunique() if "Target" in cached.columns else "?"
+        except (OSError, ValueError):
+            found = "unreadable"
+        print(
+            f"Cached table at {path} holds {found} class(es) — "
+            f"regenerating with n_classes={n_classes}"
+        )
+
+    from make_synthetic_qsar_data import make_classification_table
+
+    frame = make_classification_table(
+        n_samples=n_samples, n_classes=n_classes, seed=seed
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_csv(path, index=False)
+    print(f"Generated synthetic table ({n_classes} classes) -> {path}")
+    return path
 
 
 def main() -> None:
@@ -70,13 +110,8 @@ def main() -> None:
         print(f"Loaded user file '{args.data}': {dataset.n_samples} rows, "
               f"{dataset.n_features} features, task={dataset.task}")
     else:
-        if not DATA.is_file():
-            from make_synthetic_qsar_data import make_classification_table
-
-            frame = make_classification_table(n_classes=args.classes)
-            DATA.parent.mkdir(parents=True, exist_ok=True)
-            frame.to_csv(DATA, index=False)
-        dataset = load_dataset(DATA, target="Target")
+        table = ensure_synthetic_table(DATA, n_classes=args.classes)
+        dataset = load_dataset(table, target="Target")
         print(f"Loaded synthetic table: {dataset.n_samples} rows, "
               f"{dataset.n_features} features, task={dataset.task}")
 

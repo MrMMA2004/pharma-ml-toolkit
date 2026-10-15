@@ -81,6 +81,52 @@ class TestSyntheticGenerator:
         with pytest.raises(ValueError, match="class_labels"):
             make_classification_table(n_samples=30, n_classes=3, class_labels=["a", "b"])
 
+    def test_five_classes_with_activity_labels(self) -> None:
+        """K is freely selectable — five pharma-style activity tiers."""
+        labels = ["inactive", "weak", "moderate", "strong", "potent"]
+        frame = make_classification_table(
+            n_samples=200, n_classes=5, class_labels=labels
+        )
+        assert frame["Target"].nunique() == 5
+        assert set(frame["Target"].unique()) == set(labels)
+
+
+class TestSyntheticTableCache:
+    """``run_classification.ensure_synthetic_table`` — ``--classes K`` is
+    never silently ignored when a cached synthetic table exists."""
+
+    def test_missing_file_generates_requested_classes(self, tmp_path) -> None:
+        from run_classification import ensure_synthetic_table
+
+        path = ensure_synthetic_table(tmp_path / "t.csv", n_classes=3, n_samples=90)
+        assert pd.read_csv(path)["Target"].nunique() == 3
+
+    def test_matching_cache_is_reused_untouched(self, tmp_path) -> None:
+        from run_classification import ensure_synthetic_table
+
+        first = ensure_synthetic_table(tmp_path / "t.csv", n_classes=2, n_samples=60)
+        content = first.read_text(encoding="utf-8")
+        second = ensure_synthetic_table(tmp_path / "t.csv", n_classes=2, n_samples=60)
+        assert second == first
+        assert first.read_text(encoding="utf-8") == content  # not regenerated
+
+    def test_stale_class_count_regenerates(self, tmp_path) -> None:
+        """The old bug: a cached 2-class table silently ignored --classes 4."""
+        from run_classification import ensure_synthetic_table
+
+        path = ensure_synthetic_table(tmp_path / "t.csv", n_classes=2, n_samples=60)
+        assert pd.read_csv(path)["Target"].nunique() == 2
+        ensure_synthetic_table(path, n_classes=4, n_samples=120)
+        assert pd.read_csv(path)["Target"].nunique() == 4
+
+    def test_unreadable_cache_regenerates(self, tmp_path) -> None:
+        from run_classification import ensure_synthetic_table
+
+        bad = tmp_path / "t.csv"
+        bad.write_text("", encoding="utf-8")  # EmptyDataError -> unreadable
+        path = ensure_synthetic_table(bad, n_classes=3, n_samples=90)
+        assert pd.read_csv(path)["Target"].nunique() == 3
+
 
 class TestMulticlassTraining:
     def test_train_and_evaluate_three_classes(self, split) -> None:
