@@ -93,13 +93,21 @@ class TestSplitTable:
         assert result.stratified is False
         assert len(result.train) + len(result.test) == len(frame)
 
-    def test_continuous_target_falls_back(self):
+    def test_continuous_target_falls_back(self, caplog) -> None:
         frame = pd.DataFrame({"x": range(50), "pIC50": np.linspace(4, 9, 50)})
-        result = split_table(frame=frame, test_size=0.2, random_state=0)
+        logging.disable(logging.NOTSET)  # lift the module-level silence for caplog
+        try:
+            with caplog.at_level(logging.WARNING, logger="pharmaml.data"):
+                result = split_table(frame=frame, test_size=0.2, random_state=0)
+        finally:
+            logging.disable(logging.CRITICAL)
         # every value unique -> stratification impossible -> random split
         assert result.stratified is False
         assert result.target == "pIC50"
         assert result._balance(result.train) is None  # >20 unique values
+        # continuous targets skip stratification as the expected path --
+        # no spurious "Class ... has 1 member(s)" warning.
+        assert "member(s)" not in caplog.text
 
     def test_explicit_target_and_no_stratify(self, balanced_frame):
         result = split_table(frame=balanced_frame, target="Target", stratify=False)

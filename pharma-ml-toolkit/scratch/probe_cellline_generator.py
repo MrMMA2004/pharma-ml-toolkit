@@ -1,7 +1,11 @@
 """Smoke: planted EGFR biomarker recovery from the synthetic generator."""
+import sys
 import warnings
+from pathlib import Path
 
 warnings.filterwarnings("ignore")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 
 from make_synthetic_cellline_data import (  # noqa: E402
     make_response_screen,

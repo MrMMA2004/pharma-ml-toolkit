@@ -24,6 +24,7 @@ __all__ = [
     "require_columns",
     "validate_concentration_series",
     "coerce_frame",
+    "looks_continuous",
 ]
 
 # Cheap syntactic sanity check for SMILES: balanced brackets and only
@@ -156,6 +157,27 @@ def validate_concentration_series(
             "pass require_positive_conc=False if zeros are intentional"
         )
     return t, c
+
+
+def looks_continuous(y: Any, max_unique: int = 10) -> bool:
+    """Heuristic: does ``y`` look like a numeric (regression) target?
+
+    Stratification only makes sense for class labels, but the splitters
+    also see regression targets.  A numeric target whose values are
+    mostly unique — more distinct values than ``max(max_unique, n/2)`` —
+    is treated as continuous so callers can skip stratification
+    *quietly* instead of warning about "classes" with a single member.
+
+    Balanced multiclass tables never trip this rule: with at least two
+    members per class the distinct-value count stays at or below
+    ``n / 2``.  Non-numeric targets are never continuous.
+    """
+    arr = np.asarray(y)
+    if not np.issubdtype(arr.dtype, np.number):
+        return False
+    values = arr[~pd.isna(arr)] if arr.size else arr
+    n_unique = int(pd.unique(values).size)
+    return n_unique > max(max_unique, arr.size // 2)
 
 
 def coerce_frame(data: Any) -> pd.DataFrame:

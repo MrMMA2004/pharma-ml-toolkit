@@ -29,6 +29,7 @@ from pharmaml.ml.preprocessing import (
     split_features_target,
 )
 from pharmaml.ml.training import compare_models, train_model
+from pharmaml.utils.validation import looks_continuous
 
 
 @contextmanager
@@ -138,6 +139,28 @@ class TestPreprocessing:
         X_train, X_test, y_train, y_test = make_train_test_split(X, y, test_size=0.3)
         assert len(X_test) > 0
 
+    def test_regression_target_splits_quietly(self, caplog) -> None:
+        # Continuous targets skip stratification as the *expected* path:
+        # no spurious "Class with 1 member(s)" warning for regression y.
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame(rng.normal(size=(24, 3)), columns=["g1", "g2", "g3"])
+        y = pd.Series(rng.normal(size=24), name="pIC50")
+        with _pharmaml_logs_visible(), caplog.at_level(
+            logging.WARNING, logger="pharmaml.ml.preprocessing"
+        ):
+            X_train, X_test, _, _ = make_train_test_split(X, y, test_size=0.25)
+        assert len(X_train) + len(X_test) == 24
+        assert "Class with" not in caplog.text
+
+    def test_rare_categorical_class_still_warns(self, caplog) -> None:
+        X = pd.DataFrame({"a": range(6)})
+        y = pd.Series(["x", "x", "x", "x", "x", "y"])  # 'y' has one member
+        with _pharmaml_logs_visible(), caplog.at_level(
+            logging.WARNING, logger="pharmaml.ml.preprocessing"
+        ):
+            make_train_test_split(X, y, test_size=0.3)
+        assert "Class with" in caplog.text
+
     def test_build_preprocessor(self) -> None:
         pipeline = build_preprocessor()
         assert [name for name, _ in pipeline.steps] == ["impute", "scale"]
@@ -146,6 +169,32 @@ class TestPreprocessing:
         frame = pd.DataFrame({"x": [1.0] * 20 + [1000.0]})
         cleaned = remove_outliers_iqr(frame)
         assert len(cleaned) == 20
+
+
+class TestLooksContinuous:
+    """``pharmaml.utils.validation.looks_continuous`` -- the numeric-mostly-unique heuristic."""
+
+    def test_float_target_is_continuous(self) -> None:
+        assert looks_continuous(np.linspace(4.0, 9.0, 50)) is True
+
+    def test_binary_labels_are_not(self) -> None:
+        assert looks_continuous(pd.Series([0, 1] * 25)) is False
+
+    def test_balanced_multiclass_is_not(self) -> None:
+        # 12 classes x 2 members = 24 rows: 12 distinct <= max(10, 24 // 2).
+        assert looks_continuous(pd.Series(np.repeat(np.arange(12), 2))) is False
+
+    def test_string_labels_are_not(self) -> None:
+        assert looks_continuous(pd.Series(["a", "b", "c"])) is False
+
+    def test_nan_values_ignored(self) -> None:
+        values = np.linspace(0.0, 1.0, 40)
+        values[:4] = np.nan
+        assert looks_continuous(values) is True
+
+    def test_small_integer_labels_are_not(self) -> None:
+        # 3 distinct values in 6 rows: below the max(10, n/2) threshold.
+        assert looks_continuous(pd.Series([1, 1, 2, 2, 3, 3])) is False
 
 
 class TestTraining:

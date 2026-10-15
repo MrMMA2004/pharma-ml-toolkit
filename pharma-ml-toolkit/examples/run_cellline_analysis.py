@@ -128,10 +128,15 @@ def main() -> None:
     compounds = summarize_compounds(clean, metric="pIC50")
     print(f"\nReplicate collapse: {len(screen.frame)} -> {len(collapsed)} row(s)")
     print("\n=== Per-compound potency (pIC50: higher = more potent) ===")
-    print(compounds.to_string(index=False))
+    print(compounds.to_string())  # compound is the index -- keep it visible
 
     # 5. Sensitive / resistant calls for the chosen compound.
     matrix = response_matrix(clean, metric=args.metric)
+    if args.compound not in matrix.columns:
+        available = ", ".join(sorted(matrix.columns))
+        parser.error(
+            f"compound {args.compound!r} not in the screen; available: {available}"
+        )
     compound_response = matrix[args.compound]
     labels = call_sensitive_resistant(compound_response)
     print(f"\n=== Sensitivity calls: {args.compound} ({args.metric}) ===")
@@ -140,11 +145,11 @@ def main() -> None:
     # 6. Expression normalization + MAD feature selection.
     from pharmaml.utils.io import read_table as _read_table
 
-    expression = (
-        _read_table(expression_table).set_index(expression_table.columns[0])
-        if isinstance(expression_table, (str, Path))
-        else expression_table
-    )
+    if isinstance(expression_table, (str, Path)):
+        raw = _read_table(expression_table)
+        expression = raw.set_index(raw.columns[0])  # first column = cell line
+    else:
+        expression = expression_table
     expr_norm = normalize_expression(expression)
     top_genes = most_variable_genes(expr_norm, n=args.n_genes)
     if "EGFR" in expr_norm.columns and "EGFR" not in top_genes:
@@ -164,8 +169,16 @@ def main() -> None:
 
     # 8. Response modeling: predict the compound's pIC50 from expression.
     #    Cell lines with a missing response (the audit already flagged
-    #    them) cannot train a model -- dropped here, visibly.
+    #    them) cannot train a model -- dropped here, visibly.  Cell lines
+    #    absent from the expression matrix cannot either.
     response = response.dropna()
+    usable = response.index.intersection(expr_norm.index)
+    if len(usable) < len(response):
+        print(
+            f"Note: {len(response) - len(usable)} responded cell line(s) have "
+            "no expression profile -- excluded from the model"
+        )
+    response = response.loc[usable]
     X = expr_norm.loc[response.index, top_genes]
     y = ln_ic50_to_pic50(response)
     X_train, X_test, y_train, y_test = make_train_test_split(

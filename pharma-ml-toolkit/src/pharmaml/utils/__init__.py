@@ -7,6 +7,7 @@ from pharmaml.utils.io import (
     write_table,
 )
 from pharmaml.utils.validation import (
+    looks_continuous,
     validate_concentration_series,
     validate_positive,
     validate_smiles_syntax,
@@ -18,6 +19,7 @@ __all__ = [
     "read_table",
     "safe_filename",
     "write_table",
+    "looks_continuous",
     "validate_concentration_series",
     "validate_positive",
     "validate_smiles_syntax",

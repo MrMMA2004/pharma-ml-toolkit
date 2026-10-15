@@ -19,7 +19,7 @@ from sklearn.preprocessing import StandardScaler
 
 from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
-from pharmaml.utils.validation import require_columns
+from pharmaml.utils.validation import looks_continuous, require_columns
 
 _LOG = get_logger(__name__)
 
@@ -210,10 +210,14 @@ def make_train_test_split(
 ):
     """Stratified train/test split with automatic fallback.
 
-    Stratification is attempted when every class has at least
-    ``min_class_count`` members; otherwise a plain split is used and a
-    warning is logged (the legacy scripts crashed outright on
-    single-member classes).
+    Stratification is attempted for class-label targets when every
+    class has at least ``min_class_count`` members.  Regression-style
+    targets (numeric with mostly unique values, see
+    :func:`pharmaml.utils.validation.looks_continuous`) skip
+    stratification quietly — it is the expected path for them, not a
+    fallback.  For categorical targets with a rare class a plain split
+    is used and a warning is logged (the legacy scripts crashed
+    outright on single-member classes).
 
     Returns
     -------
@@ -237,15 +241,21 @@ def make_train_test_split(
         )
     use_stratify = stratify
     if stratify:
-        counts = pd.Series(np.asarray(y)).value_counts()
-        if counts.min() < min_class_count:
-            _LOG.warning(
-                "Class with %d member(s) < %d required; falling back to a "
-                "non-stratified split.",
-                int(counts.min()),
-                min_class_count,
-            )
+        if looks_continuous(y):
+            # Regression-style target: stratification is not a thing --
+            # skip it quietly rather than warning about 1-member "classes".
+            _LOG.debug("continuous target -- splitting without stratification")
             use_stratify = False
+        else:
+            counts = pd.Series(np.asarray(y)).value_counts()
+            if counts.min() < min_class_count:
+                _LOG.warning(
+                    "Class with %d member(s) < %d required; falling back to a "
+                    "non-stratified split.",
+                    int(counts.min()),
+                    min_class_count,
+                )
+                use_stratify = False
     return train_test_split(
         X,
         y,

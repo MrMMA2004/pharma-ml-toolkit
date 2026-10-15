@@ -238,6 +238,7 @@ after adding new public functions.
 | `require_columns` | function | Assert that every name in ``columns`` exists in ``frame``. |
 | `validate_concentration_series` | function | Validate a paired time/concentration series for PK math. |
 | `coerce_frame` | function | Coerce common inputs (DataFrame / dict of arrays) to a DataFrame. |
+| `looks_continuous` | function | Heuristic: does ``y`` look like a numeric (regression) target? |
 
 ## Command-line interface
 

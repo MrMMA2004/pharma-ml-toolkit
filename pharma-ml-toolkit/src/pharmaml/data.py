@@ -54,6 +54,7 @@ import pandas as pd
 from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
 from pharmaml.utils.io import read_table
+from pharmaml.utils.validation import looks_continuous
 
 __all__ = [
     "TARGET_CANDIDATES",
@@ -654,6 +655,14 @@ def split_table(
     labels = table[target_col] if target_col is not None else None
 
     use_stratify = stratify and labels is not None
+    if use_stratify and looks_continuous(labels):
+        # Regression-style target column: stratification is not a thing
+        # -- skip quietly instead of warning about 1-member "classes".
+        _LOG.debug(
+            "continuous target column %r -- splitting without stratification",
+            str(target_col),
+        )
+        use_stratify = False
     if use_stratify:
         counts = labels.value_counts()
         n_sides = 3 if val_size else 2
