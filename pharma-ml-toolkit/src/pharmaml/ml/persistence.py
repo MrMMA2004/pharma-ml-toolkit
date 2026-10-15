@@ -35,7 +35,7 @@ from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
 
-__all__ = ["save_model", "load_model", "bundle_metadata"]
+__all__ = ["save_model", "load_model", "bundle_metadata", "write_metadata_sidecar"]
 
 _BUNDLE_KEY_MODEL = "model"
 _BUNDLE_KEY_META = "metadata"
@@ -90,17 +90,24 @@ def save_model(
     -------
     Path
         Resolved path of the written artifact.
+
+    Raises
+    ------
+    PersistenceError
+        When the parent directory cannot be created or the artifact
+        cannot be written (permissions, unwritable location, joblib
+        serialisation failures).
     """
     target = Path(path)
     if target.suffix.lower() not in {".joblib", ".pkl"}:
         target = target.with_suffix(".joblib")
-    target.parent.mkdir(parents=True, exist_ok=True)
 
     bundle = {
         _BUNDLE_KEY_MODEL: model,
         _BUNDLE_KEY_META: bundle_metadata(name, task, features, best_params, metrics),
     }
     try:
+        target.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(bundle, target, compress=3)
     except Exception as exc:
         raise PersistenceError(f"Failed to save model to {target}: {exc}") from exc
@@ -119,8 +126,9 @@ def load_model(path: str | Path) -> tuple[Any, dict[str, Any]]:
     Raises
     ------
     PersistenceError
-        If the file is missing, not a PharmaML bundle, or was written
-        by an incompatible joblib/sklearn generation.
+        If the file is missing, not a PharmaML bundle (a malformed
+        metadata block included), or was written by an incompatible
+        joblib/sklearn generation.
     """
     source = Path(path)
     if not source.is_file():
@@ -139,6 +147,12 @@ def load_model(path: str | Path) -> tuple[Any, dict[str, Any]]:
         )
 
     metadata = bundle.get(_BUNDLE_KEY_META, {})
+    if not isinstance(metadata, dict):
+        raise PersistenceError(
+            f"'{source}' has a malformed metadata block "
+            f"({type(metadata).__name__}) -- re-save the model with "
+            "pharmaml.ml.persistence.save_model"
+        )
     _LOG.info(
         "Loaded model '%s' trained at %s (pharmaml %s, sklearn %s)",
         metadata.get("name", "<unknown>"),
@@ -160,6 +174,11 @@ def write_metadata_sidecar(model_path: str | Path) -> Path:
     """Dump the metadata block of a bundle as a sibling ``.json`` file.
 
     Handy for audits and version control diffs of model provenance.
+
+    Raises
+    ------
+    PersistenceError
+        When ``model_path`` cannot be loaded as a PharmaML bundle.
     """
     source = Path(model_path)
     _, metadata = load_model(source)

@@ -87,7 +87,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame
-├── tests/                   # 685 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 703 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + four executed notebooks (complete ML · complete docking · complete PK/PD · walkthrough) + three no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
 ├── docs/                    # INDEX.md — auto-generated module/API index
@@ -467,6 +467,7 @@ pharmaml docking campaign list --dir ligand_folders/ --ext .pdbqt --out names.cs
 pharmaml docking campaign distribute --dir ligand_folders/ --file receptor.pdbqt
 pharmaml docking campaign cleanup --dir runs/ --keep r.dlg --remove-empty --dry-run
 pharmaml docking campaign delete-named --dir runs/ --name r.gpf --dry-run
+pharmaml docking campaign reindex --data results.csv --column name --start 1 --stop 300  # gap audit + reindex
 ```
 
 `--model` accepts registry names and aliases (`rf`, `logistic`, `xgb`,

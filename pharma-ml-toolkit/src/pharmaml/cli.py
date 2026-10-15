@@ -366,7 +366,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     campaign = docking_sub.add_parser(
         "campaign",
-        help="campaign-tree file management (distribute / cleanup / delete-named / list)",
+        help="campaign-tree file management (distribute / cleanup / delete-named / list / reindex)",
     )
     campaign_sub = campaign.add_subparsers(dest="campaign_command", required=True)
 
@@ -432,6 +432,36 @@ def _build_parser() -> argparse.ArgumentParser:
     campaign_delete.add_argument("--name", required=True, help="filename to remove")
     campaign_delete.add_argument(
         "--dry-run", action="store_true", help="count without deleting"
+    )
+
+    campaign_reindex = campaign_sub.add_parser(
+        "reindex",
+        help="reindex a results table onto the full ligand-number range "
+        "(missing ligands appear as blank rows instead of silently absent)",
+    )
+    campaign_reindex.add_argument(
+        "--data", required=True, help="results table to reindex (CSV/XLSX)"
+    )
+    campaign_reindex.add_argument(
+        "--column",
+        required=True,
+        help="column whose values embed the ligand number (e.g. '5_result.dlg')",
+    )
+    campaign_reindex.add_argument(
+        "--start", type=int, default=0, help="first ligand number (default 0)"
+    )
+    campaign_reindex.add_argument(
+        "--stop", type=int, default=300, help="last ligand number (default 300)"
+    )
+    campaign_reindex.add_argument(
+        "--pattern",
+        default=r"(\d+)",
+        help="regex whose first capture group extracts the number (default r'(\\d+)')",
+    )
+    campaign_reindex.add_argument(
+        "--out",
+        default=None,
+        help="optional output CSV/XLSX (index written as a 'number' column)",
     )
 
     return parser
@@ -1011,6 +1041,7 @@ def _cmd_docking_campaign(args: argparse.Namespace) -> int:
         delete_named_files,
         distribute_files,
         list_file_names,
+        reindex_by_number,
     )
 
     verb = args.campaign_command
@@ -1051,6 +1082,34 @@ def _cmd_docking_campaign(args: argparse.Namespace) -> int:
             f"{deleted} file(s) named {args.name!r} "
             + ("would be deleted (dry run)" if args.dry_run else "deleted")
         )
+        return 0
+    if verb == "reindex":
+        from pharmaml.utils.io import read_table, write_table
+
+        frame = read_table(args.data)
+        result = reindex_by_number(
+            frame,
+            column=args.column,
+            start=args.start,
+            stop=args.stop,
+            pattern=args.pattern,
+        ).rename_axis("number")
+        total = int(len(result))
+        present = int(result[args.column].notna().sum())
+        print(
+            f"{present}/{total} ligand number(s) present in range "
+            f"{args.start}..{args.stop}"
+        )
+        missing = [int(n) for n in result.index[result[args.column].isna()]]
+        if missing and len(missing) <= 20:
+            print("missing numbers: " + ", ".join(str(n) for n in missing))
+        elif missing:
+            print(f"{len(missing)} missing number(s) (not listed; more than 20)")
+        if args.out:
+            written = write_table(result, args.out, index=True)
+            print(f"reindexed table -> {written}")
+        else:
+            print(result.to_string())
         return 0
     return 2  # pragma: no cover - argparse guards this
 

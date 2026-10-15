@@ -391,6 +391,73 @@ class TestDockingCampaignCommands:
         assert "2 file(s) named 'r.gpf' deleted" in capsys.readouterr().out
         assert not (tmp_path / "ligand_01" / "r.gpf").exists()
 
+    def test_campaign_reindex_writes_table(self, tmp_path, capsys):
+        import pandas as pd
+
+        src = tmp_path / "results.csv"
+        pd.DataFrame(
+            {
+                "name": ["1_result.dlg", "5_result.dlg", "7_result.dlg"],
+                "best": [-9.1, -10.2, -8.7],
+            }
+        ).to_csv(src, index=False)
+        out_csv = tmp_path / "reindexed.csv"
+        code = main(
+            [
+                "docking", "campaign", "reindex",
+                "--data", str(src), "--column", "name",
+                "--start", "1", "--stop", "10", "--out", str(out_csv),
+            ]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "3/10 ligand number(s) present in range 1..10" in out
+        assert "missing numbers: 2, 3, 4, 6, 8, 9, 10" in out
+        assert f"reindexed table -> {out_csv}" in out
+        content = out_csv.read_text(encoding="utf-8").splitlines()
+        assert content[0] == "number,name,best"
+        assert content[1] == "1,1_result.dlg,-9.1"
+        assert content[2] == "2,,"
+        assert content[4] == "4,,"
+        assert content[5] == "5,5_result.dlg,-10.2"
+        assert len(content) == 11  # header + full 1..10 range
+
+    def test_campaign_reindex_stdout_preview_without_out(self, tmp_path, capsys):
+        import pandas as pd
+
+        src = tmp_path / "results.csv"
+        pd.DataFrame({"name": ["2_run.dlg"], "best": [-7.5]}).to_csv(src, index=False)
+        code = main(
+            [
+                "docking", "campaign", "reindex",
+                "--data", str(src), "--column", "name",
+                "--start", "1", "--stop", "3",
+            ]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "1/3 ligand number(s) present in range 1..3" in out
+        assert "missing numbers: 1, 3" in out
+        assert "2_run.dlg" in out  # the frame preview itself
+        assert "number" in out
+
+    def test_campaign_reindex_bad_column_reports_error(self, tmp_path, capsys):
+        import pandas as pd
+
+        src = tmp_path / "results.csv"
+        pd.DataFrame({"name": ["1_result.dlg"]}).to_csv(src, index=False)
+        code = main(
+            [
+                "docking", "campaign", "reindex",
+                "--data", str(src), "--column", "bogus",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "error:" in err
+        assert "bogus" in err
+        assert "available columns" in err
+
 
 class TestChemTableCommands:
     """`pharmaml chem compare` / `chem merge` surface tables.py in the CLI."""

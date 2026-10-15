@@ -177,14 +177,24 @@ def split_features_target(
         Column holding the endpoint (class label or pIC50).
     drop_cols:
         Extra columns to exclude from features (IDs, SMILES, splits...).
+        Entries missing from the frame are logged and ignored -- a typo
+        would otherwise silently leave e.g. a SMILES column among the
+        features.
 
     Returns
     -------
     tuple
-        ``(X, y)`` where ``X`` keeps only numeric feature columns.
+        ``(X, y)`` where ``X`` carries every remaining column, numeric
+        and non-numeric alike (string columns are one-hot encoded
+        downstream by ``train_model`` / ``compare_models``; pass
+        metadata like SMILES via ``drop_cols``).
     """
     require_columns(frame, [target_col])
-    drop = {target_col, *(drop_cols or [])}
+    requested = drop_cols or []
+    missing = [c for c in requested if c not in frame.columns]
+    if missing:
+        _LOG.warning("drop_cols not present in frame, kept as features: %s", missing)
+    drop = {target_col, *requested}
     X = frame.drop(columns=[c for c in drop if c in frame.columns])
     y = frame[target_col]
     return X, y
@@ -209,9 +219,22 @@ def make_train_test_split(
     -------
     tuple
         ``(X_train, X_test, y_train, y_test)``.
+
+    Raises
+    ------
+    DataValidationError
+        When ``test_size`` is outside (0, 1) or ``y`` contains NaN
+        values (the stratified splitter used to surface a raw sklearn
+        ``ValueError: Input y contains NaN``).
     """
     if not 0.0 < test_size < 1.0:
         raise DataValidationError(f"test_size must be in (0, 1), got {test_size}")
+    n_missing = int(pd.isna(np.asarray(y)).sum())
+    if n_missing:
+        raise DataValidationError(
+            f"y contains {n_missing} NaN value(s) -- drop or impute the target "
+            "before splitting (load_dataset drops missing-target rows for you)"
+        )
     use_stratify = stratify
     if stratify:
         counts = pd.Series(np.asarray(y)).value_counts()
@@ -241,7 +264,9 @@ def remove_outliers_iqr(
 
     A row is kept only if, for *every* considered column, its value lies
     within ``[Q1 − factor·IQR, Q3 + factor·IQR]``.  ``subset=None``
-    considers all numeric columns.
+    considers all numeric columns.  ``subset`` entries that are missing
+    from the frame or non-numeric are ignored with a warning (a typo
+    used to silently disable the filter for that column).
     """
     if factor <= 0:
         raise DataValidationError(f"factor must be > 0, got {factor}")
@@ -250,6 +275,12 @@ def remove_outliers_iqr(
         columns = list(numeric.columns)
     else:
         columns = [c for c in subset if c in numeric.columns]
+        ignored = [c for c in subset if c not in numeric.columns]
+        if ignored:
+            _LOG.warning(
+                "Ignoring subset column(s) not found among numeric columns: %s",
+                ignored,
+            )
     if not columns:
         return frame.copy()
 

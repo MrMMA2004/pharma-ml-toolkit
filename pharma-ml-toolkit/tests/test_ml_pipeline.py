@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.linear_model import HuberRegressor
+from sklearn.linear_model import HuberRegressor, LogisticRegression
 
-from pharmaml.exceptions import ModelError, PersistenceError
+from pharmaml.exceptions import DataValidationError, ModelError, PersistenceError
 from pharmaml.ml.evaluation import ClassificationReport, RegressionReport, evaluate_model
 from pharmaml.ml.models import (
     MODEL_REGISTRY,
@@ -19,7 +20,7 @@ from pharmaml.ml.models import (
     list_models,
     resolve_model_name,
 )
-from pharmaml.ml.persistence import load_model, save_model
+from pharmaml.ml.persistence import load_model, save_model, write_metadata_sidecar
 from pharmaml.ml.preprocessing import (
     build_preprocessor,
     clean_numeric_frame,
@@ -28,6 +29,25 @@ from pharmaml.ml.preprocessing import (
     split_features_target,
 )
 from pharmaml.ml.training import compare_models, train_model
+
+
+@contextmanager
+def _pharmaml_logs_visible():
+    """Re-enable propagation on the ``pharmaml`` logger for caplog.
+
+    The CLI tests call :func:`configure_logging`, which sets
+    ``propagate=False`` on the ``pharmaml`` root logger; pytest's
+    caplog handler lives on the true root logger, so records only
+    reach it while propagation is on (restored on exit).  Same dance
+    as ``TestTrainingEdgeCases.test_compare_keeps_nan_row_and_warns``.
+    """
+    pharma_root = logging.getLogger("pharmaml")
+    prev_propagate = pharma_root.propagate
+    pharma_root.propagate = True
+    try:
+        yield
+    finally:
+        pharma_root.propagate = prev_propagate
 
 
 class TestRegistry:
@@ -313,3 +333,165 @@ class TestEvaluationEdgeCases:
         result = train_model("logistic_regression", "classification", X, y, tune=False)
         with pytest.raises(ModelError, match="y_test is empty"):
             evaluate_model(result.model, X.iloc[:0], y.iloc[:0], "classification")
+
+
+class TestRegistryEdgeCases:
+    """Regression tests from the ml/models.py deep review (100x-14-a)."""
+
+    def test_list_models_rejects_unknown_task(self) -> None:
+        # A typo'd or mis-cased task used to silently return only the
+        # dual-task ("both") models instead of complaining.
+        with pytest.raises(ModelError, match="task must be"):
+            list_models(task="clasification")
+        with pytest.raises(ModelError, match="task must be"):
+            list_models(task="Classification")
+
+    def test_list_models_task_both_keeps_dual_task_filter(self) -> None:
+        # 'both' stays a legal filter (models usable for either task);
+        # this pins the contract the new validation must preserve.
+        entries = list_models(task="both", only_available=False)
+        assert {e["task"] for e in entries} == {"both"}
+        assert "random_forest" in {e["name"] for e in entries}
+
+    def test_stacking_empty_base_models_raises(self) -> None:
+        # Used to construct silently and crash only at fit() with a raw
+        # sklearn ValueError about the 'estimators' attribute.
+        with pytest.raises(ModelError, match="base_models list is empty"):
+            build_stacking("classification", [])
+
+    def test_voting_empty_base_models_raises(self) -> None:
+        with pytest.raises(ModelError, match="base_models list is empty"):
+            build_voting("classification", [])
+
+    def test_voting_rejects_unknown_voting_mode(self) -> None:
+        # voting='bogus' used to construct fine and blow up at fit()
+        # with sklearn's InvalidParameterError.
+        with pytest.raises(ModelError, match="voting must be 'soft' or 'hard'"):
+            build_voting("classification", ["logistic_regression"], voting="bogus")
+
+    def test_voting_collapses_alias_duplicates(self) -> None:
+        # 'rf' + 'random_forest' used to cast the same forest twice
+        # (silent double weight in the vote).
+        ensemble = build_voting("classification", ["rf", "random_forest"])
+        assert [name for name, _ in ensemble.estimators] == ["random_forest"]
+
+    def test_stacking_collapses_alias_duplicates(self) -> None:
+        # Same trap for level-0 learners: the identical forest used to
+        # appear twice among the base estimators.
+        ensemble = build_stacking("classification", ["rf", "random_forest"])
+        assert [name for name, _ in ensemble.estimators] == ["random_forest"]
+
+    def test_voting_weights_length_checked_after_alias_collapse(self) -> None:
+        # Two alias rows collapse to one member; the weights list must
+        # match the collapsed count or the ensemble would be invalid
+        # only at fit() time.
+        with pytest.raises(ModelError, match="unique base"):
+            build_voting(
+                "classification", ["rf", "random_forest"], weights=[0.6, 0.4]
+            )
+
+
+class TestPersistenceEdgeCases:
+    """Regression tests from the ml/persistence.py deep review (100x-14-a)."""
+
+    @staticmethod
+    def _tiny_model() -> LogisticRegression:
+        rng = np.random.default_rng(0)
+        X = rng.normal(size=(12, 2))
+        y = (X[:, 0] > 0).astype(int)
+        return LogisticRegression().fit(X, y)
+
+    def test_save_model_parent_is_file_wraps_os_error(self, tmp_path) -> None:
+        # mkdir() failures used to escape as raw FileExistsError /
+        # NotADirectoryError instead of the documented PersistenceError
+        # (joblib.dump failures were already wrapped).
+        blocker = tmp_path / "blocker"
+        blocker.write_text("not a directory")
+        with pytest.raises(PersistenceError, match="Failed to save"):
+            save_model(
+                self._tiny_model(),
+                blocker / "model.joblib",
+                name="logreg",
+                task="classification",
+            )
+
+    def test_save_model_path_through_file_wraps_os_error(self, tmp_path) -> None:
+        blocker = tmp_path / "blocker"
+        blocker.write_text("not a directory")
+        with pytest.raises(PersistenceError, match="Failed to save"):
+            save_model(
+                self._tiny_model(),
+                blocker / "sub" / "model.joblib",
+                name="logreg",
+                task="classification",
+            )
+
+    def test_load_model_malformed_metadata_raises(self, tmp_path) -> None:
+        # A bundle whose "metadata" block is not a dict used to crash
+        # with a raw AttributeError before the sklearn-version check.
+        import joblib
+
+        weird = tmp_path / "weird.joblib"
+        joblib.dump({"model": self._tiny_model(), "metadata": None}, weird)
+        with pytest.raises(PersistenceError, match="malformed metadata"):
+            load_model(weird)
+
+    def test_write_metadata_sidecar_exported_and_roundtrip(self, tmp_path) -> None:
+        # write_metadata_sidecar is public and documented but used to be
+        # missing from persistence.__all__ (and had zero test coverage).
+        import json
+
+        from pharmaml.ml import persistence as persistence_module
+
+        assert "write_metadata_sidecar" in persistence_module.__all__
+        path = save_model(
+            self._tiny_model(),
+            tmp_path / "side.joblib",
+            name="logreg",
+            task="classification",
+            features=["a", "b"],
+            metrics={"accuracy": 0.9},
+        )
+        sidecar = write_metadata_sidecar(path)
+        assert sidecar == tmp_path / "side.json"
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert data["name"] == "logreg"
+        assert data["task"] == "classification"
+        assert data["features"] == ["a", "b"]
+        assert data["metrics"] == {"accuracy": 0.9}
+        assert "sklearn_version" in data
+
+
+class TestPreprocessingEdgeCases:
+    """Regression tests from the ml/preprocessing.py deep review (100x-14-a)."""
+
+    def test_split_warns_on_unknown_drop_cols(self, caplog) -> None:
+        # A typo'd drop_cols entry used to silently keep the column in X
+        # (identity/metadata leakage with zero signal).
+        frame = pd.DataFrame(
+            {"d1": [1.0, 2.0], "SMILES": ["C", "CC"], "Target": [0, 1]}
+        )
+        with _pharmaml_logs_visible():
+            with caplog.at_level(logging.WARNING, logger="pharmaml.ml.preprocessing"):
+                X, _ = split_features_target(frame, "Target", drop_cols=["SMIELS"])
+        assert "SMILES" in X.columns  # the typo'd entry cannot drop it
+        assert "SMIELS" in caplog.text
+
+    def test_remove_outliers_iqr_warns_on_unknown_subset(self, caplog) -> None:
+        # subset=['zzz'] used to be a silent no-op: all rows kept, no
+        # warning, filter effectively disabled.
+        frame = pd.DataFrame({"x": [1.0] * 20 + [1000.0]})
+        with _pharmaml_logs_visible():
+            with caplog.at_level(logging.WARNING, logger="pharmaml.ml.preprocessing"):
+                kept = remove_outliers_iqr(frame, subset=["zzz"])
+        assert len(kept) == 21  # no-op stays a no-op ...
+        assert "zzz" in caplog.text  # ... but it is no longer silent
+
+    def test_make_train_test_split_rejects_nan_target(self) -> None:
+        # NaN in y used to surface as a raw sklearn ``ValueError: Input
+        # y contains NaN`` (the stratify fallback's value_counts also
+        # dropped the NaN class, so the guard never triggered).
+        X = pd.DataFrame({"a": range(10)})
+        y = pd.Series([0, 0, 1, 1, 0, 0, 1, 1, np.nan, np.nan])
+        with pytest.raises(DataValidationError, match="y contains 2 NaN"):
+            make_train_test_split(X, y, test_size=0.4)

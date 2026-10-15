@@ -66,7 +66,9 @@ class ModelSpec:
         ``'classification'``, ``'regression'`` or ``'both'``.
     factory:
         Zero-argument callable returning a fresh, unfitted estimator
-        (random_state already threaded in).
+        (random_state already threaded in where the estimator accepts
+        one).  ``None`` for dual-task entries whose per-task estimator
+        is built by :data:`_TASK_FACTORIES` inside :func:`build_model`.
     param_grid:
         Compact default grid for hyperparameter search.
     requires:
@@ -77,7 +79,7 @@ class ModelSpec:
 
     name: str
     task: str
-    factory: Callable[..., Any]
+    factory: Callable[..., Any] | None
     param_grid: dict[str, list[Any]] = field(default_factory=dict)
     requires: str | None = None
     notes: str = ""
@@ -197,7 +199,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     "knn": ModelSpec(
         name="knn",
         task="both",
-        factory=None,  # replaced below -- see _build for dispatch
+        factory=None,  # per-task dispatch via _TASK_FACTORIES in build_model
         param_grid={"n_neighbors": [3, 5, 7, 11], "weights": ["uniform", "distance"]},
         notes="k-nearest neighbours (upgrades KNN.py)",
     ),
@@ -371,9 +373,24 @@ _TASK_FACTORIES: dict[str, dict[str, Callable[[], Any]]] = {
 def list_models(task: str | None = None, only_available: bool = True) -> list[dict[str, Any]]:
     """List registry entries with availability information.
 
+    ``task`` filters by kind: ``'classification'``, ``'regression'`` or
+    ``'both'`` (models usable for either task); ``None`` (the default)
+    lists every entry.
+
     Returns a list of dicts with keys ``name``, ``task``, ``available``,
     ``requires`` and ``notes`` -- ready for pretty printing or the CLI.
+
+    Raises
+    ------
+    ModelError
+        When ``task`` is not one of the accepted kinds.  A typo'd value
+        such as ``'clasification'`` used to silently return only the
+        dual-task models instead of complaining.
     """
+    if task is not None and task not in {"classification", "regression", "both"}:
+        raise ModelError(
+            f"task must be 'classification', 'regression' or 'both', got {task!r}"
+        )
     entries = []
     for spec in MODEL_REGISTRY.values():
         if task and spec.task != "both" and spec.task != task:
@@ -467,10 +484,25 @@ def build_stacking(
         for regression.
     passthrough:
         Append original features to meta-features.
+
+    Raises
+    ------
+    ModelError
+        When ``base_models`` is empty, a member name is unknown, or a
+        member does not support ``task``.  Aliases in ``base_models``
+        are resolved and duplicates collapsed, so ``['rf',
+        'random_forest']`` builds one random-forest learner, not two
+        identical ones.
     """
+    if not base_models:
+        raise ModelError(
+            "base_models list is empty -- pass at least one registry name "
+            "(see pharmaml.ml.list_models())"
+        )
     if meta_model is None:
         meta_model = "logistic_regression" if task == "classification" else "ridge"
-    estimators = [(name, build_model(name, task)) for name in base_models]
+    keys = list(dict.fromkeys(resolve_model_name(name) for name in base_models))
+    estimators = [(key, build_model(key, task)) for key in keys]
     meta = build_model(meta_model, task)
     if task == "classification":
         return StackingClassifier(
@@ -491,13 +523,39 @@ def build_voting(
 
     ``voting='soft'`` (probability averaging) requires all members to
     expose ``predict_proba``; ``voting='hard'`` (majority vote) works
-    for every estimator and for **any number of classes**.
+    for every estimator and for **any number of classes**.  For
+    regression the voting rule is ignored (``VotingRegressor``
+    averages predictions), but the value must still be ``'soft'`` or
+    ``'hard'``.  Aliases in ``base_models`` are resolved and
+    duplicates collapsed, so ``['rf', 'random_forest']`` casts one
+    vote, not two.
+
+    Raises
+    ------
+    ModelError
+        When ``base_models`` is empty, a member name is unknown,
+        ``voting`` is neither ``'soft'`` nor ``'hard'``, ``weights``
+        does not match the number of unique members, or a soft-voting
+        member lacks ``predict_proba``.
     """
-    estimators = [(name, build_model(name, task)) for name in base_models]
+    if not base_models:
+        raise ModelError(
+            "base_models list is empty -- pass at least one registry name "
+            "(see pharmaml.ml.list_models())"
+        )
+    if voting not in {"soft", "hard"}:
+        raise ModelError(f"voting must be 'soft' or 'hard', got {voting!r}")
+    keys = list(dict.fromkeys(resolve_model_name(name) for name in base_models))
+    if weights is not None and len(weights) != len(keys):
+        raise ModelError(
+            f"weights has {len(weights)} entries for {len(keys)} unique base "
+            "model(s) -- alias duplicates are collapsed"
+        )
+    estimators = [(key, build_model(key, task)) for key in keys]
     if task == "classification":
         if voting == "soft":
             unsupported = [
-                name for name, est in estimators if not hasattr(est, "predict_proba")
+                key for key, est in estimators if not hasattr(est, "predict_proba")
             ]
             if unsupported:
                 raise ModelError(
