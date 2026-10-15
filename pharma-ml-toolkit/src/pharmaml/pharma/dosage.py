@@ -187,13 +187,16 @@ def renal_dose_adjustment(
     normal_creatinine_clearance: float = 100.0,
     floor_fraction: float = 0.25,
 ) -> float:
-    """Linearly reduce a dose for impaired renal function.
+    """Linearly scale a dose with renal function (creatinine clearance).
 
     ``dose = normal_dose · max(CrCl_current, floor·CrCl_normal)/CrCl_normal``.
 
-    The ``floor_fraction`` guards against absurdly tiny doses for
-    anuric patients -- below the floor, clinicians switch modality
-    rather than dose.
+    The scaling is bidirectional: impaired function reduces the dose,
+    and clearance *above* the normal value increases it proportionally
+    (renally-cleared drugs in high-clearance patients).  The
+    ``floor_fraction`` guards against absurdly tiny doses for anuric
+    patients -- below the floor, clinicians switch modality rather
+    than dose.
     """
     validate_positive(normal_dose, "normal_dose")
     validate_positive(
@@ -233,13 +236,16 @@ def tdm_trough_adjustment(
     validate_positive(current_dose, "current_dose")
     measured_trough = validate_positive(measured_trough, "measured_trough")
     target_trough = validate_positive(target_trough, "target_trough")
-    if target_trough / measured_trough > 5:
+    ratio = target_trough / measured_trough
+    if ratio > 5.0 or ratio < 1.0 / 5.0:
         raise DataValidationError(
-            "target/measured trough ratio > 5 suggests non-linear kinetics, "
-            "non-steady-state sampling, or a data-entry error -- refusing to "
-            "extrapolate linearly"
+            f"target/measured trough ratio {ratio:.2g} lies outside the "
+            "factor-5 band accepted for linear kinetics; a change this "
+            "large suggests non-linear kinetics, non-steady-state "
+            "sampling, or a data-entry error -- refusing to extrapolate "
+            "linearly"
         )
-    adjusted = current_dose * target_trough / measured_trough
+    adjusted = current_dose * ratio
     if min_dose is not None and adjusted < min_dose:
         adjusted = min_dose
     return adjusted

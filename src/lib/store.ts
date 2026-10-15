@@ -40,6 +40,87 @@ export const DEFAULT_PK_PARAMS: PkParams = {
   ka: 1.2,
 };
 
+/* ---- PK/PD Explorer: PD effect layer + NCA observed-data panel ---- */
+
+/** PD effect model driven by the live PK concentration curve. */
+export type PdModelId = "linear" | "emax" | "sigmoid" | "inhibitory";
+
+/** Chart mode for the PD panel (mobile users can declutter). */
+export type PdView = "conc" | "effect" | "both";
+
+/** PD model parameters (all models' sliders in one persisted object). */
+export interface PdParams {
+  model: PdModelId;
+  view: PdView;
+  slope: number; // linear
+  e0: number; // baseline effect
+  emax: number; // Emax family
+  ec50: number; // mg/L
+  hill: number; // sigmoid slope factor
+  imax: number; // inhibitory
+  ic50: number; // mg/L
+}
+
+export const DEFAULT_PD_PARAMS: PdParams = {
+  model: "emax",
+  view: "both",
+  slope: 8,
+  e0: 10,
+  emax: 80,
+  ec50: 2,
+  hill: 1.5,
+  imax: 10,
+  ic50: 2,
+};
+
+/** One editable NCA observation row (raw input text, parsed client-side). */
+export interface NcaRow {
+  id: number;
+  t: string;
+  c: string;
+}
+
+/** NCA panel state — observations table + dose inputs + terminal-point count.
+ * Persisted (rows included): edits survive sub-tab switches and reloads,
+ * capped so the sessionStorage payload stays small. */
+export interface NcaState {
+  rows: NcaRow[];
+  dose: string; // mg (raw text)
+  f: string; // bioavailability (raw text)
+  terminalN: number; // 2–6 terminal points for the log-linear fit
+}
+
+const NCA_ROWS_CAP = 40;
+
+function defaultNcaRows(): NcaRow[] {
+  return [
+    ["0", "0"],
+    ["0.25", "1.28"],
+    ["0.5", "2.21"],
+    ["1", "3.33"],
+    ["2", "4.08"],
+    ["4", "3.85"],
+    ["6", "3.31"],
+    ["8", "2.82"],
+    ["12", "2.05"],
+    ["24", "0.79"],
+    ["36", "0.30"],
+    ["48", "0.12"],
+  ].map(([t, c], id) => ({ id, t, c }));
+}
+
+export const DEFAULT_NCA_STATE: NcaState = {
+  rows: defaultNcaRows(),
+  dose: "250",
+  f: "0.9",
+  terminalN: 3,
+};
+
+/** Fresh row ids count up from the current maximum (never reused in a session). */
+export function nextRowId(rows: NcaRow[]): number {
+  return rows.reduce((m, r) => Math.max(m, r.id), -1) + 1;
+}
+
 /** Max entries kept in the "recently viewed" strip. */
 export const RECENT_LIMIT = 8;
 
@@ -124,7 +205,11 @@ function saveRecentFiles(recent: string[]): void {
 
 interface PlaygroundPersisted {
   playgroundTab: string;
+  /** Active inner tab of the PK/PD Explorer ("regimen" | "pd" | "nca"). */
+  pkInnerTab: string;
   pkParams: PkParams;
+  pdParams: PdParams;
+  ncaState: NcaState;
   mlConfig: MlConfig;
   mlCsv: MlCsvState | null;
 }
@@ -145,6 +230,65 @@ function validatePk(raw: unknown): PkParams {
     doses: Math.round(num(p.doses, base.doses, 1, 48)),
     f: num(p.f, base.f, 0.05, 1),
     ka: num(p.ka, base.ka, 0.01, 12),
+  };
+}
+
+/** Validate a persisted PD parameter object (sliders bound the live values;
+ * this only guards corrupted sessionStorage). */
+function validatePd(raw: unknown): PdParams {
+  const base = DEFAULT_PD_PARAMS;
+  if (typeof raw !== "object" || raw === null) return base;
+  const p = raw as Partial<PdParams>;
+  const num = (v: unknown, def: number, lo: number, hi: number) =>
+    typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi ? v : def;
+  return {
+    model:
+      p.model === "linear" || p.model === "emax" || p.model === "sigmoid" || p.model === "inhibitory"
+        ? p.model
+        : base.model,
+    view: p.view === "conc" || p.view === "effect" || p.view === "both" ? p.view : base.view,
+    slope: num(p.slope, base.slope, -100, 100),
+    e0: num(p.e0, base.e0, -1000, 1000),
+    emax: num(p.emax, base.emax, -1000, 1000),
+    ec50: num(p.ec50, base.ec50, 0.01, 1000),
+    hill: num(p.hill, base.hill, 0.05, 20),
+    imax: num(p.imax, base.imax, -1000, 1000),
+    ic50: num(p.ic50, base.ic50, 0.01, 1000),
+  };
+}
+
+/** Validate a persisted NCA snapshot: rows are raw text, capped + typed. */
+function validateNca(raw: unknown): NcaState {
+  const base = DEFAULT_NCA_STATE;
+  if (typeof raw !== "object" || raw === null) return base;
+  const s = raw as Partial<NcaState>;
+  const cell = (v: unknown): string | null =>
+    typeof v === "string" && v.length <= 16 && /^[\d.\s-]*$/.test(v) ? v : null;
+  const rows: NcaRow[] = Array.isArray(s.rows)
+    ? s.rows
+        .filter(
+          (r): r is NcaRow =>
+            typeof r === "object" &&
+            r !== null &&
+            typeof (r as NcaRow).id === "number" &&
+            Number.isInteger((r as NcaRow).id) &&
+            (r as NcaRow).id >= 0 &&
+            (r as NcaRow).id < 100_000 &&
+            typeof (r as NcaRow).t === "string" &&
+            typeof (r as NcaRow).c === "string",
+        )
+        .slice(0, NCA_ROWS_CAP)
+        .map((r) => ({ id: r.id, t: cell(r.t) ?? "0", c: cell(r.c) ?? "0" }))
+    : [];
+  const terminalN =
+    typeof s.terminalN === "number" && Number.isFinite(s.terminalN) && s.terminalN >= 2 && s.terminalN <= 6
+      ? Math.round(s.terminalN)
+      : base.terminalN;
+  return {
+    rows: rows.length >= 2 ? rows : defaultNcaRows(),
+    dose: cell(s.dose) ?? base.dose,
+    f: cell(s.f) ?? base.f,
+    terminalN,
   };
 }
 
@@ -496,7 +640,10 @@ function loadPlayground(): Partial<PlaygroundPersisted> {
     const p = parsed as Partial<PlaygroundPersisted>;
     return {
       playgroundTab: typeof p.playgroundTab === "string" ? p.playgroundTab.slice(0, 32) : undefined,
+      pkInnerTab: typeof p.pkInnerTab === "string" ? p.pkInnerTab.slice(0, 16) : undefined,
       pkParams: validatePk(p.pkParams),
+      pdParams: validatePd(p.pdParams),
+      ncaState: validateNca(p.ncaState),
       mlConfig: validateMl(p.mlConfig),
       mlCsv: validMlCsv(p.mlCsv),
     };
@@ -508,7 +655,10 @@ function loadPlayground(): Partial<PlaygroundPersisted> {
 /** Persist the current playground snapshot (client only, best-effort). */
 function savePlayground(state: {
   playgroundTab: string;
+  pkInnerTab: string;
   pkParams: PkParams;
+  pdParams: PdParams;
+  ncaState: NcaState;
   mlConfig: MlConfig;
   mlCsv: MlCsvState | null;
 }): void {
@@ -615,10 +765,24 @@ interface ToolkitStore {
   playgroundTab: string;
   setPlaygroundTab: (tab: string) => void;
 
+  /** Active inner tab of the PK/PD Explorer ("regimen" | "pd" | "nca"). */
+  pkInnerTab: string;
+  setPkInnerTab: (tab: string) => void;
+
   /** PK simulator regimen — persisted so sliders survive tab switches. */
   pkParams: PkParams;
   setPkParam: <K extends keyof PkParams>(key: K, value: PkParams[K]) => void;
   resetPkParams: () => void;
+
+  /** PD effect model + parameters — persisted like the PK regimen. */
+  pdParams: PdParams;
+  setPdParam: <K extends keyof PdParams>(key: K, value: PdParams[K]) => void;
+  resetPdParams: () => void;
+
+  /** NCA observed-data panel state (editable rows + dose inputs) — persisted. */
+  ncaState: NcaState;
+  setNcaState: (patch: Partial<NcaState>) => void;
+  resetNcaState: () => void;
 
   /** ML playground experiment config — persisted so the setup survives tab switches. */
   mlConfig: MlConfig;
@@ -662,7 +826,24 @@ const persistedPlayground = loadPlayground();
 /** Session-restored ML run history (empty on the server / fresh session). */
 const persistedMlHistory = loadMlHistory();
 
-export const useToolkitStore = create<ToolkitStore>((set, get) => ({
+export const useToolkitStore = create<ToolkitStore>((set, get) => {
+  /* Snapshot the whole playground slice to sessionStorage. One helper (not a
+   * per-setter literal) so a new persisted field can never be silently
+   * dropped by a setter that forgets to list it (round 19-b bug class). */
+  const persistPlayground = () => {
+    const s = get();
+    savePlayground({
+      playgroundTab: s.playgroundTab,
+      pkInnerTab: s.pkInnerTab,
+      pkParams: s.pkParams,
+      pdParams: s.pdParams,
+      ncaState: s.ncaState,
+      mlConfig: s.mlConfig,
+      mlCsv: s.mlCsv,
+    });
+  };
+
+  return {
   tab: "overview",
   setTab: (tab) => set({ tab }),
 
@@ -695,65 +876,59 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
   playgroundTab: persistedPlayground.playgroundTab ?? "calculators",
   setPlaygroundTab: (tab) => {
     set({ playgroundTab: tab });
-    savePlayground({
-      playgroundTab: tab,
-      pkParams: get().pkParams,
-      mlConfig: get().mlConfig,
-      mlCsv: get().mlCsv,
-    });
+    persistPlayground();
+  },
+
+  pkInnerTab: persistedPlayground.pkInnerTab ?? "regimen",
+  setPkInnerTab: (tab) => {
+    set({ pkInnerTab: tab });
+    persistPlayground();
   },
 
   pkParams: persistedPlayground.pkParams ?? DEFAULT_PK_PARAMS,
   setPkParam: (key, value) => {
-    const pkParams = { ...get().pkParams, [key]: value };
-    set({ pkParams });
-    savePlayground({
-      playgroundTab: get().playgroundTab,
-      pkParams,
-      mlConfig: get().mlConfig,
-      mlCsv: get().mlCsv,
-    });
+    set({ pkParams: { ...get().pkParams, [key]: value } });
+    persistPlayground();
   },
   resetPkParams: () => {
     set({ pkParams: DEFAULT_PK_PARAMS });
-    savePlayground({
-      playgroundTab: get().playgroundTab,
-      pkParams: DEFAULT_PK_PARAMS,
-      mlConfig: get().mlConfig,
-      mlCsv: get().mlCsv,
-    });
+    persistPlayground();
+  },
+
+  pdParams: persistedPlayground.pdParams ?? DEFAULT_PD_PARAMS,
+  setPdParam: (key, value) => {
+    set({ pdParams: { ...get().pdParams, [key]: value } });
+    persistPlayground();
+  },
+  resetPdParams: () => {
+    set({ pdParams: DEFAULT_PD_PARAMS });
+    persistPlayground();
+  },
+
+  ncaState: persistedPlayground.ncaState ?? DEFAULT_NCA_STATE,
+  setNcaState: (patch) => {
+    set({ ncaState: { ...get().ncaState, ...patch } });
+    persistPlayground();
+  },
+  resetNcaState: () => {
+    set({ ncaState: DEFAULT_NCA_STATE });
+    persistPlayground();
   },
 
   mlConfig: persistedPlayground.mlConfig ?? DEFAULT_ML_CONFIG,
   setMlConfig: (patch) => {
-    const mlConfig = { ...get().mlConfig, ...patch };
-    set({ mlConfig });
-    savePlayground({
-      playgroundTab: get().playgroundTab,
-      pkParams: get().pkParams,
-      mlConfig,
-      mlCsv: get().mlCsv,
-    });
+    set({ mlConfig: { ...get().mlConfig, ...patch } });
+    persistPlayground();
   },
   resetMlConfig: () => {
     set({ mlConfig: DEFAULT_ML_CONFIG });
-    savePlayground({
-      playgroundTab: get().playgroundTab,
-      pkParams: get().pkParams,
-      mlConfig: DEFAULT_ML_CONFIG,
-      mlCsv: get().mlCsv,
-    });
+    persistPlayground();
   },
 
   mlCsv: persistedPlayground.mlCsv ?? null,
   setMlCsv: (csv) => {
     set({ mlCsv: csv });
-    savePlayground({
-      playgroundTab: get().playgroundTab,
-      pkParams: get().pkParams,
-      mlConfig: get().mlConfig,
-      mlCsv: csv,
-    });
+    persistPlayground();
   },
   mlResult: loadMlResult(),
   setMlResult: (result) => {
@@ -805,4 +980,5 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
       });
     }
   },
-}));
+  };
+});

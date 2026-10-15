@@ -23,6 +23,13 @@ function Slider({
     [value, defaultValue, min, max]
   )
 
+  // Forward the control's accessible name to the thumb: radix renders
+  // role="slider" on the thumb element, and an aria-label/aria-labelledby
+  // on the (role-less) root div alone is never announced. Single-value
+  // sliders take the root label; multi-thumb (range) sliders keep
+  // radix's built-in "Minimum"/"Maximum" thumb names.
+  const thumbLabel = _values.length === 1 ? props["aria-label"] : undefined
+
   return (
     <SliderPrimitive.Root
       data-slot="slider"
@@ -53,6 +60,7 @@ function Slider({
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
+          aria-label={thumbLabel}
           className="border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}

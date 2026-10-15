@@ -31,6 +31,23 @@ __all__ = [
 ]
 
 
+def _validated_concentration(concentration: float | Sequence[float]) -> np.ndarray:
+    """Asarray + domain checks shared by the Emax model family.
+
+    Concentrations must be finite and non-negative; NaN or infinite
+    values would otherwise flow through the formulas as silent NaN
+    effects (``inf`` even evaluates to ``inf/inf = nan``).
+    """
+    conc = np.asarray(concentration, dtype=float)
+    if not np.isfinite(conc).all():
+        raise DataValidationError(
+            "concentrations must be finite numbers (NaN/inf rejected)"
+        )
+    if np.any(conc < 0):
+        raise DataValidationError("concentrations must be non-negative")
+    return conc
+
+
 def emax_effect(
     concentration: float | Sequence[float],
     e0: float,
@@ -42,7 +59,9 @@ def emax_effect(
     Parameters
     ----------
     concentration:
-        Concentration(s); must be non-negative.
+        Concentration(s); must be non-negative and finite (NaN/inf
+        values are rejected with a DataValidationError instead of
+        silently returning NaN effects).
     e0:
         Baseline effect without drug.
     emax:
@@ -58,9 +77,7 @@ def emax_effect(
         Predicted effect, matching the input's scalar/array shape.
     """
     validate_positive(ec50, "ec50")
-    conc = np.asarray(concentration, dtype=float)
-    if np.any(conc < 0):
-        raise DataValidationError("concentrations must be non-negative")
+    conc = _validated_concentration(concentration)
     result = e0 + emax * conc / (ec50 + conc)
     return float(result) if np.ndim(concentration) == 0 else result
 
@@ -80,9 +97,7 @@ def sigmoid_emax_effect(
     """
     validate_positive(ec50, "ec50")
     validate_positive(hill, "hill")
-    conc = np.asarray(concentration, dtype=float)
-    if np.any(conc < 0):
-        raise DataValidationError("concentrations must be non-negative")
+    conc = _validated_concentration(concentration)
     powered = np.power(conc, hill)
     result = e0 + emax * powered / (ec50**hill + powered)
     return float(result) if np.ndim(concentration) == 0 else result
@@ -98,13 +113,12 @@ def inhibitory_emax_effect(
     """Inhibitory (inverse) Emax model: ``E = E0 − Imax·C^h/(IC50^h + C^h)``.
 
     The standard PD model for antagonists / enzyme inhibitors where the
-    effect *decreases* from baseline toward ``E0 − Imax``.
+    effect *decreases* from baseline toward ``E0 − Imax``.  As with the
+    excitatory models, concentrations must be finite and non-negative.
     """
     validate_positive(ic50, "ic50")
     validate_positive(hill, "hill")
-    conc = np.asarray(concentration, dtype=float)
-    if np.any(conc < 0):
-        raise DataValidationError("concentrations must be non-negative")
+    conc = _validated_concentration(concentration)
     powered = np.power(conc, hill)
     result = e0 - imax * powered / (ic50**hill + powered)
     return float(result) if np.ndim(concentration) == 0 else result
@@ -134,7 +148,9 @@ def ec50_for_target_effect(
 
     ``C = EC50 · (f/(1−f))^(1/h)``  with  ``f = (E − E0)/Emax``.
 
-    Useful for target-effect dosage design.
+    Useful for target-effect dosage design.  ``f = 0`` (a target equal
+    to the baseline ``E0``) is reached at ``C = 0``; ``f → 1`` needs
+    ``C → ∞`` and is rejected.
     """
     validate_positive(ec50, "ec50")
     validate_positive(hill, "hill")
@@ -144,10 +160,10 @@ def ec50_for_target_effect(
             "(a zero Emax gives the same effect at every concentration)"
         )
     fraction = (target_effect - e0) / emax
-    if not 0.0 < fraction < 1.0:
+    if not 0.0 <= fraction < 1.0:
         raise DataValidationError(
             f"target effect {target_effect} is unreachable: the achievable "
-            f"fraction of Emax must lie in (0, 1), got {fraction:.3f}"
+            f"fraction of Emax must lie in [0, 1), got {fraction:.3f}"
         )
     return ec50 * (fraction / (1.0 - fraction)) ** (1.0 / hill)
 

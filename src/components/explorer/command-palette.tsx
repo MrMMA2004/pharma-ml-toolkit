@@ -82,7 +82,7 @@ const TAB_ICONS: Record<TabId, LucideIcon> = {
 
 const SUB_TABS: Array<{ value: string; label: string; icon: LucideIcon }> = [
   { value: "calculators", label: "Calculators", icon: Calculator },
-  { value: "pk", label: "PK Simulator", icon: Activity },
+  { value: "pk", label: "PK / PD Explorer", icon: Activity },
   { value: "ml", label: "ML Training", icon: Brain },
   { value: "biology", label: "Cell Line Bio", icon: Microscope },
   { value: "docking", label: "Docking Parser", icon: ScanSearch },

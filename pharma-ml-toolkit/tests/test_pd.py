@@ -104,3 +104,43 @@ class TestEffectTable:
         assert table["concentration"] == grid
         assert len(table["effect"]) == len(grid)
         assert table["effect"][2] == pytest.approx(50.0)
+
+
+class TestNonFiniteConcentrations:
+    """NaN/inf concentrations must raise, not silently return NaN effects."""
+
+    @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
+    def test_emax_rejects_non_finite(self, bad: float) -> None:
+        # Regression: NaN (and inf, which produced inf/inf = NaN with a
+        # numpy RuntimeWarning) used to propagate silently.
+        with pytest.raises(DataValidationError, match="finite"):
+            emax_effect(bad, 0.0, 100.0, 10.0)
+
+    def test_sigmoid_rejects_nan_inside_array(self) -> None:
+        # Regression: a single NaN element silently poisoned one effect row.
+        with pytest.raises(DataValidationError, match="finite"):
+            sigmoid_emax_effect([0.0, float("nan"), 10.0], 0.0, 100.0, 10.0, 1.0)
+
+    def test_inhibitory_rejects_non_finite(self) -> None:
+        with pytest.raises(DataValidationError, match="finite"):
+            inhibitory_emax_effect(float("nan"), 90.0, 80.0, 5.0)
+
+
+class TestInverseEmaxBoundary:
+    def test_target_at_baseline_returns_zero_concentration(self) -> None:
+        # Regression: E == E0 is reached at C == 0; the old guard called
+        # that effect "unreachable".
+        assert ec50_for_target_effect(0.0, ec50=10.0, e0=0.0, emax=100.0) == 0.0
+
+    def test_target_at_full_emax_still_unreachable(self) -> None:
+        # PINNING: fraction == 1 needs C -> inf.
+        with pytest.raises(DataValidationError, match="unreachable"):
+            ec50_for_target_effect(100.0, ec50=10.0, e0=0.0, emax=100.0)
+
+    def test_negative_emax_inverts_consistently(self) -> None:
+        # PINNING (already correct before this round): the inhibitory
+        # direction (Emax < 0) round-trips through the inversion.
+        conc = 4.0
+        effect = sigmoid_emax_effect(conc, 90.0, -80.0, 10.0, hill=1.0)
+        recovered = ec50_for_target_effect(effect, ec50=10.0, e0=90.0, emax=-80.0)
+        assert recovered == pytest.approx(conc, rel=1e-9)

@@ -5,7 +5,9 @@ import {
   Activity,
   Info,
   RotateCcw,
+  Sigma,
   TriangleAlert,
+  Waves,
 } from "lucide-react";
 import {
   Area,
@@ -20,120 +22,33 @@ import {
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useToolkitStore, type PkParams } from "@/lib/store";
-import { CHART } from "@/components/explorer/playground/calc-ui";
+import { CHART, ParamSlider } from "@/components/explorer/playground/calc-ui";
+import { PdEffect } from "@/components/explorer/playground/pd-effect";
+import { NcaPanel } from "@/components/explorer/playground/nca-panel";
+import { concentrationAt, derivePk } from "@/lib/pk-pd";
 
 /* ------------------------------------------------------------------ */
-/* Types & maths                                                       */
+/* Regimen panel (one-compartment multi-dose simulator)                */
 /* ------------------------------------------------------------------ */
 
 type Route = PkParams["route"];
 
-interface Derived {
-  ke: number; // 1/h
-  halfLife: number; // h
-  accumulation: number; // R_ac
-  cssAvg: number; // mg/L
-  cMaxFirst: number; // mg/L
-  cMaxSS: number; // mg/L
-}
-
-/** One compartment, first-order elimination, exact superposition. */
-function concentrationAt(t: number, p: PkParams, ke: number): number {
-  let c = 0;
-  for (let i = 0; i < p.doses; i++) {
-    const since = t - i * p.tau;
-    if (since < 0) break;
-    if (p.route === "iv") {
-      c += (p.dose / p.vd) * Math.exp(-ke * since);
-    } else {
-      const denom = p.vd * (p.ka - ke);
-      if (Math.abs(denom) < 1e-9) continue;
-      c += ((p.f * p.dose * p.ka) / denom) * (Math.exp(-ke * since) - Math.exp(-p.ka * since));
-    }
-  }
-  return c;
-}
-
-function derive(p: PkParams): Derived {
-  const ke = p.cl / p.vd;
-  const halfLife = Math.log(2) / ke;
-  const accumulation = 1 / (1 - Math.exp(-ke * p.tau));
-  const cssAvg = (p.route === "iv" ? 1 : p.f) * (p.dose / (p.cl * p.tau));
-
-  const endOfFirst = p.route === "iv" ? 0 : Math.log(p.ka / ke) / (p.ka - ke);
-  const cMaxFirst = concentrationAt(endOfFirst, { ...p, doses: 1 }, ke);
-  const lastDose = (p.doses - 1) * p.tau;
-  const cMaxSS =
-    p.doses > 4
-      ? concentrationAt(lastDose + endOfFirst, p, ke)
-      : Number.NaN; // not yet near steady state — don't mislead
-  return { ke, halfLife, accumulation, cssAvg, cMaxFirst, cMaxSS };
-}
-
-/* ------------------------------------------------------------------ */
-/* Slider row                                                          */
-/* ------------------------------------------------------------------ */
-
-interface ParamSliderProps {
-  id: string;
-  label: string;
-  unit: string;
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-  onChange: (v: number) => void;
-  format?: (v: number) => string;
-}
-
-function ParamSlider({ id, label, unit, min, max, step, value, onChange, format }: ParamSliderProps) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">
-          {label}
-        </Label>
-        <span className="rounded-md border border-primary/15 bg-primary/5 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums">
-          {format ? format(value) : value}
-          <span className="ml-0.5 font-normal text-muted-foreground">{unit}</span>
-        </span>
-      </div>
-      <Slider
-        id={id}
-        min={min}
-        max={max}
-        step={step}
-        value={[value]}
-        onValueChange={(vals) => onChange(vals[0] ?? value)}
-        aria-label={`${label} in ${unit}`}
-        className="py-1"
-      />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Main component                                                      */
-/* ------------------------------------------------------------------ */
-
 const SAMPLES = 420;
 
-/** Multi-dose PK simulator: exact superposition, 1-compartment.
- * Regimen state lives in the zustand store, so sliders keep their values
- * when the user switches playground tabs or navigates away and back. */
-export function PkSimulator() {
+/** Regimen PK panel: exact superposition, 1-compartment. Regimen state
+ * lives in the zustand store, so sliders keep their values when the user
+ * switches playground tabs or navigates away and back. */
+function RegimenPanel() {
   const params = useToolkitStore((s) => s.pkParams);
   const setPkParam = useToolkitStore((s) => s.setPkParam);
   const resetPkParams = useToolkitStore((s) => s.resetPkParams);
 
   const { route, dose, vd, cl, tau, doses, f, ka } = params;
 
-  const derived = useMemo(() => derive(params), [params]);
+  const derived = useMemo(() => derivePk(params), [params]);
 
   const series = useMemo(() => {
     const ke = derived.ke;
@@ -163,7 +78,7 @@ export function PkSimulator() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
       {/* ------------------------------ Controls ------------------------------ */}
       <Card className="h-fit py-0 shadow-sm">
         <CardHeader className="border-b bg-muted/30 py-3">
@@ -275,6 +190,7 @@ export function PkSimulator() {
                     dataKey="c"
                     stroke="none"
                     fill="url(#pkConcFill)"
+                    tooltipType="none"
                     isAnimationActive={false}
                   />
                   <Line
@@ -337,5 +253,57 @@ export function PkSimulator() {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Shell: PK / PD Explorer inner tabs                                  */
+/* ------------------------------------------------------------------ */
+
+/** PK/PD Explorer shell: three inner tabs — regimen simulator, live PD
+ * effect layer, and NCA over user-observed data. The active inner tab is
+ * persisted in the store (like the playground sub-tab itself). */
+export function PkSimulator() {
+  const innerTab = useToolkitStore((s) => s.pkInnerTab);
+  const setPkInnerTab = useToolkitStore((s) => s.setPkInnerTab);
+
+  return (
+    <Tabs value={innerTab} onValueChange={setPkInnerTab} className="w-full">
+      <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-md grid-cols-3 gap-1 overflow-x-auto p-1">
+        <TabsTrigger
+          value="regimen"
+          className="min-h-10 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm"
+        >
+          <Activity className="size-4 shrink-0" aria-hidden />
+          Regimen PK
+        </TabsTrigger>
+        <TabsTrigger
+          value="pd"
+          className="min-h-10 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm"
+        >
+          <Waves className="size-4 shrink-0" aria-hidden />
+          PD effect
+        </TabsTrigger>
+        <TabsTrigger
+          value="nca"
+          className="min-h-10 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm"
+        >
+          <Sigma className="size-4 shrink-0" aria-hidden />
+          {/* Short label on ≤sm: "NCA (observed)" clips inside its
+           * grid cell at 360 px (109 px needed vs 104 available). */}
+          <span className="sm:hidden">NCA</span>
+          <span className="hidden sm:inline">NCA (observed)</span>
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="regimen" className="mt-4 sm:mt-6">
+        <RegimenPanel />
+      </TabsContent>
+      <TabsContent value="pd" className="mt-4 sm:mt-6">
+        <PdEffect />
+      </TabsContent>
+      <TabsContent value="nca" className="mt-4 sm:mt-6">
+        <NcaPanel />
+      </TabsContent>
+    </Tabs>
   );
 }

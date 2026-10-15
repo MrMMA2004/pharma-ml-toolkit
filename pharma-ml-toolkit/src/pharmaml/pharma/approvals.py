@@ -105,7 +105,8 @@ def filter_approved_drugs(
     Returns
     -------
     list[str]
-        Sorted unique drug names (stripped).
+        Sorted unique drug names (stripped; blank/whitespace-only
+        cells are skipped like the missing-value sentinels).
 
     Raises
     ------
@@ -160,7 +161,10 @@ def filter_approved_drugs(
         for value in approved[drug_key]:
             if _is_missing(value):
                 continue
-            names.add(str(value).strip())
+            name = str(value).strip()
+            if not name:
+                continue  # blank cell: not a drug name, same as missing
+            names.add(name)
 
     result = sorted(names)
     if out_path is not None:

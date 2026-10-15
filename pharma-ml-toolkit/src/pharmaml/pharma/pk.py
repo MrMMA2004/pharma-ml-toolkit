@@ -57,15 +57,19 @@ def elimination_rate_constant(t_half: float) -> float:
 def iv_bolus_concentration(c0: float, ke: float, t: float | np.ndarray) -> float | np.ndarray:
     """Concentration after an IV bolus: ``C(t) = C0 · e^(−ke·t)``.
 
-    One-compartment model, first-order elimination.
+    One-compartment model, first-order elimination.  ``t`` may be a
+    scalar or any sequence of sample times (list, tuple, array or
+    pandas Series); the output mirrors the scalar/array nature of the
+    input.
     """
     c0 = validate_positive(c0, "c0")
     ke = validate_positive(ke, "ke")
-    if np.any(np.asarray(t) < 0):
+    times = np.asarray(t, dtype=float)
+    if np.any(times < 0):
         raise DataValidationError("time t must be non-negative")
-    return c0 * np.exp(-ke * np.asarray(t, dtype=float)) if isinstance(
-        t, np.ndarray
-    ) else c0 * math.exp(-ke * t)
+    if np.ndim(t) == 0:
+        return c0 * math.exp(-ke * float(times))
+    return c0 * np.exp(-ke * times)
 
 
 def iv_infusion_steady_state(rate: float, clearance_: float) -> float:
@@ -83,8 +87,11 @@ def oral_tmax(ka: float, ke: float) -> float:
     Raises
     ------
     DataValidationError
-        If ``ka <= ke`` (flip-flop kinetics make the formula invalid)
-        or either rate is not positive.
+        If ``ka <= ke`` or either rate is not positive.  (The closed
+        form is in fact symmetric in ka/ke, so it stays valid under
+        flip-flop -- but ``ka <= ke`` is almost always a data-entry
+        mistake in this parameterisation, so the toolkit refuses to
+        compute it rather than risk a silently-wrong regimen.)
     """
     ka = validate_positive(ka, "ka")
     ke = validate_positive(ke, "ke")
@@ -126,8 +133,11 @@ def auc_trapezoid(
     method:
         ``'linear'`` for the standard trapezoid (safe with zero
         concentrations) or ``'log'`` for the logarithmic trapezoid
-        (more accurate during exponential decay; requires positive
-        concentrations).
+        [1]_ -- the segment integral ``Δt·(C₂ − C₁)/ln(C₂/C₁)``,
+        which is *exact* while the curve decays exponentially between
+        samples.  The log rule requires positive concentrations;
+        segments with equal endpoint concentrations (its 0/0 corner)
+        fall back to the linear rule, which is exact for constant C.
 
     Returns
     -------
@@ -148,8 +158,18 @@ def auc_trapezoid(
     if method == "linear":
         areas = 0.5 * (c[:-1] + c[1:]) * dt
     elif method == "log":
-        c_mid = np.sqrt(c[:-1] * c[1:])
-        areas = c_mid * dt
+        # Purves' logarithmic trapezoid: dt * (c2 - c1)/ln(c2/c1), exact
+        # for exponential segments in either direction.  Equal endpoint
+        # concentrations make it 0/0; those segments are constant, for
+        # which the linear trapezoid is exact.
+        c_start, c_end = c[:-1], c[1:]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            log_ratio = np.log(c_end) - np.log(c_start)
+            quotient = (c_end - c_start) / log_ratio
+        flat = log_ratio == 0.0
+        if np.any(flat):
+            quotient = np.where(flat, 0.5 * (c_start + c_end), quotient)
+        areas = quotient * dt
     else:
         raise DataValidationError(
             f"method must be 'linear' or 'log', got {method!r}"
@@ -257,7 +277,8 @@ def creatinine_clearance(
     serum_cr_mg_dl:
         Serum creatinine in mg/dL.
     sex:
-        ``'male'``/``'m'`` or ``'female'``/``'f'``.
+        ``'male'``/``'m'`` or ``'female'``/``'f'`` (non-string values
+        are rejected with a DataValidationError).
 
     References
     ----------
@@ -267,7 +288,7 @@ def creatinine_clearance(
         raise DataValidationError(f"age must be within [1, 120] years, got {age_years}")
     validate_positive(weight_kg, "weight_kg")
     validate_positive(serum_cr_mg_dl, "serum_creatinine")
-    key = sex.strip().lower()
+    key = sex.strip().lower() if isinstance(sex, str) else None
     if key in {"male", "m"}:
         factor = 1.0
     elif key in {"female", "f"}:
@@ -307,9 +328,10 @@ def nca_summary(
 ) -> PKSummary:
     """Full non-compartmental analysis of one profile.
 
-    The terminal half-life is estimated from the last two (or three)
-    positive points by log-linear regression, mirroring the behaviour
-    of commercial NCA software.
+    The terminal half-life is estimated from the last two positive
+    points (a log-linear secant through the final positive samples,
+    mirroring the behaviour of commercial NCA software); trailing
+    below-limit samples reported as zero are excluded automatically.
     """
     t, c = validate_concentration_series(times, conc, require_positive_conc=False)
 

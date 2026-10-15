@@ -104,3 +104,27 @@ class TestTDM:
     def test_extreme_ratio_refused(self) -> None:
         with pytest.raises(DataValidationError, match="non-linear"):
             tdm_trough_adjustment(100.0, 1.0, 12.0)  # ratio 12 > 5
+
+
+class TestTDMSymmetry:
+    """The non-linear-kinetics guard must be symmetric in both directions."""
+
+    def test_extreme_reduction_refused(self) -> None:
+        # Regression: the guard only fired for target/measured > 5 (dose
+        # increases); a 10x reduction sailed through silently, although the
+        # same non-steady-state / non-linearity concerns apply.
+        with pytest.raises(DataValidationError, match="non-linear"):
+            tdm_trough_adjustment(1000.0, measured_trough=50.0, target_trough=5.0)
+
+    def test_boundary_fivefold_reduction_allowed(self) -> None:
+        # PINNING: exactly 5x down stays on the accepted edge of linear
+        # kinetics (the guard is strict on both sides).
+        assert tdm_trough_adjustment(500.0, 25.0, 5.0) == pytest.approx(100.0)
+
+
+class TestRenalScalingDirection:
+    def test_supranormal_clearance_scales_up(self) -> None:
+        # PINNING (documented linear scaling): CrCl above the normal value
+        # increases the dose proportionally -- the docstring states the
+        # scaling is bidirectional.
+        assert renal_dose_adjustment(100.0, 150.0, 100.0) == pytest.approx(150.0)

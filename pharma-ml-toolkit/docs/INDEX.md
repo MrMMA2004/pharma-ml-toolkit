@@ -128,7 +128,7 @@ after adding new public functions.
 | `infusion_rate` | function | Constant IV infusion rate achieving a steady state: ``R = CL·Css``. |
 | `loading_dose` | function | Loading dose to reach target concentration quickly. |
 | `maintenance_dose` | function | Maintenance dose per dosing interval. |
-| `renal_dose_adjustment` | function | Linearly reduce a dose for impaired renal function. |
+| `renal_dose_adjustment` | function | Linearly scale a dose with renal function (creatinine clearance). |
 | `tdm_trough_adjustment` | function | Proportionally adjust a dose from a measured trough level. |
 | `youngs_rule` | function | Young's rule for paediatric dose scaling (age 1–12). |
 | `filter_approved_drugs` | function | Collect the drug names whose regulatory approval matches a status. |

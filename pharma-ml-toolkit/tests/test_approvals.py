@@ -144,3 +144,16 @@ class TestMissingSentinels:
         names = filter_approved_drugs(frame)
         assert names == ["Warfarin"]
         assert "NaT" not in names
+
+    def test_blank_drug_cells_are_skipped(self) -> None:
+        # Regression: whitespace-only drug cells were collected as "" in
+        # the returned list (and in the out_path CSV).
+        frame = pd.DataFrame(
+            {
+                "Drug": ["Aspirin", "   ", ""],
+                "Regulatory Approval": ["Approved", "Approved", "Approved"],
+            }
+        )
+        names = filter_approved_drugs(frame)
+        assert names == ["Aspirin"]
+        assert "" not in names

@@ -872,7 +872,14 @@ def _cmd_chem_descriptors(args: argparse.Namespace) -> int:
         print(f"error: column {args.smiles_col!r} not found", file=sys.stderr)
         return 2
     descriptors = compute_descriptors(frame[args.smiles_col], descriptor_set=args.descriptor_set)
-    merged = frame.join(descriptors.drop(columns=["SMILES"]), how="left")
+    # ``descriptors`` is indexed by *position* in the SMILES column, so the
+    # join must be positional: aligning on the caller frame's index labels
+    # would silently attach the wrong row's descriptors to any frame that
+    # lacks a default RangeIndex.
+    merged = frame.reset_index(drop=True).join(
+        descriptors.drop(columns=["SMILES"]), how="left"
+    )
+    merged.index = frame.index
     out = Path(args.out) if args.out else Path(args.data).with_name(
         Path(args.data).stem + "_descriptors.csv"
     )

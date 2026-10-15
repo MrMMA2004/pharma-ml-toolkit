@@ -10,9 +10,9 @@ import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
 import { LigandReconciler } from "@/components/explorer/playground/ligand-reconciler";
 import { useToolkitStore } from "@/lib/store";
 
-/** Playground: pharma calculators / PK simulator / ML training / cell line
+/** Playground: pharma calculators / PK-PD explorer / ML training / cell line
  * biology / docking parser / ligand-set reconciler. The active sub-tab and
- * the PK regimen live in the store so both survive switching away and back. */
+ * the PK/PD state live in the store so both survive switching away and back. */
 export function Playground() {
   const playgroundTab = useToolkitStore((s) => s.playgroundTab);
   const setPlaygroundTab = useToolkitStore((s) => s.setPlaygroundTab);
@@ -36,7 +36,7 @@ export function Playground() {
           className="min-h-11 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm sm:px-3 sm:text-sm"
         >
           <Activity className="size-4 shrink-0" aria-hidden />
-          PK Simulator
+          PK / PD
         </TabsTrigger>
         <TabsTrigger
           value="ml"

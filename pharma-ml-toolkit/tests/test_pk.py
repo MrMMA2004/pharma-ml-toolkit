@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
+import pandas as pd
 import pytest
 
 from pharmaml.exceptions import DataValidationError
@@ -17,6 +20,7 @@ from pharmaml.pharma.pk import (
     elimination_rate_constant,
     half_life,
     iv_bolus_concentration,
+    iv_infusion_steady_state,
     mrt,
     nca_summary,
     oral_cmax,
@@ -158,6 +162,14 @@ class TestCockcroftGault:
         with pytest.raises(DataValidationError):
             creatinine_clearance(150, 80, 1.0, "male")
 
+    def test_rejects_non_string_sex(self) -> None:
+        # Regression: a non-string sex used to escape as a raw
+        # AttributeError ('NoneType' has no attribute 'strip').
+        with pytest.raises(DataValidationError, match="sex"):
+            creatinine_clearance(40, 80, 1.0, None)
+        with pytest.raises(DataValidationError, match="sex"):
+            creatinine_clearance(40, 80, 1.0, 123)
+
 
 class TestNCASummary:
     def test_synthetic_profile(self) -> None:
@@ -232,3 +244,103 @@ def test_pharma_package_surface() -> None:
     # star-import parity: __all__ lists everything importable
     for name in expected:
         assert name in pharma.__all__, name
+
+
+class TestLogTrapezoid:
+    """The ``method='log'`` contract: Purves' logarithmic trapezoid."""
+
+    def test_exact_for_exponential_segment(self) -> None:
+        # Regression: a 10x decay over one interval must integrate to
+        # (c1 - c2)/ln(c1/c2) = 9/ln(10) = 3.9089.  The old geometric-mean
+        # implementation returned sqrt(10) = 3.1623 (-19%).
+        assert auc_trapezoid([0.0, 1.0], [10.0, 1.0], method="log") == pytest.approx(
+            9.0 / math.log(10)
+        )
+
+    def test_exact_for_two_decade_decay(self) -> None:
+        # Regression: 100x decay -- the old implementation was off by -53%.
+        assert auc_trapezoid([0.0, 1.0], [100.0, 1.0], method="log") == pytest.approx(
+            99.0 / math.log(100)
+        )
+
+    def test_mixed_flat_and_decaying_segments(self) -> None:
+        # Flat segments (c1 == c2) are the log rule's 0/0 corner and fall
+        # back to the linear rule; decaying segments use the log rule.
+        expected = 5.0 + 5.0 + 4.5 / math.log(10)
+        assert auc_trapezoid(
+            [0.0, 1.0, 2.0, 3.0], [5.0, 5.0, 5.0, 0.5], method="log"
+        ) == pytest.approx(expected)
+
+    def test_flat_profile_log_does_not_crash(self) -> None:
+        # PINNING (already correct before this round): constant profiles
+        # integrate exactly under either rule.
+        assert auc_trapezoid(
+            [0.0, 1.0, 2.0], [5.0, 5.0, 5.0], method="log"
+        ) == pytest.approx(10.0)
+
+    def test_ascending_segment_uses_log_rule(self) -> None:
+        # The log rule is direction-symmetric: 1 -> 10 over one interval.
+        assert auc_trapezoid([0.0, 1.0], [1.0, 10.0], method="log") == pytest.approx(
+            9.0 / math.log(10)
+        )
+
+
+class TestIVBolusSequenceTimes:
+    """``iv_bolus_concentration`` accepts sequences, not just ndarrays."""
+
+    def test_list_and_tuple_times(self) -> None:
+        # Regression: list/tuple time input crashed with a raw TypeError.
+        expected = 10.0 * np.exp(-0.5 * np.array([0.0, 1.0, 2.0]))
+        for t in ([0.0, 1.0, 2.0], (0.0, 1.0, 2.0)):
+            result = iv_bolus_concentration(10.0, 0.5, t)
+            assert isinstance(result, np.ndarray)
+            np.testing.assert_allclose(result, expected)
+
+    def test_series_times(self) -> None:
+        # Regression: Series time input crashed with a raw TypeError.
+        result = iv_bolus_concentration(10.0, 0.5, pd.Series([0.0, 1.0, 2.0]))
+        np.testing.assert_allclose(
+            result, 10.0 * np.exp(-0.5 * np.array([0.0, 1.0, 2.0]))
+        )
+
+    def test_negative_time_in_sequence_raises(self) -> None:
+        # PINNING (already correct before this round).
+        with pytest.raises(DataValidationError, match="non-negative"):
+            iv_bolus_concentration(10.0, 0.5, [0.0, -1.0])
+
+
+class TestSeriesInputValidation:
+    """Non-numeric series values must raise the documented typed error."""
+
+    def test_non_numeric_concentration_raises_typed_error(self) -> None:
+        # Regression: junk text escaped as a raw numpy ValueError
+        # ("could not convert string to float") instead of DataValidationError.
+        with pytest.raises(DataValidationError, match="numeric"):
+            auc_trapezoid([0.0, 1.0], ["low", "high"])
+
+    def test_non_numeric_times_raise_typed_error(self) -> None:
+        with pytest.raises(DataValidationError, match="numeric"):
+            auc_trapezoid(["now", "later"], [1.0, 2.0])
+
+
+class TestNCATerminalSlope:
+    def test_trailing_zero_samples_do_not_poison_terminal_slope(self) -> None:
+        # PINNING (already correct before this round): BLQ zeros at the tail
+        # are excluded -- the slope comes from the last two POSITIVE samples
+        # (6 -> 3 over 1 h, i.e. t1/2 = 1 h).
+        summary = nca_summary([0.0, 1.0, 2.0, 3.0, 4.0], [10.0, 6.0, 3.0, 0.0, 0.0])
+        assert summary.half_life_terminal == pytest.approx(1.0)
+
+    def test_rising_tail_gives_nan_half_life(self) -> None:
+        # PINNING (already correct before this round): an ascending tail has
+        # no terminal elimination phase.
+        summary = nca_summary([0.0, 1.0, 2.0], [1.0, 2.0, 4.0])
+        assert math.isnan(summary.half_life_terminal)
+
+
+class TestIVInfusionSteadyState:
+    def test_css_is_rate_over_clearance(self) -> None:
+        # PINNING (first behavioural test for this public function -- it had
+        # zero coverage beyond hasattr checks).
+        assert iv_infusion_steady_state(50.0, 10.0) == pytest.approx(5.0)
+        assert iv_infusion_steady_state(30.0, 2.0) == pytest.approx(15.0)

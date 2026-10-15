@@ -9,6 +9,7 @@ them.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -579,6 +580,131 @@ class TestPharmaApprovalsCommand:
         assert "2 unique" in out_text
         frame = pd.read_csv(out)
         assert frame["drug"].tolist() == ["Ibuprofen", "Metformin"]
+
+
+class TestPharmaPkCommand:
+    """`pharmaml pharma pk` -- NCA summary straight from a CSV."""
+
+    def test_pk_summary_json(self, tmp_path, capsys):
+        profile = tmp_path / "profile.csv"
+        profile.write_text(
+            "time,conc\n0,10.0\n1,6.0\n2,3.6\n3,2.2\n", encoding="utf-8"
+        )
+        code = main(["pharma", "pk", "--data", str(profile)])
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        # linear trapezoid: 0.5*(10+6) + 0.5*(6+3.6) + 0.5*(3.6+2.2) = 15.7
+        assert payload["AUC"] == pytest.approx(15.7)
+        assert payload["Cmax"] == pytest.approx(10.0)
+        assert payload["Tmax"] == pytest.approx(0.0)
+
+    def test_pk_out_json_file(self, tmp_path, capsys):
+        profile = tmp_path / "profile.csv"
+        profile.write_text(
+            "time,conc\n0,10.0\n1,6.0\n2,3.6\n3,2.2\n", encoding="utf-8"
+        )
+        out = tmp_path / "summary.json"
+        code = main(
+            ["pharma", "pk", "--data", str(profile), "--out", str(out)]
+        )
+        assert code == 0
+        assert "saved ->" in capsys.readouterr().out
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        assert payload["AUC"] == pytest.approx(15.7)
+
+    def test_pk_non_numeric_concentration_clean_error(self, tmp_path, capsys):
+        # Regression: a text cell ('blq') in the conc column used to surface
+        # as a raw numpy conversion error; it must be a typed message that
+        # names the offending values.
+        messy = tmp_path / "messy.csv"
+        messy.write_text("time,conc\n0,5.0\n1,blq\n2,1.0\n", encoding="utf-8")
+        code = main(["pharma", "pk", "--data", str(messy)])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "error:" in err
+        assert "numeric" in err
+
+
+class TestPharmaDoseCommand:
+    """`pharmaml pharma dose` -- regimen design from CL/Vd/Css."""
+
+    def test_dose_regimen_output(self, capsys):
+        code = main(
+            [
+                "pharma", "dose",
+                "--cl", "5.0", "--vd", "35.0", "--target-css", "15.0",
+                "--tau", "12.0", "--f", "0.9",
+            ]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        # MD = CL*Css*tau/F = 5*15*12/0.9 = 1000; LD = Vd*Css/F = 35*15/0.9.
+        assert "maintenance dose : 1000.00 per 12 h" in out
+        assert "loading dose     : 583.33" in out
+
+    def test_dose_rejects_negative_clearance(self, capsys):
+        code = main(
+            [
+                "pharma", "dose",
+                "--cl", "-5.0", "--vd", "35.0", "--target-css", "15.0",
+            ]
+        )
+        assert code == 1
+        assert "error:" in capsys.readouterr().err
+
+
+class TestChemDescriptorsCommand:
+    """`pharmaml chem descriptors` output alignment (round-19 triage item)."""
+
+    @staticmethod
+    def _ligands_csv(tmp_path: Path) -> Path:
+        csv = tmp_path / "ligands.csv"
+        csv.write_text("smiles\nCCO\nCCN\n", encoding="utf-8")
+        return csv
+
+    def test_descriptors_aligned_with_default_index_csv(self, tmp_path):
+        # PINNING: the plain CSV path (default RangeIndex) is correct.
+        csv = self._ligands_csv(tmp_path)
+        out = tmp_path / "out.csv"
+        code = main(
+            [
+                "chem", "descriptors", "--data", str(csv),
+                "--smiles-col", "smiles", "--out", str(out),
+            ]
+        )
+        assert code == 0
+        frame = pd.read_csv(out)
+        weights = frame.set_index("smiles")["MolWt"]
+        assert weights["CCO"] == pytest.approx(46.07, abs=0.05)
+        assert weights["CCN"] == pytest.approx(45.08, abs=0.05)
+
+    def test_descriptors_positionally_aligned_for_indexed_frames(
+        self, tmp_path, monkeypatch
+    ):
+        # Regression (round-19 triage): compute_descriptors indexes rows by
+        # POSITION in the SMILES column, but the CLI handler joined on the
+        # caller frame's INDEX LABELS -- any frame without a default
+        # RangeIndex silently attached the wrong row's descriptors.
+        csv = self._ligands_csv(tmp_path)
+        indexed = pd.read_csv(csv)
+        indexed.index = [1, 0]  # non-default label/position permutation
+
+        import pharmaml.utils.io as io_module
+
+        monkeypatch.setattr(io_module, "read_table", lambda path: indexed.copy())
+        out = tmp_path / "out.csv"
+        code = main(
+            [
+                "chem", "descriptors", "--data", str(csv),
+                "--smiles-col", "smiles", "--out", str(out),
+            ]
+        )
+        assert code == 0
+        frame = pd.read_csv(out)
+        weights = frame.set_index("smiles")["MolWt"]
+        # CCO (46.07 g/mol) must keep its own descriptors, not CCN's.
+        assert weights["CCO"] == pytest.approx(46.07, abs=0.05)
+        assert weights["CCN"] == pytest.approx(45.08, abs=0.05)
 
 
 class TestBiologyCommands:

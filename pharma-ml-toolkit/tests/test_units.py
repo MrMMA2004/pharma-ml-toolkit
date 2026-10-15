@@ -77,3 +77,36 @@ def test_conversion_within_dimension_is_transitive() -> None:
     step1 = UnitConverter.convert(7.5, "mg", "g")
     step2 = UnitConverter.convert(step1, "g", "kg")
     assert step2 == pytest.approx(UnitConverter.convert(7.5, "mg", "kg"))
+
+
+class TestMolarMassRobustness:
+    """Malformed formulas must raise; documented examples must parse."""
+
+    def test_docstring_example_cobalt_hexammine(self) -> None:
+        # Regression: the _parse_formula_group docstring promises
+        # Co(NH3)6.3H2O parses -- Co was missing from the element table.
+        assert molar_mass("Co(NH3)6.3H2O") == pytest.approx(215.164, rel=1e-4)
+
+    def test_empty_parenthesis_group_rejected(self) -> None:
+        # Regression: "Ca()2" used to return the plain Ca mass silently.
+        with pytest.raises(UnitConversionError, match="empty"):
+            molar_mass("Ca()2")
+
+    def test_dangling_hydrate_count_rejected(self) -> None:
+        # Regression: "MgSO4.7" used to return the plain MgSO4 mass silently.
+        with pytest.raises(UnitConversionError, match="hydrate"):
+            molar_mass("MgSO4.7")
+
+    def test_non_string_formula_rejected(self) -> None:
+        # Regression: molar_mass(None) escaped as a raw AttributeError.
+        with pytest.raises(UnitConversionError, match="string"):
+            molar_mass(None)
+        with pytest.raises(UnitConversionError, match="string"):
+            molar_mass(194)
+
+    def test_nested_parentheses(self) -> None:
+        # PINNING (already correct before this round): K4(Fe(CN)6)
+        # = 4 K + Fe + 6 (C + N).
+        assert molar_mass("K4(Fe(CN)6)") == pytest.approx(
+            4 * 39.098 + 55.845 + 6 * (12.011 + 14.007), rel=1e-4
+        )

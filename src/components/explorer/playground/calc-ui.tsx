@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { copyToClipboard } from "@/lib/format";
 import { toast } from "sonner";
@@ -79,6 +80,60 @@ export function NumberField({
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Slider row (label + value pill + range slider)                      */
+/* ------------------------------------------------------------------ */
+
+interface ParamSliderProps {
+  id: string;
+  label: string;
+  unit: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (v: number) => void;
+  format?: (v: number) => string;
+}
+
+/** Labelled slider row with a mono value pill — the shared control atom
+ *  for the PK regimen + PD effect panels. */
+export function ParamSlider({
+  id,
+  label,
+  unit,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+  format,
+}: ParamSliderProps) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+          {label}
+        </Label>
+        <span className="rounded-md border border-primary/15 bg-primary/5 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums">
+          {format ? format(value) : value}
+          <span className="ml-0.5 font-normal text-muted-foreground">{unit}</span>
+        </span>
+      </div>
+      <Slider
+        id={id}
+        min={min}
+        max={max}
+        step={step}
+        value={[value]}
+        onValueChange={(vals) => onChange(vals[0] ?? value)}
+        aria-label={`${label} in ${unit}`}
+        className="py-1"
+      />
     </div>
   );
 }
@@ -197,3 +252,38 @@ export const CHART = {
     boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
   } as const,
 } as const;
+
+/** Compact chart legend that dedupes by label — the shared atom for charts
+ *  where two series (e.g. an Area + Line on the same dataKey, or a Line
+ *  joining a Scatter's points) carry the same name. */
+export function DedupeLegend({
+  payload,
+}: {
+  payload?: Array<{ value?: string; color?: string; dataKey?: string | number }>;
+}) {
+  const items = (payload ?? []).filter(
+    (it, idx, arr) => arr.findIndex((x) => x.value === it.value) === idx,
+  );
+  if (items.length === 0) return null;
+  return (
+    <ul
+      className="flex list-none flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-[11px]"
+      style={{ color: "#78716c" }}
+    >
+      {items.map((it) => (
+        <li
+          key={String(it.value ?? it.dataKey)}
+          className="flex items-center gap-1.5"
+          style={{ color: it.color ?? "#78716c" }}
+        >
+          <span
+            className="inline-block h-0.5 w-4 rounded-full"
+            style={{ backgroundColor: it.color ?? "#78716c" }}
+            aria-hidden
+          />
+          <span className="text-muted-foreground">{it.value}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}

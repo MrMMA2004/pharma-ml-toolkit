@@ -90,7 +90,8 @@ _ATOMIC_WEIGHTS: dict[str, float] = {
     "C": 12.011, "N": 14.007, "O": 15.999, "F": 18.998, "Ne": 20.180,
     "Na": 22.990, "Mg": 24.305, "Al": 26.982, "Si": 28.085, "P": 30.974,
     "S": 32.06, "Cl": 35.45, "Ar": 39.948, "K": 39.098, "Ca": 40.078,
-    "Fe": 55.845, "Zn": 65.38, "Se": 78.971, "Br": 79.904, "I": 126.90,
+    "Co": 58.933, "Fe": 55.845, "Zn": 65.38, "Se": 78.971, "Br": 79.904,
+    "I": 126.90,
 }
 
 
@@ -104,7 +105,9 @@ def molar_mass(formula: str) -> float:
     Raises
     ------
     UnitConversionError
-        If the formula contains unknown elements or malformed groups.
+        If the formula is not a string, contains unknown elements or
+        malformed groups (including empty ``()`` groups and hydrate
+        counts not followed by a formula).
 
     Examples
     --------
@@ -113,6 +116,10 @@ def molar_mass(formula: str) -> float:
     >>> round(molar_mass("C8H10N4O2"), 2)   # caffeine
     194.19
     """
+    if not isinstance(formula, str):
+        raise UnitConversionError(
+            f"formula must be a string, got {type(formula).__name__}: {formula!r}"
+        )
     text = formula.replace(" ", "").replace("·", ".")
     if not text:
         raise UnitConversionError("empty formula")
@@ -149,6 +156,10 @@ def _parse_formula_group(text: str) -> float:
             if end == -1:
                 raise UnitConversionError(f"unbalanced parentheses in formula {text!r}")
             inner = text[pos + 1 : end]
+            if not inner:
+                raise UnitConversionError(
+                    f"empty parenthesis group in formula {text!r}"
+                )
             multiplier_match = re.match(r"(\d+)", text[end + 1 :])
             multiplier_txt = multiplier_match.group(1) if multiplier_match else ""
             multiplier = float(multiplier_txt) if multiplier_txt else 1.0
@@ -165,7 +176,13 @@ def _parse_formula_group(text: str) -> float:
             if not multiplier_match:
                 raise UnitConversionError(f"malformed hydrate notation in {text!r}")
             count = float(multiplier_match.group(1))
-            total += count * _parse_formula_group(text[pos + multiplier_match.end() :])
+            tail = text[pos + multiplier_match.end() :]
+            if not tail:
+                raise UnitConversionError(
+                    f"hydrate count {multiplier_match.group(1)} in {text!r} "
+                    "is not followed by a formula"
+                )
+            total += count * _parse_formula_group(tail)
             break
 
         match = _ELEMENT_TOKEN.match(text, pos)

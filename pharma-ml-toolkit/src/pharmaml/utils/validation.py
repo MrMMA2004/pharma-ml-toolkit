@@ -131,8 +131,16 @@ def validate_concentration_series(
     DataValidationError
         With a precise description of the first violated rule.
     """
-    t = np.asarray(times, dtype=float)
-    c = np.asarray(concentrations, dtype=float)
+    try:
+        t = np.asarray(times, dtype=float)
+        c = np.asarray(concentrations, dtype=float)
+    except (TypeError, ValueError) as exc:
+        # e.g. text cells in a concentration column: numpy would otherwise
+        # escape as a raw "could not convert string to float" ValueError.
+        raise DataValidationError(
+            "times and concentrations must be numeric sequences "
+            f"(conversion failed: {exc})"
+        ) from exc
     if t.shape != c.shape or t.ndim != 1:
         raise DataValidationError(
             "times and concentrations must be 1-D sequences of equal length "
