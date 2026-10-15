@@ -2,7 +2,10 @@
  * Small formatting helpers shared across the UI.
  */
 
-/** Format a number to `sig` significant digits without float soup. */
+/** Format a number to `sig` significant digits without float soup.
+ *  `sig` is clamped to the 1–100 toPrecision() domain so a stray extra
+ *  argument (e.g. a recharts tick INDEX passed as the second parameter)
+ *  can never raise a RangeError. */
 export function fmtNum(value: number | null | undefined, sig = 3): string {
   if (value === null || value === undefined) return "—";
   if (Number.isNaN(value)) return "—";
@@ -11,7 +14,8 @@ export function fmtNum(value: number | null | undefined, sig = 3): string {
   if (abs !== 0 && (abs < 1e-4 || abs >= 1e6)) {
     return value.toExponential(2).replace("e+", "e");
   }
-  return String(Number(value.toPrecision(sig)));
+  const digits = Math.min(Math.max(Math.round(sig), 1), 100);
+  return String(Number(value.toPrecision(digits)));
 }
 
 /** Format bytes as B / KB / MB. */

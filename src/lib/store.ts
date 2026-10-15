@@ -389,6 +389,8 @@ function validateMlHistoryPayload(raw: unknown): {
     if (typeof item !== "object" || item === null) continue;
     const r = item as Record<string, unknown>;
     const result = validateMlResult(r.result);
+    const csvMeta =
+      typeof r.csv === "object" && r.csv !== null ? (r.csv as Record<string, unknown>) : null;
     if (
       !result ||
       typeof r.id !== "number" ||
@@ -414,21 +416,21 @@ function validateMlHistoryPayload(raw: unknown): {
       keyValue: r.keyValue,
       config: validateMl(r.config),
       result,
-      ...(typeof r.csv === "object" && r.csv !== null
+      ...(csvMeta
         ? {
             csv: {
               fileName:
-                typeof (r.csv as Record<string, unknown>).fileName === "string"
-                  ? (r.csv as Record<string, unknown>).fileName.slice(0, 128) || "pasted.csv"
+                typeof csvMeta.fileName === "string"
+                  ? csvMeta.fileName.slice(0, 128) || "pasted.csv"
                   : "pasted.csv",
-              featureColumns: Array.isArray((r.csv as Record<string, unknown>).featureColumns)
-                ? ((r.csv as Record<string, unknown>).featureColumns as unknown[])
+              featureColumns: Array.isArray(csvMeta.featureColumns)
+                ? (csvMeta.featureColumns as unknown[])
                     .filter((c): c is string => typeof c === "string" && c.length <= 128)
                     .slice(0, 8)
                 : [],
               targetColumn:
-                typeof (r.csv as Record<string, unknown>).targetColumn === "string"
-                  ? (r.csv as Record<string, unknown>).targetColumn.slice(0, 128)
+                typeof csvMeta.targetColumn === "string"
+                  ? csvMeta.targetColumn.slice(0, 128)
                   : "",
             },
           }
@@ -709,6 +711,7 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => ({
       playgroundTab: get().playgroundTab,
       pkParams,
       mlConfig: get().mlConfig,
+      mlCsv: get().mlCsv,
     });
   },
   resetPkParams: () => {

@@ -13,6 +13,7 @@ import {
   Dna,
   FileArchive,
   FileCode2,
+  Microscope,
   NotebookText,
   Pill,
   ShieldCheck,
@@ -216,6 +217,19 @@ const DOMAINS: DomainCardSpec[] = [
     accent: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
   },
   {
+    icon: Microscope,
+    title: "Cell Line Biology",
+    tagline: "pharmaml.biology — GDSC/CCLE-style screens",
+    bullets: [
+      "Drug-response screens: load, audit (duplicates, missing metrics), collapse replicates",
+      "Expression matrices: log2 / z-score normalisation, imputation, MAD feature selection",
+      "Biomarker discovery: per-gene Spearman vs response with Benjamini–Hochberg FDR",
+      "Synthetic 24-line × 10-tissue generator with a planted EGFR biomarker",
+    ],
+    apis: ["load_response_table()", "sensitivity_associations()", "top_biomarkers()"],
+    accent: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  },
+  {
     icon: Dna,
     title: "Cheminformatics",
     tagline: "pharmaml.chem — lazy RDKit extras",
@@ -271,7 +285,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "900 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+    after: "955 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Distribution",
@@ -324,8 +338,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "122";
-  const loc = stats ? fmtInt(stats.totalLines) : "48,003";
+  const fileCount = stats ? fmtInt(stats.files) : "124";
+  const loc = stats ? fmtInt(stats.totalLines) : "48,687";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -373,7 +387,7 @@ export function Overview() {
             >
               One toolkit.{" "}
               <span className="hero-gradient-text">
-                Three scientific domains.
+                Six scientific domains.
               </span>
             </motion.h1>
             <motion.p
@@ -603,14 +617,14 @@ export function Overview() {
           <div>
             <p className="eyebrow">The package</p>
             <h2 id="domains-title" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
-              Five subpackages, one import
+              Six domains, one import
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Every module ships with type hints, docstrings, structured logging and tests.
             </p>
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {DOMAINS.map((d, i) => (
             <motion.div
               key={d.title}

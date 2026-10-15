@@ -224,6 +224,94 @@ export interface DatasetPreviewResponse {
 }
 
 /* ------------------------------------------------------------------ */
+/* Cell line biology / biomarker discovery                              */
+/* ------------------------------------------------------------------ */
+
+/** The 8 screened compounds (mirrors examples/make_synthetic_cellline_data.py). */
+export type BiologyCompound =
+  | "erlotinib"
+  | "gefitinib"
+  | "cisplatin"
+  | "doxorubicin"
+  | "paclitaxel"
+  | "5-fluorouracil"
+  | "gemcitabine"
+  | "sorafenib";
+
+export interface BiomarkersRequest {
+  compound: BiologyCompound;
+  /** Number of genes in the expression matrix (60–600). */
+  genes: number;
+  /** Screen-generation seed (expression matrix uses seed + 1). */
+  seed: number;
+  /** Panel size restriction (6–24 canonical cell lines). */
+  nCellLines?: number;
+}
+
+/** One row of the ranked biomarker table. */
+export interface BiomarkerRow {
+  /** 1-based rank by |rho| descending. */
+  rank: number;
+  gene: string;
+  /** Spearman rho vs the compound's LN_IC50 (negative = sensitizing). */
+  rho: number;
+  /** Two-sided p-value, normal approximation with tie correction. */
+  pValue: number;
+  /** Benjamini–Hochberg adjusted p-value across all screened genes. */
+  fdr: number;
+  /** FDR < 0.05. */
+  significant: boolean;
+}
+
+/** One cell line of a biomarker scatter payload. */
+export interface BiomarkerPoint {
+  cellLine: string;
+  tissue: string;
+  /** Expression of the plotted gene (raw log2 value). */
+  value: number;
+  /** Response of the selected compound (natural-log IC50, µM). */
+  lnIc50: number;
+  /** Area under the dose–response curve (0–1, tracks LN_IC50). */
+  auc: number;
+}
+
+/** Scatter payload for one gene (the top hit, or EGFR specifically). */
+export interface BiomarkerScatter {
+  gene: string;
+  rho: number;
+  significant: boolean;
+  points: BiomarkerPoint[];
+  /** Rank-space fitted trend line, mapped back to value space. */
+  trend: Array<{ x: number; y: number }>;
+}
+
+export interface BiomarkersResponse {
+  /** Top 15 genes by |rho|. */
+  biomarkers: BiomarkerRow[];
+  /** Full row for EGFR when present in the matrix (always is). */
+  egfr: BiomarkerRow | null;
+  /** Scatter payload of the #1 ranked gene. */
+  topHit: BiomarkerScatter;
+  /** Scatter payload for EGFR (same points, EGFR expression values). */
+  egfrScatter: BiomarkerScatter | null;
+  /** Distinct tissues covered by the panel (chart legend order). */
+  tissues: string[];
+  meta: {
+    nGenes: number;
+    nCellLines: number;
+    compound: BiologyCompound;
+    /** "EGFR" when the planted biomarker ranks #1 and passes FDR < 0.05. */
+    plantedHit: "EGFR" | null;
+    /** Number of genes significant at FDR < 0.05. */
+    nSignificant: number;
+    /** Strongest |rho| across the whole screen. */
+    strongestRho: number;
+    seed: number;
+    runtimeMs: number;
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Docking result parser                                               */
 /* ------------------------------------------------------------------ */
 

@@ -15,9 +15,11 @@ import {
   Download,
   Eraser,
   FileCode2,
+  GitCompare,
   Hash,
   LayoutDashboard,
   Loader2,
+  Microscope,
   Moon,
   NotebookText,
   ScanSearch,
@@ -82,7 +84,9 @@ const SUB_TABS: Array<{ value: string; label: string; icon: LucideIcon }> = [
   { value: "calculators", label: "Calculators", icon: Calculator },
   { value: "pk", label: "PK Simulator", icon: Activity },
   { value: "ml", label: "ML Training", icon: Brain },
+  { value: "biology", label: "Cell Line Bio", icon: Microscope },
   { value: "docking", label: "Docking Parser", icon: ScanSearch },
+  { value: "reconciler", label: "Ligand Sets", icon: GitCompare },
 ];
 
 const SYMBOL_ICONS: Record<string, LucideIcon> = {
@@ -266,7 +270,7 @@ function PaletteDialog({ close }: { close: () => void }) {
         id: `tab:${t.id}`,
         group: "navigate",
         label: t.label,
-        sublabel: t.id === "playground" ? "machine learning · pharma · docking" : undefined,
+        sublabel: t.id === "playground" ? "ml · pharma · biology · docking" : undefined,
         icon: Icon,
         run: () => setTab(t.id),
       });

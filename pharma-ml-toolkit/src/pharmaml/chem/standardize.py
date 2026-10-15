@@ -107,7 +107,12 @@ def canonicalize_tautomer(smiles: str) -> str:
     Chem = require_rdkit_standardize()
     from rdkit.Chem.MolStandardize import rdMolStandardize  # noqa: PLC0415
 
-    mol = Chem.MolFromSmiles(smiles)
+    # Blank/non-str input must raise "Cannot parse SMILES" (see smiles_to_pdb).
+    mol = (
+        Chem.MolFromSmiles(smiles)
+        if isinstance(smiles, str) and smiles.strip()
+        else None
+    )
     if mol is None:
         raise DataValidationError(f"Cannot parse SMILES: {smiles!r}")
     try:
@@ -234,7 +239,15 @@ def smiles_to_pdb(
             f"num_confs must be at least 1, got {num_confs}"
         )
 
-    mol = Chem.MolFromSmiles(smiles)
+    # RDKit parses "" as a *valid* 0-atom molecule (the embedder then dies
+    # with "molecule has no atoms") and MolFromSmiles(None) raises a raw
+    # Boost error; both must surface as the documented parse failure.
+    # Same guard family as chem/descriptors._smiles_to_molecules.
+    mol = (
+        Chem.MolFromSmiles(smiles)
+        if isinstance(smiles, str) and smiles.strip()
+        else None
+    )
     if mol is None:
         raise DataValidationError(f"Cannot parse SMILES: {smiles!r}")
     mol.SetProp("_Name", name)

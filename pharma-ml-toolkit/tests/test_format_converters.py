@@ -178,6 +178,29 @@ class TestTableToSdf:
         assert len(back) == 2
         assert INVALID not in set(back["SMILES"])
 
+    def test_blank_smiles_cell_counted_as_failure(self, tmp_path: Path) -> None:
+        # 100x-19-a family fix: RDKit parses "" as a *valid* 0-atom molecule,
+        # which either crashed 3D embedding with "molecule has no atoms" or
+        # silently wrote an empty SDF record.  Blank cells are parse failures.
+        frame = pd.DataFrame({"SMILES": [ETHANOL, "", BENZENE]})
+        sdf = tmp_path / "l.sdf"
+        report = table_to_sdf(frame, sdf, embed3d=False)
+        assert report.molecules == 2
+        assert report.failures == 1
+        assert report.failed_smiles == [""]
+        assert sdf.read_text(encoding="utf-8").count("$$$$") == 2
+
+    def test_blank_smiles_cell_with_3d_embedding(self, tmp_path: Path) -> None:
+        # The embed3d=True path crashed outright (ValueError: molecule has
+        # no atoms) before the blank-cell guard.
+        frame = pd.DataFrame({"SMILES": [ETHANOL, ""]})
+        sdf = tmp_path / "l.sdf"
+        report = table_to_sdf(frame, sdf)
+        assert report.molecules == 1
+        assert report.failures == 1
+        assert report.embedded_3d == 1
+        assert sdf.read_text(encoding="utf-8").count("$$$$") == 1
+
     def test_embed3d_false_fast_path(self, ligand_frame: pd.DataFrame, tmp_path: Path) -> None:
         sdf = tmp_path / "l.sdf"
         report = table_to_sdf(ligand_frame, sdf, embed3d=False)

@@ -508,7 +508,15 @@ def table_to_sdf(
         for i, record in enumerate(frame.itertuples(index=False, name=None), start=1):
             values = dict(zip(columns, record))
             raw_smiles = values[smiles_col]
-            mol = Chem.MolFromSmiles(raw_smiles) if isinstance(raw_smiles, str) else None
+            # Blank cells must count as parse failures: RDKit parses "" as
+            # a *valid* 0-atom molecule, which then crashes the 3D embedder
+            # ("molecule has no atoms") or silently writes an empty record.
+            # Same guard family as chem/descriptors._smiles_to_molecules.
+            mol = (
+                Chem.MolFromSmiles(raw_smiles)
+                if isinstance(raw_smiles, str) and raw_smiles.strip()
+                else None
+            )
             if mol is None:
                 failures.append(str(raw_smiles))
                 _LOG.warning("Invalid SMILES at row %d: %r", i, raw_smiles)

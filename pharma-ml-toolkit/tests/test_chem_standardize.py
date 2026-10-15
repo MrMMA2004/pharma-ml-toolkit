@@ -51,6 +51,18 @@ class TestCanonicalizeTautomer:
         with pytest.raises(DataValidationError, match="Cannot parse SMILES"):
             canonicalize_tautomer("not_a_smiles")
 
+    def test_blank_smiles_raises(self) -> None:
+        # 100x-19-a family fix: "" parsed as a valid 0-atom molecule, so the
+        # tautomer canonicalisation silently returned "" instead of raising.
+        with pytest.raises(DataValidationError, match="Cannot parse SMILES"):
+            canonicalize_tautomer("")
+
+    def test_non_string_smiles_raises_cleanly(self) -> None:
+        # Same guard family: MolFromSmiles(None) escaped as a raw
+        # Boost.ArgumentError before the isinstance check.
+        with pytest.raises(DataValidationError, match="Cannot parse SMILES"):
+            canonicalize_tautomer(None)  # type: ignore[arg-type]
+
     def test_rdkit_missing_raises_dependency_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -96,6 +108,12 @@ class TestSmilesToPdb:
         assert atom_lines
         for line in atom_lines:  # PDB columns 61-66, the rar default of 20.0
             assert line[60:66] == " 20.00"
+
+    def test_blank_smiles_raises_cleanly(self, tmp_path: Path) -> None:
+        # 100x-19-a family fix: "" produced a raw "ValueError: molecule has
+        # no atoms" from the embedder instead of the documented parse error.
+        with pytest.raises(DataValidationError, match="Cannot parse SMILES"):
+            smiles_to_pdb("", tmp_path / "blank.pdb")
 
     def test_unsupported_metal_raises(self, tmp_path: Path) -> None:
         with pytest.raises(DataValidationError, match="Fe"):

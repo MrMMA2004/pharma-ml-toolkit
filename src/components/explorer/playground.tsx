@@ -1,17 +1,18 @@
 "use client";
 
-import { Activity, Brain, Calculator, GitCompare, ScanSearch } from "lucide-react";
+import { Activity, Brain, Calculator, GitCompare, Microscope, ScanSearch } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PharmaCalcs } from "@/components/explorer/playground/pharma-calcs";
 import { MlPlayground } from "@/components/explorer/playground/ml-playground";
+import { BiologyPlayground } from "@/components/explorer/playground/biology-playground";
 import { DockingParser } from "@/components/explorer/playground/docking-parser";
 import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
 import { LigandReconciler } from "@/components/explorer/playground/ligand-reconciler";
 import { useToolkitStore } from "@/lib/store";
 
-/** Playground: pharma calculators / PK simulator / ML training / docking
- * parser / ligand-set reconciler. The active sub-tab and the PK regimen
- * live in the store so both survive switching away and back. */
+/** Playground: pharma calculators / PK simulator / ML training / cell line
+ * biology / docking parser / ligand-set reconciler. The active sub-tab and
+ * the PK regimen live in the store so both survive switching away and back. */
 export function Playground() {
   const playgroundTab = useToolkitStore((s) => s.playgroundTab);
   const setPlaygroundTab = useToolkitStore((s) => s.setPlaygroundTab);
@@ -22,7 +23,7 @@ export function Playground() {
       onValueChange={setPlaygroundTab}
       className="w-full"
     >
-      <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-3xl grid-cols-2 gap-1 overflow-x-auto p-1 sm:grid-cols-5">
+      <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-3xl grid-cols-2 gap-1 overflow-x-auto p-1 sm:grid-cols-6">
         <TabsTrigger
           value="calculators"
           className="min-h-11 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm sm:px-3 sm:text-sm"
@@ -43,6 +44,13 @@ export function Playground() {
         >
           <Brain className="size-4 shrink-0" aria-hidden />
           ML Training
+        </TabsTrigger>
+        <TabsTrigger
+          value="biology"
+          className="min-h-11 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm sm:px-3 sm:text-sm"
+        >
+          <Microscope className="size-4 shrink-0" aria-hidden />
+          Cell Line Bio
         </TabsTrigger>
         <TabsTrigger
           value="docking"
@@ -67,6 +75,9 @@ export function Playground() {
       </TabsContent>
       <TabsContent value="ml" className="mt-4 sm:mt-6">
         <MlPlayground />
+      </TabsContent>
+      <TabsContent value="biology" className="mt-4 sm:mt-6">
+        <BiologyPlayground />
       </TabsContent>
       <TabsContent value="docking" className="mt-4 sm:mt-6">
         <DockingParser />

@@ -45,10 +45,25 @@ def tanimoto_from_bitarrays(a: np.ndarray, b: np.ndarray) -> float:
     """Tanimoto coefficient for two equal-length binary arrays.
 
     Uses vectorised bitwise ops -- ~50x faster than set operations for
-    2048-bit fingerprints in benchmarks.
+    2048-bit fingerprints in benchmarks.  Float inputs must be finite:
+    ``astype(bool)`` maps NaN to ``True``, so a NaN would silently count
+    as a set bit.
+
+    Raises
+    ------
+    DataValidationError
+        If the arrays differ in shape or contain non-finite float values.
     """
-    a = np.asarray(a).astype(bool)
-    b = np.asarray(b).astype(bool)
+    a = np.asarray(a)
+    b = np.asarray(b)
+    for label, arr in (("a", a), ("b", b)):
+        if arr.dtype.kind == "f" and not np.isfinite(arr).all():
+            raise DataValidationError(
+                f"bit array {label!r} contains non-finite values (NaN/inf); "
+                "expected a binary 0/1 array"
+            )
+    a = a.astype(bool)
+    b = b.astype(bool)
     if a.shape != b.shape:
         raise DataValidationError(
             f"bit arrays must have equal length, got {a.shape} vs {b.shape}"
@@ -75,9 +90,23 @@ def tanimoto_matrix(
     -------
     numpy.ndarray
         ``(n_ref, n_tgt)`` float64 similarity matrix.
+
+    Raises
+    ------
+    DataValidationError
+        If the matrices are not 2-D with matching bit length, or contain
+        non-finite float values (NaN would silently count as a set bit).
     """
-    reference = np.asarray(reference).astype(bool)
-    targets = np.asarray(targets).astype(bool)
+    reference = np.asarray(reference)
+    targets = np.asarray(targets)
+    for label, arr in (("reference", reference), ("targets", targets)):
+        if arr.dtype.kind == "f" and not np.isfinite(arr).all():
+            raise DataValidationError(
+                f"{label!r} contains non-finite values (NaN/inf); "
+                "expected a binary 0/1 matrix"
+            )
+    reference = reference.astype(bool)
+    targets = targets.astype(bool)
     if reference.ndim != 2 or targets.ndim != 2 or reference.shape[1] != targets.shape[1]:
         raise DataValidationError(
             "reference/targets must be 2-D with matching bit length, got "
@@ -138,19 +167,37 @@ def similarity_scan(
     Returns
     -------
     pandas.DataFrame
-        Filtered similarity pairs sorted by descending similarity.
+        Filtered similarity pairs sorted by descending similarity
+        (ties keep library order -- the sort is stable).  A pandas Series
+        is accepted for both SMILES arguments; row order is used and the
+        Series index is ignored, so the ``reference``/``target`` columns
+        always match the positional ``*_index`` columns.
+
+    Raises
+    ------
+    DataValidationError
+        If ``threshold`` is outside [0, 1] or either SMILES argument is
+        a bare string (which would otherwise be split into characters).
     """
     if not 0.0 <= threshold <= 1.0:
         raise DataValidationError(f"threshold must be within [0, 1], got {threshold}")
     _require_rdkit_similarity()
 
-    from pharmaml.chem.descriptors import compute_fingerprints  # noqa: PLC0415
+    from pharmaml.chem.descriptors import (  # noqa: PLC0415
+        _as_smiles_list,
+        compute_fingerprints,
+    )
+
+    # Materialise once: keeps positional lookups correct for Series with
+    # non-default indexes and for one-shot generators.
+    reference_list = _as_smiles_list(reference_smiles, "reference_smiles")
+    target_list = _as_smiles_list(target_smiles, "target_smiles")
 
     ref_matrix, ref_idx = compute_fingerprints(
-        list(reference_smiles), kind=fingerprint, n_bits=n_bits, radius=radius
+        reference_list, kind=fingerprint, n_bits=n_bits, radius=radius
     )
     tgt_matrix, tgt_idx = compute_fingerprints(
-        list(target_smiles), kind=fingerprint, n_bits=n_bits, radius=radius
+        target_list, kind=fingerprint, n_bits=n_bits, radius=radius
     )
     _LOG.info(
         "Similarity scan: %d valid references x %d valid targets (threshold=%.2f)",
@@ -168,8 +215,8 @@ def similarity_scan(
             if mask[ref_row, tgt_row]:
                 rows.append(
                     {
-                        "reference": reference_smiles[ref_pos],
-                        "target": target_smiles[tgt_pos],
+                        "reference": reference_list[ref_pos],
+                        "target": target_list[tgt_pos],
                         "reference_index": int(ref_pos),
                         "target_index": int(tgt_pos),
                         "similarity": float(similarities[ref_row, tgt_row]),
@@ -179,7 +226,7 @@ def similarity_scan(
         rows,
         columns=["reference", "target", "reference_index", "target_index", "similarity"],
     )
-    return frame.sort_values("similarity", ascending=False).reset_index(drop=True)
+    return frame.sort_values("similarity", ascending=False, kind="stable").reset_index(drop=True)
 
 
 def top_matches(
@@ -188,19 +235,41 @@ def top_matches(
     k: int = 10,
     fingerprint: str = "rdkit",
     n_bits: int = 2048,
+    radius: int = 2,
 ) -> pd.DataFrame:
     """Return the ``k`` library entries most similar to ``query``.
 
     Convenience wrapper around :func:`similarity_scan` with
-    ``threshold=0`` and a head-slice.
+    ``threshold=0`` and a head-slice.  ``radius`` is forwarded to the
+    Morgan fingerprint (matching :func:`similarity_scan`); equal
+    similarities keep library order.
+
+    Raises
+    ------
+    DataValidationError
+        If ``k < 1``, ``library`` is a bare string, or ``query`` is not a
+        parseable SMILES (a wrong query must not masquerade as "no
+        matches").
     """
     if k < 1:
         raise DataValidationError(f"k must be >= 1, got {k}")
+    _require_rdkit_similarity()
+    from pharmaml.chem.descriptors import (  # noqa: PLC0415
+        _as_smiles_list,
+        _smiles_to_molecules,
+    )
+
+    _, _, failures = _smiles_to_molecules([query])
+    if failures:
+        raise DataValidationError(
+            f"query SMILES is not valid: {query!r} -- no matches were computed"
+        )
     pairs = similarity_scan(
         [query],
-        list(library),
+        _as_smiles_list(library, "library"),
         threshold=0.0,
         fingerprint=fingerprint,
         n_bits=n_bits,
+        radius=radius,
     )
     return pairs.head(k).reset_index(drop=True)

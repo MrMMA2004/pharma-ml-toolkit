@@ -13,6 +13,7 @@ with:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Literal
 
 import numpy as np
@@ -23,7 +24,7 @@ from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
 
-__all__ = ["compute_descriptors", "compute_fingerprints", "require_rdkit"]
+__all__ = ["compute_descriptors", "compute_fingerprints", "compute_maccs", "require_rdkit"]
 
 FingerprintKind = Literal["morgan", "rdkit", "atom_pair"]
 
@@ -48,13 +49,38 @@ def _smiles_to_molecules(
     Chem = require_rdkit()
     molecules, valid_idx, failures = [], [], []
     for idx, smi in enumerate(smiles):
-        mol = Chem.MolFromSmiles(smi) if isinstance(smi, str) else None
+        # RDKit parses "" as a *valid* 0-atom molecule; blank cells must be
+        # counted as invalid instead (consistent with
+        # utils.validation.validate_smiles_syntax).
+        mol = (
+            Chem.MolFromSmiles(smi)
+            if isinstance(smi, str) and smi.strip()
+            else None
+        )
         if mol is None:
             failures.append(f"index {idx}: {smi!r}")
         else:
             molecules.append(mol)
             valid_idx.append(idx)
     return molecules, valid_idx, failures
+
+
+def _as_smiles_list(smiles: Iterable[str] | pd.Series, arg_name: str) -> list[str]:
+    """Materialise a SMILES sequence exactly once.
+
+    Rejects a bare string (``"CCO"`` would otherwise be iterated
+    character-by-character into three single-atom "molecules") and freezes
+    generators / pandas Series so later positional lookups stay valid even
+    when the Series index is not ``0..n-1``.
+    """
+    if isinstance(smiles, str):
+        preview = smiles if len(smiles) <= 40 else smiles[:40] + "..."
+        raise DataValidationError(
+            f"{arg_name} must be a list or pandas.Series of SMILES strings, not a "
+            f"single string (got {preview!r}); wrap it in a list to compute "
+            "one molecule"
+        )
+    return list(smiles)
 
 
 def compute_descriptors(
@@ -72,6 +98,7 @@ def compute_descriptors(
         ``'rdkit_all'`` for all 2D RDKit descriptors, ``'morgan'`` for a
         fixed-radius Morgan count fingerprint, ``'mordred'`` for the
         Mordred descriptor suite (needs ``pip install mordred``).
+        Any other value raises instead of silently falling back.
     progress:
         Show a tqdm progress bar for large batches.
 
@@ -79,17 +106,21 @@ def compute_descriptors(
     -------
     pandas.DataFrame
         One row per *valid* molecule, indexed by the original position,
-        with a ``SMILES`` column followed by descriptor columns.  Use
-        :func:`compute_fingerprints` for bit/count fingerprints instead.
+        with a ``SMILES`` column followed by descriptor columns.  Blank /
+        whitespace-only SMILES count as invalid, like any other parse
+        failure.  Use :func:`compute_fingerprints` for bit/count
+        fingerprints instead.
 
     Raises
     ------
     DependencyError
         If RDKit (or Mordred when selected) is not installed.
     DataValidationError
-        If no SMILES parses to a valid molecule.
+        If no SMILES parses to a valid molecule, ``smiles`` is a bare
+        string, or ``descriptor_set`` is unknown.
     """
-    molecules, valid_idx, failures = _smiles_to_molecules(list(smiles))
+    smiles_list = _as_smiles_list(smiles, "smiles")
+    molecules, valid_idx, failures = _smiles_to_molecules(smiles_list)
     if failures:
         _LOG.warning("Dropping %d invalid SMILES: %s", len(failures), failures[:5])
     if not molecules:
@@ -117,22 +148,31 @@ def compute_descriptors(
             rows.append(dict(calc(mol)))
         frame = pd.DataFrame(rows)
     elif descriptor_set == "morgan":
-        Chem = require_rdkit()
+        Chem = require_rdkit()  # noqa: F841 -- import guard
         from rdkit.Chem import rdMolDescriptors  # noqa: PLC0415
 
         names = [f"FP{i:03d}" for i in range(2048)]
         for mol in iterator:
-            counts = rdMolDescriptors.GetHashedMorganFingerprint(mol, radius=2, nBits=2048)
-            rows.append({name: counts.GetVal(u) for u, name in enumerate(names)})
+            counts = rdMolDescriptors.GetHashedMorganFingerprint(
+                mol, radius=2, nBits=2048
+            )
+            # UIntSparseIntVect has GetNonzeroElements(), not GetVal().
+            elements = counts.GetNonzeroElements()
+            rows.append({name: elements.get(u, 0) for u, name in enumerate(names)})
         frame = pd.DataFrame(rows)
-    else:
+    elif descriptor_set == "rdkit_all":
         from rdkit.Chem import Descriptors  # noqa: PLC0415
 
         for mol in iterator:
             rows.append({name: func(mol) for name, func in Descriptors.descList})
         frame = pd.DataFrame(rows)
+    else:
+        raise DataValidationError(
+            "descriptor_set must be one of 'rdkit_all', 'morgan' or 'mordred', "
+            f"got {descriptor_set!r}"
+        )
 
-    frame.insert(0, "SMILES", [str(list(smiles)[i]) for i in valid_idx])
+    frame.insert(0, "SMILES", [str(smiles_list[i]) for i in valid_idx])
     frame.index = pd.Index(valid_idx, name="original_index")
     _LOG.info("Computed %d descriptors for %d molecules", frame.shape[1] - 1, len(frame))
     return frame
@@ -166,25 +206,31 @@ def compute_fingerprints(
     tuple
         ``(matrix, valid_indices)`` where ``matrix`` is an
         ``(n_valid, n_bits)`` uint8 (or uint32 for counts) array and
-        ``valid_indices`` maps rows back to input positions.
+        ``valid_indices`` maps rows back to input positions.  Blank /
+        whitespace-only SMILES count as invalid, like any other parse
+        failure.
 
     Raises
     ------
     DependencyError
         If RDKit is not installed.
+    DataValidationError
+        If ``smiles`` is a bare string, or ``radius`` / ``n_bits`` are out
+        of range.
     """
     if radius < 0:
         raise DataValidationError(f"radius must be >= 0, got {radius}")
     if not 0 < n_bits <= 65536:
         raise DataValidationError(f"n_bits out of range: {n_bits}")
 
+    smiles_list = _as_smiles_list(smiles, "smiles")
     Chem = require_rdkit()  # noqa: F841 -- import guard; failure surfaces DependencyError
     from rdkit.Chem import AllChem, rdMolDescriptors  # noqa: PLC0415
     from rdkit import DataStructs  # noqa: PLC0415
 
-    molecules, valid_idx, failures = _smiles_to_molecules(list(smiles))
+    molecules, valid_idx, failures = _smiles_to_molecules(smiles_list)
     if failures:
-        _LOG.warning("Dropping %d invalid SMILES before fingerprinting", len(failures))
+        _LOG.warning("Dropping %d invalid SMILES: %s", len(failures), failures[:5])
 
     if kind == "morgan":
         if as_counts:
@@ -225,12 +271,27 @@ def compute_fingerprints(
 
 # Re-exported for callers that want the MACCS keys shortcut.
 def compute_maccs(smiles: pd.Series | list[str]) -> tuple[np.ndarray, list[int]]:
-    """Compute the 167-bit MACCS key fingerprints."""
+    """Compute the 167-bit MACCS key fingerprints.
+
+    Blank / whitespace-only SMILES count as invalid and are dropped with
+    a warning naming their input index, matching the other entry points.
+
+    Raises
+    ------
+    DependencyError
+        If RDKit is not installed.
+    DataValidationError
+        If ``smiles`` is a bare string.
+    """
     require_rdkit()  # import guard
     from rdkit.Chem import MACCSkeys  # noqa: PLC0415
     from rdkit import DataStructs  # noqa: PLC0415
 
-    molecules, valid_idx, _ = _smiles_to_molecules(list(smiles))
+    molecules, valid_idx, failures = _smiles_to_molecules(
+        _as_smiles_list(smiles, "smiles")
+    )
+    if failures:
+        _LOG.warning("Dropping %d invalid SMILES: %s", len(failures), failures[:5])
     n_bits = 167
     matrix = np.zeros((len(molecules), n_bits), dtype=np.uint8)
     for row, mol in enumerate(molecules):
