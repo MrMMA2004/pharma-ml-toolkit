@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+from contextlib import contextmanager
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -12,6 +15,7 @@ from pharmaml.docking.parsing import (
     parse_dlg_summary,
     parse_vina_output,
     scan_docking_directory,
+    scan_vina_directory,
 )
 from pharmaml.docking.preparation import (
     GridBox,
@@ -19,8 +23,31 @@ from pharmaml.docking.preparation import (
     extract_pdbqt_atom_types,
     write_gpf,
 )
-from pharmaml.docking.scoring import consensus_rescore, ligand_efficiency
+from pharmaml.docking.scoring import (
+    consensus_rescore,
+    ligand_efficiency,
+    ligand_efficiency_series,
+)
 from pharmaml.exceptions import DataValidationError, DockingParseError
+
+
+@contextmanager
+def _pharmaml_logs_visible():
+    """Re-enable propagation on the ``pharmaml`` logger for caplog.
+
+    The CLI tests call :func:`configure_logging`, which sets
+    ``propagate=False`` on the ``pharmaml`` root logger; pytest's
+    caplog handler lives on the true root logger, so records only
+    reach it while propagation is on (restored on exit).  Same dance
+    as ``tests/test_ml_pipeline.py``.
+    """
+    pharma_root = logging.getLogger("pharmaml")
+    prev_propagate = pharma_root.propagate
+    pharma_root.propagate = True
+    try:
+        yield
+    finally:
+        pharma_root.propagate = prev_propagate
 
 
 class TestGridBox:
@@ -135,6 +162,46 @@ class TestVinaParsing:
         with pytest.raises(DockingParseError, match="no Vina pose"):
             parse_vina_output("nothing useful\n")
 
+    def test_scientific_notation_rows_are_parsed(self) -> None:
+        # Regression: affinity/RMSD values in exponent form (e.g. from
+        # post-processed tables) were silently dropped by the row regex.
+        text = "\n".join(
+            [
+                "   1      -1.0e+01          0          0",
+                "   2      -9.6e+00      1.842      2.301",
+                "   3       -9.4      2.105      2.777",
+            ]
+        )
+        poses = parse_vina_output(text)
+        assert len(poses) == 3
+        assert poses[0].affinity == pytest.approx(-10.0)
+        assert poses[1].affinity == pytest.approx(-9.6)
+        assert poses[1].rmsd_lb == pytest.approx(1.842)
+
+    def test_malformed_remark_line_warns_and_keeps_good_poses(self, caplog) -> None:
+        # Regression: a corrupted REMARK used to crash with a raw
+        # ValueError ('could not convert string to float: abc').
+        text = "\n".join(
+            [
+                "REMARK VINA RESULT:    abc      1.234      2.345",
+                "REMARK VINA RESULT:    -9.5      1.234      2.345",
+                "REMARK VINA RESULT:    -8.9      2.000      3.000",
+            ]
+        )
+        with _pharmaml_logs_visible():
+            with caplog.at_level(logging.WARNING, logger="pharmaml.docking.parsing"):
+                poses = parse_vina_output(text)
+        assert [p.affinity for p in poses] == pytest.approx([-9.5, -8.9])
+        assert "malformed Vina RESULT" in caplog.text
+
+    def test_short_remark_line_warns(self, caplog) -> None:
+        # A truncated REMARK (affinity only) must not vanish silently.
+        with _pharmaml_logs_visible():
+            with caplog.at_level(logging.WARNING, logger="pharmaml.docking.parsing"):
+                with pytest.raises(DockingParseError, match="no Vina pose"):
+                    parse_vina_output("REMARK VINA RESULT:    -9.5")
+        assert "malformed Vina RESULT" in caplog.text
+
 
 class TestDirectoryScans:
     def _make_tree(self, tmp_path, sample_dlg) -> None:
@@ -168,6 +235,28 @@ class TestDirectoryScans:
     def test_scan_requires_directory(self, tmp_path) -> None:
         with pytest.raises(DockingParseError):
             scan_docking_directory(tmp_path / "nowhere")
+
+    def test_completion_audit_requires_directory(self, tmp_path) -> None:
+        # Regression: a typo'd path used to return an empty audit table,
+        # which the CLI reads as "all runs OK" (exit code 0).
+        with pytest.raises(DockingParseError, match="not found"):
+            check_docking_completion(tmp_path / "nowhere")
+
+    def test_scan_vina_directory_parses_and_sorts(self, tmp_path) -> None:
+        (tmp_path / "ligand_a.log").write_text(
+            "   1      -1.05e+01          0          0\n", encoding="utf-8"
+        )
+        (tmp_path / "ligand_b.log").write_text(
+            "   1       -9.7          0          0\n", encoding="utf-8"
+        )
+        (tmp_path / "ligand_c.log").write_text("garbage\n", encoding="utf-8")
+        report = scan_vina_directory(tmp_path)
+        assert list(report["ligand"]) == ["ligand_a", "ligand_b", "ligand_c"]
+        assert report["best_affinity"].iloc[0] == pytest.approx(-10.5)
+        assert report["best_affinity"].iloc[1] == pytest.approx(-9.7)
+        assert pd.isna(report["best_affinity"].iloc[2])  # unparseable sorts last
+        assert list(report["n_poses"]) == [1, 1, 0]
+        assert report["log"].iloc[0] == "ligand_a.log"
 
 
 class TestScoring:
@@ -225,3 +314,111 @@ class TestScoring:
         frame = pd.DataFrame({"e": [-9.0, -9.0, -9.0], "n": [1, 5, 9]})
         scores = consensus_rescore(frame, columns=["e", "n"])
         assert scores.notna().all()
+
+    def test_ligand_efficiency_series_atom_count_validation(self) -> None:
+        # Regression: 12.5 atoms used to be silently truncated to 12
+        # (LE computed on the wrong count), diverging from the scalar
+        # ligand_efficiency contract; whole-number floats stay accepted.
+        bad = pd.DataFrame(
+            {"best_lowest_energy": [-10.0, -10.0], "num_heavy_atoms": [12.5, 30.0]}
+        )
+        with pytest.raises(DataValidationError, match="12.5"):
+            ligand_efficiency_series(bad)
+        good = pd.DataFrame({"best_lowest_energy": [-10.0], "num_heavy_atoms": [30.0]})
+        assert ligand_efficiency_series(good).iloc[0] == pytest.approx(10.0 / 30.0)
+
+    def test_ligand_efficiency_series_rejects_string_and_nan_atoms(self) -> None:
+        # Regression: 'n/a'/NaN atom counts surfaced as raw ValueError /
+        # "cannot convert float NaN to integer" from inside apply().
+        for bad_value in ("n/a", float("nan")):
+            frame = pd.DataFrame(
+                {"best_lowest_energy": [-10.0], "num_heavy_atoms": [bad_value]}
+            )
+            with pytest.raises(DataValidationError, match="atom counts"):
+                ligand_efficiency_series(frame)
+
+    def test_ligand_efficiency_series_empty_frame_returns_series(self) -> None:
+        # Regression: apply() on an empty frame returned a DataFrame, so
+        # the standard ok["le"] = ligand_efficiency_series(ok) flow
+        # crashed with "Cannot set a DataFrame with multiple columns".
+        frame = pd.DataFrame(columns=["best_lowest_energy", "num_heavy_atoms"])
+        result = ligand_efficiency_series(frame)
+        assert isinstance(result, pd.Series)
+        assert len(result) == 0
+        ok = pd.DataFrame(columns=["folder"])
+        ok["ligand_efficiency"] = result
+        assert len(ok) == 0
+
+    def test_ligand_efficiency_series_warns_on_missing_affinity(self, caplog) -> None:
+        # Regression: NaN affinities produced silently-NaN efficiencies.
+        frame = pd.DataFrame(
+            {"best_lowest_energy": [float("nan"), -10.0], "num_heavy_atoms": [23, 30]}
+        )
+        with _pharmaml_logs_visible():
+            with caplog.at_level(logging.WARNING, logger="pharmaml.docking.scoring"):
+                result = ligand_efficiency_series(frame)
+        assert result.iloc[0] != result.iloc[0]  # NaN row stays NaN ...
+        assert result.iloc[1] == pytest.approx(10.0 / 30.0)
+        assert "missing/non-numeric affinity" in caplog.text  # ... but not silently
+
+    def test_consensus_direction_defaults_for_energy_and_affinity_columns(self) -> None:
+        # Regression: scan_vina_directory's 'best_affinity' (and
+        # parse_dlg_summary's 'top_lowest_energy') defaulted to
+        # higher-is-better, inverting the ranking: the WORST binder
+        # scored 1.0.  Docstring promises binding energies default to
+        # False (more negative = better).
+        vina = pd.DataFrame(
+            {"ligand": ["weak", "medium", "strong"], "best_affinity": [-5.0, -8.0, -11.0]}
+        )
+        scores = consensus_rescore(vina, columns=["best_affinity"])
+        assert scores.iloc[2] == pytest.approx(1.0)  # strongest binder wins
+        assert scores.iloc[0] == pytest.approx(0.0)
+        dlg = pd.DataFrame({"top_lowest_energy": [-11.5, -10.0, -9.0]})
+        scores_dlg = consensus_rescore(dlg, columns=["top_lowest_energy"])
+        assert scores_dlg.iloc[0] == pytest.approx(1.0)
+
+    def test_consensus_all_nan_column_raises(self) -> None:
+        # Regression: the docstring promised DataValidationError on
+        # all-NaN inputs, but the code warned "zero variance" and
+        # scored the column a neutral 0.5.
+        frame = pd.DataFrame({"e": [float("nan")] * 3, "n": [1, 5, 9]})
+        with pytest.raises(DataValidationError, match="no numeric values"):
+            consensus_rescore(frame, columns=["e", "n"])
+
+    def test_consensus_non_numeric_column_raises(self) -> None:
+        # Regression: strings were coerced to NaN by pd.to_numeric and
+        # then masqueraded as a "zero variance" column scored 0.5.
+        frame = pd.DataFrame({"e": ["a", "b", "c"], "n": [1, 5, 9]})
+        with pytest.raises(DataValidationError, match="no numeric values"):
+            consensus_rescore(frame, columns=["e", "n"])
+
+    def test_consensus_partial_nan_warns_and_keeps_row_nan(self, caplog) -> None:
+        frame = pd.DataFrame({"e": [-11.0, float("nan"), -9.0], "n": [1, 5, 9]})
+        with _pharmaml_logs_visible():
+            with caplog.at_level(logging.WARNING, logger="pharmaml.docking.scoring"):
+                scores = consensus_rescore(frame, columns=["e", "n"])
+        assert scores.iloc[1] != scores.iloc[1]  # NaN row stays NaN ...
+        assert scores.iloc[[0, 2]].notna().all()
+        assert "NaN/non-numeric" in caplog.text  # ... but not silently
+
+    def test_consensus_inf_values_score_nan_with_warning(self, caplog) -> None:
+        # Regression: +-inf made the span non-finite, which tripped the
+        # "zero variance" branch and flattened the whole column to 0.5.
+        frame = pd.DataFrame({"e": [float("-inf"), -9.0, -8.0], "n": [1, 5, 9]})
+        with _pharmaml_logs_visible():
+            with caplog.at_level(logging.WARNING, logger="pharmaml.docking.scoring"):
+                scores = consensus_rescore(frame, columns=["e", "n"])
+        assert scores.iloc[0] != scores.iloc[0]
+        assert scores.iloc[[1, 2]].notna().all()
+        assert "NaN/non-numeric" in caplog.text
+
+    def test_consensus_empty_columns_list_raises(self) -> None:
+        # Regression: used to fall through to the confusing
+        # "consensus weights must not all be zero, got []".
+        with pytest.raises(DataValidationError, match="columns list is empty"):
+            consensus_rescore(pd.DataFrame({"a": [1.0]}), columns=[])
+
+    def test_consensus_empty_frame_raises(self) -> None:
+        frame = pd.DataFrame({"e": pd.Series(dtype=float), "n": pd.Series(dtype=float)})
+        with pytest.raises(DataValidationError, match="frame is empty"):
+            consensus_rescore(frame, columns=["e", "n"])

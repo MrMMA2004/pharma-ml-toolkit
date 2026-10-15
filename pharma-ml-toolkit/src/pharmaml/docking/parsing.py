@@ -85,8 +85,11 @@ _CLUSTER_ROW = re.compile(
 )
 # Vina table lines look like:
 #   "   1        -11.5        0.000        0.000"
+# Affinity/RMSD groups accept optional scientific notation (some
+# post-processing pipelines normalise the tables that way).
 _VINA_ROW = re.compile(
-    r"^\s+(\d+)\s+([-+]?\d+\.?\d*)\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s*$"
+    r"^\s+(\d+)\s+([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)"
+    r"\s+(\d+\.?\d*(?:[eE][-+]?\d+)?)\s+(\d+\.?\d*(?:[eE][-+]?\d+)?)\s*$"
 )
 
 
@@ -194,15 +197,27 @@ def parse_vina_output(source: str | Path) -> list[VinaPose]:
     for line in text.splitlines():
         if line.startswith(("REMARK VINA RESULT", "VINA RESULT")):
             parts = line.split(":")[-1].split()
-            if len(parts) >= 3:
-                poses.append(
-                    VinaPose(
-                        mode=len(poses) + 1,
-                        affinity=float(parts[0]),
-                        rmsd_lb=float(parts[1]),
-                        rmsd_ub=float(parts[2]),
+            try:
+                if len(parts) >= 3:
+                    poses.append(
+                        VinaPose(
+                            mode=len(poses) + 1,
+                            affinity=float(parts[0]),
+                            rmsd_lb=float(parts[1]),
+                            rmsd_ub=float(parts[2]),
+                        )
                     )
-                )
+                    continue
+            except ValueError:
+                pass
+            # Truncated or corrupted REMARK (interrupted run, edited
+            # file): keep the surviving poses but say so instead of
+            # silently dropping the line.
+            _LOG.warning(
+                "Skipping malformed Vina RESULT line (expected "
+                "'<affinity> <rmsd l.b.> <rmsd u.b.>'): %r",
+                line.strip(),
+            )
             continue
         match = _VINA_ROW.match(line)
         if match:
@@ -227,10 +242,24 @@ def check_docking_completion(
     Every sub-directory is checked for the expected log file *and* the
     ``Successful Completion`` sentinel that AutoDock4 writes at the end
     of a healthy run.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per sub-directory with ``folder`` and ``status``
+        columns (``OK`` / ``INCOMPLETE`` / ``MISSING_LOG``).
+
+    Raises
+    ------
+    DockingParseError
+        If ``directory`` does not exist or is not a directory (an
+        empty audit table would otherwise look like "all runs passed").
     """
     base = Path(directory)
+    if not base.is_dir():
+        raise DockingParseError(f"docking directory not found: {base}")
     rows = []
-    sub_directories = sorted(p for p in base.iterdir() if p.is_dir()) if base.is_dir() else []
+    sub_directories = sorted(p for p in base.iterdir() if p.is_dir())
     for sub in sub_directories:
         log = sub / log_name
         if not log.is_file():

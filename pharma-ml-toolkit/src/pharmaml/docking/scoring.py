@@ -21,11 +21,32 @@ import pandas as pd
 
 from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
-from pharmaml.utils.validation import validate_positive
 
 _LOG = get_logger(__name__)
 
 __all__ = ["ligand_efficiency", "ligand_efficiency_series", "consensus_rescore"]
+
+
+def _validated_atom_count(value: object, atoms_col: str) -> int:
+    """Coerce one table cell to a positive integer atom count.
+
+    Accepts ``int``/``np.integer`` and whole-number floats (pandas
+    float64 columns holding counts); fractional floats, strings and
+    NaN raise :class:`DataValidationError` naming the value, so a dirty
+    ``atoms_col`` cannot silently truncate (``12.5`` -> ``12``) or crash
+    with a raw ``ValueError``.
+    """
+    count: int | None = None
+    if isinstance(value, (int, np.integer)):
+        count = int(value)
+    elif isinstance(value, (float, np.floating)) and float(value).is_integer():
+        count = int(value)
+    if count is None or count <= 0:
+        raise DataValidationError(
+            f"column {atoms_col!r} must hold positive integer atom counts, "
+            f"got {value!r}"
+        )
+    return count
 
 
 def ligand_efficiency(affinity_kcal_mol: float, num_heavy_atoms: int) -> float:
@@ -55,15 +76,45 @@ def ligand_efficiency_series(
     affinity_col: str = "best_lowest_energy",
     atoms_col: str = "num_heavy_atoms",
 ) -> pd.Series:
-    """Vectorised ligand-efficiency column for a docking summary table."""
+    """Vectorised ligand-efficiency column for a docking summary table.
+
+    Parameters
+    ----------
+    frame:
+        Docking summary table (one row per ligand); the result carries
+        the frame's index, so it can be assigned straight back as a
+        column.  An empty frame yields an empty float Series.
+    affinity_col:
+        Binding-energy column (kcal/mol).  Missing/non-numeric
+        affinities produce NaN efficiencies and a warning instead of a
+        raw ``TypeError``.
+    atoms_col:
+        Heavy-atom count column.  Values must be positive integers
+        (whole-number floats such as ``30.0`` are accepted); anything
+        else raises with the offending value named.
+
+    Raises
+    ------
+    DataValidationError
+        If either column is missing, or ``atoms_col`` holds values that
+        are not positive integers (e.g. ``12.5``, ``"n/a"``, NaN).
+    """
     for col in (affinity_col, atoms_col):
         if col not in frame.columns:
             raise DataValidationError(
                 f"column {col!r} missing; available: {list(frame.columns)}"
             )
-    return frame.apply(
-        lambda row: ligand_efficiency(row[affinity_col], int(row[atoms_col])), axis=1
-    )
+    affinities = pd.to_numeric(frame[affinity_col], errors="coerce")
+    n_missing = int(affinities.isna().sum())
+    if n_missing:
+        _LOG.warning(
+            "column %r has %d missing/non-numeric affinity value(s); "
+            "their ligand efficiencies will be NaN",
+            affinity_col,
+            n_missing,
+        )
+    atoms = [_validated_atom_count(value, atoms_col) for value in frame[atoms_col]]
+    return affinities.abs() / atoms
 
 
 def consensus_rescore(
@@ -88,23 +139,39 @@ def consensus_rescore(
     weights:
         Per-column weights (uniform when None).  Must match length.
     higher_is_better:
-        Map column -> direction.  Binding energies default to False
-        (more negative = better); cluster sizes default to True.
+        Map column -> direction.  Columns whose names end in
+        ``energy`` or ``affinity`` (e.g. ``best_lowest_energy``,
+        ``best_affinity`` -- the outputs of :func:`parse_dlg_summary`
+        and :func:`scan_vina_directory`) default to False (more
+        negative = better); everything else (cluster sizes, ligand
+        efficiency, ...) defaults to True.
 
     Returns
     -------
     pandas.Series
-        Consensus score in [0, 1]; higher is always better.
+        Consensus score in [0, 1]; higher is always better.  Rows whose
+        input columns hold NaN/inf keep NaN (with a warning naming the
+        column) instead of silently poisoning the table.
 
     Raises
     ------
     DataValidationError
-        On missing columns, weight-length mismatch, invalid weights
-        (negative or all-zero) or all-NaN inputs.
+        On an empty ``columns`` list, missing columns, weight-length
+        mismatch, invalid weights (negative or all-zero), an empty
+        frame, or a column with no numeric values at all (all NaN or
+        non-numeric after coercion).
     """
+    if not columns:
+        raise DataValidationError(
+            "columns list is empty -- pass the evidence columns to combine"
+        )
     missing = [c for c in columns if c not in frame.columns]
     if missing:
         raise DataValidationError(f"missing columns {missing} for rescoring")
+    if frame.empty:
+        raise DataValidationError(
+            "frame is empty -- consensus_rescore needs at least one row"
+        )
     if weights is not None and len(weights) != len(columns):
         raise DataValidationError(
             f"got {len(weights)} weights for {len(columns)} columns"
@@ -127,14 +194,30 @@ def consensus_rescore(
     normalised: list[pd.Series] = []
     for col in list(columns):
         values = pd.to_numeric(frame[col], errors="coerce")
+        invalid = ~np.isfinite(values)
+        n_invalid = int(np.asarray(invalid).sum())
+        if n_invalid == len(values):
+            raise DataValidationError(
+                f"column {col!r} has no numeric values to rescore "
+                "(all NaN or non-numeric)"
+            )
+        if n_invalid:
+            _LOG.warning(
+                "column %r has %d NaN/non-numeric value(s); their "
+                "consensus rows will be NaN",
+                col,
+                n_invalid,
+            )
+            values = values.where(np.isfinite(values))
         span = values.max() - values.min()
-        if not np.isfinite(span) or span == 0:
+        if span == 0:
             _LOG.warning("column %r has zero variance; scoring it as 0.5", col)
             normalised.append(pd.Series(0.5, index=frame.index))
             continue
         unit = (values - values.min()) / span
-        if not direction.get(col, col not in ("lowest_energy", "best_lowest_energy")):
-            # Default: binding-energy-like columns are "lower is better".
+        if not direction.get(col, not col.endswith(("energy", "affinity"))):
+            # Default: binding-energy/affinity columns (names ending in
+            # "energy" or "affinity") are "lower is better".
             unit = 1.0 - unit
         normalised.append(unit)
 
