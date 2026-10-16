@@ -99,6 +99,11 @@ def compute_descriptors(
         fixed-radius Morgan count fingerprint, ``'mordred'`` for the
         Mordred descriptor suite (needs ``pip install mordred``).
         Any other value raises instead of silently falling back.
+        Known limitation of the Mordred path (documented, deliberately
+        not transformed): descriptors that fail for a given molecule
+        come back as Mordred ``Error`` objects rather than numbers and
+        are kept as-is in the frame -- mordred is exercised only by the
+        full-deps CI job, never in the default environment.
     progress:
         Show a tqdm progress bar for large batches.
 

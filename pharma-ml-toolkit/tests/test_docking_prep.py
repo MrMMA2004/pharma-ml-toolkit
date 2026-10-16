@@ -604,6 +604,28 @@ class TestProteinMeekoPipeline:
         assert report.hydrogens_removed == 1
         assert report.output_atoms == 394  # template hydrogens replace input ones
 
+    def test_digit_leading_hydrogen_names_stripped(self, tmp_path: Path) -> None:
+        """Legacy PDBs digit-prefix hydrogen names ('1HB', '2HB1') and omit
+        the element column (line stops after the B-factor, length < 78).
+
+        Pre-fix (27-A): the name-based element fallback took the first
+        character of the atom name, so '1HB' inferred element '1' -- not
+        'H' -- and the atom survived ``strip_hydrogens``.
+        """
+        lines = CRAMBIN.read_text(encoding="utf-8", errors="ignore").splitlines()
+        atoms = [line for line in lines if line.startswith("ATOM")]
+        legacy = [
+            # name '1HB ' left-justified in cols 13-16, no element column
+            "ATOM    900 1HB  THR A   1       0.500   0.500   0.500  1.00  0.00",
+            "ATOM    901 2HB1 THR A   1       0.600   0.600   0.600  1.00  0.00",
+        ]
+        assert all(len(line) < 78 for line in legacy)  # element-column fallback
+        src = tmp_path / "legacy_h.pdb"
+        src.write_text("\n".join(atoms + legacy) + "\nEND\n", encoding="utf-8")
+        report = prepare_protein(src, tmp_path / "r.pdbqt")
+        assert report.hydrogens_removed == 2
+        assert report.output_atoms == 394  # template hydrogens replace input ones
+
     def test_broken_residue_raises_docking_error(self, tmp_path: Path) -> None:
         from pharmaml.exceptions import DockingError
 

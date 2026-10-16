@@ -5,7 +5,9 @@ the config-driven Vina batch (``others/Vina/*``)."""
 
 from __future__ import annotations
 
+import logging
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
@@ -39,6 +41,24 @@ from pharmaml.docking.workflow import (
     run_vina_batch,
 )
 from pharmaml.exceptions import DataValidationError, DockingError, DockingParseError
+
+
+@contextmanager
+def _pharmaml_logs_visible():
+    """Re-enable propagation on the ``pharmaml`` logger for caplog.
+
+    Same dance as ``test_biology.py`` / ``test_ml_pipeline.py``: the CLI
+    tests call :func:`configure_logging`, which sets ``propagate=False``
+    on the ``pharmaml`` root logger, so caplog records only reach the
+    true root logger while propagation is on (restored on exit).
+    """
+    pharma_root = logging.getLogger("pharmaml")
+    prev_propagate = pharma_root.propagate
+    pharma_root.propagate = True
+    try:
+        yield
+    finally:
+        pharma_root.propagate = prev_propagate
 
 
 class TestWriteDPF:
@@ -424,6 +444,39 @@ class TestReindexByNumber:
         result = reindex_by_number(frame, "f", start=0, stop=10)
         assert result["f"].notna().sum() == 2
         assert result.loc[2, "f"] == "2_a"
+
+    def test_dropped_rows_warn_pattern_miss_and_out_of_range(self, caplog) -> None:
+        """No silent loss (27-A): rows the reindex drops must warn.
+
+        Pre-fix, both drop paths were silent: a row whose ``column`` value
+        does not match ``pattern`` at all vanished at the notna() filter,
+        and a row whose extracted number lies outside ``[start, stop]``
+        vanished in the ``reindex`` join.
+        """
+        frame = pd.DataFrame(
+            {
+                "f": ["5_result.dlg", "no_number_here", "999_result.dlg"],
+                "v": [1.0, 2.0, 3.0],
+            }
+        )
+        with _pharmaml_logs_visible(), caplog.at_level(
+            logging.WARNING, logger="pharmaml.docking.campaign"
+        ):
+            result = reindex_by_number(frame, "f", start=0, stop=10)
+        # the rows are still dropped -- but loudly, with actionable counts
+        assert result["v"].notna().sum() == 1
+        assert result.loc[5, "v"] == 1.0
+        assert "1 row(s) in 'f' do not match pattern" in caplog.text
+        assert "1 row(s) with ligand number(s) outside [0, 10]" in caplog.text
+
+    def test_in_range_rows_produce_no_drop_warnings(self, caplog) -> None:
+        frame = pd.DataFrame({"f": ["2_a", "7_b"]})
+        with _pharmaml_logs_visible(), caplog.at_level(
+            logging.WARNING, logger="pharmaml.docking.campaign"
+        ):
+            reindex_by_number(frame, "f", start=0, stop=10)
+        assert "do not match pattern" not in caplog.text
+        assert "outside" not in caplog.text
 
     def test_missing_column_raises(self) -> None:
         with pytest.raises(DataValidationError, match="not found"):

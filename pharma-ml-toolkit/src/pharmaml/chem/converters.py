@@ -89,9 +89,19 @@ def parse_endpoint(raw: object) -> EndpointValue | None:
         qualifier = text[0]
         text = text[1:].strip()
 
-    # Strip a trailing unit token such as 'nM' / 'uM' / 'M'.
-    for unit in ("nM", "uM", "µM", "mM", "M"):
-        if text.endswith(unit):
+    # Strip a trailing unit token such as 'nM' / 'uM' / 'M'.  Matched
+    # case-insensitively (27-A): spreadsheets write 'NM'/'um'/'μM' as
+    # often as the canonical 'nM'/'uM'/'µM', and a pure case variance
+    # must not silently make the row unparseable -- the caller's
+    # ``unit`` parameter stays the authoritative scale, so no
+    # interpretation is at risk here, only lexing.  casefold() also
+    # unifies the micro sign (U+00B5) and Greek mu (U+03BC) spellings
+    # of 'µM'.  'pM' completes the concentration set of
+    # ``ic50_to_pic50``'s scale dict (2-char tokens first: 'pM'/'mM'
+    # must match before the bare 'M').
+    lowered = text.casefold()
+    for unit in ("nM", "uM", "µM", "pM", "mM", "M"):
+        if lowered.endswith(unit.casefold()):
             text = text[: -len(unit)].strip()
             break
     text = text.replace(",", "")
@@ -139,7 +149,10 @@ def ic50_to_pic50(ic50: object, unit: str = "nM") -> float | None:
     if parsed is None:
         return None
     molar = parsed.value * scale[unit_key]
-    return -math.log10(molar)
+    result = -math.log10(molar)
+    # -log10(1.0) is IEEE negative zero; normalise it so a 1 M endpoint
+    # never surfaces as "-0.0" in tables or reports (27-A).
+    return 0.0 if result == 0.0 else result
 
 
 def ki_to_pki(ki: object, unit: str = "nM") -> float | None:

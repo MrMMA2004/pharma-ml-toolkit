@@ -22,6 +22,7 @@ import importlib
 import importlib.util
 import logging
 import math
+import random
 import sys
 
 import pandas as pd
@@ -47,6 +48,7 @@ from pharmaml.generative import (
     TpsaBandObjective,
     run_genetic_optimization,
     run_rl_optimization,
+    scaffold_hop_crossover,
 )
 from pharmaml.generative._utils import canonical_smiles
 from pharmaml.generative.genetic import (
@@ -1394,6 +1396,53 @@ class TestGenerativeCommands:
         assert "reinforce_rl" in output
         assert "method   : rl" in output
 
+    def test_ga_scaffold_hop_flag_reports_mode(self, tmp_path, capsys) -> None:
+        from pharmaml.cli import main
+
+        out = tmp_path / "ga_hop.csv"
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "qed",
+            "--iterations", "6", "--population", "24", "--seed", "42",
+            "--scaffold-hop", "--top", "3", "--out", str(out),
+        ])
+        assert code == 0
+        output = capsys.readouterr().out
+        assert "hop      : on" in output  # BREED crossover summary line
+        assert out.is_file()
+        frame = pd.read_csv(out)
+        assert list(frame.columns) == ["rank", "smiles", "score"]
+        assert len(frame) > 0
+
+    def test_scaffold_hop_with_rl_method_is_a_typed_error(self, capsys) -> None:
+        # --scaffold-hop is a GA crossover: asking an RL run for it must be
+        # an actionable typed error, not a silently ignored flag.
+        from pharmaml.cli import main
+
+        code = main([
+            "generative", "run",
+            "--method", "rl", "--recipe", "qed",
+            "--scaffold-hop", "--iterations", "1",
+        ])
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "--scaffold-hop" in error and "ga only" in error
+
+    def test_scaffold_plus_scaffold_hop_is_the_structural_mode(self, capsys) -> None:
+        # both structural flags: framework recombination + decoration resampling
+        from pharmaml.cli import main
+
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "qed",
+            "--iterations", "5", "--population", "16", "--seed", "42",
+            "--scaffold", "--scaffold-hop", "--top", "3",
+        ])
+        assert code == 0
+        output = capsys.readouterr().out
+        assert "scaffold : on" in output
+        assert "hop      : on" in output
+
     def test_seeded_similar_recipe_from_csv(self, tmp_path, capsys) -> None:
         from pharmaml.cli import main
 
@@ -1892,3 +1941,166 @@ class TestScaffoldMutation:
         assert [round(entry["best_score"], 6) for entry in multi_result.history] == [
             0.833081, 0.833081, 0.839569, 0.839569,
         ]
+
+
+class TestScaffoldHopCrossover:
+    """BREED-style homologous-cut crossover (round 100x-27 flagship).
+
+    Covers the standalone :func:`~pharmaml.generative.scaffold_hop_crossover`
+    operator (validity, determinism, composition bounds, framework hops,
+    fallback contract, length cap) and its wiring into
+    :class:`~pharmaml.generative.GeneticOptimizer` (mode validation,
+    determinism, metadata reporting, the full structural mode).
+    """
+
+    PARENT_A = "CC(=O)Oc1ccccc1C(=O)O"  # aspirin
+    PARENT_B = "NC(=O)c1ccccc1"  # benzamide
+
+    @staticmethod
+    def _murcko(smiles: str) -> str:
+        from rdkit.Chem.Scaffolds import MurckoScaffold
+
+        mol = rdkit.Chem.MolFromSmiles(smiles)
+        assert mol is not None
+        return rdkit.Chem.MolToSmiles(MurckoScaffold.GetScaffoldForMol(mol))
+
+    def test_children_valid_deterministic_and_bounded(self) -> None:
+        for seed in range(12):
+            child = scaffold_hop_crossover(
+                self.PARENT_A, self.PARENT_B, random.Random(seed)
+            )
+            assert child is not None
+            again = scaffold_hop_crossover(
+                self.PARENT_A, self.PARENT_B, random.Random(seed)
+            )
+            assert again == child  # pure function of (parents, rng state, cap)
+            mol = rdkit.Chem.MolFromSmiles(child)
+            assert mol is not None
+            # no attachment dummy ever leaks into an offspring
+            assert all(atom.GetAtomicNum() != 0 for atom in mol.GetAtoms())
+            # composition: one fragment from each parent, so strictly
+            # fewer heavy atoms than both parents combined
+            n_a = rdkit.Chem.MolFromSmiles(self.PARENT_A).GetNumAtoms()
+            n_b = rdkit.Chem.MolFromSmiles(self.PARENT_B).GetNumAtoms()
+            assert mol.GetNumAtoms() < n_a + n_b
+            # element provenance: only elements present in the parents
+            elems = (
+                {a.GetSymbol() for a in rdkit.Chem.MolFromSmiles(self.PARENT_A).GetAtoms()}
+                | {a.GetSymbol() for a in rdkit.Chem.MolFromSmiles(self.PARENT_B).GetAtoms()}
+            )
+            assert {a.GetSymbol() for a in mol.GetAtoms()} <= elems
+
+    def test_framework_hops_both_parents_scaffolds(self) -> None:
+        # 2-methylnaphthalene x methyl-pyridine-acid: the naphthalene and
+        # pyridine fragments recombine into frameworks neither parent has
+        parent_a = "Cc1ccc2ccccc2c1"
+        parent_b = "Cc1ccncc1C(=O)O"
+        scaff_a = self._murcko(parent_a)
+        scaff_b = self._murcko(parent_b)
+        assert scaff_a != scaff_b
+        hopped = 0
+        for seed in range(24):
+            child = scaffold_hop_crossover(parent_a, parent_b, random.Random(seed))
+            assert child is not None
+            if self._murcko(child) not in (scaff_a, scaff_b):
+                hopped += 1
+        assert hopped >= 12  # probe on rdkit 2026.09.1: 24/24 seeds hop
+
+    def test_no_homologous_bridge_returns_none(self) -> None:
+        # benzene x pyridine: no acyclic single bonds to cut at all
+        assert scaffold_hop_crossover("c1ccccc1", "c1ccncc1", random.Random(0)) is None
+        # biphenyl x diphenyl ether: bridges exist on both sides but the
+        # join signatures cannot match (a C-C bridge never crosses C-O)
+        assert (
+            scaffold_hop_crossover(
+                "c1ccccc1-c1ccccc1", "c1ccccc1Oc1ccccc1", random.Random(0)
+            )
+            is None
+        )
+
+    def test_invalid_or_disconnected_parents_return_none(self) -> None:
+        assert scaffold_hop_crossover("not_a_smiles", "CCO", random.Random(0)) is None
+        assert scaffold_hop_crossover("CCO", "not_a_smiles", random.Random(0)) is None
+        # a dot-disconnected parent has no recombination semantics
+        assert scaffold_hop_crossover("CCO.CC", "CCO", random.Random(0)) is None
+        assert scaffold_hop_crossover("CCO", "CCO.CC", random.Random(0)) is None
+
+    def test_length_cap_enforced_with_sibling_fallback(self) -> None:
+        # seed 0's drawn pairing is the 26-char hybrid: over the cap, so
+        # the 12-char sibling pairing is returned instead
+        small = scaffold_hop_crossover(
+            self.PARENT_A, self.PARENT_B, random.Random(0), max_smiles_length=20
+        )
+        assert small == "NC(=O)C(=O)O"
+        # biindole parents: EVERY pairing is the same 30+-char biindole,
+        # so the floor cap leaves no viable child
+        biindole = "c1ccc2[nH]ccc2c1-c1ccc2[nH]ccc2c1"
+        for seed in range(4):
+            assert (
+                scaffold_hop_crossover(
+                    biindole, biindole, random.Random(seed), max_smiles_length=20
+                )
+                is None
+            )
+
+    def test_length_cap_floor_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_smiles_length"):
+            scaffold_hop_crossover(
+                "CCO", "CCO", random.Random(0), max_smiles_length=10
+            )
+
+    def test_self_crossover_yields_valid_molecules(self) -> None:
+        # cutting a molecule with itself at different loci legitimately
+        # builds duplication hybrids (larger than the parent) -- they must
+        # still sanitise and respect the cap
+        for seed in range(6):
+            child = scaffold_hop_crossover(
+                self.PARENT_A, self.PARENT_A, random.Random(seed)
+            )
+            assert child is None or rdkit.Chem.MolFromSmiles(child) is not None
+
+    # -- GeneticOptimizer wiring -----------------------------------------
+    def test_crossover_mode_validation_and_default(self) -> None:
+        with pytest.raises(DataValidationError, match="crossover"):
+            GeneticOptimizer(QedObjective(), crossover="breed")
+        optimizer = GeneticOptimizer(QedObjective())
+        assert optimizer.crossover == "splice"  # back-compat default
+
+    def test_hop_mode_runs_deterministic_and_reports_mode(self) -> None:
+        objective = MultiObjective(
+            [QedObjective(), LogPBandObjective(1.0, 3.0)], weights=[0.7, 0.3]
+        )
+
+        def run() -> GenerationResult:
+            return GeneticOptimizer(
+                objective, population_size=24, generations=4, seed=42,
+                crossover="scaffold_hop",
+            ).optimize()
+
+        first, second = run(), run()
+        assert len(first) > 0
+        assert first.smiles == second.smiles  # deterministic given the seed
+        assert first.metadata["crossover"] == "scaffold_hop"
+        assert first.metadata["mutation"] == "uniform"
+        assert all(canonical_smiles(smi) is not None for smi in first.smiles)
+
+    def test_structural_mode_scaffold_mutation_with_hop_crossover(self) -> None:
+        # the full structural mode: framework recombination + decoration
+        # resampling, seeded from aspirin over a tiny corpus
+        result = GeneticOptimizer(
+            QedObjective(), population_size=24, generations=4, seed=7,
+            mutation="scaffold", crossover="scaffold_hop",
+        ).optimize(
+            seed_smiles=["CC(=O)Oc1ccccc1C(=O)O"],
+            corpus=["CC(=O)Oc1ccccc1C(=O)O", "NC(=O)c1ccccc1", "c1ccc(O)cc1"],
+        )
+        assert len(result) > 0
+        assert result.metadata["mutation"] == "scaffold"
+        assert result.metadata["crossover"] == "scaffold_hop"
+        assert all(canonical_smiles(smi) is not None for smi in result.smiles)
+
+    def test_run_genetic_optimization_passes_crossover_through(self) -> None:
+        result = run_genetic_optimization(
+            QedObjective(), generations=2, seed=42, crossover="scaffold_hop"
+        )
+        assert result.metadata["crossover"] == "scaffold_hop"

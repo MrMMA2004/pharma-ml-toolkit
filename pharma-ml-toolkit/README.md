@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1277 tests).
+exceptions, input validation, and pytest coverage** (1303 tests).
 
 ---
 
@@ -93,7 +93,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1277 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 1303 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -259,11 +259,13 @@ laptop CPU:
 > demonstrated live) → §4 **de novo GA** (leaderboard with free breakdown
 > columns + convergence figure) → §5 **seeded GA** from your own molecules →
 > §6 **scaffold-preserving mutation** (Murcko-retention A/B: 100 % on seed
-> frameworks vs 50.5 % for uniform mutation) → §7 **RL** (char-GRU prior
-> loss curve + REINVENT-style fine-tuning with early stop) → §8 the
-> **novelty** anti-rediscovery recipe (honest strange-chemistry trade-off) →
-> §9 GA-vs-RL head-to-head → §10 leaderboard CSV + one-click visual bundle
-> → §11 recap.
+> frameworks vs 50.5 % for uniform mutation) → §6b **scaffold-hop
+> crossover** (BREED-style homologous cuts: aspirin × naproxen → a hybrid
+> carrying one fragment of each; the structural mode's leaderboard) →
+> §7 **RL** (char-GRU prior loss curve + REINVENT-style fine-tuning with
+> early stop) → §8 the **novelty** anti-rediscovery recipe (honest
+> strange-chemistry trade-off) → §9 GA-vs-RL head-to-head → §10 leaderboard
+> CSV + one-click visual bundle → §11 recap.
 
 The 12-drug seed table ships as `examples/data/seed_molecules.csv` — point
 `SEEDS_CSV` at your own CSV and every cell below it runs unchanged. §1–§6 need
@@ -542,7 +544,9 @@ objective = MultiObjective(
 # 2) Genetic algorithm: character-level mutation + splice crossover over canonical
 #    SMILES, tournament selection, elitism. CPU-strong, torch not required.
 #    mutation="scaffold" keeps each parent's Murcko framework and resamples only
-#    its decorations (lead-optimisation mode).
+#    its decorations (lead-optimisation mode); crossover="scaffold_hop" cuts two
+#    parents at homologous single bonds and recombines the fragments (BREED-style
+#    scaffold hopping).
 ga = GeneticOptimizer(objective, population_size=48, generations=20, seed=42)
 de_novo = ga.optimize()                                   # corpus-initialised
 seeded  = ga.optimize(seed_smiles=["CC(=O)Oc1ccccc1C(=O)O", "CC(=O)Nc1ccc(O)cc1"])
@@ -550,6 +554,10 @@ leadopt = GeneticOptimizer(
     MultiObjective([QedObjective(), NoveltyObjective()]),   # drug-like AND novel
     population_size=48, generations=20, seed=42, mutation="scaffold",
 ).optimize(seed_smiles=["CC(=O)Oc1ccccc1C(=O)O"], corpus=["CC(=O)Oc1ccccc1C(=O)O"])
+hopped = GeneticOptimizer(
+    objective, population_size=48, generations=20, seed=42,
+    crossover="scaffold_hop",                             # hybrids of two parents
+).optimize(seed_smiles=["CC(=O)Oc1ccccc1C(=O)O"])
 
 # 3) Reinforcement learning (REINVENT-style): train a char-level GRU prior on the
 #    corpus, then fine-tune it by policy gradient toward the same objective
@@ -574,18 +582,31 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   random subset of decorations is resampled from a corpus-derived decoration
   vocabulary (built once per corpus, re-assembled with `Chem.molzip`). Acyclic or
   bare-ring parents (and any RDKit failure) fall back to the standard character
-  mutation; crossover is bypassed in this mode. Honest scope: it is decoration
+  mutation; the character splice crossover is bypassed in this mode (it destroys
+  ring systems) — the scaffold-hop crossover is not. Honest scope: it is decoration
   resampling on a fixed framework, **not** a full scaffold-decorator generative model
   like REINVENT 2.0 (no learned attachment grammar).
+* **Scaffold-hop crossover (`crossover="scaffold_hop"`):** BREED-style structural
+  recombination — both parents are cut at a pair of *homologous* single acyclic
+  bonds (join atoms match on element, degree, aromaticity, charge) and the
+  fragments recombine cross-wise with `Chem.molzip`, so ring systems survive by
+  construction and the offspring's framework differs from both parents whenever
+  the parents' frameworks span different fragments (biaryls, diaryl ethers,
+  sulfonyl bridges). Also usable standalone via `scaffold_hop_crossover(parent_a,
+  parent_b, rng)`; deterministic; `None` (fall back) when no viable cut exists.
+  Combine with `mutation="scaffold"` for the full structural mode: framework
+  recombination + decoration resampling. Pinned demo: aspirin × naproxen →
+  `COc1ccc2cc(C(C)C(=O)C(=O)c3ccccc3OC(C)=O)ccc2c1` (one fragment per parent).
 * **Method trade-offs, honestly:** the GA explores wider (hundreds of unique molecules
   per run, no extra dependency, seeded *and* de novo modes) while RL fine-tunes a learned
   prior and needs fewer evaluations to focus on high-scoring neighbourhoods — but costs a
   torch install and yields fewer unique hits at this scale. Run both, compare leaderboards.
 * CLI twins: `pharmaml generative run --method ga|rl --recipe qed|logp|druglike|similar|novel`
   (with `--seeds examples/data/seed_molecules.csv` for the "with some sample molecules"
-  mode; `--scaffold` switches the GA to scaffold-preserving mutations — e.g.
-  `pharmaml generative run --method ga --recipe novel --scaffold --seed 42`) and
-  `pharmaml generative corpus`.
+  mode; `--scaffold` switches the GA to scaffold-preserving mutations and
+  `--scaffold-hop` to the BREED-style crossover — e.g.
+  `pharmaml generative run --method ga --recipe novel --scaffold --scaffold-hop --seed 42`
+  is the full structural mode) and `pharmaml generative corpus`.
 * Requires `pip install "pharmaml[chem]"`; the RNN/RL half additionally needs
   `pip install "pharmaml[deep]"` (PyTorch is imported lazily — the package works without it).
 
@@ -805,7 +826,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1296 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1329 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

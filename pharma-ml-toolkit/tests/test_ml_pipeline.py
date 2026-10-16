@@ -766,3 +766,76 @@ class TestTrainModelCvGuard:
             cv=2,
         )
         assert result.cv_scores is not None and len(result.cv_scores) == 2
+
+
+class TestCvSamplesGuard:
+    """``cv`` larger than the dataset must fail typed, not raw (27-A).
+
+    Pre-fix: ``train_model`` let sklearn's splitter error penetrate raw
+    (``ValueError: Cannot have number of splits n_splits=5 greater than
+    the number of samples: n_samples=3``), while ``compare_models``
+    swallowed it per model and returned a 100%-NaN leaderboard with only
+    a log warning -- the silent-poisoning pattern the package bans.
+    """
+
+    @pytest.fixture()
+    def tiny_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0], "y": [0.0, 1.0, 0.0]}
+        )
+
+    def test_train_cv_exceeding_samples_raises_model_error(self, tiny_frame) -> None:
+        X, y = tiny_frame[["a", "b"]], tiny_frame["y"]
+        with pytest.raises(ModelError, match="n_samples=3"):
+            train_model(
+                "ridge",
+                "regression",
+                X,
+                y,
+                tune=True,
+                param_grid={"alpha": [1.0]},
+                cv=5,
+                n_jobs=1,
+            )
+
+    def test_train_error_names_both_cv_and_samples(self, tiny_frame) -> None:
+        X, y = tiny_frame[["a", "b"]], tiny_frame["y"]
+        with pytest.raises(ModelError, match=r"cv=5.*n_samples=3|n_samples=3.*cv=5"):
+            train_model(
+                "ridge",
+                "regression",
+                X,
+                y,
+                tune=True,
+                param_grid={"alpha": [1.0]},
+                cv=5,
+                n_jobs=1,
+            )
+
+    def test_train_cv_equal_to_samples_still_works(self, tiny_frame) -> None:
+        # cv == n_samples leaves one sample per test fold: legal.
+        X, y = tiny_frame[["a", "b"]], tiny_frame["y"]
+        result = train_model(
+            "ridge",
+            "regression",
+            X,
+            y,
+            tune=True,
+            param_grid={"alpha": [1.0]},
+            cv=3,
+            n_jobs=1,
+        )
+        assert result.cv_scores is not None and len(result.cv_scores) == 3
+
+    def test_train_no_tune_allows_cv_larger_than_samples(self, tiny_frame) -> None:
+        # No cross-validation runs under tune=False, so a tiny dataset
+        # stays usable with the default cv=5 (documented as the fold
+        # count *for tuning/scoring*, which is skipped).
+        X, y = tiny_frame[["a", "b"]], tiny_frame["y"]
+        result = train_model("ridge", "regression", X, y, tune=False, cv=5)
+        assert result.cv_scores is None
+
+    def test_compare_cv_exceeding_samples_raises_model_error(self, tiny_frame) -> None:
+        X, y = tiny_frame[["a", "b"]], tiny_frame["y"]
+        with pytest.raises(ModelError, match="n_samples=3"):
+            compare_models(X, y, "regression", models=["ridge"], cv=5, n_jobs=1)

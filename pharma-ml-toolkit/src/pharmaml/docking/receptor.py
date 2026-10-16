@@ -178,7 +178,14 @@ def _parse_element(line: str) -> str:
     if len(line) >= 78 and line[76:78].strip():
         return line[76:78].strip()
     name = line[12:16].strip() if len(line) > 16 else ""
-    return name[:1] if name else ""
+    # Fallback for legacy files without the element column (line ends
+    # before col 77): infer the element from the atom name.  PDB
+    # hydrogen names carry a leading digit ("1HB", "2HB1", "3HG1" ...)
+    # which is the *index* of the atom, not its element -- skip the
+    # digits first, otherwise "1HB" inferred element "1" and survived
+    # strip_hydrogens (27-A).
+    element = name.lstrip("0123456789")
+    return element[:1]
 
 
 def _audit_pdbqt_lines(lines: list[str]) -> tuple[int, dict[str, int], list[float], int, list[str]]:

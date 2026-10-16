@@ -142,6 +142,12 @@ def train_model(
         When ``cv < 2`` — the same entry guard ``compare_models`` has;
         pre-fix ``--no-tune`` silently ignored the value and the tuned
         path crashed deep inside GridSearchCV with raw sklearn jargon.
+        Also when ``tune`` is enabled and the training data has fewer
+        rows than ``cv`` folds: no fold can be built at all, so the
+        request fails up front with the row count and fold count named
+        instead of letting sklearn's splitter ``ValueError`` penetrate
+        raw (27-A).  With ``tune=False`` no cross-validation runs, so a
+        dataset smaller than ``cv`` stays usable.
     """
     import time
 
@@ -169,6 +175,16 @@ def train_model(
 
     started = time.perf_counter()
     if tune and prefixed:
+        n_samples = int(X_train.shape[0])
+        if isinstance(cv, int) and n_samples < cv:
+            # Fail up front instead of letting KFold's raw ValueError
+            # ("Cannot have number of splits n_splits=5 greater than the
+            # number of samples") penetrate to the user (27-A).
+            raise ModelError(
+                f"cv={cv} folds exceeds the number of training rows "
+                f"(n_samples={n_samples}) -- no fold can be built; lower "
+                "cv or supply more data"
+            )
         scorer = _select_scorer(pipeline, task)
         _LOG.info("Tuning %s (%s) over %d parameter combinations",
                   name, task, int(np.prod([len(v) for v in prefixed.values()])))
@@ -262,13 +278,27 @@ def compare_models(
     ------
     ModelError
         If any requested model is unavailable or task-incompatible,
-        the models list is empty, ``cv < 2``, or ``scoring`` is not a
-        scikit-learn scorer name.
+        the models list is empty, ``cv < 2``, ``scoring`` is not a
+        scikit-learn scorer name, or the dataset has fewer rows than
+        ``cv`` folds — the last guard keeps a doomed request from
+        degrading into a 100%-NaN leaderboard where every model fails
+        with the identical splitter error (27-A).
     """
     if task not in {"classification", "regression"}:
         raise ModelError(f"task must be 'classification' or 'regression', got {task!r}")
     if isinstance(cv, int) and cv < 2:
         raise ModelError(f"cv must be >= 2 folds, got {cv}")
+    n_samples = int(X.shape[0])
+    if isinstance(cv, int) and n_samples < cv:
+        # cross_validate runs for every model here; with n_samples < cv
+        # every single row would swallow the same raw splitter error
+        # below and surface as an all-NaN board instead of an
+        # actionable message.
+        raise ModelError(
+            f"cv={cv} folds exceeds the number of samples "
+            f"(n_samples={n_samples}) -- no fold can be built; lower cv "
+            "or supply more data"
+        )
     # Guard the metric name up front: a typo would otherwise fail inside
     # every per-model try/except below and surface as an all-NaN
     # leaderboard instead of an actionable error.

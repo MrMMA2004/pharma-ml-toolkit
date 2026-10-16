@@ -14,9 +14,12 @@ runs in seconds on a laptop CPU:
    blending several (one zero vetoes the whole molecule);
 3. **Optimise** --
    :class:`~pharmaml.generative.GeneticOptimizer` (a pragmatic SMILES
-   genetic algorithm: character mutation + splice crossover + tournament
-   selection + elitism; CPU-strong, de novo *or* seeded from your own
-   sample molecules) and/or :class:`~pharmaml.generative.ReinventOptimizer`
+   genetic algorithm: character mutation, splice **or** BREED-style
+   scaffold-hop crossover, tournament selection, elitism; CPU-strong,
+   de novo *or* seeded from your own sample molecules -- the
+   scaffold-hop crossover also works standalone via
+   :func:`~pharmaml.generative.scaffold_hop_crossover`) and/or
+   :class:`~pharmaml.generative.ReinventOptimizer`
    (REINVENT-style reinforcement learning: a character-level GRU prior
    trained on the corpus, fine-tuned by REINFORCE with a running
    baseline, entropy bonus, prior anchor and experience replay -- the
@@ -56,6 +59,7 @@ from .genetic import GeneticOptimizer, run_genetic_optimization
 from .result import GenerationResult
 from .rl import ReinventOptimizer, run_rl_optimization
 from .rnn import SmilesRnn
+from .scaffold_hop import scaffold_hop_crossover
 from .scoring import (
     LogPBandObjective,
     MolecularWeightBandObjective,
@@ -85,4 +89,5 @@ __all__ = [
     "TpsaBandObjective",
     "run_genetic_optimization",
     "run_rl_optimization",
+    "scaffold_hop_crossover",
 ]

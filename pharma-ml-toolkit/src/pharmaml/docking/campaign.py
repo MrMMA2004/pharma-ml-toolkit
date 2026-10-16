@@ -452,7 +452,11 @@ def reindex_by_number(
     group of ``pattern`` is extracted from ``column`` (e.g. the ligand
     number out of ``5_result.dlg``), used as the index, and the frame
     is left-joined onto ``range(start, stop + 1)`` so rows for ligands
-    with no result appear as NaN instead of silently missing.
+    with no result appear as NaN instead of silently missing.  The
+    reverse direction is guarded too (27-A): rows whose ``column``
+    value does not match ``pattern`` at all, or whose extracted number
+    falls outside ``[start, stop]``, are dropped **with a warning**
+    naming the count — never silently.
 
     Parameters
     ----------
@@ -498,8 +502,27 @@ def reindex_by_number(
         numbers = numbers[0]
     working = frame.copy()
     working["_number"] = pd.to_numeric(numbers, errors="coerce")
+    unparsed = int(working["_number"].isna().sum())
+    if unparsed:
+        _LOG.warning(
+            "%d row(s) in %r do not match pattern %r -- dropped from the "
+            "reindexed frame (clean the column or extend the pattern)",
+            unparsed,
+            column,
+            pattern,
+        )
     working = working[working["_number"].notna()]
     working["_number"] = working["_number"].astype(int)
+    out_of_range = int((~working["_number"].between(start, stop)).sum())
+    if out_of_range:
+        _LOG.warning(
+            "%d row(s) with ligand number(s) outside [%d, %d] -- dropped "
+            "from the reindexed frame (widen start/stop to keep them)",
+            out_of_range,
+            start,
+            stop,
+        )
+    working = working[working["_number"].between(start, stop)]
     duplicates = int(working["_number"].duplicated().sum())
     if duplicates:
         _LOG.warning(

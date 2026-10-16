@@ -285,7 +285,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "1277 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+    after: "1303 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Distribution",
@@ -338,8 +338,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "219";
-  const loc = stats ? fmtInt(stats.totalLines) : "65,201";
+  const fileCount = stats ? fmtInt(stats.files) : "221";
+  const loc = stats ? fmtInt(stats.totalLines) : "66,728";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(

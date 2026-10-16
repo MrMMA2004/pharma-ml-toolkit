@@ -27,6 +27,7 @@ scans::
     pharmaml generative run --recipe qed --method ga --iterations 20 --seed 42
     pharmaml generative run --recipe similar --seeds examples/data/seed_molecules.csv
     pharmaml generative run --method ga --recipe novel --scaffold --seed 42
+    pharmaml generative run --method ga --recipe qed --scaffold-hop --seed 42
     pharmaml generative corpus
     pharmaml models list
 
@@ -587,8 +588,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--scaffold", action="store_true", default=False,
         help="GA only: scaffold-preserving mutations -- keep each parent's "
         "Murcko framework verbatim and resample its decorations from the "
-        "corpus-derived vocabulary (lead-optimisation mode; crossover is "
-        "bypassed)",
+        "corpus-derived vocabulary (lead-optimisation mode; the character "
+        "splice crossover is bypassed -- pair with --scaffold-hop for "
+        "structural recombination)",
+    )
+    gen_run.add_argument(
+        "--scaffold-hop", action="store_true", default=False,
+        help="GA only: BREED-style scaffold-hop crossover -- cut two parents "
+        "at a pair of homologous single acyclic bonds and recombine the "
+        "fragments cross-wise, so ring systems survive and the offspring's "
+        "framework can differ from both parents",
     )
     gen_run.add_argument(
         "--seeds", default=None,
@@ -1568,6 +1577,13 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             "--scaffold selects the GA's scaffold-preserving mutation mode and "
             f"applies to --method ga only (got --method {args.method!r})"
         )
+    scaffold_hop = bool(getattr(args, "scaffold_hop", False))
+    if scaffold_hop and args.method != "ga":
+        raise DataValidationError(
+            "--scaffold-hop selects the GA's BREED-style scaffold-hop "
+            "crossover and applies to --method ga only (got --method "
+            f"{args.method!r})"
+        )
 
     seeds = _generative_seed_smiles(args)
     objective, description = _generative_objective(args.recipe, seeds)
@@ -1576,6 +1592,8 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
     print(f"budget   : {args.iterations} iteration(s), seed {args.seed}")
     if scaffold:
         print("scaffold : on (Murcko framework kept, decorations resampled)")
+    if scaffold_hop:
+        print("hop      : on (BREED-style homologous-cut recombination)")
     if seeds:
         print(f"seeds    : {len(seeds)} molecule(s) anchor the search")
 
@@ -1585,6 +1603,7 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             population_size=args.population,
             generations=args.iterations,
             mutation="scaffold" if scaffold else "uniform",
+            crossover="scaffold_hop" if scaffold_hop else "splice",
             seed=args.seed,
         ).optimize(seed_smiles=seeds)
     else:

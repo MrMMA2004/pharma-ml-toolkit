@@ -9,8 +9,15 @@ CPU-friendly and deterministic given ``seed``:
   are discarded) -- OR, in ``mutation="scaffold"`` mode, a
   scaffold-preserving decoration resampling (see :func:`_scaffold_mutate`);
 * **crossover** = single-point splice of two parents, sanitised the same
-  way (not used in scaffold mode: a character splice routinely destroys
-  ring systems, defeating scaffold preservation);
+  way -- OR, with ``crossover="scaffold_hop"``, a BREED-style
+  homologous-cut recombination (see
+  :func:`~pharmaml.generative.scaffold_hop_crossover`): both parents are
+  cut at a pair of matching single acyclic bonds and the fragments
+  recombined cross-wise, so ring systems survive by construction and
+  the offspring can hop scaffolds.  The character splice is not used in
+  ``mutation="scaffold"`` mode (it routinely destroys ring systems,
+  defeating scaffold preservation); the structural scaffold-hop
+  crossover IS available there;
 * **selection** = tournament of ``tournament_k`` molecules;
 * **elitism** = the top ``elitism`` molecules survive a generation
   verbatim, so the best score is monotone across generations.
@@ -50,6 +57,7 @@ from pharmaml.logger import get_logger
 from ._utils import canonical_smiles, require_rdkit, smiles_alphabet
 from .corpus import DEFAULT_CORPUS
 from .result import GenerationResult
+from .scaffold_hop import scaffold_hop_crossover
 
 __all__ = ["GeneticOptimizer", "run_genetic_optimization"]
 
@@ -372,10 +380,28 @@ class GeneticOptimizer:
         generative model like REINVENT 2.0 (no attachment-point
         generative grammar, no learned decoration distribution -- just
         corpus-derived resampling with ``Chem.molzip`` re-assembly).
-        Crossover is bypassed in this mode (a character splice routinely
-        destroys ring systems); parents without a Murcko scaffold
-        (acyclic molecules) or without decorations (bare ring systems)
-        fall back to the uniform mutation -- never an error.
+        Parents without a Murcko scaffold (acyclic molecules) or without
+        decorations (bare ring systems) fall back to the uniform
+        mutation -- never an error.
+    crossover:
+        ``"splice"`` (default) -- the classic single-point character
+        splice.  ``"scaffold_hop"`` -- **BREED-style structural
+        recombination** via
+        :func:`~pharmaml.generative.scaffold_hop_crossover`: both parents
+        are cut at a pair of homologous single acyclic bonds (matching
+        atomic number / degree / aromaticity / formal charge at the
+        join) and the fragments recombined cross-wise with
+        ``Chem.molzip``.  Every fragment arrives intact, so ring systems
+        survive by construction, and whenever the parents' frameworks
+        span different fragments (biaryls, diaryl ethers, sulfonyl
+        bridges) the offspring's framework differs from BOTH parents --
+        the scaffold-hopping operator.  Parents without a viable cut
+        fall back to ``parent_a`` -- never an error.  The character
+        splice is bypassed in ``mutation="scaffold"`` mode (it destroys
+        ring systems); the structural scaffold-hop crossover is NOT --
+        ``mutation="scaffold", crossover="scaffold_hop"`` is the full
+        structural mode (framework recombination + decoration
+        resampling).
     seed:
         Seed for the dedicated ``random.Random`` instance (default 42).
         Two runs with the same seed produce identical results.
@@ -396,6 +422,13 @@ class GeneticOptimizer:
     ...              corpus=["CC(=O)Oc1ccccc1C(=O)O"])
     >>> len(result) > 0
     True
+    >>> # scaffold-hop mode: BREED-style homologous-cut recombination
+    >>> hopped = GeneticOptimizer(
+    ...     QedObjective(), population_size=16, generations=3, seed=42,
+    ...     crossover="scaffold_hop",
+    ... ).optimize()
+    >>> hopped.metadata["crossover"]
+    'scaffold_hop'
     """
 
     def __init__(
@@ -410,6 +443,7 @@ class GeneticOptimizer:
         tournament_k: int = 3,
         max_smiles_length: int = 120,
         mutation: str = "uniform",
+        crossover: str = "splice",
         seed: int = 42,
     ) -> None:
         if not callable(getattr(objective, "score", None)):
@@ -445,6 +479,10 @@ class GeneticOptimizer:
             raise DataValidationError(
                 f"mutation must be 'uniform' or 'scaffold', got {mutation!r}"
             )
+        if crossover not in ("splice", "scaffold_hop"):
+            raise DataValidationError(
+                f"crossover must be 'splice' or 'scaffold_hop', got {crossover!r}"
+            )
         self.objective = objective
         self.population_size = population_size
         self.generations = generations
@@ -454,6 +492,7 @@ class GeneticOptimizer:
         self.tournament_k = tournament_k
         self.max_smiles_length = max_smiles_length
         self.mutation = mutation
+        self.crossover = crossover
         self.seed = seed
 
     # -- internals -------------------------------------------------------
@@ -496,7 +535,18 @@ class GeneticOptimizer:
         return "".join(chars)
 
     def _crossover(self, parent_a: str, parent_b: str, rng: random.Random) -> str:
-        """Single-point splice; over-long children fall back to parent A."""
+        """Recombine two parents: splice or scaffold-hop BREED cut.
+
+        Both operators fall back to ``parent_a`` when they cannot
+        produce a viable child (short genomes for the splice; no
+        homologous cut or both recombinations unsanitisable / over-length
+        for the scaffold hop).
+        """
+        if self.crossover == "scaffold_hop":
+            child = scaffold_hop_crossover(
+                parent_a, parent_b, rng, max_smiles_length=self.max_smiles_length
+            )
+            return child if child is not None else parent_a
         if len(parent_a) < 2 or len(parent_b) < 2:
             return parent_a
         cut_a = rng.randrange(1, len(parent_a))
@@ -740,11 +790,12 @@ class GeneticOptimizer:
                         )
                     break
                 parent_a = self._tournament(population, fitness, rng)
-                if self.mutation == "scaffold":
-                    # Decoration resampling on a single parent IS the
-                    # variation operator: a character-level splice would
-                    # routinely destroy ring systems, defeating the mode's
-                    # purpose (crossover_rate does not apply here).
+                if self.mutation == "scaffold" and self.crossover == "splice":
+                    # The character-level splice destroys ring systems and
+                    # would defeat scaffold preservation, so it is bypassed
+                    # in scaffold mode (crossover_rate does not apply).
+                    # The structural scaffold-hop crossover is NOT bypassed
+                    # -- it is the mode's natural partner.
                     child = parent_a
                 else:
                     parent_b = self._tournament(population, fitness, rng)
@@ -795,6 +846,7 @@ class GeneticOptimizer:
                 "unique_generated": len(smiles_list),
                 "population_size": self.population_size,
                 "mutation": self.mutation,
+                "crossover": self.crossover,
                 "seed_molecules": kept_seeds,
             },
         )

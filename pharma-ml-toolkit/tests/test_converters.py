@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -29,6 +31,27 @@ class TestParseEndpoint:
 
     def test_unit_suffix_stripped(self) -> None:
         assert parse_endpoint("250 nM") == EndpointValue(value=250.0)
+
+    def test_unit_suffix_stripped_regardless_of_case(self) -> None:
+        """Unit tokens are lexed case-insensitively (27-A).
+
+        Pre-fix, a pure case variance ('250 NM', '0.5 um', '10 MM') made
+        the entry unparseable -- the row silently became NaN (or was
+        dropped by ``add_pic50_column``) even though the caller's
+        ``unit`` parameter, not the stripped token, is the authoritative
+        scale, so no interpretation was at risk.
+        """
+        assert parse_endpoint("250 NM") == EndpointValue(value=250.0)
+        assert parse_endpoint("0.5 um") == EndpointValue(value=0.5)
+        assert parse_endpoint("0.5 UM") == EndpointValue(value=0.5)
+        assert parse_endpoint("10 MM") == EndpointValue(value=10.0)
+        assert parse_endpoint("2 pm") == EndpointValue(value=2.0)
+
+    def test_micro_sign_and_greek_mu_both_accepted(self) -> None:
+        # U+00B5 (micro sign) and U+03BC (Greek small mu) spell the same
+        # unit; casefold() unifies them.
+        assert parse_endpoint("10 \u00b5M") == EndpointValue(value=10.0)
+        assert parse_endpoint("10 \u03bcM") == EndpointValue(value=10.0)
 
     def test_invalid_inputs_return_none(self) -> None:
         for bad in (None, np.nan, "", "activity", "n/a", 0, -5, float("inf")):
@@ -58,6 +81,25 @@ class TestIC50ToPIC50:
 
     def test_pki_alias(self) -> None:
         assert ki_to_pki(100) == pytest.approx(7.0)
+
+    def test_one_molar_endpoint_is_positive_zero(self) -> None:
+        """``-log10(1.0)`` is IEEE ``-0.0``; never surface it (27-A).
+
+        Pre-fix, ``ic50_to_pic50(1.0, unit="M")`` returned ``-0.0`` and
+        ``add_pic50_column`` wrote it into the table, displaying as
+        "-0.0" where "0.0" is correct.
+        """
+        for value, unit in [(1.0, "M"), (1e9, "nM"), (1000.0, "mM"), (1e6, "uM")]:
+            result = ic50_to_pic50(value, unit=unit)
+            assert math.copysign(1.0, result) == 1.0
+            assert str(result) == "0.0"
+        assert str(ki_to_pki(1.0, unit="M")) == "0.0"
+
+    def test_add_pic50_column_writes_zero_not_negative_zero(self) -> None:
+        frame = pd.DataFrame({"IC50 (M)": ["1", "0.1"]})
+        result = add_pic50_column(frame, source_col="IC50 (M)", unit="M")
+        assert str(result.loc[0, "pIC50"]) == "0.0"
+        assert result.loc[1, "pIC50"] == pytest.approx(1.0)
 
 
 class TestAddPIC50Column:
