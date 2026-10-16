@@ -25,6 +25,9 @@ constructor ``seed`` and uses dedicated ``torch.Generator`` objects for
 batch shuffling; ``sample`` accepts an explicit ``seed`` (a fresh local
 generator, independent of any previous call).  Two identically-seeded
 runs on the same CPU produce identical weights and identical samples.
+Derived generator seeds (shuffle = ``seed + 1``, persistent sampler =
+``seed + 2``) wrap back into the torch-encodable interval, so boundary
+seeds (e.g. ``2**64 - 1``) work end-to-end.
 
 Example
 -------
@@ -76,6 +79,24 @@ def _validate_torch_seed(seed: int, what: str) -> int:
             f"[{_TORCH_SEED_MIN}, {_TORCH_SEED_MAX}] (2**64 - 1)"
         )
     return seed
+
+
+def _derived_seed(seed: int, offset: int) -> int:
+    """``seed + offset`` wrapped back into the torch-encodable interval.
+
+    Derived seeds (the shuffle generator's ``seed + 1``, the persistent
+    sampler's ``seed + 2``) used to escape the constructor-validated
+    interval at its edges: ``SmilesRnn(seed=2**64 - 1).train_prior(...)``
+    crashed with torch's raw ``ValueError: Overflow when unpacking long
+    long``.  Sums that stay inside the interval keep their exact historic
+    value (past runs stay byte-reproducible); only escaping sums wrap
+    around the interval span.
+    """
+    total = seed + offset
+    if _TORCH_SEED_MIN <= total <= _TORCH_SEED_MAX:
+        return total
+    span = _TORCH_SEED_MAX - _TORCH_SEED_MIN + 1
+    return _TORCH_SEED_MIN + (total - _TORCH_SEED_MIN) % span
 
 
 def _require_torch() -> Any:
@@ -257,7 +278,7 @@ class SmilesRnn:
         sequences = [self._encode(smiles) for smiles in data]
         optimizer = torch.optim.Adam(self._model.parameters(), lr=lr)
         shuffle_gen = torch.Generator()
-        shuffle_gen.manual_seed(self.seed + 1)
+        shuffle_gen.manual_seed(_derived_seed(self.seed, 1))
 
         losses: list[float] = []
         for epoch in range(epochs):
@@ -382,7 +403,7 @@ class SmilesRnn:
         else:
             if not hasattr(self, "_sample_gen"):
                 self._sample_gen = torch.Generator()
-                self._sample_gen.manual_seed(self.seed + 2)
+                self._sample_gen.manual_seed(_derived_seed(self.seed, 2))
             generator = self._sample_gen
 
         with torch.no_grad():

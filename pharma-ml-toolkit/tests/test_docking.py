@@ -51,13 +51,16 @@ def _pharmaml_logs_visible():
 
 class TestGridBox:
     def test_size_property(self) -> None:
+        # Fencepost: 60 grid points at 0.375 A spacing span
+        # (60 - 1) * 0.375 A -- the AutoDock "points = A/spacing + 1"
+        # convention puts both box faces ON grid nodes.
         box = GridBox(1.0, 2.0, 3.0, npts=(60, 60, 60), spacing=0.375)
-        assert box.size == pytest.approx((22.5, 22.5, 22.5))
+        assert box.size == pytest.approx((22.125, 22.125, 22.125))
 
     def test_vina_kwargs(self) -> None:
         box = GridBox(0, 0, 0, npts=(40, 40, 40), spacing=0.5)
         kwargs = box.as_vina_kwargs()
-        assert kwargs["size_x"] == pytest.approx(20.0)
+        assert kwargs["size_x"] == pytest.approx(19.5)  # (40 - 1) * 0.5
         assert kwargs["center_y"] == 0.0
 
 
@@ -296,6 +299,20 @@ class TestScoring:
         frame = pd.DataFrame({"e": [-9.0, -9.0, -9.0], "n": [1, 5, 9]})
         scores = consensus_rescore(frame, columns=["e", "n"])
         assert scores.notna().all()
+
+    def test_consensus_zero_variance_preserves_nan_rows(self) -> None:
+        # Regression: e=[5, NaN, 5] is zero-variance, and the neutral-0.5
+        # branch used to flatten the NaN row to a *scored* 0.5 -- even
+        # though the NaN policy (and its own warning) promise that such
+        # "consensus rows will be NaN".
+        frame = pd.DataFrame({"e": [5.0, float("nan"), 5.0], "n": [1, 2, 3]})
+        scores = consensus_rescore(frame, columns=["e", "n"])
+        assert scores.iloc[1] != scores.iloc[1]  # NaN row stays NaN
+        assert scores.iloc[[0, 2]].notna().all()
+        # finite rows: the zero-variance e contributes 0.5, n contributes
+        # its min-max unit values 0.0 / 1.0
+        assert scores.iloc[0] == pytest.approx(0.25)
+        assert scores.iloc[2] == pytest.approx(0.75)
 
     def test_ligand_efficiency_series_atom_count_validation(self) -> None:
         # Regression: 12.5 atoms used to be silently truncated to 12

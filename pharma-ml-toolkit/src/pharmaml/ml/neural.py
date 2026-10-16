@@ -28,10 +28,12 @@ happens at :meth:`fit` time and raises an actionable
 Determinism: ``fit`` seeds both the PyTorch and NumPy random number
 generators from ``random_state``, so two estimators constructed with
 the same seed and trained on the same data produce identical
-predictions (CPU).  Fitted weights are always stored as plain NumPy
-arrays, so pickled estimators stay portable across torch versions —
-and even across machines without torch installed (torch is only
-needed again to *predict*).
+predictions (CPU).  The caller's *global* torch RNG is
+snapshot-and-restored around the training loop, so ``fit`` leaves the
+global stream exactly as it found it.  Fitted weights are always
+stored as plain NumPy arrays, so pickled estimators stay portable
+across torch versions — and even across machines without torch
+installed (torch is only needed again to *predict*).
 """
 
 from __future__ import annotations
@@ -331,6 +333,33 @@ class _BaseDeepEstimator(BaseEstimator):
                 "first"
             )
 
+    def _check_feature_names(self, X: Any) -> None:
+        """Reject DataFrame columns that disagree with ``feature_names_in_``.
+
+        Mirrors sklearn's ``_check_feature_names``: an estimator fitted
+        on a DataFrame remembers its columns, and predicting on a
+        DataFrame whose columns differ in *names or order* is a silent
+        column-permutation bug (the values are consumed positionally),
+        so it raises a typed error.  Plain arrays stay positional — no
+        name checking — exactly like sklearn.
+
+        Raises
+        ------
+        DataValidationError
+            When ``X`` is a DataFrame whose column names/order differ
+            from the ones seen at fit time.
+        """
+        names = getattr(self, "feature_names_in_", None)
+        if names is None or not isinstance(X, pd.DataFrame):
+            return
+        columns = np.asarray(X.columns, dtype=object)
+        if not np.array_equal(columns, names):
+            raise DataValidationError(
+                f"X has feature names {columns.tolist()} that do not match the "
+                f"feature names seen during fit: {names.tolist()} — pass the same "
+                "columns in the fit order, or a plain (positional) array"
+            )
+
     # -- fit ------------------------------------------------------------
     def fit(self, X: Any, y: Any) -> _BaseDeepEstimator:
         """Train the network on ``(X, y)`` with early stopping.
@@ -365,13 +394,16 @@ class _BaseDeepEstimator(BaseEstimator):
         DataValidationError
             For empty/mismatched/non-numeric ``X``/``y``, NaN targets,
             a single-class classification target, unorderable labels,
-            or a feature-count mismatch at predict time.
+            or a feature-count (or, for DataFrames, feature-name)
+            mismatch at predict time.
 
         Notes
         -----
         Determinism: PyTorch and NumPy are seeded from
         ``random_state`` at fit start, so the same seed + data always
-        yields the same fitted network on CPU.
+        yields the same fitted network on CPU.  torch's *global* RNG is
+        snapshot-and-restored around the training loop: the caller's
+        global stream is left exactly as ``fit`` found it.
         """
         hidden = self._validate_hyperparameters()
         X_arr = self._check_X(X)
@@ -435,6 +467,11 @@ class _BaseDeepEstimator(BaseEstimator):
         self.n_features_in_ = int(X_arr.shape[1])
         if isinstance(X, pd.DataFrame):
             self.feature_names_in_ = np.asarray(X.columns, dtype=object)
+        elif hasattr(self, "feature_names_in_"):
+            # sklearn reset semantics: refitting on a positional array
+            # drops the stale names instead of enforcing the old column
+            # order at predict time.
+            del self.feature_names_in_
 
         seed = int(self.random_state)
         rng = np.random.default_rng(seed)
@@ -471,9 +508,20 @@ class _BaseDeepEstimator(BaseEstimator):
             self._y_std_ = y_std if y_std > 0 else 1.0
             y_enc = (y_enc - self._y_mean_) / self._y_std_
 
-        self._train_torch(
-            X_scaled, y_enc, n_out, device, hidden, train_idx, val_idx, rng
-        )
+        # The training loop seeds torch's *global* RNG from
+        # ``random_state`` (the same-seed determinism contract).  Snapshot
+        # and restore it around the call so the caller's global stream is
+        # left exactly as ``fit`` found it; ``manual_seed`` stays inside
+        # the protected window, so determinism is untouched.
+        import torch
+
+        rng_state = torch.get_rng_state()
+        try:
+            self._train_torch(
+                X_scaled, y_enc, n_out, device, hidden, train_idx, val_idx, rng
+            )
+        finally:
+            torch.set_rng_state(rng_state)
         return self
 
     def _resolve_device(self) -> str:
@@ -711,6 +759,7 @@ class _BaseDeepEstimator(BaseEstimator):
     def _forward(self, X: Any) -> np.ndarray:
         """Standardise ``X`` and forward it through the network (eval mode)."""
         self._check_fitted()
+        self._check_feature_names(X)
         X_arr = self._check_X(X)
         if X_arr.shape[1] != self.n_features_in_:
             # Without this guard a wrong-width X silently *broadcasts*
@@ -798,7 +847,9 @@ class DeepMLPClassifier(ClassifierMixin, _BaseDeepEstimator):
     n_features_in_:
         Number of input features seen at fit.
     feature_names_in_:
-        Column names when ``X`` was a DataFrame.
+        Column names when ``X`` was a DataFrame (checked against
+        predicting DataFrames in names *and* order; an ndarray refit
+        drops them, sklearn-style).
     history_:
         List of per-epoch dicts ``{'epoch', 'train_loss', 'val_loss'}``
         (``val_loss`` is ``None`` without a validation split).

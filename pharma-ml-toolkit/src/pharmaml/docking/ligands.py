@@ -547,6 +547,7 @@ def prepare_ligand_library(
     name_col: str | None = None,
     folder_naming: str = "index_name",
     ligand_filename: str = "l.pdbqt",
+    seed: int = 0,
 ) -> LigandPreparationReport:
     """Prepare every ligand of a CSV library into a campaign tree.
 
@@ -555,6 +556,9 @@ def prepare_ligand_library(
     all expect), each containing the prepared ``l.pdbqt``.  Invalid
     SMILES are skipped with their reason recorded; failing folders are
     removed again exactly like the original ``smilestopdbqt.py`` did.
+    Ligands whose 3D preparation itself fails (e.g. elements without an
+    AutoDock4 type, such as boron) are likewise recorded per row with
+    ``ok=False`` and their error instead of aborting the batch.
 
     Parameters
     ----------
@@ -570,6 +574,11 @@ def prepare_ligand_library(
     ligand_filename:
         PDBQT filename inside each folder (``l.pdbqt`` matches the
         original scripts and the GPF/DPF generators).
+    seed:
+        ETKDG embedding seed passed through to
+        :func:`~pharmaml.docking.preparation.smiles_to_pdbqt` -- the
+        default (0) makes the whole campaign tree deterministic;
+        the same seed always rebuilds byte-identical PDBQTs.
 
     Returns
     -------
@@ -616,7 +625,7 @@ def prepare_ligand_library(
         atoms = 0
         torsdof = 0
         try:
-            pdbqt = smiles_to_pdbqt(str(record.smiles), folder, name=stem)
+            pdbqt = smiles_to_pdbqt(str(record.smiles), folder, name=stem, seed=seed)
             atoms, torsdof = _pdbqt_stats(pdbqt)
         except DependencyError:
             # Missing RDKit/Meeko cannot get better by retrying: fail the

@@ -18,14 +18,20 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CodeBlock } from "@/components/explorer/code-block";
+import {
+  DataFileBadges,
+  DataFileSkeleton,
+  DataFileView,
+} from "@/components/explorer/data-file-view";
 import { FileOutline } from "@/components/explorer/file-outline";
 import { FileTree } from "@/components/explorer/file-tree";
 import { useToolkitStore } from "@/lib/store";
 import { fmtBytes, fmtInt } from "@/lib/format";
-import type { FileContentResponse, TreeNode } from "@/lib/toolkit-types";
+import { dataFileKindFromPath } from "@/lib/data-file";
+import type { AnyFileResponse, TreeNode } from "@/lib/toolkit-types";
 
 /** Module-level cache of file contents so tab switches never refetch. */
-const fileCache = new Map<string, FileContentResponse>();
+const fileCache = new Map<string, AnyFileResponse>();
 
 /** Count files in a (sub)tree. */
 function countFiles(node: TreeNode): number {
@@ -71,7 +77,7 @@ export function CodeExplorer() {
   const recentFiles = useToolkitStore((s) => s.recentFiles);
   const clearRecentFiles = useToolkitStore((s) => s.clearRecentFiles);
 
-  const [content, setContent] = useState<FileContentResponse | null>(null);
+  const [content, setContent] = useState<AnyFileResponse | null>(null);
   const [fileStatus, setFileStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [fileError, setFileError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -103,7 +109,7 @@ export function CodeExplorer() {
               : `HTTP ${res.status}`;
           throw new Error(message);
         }
-        const payload = data as FileContentResponse;
+        const payload = data as AnyFileResponse;
         if (seq !== fetchSeq.current) return; // stale response
         fileCache.set(path, payload);
         setContent(payload);
@@ -120,6 +126,12 @@ export function CodeExplorer() {
   useEffect(() => {
     void loadFile(selectedFile);
   }, [selectedFile, loadFile]);
+
+  /** Kind of the payload: data-file previews are discriminated by `kind`. */
+  const dataPayload = content !== null && "kind" in content ? content : null;
+  const sourcePayload = content !== null && !("kind" in content) ? content : null;
+  /** Preview kind of the file being opened (drives the loading skeleton). */
+  const pendingKind = dataFileKindFromPath(selectedFile);
 
   const trimmed = query.trim().toLowerCase();
   const permalink = parsePermalink(query);
@@ -414,32 +426,40 @@ export function CodeExplorer() {
             </nav>
             <div className="flex flex-wrap items-center gap-1.5">
               {content ? (
-                <>
-                  <Badge variant="secondary" className="font-mono text-[10px] uppercase">
-                    {content.language}
-                  </Badge>
-                  <Badge variant="outline" className="tabular-nums">
-                    {fmtInt(content.lines)} lines
-                  </Badge>
-                  <Badge variant="outline" className="tabular-nums">
-                    {fmtBytes(content.size)}
-                  </Badge>
-                </>
+                dataPayload ? (
+                  <DataFileBadges data={dataPayload} />
+                ) : (
+                  <>
+                    <Badge variant="secondary" className="font-mono text-[10px] uppercase">
+                      {sourcePayload?.language}
+                    </Badge>
+                    <Badge variant="outline" className="tabular-nums">
+                      {fmtInt(sourcePayload?.lines ?? 0)} lines
+                    </Badge>
+                    <Badge variant="outline" className="tabular-nums">
+                      {fmtBytes(sourcePayload?.size ?? 0)}
+                    </Badge>
+                  </>
+                )
               ) : null}
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3 p-3 sm:p-4">
           {fileStatus === "loading" ? (
-            <div className="space-y-2.5" aria-label="Loading file content">
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-4 w-5/6" />
-              <Skeleton className="h-4 w-1/2" />
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-4 w-4/5" />
-              <Skeleton className="h-4 w-3/5" />
-            </div>
+            pendingKind ? (
+              <DataFileSkeleton kind={pendingKind} />
+            ) : (
+              <div className="space-y-2.5" aria-label="Loading file content">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-4 w-3/5" />
+              </div>
+            )
           ) : fileStatus === "error" ? (
             <div className="space-y-3 py-6">
               <div className="flex items-start gap-2 text-sm text-destructive">
@@ -457,26 +477,30 @@ export function CodeExplorer() {
               </Button>
             </div>
           ) : content ? (
-            <>
-              <FileOutline
-                code={content.content}
-                language={content.language}
-                onJump={jumpInFile}
-                activeLine={activeOutlineLine}
-                filePath={content.path}
-              />
-              <CodeBlock
-                code={content.content}
-                language={content.language}
-                fileName={content.path.split("/").pop() ?? content.path}
-                showLineNumbers
-                maxHeightClass="max-h-[70vh]"
-                highlightLine={targetLine}
-                onClearHighlight={() => setTargetLine(null)}
-                permalinkPath={content.path}
-                onVisibleLineChange={handleVisibleLine}
-              />
-            </>
+            dataPayload ? (
+              <DataFileView data={dataPayload} />
+            ) : (
+              <>
+                <FileOutline
+                  code={sourcePayload?.content ?? ""}
+                  language={sourcePayload?.language ?? "text"}
+                  onJump={jumpInFile}
+                  activeLine={activeOutlineLine}
+                  filePath={content.path}
+                />
+                <CodeBlock
+                  code={sourcePayload?.content ?? ""}
+                  language={sourcePayload?.language ?? "text"}
+                  fileName={content.path.split("/").pop() ?? content.path}
+                  showLineNumbers
+                  maxHeightClass="max-h-[70vh]"
+                  highlightLine={targetLine}
+                  onClearHighlight={() => setTargetLine(null)}
+                  permalinkPath={content.path}
+                  onVisibleLineChange={handleVisibleLine}
+                />
+              </>
+            )
           ) : null}
         </CardContent>
       </Card>

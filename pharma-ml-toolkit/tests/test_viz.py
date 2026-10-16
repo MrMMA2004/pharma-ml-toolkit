@@ -755,9 +755,12 @@ class TestNotebookArtifacts:
         assert "valid molecules" in desc_text, "descriptor cell lost its output"
 
         # §7/§8 classification recipes: binary (2 classes) + multiclass
-        # with a selectable class count (N_CLASSES).
+        # with a selectable class count (N_CLASSES).  The demo tables load
+        # from examples/data/ (qsar_classification.csv / qsar_multiclass.csv)
+        # — never fabricated inline (see test_notebook_variants.py).
         for symbol in (
-            "make_classification_table",
+            'DATA_DIR / "qsar_classification.csv"',
+            'DATA_DIR / "qsar_multiclass.csv"',
             "N_CLASSES",
         ):
             assert symbol in sources, f"notebook lost its {symbol} section"
@@ -828,6 +831,37 @@ class TestNotebookArtifacts:
         )
         assert "valid         : 8" in load_text, "ligand library audit changed"
 
+        # §4's grid box must carry the fencepost-corrected sizes:
+        # npts - 1 grid intervals, not npts (size 22.1 A, Vina 22.125 A).
+        box_cell = next(
+            (c for c in code_cells if "box = compute_grid_box" in c.source), None
+        )
+        assert box_cell is not None, "notebook lost its grid-box cell"
+        box_text = "".join(
+            o.get("text", "") for o in box_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "size   : (22.1, 22.1, 22.1) A" in box_text, (
+            "grid-box size drifted from the fencepost-corrected 22.1 A"
+        )
+        assert "'size_x': 22.125" in box_text, "Vina grid size drifted from 22.125"
+
+        # §6's completion audit runs on a scratch copy of the shipped
+        # campaign (examples/data/docking_campaign/): 12 OK, 1 missing
+        # log, 1 interrupted — exactly the planted audit cases.
+        audit_cell = next(
+            (c for c in code_cells
+             if "audit = check_docking_completion" in c.source), None
+        )
+        assert audit_cell is not None, "notebook lost its completion-audit cell"
+        audit_text = "".join(
+            o.get("text", "") for o in audit_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "{'OK': 12, 'MISSING_LOG': 1, 'INCOMPLETE': 1}" in audit_text, (
+            "campaign audit drifted from the planted 12/1/1 census"
+        )
+
     def test_complete_pk_workflow_notebook(self):
         nb = self._read("complete_pk_workflow.ipynb")
         code_cells, errors, figures, executed = self._stats(nb)
@@ -885,6 +919,23 @@ class TestNotebookArtifacts:
         assert "AUC" in nca_text, "NCA cell lost its output"
         assert "17.961" in nca_text, "NCA AUC value changed"
         assert "1.623" in nca_text, "terminal half-life value changed"
+
+        # §3 exposes the AUC math: linear vs log trapezoid on the same
+        # shipped profile.  The log value is the post-round-20a
+        # log-trapezoid rule (17.2536) — the committed output predating
+        # the fix (17.2347) is long gone.
+        auc_cell = next(
+            (c for c in code_cells if "auc_log = auc_trapezoid" in c.source), None
+        )
+        assert auc_cell is not None, "notebook lost its AUC-math cell"
+        auc_text = "".join(
+            o.get("text", "") for o in auc_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "AUC linear         17.9607" in auc_text, "linear AUC pin drifted"
+        assert "AUC log            17.2536" in auc_text, (
+            "log AUC drifted from the log-trapezoid rule (17.2536)"
+        )
 
         # The validation guard (§1) and the recap (§13) must stay shipped.
         assert any(
@@ -1017,7 +1068,11 @@ class TestNotebookArtifacts:
         assert "scaffold    1.000" in retention_text, "scaffold retention changed"
         assert "uniform     0.505" in retention_text, "uniform retention changed"
 
-        # The RL early-stop flag must stay committed (plateau detection).
+        # The RL summary must stay committed.  Round 26 moved the RL to a
+        # running-baseline advantage: on this seed the mean score keeps
+        # improving to the last iteration, so the plateau early-stop stays
+        # armed but never fires (early_stopped=False) and the run yields
+        # 107 unique molecules with best score 0.601.
         rl_cell = next(
             (c for c in code_cells if "early stopped" in c.source), None
         )
@@ -1026,7 +1081,9 @@ class TestNotebookArtifacts:
             o.get("text", "") for o in rl_cell.get("outputs", [])
             if o.get("output_type") == "stream"
         )
-        assert "early stopped   : True" in rl_text, "RL early-stop flag changed"
+        assert "early stopped   : False" in rl_text, "RL early-stop flag changed"
+        assert "107 unique molecule(s)" in rl_text, "RL unique-molecule count changed"
+        assert "(score 0.601)" in rl_text, "RL best-score headline changed"
 
         # The §11 recap must stay shipped.
         assert any(

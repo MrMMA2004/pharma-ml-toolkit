@@ -1595,3 +1595,150 @@ Stage Summary:
 - One pre-existing docstring defect fixed (seeded-mode population semantics); one stale frontend note fixed (notebook counts).
 - Cron review cycle v9 (job 463546, every 15 min, Asia/Tehran, webDevReview) confirmed alive; its payload points at the worklog for the live baseline, which this entry updates.
 - Next-phase candidates for 100x-24+: (a) generative scaffold-hop crossover (vary the framework itself — the natural next operator, still deferred); (b) notebook §3 AUC erratum decision (complete_pk_workflow.ipynb committed outputs vs the 20-a log-trapezoid fix — record in docs or leave); (c) doctest-count growth check (public docstrings added since 22-c should carry doctests); (d) INDEX.md could gain a "notebooks" inventory section (auto-generated from examples/); (e) the walkthrough notebook still doesn't tour the generative domain — a §8 there would complete the every-domain claim.
+---
+Task ID: 26-R1
+Agent: general-purpose (data-inventory rebuild)
+Task: Rebuild scratch/build_example_data.py + examples/data/ inventory after sandbox reset
+
+Work Log:
+- Inventoried every inline data cell in the 6 executed notebooks (ml 3/6/11/31/35 · cellline 3/17 · pk 4 · docking 3/29 · generative 8 · walkthrough 3/5/10) — the builder copies that code + those seeds verbatim (make_synthetic_qsar_data imported as the ML notebook does), so files are byte-identical to the cells' own outputs; every committed-output number is re-asserted loudly (420×11 census 118/155/147, 360×21 census 125/102/79/54, 185 rows 23 lines/11 tissues, 23×300, 49 samples, 180×8 census 39/88/53, aspirin MW/LogP/TPSA/HBD/HBA, dlg 682/21/65 B, seed 443 B).
+- Builder properties: cwd-independent (paths from __file__), single-thread env vars set before numpy/sklearn/RDKit import, bytes-only-when-changed writes (strict idempotency), RCSB fetch only when missing (1AKI 116,397 B / 1CRN 49,491 B — fetch path live-tested in a tempdir; both fixtures were on disk and untouched), full inventory + md5 printout.
+- seed_molecules.csv rebuilt byte-exact 443 B with NO trailing newline (manual join; pandas to_csv appends one → 444 B).
+- .gitignore: added !examples/data/ + !examples/data/** + !tests/data/ + !tests/data/** right after the bare `data/` rule, removed the dead !tests/data/*.xlsx; git check-ignore exit 1 for seed_molecules.csv/1crn.pdb/lysozyme/r.dlg, artifacts/ still ignored, `git add -n examples/data tests/data` → 44 files would stage.
+- CONCURRENT EDITOR raced this task (19:23–19:37): another agent rewrote 17 src files (+672 lines) + 10 test files (+1407 lines) live — e.g. workflow.py gained the _log_complete "Successful Completion" sentinel-trust rule, which flips batch_run_directories' 10_nicotine outcome from ok (notebook's committed output) to missing-r.dpf; the builder's batch check therefore pins only the stable invariants (12 complete folders ok + benzocaine r.gpf failure) and prints the nicotine outcome.
+- ruff check scratch/build_example_data.py → All checks passed (fixed EXE001/RUF100/UP012/S110 on the way).
+
+Stage Summary:
+- examples/data: 43 files / 717,586 B (13 CSVs + docking_campaign 29 files in 14 folders + lysozyme_1aki.pdb); tests/data/1crn.pdb ensured but not counted. DEVIATION: task said 42/28 but its own enumeration sums to 29 campaign files (24 complete + benzocaine README + nicotine dlg/glg + root ligands.csv + root README) — kept every enumerated artifact, +1 file.
+- Idempotency PROVEN: consecutive builder runs wrote 0 files, md5sums identical across runs.
+- AUC pins reproduced via pharmaml.pharma.pk.auc_trapezoid on the written CSV: linear 17.9607 / log 17.2536 (log = post-20a rule; the PK notebook's committed 17.2347 predates the fix).
+- Campaign audit via the package's own tooling: check_docking_completion → {OK 12, MISSING_LOG 1, INCOMPLETE 1}; 01_aspirin parse_dlg_summary matches the notebook pin (-4.91/-4.74/15); batch_run_directories: benzocaine fails "missing r.gpf", 12 complete re-run ok.
+- Full loop-mode suite: 1223 passed / 2 skipped / 0 failed (baseline 1134/2 — the +89 tests are the concurrent agent's in-flight edits, not the data files; my scope touches nothing pytest collects).
+
+---
+Task ID: 26-R3
+Agent: general-purpose fixer (ml re-fix)
+Task: Re-implement 5 defect fixes in src/pharmaml/ml/ lost to sandbox reset
+
+Work Log:
+- Fail-first: +20 tests in tests/{test_ml_pipeline,test_neural}.py → 15 failed / 5 behavior pins pre-fix (evidence /tmp/task26/fix-r3-evidence.txt); all 5 defects probe-verified live first (catboost 1.2.8 + torch 2.14.1 installed in venv).
+- D1 models.py: new _accepted_param_names() validates params= against get_params() ∪ constructor signature (signature consulted only when __init__ has no **kwargs) — CatBoost's partial get_params no longer flags 'iterations'/'depth'/'learning_rate'; set_params rejections wrapped as ModelError; all-registry-grids invariant test added.
+- D2 models.py: _TASK_FACTORIES["adaboost"] → AdaBoost*(random_state=42) lambdas — two identical tune=False runs now predict identically and compare_models rows stop drifting.
+- D3 neural.py: fit() snapshots torch.get_rng_state() around _train_torch, restores in finally (manual_seed stays inside the window — same-seed determinism pins green).
+- D4 neural.py: _check_feature_names in _forward — DataFrame names OR order mismatch → typed DataValidationError (arrays stay positional); ndarray refit deletes stale feature_names_in_ (sklearn reset semantics), DataFrame refit refreshes.
+- D5 training.py: train_model entry guard "cv must be >= 2 folds, got N" (mirrors compare_models); CLI smoke `ml train --cv 0/1/-3` now exits 1 with the typed message (cli.py untouched).
+- Sandbox recovery per round convention: exec bits re-cleared to git index; catboost_info/ artifacts cleaned — my catboost test passes allow_writing_files=False (the directory itself is pre-existing compare_models-fit behavior, out of scope).
+
+Stage Summary:
+- 20 new tests green (params-validation 5, adaboost 3, cv-guard 5, RNG 2, feature-names 5); ml+neural files 149 passed / 1 skipped; full loop-mode suite 1223 passed / 2 skipped; ruff + mypy clean on every 26-R3 file (the one remaining mypy error is pre-existing in docking/receptor.py, outside this task's scope).
+
+---
+Task ID: 26-R2
+Agent: general-purpose fixer (generative re-fix)
+Task: Re-implement 8 defect fixes in src/pharmaml/generative/ lost to sandbox reset
+
+Work Log:
+- Re-confirmed all 8 defects with a standalone probe (/tmp/task26/probe_defects.py) + 12 fail-first regression tests in tests/test_generative.py (12 failed pre-fix, evidence /tmp/task26/fix-r2-evidence.txt; green probe /tmp/task26/green-probe.txt).
+- D1 rnn.py: module-private `_derived_seed(seed, offset)` wraps seed+1 / seed+2 back into [-2**63, 2**64-1] ONLY when the sum escapes (historic values exact); boundary seed 2**64-1 now trains/samples/RL-runs end-to-end (was raw torch overflow).
+- D2: bare-string `seed_smiles`/`corpus` raise NoveltyObjective's typed DataValidationError in GeneticOptimizer.optimize (both params) + ReinventOptimizer.__init__ (corpus) -- was silent character iteration (best molecule literally 'C').
+- D3 genetic.py: non-string + invalid/unparseable corpus drops now warn sibling-style ("dropping N ... corpus entr(ies)"); population provably drawn from the surviving valid pool.
+- D4 rl.py: advantage = (returns − baseline)/(EMA-of-previous-batch-std + 1e-6), NO per-batch mean subtraction (it cancelled ANY baseline exactly); baseline/std EMAs folded in AFTER the gradient; module-level `_BASELINE_INIT` seam (+ `_BASELINE_DECAY`); docstring rewritten to the real algorithm.
+- D5/D6 scoring.py: MultiObjective.reset_stats() resets duck-typed children; weighted geometric mean now log-space (math.fsum, max-rescaled weights) -- [2000,2000]=0.5, [1e308,1e308]=0.5 (was fabricated 1.0), [1e307,1e308]=0.7665 (was 0.0).
+- D7 result.py: breakdown keys colliding with reserved columns (rank/smiles/score) raise typed DataValidationError at construction (was silently clobbering the leaderboard column).
+- D8 scoring.py: Novelty's bool-exclusion pattern in SimilarityObjective (radius, n_bits) + _BandObjective bounds (LogP/MW/TPSA).
+
+Stage Summary:
+- 12 new tests, all green; tests/test_generative.py 127 -> 139 passed; generative doctests 15 passed (one legitimate re-pin: __init__.py RL example ('CCOc1ccccc1O', 0.754) -> ('CCCNc1ccccc1', 0.728); rl.py's own doctest bounds held); full loop-mode suite 1223 passed / 2 skipped (includes parallel agents' concurrent tests); ruff clean on src/pharmaml/generative + tests/test_generative.py; mypy 0 errors in the 8 generative files.
+- Sanity re-verified for D4: tiny-corpus QED run improves (mean 0.000 -> ~0.15, best 0.513, 12 iterations) and determinism holds (test_rl_is_deterministic_given_seed + injected-baseline seam test).
+
+---
+Task ID: 26-R8
+Agent: full-stack-developer (data preview rebuild)
+Task: Rebuild Code Explorer CSV/PDB preview lost to sandbox reset
+
+Work Log:
+- Backend /api/toolkit/file: kind-tagged data previews — CSV {columns, exact rowCount, ≤50 previewRows, truncated} (RFC4180 quotes/CRLF-aware), PDB {atomCount, residueCount, totalLineCount, ≤200-line previewText}, plain-text ≤400 lines for .txt/.dlg/.glg/.gpf/.dpf; caps CSV ≤512 KB / PDB-text ≤8 MB with actionable 400s; bounded reads via the TOP-LEVEL fs.createReadStream (toolkit-fs.readToolkitFileBounded + FILE_TOO_LARGE sentinel — fs.promises has no stream API); traversal/absolute/missing guards unchanged; source-file payloads byte-compatible (README.md keys+values identical).
+- New isomorphic src/lib/data-file.ts (pure parsers, no fs); tree walk marks data nodes language=csv/pdb/text and NEVER line-counts them — LOC stat stays source-only (live tree: data nodes lines=null).
+- Frontend: new data-file-view.tsx — CSV semantic table (border-separate sticky thead, zebra odd:bg-muted/50 + hover, right-aligned tabular-nums numerics, title tooltips, sr-only + visible caption "Showing N of M rows · K columns · X KB", "+N more rows in file" badge, header-only empty state); PDB summary chips (atoms/residues/lines/size) + first 200 records in the CodeBlock chrome + "+N more lines" badge; text in CodeBlock. code-explorer: kind-aware header badges, table/chip-shaped loading skeletons, cache widened to AnyFileResponse. file-tree: data nodes get Table2 (.csv/.gpf/.dpf) / Atom (.pdb/.dlg/.glg) icons in primary accent + size label + "click to preview" aria-labels.
+- One incident: Turbopack HMR staleness served a stale toolkit-fs chunk ("readToolkitFileBounded is not a function") — fixed via content-hash bust, then clean.
+
+Stage Summary:
+- Shipped the full data-preview pipeline (backend + tree integrity + viewer + wiring). Evidence: bun run lint exit 0; bunx tsc --noEmit 0 errors in src/ (only 4 pre-existing out-of-scope errors: examples/websocket ×2 unchanged-from-HEAD, skills/ ×2 untracked env scripts); curl matrix green — qsar_classification.csv 420 rows/11 cols/truncated, lysozyme_1aki.pdb 1,079 atoms/207 residues/1,437 lines + 200-line preview, seed_molecules.csv 12 rows untruncated, 01_aspirin r.dlg text preview, ../../etc/passwd and /etc/passwd → 400, missing → 404, README.md byte-identical shape; agent-browser 1280×900 E2E (CSV node → real 11-col/50-row table with badges+caption+"+370 more rows"; PDB node → chips 1,079/207/1,437/113.7 KB + records + "+1,237 more lines"; r.dlg → text view; ZERO console/page errors) + 360px (document.scrollWidth === 360 = viewport; table scrolls inner-only: scroller 300→1721 px) + VLM visual pass (zebra visible after /25→/50 bump; no glitches).
+- Files touched: src/app/api/toolkit/file/route.ts, src/lib/toolkit-fs.ts, src/lib/toolkit-types.ts, src/lib/data-file.ts (new), src/components/explorer/code-explorer.tsx, src/components/explorer/file-tree.tsx, src/components/explorer/data-file-view.tsx (new). Nothing under pharma-ml-toolkit/**, README.md or docs/INDEX.md. Deferred: nothing.
+
+---
+Task ID: 26-R4
+Agent: general-purpose fixer (biology+docking re-fix) — gateway-cut before worklog; work verified + entry written by the orchestrator (recovery pattern, interruption #12)
+
+Task: Re-implement 12 defect fixes in src/pharmaml/biology/ + docking/ lost to the sandbox reset (originally fixed in round 25, review 25-R3).
+
+Work Log:
+- Fail-first evidence at /tmp/task26/fix-r4-evidence.txt: 29 pre-fix failures across the scope suites.
+- All 12 re-implemented: omics duplicate-gene-columns typed DataValidationError on all 5 entry points; datetime columns excluded from metric auto-detection (DataFrame + xlsx); summarize_compounds duplicate-index typed error with reset_index hint; GridBox.size = (npts−1)·spacing fencepost (docstring convention true; Vina kwargs −0.375 Å/axis); _read_coordinates token fallback locates [resseq,x,y,z] windows (chain-less records fixed); consensus_rescore zero-variance branch keeps NaN rows; smiles_to_pdbqt ETKDG-seeded with new public seed param (byte-identical repeat calls) threaded through prepare_ligand_library; charge hint warns "ignored, neutral state" (dead param honestly documented); unknown atom types raise typed DockingError from smiles_to_pdbqt + per-ligand ok=False in prepare_ligand_library; read_gpf malformed numeric fields (npts/spacing/gridcenter/smooth/dielectric) raise typed DockingParseError; run_vina_batch launches engine with cwd=conf.parent; run_autodock4 skip_existing gates on the completion sentinel.
+- Orchestrator verification: biology+docking scope suites 271 passed / 2 warnings; full loop-mode 1277/2 (after R7's guards); ruff + mypy clean; the re-executed docking notebook shows the honest new behaviour — batch re-run reports 08_benzocaine FAILED (missing r.gpf) and 10_nicotine FAILED (missing r.dpf): the sentinel-trust rule no longer trusts interrupted logs.
+
+Stage Summary:
+- 12/12 closed with 29 fail-first tests; new public surface: smiles_to_pdbqt(seed=0) parameter (docs/INDEX.md rebuilt — 207 symbols, census unchanged).
+
+---
+Task ID: 26-R5
+Agent: general-purpose fixer (cli+data+chem re-fix) — gateway-cut before worklog; entry written by the orchestrator from its evidence file (interruption #13)
+
+Task: Re-implement 8 defect fixes in cli.py/data.py/chem/converters.py lost to the sandbox reset (originally fixed in round 25, review 25-R4).
+
+Work Log:
+- Evidence at /tmp/task26/fix-r5-evidence.txt: 18 pre-fix failures → POST-FIX all defect probes green, 30 new tests passed, full loop-mode 1223/2 at its close, ruff+mypy clean on owned files.
+- All 8 re-implemented: SplitResult gained public `source` field; write() refuses to overwrite the input file (typed DataValidationError, no partial files); chem descriptors bad-column exit 2→1 (convention); split_table NaN-in-stratify-target typed error (regression NaN targets still split); sdf_to_table warns "N of M records unparseable and dropped" + frame.attrs counts + CLI exits 1 on drops (csv AND smi paths); csv→csv same-format guard (input never mutated); _NoConsoleCliError logging.Filter kills the duplicate stderr line (--log-file handler keeps its record; subprocess test counts exactly 1 occurrence); --out success messages print write_table's ACTUAL returned path (4 sites: pic50, descriptors, docking scan, docking check — the last also gained its missing "saved ->" line); ml train --out help documents that the model always lands under ./artifacts/.
+
+Stage Summary:
+- 8/8 closed with 30 fail-first tests; new public surface: SplitResult.source dataclass field (docs/INDEX.md census unchanged).
+
+---
+Task ID: 26-R6
+Agent: full-stack-developer (playground model library rebuild) — gateway-cut before worklog; verification artifacts audited + entry written by the orchestrator (interruption #14)
+
+Task: Rebuild the 17-model ML Playground library lost to the sandbox reset (originally round 24-b).
+
+Work Log:
+- Rebuilt: src/lib/ml-math.ts 439→1335 LOC (lasso + elastic_net coordinate descent, knn, CART variance/gini trees, seeded-bagging random forests, depth-3-stump gradient boosting, tanh MLPs; classification adds decision_tree/random_forest/knn/gaussian_nb/svm_linear/MLP), train route 895 LOC dispatch (grouped model cases), ml-playground.tsx 2442 LOC (grouped pickers, contextual hyperparameters, CV tables).
+- Determinism verified by the orchestrator from its artifacts: det_reg_mlp_1/2.json byte-identical metrics (r² 0.9054409417114849 both runs); legacy base_reg_ridge.json vs new_reg_ridge.json compared for byte-compatibility.
+- sklearn cross-validation probe (scratch/probe_playground_models_26.py, 17.5 KB — replicates mulberry32, Box–Muller, synthetic generators, Fisher–Yates split, FNV-1a hashCsvSeed in Python): 13/13 model comparisons — lasso/elastic_net/reg-knn/reg-tree/gb/cls-knn/cls-tree/gaussian_nb/svm_linear/cls-mlp EXACT (Δ ≤ 1e-15), random_forest reg+cls and reg-mlp within tolerance (RNG/optimizer differences), 0 DIFF; CSV mode hashCsvSeed replica MATCHES the API's split.
+
+Stage Summary:
+- Playground restored: 4 → 17 models (10 regression + 7 classification), pure TS, deterministic, honest model summaries; probe documents sklearn agreement.
+
+---
+Task ID: 26-R7
+Agent: general-purpose (notebook file-driven conversion) — gateway-cut before worklog; driver completed the full pass, verified + entry written by the orchestrator (interruption #15)
+
+Task: Convert all 6 executed notebooks to shipped-file inputs (user's standing requirement), re-execute, restore the 54-assertion guard + README data inventory.
+
+Work Log:
+- Driver scratch/reexecute_notebooks_26.py (816 LOC, lineage of the patch_* family): conversion map 14 fabrication cells → 13 shipped files (ML 3/6/11/31/35; cellline 3/17; PK 4; docking 3/9/29 — campaign copied into WORK first so housekeeping verbs never mutate the shipped tree; generative 8; walkthrough 3/5/10); 9 banned tokens documented with pre-conversion cell evidence (22 hits).
+- All 6 notebooks re-executed with nbclient (cwd=examples/, worker-cap env); 5 twins regenerated code-synced.
+- Spot-checks verified by the orchestrator: PK §3 AUC log 17.2347 → 17.2536 (the round-20a erratum FINALLY dissolved); docking §4 grid box (22.5→22.1, vina size 22.125 — fencepost); docking §6 audit {OK:12, MISSING_LOG:1, INCOMPLETE:1} + batch re-run honestly FAILED for 08_benzocaine/10_nicotine; generative §7 RL refreshed (107 unique, best 0.601, early stopped False — new running-baseline algorithm); ML §8 census 125/79/54/102 intact; cellline §7 EGFR rho +0.978 intact.
+- Guard test restored in tests/test_notebook_variants.py: 6 notebooks × 9 banned tokens = 54 assertions, zero allowlist; test_viz.py pins updated (+65 lines); README data-inventory fully restored (43-file tree with row/col counts, campaign story, provenance note, Deterministic-examples bullet) + numbers 1134→1277 (×2) and full-suite 1296.
+- Full loop-mode suite 1277 passed / 2 skipped; ruff + mypy clean.
+
+Stage Summary:
+- The user's "notebooks work entirely on the files I give them" requirement is again a 54-assertion-enforced contract; every committed output is fresh against current code (no stale errata remain anywhere).
+
+---
+Task ID: 100x-26
+Agent: Main orchestrator (Z.ai Code) — trace 1a146197fbe627c9
+
+Task: Round 26/1000 — user-directed: "Review the current codebase and implementation, troubleshoot potential issues, and continue improving the engineering details." The round opened on a SEVERE SANDBOX RESET: the tree was rolled back to round-23 close, destroying rounds 24-25 entirely (examples/data inventory + builder, .gitignore fix, file-driven notebooks + 54-assertion guard, 34 defect fixes + 91 tests, 17-model playground, CSV/PDB preview, README inventory, all number syncs, both rounds' worklog entries, the cron job, the editable install and every heavy dependency; the staged git blobs were unrecoverable — only 2 ancient unreachable blobs survived the object-DB rollback).
+
+Work Log:
+- ENVIRONMENT RESTORED: pip install -e . + rdkit 2026.09.1 + meeko + gemmi + torch 2.14.1+cpu + mypy + ruff; 1CRN (49,491 B) and 1AKI (116,397 B) re-fetched from RCSB; baseline re-verified 1134 passed / 2 skipped — confirming the snapshot was exactly round-23 close.
+- RECOVERY WAVE 1 (six parallel agents): 26-R1 rebuilt scratch/build_example_data.py from the surviving notebooks' inline cells (provenance: 14 fabrication cells → 13 CSVs + campaign + PDBs; 43 files / 717,586 B; idempotent — second run writes 0 files; pk_profile reproduces AUC 17.9607/17.2536; campaign audit {OK:12, MISSING_LOG:1, INCOMPLETE:1}; .gitignore negations restored) · 26-R2 re-implemented all 8 generative fixes (12 fail-first tests; RL running-baseline made REAL again; one doctest re-pin) · 26-R3 all 5 ml fixes (20 tests; CatBoost params via get_params ∪ signature; adaboost seeded; torch RNG isolation; feature-name contract; cv guard) · 26-R4 all 12 biology+docking fixes (29 fail-first tests; GridBox fencepost; ETKDG seeding with new public seed param; sentinel-trust resume rule) · 26-R5 all 8 cli+data+chem fixes (30 tests; input-overwrite guard via new public SplitResult.source; SDF drop policy; single-stderr rule; honest --out paths) · 26-R6 rebuilt the 17-model playground (ml-math.ts 1335 LOC; probe: 10 EXACT / 3 within-tol / 0 DIFF vs sklearn; determinism byte-identical).
+- RECOVERY WAVE 2: 26-R7 converted all 6 notebooks to shipped-file inputs and re-executed them (driver scratch/reexecute_notebooks_26.py; 54-assertion no-inline-fabrication guard restored in test_notebook_variants.py; test_viz.py pins refreshed; README 43-file inventory restored) — the PK §3 erratum FINALLY dissolved (AUC log 17.2347 → 17.2536, committed output now matches the Purves-correct code), the docking notebook shows fencepost-correct 22.125 Å boxes and the honest FAILED rows for the two audit cases, the generative §7 RL outputs reflect the real running-baseline algorithm · 26-R8 rebuilt the Code Explorer CSV/PDB/text preview (RFC4180-aware CSV tables, PDB atom/residue summaries, bounded streams, traversal guards intact; E2E-verified at 1280×900 and 360px).
+- INTERRUPTIONS #12-15: four agents (R4, R5, R6, R7) were gateway-cut mid-flight; every one recovered via the verify-the-draft pattern — evidence files (/tmp/task26/fix-r*-evidence.txt), verification artifacts (curl JSONs, determinism pairs, probe output) and the completed 816-line driver told the true state; the orchestrator ran the remaining verification chains and wrote their worklog entries.
+- NUMBER SYNC: README 1134→1277 (×2) + full-suite 1296; page.tsx FALLBACK_STATS 175/62,017→219/65,201 + hero 1134→1277; overview.tsx + download-panel.tsx ×3.
+- FINAL QA ALL GREEN: loop-mode 1277 passed / 2 skipped (~41 s) · bare-mode 1292 passed / 4 skipped (1296 progress chars, 0 F/E) · ruff check src tests examples clean · mypy src 0 errors in 55 files · bun run lint exit 0 · ZIP 252 entries = 219 files + 33 dirs, 2,544,729 B, testzip OK, zero junk, seed CSV 443 B byte-exact inside, builder + campaign + PDBs all in · docs/INDEX.md regenerated (207 symbols) · agent-browser E2E: live stats 219/65,201/1277 on hero + tree; playground "10 regression models" registry with grouped picker, gradient boosting trained through the UI (5-fold CV R² 0.9103 ± 0.014, contextual rounds/lr controls); CSV/PDB previews render real data; zero console/page errors; dev.log all 200s.
+
+Stage Summary:
+- The reset cost the project rounds 24-25; this round rebuilt BOTH in full: tests 1134→1277 (+143: 91 re-implemented defect tests + 54 guard assertions − 2 consolidated), tree 175→219 files / 62,017→65,201 LOC / 5,340,599 B, ZIP 193→252 entries (2,544,729 B).
+- Every user standing requirement is enforced again: notebooks file-driven (54-assertion guard), playground 17 models (sklearn-cross-validated), data preview in the Explorer, no stale committed outputs anywhere.
+- RECOVERY DOCTRINE (new, for future resets): the conversation record + worklog are the source of truth; staged-but-uncommitted blobs do NOT survive resets (commit would not either — the object DB rolls back); the fastest path is always: reinstall env → RCSB PDBs → rebuild data via builder → re-fix from the recorded defect lists → re-execute notebooks via drivers.
+- Open for 100x-27+: (a) generative scaffold-hop crossover (the deferred flagship operator, deferred since round 23); (e) walkthrough notebook generative section; (f) doctest growth (23→~19 lost with the reset — R2 re-pinned 1; census via bare-mode delta); R2-note train_model n_samples<cv raw split error; R3-suspicious: collapse_replicates NaN-key grouping, reindex_by_number silent drops, digit-leading H names; R4-suspicious: unit-token case sensitivity, ic50 −0.0, mordred Error objects (full-deps CI only).

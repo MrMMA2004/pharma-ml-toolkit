@@ -33,7 +33,11 @@ from pharmaml.docking.preparation import (
     write_dpf,
     write_gpf,
 )
-from pharmaml.docking.workflow import parse_vina_config, run_vina_batch
+from pharmaml.docking.workflow import (
+    parse_vina_config,
+    run_autodock4,
+    run_vina_batch,
+)
 from pharmaml.exceptions import DataValidationError, DockingError, DockingParseError
 
 
@@ -776,3 +780,128 @@ class TestTorsionConventions:
         ligand.write_text("TORSDOF 0\n", encoding="utf-8")
         with pytest.raises(DockingError, match="convention must be"):
             check_torsion_consistency(ligand, convention="ad4")
+
+
+class TestReadGPFMalformedNumericFields:
+    """Malformed numeric GPF fields raise the typed DockingParseError.
+
+    Regression: ``spacing``/``smooth``/``dielectric`` escaped as raw
+    ``ValueError`` from ``float()``, while malformed ``npts``/
+    ``gridcenter`` lines silently kept their defaults -- the docstring
+    promises :class:`DockingParseError` for unparseable files.
+    """
+
+    @pytest.mark.parametrize(
+        ("field_line", "field"),
+        [
+            ("npts sixty 60 60", "npts"),
+            ("npts 60 60", "npts"),  # too few values
+            ("npts 40.5 40 40", "npts"),  # non-integer point count
+            ("spacing zero", "spacing"),
+            ("gridcenter 1.0 2.0", "gridcenter"),
+            ("gridcenter 1.0 two 3.0", "gridcenter"),
+            ("smooth abc", "smooth"),
+            ("dielectric xyz", "dielectric"),
+        ],
+    )
+    def test_malformed_field_raises_typed_error(
+        self, tmp_path: Path, field_line: str, field: str
+    ) -> None:
+        gpf = tmp_path / "r.gpf"
+        gpf.write_text(f"ligand_types C\n{field_line}\n", encoding="utf-8")
+        with pytest.raises(DockingParseError, match=field):
+            read_gpf(gpf)
+
+    def test_well_formed_file_still_parses(self, tmp_path: Path) -> None:
+        gpf = tmp_path / "r.gpf"
+        gpf.write_text(
+            "ligand_types C\nnpts 40 40 40\nspacing 0.375\n"
+            "gridcenter 1.0 2.0 3.0\nsmooth 0.5\ndielectric -0.1465\n",
+            encoding="utf-8",
+        )
+        parsed = read_gpf(gpf)
+        assert parsed["npts"] == (40, 40, 40)
+        assert parsed["gridcenter"] == (1.0, 2.0, 3.0)
+        assert parsed["spacing"] == pytest.approx(0.375)
+        assert parsed["smooth"] == pytest.approx(0.5)
+        assert parsed["dielectric"] == pytest.approx(-0.1465)
+
+
+class TestRunAutodock4Completion:
+    """``skip_existing`` trusts the completion sentinel, not file presence.
+
+    An interrupted AutoDock4 run leaves a partial ``r.dlg`` behind;
+    treating its mere presence as "done" reported the run as ok without
+    ever producing poses.  The sentinel check mirrors
+    :func:`~pharmaml.docking.parsing.check_docking_completion`.
+    """
+
+    def _run_dir(self, tmp_path: Path, dlg_text: str) -> Path:
+        work = tmp_path / "ligand_01"
+        work.mkdir()
+        (work / "r.gpf").write_text("ligand_types C\n", encoding="utf-8")
+        (work / "r.dpf").write_text("ligand_types C\n", encoding="utf-8")
+        (work / "r.glg").write_text("autogrid4 log\n", encoding="utf-8")
+        (work / "r.dlg").write_text(dlg_text, encoding="utf-8")
+        return work
+
+    def test_interrupted_dlg_is_rerun_not_silently_ok(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        # Interrupted run left a partial r.dlg; the re-run finds no
+        # autodock4 engine -> a clean, actionable not-ok result.
+        work = self._run_dir(tmp_path, "DPF> interrupted mid-run\n")
+
+        def no_engine(name: str) -> str:
+            raise DockingError(f"executable {name!r} not found on PATH")
+
+        monkeypatch.setattr(workflow_mod, "_require_executable", no_engine)
+        result = run_autodock4(work, skip_existing=True)
+        assert result.ok is False
+        assert result.log_file is None
+        assert "not found" in (result.error or "")
+
+    def test_completed_run_is_skipped_without_touching_engines(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        work = self._run_dir(tmp_path, "AutoDock4 log\n\nSuccessful Completion\n")
+
+        def must_not_run(*args, **kwargs):
+            raise AssertionError("completed run must be skipped, not re-run")
+
+        monkeypatch.setattr(workflow_mod, "_require_executable", must_not_run)
+        monkeypatch.setattr(workflow_mod.subprocess, "run", must_not_run)
+        result = run_autodock4(work, skip_existing=True)
+        assert result.ok is True
+        assert result.log_file == work / "r.dlg"
+
+
+class TestVinaBatchRunsInConfigDirectory:
+    """run_vina_batch launches vina with ``cwd=`` the config's directory."""
+
+    def test_subprocess_cwd_is_config_parent(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        # Regression: the receptor is validated relative to the config's
+        # own directory, but the engine was launched without cwd= -- so
+        # Vina resolved config-relative paths against the process CWD.
+        conf_dir = tmp_path / "engines"
+        conf_dir.mkdir()
+        conf = conf_dir / "conf.txt"
+        conf.write_text("receptor = r.pdbqt\n", encoding="utf-8")
+        (conf_dir / "r.pdbqt").write_text("receptor", encoding="utf-8")
+        ligands = tmp_path / "ligands"
+        ligands.mkdir()
+        (ligands / "l.pdbqt").write_text("ligand", encoding="utf-8")
+        monkeypatch.setattr(
+            workflow_mod, "_require_executable", lambda name: f"/fake/bin/{name}"
+        )
+        seen: list[object] = []
+
+        def fake_run(cmd, **kwargs):
+            seen.append(kwargs.get("cwd"))
+
+        monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
+        results = run_vina_batch(conf, ligands, out_dir=tmp_path / "out")
+        assert all(result.ok for result in results)
+        assert seen == [conf.parent]

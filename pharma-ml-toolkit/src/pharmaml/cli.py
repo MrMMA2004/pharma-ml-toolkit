@@ -37,6 +37,7 @@ scans::
 from __future__ import annotations
 
 import argparse
+import logging
 import math
 import sys
 from pathlib import Path
@@ -167,7 +168,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="emit the full visual bundle (report.html + figures + "
         "tables) into <out>/report/ — requires pharmaml[reports]",
     )
-    train.add_argument("--out", default="artifacts", help="artifact output directory")
+    train.add_argument(
+        "--out", default="artifacts",
+        help="plots/report output directory (the trained model itself is "
+        "always saved under ./artifacts/)",
+    )
 
     compare = ml_sub.add_parser("compare", help="cross-validated model leaderboard")
     compare.add_argument("--data", required=True)
@@ -722,6 +727,24 @@ def _smi_bridge_frame(path: Path):
     return frame
 
 
+def _sdf_drop_exit(frame: Any) -> int:
+    """Exit code for an SDF -> table conversion that dropped records.
+
+    Mirrors the ``table_to_sdf`` CLI convention: any dropped record is
+    reported on stderr and makes the command exit 1 -- surviving rows
+    were converted, but data was lost and the user must know.
+    """
+    dropped = int(frame.attrs.get("sdf_dropped_records", 0))
+    total = int(frame.attrs.get("sdf_total_records", 0))
+    if dropped:
+        print(
+            f"{dropped} of {total} SDF records unparseable and dropped",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def _cmd_data_convert(args: argparse.Namespace) -> int:
     from pharmaml.chem.converters import (
         sdf_to_table,
@@ -762,14 +785,14 @@ def _cmd_data_convert(args: argparse.Namespace) -> int:
         if target == "csv":
             frame = sdf_to_table(src, out=out, smiles_col=args.smiles_col)
             print(f"converted {src.name} -> {out} ({len(frame)} molecules)")
-            return 0
+            return _sdf_drop_exit(frame)
         frame = sdf_to_table(src, smiles_col=args.smiles_col)
         name_col = args.name_col or ("name" if "name" in frame.columns else None)
         written = table_to_smi(
             frame, out, smiles_col=args.smiles_col, name_col=name_col
         )
         print(f"converted {src.name} -> {written} ({len(frame)} molecules)")
-        return 0
+        return _sdf_drop_exit(frame)
     else:  # CSV/TSV/Excel table input
         if target == "smi":
             written = table_to_smi(
@@ -778,6 +801,12 @@ def _cmd_data_convert(args: argparse.Namespace) -> int:
             print(f"converted {src.name} -> {written}")
             return 0
         if target == "csv":
+            if suffix == ".csv":
+                # same-format guard (26-R5): csv -> csv used to rewrite the
+                # INPUT in place (semicolon -> comma, exit 0)
+                raise DataValidationError(
+                    f"input {src.name} is already a CSV file -- nothing to convert"
+                )
             frame = read_table(src)
             written = write_table(frame, out)
             print(f"converted {src.name} -> {written} ({len(frame)} rows)")
@@ -946,8 +975,8 @@ def _cmd_chem_pic50(args: argparse.Namespace) -> int:
     out = Path(args.out) if args.out else Path(args.data).with_name(
         Path(args.data).stem + "_pic50.csv"
     )
-    write_table(converted, out)
-    print(f"pIC50 column added -> {out} ({len(converted)} rows)")
+    written = write_table(converted, out)
+    print(f"pIC50 column added -> {written} ({len(converted)} rows)")
     return 0
 
 
@@ -958,7 +987,8 @@ def _cmd_chem_descriptors(args: argparse.Namespace) -> int:
     frame = read_table(args.data)
     if args.smiles_col not in frame.columns:
         print(f"error: column {args.smiles_col!r} not found", file=sys.stderr)
-        return 2
+        # 26-R5: exit 1, the convention every other CLI failure follows
+        return 1
     descriptors = compute_descriptors(frame[args.smiles_col], descriptor_set=args.descriptor_set)
     # ``descriptors`` is indexed by *position* in the SMILES column, so the
     # join must be positional: aligning on the caller frame's index labels
@@ -971,8 +1001,10 @@ def _cmd_chem_descriptors(args: argparse.Namespace) -> int:
     out = Path(args.out) if args.out else Path(args.data).with_name(
         Path(args.data).stem + "_descriptors.csv"
     )
-    write_table(merged, out)
-    print(f"descriptors -> {out} ({descriptors.shape[1] - 1} columns)")
+    # write_table falls back to CSV for unknown extensions (.dat -> .csv):
+    # report the path it RETURNS, not the one the user typed (26-R5).
+    written = write_table(merged, out)
+    print(f"descriptors -> {written} ({descriptors.shape[1] - 1} columns)")
     return 0
 
 
@@ -1101,8 +1133,10 @@ def _cmd_docking_scan(args: argparse.Namespace) -> int:
     summary = scan_docking_directory(args.directory, log_name=args.log_name)
     print(summary.head(20).to_string(index=False))
     if args.out:
-        write_table(summary, args.out)
-        print(f"saved -> {args.out}")
+        # write_table falls back to CSV for unknown extensions: report
+        # the path it RETURNS (26-R5).
+        written = write_table(summary, args.out)
+        print(f"saved -> {written}")
     return 0
 
 
@@ -1114,7 +1148,10 @@ def _cmd_docking_check(args: argparse.Namespace) -> int:
     print(audit.to_string(index=False))
     problems = int((audit["status"] != "OK").sum())
     if args.out:
-        write_table(audit, args.out)
+        # write_table falls back to CSV for unknown extensions: report
+        # the path it RETURNS (26-R5).
+        written = write_table(audit, args.out)
+        print(f"saved -> {written}")
     return 1 if problems else 0
 
 
@@ -1635,6 +1672,38 @@ _HANDLERS = {
 }
 
 
+class _NoConsoleCliError(logging.Filter):
+    """Suppress the console echo of ``pharmaml.cli`` ERROR records.
+
+    ``main()`` already prints one plain ``error: ...`` line to stderr for
+    every failure; without this filter the ``pharmaml`` console handler
+    echoes the same ``_LOG.error`` record a second time -- two copies of
+    every CLI failure on stderr.  Only console handlers are filtered:
+    ``--log-file`` handlers keep the record.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (record.name == "pharmaml.cli" and record.levelno >= logging.ERROR)
+
+
+def _attach_cli_error_filter() -> None:
+    """Attach :class:`_NoConsoleCliError` to pharmaml console handlers.
+
+    Idempotent: repeated ``main()`` calls in one process (tests, REPLs)
+    never stack duplicate filters.  Console handlers are ``StreamHandler``
+    instances that are not file-backed (``--log-file`` adds a rotating
+    file handler, which must keep seeing the records).
+    """
+    for handler in logging.getLogger("pharmaml").handlers:
+        is_console = isinstance(handler, logging.StreamHandler) and not isinstance(
+            handler, logging.FileHandler
+        )
+        if is_console and not any(
+            isinstance(flt, _NoConsoleCliError) for flt in handler.filters
+        ):
+            handler.addFilter(_NoConsoleCliError())
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point (returns a process exit code)."""
     parser = _build_parser()
@@ -1644,6 +1713,7 @@ def main(argv: list[str] | None = None) -> int:
         level=10 if args.verbose else 30,  # DEBUG / INFO
         log_file=args.log_file,
     )
+    _attach_cli_error_filter()
 
     sub = getattr(args, f"{args.command}_command", None)
     handler = _HANDLERS.get((args.command, sub))

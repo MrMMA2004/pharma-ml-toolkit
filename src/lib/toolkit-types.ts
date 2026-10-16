@@ -44,6 +44,62 @@ export interface FileContentResponse {
 }
 
 /* ------------------------------------------------------------------ */
+/* Data-file previews (CSV / PDB / plain text)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Union of every payload `/api/toolkit/file` can return. Source files keep
+ * the classic `FileContentResponse` shape; shipped data files (.csv, .pdb,
+ * .dlg, .glg, .gpf, .dpf, .txt) return a `kind`-tagged preview instead.
+ * Discriminate with `"kind" in payload`.
+ */
+export type AnyFileResponse = FileContentResponse | DataFileResponse;
+
+/** Preview of a delimited data table (shipped example datasets). */
+export interface CsvPreviewResponse {
+  kind: "csv";
+  path: string;
+  /** Header row (RFC4180-aware, quotes stripped). */
+  columns: string[];
+  /** Exact number of data rows (header excluded). */
+  rowCount: number;
+  /** First ≤50 data rows, each aligned with `columns`. */
+  previewRows: string[][];
+  /** True when `rowCount > previewRows.length`. */
+  truncated: boolean;
+  totalBytes: number;
+}
+
+/** Preview of a PDB structure file. */
+export interface PdbPreviewResponse {
+  kind: "pdb";
+  path: string;
+  totalBytes: number;
+  /** ATOM + HETATM records in the file. */
+  atomCount: number;
+  /** Unique residue sequence numbers across ATOM/HETATM records. */
+  residueCount: number;
+  /** Every line in the file (records + remarks + connectors). */
+  totalLineCount: number;
+  /** First ≤200 lines, verbatim. */
+  previewText: string;
+}
+
+/** Preview of a plain-text data file (docking logs, configs, notes). */
+export interface TextPreviewResponse {
+  kind: "text";
+  path: string;
+  /** First ≤400 lines, verbatim. */
+  previewText: string;
+  truncated: boolean;
+  totalBytes: number;
+  /** Exact line count of the whole file. */
+  totalLineCount: number;
+}
+
+export type DataFileResponse = CsvPreviewResponse | PdbPreviewResponse | TextPreviewResponse;
+
+/* ------------------------------------------------------------------ */
 /* API reference (parsed from docs/INDEX.md)                           */
 /* ------------------------------------------------------------------ */
 
@@ -109,10 +165,30 @@ export interface MLTrainRequest {
   samples: number;
   noise: number;
   model: string;
-  /** Ridge alpha (regression) — omitted for other models. */
+  /** Ridge/lasso/elastic-net strength — omitted for other models. */
   alpha?: number;
+  /** Elastic-net L1 mix in [0, 1] (1 = lasso, 0 = ridge). */
+  l1Ratio?: number;
   /** L2 strength (logistic classification). */
   l2?: number;
+  /** kNN neighbours (odd, 1–25). */
+  k?: number;
+  /** CART depth cap (1–12). */
+  maxDepth?: number;
+  /** Forest size (3–200 trees). */
+  nEstimators?: number;
+  /** Boosting rounds (5–200). */
+  rounds?: number;
+  /** Boosting shrinkage (0.005–1). */
+  learningRate?: number;
+  /** MLP hidden-layer width (2–64). */
+  hidden?: number;
+  /** MLP training epochs (10–2000). */
+  epochs?: number;
+  /** MLP learning rate (0.001–1). */
+  lr?: number;
+  /** Linear SVM margin C (0.01–100). */
+  C?: number;
   testSize: number;
   cv: 0 | 3 | 5 | 10;
   seed: number;
@@ -145,17 +221,37 @@ export interface CVSummary {
   std: number;
 }
 
+/** Normalized impurity-reduction feature importance (trees & ensembles).
+ *  Values are non-negative and sum to 1 — the honest parameter summary
+ *  for models that have no closed-form coefficients. */
+export interface FeatureImportance {
+  /** Feature names (raw column names, no standardization suffix). */
+  features: string[];
+  /** Normalized importances, same order as `features`. */
+  importance: number[];
+  /** Impurity measure the reductions were computed with. */
+  measure: "variance" | "gini";
+}
+
 export interface MLTrainResponse {
   task: MLTask;
   model: string;
   metrics: Record<string, number>;
   cv?: CVSummary;
-  coefficients: {
+  /** Present ONLY for models with real closed-form coefficients
+   *  (linear / polynomial / ridge / logistic) — never fabricated for
+   *  tree, instance-based, probabilistic or neural models. */
+  coefficients?: {
     intercept: number;
     coefs: number[];
     /** True when coefficients live in standardized feature space. */
     standardized: boolean;
   };
+  /** Trees & ensembles: normalized impurity-reduction importances. */
+  featureImportance?: FeatureImportance;
+  /** kNN / MLP / Naive Bayes / SVM: echoed hyperparameters (the honest
+   *  "learned parameters" card content for hyperparameter-driven models). */
+  modelParams?: Record<string, number>;
   series: {
     test: Array<{ x: number; y: number; label?: number }>;
     curve?: Array<{ x: number; yhat: number }>;

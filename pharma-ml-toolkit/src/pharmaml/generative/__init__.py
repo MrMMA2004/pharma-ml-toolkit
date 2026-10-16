@@ -41,7 +41,7 @@ Example
 ...                           seed=42).optimize(seed_smiles=["CC(=O)Oc1ccccc1C(=O)O"])
 >>> rl = ReinventOptimizer(objective, iterations=15, seed=42).optimize()
 >>> rl.best, round(rl.best_score, 3)
-('CCOc1ccccc1O', 0.754)
+('CCCNc1ccccc1', 0.728)
 
 Dependencies: RDKit (``pip install 'pharmaml[chem]'``) is required for
 scoring and the genetic algorithm; PyTorch (``pip install

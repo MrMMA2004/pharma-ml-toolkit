@@ -48,7 +48,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -61,7 +63,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CHART } from "@/components/explorer/playground/calc-ui";
+import { CHART, ParamSlider } from "@/components/explorer/playground/calc-ui";
 import { ProbabilityCalibration } from "@/components/explorer/playground/calibration-widget";
 import {
   MAX_CSV_FEATURES,
@@ -81,7 +83,309 @@ import type {
 } from "@/lib/toolkit-types";
 
 type Task = "regression" | "classification";
-type RegModel = "linear" | "polynomial" | "ridge";
+
+/* ------------------------------------------------------------------ */
+/* Model registry (mirrors the server-side /api/ml/train registry)      */
+/* ------------------------------------------------------------------ */
+
+/** How the "Learned parameters" card summarizes this model family. */
+type ModelKind = "coefficients" | "importance" | "params";
+
+type ModelGroup = "linear" | "trees" | "instance" | "probabilistic" | "neural";
+
+const GROUP_LABELS: Record<ModelGroup, string> = {
+  linear: "Linear family",
+  trees: "Trees & ensembles",
+  instance: "Instance-based",
+  probabilistic: "Probabilistic",
+  neural: "Neural",
+};
+
+/** One contextual hyperparameter control. */
+interface HyperSpec {
+  key: "alpha" | "l2" | "l1Ratio" | "k" | "maxDepth" | "nEstimators" | "rounds" | "learningRate" | "hidden" | "epochs" | "lr" | "C";
+  label: string;
+  control: "input" | "slider";
+  unit?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+interface ModelSpec {
+  id: string;
+  label: string;
+  /** Honest one-line description shown under the picker. */
+  hint: string;
+  group: ModelGroup;
+  kind: ModelKind;
+  hp: HyperSpec[];
+}
+
+const ALPHA_HP: HyperSpec = { key: "alpha", label: "α strength", control: "input" };
+
+const REG_MODELS: ModelSpec[] = [
+  {
+    id: "linear",
+    label: "Linear regression",
+    hint: "Closed-form least squares via normal equations",
+    group: "linear",
+    kind: "coefficients",
+    hp: [],
+  },
+  {
+    id: "polynomial",
+    label: "Polynomial (degree 2)",
+    hint: "Degree-2 features, closed-form solve",
+    group: "linear",
+    kind: "coefficients",
+    hp: [],
+  },
+  {
+    id: "ridge",
+    label: "Ridge (α regularized)",
+    hint: "L2 penalty α on the normal-equation diagonal",
+    group: "linear",
+    kind: "coefficients",
+    hp: [ALPHA_HP],
+  },
+  {
+    id: "lasso",
+    label: "Lasso (L1)",
+    hint: "Coordinate descent with soft-thresholding",
+    group: "linear",
+    kind: "coefficients",
+    hp: [ALPHA_HP],
+  },
+  {
+    id: "elastic_net",
+    label: "Elastic net",
+    hint: "L1 + L2 blend via α and the l1 mix",
+    group: "linear",
+    kind: "coefficients",
+    hp: [
+      ALPHA_HP,
+      { key: "l1Ratio", label: "l1 mix", control: "slider", unit: "", min: 0, max: 1, step: 0.05 },
+    ],
+  },
+  {
+    id: "decision_tree",
+    label: "Decision tree (CART)",
+    hint: "Variance-reduction splits, depth-capped",
+    group: "trees",
+    kind: "importance",
+    hp: [{ key: "maxDepth", label: "max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 }],
+  },
+  {
+    id: "random_forest",
+    label: "Random forest",
+    hint: "Seeded bagging of depth-capped CART trees",
+    group: "trees",
+    kind: "importance",
+    hp: [
+      { key: "nEstimators", label: "trees", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "maxDepth", label: "max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 },
+    ],
+  },
+  {
+    id: "gradient_boosting",
+    label: "Gradient boosting",
+    hint: "Depth-3 stumps fit the residuals, learning-rate scaled",
+    group: "trees",
+    kind: "importance",
+    hp: [
+      { key: "rounds", label: "rounds", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "learningRate", label: "learning rate", control: "slider", unit: "η", min: 0.02, max: 0.5, step: 0.02 },
+    ],
+  },
+  {
+    id: "knn",
+    label: "k-nearest neighbours",
+    hint: "Averages the k nearest train points",
+    group: "instance",
+    kind: "params",
+    hp: [{ key: "k", label: "neighbours", control: "slider", unit: "k", min: 1, max: 25, step: 2 }],
+  },
+  {
+    id: "mlp",
+    label: "MLP (1 hidden layer)",
+    hint: "tanh hidden layer — demo-scale network, not production deep learning",
+    group: "neural",
+    kind: "params",
+    hp: [
+      { key: "hidden", label: "hidden units", control: "slider", unit: "n", min: 2, max: 64, step: 2 },
+      { key: "epochs", label: "epochs", control: "slider", unit: "n", min: 20, max: 2000, step: 20 },
+      { key: "lr", label: "learning rate", control: "slider", unit: "η", min: 0.005, max: 0.5, step: 0.005 },
+    ],
+  },
+];
+
+const CLS_MODELS: ModelSpec[] = [
+  {
+    id: "logistic",
+    label: "Logistic regression",
+    hint: "Batch GD, 800 epochs, L2 (bias exempt)",
+    group: "linear",
+    kind: "coefficients",
+    hp: [{ key: "l2", label: "L2 strength λ", control: "input" }],
+  },
+  {
+    id: "svm_linear",
+    label: "Linear SVM",
+    hint: "Squared-hinge margin via gradient descent",
+    group: "linear",
+    kind: "params",
+    hp: [{ key: "C", label: "margin C", control: "slider", unit: "C", min: 0.05, max: 10, step: 0.05 }],
+  },
+  {
+    id: "decision_tree",
+    label: "Decision tree (gini)",
+    hint: "Gini-impurity splits, depth-capped",
+    group: "trees",
+    kind: "importance",
+    hp: [{ key: "maxDepth", label: "max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 }],
+  },
+  {
+    id: "random_forest",
+    label: "Random forest",
+    hint: "Seeded bagging of gini CART trees",
+    group: "trees",
+    kind: "importance",
+    hp: [
+      { key: "nEstimators", label: "trees", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "maxDepth", label: "max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 },
+    ],
+  },
+  {
+    id: "knn",
+    label: "k-nearest neighbours",
+    hint: "Majority vote of the k nearest train points",
+    group: "instance",
+    kind: "params",
+    hp: [{ key: "k", label: "neighbours", control: "slider", unit: "k", min: 1, max: 25, step: 2 }],
+  },
+  {
+    id: "gaussian_nb",
+    label: "Gaussian Naive Bayes",
+    hint: "Per-class Gaussian log-posterior",
+    group: "probabilistic",
+    kind: "params",
+    hp: [],
+  },
+  {
+    id: "mlp",
+    label: "MLP (1 hidden layer)",
+    hint: "Sigmoid output, cross-entropy — demo-scale network, not production deep learning",
+    group: "neural",
+    kind: "params",
+    hp: [
+      { key: "hidden", label: "hidden units", control: "slider", unit: "n", min: 2, max: 64, step: 2 },
+      { key: "epochs", label: "epochs", control: "slider", unit: "n", min: 20, max: 2000, step: 20 },
+      { key: "lr", label: "learning rate", control: "slider", unit: "η", min: 0.005, max: 0.5, step: 0.005 },
+    ],
+  },
+];
+
+const MODEL_GROUPS: ModelGroup[] = ["linear", "trees", "instance", "probabilistic", "neural"];
+
+/** Slider hyperparameter defaults (server-side defaults mirrored). */
+const DEFAULT_HP: Record<string, number> = {
+  l1Ratio: 0.5,
+  k: 5,
+  maxDepth: 4,
+  nEstimators: 50,
+  rounds: 50,
+  learningRate: 0.1,
+  hidden: 16,
+  epochs: 200,
+  lr: 0.05,
+  C: 1,
+};
+
+/** Honest footer note per model — how it was actually trained. */
+const MODEL_NOTES: Record<string, string> = {
+  linear: "Solved in closed form via normal equations (Gaussian elimination with partial pivoting).",
+  polynomial: "Degree-2 polynomial features, solved in closed form via normal equations.",
+  ridge: "Ridge adds α to the normal-equation diagonal, skipping the intercept.",
+  lasso: "Cyclic coordinate descent with soft-thresholding; α drives L1 sparsity (exact zeros).",
+  elastic_net: "Coordinate descent blending the L1 (l1 mix) and L2 (1 − l1 mix) penalties.",
+  logistic: "Batch gradient descent: lr = 0.1, 800 epochs, L2-penalized weights (bias exempt).",
+  svm_linear: "Batch gradient descent on the squared-hinge objective; C trades margin width against violations (liblinear-style regularized bias).",
+  knn: "No closed-form coefficients — predictions come from the stored train points; k is echoed instead.",
+  decision_tree: "CART splits chosen by impurity reduction; the bars are each feature's share of the total reduction.",
+  random_forest: "Seeded bootstrap aggregation of depth-capped CART trees; importances are per-tree means, renormalized.",
+  gradient_boosting: "Each round fits a depth-3 tree to the current residuals, shrunk by the learning rate.",
+  gaussian_nb: "Class-conditional Gaussians (μ, σ per feature) feed the log-posterior; no tunable hyperparameters.",
+  mlp: "One tanh hidden layer, full-batch gradient descent, seeded init — a demo-scale network, not production deep learning.",
+};
+
+/** Pretty labels for echoed modelParams keys. */
+const HP_LABELS: Record<string, string> = {
+  alpha: "α",
+  l1Ratio: "l1 mix",
+  k: "k (neighbours)",
+  varSmoothing: "var smoothing",
+  hidden: "hidden units",
+  epochs: "epochs",
+  lr: "learning rate",
+  C: "C (margin)",
+  maxDepth: "max depth",
+  nEstimators: "trees",
+  rounds: "rounds",
+  learningRate: "learning rate",
+};
+
+function specOf(task: Task, model: string): ModelSpec | null {
+  const list = task === "regression" ? REG_MODELS : CLS_MODELS;
+  return list.find((m) => m.id === model) ?? null;
+}
+
+/** Compact slider value pill format (5 → "5", 0.1 → "0.1"). */
+function fmtHp(v: number): string {
+  return String(Math.round(v * 100) / 100);
+}
+
+/** Type-safe hyperparameter assignment onto the request body. */
+function assignHp(body: MLTrainRequest, key: string, value: number): void {
+  switch (key) {
+    case "alpha":
+      body.alpha = value;
+      break;
+    case "l1Ratio":
+      body.l1Ratio = value;
+      break;
+    case "l2":
+      body.l2 = value;
+      break;
+    case "k":
+      body.k = value;
+      break;
+    case "maxDepth":
+      body.maxDepth = value;
+      break;
+    case "nEstimators":
+      body.nEstimators = value;
+      break;
+    case "rounds":
+      body.rounds = value;
+      break;
+    case "learningRate":
+      body.learningRate = value;
+      break;
+    case "hidden":
+      body.hidden = value;
+      break;
+    case "epochs":
+      body.epochs = value;
+      break;
+    case "lr":
+      body.lr = value;
+      break;
+    case "C":
+      body.C = value;
+      break;
+  }
+}
 
 const REG_METRICS: Array<{ key: string; label: string }> = [
   { key: "r2", label: "R²" },
@@ -177,6 +481,35 @@ export function MlPlayground() {
     featureColumns,
     targetColumn,
   } = mlConfig;
+
+  /* Model selection + slider hyperparameters are component-local (the
+   * persisted store only carries the legacy trio + α/λ strings). They are
+   * re-derived from the persisted training result — which echoes the model
+   * name and its hyperparameters — so a reload or run-restore puts the
+   * pickers back into the trained configuration. */
+  const [modelSel, setModelSel] = useState<string>(() => {
+    if (result && result.task === mlConfig.task && specOf(mlConfig.task, result.model)) {
+      return result.model;
+    }
+    return mlConfig.task === "regression"
+      ? specOf("regression", mlConfig.regModel)
+        ? mlConfig.regModel
+        : "linear"
+      : "logistic";
+  });
+  const [hp, setHp] = useState<Record<string, number>>(() => ({
+    ...DEFAULT_HP,
+    ...(result?.modelParams ?? {}),
+  }));
+
+  const modelSpec = specOf(task, modelSel) ?? REG_MODELS[0]!;
+  const specs = task === "regression" ? REG_MODELS : CLS_MODELS;
+
+  /** Select a model and reset the slider hyperparameters to its defaults. */
+  function selectModel(id: string) {
+    setModelSel(id);
+    setHp({ ...DEFAULT_HP });
+  }
 
   /* Multivariate mode: regression result with ≥2 standardized features
    * (uploaded CSV only) → the chart switches to predicted-vs-actual. */
@@ -323,8 +656,11 @@ export function MlPlayground() {
   function switchTask(next: Task) {
     setMlConfig({ task: next });
     if (next === "classification" && noise > 1.5) setMlConfig({ noise: 0.3 });
-    if (next === "regression" && regModel !== "ridge" && regModel !== "linear" && regModel !== "polynomial") {
-      setMlConfig({ regModel: "linear" });
+    /* Keep the pick when the model exists for both tasks (decision_tree,
+     * random_forest, knn, mlp); otherwise fall back to the task default. */
+    if (!specOf(next, modelSel)) {
+      setModelSel(next === "regression" ? (specOf("regression", regModel) ? regModel : "linear") : "logistic");
+      setHp({ ...DEFAULT_HP });
     }
     setStatus("idle");
     setResult(null);
@@ -336,6 +672,8 @@ export function MlPlayground() {
   /** Restore the default experiment setup and drop any stored results. */
   function resetSetup() {
     resetMlConfig();
+    setModelSel("linear");
+    setHp({ ...DEFAULT_HP });
     setStatus("idle");
     setResult(null);
     setPreview(null);
@@ -445,11 +783,13 @@ export function MlPlayground() {
       );
       return;
     }
-    if (task === "regression" && regModel === "ridge" && !alphaValid) {
-      setError("Ridge alpha must be a number ≥ 0.");
+    const needsAlpha = modelSpec.hp.some((h) => h.key === "alpha");
+    if (task === "regression" && needsAlpha && !alphaValid) {
+      setError("Alpha must be a number ≥ 0.");
       return;
     }
-    if (task === "classification" && !l2Valid) {
+    const needsL2 = modelSpec.hp.some((h) => h.key === "l2");
+    if (task === "classification" && needsL2 && !l2Valid) {
       setError("L2 strength must be a number ≥ 0.");
       return;
     }
@@ -459,13 +799,21 @@ export function MlPlayground() {
       task,
       samples,
       noise,
-      model: task === "regression" ? regModel : "logistic",
+      model: modelSel,
       testSize: testSizePct / 100,
       cv: (Number.parseInt(cv, 10) || 0) as 0 | 3 | 5 | 10,
       seed: Number.parseInt(seed, 10) || 0,
     };
-    if (task === "regression" && regModel === "ridge") body.alpha = Number.parseFloat(alpha);
-    if (task === "classification") body.l2 = Number.parseFloat(l2);
+    /* Contextual hyperparameters: α/λ come from the legacy input fields,
+     * everything else from the slider state. */
+    for (const h of modelSpec.hp) {
+      if (h.control === "input") {
+        if (h.key === "alpha") body.alpha = Number.parseFloat(alpha);
+        else if (h.key === "l2") body.l2 = Number.parseFloat(l2);
+      } else {
+        assignHp(body, h.key, hp[h.key] ?? DEFAULT_HP[h.key] ?? 0);
+      }
+    }
     if (source === "csv" && mlCsv) {
       body.csv = mlCsv.text;
       body.csvName = mlCsv.fileName;
@@ -534,10 +882,16 @@ export function MlPlayground() {
     }
   }
 
-  /** Restore a previous run: config snapshot + full result + charts. */
+  /** Restore a previous run: config snapshot + full result + charts. The
+   *  model pickers are re-derived from the result (model name + echoed
+   *  hyperparameters), so the setup panel reflects the restored run. */
   function restoreRun(rec: MlRunRecord) {
     setMlConfig(rec.config);
     setResult(rec.result);
+    if (specOf(rec.result.task, rec.result.model)) {
+      setModelSel(rec.result.model);
+      setHp({ ...DEFAULT_HP, ...(rec.result.modelParams ?? {}) });
+    }
     setMlCurrentRun(rec.id);
     setStatus("done");
     setError(null);
@@ -625,7 +979,7 @@ export function MlPlayground() {
   }, [result]);
 
   const coefficientsText = useMemo(() => {
-    if (!result) return null;
+    if (!result || !result.coefficients) return null;
     const { intercept, coefs } = result.coefficients;
     if (result.task === "regression") {
       /* Multivariate: one weight per named feature (uploaded CSV mode). */
@@ -645,6 +999,23 @@ export function MlPlayground() {
       .map((c) => fmtNum(c, 4))
       .join(", ")}]`;
   }, [result]);
+
+  /** Which honest parameter summary the "Learned parameters" card shows,
+   *  keyed off the model name (which survives result persistence). */
+  const resultSpec = useMemo(
+    () => (result ? specOf(result.task, result.model) : null),
+    [result]
+  );
+  const paramsPanel = useMemo(() => {
+    if (!result || !resultSpec) return null;
+    if (resultSpec.kind === "coefficients") {
+      return result.coefficients ? { kind: "coefficients" as const } : null;
+    }
+    if (resultSpec.kind === "importance") {
+      return { kind: "importance" as const, data: result.featureImportance ?? null };
+    }
+    return { kind: "params" as const, data: result.modelParams ?? null };
+  }, [result, resultSpec]);
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
@@ -1027,59 +1398,87 @@ export function MlPlayground() {
             </>
           ) : null}
 
-          {/* Model */}
+          {/* Model — grouped picker (Linear family / Trees & ensembles /
+              Instance-based / Probabilistic / Neural) with honest hints. */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Model</Label>
-            {task === "regression" ? (
-              <Select value={regModel} onValueChange={(v) => setMlConfig({ regModel: v as RegModel })}>
-                <SelectTrigger className="h-10" aria-label="Regression model">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="linear">Linear regression</SelectItem>
-                  <SelectItem value="polynomial">Polynomial (degree 2)</SelectItem>
-                  <SelectItem value="ridge">Ridge (α regularized)</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex h-10 items-center rounded-md border bg-muted/30 px-3 text-sm text-muted-foreground">
-                  Logistic regression (batch GD, 800 epochs)
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="ml-l2" className="text-xs font-medium">
-                    L2 strength λ
-                  </Label>
-                  <Input
-                    id="ml-l2"
-                    inputMode="decimal"
-                    value={l2}
-                    onChange={(e) => setMlConfig({ l2: e.target.value })}
-                    aria-invalid={l2Valid ? undefined : true}
-                    className={`h-10 font-mono text-sm tabular-nums ${l2Valid ? "" : "border-destructive/60"}`}
-                  />
-                  {!l2Valid ? (
-                    <p className="text-[11px] text-destructive">Must be a number ≥ 0.</p>
-                  ) : null}
-                </div>
-              </div>
-            )}
+            <Label className="text-xs font-medium">
+              Model{" "}
+              <span className="font-normal text-muted-foreground">
+                ({specs.length}{" "}
+                {task === "regression" ? "regression" : "classification"} models)
+              </span>
+            </Label>
+            <Select value={modelSel} onValueChange={selectModel}>
+              <SelectTrigger className="h-10" aria-label="Machine learning model">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODEL_GROUPS.map((group) => {
+                  const groupModels = specs.filter((m) => m.group === group);
+                  if (groupModels.length === 0) return null;
+                  return (
+                    <SelectGroup key={group}>
+                      <SelectLabel className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {GROUP_LABELS[group]}
+                      </SelectLabel>
+                      {groupModels.map((m) => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] leading-snug text-muted-foreground" aria-live="polite">
+              {modelSpec.hint}
+            </p>
           </div>
 
-          {task === "regression" && regModel === "ridge" ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="ml-alpha" className="text-xs font-medium">
-                Ridge α
+          {/* Contextual hyperparameters for the selected model. */}
+          {modelSpec.hp.length > 0 ? (
+            <div className="space-y-3">
+              <Label className="text-xs font-medium">
+                {modelSpec.label} parameters
               </Label>
-              <Input
-                id="ml-alpha"
-                inputMode="decimal"
-                value={alpha}
-                onChange={(e) => setMlConfig({ alpha: e.target.value })}
-                aria-invalid={alphaValid ? undefined : true}
-                className={`h-10 font-mono text-sm tabular-nums ${alphaValid ? "" : "border-destructive/60"}`}
-              />
-              {!alphaValid ? <p className="text-[11px] text-destructive">Must be a number ≥ 0.</p> : null}
+              {modelSpec.hp.map((h) =>
+                h.control === "input" ? (
+                  <div key={h.key} className="space-y-1.5">
+                    <Label htmlFor={`ml-${h.key}`} className="text-xs font-medium">
+                      {h.key === "alpha" ? `${modelSpec.label} α` : h.label}
+                    </Label>
+                    <Input
+                      id={`ml-${h.key}`}
+                      inputMode="decimal"
+                      value={h.key === "alpha" ? alpha : l2}
+                      onChange={(e) =>
+                        setMlConfig(h.key === "alpha" ? { alpha: e.target.value } : { l2: e.target.value })
+                      }
+                      aria-invalid={(h.key === "alpha" ? alphaValid : l2Valid) ? undefined : true}
+                      className={`h-10 font-mono text-sm tabular-nums ${
+                        (h.key === "alpha" ? alphaValid : l2Valid) ? "" : "border-destructive/60"
+                      }`}
+                    />
+                    {(h.key === "alpha" ? !alphaValid : !l2Valid) ? (
+                      <p className="text-[11px] text-destructive">Must be a number ≥ 0.</p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <ParamSlider
+                    key={h.key}
+                    id={`ml-${h.key}`}
+                    label={h.label}
+                    unit={h.unit ?? ""}
+                    min={h.min ?? 0}
+                    max={h.max ?? 1}
+                    step={h.step ?? 1}
+                    value={hp[h.key] ?? DEFAULT_HP[h.key] ?? 0}
+                    onChange={(v) => setHp((prev) => ({ ...prev, [h.key]: v }))}
+                    format={fmtHp}
+                  />
+                )
+              )}
             </div>
           ) : null}
 
@@ -1529,10 +1928,10 @@ export function MlPlayground() {
               </span>
               <p className="text-sm font-medium">No results yet</p>
               <p className="max-w-sm text-xs text-muted-foreground">
-                Pick a data source — the seeded server-side generator or your own CSV — then press{" "}
-                <strong className="font-semibold text-foreground">Train model</strong>. Regression
-                fits a closed-form least-squares model; classification trains logistic regression
-                on the chosen columns.
+                Pick a data source — the seeded server-side generator or your own CSV — pick one of
+                the 10 regression or 7 classification models, then press{" "}
+                <strong className="font-semibold text-foreground">Train model</strong>. Every
+                run is deterministic: same seed, same data, same numbers.
               </p>
             </CardContent>
           </Card>
@@ -1542,13 +1941,13 @@ export function MlPlayground() {
           <Card className="py-0 shadow-sm">
             <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
               <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
-              <p className="text-sm font-medium">Training…</p>
+              <p className="text-sm font-medium">Training {modelSpec.label}…</p>
               <p className="text-xs text-muted-foreground">
                 {source === "csv" && mlCsv
-                  ? `Training on ${mlCsv.fileName} (${csvTable?.rows.length ?? 0} rows), fitting the model, evaluating the held-out split${
+                  ? `Training on ${mlCsv.fileName} (${csvTable?.rows.length ?? 0} rows), fitting ${modelSpec.label}, evaluating the held-out split${
                       cv !== "0" ? ` and running ${cv}-fold CV` : ""
                     }.`
-                  : `Generating ${samples} samples, fitting the model, evaluating the held-out split${
+                  : `Generating ${samples} samples, fitting ${modelSpec.label}, evaluating the held-out split${
                       cv !== "0" ? ` and running ${cv}-fold CV` : ""
                     }.`}
               </p>
@@ -1816,21 +2215,86 @@ export function MlPlayground() {
                     Learned parameters
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Standardized feature space (train-set μ, σ)
+                    {paramsPanel?.kind === "importance"
+                      ? `Feature importance (${paramsPanel.data?.measure === "gini" ? "gini" : "variance"} reduction, normalized to Σ = 1)`
+                      : paramsPanel?.kind === "params"
+                        ? "Echoed hyperparameters — no closed-form coefficients"
+                        : "Standardized feature space (train-set μ, σ)"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pb-4">
-                  {coefficientsText ? (
+                  {/* Linear family: real coefficients. */}
+                  {paramsPanel?.kind === "coefficients" && coefficientsText ? (
                     <pre className="thin-scrollbar overflow-x-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
                       {coefficientsText}
                     </pre>
                   ) : null}
-                  <p className="mt-2 text-[11px] text-muted-foreground">
-                    {result.task === "regression"
-                      ? predActual
-                        ? "Multivariate least squares: k features standardized on train statistics, solved in closed form via normal equations; ridge adds α to the diagonal, skipping the intercept."
-                        : "Solved in closed form via normal equations (Gaussian elimination with partial pivoting); ridge adds α to the diagonal, skipping the intercept."
-                      : "Batch gradient descent: lr = 0.1, 800 epochs, L2-penalized weights (bias exempt)."}
+
+                  {/* Trees & ensembles: normalized impurity-reduction importance. */}
+                  {paramsPanel?.kind === "importance" ? (
+                    paramsPanel.data ? (
+                      <ul className="space-y-2" aria-label="Feature importances">
+                        {paramsPanel.data.features.map((f, i) => {
+                          const v = paramsPanel.data!.importance[i] ?? 0;
+                          return (
+                            <li key={f} className="space-y-1">
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span className="truncate font-mono text-xs font-medium" title={f}>
+                                  {f}
+                                </span>
+                                <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                                  {fmtNum(v, 4)}
+                                </span>
+                              </div>
+                              <div
+                                className="h-2 overflow-hidden rounded-full bg-muted"
+                                role="presentation"
+                              >
+                                <div
+                                  className="h-full rounded-full bg-primary/70"
+                                  style={{ width: `${Math.max(v, 0) * 100}%` }}
+                                />
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="rounded-md border border-dashed px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+                        Importances aren’t kept in the persisted result — retrain to view them.
+                      </p>
+                    )
+                  ) : null}
+
+                  {/* Instance-based / neural / NB / SVM: hyperparameter echo. */}
+                  {paramsPanel?.kind === "params" ? (
+                    paramsPanel.data ? (
+                      <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5" aria-label="Model hyperparameters">
+                        {Object.entries(paramsPanel.data).map(([key, value]) => (
+                          <div key={key} className="col-span-2 grid grid-cols-subgrid items-baseline">
+                            <dt className="truncate font-mono text-xs text-muted-foreground" title={key}>
+                              {HP_LABELS[key] ?? key}
+                            </dt>
+                            <dd className="text-right font-mono text-xs font-semibold tabular-nums">
+                              {fmtNum(value, 4)}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : (
+                      <p className="rounded-md border border-dashed px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+                        This model reports no hyperparameters — {MODEL_NOTES[result.model] ?? "see the model hint."}
+                      </p>
+                    )
+                  ) : null}
+
+                  <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+                    {MODEL_NOTES[result.model] ??
+                      (result.task === "regression"
+                        ? predActual
+                          ? "Multivariate least squares: k features standardized on train statistics, solved in closed form via normal equations; ridge adds α to the diagonal, skipping the intercept."
+                          : "Solved in closed form via normal equations (Gaussian elimination with partial pivoting); ridge adds α to the diagonal, skipping the intercept."
+                        : "Batch gradient descent: lr = 0.1, 800 epochs, L2-penalized weights (bias exempt).")}
                   </p>
                 </CardContent>
               </Card>

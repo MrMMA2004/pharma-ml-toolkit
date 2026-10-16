@@ -11,8 +11,13 @@ running baseline*, not the original augmented-likelihood formulation:
 * each iteration samples a batch from the agent, scores every string
   (invalid SMILES score 0.0, so their probability is actively pushed
   *down* -- validity is learned, not assumed);
-* the return is the score minus an exponential-moving-average baseline,
-  normalized per batch (classic variance reduction);
+* the advantage is ``(score - baseline) / running_std`` where the
+  baseline is an exponential moving average of *previous* batches' mean
+  scores and ``running_std`` an EMA of their return spread (classic
+  variance reduction).  Both statistics are folded in *after* each
+  gradient, so the current batch cannot cancel itself out of its own
+  advantage (a per-batch mean subtraction would make ANY baseline
+  mathematically inert);
 * an **entropy bonus** keeps exploration alive;
 * a **prior anchor** (the mode-collapse brake) adds
   ``anchor_weight * mean((logP_agent - logP_prior)^2)`` -- a soft
@@ -57,6 +62,19 @@ __all__ = ["ReinventOptimizer", "run_rl_optimization"]
 
 _LOG = get_logger(__name__)
 
+#: Initial value of the REINFORCE running baseline.  ``None`` (default)
+#: seeds the baseline from the first batch's mean score; a number seeds
+#: it directly.  Module-level so tests can inject a fixed baseline and
+#: observe its effect on the run (the seam that proved the baseline was
+#: once mathematically inert -- see ``_BASELINE_INIT``-titled regression
+#: test in tests/test_generative.py).
+_BASELINE_INIT: float | None = None
+
+#: Decay of the baseline / return-std exponential moving averages (the
+#: classic 0.9/0.1 smoothing; the gradient sees statistics from previous
+#: batches only).
+_BASELINE_DECAY = 0.9
+
 
 def _clamped_score(objective: Any, smiles: str) -> float:
     """Score ``smiles`` clamped to ``[0, 1]`` (NaN/inf -> 0.0).
@@ -93,7 +111,8 @@ class ReinventOptimizer:
     corpus:
         Training molecules for the on-the-fly prior (default:
         :data:`~pharmaml.generative.DEFAULT_CORPUS`); ignored when
-        ``prior`` is given.
+        ``prior`` is given.  A bare string is rejected (it would be
+        iterated as single-atom characters).
     iterations:
         Maximum RL iterations (default 30).
     batch_size:
@@ -130,8 +149,9 @@ class ReinventOptimizer:
     DataValidationError
         On out-of-range hyperparameters, non-finite float
         hyperparameters (NaN slips sign-only guards), a ``seed`` outside
-        the torch-encodable interval, or an explicitly passed ``prior``
-        that is untrained.
+        the torch-encodable interval, a bare-string ``corpus`` (it would
+        be iterated as single-atom characters), or an explicitly passed
+        ``prior`` that is untrained.
     DependencyError
         When torch is not installed (at :meth:`optimize` time).
     """
@@ -209,6 +229,14 @@ class ReinventOptimizer:
                 f"max_smiles_length must be >= 20, got {max_smiles_length}"
             )
         _validate_torch_seed(seed, "seed")
+        if corpus is not None and isinstance(corpus, str):
+            # iterating a bare string would treat CHARACTERS as molecules
+            # ("CCO" -> a corpus of C, C, O atoms) -- the NoveltyObjective
+            # guard, same typed DataValidationError.
+            raise DataValidationError(
+                "corpus must be a sequence of SMILES strings, not a single "
+                f"string (got {corpus!r} of length {len(corpus)})"
+            )
         self.objective = objective
         self.prior = prior
         self.corpus = list(corpus) if corpus is not None else None
@@ -283,7 +311,12 @@ class ReinventOptimizer:
         agent._model.train()
         optimizer = torch.optim.Adam(agent._model.parameters(), lr=self.lr)
 
-        baseline: float | None = None
+        # REINFORCE running statistics: the baseline is the EMA of
+        # PREVIOUS batches' mean scores, the normaliser the EMA of their
+        # return spread.  ``None`` seeds each from the first batch (the
+        # ``_BASELINE_INIT`` seam lets tests inject a fixed baseline).
+        baseline: float | None = _BASELINE_INIT
+        std_ema: float | None = None
         best_mean = -1.0
         stale = 0
         stopped_early = False
@@ -318,9 +351,6 @@ class ReinventOptimizer:
                         )
 
             mean_score = sum(scores) / len(scores)
-            baseline = (
-                mean_score if baseline is None else 0.9 * baseline + 0.1 * mean_score
-            )
 
             # experience replay: keep the best unique samples, mix them in
             replay = dict(
@@ -340,16 +370,32 @@ class ReinventOptimizer:
                 agent_lp, entropy = agent._sequence_logprob_and_entropy(
                     torch, sequences
                 )
-                advantage = returns - baseline
-                advantage = (advantage - advantage.mean()) / (
-                    advantage.std() + 1e-6
-                )
+                # Advantage = (returns - baseline) / running std.  NO
+                # per-batch mean subtraction: subtracting the batch mean
+                # would cancel the baseline exactly ((r - b) -
+                # mean(r - b) = r - mean(r) for ANY b), leaving the
+                # advertised running baseline mathematically inert.
+                batch_std = float(returns.std())
+                if baseline is None:
+                    baseline = mean_score  # seed: no previous batch yet
+                if std_ema is None:
+                    std_ema = batch_std
+                advantage = (returns - baseline) / (std_ema + 1e-6)
                 anchor_loss = ((agent_lp - prior_lp) ** 2).mean()
                 loss = -(advantage * agent_lp).mean() - self.entropy_bonus * entropy
                 if self.anchor_weight > 0:
                     loss = loss + self.anchor_weight * anchor_loss
                 agent._apply_sgd_step(torch, optimizer, loss, self.grad_clip)
                 loss_value = float(loss.detach())
+                # Fold the current batch into the running statistics only
+                # AFTER the gradient: this iteration's advantage saw
+                # previous batches, the next one's sees this one too.
+                baseline = _BASELINE_DECAY * baseline + (
+                    1.0 - _BASELINE_DECAY
+                ) * mean_score
+                std_ema = _BASELINE_DECAY * std_ema + (
+                    1.0 - _BASELINE_DECAY
+                ) * batch_std
 
             best_index = scores.index(max(scores))
             history.append(

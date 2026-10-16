@@ -16,6 +16,7 @@ Key safety improvements over the originals:
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
@@ -70,8 +71,10 @@ class GridBox:
     center_x/y/z:
         Box centre in Å.
     npts:
-        Number of grid points per axis (AutoDock4 convention:
-        points = Å / spacing + 1).
+        Number of grid points per axis.  AutoDock's fencepost
+        convention: ``points = Å / spacing + 1`` -- the end points sit
+        ON grid nodes, so the box edge length is ``(npts - 1) *
+        spacing`` (see the :attr:`size` property).
     spacing:
         Grid spacing in Å (0.375 is the AutoDock default).
     """
@@ -84,8 +87,17 @@ class GridBox:
 
     @property
     def size(self) -> tuple[float, float, float]:
-        """Box edge lengths in Å along (x, y, z)."""
-        return tuple(n * self.spacing for n in self.npts)  # type: ignore[return-value]
+        """Box edge lengths in Å along (x, y, z).
+
+        Fencepost arithmetic: ``npts`` grid points at ``spacing`` span
+        ``(npts - 1) * spacing`` Å per axis -- 60 points at 0.375 Å
+        cover 22.125 Å, not 22.5 -- matching the AutoDock convention
+        documented on :attr:`npts`.  The value feeds Vina's
+        ``--size_x/y/z`` arguments via :meth:`as_vina_kwargs`.
+        """
+        return tuple(
+            (n - 1) * self.spacing for n in self.npts
+        )  # type: ignore[return-value]
 
     def as_vina_kwargs(self) -> dict[str, float]:
         """Centre/size mapping consumed by ``vina`` CLI arguments."""
@@ -126,10 +138,20 @@ def _read_coordinates(pdbqt_path: Path) -> np.ndarray:
         if not parsed:
             parts = line.split()
             if len(parts) >= 9:
-                try:
-                    coords.append([float(parts[6]), float(parts[7]), float(parts[8])])
-                except ValueError:
-                    continue
+                # Token-order fallback: locate the [resseq, x, y, z]
+                # window -- the last three tokens of the first run of
+                # four consecutive float-parsable tokens.  Chain-less
+                # records (no chain ID) shift every field one token
+                # left, so fixed offsets would read (y, z, occupancy)
+                # instead of (x, y, z).
+                for start in range(len(parts) - 3):
+                    window = parts[start : start + 4]
+                    try:
+                        values = [float(token) for token in window]
+                    except ValueError:
+                        continue
+                    coords.append(values[1:])
+                    break
     if not coords:
         raise DockingParseError(f"no atom coordinates found in {pdbqt_path}")
     return np.asarray(coords, dtype=float)
@@ -280,6 +302,20 @@ class GridParameters(TypedDict):
     dielectric: float
 
 
+def _gpf_float(field: str, tokens: list[str], path: Path) -> float:
+    """Parse one GPF float field, raising a typed error when malformed."""
+    if not tokens:
+        raise DockingParseError(
+            f"malformed {field} in {path}: expected a float value, got none"
+        )
+    try:
+        return float(tokens[0])
+    except ValueError as exc:
+        raise DockingParseError(
+            f"malformed {field} in {path}: cannot parse {tokens[0]!r} as a float"
+        ) from exc
+
+
 def read_gpf(gpf_path: str | Path) -> GridParameters:
     """Parse an AutoDock4 grid parameter file (GPF) into a dict.
 
@@ -300,7 +336,11 @@ def read_gpf(gpf_path: str | Path) -> GridParameters:
     Raises
     ------
     DockingParseError
-        If the file is unreadable or contains no ``ligand_types`` line.
+        If the file is unreadable, contains no ``ligand_types`` line,
+        or any of the five numeric fields (``npts``, ``spacing``,
+        ``gridcenter``, ``smooth``, ``dielectric``) is present but
+        malformed -- instead of a raw ``ValueError`` or silently
+        keeping the default value.
     """
     path = Path(gpf_path)
     if not path.is_file():
@@ -321,6 +361,12 @@ def read_gpf(gpf_path: str | Path) -> GridParameters:
         "smooth": 0.5,
         "dielectric": -0.1465,
     }
+
+    def _fail(field: str, expected: str, got: object) -> DockingParseError:
+        return DockingParseError(
+            f"malformed {field} in {path}: expected {expected}, got {got!r}"
+        )
+
     for raw in text.splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line:
@@ -331,30 +377,34 @@ def read_gpf(gpf_path: str | Path) -> GridParameters:
             parsed["ligand_types"] = rest
         elif key == "receptor_types":
             parsed["receptor_types"] = rest
-        elif key == "npts" and len(rest) >= 3:
+        elif key == "npts":
+            if len(rest) < 3:
+                raise _fail("npts", "3 integers", rest)
             try:
                 parsed["npts"] = (int(rest[0]), int(rest[1]), int(rest[2]))
-            except ValueError:
-                continue
-        elif key == "spacing" and rest:
-            parsed["spacing"] = float(rest[0])
-        elif key == "gridcenter" and len(rest) >= 3:
+            except ValueError as exc:
+                raise _fail("npts", "3 integers", rest) from exc
+        elif key == "spacing":
+            parsed["spacing"] = _gpf_float("spacing", rest, path)
+        elif key == "gridcenter":
+            if len(rest) < 3:
+                raise _fail("gridcenter", "3 coordinates", rest)
             try:
                 parsed["gridcenter"] = (
                     float(rest[0]),
                     float(rest[1]),
                     float(rest[2]),
                 )
-            except ValueError:
-                continue
+            except ValueError as exc:
+                raise _fail("gridcenter", "3 coordinates", rest) from exc
         elif key == "receptor" and rest:
             parsed["receptor"] = rest[0]
         elif key == "map" and rest:
             parsed["maps"] = [*parsed["maps"], rest[0]]
-        elif key == "smooth" and rest:
-            parsed["smooth"] = float(rest[0])
-        elif key == "dielectric" and rest:
-            parsed["dielectric"] = float(rest[0])
+        elif key == "smooth":
+            parsed["smooth"] = _gpf_float("smooth", rest, path)
+        elif key == "dielectric":
+            parsed["dielectric"] = _gpf_float("dielectric", rest, path)
 
     if not parsed["ligand_types"]:
         raise DockingParseError(f"no ligand_types line found in {path}")
@@ -507,6 +557,7 @@ def smiles_to_pdbqt(
     output_dir: str | Path,
     name: str | None = None,
     charge: int | None = None,
+    seed: int = 0,
 ) -> Path:
     """Convert one SMILES to a 3D PDBQT ligand (Meeko + RDKit).
 
@@ -523,7 +574,14 @@ def smiles_to_pdbqt(
     name:
         Base filename (defaults to a safe SMILES slug).
     charge:
-        Optional formal charge hint for protonation states.
+        Formal-charge hint.  Currently **ignored** -- the neutral state
+        is always generated (no protonation engine is invoked); passing
+        a non-zero hint only triggers a :class:`UserWarning` so the
+        caller knows the output will not match the intended species.
+    seed:
+        Random seed for the ETKDG embedding (default 0 = deterministic,
+        unlike RDKit's unseeded default).  Pass different seeds to
+        sample different conformers of a flexible molecule.
 
     Returns
     -------
@@ -535,7 +593,9 @@ def smiles_to_pdbqt(
     DependencyError
         If RDKit/Meeko are not installed.
     DockingError
-        If embedding, writing, or atom-type repair fails.
+        If embedding or writing fails, or the molecule contains atom
+        types with no AutoDock4 equivalent (e.g. boron) -- the PDBQT is
+        refused rather than silently losing those atoms.
     """
     try:
         from meeko import MoleculePreparation, PDBQTWriterLegacy
@@ -551,11 +611,23 @@ def smiles_to_pdbqt(
             "Install with:  pip install rdkit meeko"
         ) from exc
 
+    if charge not in (None, 0):
+        warnings.warn(
+            "charge hint is currently ignored; generating the neutral state",
+            UserWarning,
+            stacklevel=2,
+        )
+
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise DockingError(f"invalid SMILES: {smiles!r}")
     mol = Chem.AddHs(mol, addCoords=True)
-    if rdDistGeom.EmbedMolecule(mol, rdDistGeom.ETKDG()) != 0:
+    embed_params = rdDistGeom.ETKDG()
+    # unseeded ETKDG is nondeterministic; rdkit-stubs leaves randomSeed
+    # untyped (mypy infers EmbedParameters), but at runtime it is a plain
+    # int property.
+    embed_params.randomSeed = seed  # type: ignore[assignment]
+    if rdDistGeom.EmbedMolecule(mol, embed_params) != 0:
         raise DockingError(f"3D embedding failed for {smiles!r}")
     try:
         rdForceFieldHelpers.MMFFOptimizeMolecule(mol)
@@ -569,6 +641,7 @@ def smiles_to_pdbqt(
         raise DockingError(f"Meeko PDBQT export failed: {error}")
 
     repaired_lines: list[str] = []
+    dropped: dict[str, int] = {}
     for line in pdbqt_text.splitlines():
         if line.startswith(("ATOM", "HETATM")):
             atom_type = line[77:].strip()
@@ -578,9 +651,18 @@ def smiles_to_pdbqt(
                     _LOG.info("Repaired atom type %s -> %s", atom_type, repaired)
                     line = line[:77] + repaired.rjust(3)
                 else:
-                    _LOG.warning("Dropping line with unknown atom type %r", atom_type)
+                    dropped[atom_type] = dropped.get(atom_type, 0) + 1
                     continue
         repaired_lines.append(line)
+    if dropped:
+        # Silently dropping atoms would corrupt the ligand (missing mass,
+        # wrong net charge) -- refuse instead, naming the elements.
+        raise DockingError(
+            f"SMILES {smiles!r} contains atom type(s) {sorted(dropped)} with no "
+            "AutoDock4 parameterisation -- the PDBQT would silently lose "
+            f"{sum(dropped.values())} atom(s) (element without an AD4 type); "
+            "refusing to write a corrupted ligand"
+        )
 
     from pharmaml.utils.io import safe_filename
 

@@ -10,10 +10,12 @@ import pandas as pd
 import pytest
 from sklearn.linear_model import HuberRegressor, LogisticRegression
 
+import pharmaml.ml.models as models_module
 from pharmaml.exceptions import DataValidationError, ModelError, PersistenceError
 from pharmaml.ml.evaluation import ClassificationReport, RegressionReport, evaluate_model
 from pharmaml.ml.models import (
     MODEL_REGISTRY,
+    ModelSpec,
     build_model,
     build_stacking,
     build_voting,
@@ -544,3 +546,223 @@ class TestPreprocessingEdgeCases:
         y = pd.Series([0, 0, 1, 1, 0, 0, 1, 1, np.nan, np.nan])
         with pytest.raises(DataValidationError, match="y contains 2 NaN"):
             make_train_test_split(X, y, test_size=0.4)
+
+
+# ---------------------------------------------------------------------------
+# Regression tests from the 26-R3 re-fix (params validation, adaboost
+# determinism, train_model cv guard)
+# ---------------------------------------------------------------------------
+class TestBuildModelParamsValidation:
+    """``build_model(params=...)`` validation (26-R3).
+
+    CatBoost's ``get_params()`` returns only *explicitly set* init
+    kwargs, so ``set(params) - set(get_params())`` flagged every real
+    CatBoost hyperparameter ('iterations', 'depth', 'learning_rate')
+    as unknown and raised a spurious ModelError — the registry's own
+    default catboost grid was unusable through the documented path.
+    Validation now runs against ``get_params()`` ∪ constructor
+    signature.
+    """
+
+    def test_catboost_real_hyperparams_end_to_end(self) -> None:
+        if not MODEL_REGISTRY["catboost"].available:
+            pytest.skip("catboost not installed")
+        # allow_writing_files=False keeps the fit from dropping a
+        # catboost_info/ log directory into the working tree.
+        model = build_model(
+            "catboost",
+            "regression",
+            params={
+                "iterations": 20,
+                "depth": 4,
+                "learning_rate": 0.1,
+                "allow_writing_files": False,
+            },
+        )
+        assert model.get_params()["iterations"] == 20
+        rng = np.random.default_rng(0)
+        X = rng.normal(size=(60, 4))
+        y = 2.0 * X[:, 0] - X[:, 1] + 0.1 * rng.normal(size=60)
+        model.fit(X, y)
+        predictions = np.asarray(model.predict(X[:5])).ravel()
+        assert predictions.shape == (5,)
+        assert np.isfinite(predictions).all()
+
+    def test_catboost_unknown_param_still_raises(self) -> None:
+        # Pin: genuinely-unknown names keep raising the typed error and
+        # are listed in the message, now that the acceptance set is
+        # wider.
+        if not MODEL_REGISTRY["catboost"].available:
+            pytest.skip("catboost not installed")
+        with pytest.raises(ModelError, match="totally_bogus"):
+            build_model("catboost", "regression", params={"totally_bogus": 1})
+
+    def test_stub_partial_get_params_lenient_set_params(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # CatBoost-style stub (defined here in the test): get_params()
+        # reports only explicitly-set kwargs; set_params() accepts
+        # anything.  Constructor-signature names must be accepted
+        # through params=; names in neither set still rejected.
+        class StubBoost:
+            def __init__(
+                self, iterations=None, depth=None, random_state=None, verbose=None
+            ) -> None:
+                self._explicit = {
+                    key: value
+                    for key, value in (
+                        ("iterations", iterations),
+                        ("depth", depth),
+                        ("random_state", random_state),
+                        ("verbose", verbose),
+                    )
+                    if value is not None
+                }
+
+            def get_params(self, deep: bool = True) -> dict:
+                return dict(self._explicit)
+
+            def set_params(self, **params: object) -> StubBoost:
+                self._explicit.update(params)  # lenient: never rejects
+                return self
+
+        monkeypatch.setitem(
+            models_module.MODEL_REGISTRY,
+            "stubboost",
+            ModelSpec(
+                name="stubboost",
+                task="regression",
+                factory=lambda: StubBoost(random_state=42),
+            ),
+        )
+        estimator = build_model(
+            "stubboost", "regression", params={"iterations": 10, "depth": 4}
+        )
+        assert estimator.get_params()["iterations"] == 10
+        assert estimator.get_params()["depth"] == 4
+        with pytest.raises(ModelError, match="bogus_param"):
+            build_model("stubboost", "regression", params={"bogus_param": 1})
+
+    def test_stub_set_params_rejection_wrapped_as_model_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A set_params rejection (value-level, or a strict **kwargs
+        # constructor) used to escape as the backend's raw exception.
+        class StrictStub:
+            def __init__(self, depth=None, random_state=None) -> None:
+                self.depth = depth
+                self.random_state = random_state
+
+            def get_params(self, deep: bool = True) -> dict:
+                return {"depth": self.depth, "random_state": self.random_state}
+
+            def set_params(self, **params: object) -> StrictStub:
+                if params.get("depth", 1) is not None and params["depth"] < 1:
+                    raise ValueError("depth must be >= 1")
+                for key, value in params.items():
+                    setattr(self, key, value)
+                return self
+
+        monkeypatch.setitem(
+            models_module.MODEL_REGISTRY,
+            "strictstub",
+            ModelSpec(
+                name="strictstub",
+                task="regression",
+                factory=lambda: StrictStub(random_state=42),
+            ),
+        )
+        with pytest.raises(ModelError, match="depth"):
+            build_model("strictstub", "regression", params={"depth": -5})
+
+    def test_every_registry_default_grid_is_accepted(self) -> None:
+        # Invariant: each model's own default param_grid must be usable
+        # through the documented params= path (the partial-get_params
+        # bug made CatBoost's own grid keys build-impossible).
+        for key, spec in MODEL_REGISTRY.items():
+            if not spec.available or not spec.param_grid:
+                continue
+            first = {name: values[0] for name, values in spec.param_grid.items()}
+            tasks = (
+                ["classification", "regression"] if spec.task == "both" else [spec.task]
+            )
+            for task in tasks:
+                estimator = build_model(key, task, params=dict(first))
+                merged = estimator.get_params()
+                for name, value in first.items():
+                    assert merged.get(name, value) == value, (key, task, name)
+
+
+class TestAdaboostDeterminism:
+    """AdaBoost factories must thread random_state (26-R3).
+
+    Pre-fix ``_TASK_FACTORIES['adaboost']`` built the bare classes, so
+    two identical ``tune=False`` runs produced different predictions
+    (AdaBoost.R2 resamples per stage) and compare_models rows drifted
+    between calls.
+    """
+
+    def test_adaboost_factories_seed_random_state(self) -> None:
+        # Registry convention: factories hand the estimator a seed.
+        for task in ("classification", "regression"):
+            assert build_model("adaboost", task).random_state == 42
+
+    def test_two_identical_adaboost_runs_same_predictions(
+        self, regression_frame: pd.DataFrame
+    ) -> None:
+        X, y = split_features_target(regression_frame, "pIC50")
+        first = train_model("adaboost", "regression", X, y, tune=False)
+        second = train_model("adaboost", "regression", X, y, tune=False)
+        np.testing.assert_allclose(first.model.predict(X), second.model.predict(X))
+
+    def test_compare_models_adaboost_row_stable(
+        self, regression_frame: pd.DataFrame
+    ) -> None:
+        X, y = split_features_target(regression_frame, "pIC50")
+        metric = "neg_root_mean_squared_error_mean"
+        first = compare_models(X, y, "regression", models=["adaboost"], cv=3)
+        second = compare_models(X, y, "regression", models=["adaboost"], cv=3)
+        assert first[metric].iloc[0] == second[metric].iloc[0]
+
+
+class TestTrainModelCvGuard:
+    """``train_model`` must guard ``cv`` like ``compare_models`` (26-R3).
+
+    ``ml train --cv 0/1/-3`` used to be silently ignored under
+    ``--no-tune`` and to explode into raw sklearn jargon
+    (``InvalidParameterError: The 'cv' parameter of GridSearchCV ...``)
+    when tuned.
+    """
+
+    @pytest.mark.parametrize("bad_cv", [0, 1, -3])
+    def test_cv_below_two_raises_typed_error(
+        self, classification_frame: pd.DataFrame, bad_cv: int
+    ) -> None:
+        # The --no-tune path: pre-fix cv was silently ignored.
+        X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        with pytest.raises(ModelError, match=f"cv must be >= 2 folds, got {bad_cv}"):
+            train_model(
+                "logistic_regression", "classification", X, y, tune=False, cv=bad_cv
+            )
+
+    def test_cv_below_two_tuned_path_raises_typed_error(
+        self, classification_frame: pd.DataFrame
+    ) -> None:
+        # The tuned path: pre-fix this surfaced as sklearn's raw
+        # InvalidParameterError from deep inside GridSearchCV.
+        X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        with pytest.raises(ModelError, match="cv must be >= 2 folds, got 1"):
+            train_model("knn", "classification", X, y, tune=True, cv=1)
+
+    def test_cv_two_works(self, classification_frame: pd.DataFrame) -> None:
+        X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        result = train_model(
+            "knn",
+            "classification",
+            X,
+            y,
+            tune=True,
+            param_grid={"n_neighbors": [3, 5]},
+            cv=2,
+        )
+        assert result.cv_scores is not None and len(result.cv_scores) == 2

@@ -3,8 +3,9 @@
  * Python package. Shared by the /api/toolkit/* routes.
  */
 
-import { promises as fs } from "fs";
+import { createReadStream, promises as fs } from "fs";
 import path from "path";
+import { isTreeDataNode } from "@/lib/data-file";
 import type { TreeNode, TreeStats } from "@/lib/toolkit-types";
 
 export const TOOLKIT_ROOT = path.join(process.cwd(), "pharma-ml-toolkit");
@@ -54,6 +55,15 @@ export function isViewableFile(relPath: string): boolean {
   if (ALLOWED_BASENAMES.has(base)) return true;
   const ext = path.posix.extname(relPath).toLowerCase();
   return ALLOWED_EXTENSIONS.has(ext);
+}
+
+/** Language marker for tree data nodes (.csv/.pdb/.dlg/.glg/.gpf/.dpf).
+ *  These nodes are previewed by /api/toolkit/file, never line-counted. */
+export function detectDataLanguage(relPath: string): string {
+  const ext = path.posix.extname(relPath).toLowerCase();
+  if (ext === ".csv") return "csv";
+  if (ext === ".pdb") return "pdb";
+  return "text";
 }
 
 /** Map a relative path to a syntax-highlighting grammar id. */
@@ -121,7 +131,11 @@ async function walk(dirAbs: string, relDir: string, acc: WalkAccumulator): Promi
       acc.totalBytes += stat.size;
       let lines: number | undefined;
       let language: string | undefined;
-      if (isViewableFile(rel)) {
+      if (isTreeDataNode(rel)) {
+        // Data files carry a language marker for the explorer UI but are
+        // NEVER line-counted — the LOC stat stays source-only.
+        language = detectDataLanguage(rel);
+      } else if (isViewableFile(rel)) {
         try {
           const content = await fs.readFile(abs, "utf8");
           lines = countLines(content);
@@ -175,4 +189,51 @@ export function resolveToolkitPath(relPath: string): string {
     throw new Error("Invalid path: escaping the toolkit root is not allowed.");
   }
   return resolved;
+}
+
+/** Sentinel thrown by {@link readToolkitFileBounded} when a stream exceeds
+ *  its byte budget (stat raced with a growing file, etc.). */
+export const FILE_TOO_LARGE = "FILE_TOO_LARGE";
+
+/**
+ * Stream at most `maxBytes` bytes of a toolkit file into a Buffer. Uses the
+ * TOP-LEVEL `createReadStream` from "fs" — `fs.promises` has no stream API
+ * (a real bug in a previous implementation). The hard byte stop guarantees
+ * a bounded read even if the file grows between stat() and open().
+ * @throws Error with message FILE_TOO_LARGE when the budget is exceeded.
+ */
+export function readToolkitFileBounded(absPath: string, maxBytes: number): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+    const stream = createReadStream(absPath);
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      stream.destroy();
+      reject(err);
+    };
+    stream.on("data", (chunk: Buffer) => {
+      if (settled) return;
+      total += chunk.length;
+      if (total > maxBytes) {
+        fail(new Error(FILE_TOO_LARGE));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    stream.on("error", fail);
+    stream.on("end", () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks));
+    });
+    stream.on("close", () => {
+      // Covers destroy()-without-end paths; no-op after a clean end.
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks));
+    });
+  });
 }

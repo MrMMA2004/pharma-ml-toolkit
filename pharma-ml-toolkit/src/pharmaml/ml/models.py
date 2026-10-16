@@ -15,6 +15,7 @@ registry import.
 from __future__ import annotations
 
 import importlib.util
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -413,8 +414,8 @@ _TASK_FACTORIES: dict[str, dict[str, Callable[[], Any]]] = {
         "regression": lambda: SVR(),
     },
     "adaboost": {
-        "classification": AdaBoostClassifier,
-        "regression": AdaBoostRegressor,
+        "classification": lambda: AdaBoostClassifier(random_state=42),
+        "regression": lambda: AdaBoostRegressor(random_state=42),
     },
     "ann": {
         "classification": _mlp_cls,
@@ -482,6 +483,37 @@ def list_models(task: str | None = None, only_available: bool = True) -> list[di
     return entries
 
 
+def _accepted_param_names(estimator: Any) -> set[str]:
+    """Parameter names :func:`build_model` accepts in ``params=``.
+
+    ``get_params()`` alone under-reports for estimators like CatBoost,
+    whose ``get_params()`` returns only the *explicitly set* constructor
+    kwargs — every real CatBoost hyperparameter ('iterations', 'depth',
+    'learning_rate', ...) would look unknown and be rejected with a
+    spurious :class:`ModelError`.  The constructor signature fills the
+    gap, but only when ``__init__`` declares no ``**kwargs``: a
+    kwargs-catching constructor accepts arbitrary names, so its named
+    parameters say nothing about the accepted set (there
+    :meth:`set_params` stays the rejector, and :func:`build_model`
+    wraps its rejections as the typed error).
+    """
+    accepted = set(estimator.get_params())
+    try:
+        parameters = inspect.signature(type(estimator).__init__).parameters
+    except (TypeError, ValueError):  # pragma: no cover - exotic constructors
+        return accepted
+    if any(param.kind is inspect.Parameter.VAR_KEYWORD for param in parameters.values()):
+        return accepted
+    accepted.update(
+        name
+        for name, param in parameters.items()
+        if name != "self"
+        and param.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    )
+    return accepted
+
+
 def build_model(
     name: str,
     task: str,
@@ -497,6 +529,11 @@ def build_model(
         ``'classification'`` or ``'regression'``.
     params:
         Estimator keyword overrides (e.g. ``{'n_estimators': 500}``).
+        Names are validated against ``get_params()`` ∪ the constructor
+        signature, so real CatBoost hyperparameters ('iterations',
+        'depth', ...) are accepted despite CatBoost's partial
+        ``get_params()``; genuinely unknown names raise
+        :class:`ModelError`, as do ``set_params`` rejections.
 
     Returns
     -------
@@ -539,13 +576,23 @@ def build_model(
         estimator = factory()
 
     if params:
-        unknown = set(params) - set(estimator.get_params())
+        accepted = _accepted_param_names(estimator)
+        unknown = set(params) - accepted
         if unknown:
             raise ModelError(
                 f"Unknown parameters {sorted(unknown)} for {key!r}. "
-                f"Valid: {sorted(estimator.get_params())[:20]}..."
+                f"Valid: {sorted(accepted)[:20]}..."
             )
-        estimator.set_params(**params)
+        try:
+            estimator.set_params(**params)
+        except Exception as exc:
+            # Estimators with lenient constructors reject bad *values*
+            # (or unknown names on **kwargs classes) inside set_params;
+            # surface that as the documented typed error instead of a
+            # raw backend exception (ValueError / CatBoostError / ...).
+            raise ModelError(
+                f"Invalid parameters {sorted(params)} for {key!r}: {exc}"
+            ) from exc
     return estimator
 
 

@@ -1,0 +1,1105 @@
+     1→"""Deep-learning estimators for QSAR (PyTorch, scikit-learn compatible).
+     2→
+     3→The legacy codebase shipped one shallow ``MLPClassifier`` recipe under
+     4→the name "ANN"; this module brings *real* deep learning to the
+     5→toolkit: feed-forward networks (:class:`DeepMLPClassifier` /
+     6→:class:`DeepMLPRegressor`) and residual networks
+     7→(:class:`ResidualMLPClassifier` / :class:`ResidualMLPRegressor`) built
+     8→on PyTorch, with minibatch Adam training (weight decay), early
+     9→stopping on a held-out validation split and per-feature
+    10→standardisation fitted on the training data.
+    11→
+    12→The estimators follow the scikit-learn estimator contract (``fit`` /
+    13→``predict`` / ``predict_proba``, ``get_params`` / ``set_params``,
+    14→clonable by :class:`~sklearn.model_selection.GridSearchCV`), so they
+    15→drop into :func:`~pharmaml.ml.training.train_model`,
+    16→:func:`~pharmaml.ml.training.compare_models` and
+    17→:func:`~pharmaml.ml.evaluation.evaluate_model` like any registry
+    18→model — the registry keys are ``'dnn'`` and ``'dnn_residual'``.
+    19→
+    20→PyTorch is an *optional* dependency imported lazily, mirroring how
+    21→:mod:`pharmaml.ml.models` treats XGBoost/LightGBM/CatBoost: importing
+    22→this module (or ``pharmaml`` itself) never requires torch; the import
+    23→happens at :meth:`fit` time and raises an actionable
+    24→:class:`~pharmaml.exceptions.DependencyError` when missing::
+    25→
+    26→    pip install 'pharmaml[deep]'
+    27→
+    28→Determinism: ``fit`` seeds both the PyTorch and NumPy random number
+    29→generators from ``random_state``, so two estimators constructed with
+    30→the same seed and trained on the same data produce identical
+    31→predictions (CPU).  Fitted weights are always stored as plain NumPy
+    32→arrays, so pickled estimators stay portable across torch versions —
+    33→and even across machines without torch installed (torch is only
+    34→needed again to *predict*).
+    35→"""
+    36→
+    37→from __future__ import annotations
+    38→
+    39→from types import ModuleType
+    40→from typing import TYPE_CHECKING, Any
+    41→
+    42→import numpy as np
+    43→import pandas as pd
+    44→from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
+    45→
+    46→from pharmaml.exceptions import DataValidationError, DependencyError, ModelError
+    47→from pharmaml.logger import get_logger
+    48→
+    49→if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
+    50→    import torch
+    51→
+    52→__all__ = [
+    53→    "DeepMLPClassifier",
+    54→    "DeepMLPRegressor",
+    55→    "ResidualMLPClassifier",
+    56→    "ResidualMLPRegressor",
+    57→]
+    58→
+    59→_LOG = get_logger(__name__)
+    60→
+    61→#: pip command embedded in the DependencyError raised when torch is missing.
+    62→_TORCH_HINT = "deep learning models require torch — pip install 'pharmaml[deep]'"
+    63→
+    64→#: Activation tokens accepted by the ``activation`` constructor parameter.
+    65→_ACTIVATIONS: tuple[str, ...] = ("relu", "tanh", "gelu", "sigmoid")
+    66→
+    67→#: Legal ``device`` tokens ('auto' resolves to cuda when available).
+    68→_DEVICES: tuple[str, ...] = ("auto", "cpu", "cuda")
+    69→
+    70→
+    71→# ---------------------------------------------------------------------------
+    72→# Lazy torch access
+    73→# ---------------------------------------------------------------------------
+    74→def _require_torch() -> ModuleType:
+    75→    """Import and return torch, or raise the actionable error.
+    76→
+    77→    Returns the module object for callers that only need its presence;
+    78→    functions that touch torch APIs should do a plain local ``import
+    79→    torch`` after calling this guard so mypy sees the fully-typed module
+    80→    (a ``ModuleType`` annotation alone does not expose attributes).
+    81→
+    82→    Raises
+    83→    ------
+    84→    DependencyError
+    85→        When torch is not installed (message names the ``pharmaml[deep]``
+    86→        extra that installs it).
+    87→    """
+    88→    try:
+    89→        import torch
+    90→    except ImportError as exc:
+    91→        raise DependencyError(_TORCH_HINT) from exc
+    92→    return torch
+    93→
+    94→
+    95→def _make_activation(activation: str) -> Any:
+    96→    """Return a fresh ``torch.nn`` activation module for a token."""
+    97→    from torch import nn
+    98→
+    99→    factory = {
+   100→        "relu": nn.ReLU,
+   101→        "tanh": nn.Tanh,
+   102→        "gelu": nn.GELU,
+   103→        "sigmoid": nn.Sigmoid,
+   104→    }
+   105→    return factory[activation]()
+   106→
+   107→
+   108→def _build_network(
+   109→    residual: bool,
+   110→    n_in: int,
+   111→    hidden: tuple[int, ...],
+   112→    n_out: int,
+   113→    activation: str,
+   114→    dropout: float,
+   115→) -> Any:
+   116→    """Construct an *untrained* torch network for the given architecture.
+   117→
+   118→    ``residual=False`` builds a plain feed-forward stack (Linear ->
+   119→    activation -> dropout between hidden layers); ``residual=True``
+   120→    builds :class:`_ResidualNet` blocks with skip connections.  An
+   121→    empty ``hidden`` tuple yields a single linear layer (a generalised
+   122→    linear model) in both cases.
+   123→    """
+   124→    if residual:
+   125→        return _torch_networks()[2](n_in, hidden, n_out, activation, dropout)
+   126→
+   127→    from torch import nn
+   128→
+   129→    layers: list[Any] = []
+   130→    widths = [n_in, *hidden, n_out]
+   131→    for i in range(len(widths) - 1):
+   132→        layers.append(nn.Linear(widths[i], widths[i + 1]))
+   133→        if i < len(widths) - 2:  # hidden layer -> activation + dropout
+   134→            layers.append(_make_activation(activation))
+   135→            if dropout > 0:
+   136→                layers.append(nn.Dropout(dropout))
+   137→    return nn.Sequential(*layers)
+   138→
+   139→
+   140→#: Lazily-created torch network classes, cached so state-dict keys are
+   141→#: stable across every build within a process.
+   142→_TORCH_NETS: tuple[Any, type, type] | None = None
+   143→
+   144→
+   145→def _torch_networks() -> tuple[Any, type, type]:
+   146→    """Define (once) and return ``(torch, ResidualBlock, ResidualNet)``.
+   147→
+   148→    The ``torch.nn.Module`` subclasses are defined lazily — never at
+   149→    module import — so ``import pharmaml.ml.neural`` works on machines
+   150→    without torch; caching them keeps ``state_dict`` keys identical
+   151→    between the training build and the rebuild-on-predict.
+   152→    """
+   153→    global _TORCH_NETS
+   154→    if _TORCH_NETS is None:
+   155→        import torch
+   156→        from torch import nn
+   157→
+   158→        class ResidualBlock(nn.Module):
+   159→            """Linear -> activation -> dropout -> Linear with an input skip.
+   160→
+   161→            The skip is an identity when input and output widths match,
+   162→            else a learned linear projection (the dense analogue of a
+   163→            1x1 convolution).
+   164→            """
+   165→
+   166→            def __init__(
+   167→                self, width_in: int, width_out: int, activation: str, dropout: float
+   168→            ) -> None:
+   169→                super().__init__()
+   170→                self.fc1 = nn.Linear(width_in, width_out)
+   171→                self.fc2 = nn.Linear(width_out, width_out)
+   172→                self.act = _make_activation(activation)
+   173→                self.drop = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+   174→                self.skip = (
+   175→                    nn.Identity() if width_in == width_out else nn.Linear(width_in, width_out)
+   176→                )
+   177→
+   178→            def forward(self, x: torch.Tensor) -> torch.Tensor:
+   179→                out = self.fc2(self.drop(self.act(self.fc1(x))))
+   180→                return self.act(out + self.skip(x))
+   181→
+   182→        class ResidualNet(nn.Module):
+   183→            """A stack of :class:`ResidualBlock` layers plus a linear head."""
+   184→
+   185→            def __init__(
+   186→                self,
+   187→                n_in: int,
+   188→                hidden: tuple[int, ...],
+   189→                n_out: int,
+   190→                activation: str,
+   191→                dropout: float,
+   192→            ) -> None:
+   193→                super().__init__()
+   194→                widths = [n_in, *hidden]
+   195→                self.blocks = nn.ModuleList(
+   196→                    ResidualBlock(widths[i], widths[i + 1], activation, dropout)
+   197→                    for i in range(len(widths) - 1)
+   198→                )
+   199→                self.head = nn.Linear(widths[-1], n_out)
+   200→
+   201→            def forward(self, x: torch.Tensor) -> torch.Tensor:
+   202→                for block in self.blocks:
+   203→                    x = block(x)
+   204→                return self.head(x)
+   205→
+   206→        _TORCH_NETS = (torch, ResidualBlock, ResidualNet)
+   207→    return _TORCH_NETS
+   208→
+   209→
+   210→# ---------------------------------------------------------------------------
+   211→# Shared estimator machinery
+   212→# ---------------------------------------------------------------------------
+   213→class _BaseDeepEstimator(BaseEstimator):
+   214→    """Private base with the fit/predict machinery shared by the four
+   215→    public deep estimators (never instantiated directly).
+   216→
+   217→    Subclasses set two class flags and define the sklearn-visible
+   218→    ``__init__`` (all constructor parameters verbatim, so
+   219→    ``get_params``/``set_params``/``clone`` work); everything else —
+   220→    validation, standardisation, the torch training loop, early
+   221→    stopping, weight (de)serialisation — lives here.
+   222→    """
+   223→
+   224→    _is_classifier: bool = False
+   225→    _residual: bool = False
+   226→
+   227→    # -- validation -----------------------------------------------------
+   228→    def _validate_hyperparameters(self) -> tuple[int, ...]:
+   229→        """Validate constructor values and return the hidden-layer widths.
+   230→
+   231→        Returns
+   232→        -------
+   233→        tuple of int
+   234→            ``hidden_layers`` materialised as a tuple — generators are
+   235→            consumed exactly once here, so the training loop never sees
+   236→            an exhausted iterable (which would silently build a single
+   237→            linear layer).
+   238→
+   239→        Raises
+   240→        ------
+   241→        ModelError
+   242→            When ``hidden_layers`` holds a non-positive/non-integer
+   243→            width, ``dropout``/``val_split`` fall outside ``[0, 1)``,
+   244→            ``activation``/``device`` are unknown tokens, ``epochs``/
+   245→            ``batch_size``/``patience`` are below 1, ``learning_rate``
+   246→            is not positive-finite, ``weight_decay`` is negative, or
+   247→            ``random_state`` is not an integer.
+   248→        """
+   249→        hidden = self.hidden_layers
+   250→        if isinstance(hidden, (str, bytes)) or not hasattr(hidden, "__iter__"):
+   251→            raise ModelError(
+   252→                f"hidden_layers must be a sequence of positive ints, got {hidden!r}"
+   253→            )
+   254→        hidden = tuple(hidden)
+   255→        for width in hidden:
+   256→            if isinstance(width, bool) or not isinstance(width, (int, np.integer)) or width < 1:
+   257→                raise ModelError(
+   258→                    "hidden_layers entries must be positive ints, got "
+   259→                    f"{width!r} in {tuple(hidden)!r}"
+   260→                )
+   261→        if isinstance(self.dropout, bool) or not np.isfinite(self.dropout) or not (
+   262→            0.0 <= float(self.dropout) < 1.0
+   263→        ):
+   264→            raise ModelError(f"dropout must be in [0, 1), got {self.dropout!r}")
+   265→        if self.activation not in _ACTIVATIONS:
+   266→            raise ModelError(
+   267→                f"activation must be one of {_ACTIVATIONS}, got {self.activation!r}"
+   268→            )
+   269→        for name in ("epochs", "batch_size", "patience"):
+   270→            value = getattr(self, name)
+   271→            if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
+   272→                raise ModelError(f"{name} must be an integer >= 1, got {value!r}")
+   273→        if not np.isfinite(self.learning_rate) or float(self.learning_rate) <= 0:
+   274→            raise ModelError(f"learning_rate must be > 0, got {self.learning_rate!r}")
+   275→        if not np.isfinite(self.weight_decay) or float(self.weight_decay) < 0:
+   276→            raise ModelError(f"weight_decay must be >= 0, got {self.weight_decay!r}")
+   277→        if not np.isfinite(self.val_split) or not 0.0 <= float(self.val_split) < 1.0:
+   278→            raise ModelError(f"val_split must be in [0, 1), got {self.val_split!r}")
+   279→        if self.device not in _DEVICES:
+   280→            raise ModelError(f"device must be one of {_DEVICES}, got {self.device!r}")
+   281→        if isinstance(self.random_state, bool) or not isinstance(
+   282→            self.random_state, (int, np.integer)
+   283→        ):
+   284→            raise ModelError(
+   285→                f"random_state must be an integer seed (determinism contract), "
+   286→                f"got {self.random_state!r}"
+   287→            )
+   288→        return hidden
+   289→
+   290→    def _check_X(self, X: Any) -> np.ndarray:
+   291→        """Validate and convert ``X`` to a finite float64 matrix.
+   292→
+   293→        Raises
+   294→        ------
+   295→        DataValidationError
+   296→            When ``X`` is not 2-dimensional, non-numeric, empty, has no
+   297→            feature columns, or contains NaN/infinite values.
+   298→        """
+   299→        try:
+   300→            X_arr = np.asarray(X, dtype=np.float64)
+   301→        except (TypeError, ValueError) as exc:
+   302→            raise DataValidationError(
+   303→                f"features must be numeric — conversion failed: {exc}"
+   304→            ) from exc
+   305→        if X_arr.ndim != 2:
+   306→            raise DataValidationError(
+   307→                "X must be 2-dimensional (n_samples, n_features), got "
+   308→                f"{X_arr.ndim} dimension(s)"
+   309→            )
+   310→        if X_arr.shape[0] == 0:
+   311→            raise DataValidationError(
+   312→                f"X has 0 rows — {type(self).__name__} needs at least one sample"
+   313→            )
+   314→        if X_arr.shape[1] == 0:
+   315→            raise DataValidationError(
+   316→                f"X has 0 feature columns — {type(self).__name__} needs at least "
+   317→                "one input feature"
+   318→            )
+   319→        if not np.isfinite(X_arr).all():
+   320→            raise DataValidationError(
+   321→                "X contains NaN or infinite values — impute or drop them first "
+   322→                "(pharmaml.ml.build_preprocessor does this inside a Pipeline)"
+   323→            )
+   324→        return X_arr
+   325→
+   326→    def _check_fitted(self) -> None:
+   327→        """Raise :class:`ModelError` when the estimator is used before fit."""
+   328→        if getattr(self, "_weights", None) is None:
+   329→            raise ModelError(
+   330→                f"{type(self).__name__} has not been fitted yet — call fit(X, y) "
+   331→                "first"
+   332→            )
+   333→
+   334→    # -- fit ------------------------------------------------------------
+   335→    def fit(self, X: Any, y: Any) -> _BaseDeepEstimator:
+   336→        """Train the network on ``(X, y)`` with early stopping.
+   337→
+   338→        Parameters
+   339→        ----------
+   340→        X:
+   341→            Feature matrix — DataFrame or 2-D array-like; must be
+   342→            numeric and finite (the standard ``pharmaml`` pipeline
+   343→            imputes/scales upstream).
+   344→        y:
+   345→            Targets — class labels (any hashable, e.g. strings or ints)
+   346→            for the classifiers, numeric values for the regressors.
+   347→
+   348→        Returns
+   349→        -------
+   350→        self
+   351→            Fitted estimator (``classes_``, ``n_features_in_``,
+   352→            ``history_``, ``n_iter_`` and the standardisation
+   353→            attributes are now available).
+   354→
+   355→        Raises
+   356→        ------
+   357→        DependencyError
+   358→            When torch is not installed (see ``pip install
+   359→            'pharmaml[deep]'``).
+   360→        ModelError
+   361→            For invalid hyperparameters (validated before any work),
+   362→            when predicting before fitting, or when the training
+   363→            diverged (weights became NaN/inf — typically an extreme
+   364→            ``learning_rate``).
+   365→        DataValidationError
+   366→            For empty/mismatched/non-numeric ``X``/``y``, NaN targets,
+   367→            a single-class classification target, unorderable labels,
+   368→            or a feature-count mismatch at predict time.
+   369→
+   370→        Notes
+   371→        -----
+   372→        Determinism: PyTorch and NumPy are seeded from
+   373→        ``random_state`` at fit start, so the same seed + data always
+   374→        yields the same fitted network on CPU.
+   375→        """
+   376→        hidden = self._validate_hyperparameters()
+   377→        X_arr = self._check_X(X)
+   378→
+   379→        y_arr = np.asarray(y)
+   380→        if y_arr.ndim != 1:
+   381→            raise DataValidationError(
+   382→                f"y must be 1-dimensional, got {y_arr.ndim} dimension(s)"
+   383→            )
+   384→        if y_arr.size == 0:
+   385→            raise DataValidationError(
+   386→                f"y is empty — {type(self).__name__} needs at least one target value"
+   387→            )
+   388→        if y_arr.shape[0] != X_arr.shape[0]:
+   389→            raise DataValidationError(
+   390→                f"X and y have inconsistent lengths: {X_arr.shape[0]} rows vs "
+   391→                f"{y_arr.shape[0]} targets"
+   392→            )
+   393→
+   394→        if self._is_classifier:
+   395→            try:
+   396→                classes, y_enc = np.unique(y_arr, return_inverse=True)
+   397→            except TypeError as exc:  # e.g. None mixed with labels
+   398→                raise DataValidationError(
+   399→                    "classification targets could not be label-encoded — they "
+   400→                    f"contain unorderable values (e.g. None): {exc}"
+   401→                ) from exc
+   402→            if classes.size < 2:
+   403→                raise DataValidationError(
+   404→                    "classification needs at least 2 distinct classes, got "
+   405→                    f"{classes.size}: {classes.tolist()[:5]}"
+   406→                )
+   407→            if classes.dtype.kind in "fc" and np.isnan(classes.astype(float)).any():
+   408→                raise DataValidationError(
+   409→                    "classification targets contain NaN — drop those rows first"
+   410→                )
+   411→            n_out = int(classes.size)
+   412→        else:
+   413→            try:
+   414→                y_enc = np.asarray(y_arr, dtype=np.float64)
+   415→            except (TypeError, ValueError) as exc:
+   416→                raise DataValidationError(
+   417→                    f"regression targets must be numeric — conversion failed: {exc}"
+   418→                ) from exc
+   419→            if not np.isfinite(y_enc).all():
+   420→                raise DataValidationError(
+   421→                    "regression targets contain NaN or infinite values — drop or "
+   422→                    "impute those rows first"
+   423→                )
+   424→            n_out = 1
+   425→
+   426→        # torch is imported BEFORE any fitted attribute is written, so a
+   427→        # failed fit (missing torch / unusable device) leaves the
+   428→        # estimator unfitted for sklearn's check_is_fitted as well.
+   429→        _require_torch()  # raises the actionable DependencyError
+   430→
+   431→        device = self._resolve_device()
+   432→
+   433→        if self._is_classifier:
+   434→            self.classes_ = classes
+   435→        self.n_features_in_ = int(X_arr.shape[1])
+   436→        if isinstance(X, pd.DataFrame):
+   437→            self.feature_names_in_ = np.asarray(X.columns, dtype=object)
+   438→
+   439→        seed = int(self.random_state)
+   440→        rng = np.random.default_rng(seed)
+   441→        n = int(X_arr.shape[0])
+   442→        train_idx, val_idx = self._train_val_split(y_enc, n, rng)
+   443→
+   444→        # Per-feature standardisation, fitted on the training rows only
+   445→        # (the early-stopping validation rows never touch the scaler;
+   446→        # constant columns get std 1 to avoid division by zero).
+   447→        mean = X_arr[train_idx].mean(axis=0)
+   448→        std = X_arr[train_idx].std(axis=0)
+   449→        std = np.where(std > 0, std, 1.0)
+   450→        self._mean_ = mean
+   451→        self._std_ = std
+   452→        X_scaled = (X_arr - mean) / std
+   453→
+   454→        # Regression targets are standardised too (training rows only):
+   455→        # pharmaceutical endpoints (pIC50 ~ 5, LN_IC50 ~ 2-4, AUC in
+   456→        # [0, 1]) live far from zero, and on a raw-scale MSE the output
+   457→        # bias crawls toward the target mean at ~learning_rate per
+   458→        # step -- early stopping fires long before the intercept is
+   459→        # learned (a linear baseline then beats the network by orders
+   460→        # of magnitude).  Training on z-scaled targets keeps the loss
+   461→        # O(1) and the intercept one step away; ``predict`` inverts
+   462→        # the scaling.  A constant target keeps std 1 (predict returns
+   463→        # the constant).
+   464→        if self._is_classifier:
+   465→            self._y_mean_: float | None = None
+   466→            self._y_std_: float | None = None
+   467→        else:
+   468→            y_train = y_enc[train_idx]
+   469→            self._y_mean_ = float(y_train.mean())
+   470→            y_std = float(y_train.std())
+   471→            self._y_std_ = y_std if y_std > 0 else 1.0
+   472→            y_enc = (y_enc - self._y_mean_) / self._y_std_
+   473→
+   474→        self._train_torch(
+   475→            X_scaled, y_enc, n_out, device, hidden, train_idx, val_idx, rng
+   476→        )
+   477→        return self
+   478→
+   479→    def _resolve_device(self) -> str:
+   480→        """Map the ``device`` token to a concrete torch device string.
+   481→
+   482→        Raises
+   483→        ------
+   484→        ModelError
+   485→            When ``device='cuda'`` is requested but no CUDA device is
+   486→            visible to torch.
+   487→        """
+   488→        import torch
+   489→
+   490→        if self.device == "auto":
+   491→            return "cuda" if torch.cuda.is_available() else "cpu"
+   492→        if self.device == "cuda" and not torch.cuda.is_available():
+   493→            raise ModelError(
+   494→                "device='cuda' requested but no CUDA device is visible to torch"
+   495→            )
+   496→        return self.device
+   497→
+   498→    def _train_val_split(
+   499→        self, y_enc: np.ndarray, n: int, rng: np.random.Generator
+   500→    ) -> tuple[np.ndarray, np.ndarray | None]:
+   501→        """Split row indices into (train, validation) index arrays.
+   502→
+   503→        Classification splits are *stratified* — every class keeps at
+   504→        least one training row (single-member classes stay in the
+   505→        training fold entirely); regression uses a plain random split.
+   506→        Returns ``(all_rows, None)`` when ``val_split`` is 0, the data
+   507→        is a single row, or the split would be degenerate — in that
+   508→        case training runs for all ``epochs`` with no early stopping.
+   509→        """
+   510→        val_split = float(self.val_split)
+   511→        if val_split <= 0 or n < 2:
+   512→            return np.arange(n), None
+   513→        if self._is_classifier:
+   514→            parts: list[np.ndarray] = []
+   515→            for cls in np.unique(y_enc):
+   516→                members = np.flatnonzero(y_enc == cls)
+   517→                members = members[rng.permutation(members.size)]
+   518→                k = round(val_split * members.size)
+   519→                # every class keeps >= 1 training row, even when it has
+   520→                # a single member (val_split can otherwise steal it).
+   521→                k = min(k, max(members.size - 1, 0))
+   522→                parts.append(members[:k])
+   523→            val_idx = np.concatenate(parts).astype(int) if parts else np.array([], dtype=int)
+   524→        else:
+   525→            perm = rng.permutation(n)
+   526→            val_idx = perm[: max(1, round(val_split * n))]
+   527→        if val_idx.size == 0 or val_idx.size >= n:
+   528→            return np.arange(n), None
+   529→        mask = np.zeros(n, dtype=bool)
+   530→        mask[val_idx] = True
+   531→        return np.flatnonzero(~mask), np.flatnonzero(mask)
+   532→
+   533→    def _train_torch(
+   534→        self,
+   535→        X_scaled: np.ndarray,
+   536→        y_enc: np.ndarray,
+   537→        n_out: int,
+   538→        device: str,
+   539→        hidden: tuple[int, ...],
+   540→        train_idx: np.ndarray,
+   541→        val_idx: np.ndarray | None,
+   542→        rng: np.random.Generator,
+   543→    ) -> None:
+   544→        """Run the minibatch Adam training loop with early stopping.
+   545→
+   546→        ``hidden`` is the materialised layer-width tuple from
+   547→        :meth:`_validate_hyperparameters` (one-time consumption of the
+   548→        ``hidden_layers`` iterable), and ``train_idx``/``val_idx`` (chosen
+   549→        in :meth:`fit` before the standardisation was fitted) plus the
+   550→        seeded ``rng`` keep the whole fit one deterministic random
+   551→        stream.
+   552→        """
+   553→        import torch
+   554→        from torch import nn
+   555→
+   556→        torch.manual_seed(int(self.random_state))
+   557→
+   558→        dropout = float(self.dropout)
+   559→        # Snapshot of the *fitted* architecture — later set_params calls
+   560→        # cannot desynchronise the weight rebuild.
+   561→        self._net_spec_: dict[str, Any] = {
+   562→            "residual": self._residual,
+   563→            "n_in": int(X_scaled.shape[1]),
+   564→            "hidden": hidden,
+   565→            "n_out": int(n_out),
+   566→            "activation": self.activation,
+   567→            "dropout": dropout,
+   568→        }
+   569→        network = _build_network(
+   570→            self._residual, self._net_spec_["n_in"], hidden, n_out, self.activation, dropout
+   571→        )
+   572→        network.to(device)
+   573→
+   574→        X_t = torch.as_tensor(X_scaled, dtype=torch.float32, device=device)
+   575→        if self._is_classifier:
+   576→            y_t = torch.as_tensor(y_enc, dtype=torch.long, device=device)
+   577→            criterion: Any = nn.CrossEntropyLoss()
+   578→        else:
+   579→            y_t = torch.as_tensor(y_enc, dtype=torch.float32, device=device).reshape(-1, 1)
+   580→            criterion = nn.MSELoss()
+   581→        optimizer = torch.optim.Adam(
+   582→            network.parameters(),
+   583→            lr=float(self.learning_rate),
+   584→            weight_decay=float(self.weight_decay),
+   585→        )
+   586→
+   587→        n = X_scaled.shape[0]
+   588→        train_t = torch.as_tensor(train_idx, dtype=torch.long, device=device)
+   589→        X_tr, y_tr = X_t[train_t], y_t[train_t]
+   590→        X_val = y_val = None
+   591→        if val_idx is not None:
+   592→            val_t = torch.as_tensor(val_idx, dtype=torch.long, device=device)
+   593→            X_val, y_val = X_t[val_t], y_t[val_t]
+   594→
+   595→        epochs = int(self.epochs)
+   596→        batch_size = int(self.batch_size)
+   597→        patience = int(self.patience)
+   598→
+   599→        history: list[dict[str, Any]] = []
+   600→        best_val = float("inf")
+   601→        best_state: dict[str, Any] | None = None
+   602→        stale = 0
+   603→
+   604→        for epoch in range(1, epochs + 1):
+   605→            network.train()
+   606→            perm = torch.as_tensor(rng.permutation(train_idx.size), device=device)
+   607→            batch_losses: list[float] = []
+   608→            for start in range(0, perm.numel(), batch_size):
+   609→                batch = perm[start : start + batch_size]
+   610→                optimizer.zero_grad()
+   611→                loss = criterion(network(X_tr[batch]), y_tr[batch])
+   612→                loss.backward()
+   613→                optimizer.step()
+   614→                batch_losses.append(float(loss.item()))
+   615→            train_loss = float(np.mean(batch_losses)) if batch_losses else float("nan")
+   616→
+   617→            val_loss: float | None = None
+   618→            if X_val is not None:
+   619→                network.eval()
+   620→                with torch.no_grad():
+   621→                    val_loss = float(criterion(network(X_val), y_val).item())
+   622→                if val_loss < best_val:
+   623→                    best_val = val_loss
+   624→                    best_state = {
+   625→                        key: value.detach().cpu().clone()
+   626→                        for key, value in network.state_dict().items()
+   627→                    }
+   628→                    stale = 0
+   629→                else:
+   630→                    stale += 1
+   631→
+   632→            history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+   633→            _LOG.debug(
+   634→                "epoch %03d train_loss %.3f val_loss %s",
+   635→                epoch,
+   636→                train_loss,
+   637→                "n/a" if val_loss is None else f"{val_loss:.3f}",
+   638→            )
+   639→            if val_loss is not None and stale >= patience:
+   640→                _LOG.debug(
+   641→                    "early stopping at epoch %03d (no val improvement for %d epochs)",
+   642→                    epoch,
+   643→                    patience,
+   644→                )
+   645→                break
+   646→
+   647→        if best_state is not None:  # restore the best (lowest val loss) weights
+   648→            network.load_state_dict(best_state)
+   649→        network.eval()
+   650→
+   651→        # Portable CPU weights — pickles never embed torch classes.
+   652→        weights = {
+   653→            key: value.detach().cpu().numpy().copy()
+   654→            for key, value in network.state_dict().items()
+   655→        }
+   656→        if not all(np.isfinite(value).all() for value in weights.values()):
+   657→            # Diverged training (typically an extreme learning_rate):
+   658→            # refuse to leave a silently-NaN estimator behind.
+   659→            raise ModelError(
+   660→                "training diverged — the fitted weights contain NaN/inf "
+   661→                "values; lower learning_rate (e.g. 1e-3) and refit"
+   662→            )
+   663→        self.history_ = history
+   664→        self.n_iter_ = len(history)
+   665→        self._weights = weights
+   666→        self._network = network
+   667→
+   668→        last = history[-1]
+   669→        val_text = "n/a" if last["val_loss"] is None else f"{last['val_loss']:.4f}"
+   670→        n_params = sum(int(p.numel()) for p in network.parameters())
+   671→        _LOG.info(
+   672→            "%s fitted on %d samples: epoch %03d train_loss %.4f val_loss %s "
+   673→            "(%d epochs run, %d parameters, device=%s)",
+   674→            type(self).__name__,
+   675→            n,
+   676→            last["epoch"],
+   677→            last["train_loss"],
+   678→            val_text,
+   679→            self.n_iter_,
+   680→            n_params,
+   681→            device,
+   682→        )
+   683→
+   684→    # -- predict ----------------------------------------------------------
+   685→    def _ensure_network(self) -> Any:
+   686→        """Return the live torch network, rebuilding it when needed.
+   687→
+   688→        After unpickling the live module is ``None``; it is
+   689→        reconstructed from the fitted architecture snapshot and the
+   690→        stored NumPy weights — deterministic, because
+   691→        ``load_state_dict`` overwrites every parameter.  (A
+   692→        ``set_params`` mutation keeps the *old* live network, so
+   693→        predictions keep working until the next ``fit``.)
+   694→        """
+   695→        network = getattr(self, "_network", None)
+   696→        if network is None:
+   697→            _require_torch()  # raises the actionable DependencyError
+   698→            import torch
+   699→
+   700→            spec = self._net_spec_
+   701→            network = _build_network(
+   702→                spec["residual"], spec["n_in"], spec["hidden"], spec["n_out"],
+   703→                spec["activation"], spec["dropout"],
+   704→            )
+   705→            network.load_state_dict(
+   706→                {key: torch.from_numpy(value) for key, value in self._weights.items()}
+   707→            )
+   708→            self._network = network
+   709→        return network
+   710→
+   711→    def _forward(self, X: Any) -> np.ndarray:
+   712→        """Standardise ``X`` and forward it through the network (eval mode)."""
+   713→        self._check_fitted()
+   714→        X_arr = self._check_X(X)
+   715→        if X_arr.shape[1] != self.n_features_in_:
+   716→            # Without this guard a wrong-width X silently *broadcasts*
+   717→            # against the per-feature mean/std (NumPy pads the missing
+   718→            # columns) and yields garbage predictions.
+   719→            raise DataValidationError(
+   720→                f"X has {X_arr.shape[1]} feature column(s), but "
+   721→                f"{type(self).__name__} was fitted with "
+   722→                f"{self.n_features_in_} — pass the same features as to fit()"
+   723→            )
+   724→        _require_torch()  # raises the actionable DependencyError
+   725→        import torch
+   726→
+   727→        network = self._ensure_network()
+   728→        network.eval()  # disable dropout at inference time
+   729→        X_scaled = (X_arr - self._mean_) / self._std_
+   730→        with torch.no_grad():
+   731→            out = network(torch.as_tensor(X_scaled, dtype=torch.float32))
+   732→        return out.numpy()
+   733→
+   734→    # -- pickle support ----------------------------------------------------
+   735→    def __getstate__(self) -> dict[str, Any]:
+   736→        """Drop the live torch network from pickles (rebuilt on demand).
+   737→
+   738→        Only the NumPy weight dict is serialised, so pickled estimators
+   739→        stay portable across torch versions — and loadable even where
+   740→        torch is absent (torch is required again only to predict).
+   741→        """
+   742→        state = self.__dict__.copy()
+   743→        state["_network"] = None
+   744→        return state
+   745→
+   746→
+   747→# ---------------------------------------------------------------------------
+   748→# Public estimators — feed-forward
+   749→# ---------------------------------------------------------------------------
+   750→class DeepMLPClassifier(ClassifierMixin, _BaseDeepEstimator):
+   751→    """Deep feed-forward neural-network classifier (PyTorch).
+   752→
+   753→    A fully connected network trained with minibatch Adam and
+   754→    weight-decay regularisation, early-stopped on a stratified
+   755→    validation split.  Multiclass (K > 2) is fully supported: the
+   756→    network has K outputs and ``predict_proba`` returns a full softmax
+   757→    matrix aligned with ``classes_``.
+   758→
+   759→    Parameters
+   760→    ----------
+   761→    hidden_layers:
+   762→        Widths of the hidden layers, e.g. ``(64, 32)``.  An empty tuple
+   763→        builds a single linear layer — i.e. a (regularised) multinomial
+   764→        logistic regression.
+   765→    dropout:
+   766→        Dropout probability applied after every hidden activation
+   767→        (``0`` disables it).
+   768→    activation:
+   769→        Hidden activation token: ``'relu'``, ``'tanh'``, ``'gelu'`` or
+   770→        ``'sigmoid'``.
+   771→    epochs:
+   772→        Maximum number of training epochs (>= 1).
+   773→    batch_size:
+   774→        Minibatch size (>= 1).
+   775→    learning_rate:
+   776→        Adam step size (> 0).
+   777→    weight_decay:
+   778→        Adam L2 penalty (>= 0).
+   779→    patience:
+   780→        Early-stopping patience: stop when the validation loss has not
+   781→        improved for this many epochs (>= 1).
+   782→    val_split:
+   783→        Fraction of the training rows held out for early stopping
+   784→        (stratified).  ``0`` trains on everything and disables early
+   785→        stopping.
+   786→    random_state:
+   787→        Integer seed — same seed + same data ⇒ identical fitted
+   788→        predictions on CPU.
+   789→    device:
+   790→        ``'auto'`` (cuda if available else cpu), ``'cpu'`` or
+   791→        ``'cuda'``.  Training only: fitted weights are always stored
+   792→        on CPU.
+   793→
+   794→    Attributes
+   795→    ----------
+   796→    classes_:
+   797→        Sorted class labels (strings label-encoded internally).
+   798→    n_features_in_:
+   799→        Number of input features seen at fit.
+   800→    feature_names_in_:
+   801→        Column names when ``X`` was a DataFrame.
+   802→    history_:
+   803→        List of per-epoch dicts ``{'epoch', 'train_loss', 'val_loss'}``
+   804→        (``val_loss`` is ``None`` without a validation split).
+   805→    n_iter_:
+   806→        Number of epochs actually run (early stopping included).
+   807→
+   808→    Raises
+   809→    ------
+   810→    DependencyError
+   811→        At fit/predict time when torch is missing.
+   812→    ModelError
+   813→        For invalid hyperparameters or use before ``fit``.
+   814→    DataValidationError
+   815→        For empty/non-numeric/mismatched data or single-class targets.
+   816→
+   817→    See Also
+   818→    --------
+   819→    DeepMLPRegressor, ResidualMLPClassifier : siblings in this module.
+   820→
+   821→    Notes
+   822→    -----
+   823→    Registry alias: ``build_model('dnn', 'classification')``.  Requires
+   824→    the optional torch dependency — ``pip install 'pharmaml[deep]'``.
+   825→    """
+   826→
+   827→    _is_classifier = True
+   828→    _residual = False
+   829→
+   830→    def __init__(
+   831→        self,
+   832→        hidden_layers=(64, 32),
+   833→        dropout=0.1,
+   834→        activation="relu",
+   835→        epochs=120,
+   836→        batch_size=32,
+   837→        learning_rate=1e-3,
+   838→        weight_decay=1e-4,
+   839→        patience=15,
+   840→        val_split=0.15,
+   841→        random_state=42,
+   842→        device="auto",
+   843→    ) -> None:
+   844→        self.hidden_layers = hidden_layers
+   845→        self.dropout = dropout
+   846→        self.activation = activation
+   847→        self.epochs = epochs
+   848→        self.batch_size = batch_size
+   849→        self.learning_rate = learning_rate
+   850→        self.weight_decay = weight_decay
+   851→        self.patience = patience
+   852→        self.val_split = val_split
+   853→        self.random_state = random_state
+   854→        self.device = device
+   855→
+   856→    def predict(self, X: Any) -> np.ndarray:
+   857→        """Predict class labels for ``X`` (argmax of the softmax).
+   858→
+   859→        Parameters
+   860→        ----------
+   861→        X:
+   862→            Feature matrix — DataFrame or 2-D array-like, numeric.
+   863→
+   864→        Returns
+   865→        -------
+   866→        numpy.ndarray
+   867→            Labels in the original ``classes_`` dtype (strings stay
+   868→            strings).
+   869→        """
+   870→        logits = self._forward(X)
+   871→        return self.classes_[np.argmax(logits, axis=1)]
+   872→
+   873→    def predict_proba(self, X: Any) -> np.ndarray:
+   874→        """Class probabilities for ``X`` (softmax, columns == classes_).
+   875→
+   876→        Parameters
+   877→        ----------
+   878→        X:
+   879→            Feature matrix — DataFrame or 2-D array-like, numeric.
+   880→
+   881→        Returns
+   882→        -------
+   883→        numpy.ndarray
+   884→            Shape ``(n_samples, len(classes_))``; rows sum to 1.
+   885→        """
+   886→        logits = self._forward(X)
+   887→        shifted = logits - logits.max(axis=1, keepdims=True)
+   888→        exp = np.exp(shifted)
+   889→        return exp / exp.sum(axis=1, keepdims=True)
+   890→
+   891→
+   892→class DeepMLPRegressor(RegressorMixin, _BaseDeepEstimator):
+   893→    """Deep feed-forward neural-network regressor (PyTorch).
+   894→
+   895→    Same architecture and training protocol as
+   896→    :class:`DeepMLPClassifier` (see its docstring for the full
+   897→    parameter/attribute reference) with a single linear output and
+   898→    mean-squared-error loss; ``score`` returns R².
+   899→
+   900→    Registry alias: ``build_model('dnn', 'regression')``.  Requires
+   901→    the optional torch dependency — ``pip install 'pharmaml[deep]'``.
+   902→    """
+   903→
+   904→    _is_classifier = False
+   905→    _residual = False
+   906→
+   907→    def __init__(
+   908→        self,
+   909→        hidden_layers=(64, 32),
+   910→        dropout=0.1,
+   911→        activation="relu",
+   912→        epochs=120,
+   913→        batch_size=32,
+   914→        learning_rate=1e-3,
+   915→        weight_decay=1e-4,
+   916→        patience=15,
+   917→        val_split=0.15,
+   918→        random_state=42,
+   919→        device="auto",
+   920→    ) -> None:
+   921→        self.hidden_layers = hidden_layers
+   922→        self.dropout = dropout
+   923→        self.activation = activation
+   924→        self.epochs = epochs
+   925→        self.batch_size = batch_size
+   926→        self.learning_rate = learning_rate
+   927→        self.weight_decay = weight_decay
+   928→        self.patience = patience
+   929→        self.val_split = val_split
+   930→        self.random_state = random_state
+   931→        self.device = device
+   932→
+   933→    def predict(self, X: Any) -> np.ndarray:
+   934→        """Predict continuous targets for ``X``.
+   935→
+   936→        The network's z-scaled output is mapped back to the target's
+   937→        original scale (``_y_mean_`` / ``_y_std_`` were fitted on the
+   938→        training rows).
+   939→
+   940→        Parameters
+   941→        ----------
+   942→        X:
+   943→            Feature matrix — DataFrame or 2-D array-like, numeric.
+   944→
+   945→        Returns
+   946→        -------
+   947→        numpy.ndarray
+   948→            Shape ``(n_samples,)``.
+   949→        """
+   950→        # _check_fitted first: an unfitted estimator must raise the
+   951→        # documented ModelError, not an AttributeError on the scaling
+   952→        # attributes that fit() has not written yet.
+   953→        self._check_fitted()
+   954→        y_mean, y_std = self._y_mean_, self._y_std_
+   955→        if y_mean is None or y_std is None:
+   956→            # fit() always writes both for regressors; a missing pair means
+   957→            # the estimator was never fitted in regressor mode.
+   958→            raise ModelError(
+   959→                f"{type(self).__name__} is missing its target scaling -- "
+   960→                "was it fitted as a regressor?"
+   961→            )
+   962→        return self._forward(X).reshape(-1) * y_std + y_mean
+   963→
+   964→
+   965→# ---------------------------------------------------------------------------
+   966→# Public estimators — residual
+   967→# ---------------------------------------------------------------------------
+   968→class ResidualMLPClassifier(ClassifierMixin, _BaseDeepEstimator):
+   969→    """Residual (skip-connection) deep-network classifier (PyTorch).
+   970→
+   971→    Each hidden block is Linear -> activation -> dropout -> Linear with
+   972→    an additive skip connection: identity when the block's input and
+   973→    output widths match, else a learned linear projection (the dense
+   974→    analogue of a 1x1 convolution).  This lets gradients flow through
+   975→    deeper stacks than a plain feed-forward network; the default
+   976→    ``(64, 64, 64)`` stack exercises the identity-skip path.
+   977→
+   978→    The constructor parameters, attributes, error contract and
+   979→    determinism guarantee are identical to :class:`DeepMLPClassifier`
+   980→    (see its docstring) — only the block architecture differs.
+   981→
+   982→    Registry alias: ``build_model('dnn_residual', 'classification')``.
+   983→    Requires the optional torch dependency — ``pip install
+   984→    'pharmaml[deep]'``.
+   985→    """
+   986→
+   987→    _is_classifier = True
+   988→    _residual = True
+   989→
+   990→    def __init__(
+   991→        self,
+   992→        hidden_layers=(64, 64, 64),
+   993→        dropout=0.1,
+   994→        activation="relu",
+   995→        epochs=120,
+   996→        batch_size=32,
+   997→        learning_rate=1e-3,
+   998→        weight_decay=1e-4,
+   999→        patience=15,
+  1000→        val_split=0.15,
+  1001→        random_state=42,
+  1002→        device="auto",
+  1003→    ) -> None:
+  1004→        self.hidden_layers = hidden_layers
+  1005→        self.dropout = dropout
+  1006→        self.activation = activation
+  1007→        self.epochs = epochs
+  1008→        self.batch_size = batch_size
+  1009→        self.learning_rate = learning_rate
+  1010→        self.weight_decay = weight_decay
+  1011→        self.patience = patience
+  1012→        self.val_split = val_split
+  1013→        self.random_state = random_state
+  1014→        self.device = device
+  1015→
+  1016→    def predict(self, X: Any) -> np.ndarray:
+  1017→        """Predict class labels for ``X`` (argmax of the softmax).
+  1018→
+  1019→        Returns
+  1020→        -------
+  1021→        numpy.ndarray
+  1022→            Labels in the original ``classes_`` dtype.
+  1023→        """
+  1024→        logits = self._forward(X)
+  1025→        return self.classes_[np.argmax(logits, axis=1)]
+  1026→
+  1027→    def predict_proba(self, X: Any) -> np.ndarray:
+  1028→        """Class probabilities for ``X`` (softmax, columns == classes_).
+  1029→
+  1030→        Returns
+  1031→        -------
+  1032→        numpy.ndarray
+  1033→            Shape ``(n_samples, len(classes_))``; rows sum to 1.
+  1034→        """
+  1035→        logits = self._forward(X)
+  1036→        shifted = logits - logits.max(axis=1, keepdims=True)
+  1037→        exp = np.exp(shifted)
+  1038→        return exp / exp.sum(axis=1, keepdims=True)
+  1039→
+  1040→
+  1041→class ResidualMLPRegressor(RegressorMixin, _BaseDeepEstimator):
+  1042→    """Residual (skip-connection) deep-network regressor (PyTorch).
+  1043→
+  1044→    The residual-block counterpart of :class:`DeepMLPRegressor`; see
+  1045→    :class:`DeepMLPClassifier` for the full parameter/attribute
+  1046→    reference and :class:`ResidualMLPClassifier` for the block
+  1047→    architecture.  ``score`` returns R².
+  1048→
+  1049→    Registry alias: ``build_model('dnn_residual', 'regression')``.
+  1050→    Requires the optional torch dependency — ``pip install
+  1051→    'pharmaml[deep]'``.
+  1052→    """
+  1053→
+  1054→    _is_classifier = False
+  1055→    _residual = True
+  1056→
+  1057→    def __init__(
+  1058→        self,
+  1059→        hidden_layers=(64, 64, 64),
+  1060→        dropout=0.1,
+  1061→        activation="relu",
+  1062→        epochs=120,
+  1063→        batch_size=32,
+  1064→        learning_rate=1e-3,
+  1065→        weight_decay=1e-4,
+  1066→        patience=15,
+  1067→        val_split=0.15,
+  1068→        random_state=42,
+  1069→        device="auto",
+  1070→    ) -> None:
+  1071→        self.hidden_layers = hidden_layers
+  1072→        self.dropout = dropout
+  1073→        self.activation = activation
+  1074→        self.epochs = epochs
+  1075→        self.batch_size = batch_size
+  1076→        self.learning_rate = learning_rate
+  1077→        self.weight_decay = weight_decay
+  1078→        self.patience = patience
+  1079→        self.val_split = val_split
+  1080→        self.random_state = random_state
+  1081→        self.device = device
+  1082→
+  1083→    def predict(self, X: Any) -> np.ndarray:
+  1084→        """Predict continuous targets for ``X``.
+  1085→
+  1086→        Returns
+  1087→        -------
+  1088→        numpy.ndarray
+  1089→            Shape ``(n_samples,)`` — mapped back to the target's
+  1090→            original scale (see :meth:`DeepMLPRegressor.predict`).
+  1091→        """
+  1092→        # _check_fitted first: an unfitted estimator must raise the
+  1093→        # documented ModelError, not an AttributeError on the scaling
+  1094→        # attributes that fit() has not written yet.
+  1095→        self._check_fitted()
+  1096→        y_mean, y_std = self._y_mean_, self._y_std_
+  1097→        if y_mean is None or y_std is None:
+  1098→            # fit() always writes both for regressors; a missing pair means
+  1099→            # the estimator was never fitted in regressor mode.
+  1100→            raise ModelError(
+  1101→                f"{type(self).__name__} is missing its target scaling -- "
+  1102→                "was it fitted as a regressor?"
+  1103→            )
+  1104→        return self._forward(X).reshape(-1) * y_std + y_mean
+  1105→

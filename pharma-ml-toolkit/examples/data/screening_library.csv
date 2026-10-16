@@ -1,0 +1,80 @@
+name,SMILES
+aspirin,CC(=O)Oc1ccccc1C(=O)O
+ibuprofen,CC(C)Cc1ccc(cc1)C(C)C(=O)O
+naproxen,COc1ccc2cc(ccc2c1)C(C)C(=O)O
+paracetamol,CC(=O)Nc1ccc(O)cc1
+caffeine,Cn1cnc2c1c(=O)n(C)c(=O)n2C
+theophylline,Cn1c(=O)c2[nH]cnc2n(C)c1=O
+metformin,CN(C)C(=N)N=C(N)N
+benzocaine,CCOC(=O)c1ccc(N)cc1
+propranolol,CC(C)NCC(O)COc1cccc2ccccc12
+nicotine,CN1CCCC1c1cccnc1
+atenolol,CC(C)NCC(O)COc1ccc(CC(N)=O)cc1
+metoprolol,COCCc1ccc(OCC(C)NCC(C)C)cc1
+lidocaine,CCN(CC)CC(=O)Nc1c(C)cccc1C
+procaine,CCN(CC)CCOC(=O)c1ccc(N)cc1
+fluoxetine,CNCCC(Oc1ccc(C(F)(F)F)cc1)c1ccccc1
+salicylic acid,OC(=O)c1ccccc1O
+benzoic acid,OC(=O)c1ccccc1
+benzaldehyde,O=Cc1ccccc1
+benzamide,NC(=O)c1ccccc1
+salicylamide,NC(=O)c1ccccc1O
+methyl salicylate,COC(=O)c1ccccc1O
+ethyl benzoate,CCOC(=O)c1ccccc1
+phenyl acetate,CC(=O)Oc1ccccc1
+acetophenone,CC(=O)c1ccccc1
+benzophenone,O=C(c1ccccc1)c1ccccc1
+benzyl alcohol,OCc1ccccc1
+phenetole,CCOc1ccccc1
+phenol,Oc1ccccc1
+aniline,Nc1ccccc1
+anisole,COc1ccccc1
+toluene,Cc1ccccc1
+ethylbenzene,CCc1ccccc1
+propylbenzene,CCCc1ccccc1
+o-xylene,Cc1ccccc1C
+mesitylene,Cc1c(C)c(C)cc(C)c1
+styrene,C=Cc1ccccc1
+allylbenzene,C=CCc1ccccc1
+chlorobenzene,Clc1ccccc1
+bromobenzene,Brc1ccccc1
+fluorobenzene,Fc1ccccc1
+nitrobenzene,O=[N+]([O-])c1ccccc1
+benzonitrile,N#Cc1ccccc1
+biphenyl,c1ccc(-c2ccccc2)cc1
+diphenyl ether,O(c1ccccc1)c1ccccc1
+naphthalene,c1ccc2ccccc2c1
+anthracene,c1ccc2cc3ccccc3cc2c1
+indole,c1ccc2[nH]ccc2c1
+quinoline,c1ccc2ncccc2c1
+imidazole,c1ncc[nH]1
+pyrrole,c1cc[nH]c1
+furan,c1ccoc1
+pyridine,c1ccncc1
+pyrimidine,c1cncnc1
+pyrazine,c1cnccn1
+thiazole,c1cscn1
+vanillin,COc1cc(C=O)ccc1O
+eugenol,COc1cc(CC=C)ccc1O
+guaiacol,COc1ccccc1O
+catechol,Oc1ccccc1O
+resorcinol,Oc1cccc(O)c1
+hydroquinone,Oc1ccc(O)cc1
+phthalic acid,OC(=O)c1ccccc1C(=O)O
+cinnamic acid,OC(=O)C=Cc1ccccc1
+cinnamaldehyde,O=CC=Cc1ccccc1
+coumarin,O=C1Oc2ccccc2C=C1
+sulfanilamide,Nc1ccc(S(N)(=O)=O)cc1
+phenacetin,CCOc1ccc(NC(C)=O)cc1
+glycine,NCC(=O)O
+alanine,CC(N)C(=O)O
+valine,CC(C)CC(N)C(=O)O
+leucine,CC(C)CCC(N)C(=O)O
+phenylalanine,NC(Cc1ccccc1)C(=O)O
+tyrosine,NC(Cc1ccc(O)cc1)C(=O)O
+serine,NC(CO)C(=O)O
+histamine,CNCCc1c[nH]cn1
+dopamine,NCCc1ccc(O)c(O)c1
+acetylcholine,CC[N+](C)(C)CCOC(C)=O
+broken-smiles,not_a_smiles
+unclosed-ring,C1CC

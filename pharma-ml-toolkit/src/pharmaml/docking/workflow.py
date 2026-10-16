@@ -76,6 +76,26 @@ def _require_executable(name: str) -> str:
     return located
 
 
+#: Sentinel AutoDock4 writes at the very end of a healthy ``.dlg`` --
+#: the same string :func:`~pharmaml.docking.parsing.check_docking_completion`
+#: audits per directory.
+_COMPLETION_SENTINEL = "Successful Completion"
+
+
+def _log_complete(log: Path) -> bool:
+    """True when an AutoDock log exists AND carries the completion sentinel.
+
+    A log's *presence* says nothing: interrupted runs leave partial logs
+    behind.  This is the single-file form of the rule
+    :func:`~pharmaml.docking.parsing.check_docking_completion` applies
+    per directory.
+    """
+    if not log.is_file():
+        return False
+    content = log.read_text(encoding="utf-8", errors="ignore")
+    return _COMPLETION_SENTINEL in content
+
+
 def run_autodock4(
     directory: str | Path,
     grid_field: str = "r.gpf",
@@ -101,7 +121,10 @@ def run_autodock4(
     dock_param:
         Docking parameter file basename.
     skip_existing:
-        Reuse existing ``.glg``/``.dlg`` outputs when present.
+        Reuse existing ``.glg`` output when present, and an existing
+        ``.dlg`` only when it carries AutoDock's ``Successful
+        Completion`` sentinel -- an interrupted run is re-run, never
+        trusted just because the file exists.
 
     Returns
     -------
@@ -117,11 +140,16 @@ def run_autodock4(
     dlg = work / "r.dlg"
     started = time.perf_counter()
 
+    def _failure(error: str) -> DockingRunResult:
+        return DockingRunResult(
+            work, False, None, time.perf_counter() - started, error
+        )
+
     if not (skip_existing and glg.is_file()):
         if not (work / grid_field).is_file():
             raise DockingError(f"missing {grid_field} in {work}")
-        autogrid_bin = _require_executable(autogrid)
         try:
+            autogrid_bin = _require_executable(autogrid)
             subprocess.run(
                 [autogrid_bin, "-p", grid_field, "-l", "r.glg"],
                 cwd=work,
@@ -129,14 +157,18 @@ def run_autodock4(
                 capture_output=True,
                 timeout=timeout_s,
             )
+        except DockingError as exc:
+            # missing engine: a clean not-ok result (the batch wrapper
+            # reports it per ligand) instead of an exception mid-run
+            return _failure(str(exc))
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            return DockingRunResult(work, False, None, time.perf_counter() - started, str(exc))
+            return _failure(str(exc))
 
-    if not (skip_existing and dlg.is_file()):
+    if not (skip_existing and _log_complete(dlg)):
         if not (work / dock_param).is_file():
             raise DockingError(f"missing {dock_param} in {work}")
-        autodock_bin = _require_executable(autodock)
         try:
+            autodock_bin = _require_executable(autodock)
             subprocess.run(
                 [autodock_bin, "-p", dock_param, "-l", "r.dlg"],
                 cwd=work,
@@ -144,14 +176,13 @@ def run_autodock4(
                 capture_output=True,
                 timeout=timeout_s,
             )
+        except DockingError as exc:
+            return _failure(str(exc))
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            return DockingRunResult(work, False, None, time.perf_counter() - started, str(exc))
+            return _failure(str(exc))
 
-    if not dlg.is_file():
-        return DockingRunResult(
-            work, False, None, time.perf_counter() - started,
-            "autodock4 produced no .dlg output",
-        )
+    if not _log_complete(dlg):
+        return _failure("autodock4 produced no complete .dlg output")
     return DockingRunResult(
         work, True, dlg, time.perf_counter() - started
     )
@@ -382,7 +413,13 @@ def run_vina_batch(
             "--log", str(log_file),
         ]
         try:
-            subprocess.run(cmd, check=True, capture_output=True, timeout=timeout_s)
+            subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                timeout=timeout_s,
+                cwd=conf.parent,
+            )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             return DockingRunResult(
                 out, False, None, time.perf_counter() - started, str(exc)

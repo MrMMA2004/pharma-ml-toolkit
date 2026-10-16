@@ -11,6 +11,12 @@ from pharmaml.exceptions import DataValidationError
 
 __all__ = ["GenerationResult"]
 
+#: Leaderboard columns ``to_dataframe()`` always provides; a breakdown key
+#: colliding with one of them would silently CLOBBER the column (the
+#: literal ``"score"`` key replacing the total-score column) -- a typed
+#: construction-time error instead.
+_RESERVED_COLUMNS = ("rank", "smiles", "score")
+
 
 @dataclass
 class GenerationResult:
@@ -40,7 +46,8 @@ class GenerationResult:
     DataValidationError
         If ``smiles`` / ``scores`` / ``breakdown`` lengths disagree --
         hand-built results must stay row-aligned like the optimisers'
-        own output.
+        own output -- or a breakdown key collides with a reserved
+        leaderboard column (``"rank"`` / ``"smiles"`` / ``"score"``).
 
     Example
     -------
@@ -82,6 +89,17 @@ class GenerationResult:
         if not self.breakdown:
             # one independent dict per row (a shared ``[{}] * n`` would alias)
             self.breakdown = [{} for _ in range(n)]
+        for entry in self.breakdown:
+            for key in entry:
+                if key in _RESERVED_COLUMNS:
+                    raise DataValidationError(
+                        f"breakdown key {key!r} collides with the reserved "
+                        f"to_dataframe() column {key!r} "
+                        f"({', '.join(map(repr, _RESERVED_COLUMNS))}) -- the "
+                        "breakdown entry would silently clobber the "
+                        "leaderboard column; rename the objective (its "
+                        "``name`` attribute) to a non-reserved key"
+                    )
         if not self.smiles:
             self.best, self.best_score = "", 0.0
         elif not self.best:

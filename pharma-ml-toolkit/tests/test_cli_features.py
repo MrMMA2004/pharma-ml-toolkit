@@ -82,6 +82,38 @@ class TestDataSplitCommand:
         assert code == 1
         assert "error:" in capsys.readouterr().err
 
+    def test_split_refuses_to_overwrite_its_own_input(self, tmp_path, capsys):
+        # 26-R5 defect 1: `data split --data qsar_train.csv --prefix qsar`
+        # used to write the TRAIN side straight into the input file
+        # (20 rows -> 16, exit 0) -- the realistic re-split-your-train-set
+        # workflow destroyed the source data.
+        path = tmp_path / "qsar_train.csv"
+        pd.DataFrame(
+            {"d": range(20), "Target": ["x"] * 10 + ["y"] * 10}
+        ).to_csv(path, index=False)
+        before = path.read_bytes()
+        code = main(["data", "split", "--data", str(path), "--prefix", "qsar"])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "error:" in err
+        assert "refusing to overwrite the input file" in err
+        # the input is untouched and no partial split files were written
+        assert path.read_bytes() == before
+        assert not (tmp_path / "qsar_test.csv").exists()
+
+    def test_split_non_colliding_prefix_writes_normally(self, tmp_path):
+        # the guard is about *collision*, not about splitting per se:
+        # a distinct prefix next to a <stem>_train.csv input still writes.
+        path = tmp_path / "qsar_train.csv"
+        pd.DataFrame(
+            {"d": range(20), "Target": ["x"] * 10 + ["y"] * 10}
+        ).to_csv(path, index=False)
+        code = main(["data", "split", "--data", str(path), "--prefix", "final"])
+        assert code == 0
+        assert (tmp_path / "final_train.csv").is_file()
+        assert (tmp_path / "final_test.csv").is_file()
+        assert len(pd.read_csv(path)) == 20  # input still intact
+
 
 class TestMLTrainCommand:
     def test_alias_resolved_in_output(self, clf_csv, tmp_path, capsys, monkeypatch):
@@ -669,6 +701,18 @@ class TestChemDescriptorsCommand:
         assert weights["CCO"] == pytest.approx(46.07, abs=0.05)
         assert weights["CCN"] == pytest.approx(45.08, abs=0.05)
 
+    def test_missing_smiles_col_exits_1_like_every_other_cli_failure(self, tmp_path, capsys):
+        # 26-R5 defect 2: this was the single CLI failure path that exited 2
+        # while the identical failure class exits 1 everywhere else.
+        csv = self._ligands_csv(tmp_path)
+        code = main(
+            ["chem", "descriptors", "--data", str(csv), "--smiles-col", "nope"]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "error:" in err
+        assert "nope" in err
+
     def test_descriptors_positionally_aligned_for_indexed_frames(
         self, tmp_path, monkeypatch
     ):
@@ -910,3 +954,126 @@ class TestBiologyCommands:
         err = capsys.readouterr().err
         assert "error:" in err
         assert "at most one of --lower-is-sensitive / --higher-is-sensitive" in err
+
+
+class TestCliStderrSingleCopy:
+    """26-R5 defect 6: every CLI failure used to hit stderr TWICE.
+
+    The ``pharmaml`` console logging handler echoed the ``_LOG.error``
+    record AND ``main()`` printed its plain ``error: ...`` line.  A real
+    subprocess run is required -- in-process tests silence logging, and
+    the failure path is exercised exactly as a shell would see it.
+    """
+
+    def test_failure_message_appears_exactly_once_on_stderr(self, tmp_path):
+        import subprocess
+        import sys
+
+        tiny = tmp_path / "tiny.csv"
+        pd.DataFrame({"a": [1, 2]}).to_csv(tiny, index=False)
+        log_file = tmp_path / "cli.log"
+        proc = subprocess.run(
+            [
+                sys.executable, "-m", "pharmaml.cli",
+                "--log-file", str(log_file),
+                "data", "split", "--data", str(tiny),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,  # the failure's exit code is asserted below
+        )
+        assert proc.returncode == 1
+        marker = "too few to split"
+        assert proc.stderr.count(marker) == 1, (
+            "CLI failure message must appear on stderr exactly once:\n"
+            + proc.stderr
+        )
+        # the --log-file handler still records the failure (only the
+        # console echo is suppressed)
+        assert marker in log_file.read_text(encoding="utf-8")
+
+
+class TestOutPathMessagesMatchWrittenFiles:
+    """26-R5 defect 7: success messages must name the file write_table RETURNS.
+
+    ``write_table`` falls back to CSV for unknown extensions (``.dat`` ->
+    ``.csv``), so the CLI used to print paths that were never written.
+    """
+
+    @staticmethod
+    def _activity_csv(tmp_path: Path) -> Path:
+        csv = tmp_path / "act.csv"
+        pd.DataFrame({"IC50 (nM)": [100.0, 500.0]}).to_csv(csv, index=False)
+        return csv
+
+    def test_pic50_out_dat_message_names_written_csv(self, tmp_path, capsys):
+        csv = self._activity_csv(tmp_path)
+        out = tmp_path / "res.dat"
+        code = main(["chem", "pic50", "--data", str(csv), "--out", str(out)])
+        assert code == 0
+        stdout = capsys.readouterr().out
+        assert "res.csv" in stdout
+        assert "res.dat" not in stdout
+        assert (tmp_path / "res.csv").is_file()
+        assert not out.exists()
+
+    def test_descriptors_out_dat_message_names_written_csv(self, tmp_path, capsys):
+        csv = tmp_path / "lig.csv"
+        csv.write_text("smiles\nCCO\nCCN\n", encoding="utf-8")
+        out = tmp_path / "res.dat"
+        code = main(
+            [
+                "chem", "descriptors", "--data", str(csv),
+                "--smiles-col", "smiles", "--out", str(out),
+            ]
+        )
+        assert code == 0
+        stdout = capsys.readouterr().out
+        assert "res.csv" in stdout
+        assert "res.dat" not in stdout
+        assert (tmp_path / "res.csv").is_file()
+
+    def test_docking_scan_out_dat_message_names_written_csv(
+        self, tmp_path, capsys, sample_dlg
+    ):
+        run = tmp_path / "run" / "ligand_01"
+        run.mkdir(parents=True)
+        (run / "r.dlg").write_text(sample_dlg, encoding="utf-8")
+        out = tmp_path / "res.dat"
+        code = main(
+            ["docking", "scan", "--directory", str(tmp_path / "run"), "--out", str(out)]
+        )
+        assert code == 0
+        stdout = capsys.readouterr().out
+        assert "res.csv" in stdout
+        assert "res.dat" not in stdout
+        assert (tmp_path / "res.csv").is_file()
+
+    def test_docking_check_out_dat_message_names_written_csv(
+        self, tmp_path, capsys, sample_dlg
+    ):
+        run = tmp_path / "run" / "ligand_01"
+        run.mkdir(parents=True)
+        (run / "r.dlg").write_text(sample_dlg, encoding="utf-8")
+        out = tmp_path / "res.dat"
+        code = main(
+            ["docking", "check", "--directory", str(tmp_path / "run"), "--out", str(out)]
+        )
+        assert code == 0  # 'Successful Completion' sentinel -> all OK
+        stdout = capsys.readouterr().out
+        assert "res.csv" in stdout
+        assert "res.dat" not in stdout
+        assert (tmp_path / "res.csv").is_file()
+
+
+class TestMlTrainHelp:
+    def test_out_help_is_honest_about_artifacts(self, capsys):
+        # 26-R5 defect 8: --out claimed to be the "artifact output
+        # directory" but only controls plots; the model always lands
+        # under ./artifacts/ (PipelineConfig.output_path).
+        with pytest.raises(SystemExit):
+            main(["ml", "train", "--help"])
+        out = capsys.readouterr().out
+        assert "plots/report output directory" in out
+        assert "always saved under ./artifacts/" in out

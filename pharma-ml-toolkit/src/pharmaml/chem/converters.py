@@ -598,6 +598,14 @@ def sdf_to_table(
     column and every SD property as a typed column (numbers come back
     as numbers via ``GetPropsAsDict``).
 
+    Records that fail to parse are never dropped *silently*: the count
+    is reported with a warning (``"N of M SDF records unparseable and
+    dropped"``) and recorded on ``frame.attrs`` as
+    ``sdf_dropped_records`` / ``sdf_total_records`` so CLI callers can
+    exit non-zero -- the mirror of :func:`table_to_sdf`'s failure
+    accounting (``data convert`` exits 1 on any drop).  A file whose
+    records are *all* unparseable still raises.
+
     Parameters
     ----------
     sdf_path:
@@ -623,13 +631,22 @@ def sdf_to_table(
     if not src.is_file():
         raise DataValidationError(f"SDF file not found: {src}")
     Chem, _AllChem = _require_rdkit()
+    # rdkit-stubs does not re-export DisableLog/EnableLog on rdkit.RDLogger,
+    # but rdBase (their defining module) is fully typed (cf. table_to_sdf).
+    from rdkit.rdBase import DisableLog, EnableLog
 
     rows: list[dict] = []
+    total = 0
+    # RDKit logs parse errors to stderr before returning None; the
+    # warning below is the single typed report (same guard as
+    # table_to_sdf).
+    DisableLog("rdApp.error")
     try:
         supplier = Chem.SDMolSupplier(str(src))
+        total = len(supplier)  # record count, dropped records included
         for mol in supplier:
             if mol is None:
-                continue  # unparseable record: skipped, like the notebook did
+                continue  # unparseable record: dropped, counted below
             row: dict[str, object] = dict(
                 mol.GetPropsAsDict(includePrivate=False, includeComputed=False)
             )
@@ -638,15 +655,24 @@ def sdf_to_table(
             rows.append(row)
     except OSError as exc:
         raise DataValidationError(f"empty or unreadable SDF file: {src}") from exc
+    finally:
+        EnableLog("rdApp.error")
 
     if not rows:
         raise DataValidationError(f"no parseable molecules found in {src}")
+
+    dropped = total - len(rows)
+    if dropped:
+        _LOG.warning("%d of %d SDF records unparseable and dropped", dropped, total)
 
     frame = pd.DataFrame(rows)
     ordered = [smiles_col, "name"] + [
         col for col in frame.columns if col not in (smiles_col, "name")
     ]
     frame = frame[ordered]
+    # Drop accounting for downstream callers (the CLI exits 1 on any drop).
+    frame.attrs["sdf_dropped_records"] = dropped
+    frame.attrs["sdf_total_records"] = total
     _LOG.info("Read %d molecules from %s", len(frame), src)
     if out is not None:
         written = write_table(frame, out)

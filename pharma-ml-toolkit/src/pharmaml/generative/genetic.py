@@ -615,16 +615,44 @@ class GeneticOptimizer:
         Raises
         ------
         DataValidationError
-            If every provided seed molecule is invalid, or the corpus is
-            empty after validity / length filtering.
+            If ``seed_smiles`` / ``corpus`` is a bare string (it would
+            otherwise be iterated as single-atom CHARACTERS), every
+            provided seed molecule is invalid, or the corpus is empty
+            after validity / length filtering.  Invalid corpus entries
+            are dropped with a warning, never silently.
         """
         started = time.perf_counter()
         rng = random.Random(self.seed)
+
+        # A bare string would silently iterate as CHARACTERS ("CCO" ->
+        # ['C', 'C', 'O'] single-atom molecules) -- the exact trap
+        # NoveltyObjective guards against for its corpus, so the same
+        # typed DataValidationError fires here.
+        if seed_smiles is not None and isinstance(seed_smiles, str):
+            raise DataValidationError(
+                "seed_smiles must be a sequence of SMILES strings, not a "
+                f"single string (got {seed_smiles!r} of length "
+                f"{len(seed_smiles)})"
+            )
+        if corpus is not None and isinstance(corpus, str):
+            raise DataValidationError(
+                "corpus must be a sequence of SMILES strings, not a single "
+                f"string (got {corpus!r} of length {len(corpus)})"
+            )
 
         # An explicitly passed *empty* corpus must raise (not silently fall
         # back to the default corpus), so truthiness tricks are off limits.
         pool = list(DEFAULT_CORPUS if corpus is None else corpus)
         n_non_string = sum(1 for s in pool if not isinstance(s, str))
+        if n_non_string:
+            # silent data loss is the failure mode this package refuses:
+            # invalid SEEDS warn, so must non-string corpus entries
+            # (the NoveltyObjective warning, sibling-style).
+            _LOG.warning(
+                "dropping %d non-string corpus entr(ies) -- corpus entries "
+                "must be SMILES strings",
+                n_non_string,
+            )
         pool = [s for s in pool if isinstance(s, str)]
         if not pool:
             raise DataValidationError(
@@ -637,6 +665,17 @@ class GeneticOptimizer:
             canonical = canonical_smiles(smiles)
             if canonical is not None and len(canonical) <= self.max_smiles_length:
                 canonical_pool.append(canonical)
+        n_dropped = len(pool) - len(canonical_pool)
+        if n_dropped:
+            # same sibling-style warning the optimizer already gives for
+            # invalid seeds: dropped entries must not vanish silently
+            _LOG.warning(
+                "dropping %d invalid/unparseable corpus entr(ies) (or over "
+                "the max_smiles_length cap) -- the initial population is "
+                "drawn from the remaining %d valid molecule(s)",
+                n_dropped,
+                len(canonical_pool),
+            )
         # de-duplicate while preserving order: duplicate spellings of the
         # same molecule (e.g. "CCO" and "OCC") must not skew the initial
         # sampling, and a pool with fewer UNIQUE molecules than

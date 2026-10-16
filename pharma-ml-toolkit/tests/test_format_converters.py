@@ -499,3 +499,151 @@ class TestCliDataConvert:
         code = main(["data", "convert", "--data", str(tmp_path / "ghost.csv"), "--to", "sdf"])
         assert code == 1
         assert "error:" in capsys.readouterr().err
+
+
+class TestSdfToTableDroppedRecords:
+    """26-R5 defect 4: unparseable SDF records were dropped silently.
+
+    A 2-record SDF with 1 corrupt record yielded 1 row, NO warning and a
+    CLI exit 0 -- the mirror image of ``table_to_sdf``, which counts and
+    reports every failed row.
+    """
+
+    @staticmethod
+    def _mixed_sdf(tmp_path: Path) -> Path:
+        """One valid ethanol record + one corrupt record."""
+        good = tmp_path / "good.sdf"
+        table_to_sdf(
+            pd.DataFrame({"name": ["ethanol"], "SMILES": [ETHANOL]}),
+            good,
+            name_col="name",
+            embed3d=False,
+        )
+        mixed = tmp_path / "mixed.sdf"
+        mixed.write_text(
+            good.read_text(encoding="utf-8") + "corrupt not-a-molfile\n$$$$\n",
+            encoding="utf-8",
+        )
+        return mixed
+
+    def test_dropped_records_warned_and_counted(self, tmp_path: Path, caplog) -> None:
+        # two silencers must be lifted for caplog (suite convention, cf.
+        # tests/test_descriptors.py::_visible_logs): this module disables
+        # logging at import time and CLI tests set propagate=False on the
+        # pharmaml root logger.
+        prev_disable = logging.root.manager.disable
+        pharma_root = logging.getLogger("pharmaml")
+        prev_propagate = pharma_root.propagate
+        logging.disable(logging.NOTSET)
+        pharma_root.propagate = True
+        try:
+            with caplog.at_level(logging.WARNING, logger="pharmaml.chem.converters"):
+                frame = sdf_to_table(self._mixed_sdf(tmp_path))
+        finally:
+            pharma_root.propagate = prev_propagate
+            logging.disable(prev_disable)
+
+        assert len(frame) == 1
+        assert frame["SMILES"].iloc[0] == ETHANOL  # the valid row survives
+        assert "1 of 2 SDF records unparseable and dropped" in caplog.text
+        assert frame.attrs["sdf_dropped_records"] == 1
+        assert frame.attrs["sdf_total_records"] == 2
+
+    def test_clean_sdf_has_zero_drop_counts(self, ligand_frame: pd.DataFrame, tmp_path: Path) -> None:
+        sdf = tmp_path / "clean.sdf"
+        table_to_sdf(ligand_frame, sdf, embed3d=False)
+        frame = sdf_to_table(sdf)
+        assert len(frame) == 3
+        assert frame.attrs["sdf_dropped_records"] == 0
+        assert frame.attrs["sdf_total_records"] == 3
+
+
+class TestCliDataConvertSdfDrops:
+    """CLI side of 26-R5 defect 4: `data convert` reports drops, exit 1."""
+
+    def test_sdf_to_csv_reports_drop_and_exits_1(self, tmp_path: Path, capsys) -> None:
+        good = tmp_path / "good.sdf"
+        table_to_sdf(
+            pd.DataFrame({"name": ["ethanol"], "SMILES": [ETHANOL]}),
+            good,
+            name_col="name",
+            embed3d=False,
+        )
+        mixed = tmp_path / "mixed.sdf"
+        mixed.write_text(
+            good.read_text(encoding="utf-8") + "corrupt not-a-molfile\n$$$$\n",
+            encoding="utf-8",
+        )
+        out = tmp_path / "back.csv"
+        code = main(
+            ["data", "convert", "--data", str(mixed), "--to", "csv", "--out", str(out)]
+        )
+        assert code == 1
+        captured = capsys.readouterr()
+        assert "1 of 2 SDF records unparseable and dropped" in captured.err
+        # the surviving molecule was still converted
+        assert out.is_file()
+        assert pd.read_csv(out)["SMILES"].iloc[0] == ETHANOL
+
+    def test_sdf_to_smi_reports_drop_and_exits_1(self, tmp_path: Path, capsys) -> None:
+        good = tmp_path / "good.sdf"
+        table_to_sdf(
+            pd.DataFrame({"name": ["ethanol"], "SMILES": [ETHANOL]}),
+            good,
+            name_col="name",
+            embed3d=False,
+        )
+        mixed = tmp_path / "mixed.sdf"
+        mixed.write_text(
+            good.read_text(encoding="utf-8") + "corrupt not-a-molfile\n$$$$\n",
+            encoding="utf-8",
+        )
+        out = tmp_path / "back.smi"
+        code = main(
+            ["data", "convert", "--data", str(mixed), "--to", "smi", "--out", str(out)]
+        )
+        assert code == 1
+        captured = capsys.readouterr()
+        assert "1 of 2 SDF records unparseable and dropped" in captured.err
+        assert out.read_text(encoding="utf-8").splitlines() == [f"{ETHANOL} ethanol"]
+
+    def test_clean_sdf_to_csv_still_exits_0(self, tmp_path: Path, capsys) -> None:
+        # no drop -> the historical exit 0 must be preserved
+        sdf = tmp_path / "clean.sdf"
+        table_to_sdf(pd.DataFrame({"SMILES": [ETHANOL]}), sdf, embed3d=False)
+        out = tmp_path / "back.csv"
+        code = main(
+            ["data", "convert", "--data", str(sdf), "--to", "csv", "--out", str(out)]
+        )
+        assert code == 0
+        assert "unparseable and dropped" not in capsys.readouterr().err
+
+
+class TestCliCsvToCsvGuard:
+    """26-R5 defect 5: csv -> csv rewrote the INPUT in place.
+
+    The same-format guard existed only for smi/sdf; a semicolon CSV was
+    re-serialised with commas straight over the input file (exit 0).
+    """
+
+    def test_csv_to_csv_rejected_input_never_mutated(self, tmp_path: Path, capsys) -> None:
+        euro = tmp_path / "euro.csv"
+        euro.write_text("SMILES;name\nCCO;ethanol\nCCC;propane\n", encoding="utf-8")
+        before = euro.read_bytes()
+        code = main(["data", "convert", "--data", str(euro), "--to", "csv"])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "error:" in err
+        assert "already a CSV file" in err
+        assert euro.read_bytes() == before
+
+    def test_tsv_to_csv_still_converts(self, tmp_path: Path, capsys) -> None:
+        # the guard is suffix-based: a real delimiter change keeps working
+        tsv = tmp_path / "table.tsv"
+        tsv.write_text("SMILES\tname\nCCO\tethanol\n", encoding="utf-8")
+        code = main(["data", "convert", "--data", str(tsv), "--to", "csv"])
+        assert code == 0
+        out = tmp_path / "table.csv"
+        assert out.is_file()
+        frame = pd.read_csv(out)
+        assert list(frame["SMILES"]) == [ETHANOL]

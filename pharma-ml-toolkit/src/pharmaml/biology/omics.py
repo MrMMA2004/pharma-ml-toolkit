@@ -54,8 +54,21 @@ def _numeric_expression(frame: pd.DataFrame) -> pd.DataFrame:
     """Coerce every expression column to numeric dtype, warning per column.
 
     Non-numeric values become NaN after a warning that names the column
-    and the count (round-11/16 semantics: warn, keep NaN).
+    and the count (round-11/16 semantics: warn, keep NaN).  Duplicated
+    gene symbols (duplicate DataFrame columns) raise
+    :class:`DataValidationError` naming the symbols -- pandas operations
+    on duplicate columns would otherwise crash with a raw ``TypeError``
+    deep inside the numeric pipeline.  Every public omics entry point
+    funnels through here, so the check covers them all.
     """
+    duplicated = frame.columns[frame.columns.duplicated()]
+    if not duplicated.empty:
+        symbols = sorted({str(symbol) for symbol in duplicated})
+        raise DataValidationError(
+            f"duplicated gene symbol(s) in the expression columns: {symbols} -- "
+            "each gene must appear exactly once; aggregate or rename the "
+            "duplicates before calling the omics functions"
+        )
     coerced = frame.copy()
     for column in coerced.columns:
         series = coerced[column]
@@ -110,7 +123,8 @@ def normalize_expression(
     DataValidationError
         If the frame holds negative values while ``log_transform`` is
         enabled -- ``log2(x + 1)`` is undefined there.  The message
-        counts the offending cells.
+        counts the offending cells.  Duplicated gene symbols (duplicate
+        DataFrame columns) likewise raise, naming the symbols.
     """
     values = _numeric_expression(frame)
 
@@ -183,7 +197,9 @@ def impute_expression(
     Raises
     ------
     DataValidationError
-        If ``strategy`` is neither ``"median"`` nor ``"mean"``.
+        If ``strategy`` is neither ``"median"`` nor ``"mean"``, or the
+        frame holds duplicated gene symbols (duplicate DataFrame
+        columns).
     """
     if strategy not in ("median", "mean"):
         raise DataValidationError(
@@ -237,7 +253,8 @@ def most_variable_genes(frame: pd.DataFrame, n: int = 500) -> list[str]:
     Raises
     ------
     DataValidationError
-        If ``n`` is smaller than 1.
+        If ``n`` is smaller than 1, or the frame holds duplicated gene
+        symbols (duplicate DataFrame columns).
     """
     if n < 1:
         raise DataValidationError(f"n must be >= 1, got {n}")
@@ -352,7 +369,9 @@ def correlate_with_response(
     DataValidationError
         If ``method`` is unknown, no cell line is shared between the
         two inputs, or either index holds duplicate cell-line labels
-        (the pairing would be ambiguous).
+        (the pairing would be ambiguous).  Duplicated gene symbols in
+        ``expression_frame`` (duplicate DataFrame columns) likewise
+        raise, naming the symbols.
     """
     if method not in _CORRELATION_METHODS:
         raise DataValidationError(

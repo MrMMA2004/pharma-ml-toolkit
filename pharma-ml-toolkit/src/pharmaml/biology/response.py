@@ -87,6 +87,11 @@ def _detect_metric_columns(
     not a measurement.  The rule covers both ``bool`` dtype and an
     ``object`` column holding only ``True``/``False`` (with missing
     entries -- what a csv round-trip of a flag column produces).
+    Datetime columns are excluded in the same spirit: a
+    ``screened_on`` screening date is an annotation, and
+    ``pd.to_numeric`` would otherwise coerce it to ns-epoch integers
+    that masquerade as measurements (the ``datetime64`` dtypes pandas'
+    Excel/parquet readers emit).
     Pass such a column explicitly via ``metrics=[...]`` to treat its
     ``True``/``False`` values as 1/0.
     """
@@ -96,6 +101,8 @@ def _detect_metric_columns(
             continue
         series = frame[column]
         if pd.api.types.is_bool_dtype(series):
+            continue
+        if pd.api.types.is_datetime64_any_dtype(series):
             continue
         if pd.api.types.is_numeric_dtype(series):
             metrics.append(column)
@@ -285,8 +292,10 @@ def load_response_table(
         columns that hold at least one parseable number, so a stray
         string in an otherwise numeric export degrades to NaN instead
         of hiding the whole metric.  Boolean columns (flags like
-        ``msi_status``) are *never* auto-detected; pass one explicitly
-        to have its ``True``/``False`` values treated as 1/0.
+        ``msi_status``) and datetime columns (screening dates) are
+        *never* auto-detected; pass one explicitly to have its
+        ``True``/``False`` values treated as 1/0 (or its datetimes
+        coerced, which is the caller's responsibility).
 
     Returns
     -------
@@ -641,12 +650,23 @@ def summarize_compounds(
     Raises
     ------
     DataValidationError
-        If ``metric`` is not one of the screen's metrics.
+        If ``metric`` is not one of the screen's metrics, or the frame's
+        row index holds duplicated labels -- the positional
+        ``idxmin``/``idxmax`` re-alignment would crash there; call
+        ``screen.frame.reset_index(drop=True)`` (or reload the table)
+        first.
     """
     if metric not in screen.metrics:
         raise DataValidationError(
             f"metric {metric!r} is not part of the screen -- available "
             f"metrics: {list(screen.metrics)}"
+        )
+    if screen.frame.index.has_duplicates:
+        raise DataValidationError(
+            "the screen frame has duplicated row index labels -- "
+            "summarize_compounds aligns its picks by label; call "
+            "screen.frame.reset_index(drop=True) (or reload the table) "
+            "first"
         )
     grouped = screen.frame.groupby(
         screen.compound_col, sort=True, dropna=False

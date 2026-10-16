@@ -20,6 +20,7 @@ from pharmaml.data import (
     DatasetSummary,
     infer_task,
     load_dataset,
+    split_table,
     summarize_dataset,
 )
 from pharmaml.exceptions import DataValidationError
@@ -281,3 +282,84 @@ class TestCli:
         assert code == 0
         out = capsys.readouterr().out
         assert "logistic_regression" in out
+
+
+class TestSplitResultSource:
+    """26-R5 defect 1: ``SplitResult.source`` records where the table came from."""
+
+    def test_source_set_when_path_given(self, tmp_path: Path) -> None:
+        path = tmp_path / "src.csv"
+        _classification_frame(n=20).to_csv(path, index=False)
+        result = split_table(path=path)
+        assert result.source == path
+
+    def test_source_none_for_in_memory_frames(self) -> None:
+        result = split_table(frame=_classification_frame(n=20))
+        assert result.source is None
+
+    def test_write_refuses_to_overwrite_the_input_file(self, tmp_path: Path) -> None:
+        # `write()` resolves every output path against the source BEFORE
+        # writing any of them: a colliding train path (<prefix>_train.csv
+        # == the input itself) raises a typed error and no partial files
+        # appear.
+        path = tmp_path / "demo_train.csv"
+        _classification_frame(n=20).to_csv(path, index=False)
+        before = path.read_bytes()
+        result = split_table(path=path)
+        with pytest.raises(DataValidationError, match="refusing to overwrite the input file"):
+            result.write(tmp_path, prefix="demo")
+        assert path.read_bytes() == before
+        assert not (tmp_path / "demo_test.csv").exists()  # nothing partial
+
+    def test_write_still_works_without_source(self, tmp_path: Path) -> None:
+        # in-memory splits keep the old behaviour: no source, no guard
+        result = split_table(frame=_classification_frame(n=20))
+        paths = result.write(tmp_path, prefix="mem")
+        assert paths["train"].is_file()
+
+
+class TestSplitNanStratifyTargets:
+    """26-R5 defect 3: NaN in a stratify target must be a typed error.
+
+    The class-count guard used NaN-blind ``value_counts``, so sklearn's
+    raw ``ValueError: Input contains NaN`` leaked to callers.
+    """
+
+    def test_object_target_with_nan_raises_typed(self, tmp_path: Path) -> None:
+        path = tmp_path / "gap.csv"
+        frame = pd.DataFrame(
+            {"a": range(40), "Target": ["x"] * 19 + ["y"] * 19 + [None, None]}
+        )
+        frame.to_csv(path, index=False)
+        with pytest.raises(DataValidationError, match="contains 2 NaN value"):
+            split_table(path=path)
+
+    def test_numeric_target_with_nan_raises_typed(self, tmp_path: Path) -> None:
+        path = tmp_path / "gap.csv"
+        frame = pd.DataFrame(
+            {"a": range(40), "Target": [0.0] * 20 + [1.0] * 18 + [np.nan] * 2}
+        )
+        frame.to_csv(path, index=False)
+        with pytest.raises(DataValidationError, match="'Target' contains 2 NaN value"):
+            split_table(path=path)
+
+    def test_regression_target_with_nan_still_splits(self, tmp_path: Path) -> None:
+        # continuous (regression-style) targets skip stratification, so a
+        # few missing endpoint values must NOT block the split
+        path = tmp_path / "reg.csv"
+        values = list(np.linspace(4.0, 9.0, 38)) + [np.nan, np.nan]
+        frame = pd.DataFrame({"x": range(40), "pIC50": values})
+        frame.to_csv(path, index=False)
+        result = split_table(path=path)
+        assert result.stratified is False
+        assert len(result.train) + len(result.test) == 40
+
+    def test_no_stratify_with_nan_target_still_splits(self, tmp_path: Path) -> None:
+        path = tmp_path / "gap.csv"
+        frame = pd.DataFrame(
+            {"a": range(40), "Target": ["x"] * 19 + ["y"] * 19 + [None, None]}
+        )
+        frame.to_csv(path, index=False)
+        result = split_table(path=path, target="Target", stratify=False)
+        assert result.stratified is False
+        assert len(result.train) + len(result.test) == 40

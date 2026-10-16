@@ -1,0 +1,913 @@
+     1→"""CLI-level tests for the new commands and flags.
+     2→
+     3→Exercises ``pharmaml.data split``, ``ml train --plots/--keep-categorical``,
+     4→``ml compare --out/--plot``, model aliases and the docking campaign
+     5→subcommands (``dpf``/``collect``/``torsion``/``gpf-scan``/``vina-scan``)
+     6→through :func:`pharmaml.cli.main` exactly the way a shell would invoke
+     7→them.
+     8→"""
+     9→
+    10→from __future__ import annotations
+    11→
+    12→import json
+    13→import logging
+    14→from pathlib import Path
+    15→
+    16→import numpy as np
+    17→import pandas as pd
+    18→import pytest
+    19→
+    20→from pharmaml.cli import main
+    21→
+    22→logging.disable(logging.CRITICAL)
+    23→
+    24→
+    25→@pytest.fixture()
+    26→def clf_csv(tmp_path) -> str:
+    27→    rng = np.random.default_rng(3)
+    28→    frame = pd.DataFrame(rng.normal(size=(90, 4)), columns=[f"d{i}" for i in range(4)])
+    29→    frame["Target"] = (frame["d0"] + frame["d1"] > 0).astype(int)
+    30→    frame["assay"] = rng.choice(["A", "B"], size=90)
+    31→    path = tmp_path / "clf.csv"
+    32→    frame.to_csv(path, index=False)
+    33→    return str(path)
+    34→
+    35→
+    36→@pytest.fixture()
+    37→def reg_csv(tmp_path) -> str:
+    38→    rng = np.random.default_rng(4)
+    39→    frame = pd.DataFrame(rng.normal(size=(90, 3)), columns=[f"d{i}" for i in range(3)])
+    40→    frame["pIC50"] = 5 + frame["d0"] * 2 - frame["d1"] + rng.normal(scale=0.2, size=90)
+    41→    path = tmp_path / "reg.csv"
+    42→    frame.to_csv(path, index=False)
+    43→    return str(path)
+    44→
+    45→
+    46→class TestDataSplitCommand:
+    47→    def test_split_writes_stratified_files(self, clf_csv, tmp_path, capsys):
+    48→        out_dir = tmp_path / "splits"
+    49→        code = main([
+    50→            "data", "split", "--data", clf_csv,
+    51→            "--test-size", "0.25", "--val-size", "0.15",
+    52→            "--out-dir", str(out_dir), "--prefix", "qsar",
+    53→        ])
+    54→        assert code == 0
+    55→        out = capsys.readouterr().out
+    56→        assert "stratified" in out
+    57→        for side in ("train", "val", "test"):
+    58→            assert (out_dir / f"qsar_{side}.csv").is_file()
+    59→        assert "qsar_train.csv" in out
+    60→
+    61→    def test_split_default_writes_alongside_source(self, clf_csv, capsys):
+    62→        code = main(["data", "split", "--data", clf_csv, "--seed", "7"])
+    63→        assert code == 0
+    64→        source = Path(clf_csv)
+    65→        assert (source.parent / f"{source.stem}_train.csv").is_file()
+    66→        assert (source.parent / f"{source.stem}_test.csv").is_file()
+    67→
+    68→    def test_split_no_stratify_without_target(self, tmp_path, capsys):
+    69→        path = tmp_path / "no_target.csv"
+    70→        pd.DataFrame({"a": range(40), "b": range(40, 80)}).to_csv(path, index=False)
+    71→        code = main([
+    72→            "data", "split", "--data", str(path), "--no-stratify", "--test-size", "0.25",
+    73→        ])
+    74→        assert code == 0
+    75→        out = capsys.readouterr().out
+    76→        assert "unstratified" in out
+    77→
+    78→    def test_split_errors_reported_cleanly(self, tmp_path, capsys):
+    79→        path = tmp_path / "tiny.csv"
+    80→        pd.DataFrame({"a": [1, 2]}).to_csv(path, index=False)
+    81→        code = main(["data", "split", "--data", str(path)])
+    82→        assert code == 1
+    83→        assert "error:" in capsys.readouterr().err
+    84→
+    85→
+    86→class TestMLTrainCommand:
+    87→    def test_alias_resolved_in_output(self, clf_csv, tmp_path, capsys, monkeypatch):
+    88→        monkeypatch.chdir(tmp_path)
+    89→        code = main([
+    90→            "ml", "train", "--data", clf_csv, "--model", "rf",
+    91→            "--no-tune", "--cv", "3", "--out", str(tmp_path / "art"),
+    92→        ])
+    93→        assert code == 0
+    94→        assert "model:    random_forest" in capsys.readouterr().out
+    95→
+    96→    def test_plots_bundle_for_classification(self, clf_csv, tmp_path, capsys, monkeypatch):
+    97→        monkeypatch.chdir(tmp_path)
+    98→        out_dir = tmp_path / "art"
+    99→        code = main([
+   100→            "ml", "train", "--data", clf_csv, "--model", "logistic",
+   101→            "--no-tune", "--cv", "3", "--plots", "--out", str(out_dir),
+   102→        ])
+   103→        assert code == 0
+   104→        out = capsys.readouterr().out
+   105→        assert "plots:" in out and "report.html" in out
+   106→        bundle = out_dir / "report"
+   107→        assert (bundle / "report.html").is_file()
+   108→        for figure in ("confusion_matrix.png", "roc_curves.png",
+   109→                       "class_distribution.png", "feature_importance.png"):
+   110→            assert (bundle / figure).is_file(), figure
+   111→        assert (bundle / "held_out_metrics.csv").is_file()
+   112→        assert (bundle / "class_counts.csv").is_file()
+   113→
+   114→    def test_plots_bundle_for_regression(self, reg_csv, tmp_path, capsys, monkeypatch):
+   115→        monkeypatch.chdir(tmp_path)
+   116→        out_dir = tmp_path / "art"
+   117→        code = main([
+   118→            "ml", "train", "--data", reg_csv, "--model", "ridge",
+   119→            "--no-tune", "--cv", "3", "--plots", "--out", str(out_dir),
+   120→        ])
+   121→        assert code == 0
+   122→        bundle = out_dir / "report"
+   123→        assert (bundle / "report.html").is_file()
+   124→        assert (bundle / "predicted_vs_actual.png").is_file()
+   125→        assert (bundle / "residuals.png").is_file()
+   126→        # regression: no confusion matrix / class distribution
+   127→        assert not (bundle / "confusion_matrix.png").exists()
+   128→
+   129→    def test_keep_categorical_flow(self, clf_csv, tmp_path, capsys, monkeypatch):
+   130→        monkeypatch.chdir(tmp_path)
+   131→        code = main([
+   132→            "ml", "train", "--data", clf_csv, "--model", "rf",
+   133→            "--no-tune", "--cv", "3", "--keep-categorical",
+   134→            "--out", str(tmp_path / "art"),
+   135→        ])
+   136→        assert code == 0
+   137→        # 4 numeric + 1 categorical kept (5 features, not 4)
+   138→        assert "5 features" in capsys.readouterr().out
+   139→
+   140→
+   141→class TestMLCompareCommand:
+   142→    def test_out_and_plot(self, clf_csv, tmp_path, capsys, monkeypatch):
+   143→        monkeypatch.chdir(tmp_path)
+   144→        code = main([
+   145→            "ml", "compare", "--data", clf_csv,
+   146→            "--models", "rf", "logistic", "--cv", "3",
+   147→            "--out", str(tmp_path / "board.csv"),
+   148→            "--plot", "--out-dir", str(tmp_path / "board_report"),
+   149→        ])
+   150→        assert code == 0
+   151→        out = capsys.readouterr().out
+   152→        assert "leaderboard ->" in out and "plot:" in out
+   153→        assert (tmp_path / "board.csv").is_file()
+   154→        report_dir = tmp_path / "board_report"
+   155→        assert (report_dir / "report.html").is_file()
+   156→        assert (report_dir / "model_comparison.png").is_file()
+   157→        assert (report_dir / "leaderboard.csv").is_file()
+   158→
+   159→    def test_keep_categorical_compare(self, clf_csv, capsys, monkeypatch, tmp_path):
+   160→        monkeypatch.chdir(tmp_path)
+   161→        code = main([
+   162→            "ml", "compare", "--data", clf_csv, "--models", "rf",
+   163→            "--cv", "3", "--keep-categorical",
+   164→        ])
+   165→        assert code == 0
+   166→        out = capsys.readouterr().out
+   167→        assert "random_forest" in out
+   168→
+   169→    def test_bad_model_alias_error(self, clf_csv, capsys):
+   170→        code = main(["ml", "compare", "--data", clf_csv, "--models", "not_a_model"])
+   171→        assert code == 1
+   172→        assert "error:" in capsys.readouterr().err
+   173→
+   174→
+   175→class TestInspectShowsCategorical:
+   176→    def test_inspect(self, clf_csv, capsys):
+   177→        code = main(["data", "inspect", "--data", clf_csv, "--head", "2"])
+   178→        assert code == 0
+   179→        out = capsys.readouterr().out
+   180→        assert "dropped cols" in out          # default view drops 'assay'
+   181→        assert "first 2 row(s)" in out
+   182→
+   183→
+   184→class TestDockingCampaignCommands:
+   185→    """Upgrades of the rar campaign scripts exposed as CLI verbs."""
+   186→
+   187→    @staticmethod
+   188→    def _ligand_pdbqt(tmp_path: Path) -> Path:
+   189→        carbon = "ATOM      1  C   LIG A   1       1.000   2.000   3.000  1.00  0.00    0.000 C"
+   190→        oxygen = "ATOM      2  O   LIG A   1       4.000   2.000   3.000  1.00  0.00    0.000 OA"
+   191→        ligand = tmp_path / "l.pdbqt"
+   192→        ligand.write_text(
+   193→            f"REMARK  Name = cli_ligand\nROOT\n{carbon}\n{oxygen}\nENDROOT\nTORSDOF 1"
+   194→            + "\n",
+   195→            encoding="utf-8",
+   196→        )
+   197→        return ligand
+   198→
+   199→    def test_dpf_writes_parameter_file(self, tmp_path, capsys):
+   200→        ligand = self._ligand_pdbqt(tmp_path)
+   201→        code = main(
+   202→            ["docking", "dpf", "--ligand", str(ligand), "--ga-runs", "5"]
+   203→        )
+   204→        assert code == 0
+   205→        out = capsys.readouterr().out
+   206→        assert "dpf ->" in out
+   207→        dpf = tmp_path / "r.dpf"
+   208→        assert dpf.is_file()
+   209→        text = dpf.read_text(encoding="utf-8")
+   210→        assert "ga_run 5" in text
+   211→        assert "ligand_types C OA" in text
+   212→        assert "move l.pdbqt" in text
+   213→
+   214→    def test_dpf_missing_ligand_reports_error(self, tmp_path, capsys):
+   215→        code = main(["docking", "dpf", "--ligand", str(tmp_path / "ghost.pdbqt")])
+   216→        assert code == 1
+   217→        assert "error:" in capsys.readouterr().err
+   218→
+   219→    def test_collect_prints_report(self, tmp_path, capsys):
+   220→        folder = tmp_path / "campaign" / "ligand_01"
+   221→        folder.mkdir(parents=True)
+   222→        (folder / "r.dlg").write_text("dlg", encoding="utf-8")
+   223→        code = main(["docking", "collect", "--dir", str(tmp_path / "campaign")])
+   224→        assert code == 0
+   225→        out = capsys.readouterr().out
+   226→        assert "ligand_01.dlg" in out
+   227→        assert "1 match(es), 1 copied" in out
+   228→        assert (tmp_path / "campaign" / "collected" / "ligand_01.dlg").is_file()
+   229→
+   230→    def test_collect_dry_run_copies_nothing(self, tmp_path, capsys):
+   231→        folder = tmp_path / "campaign" / "ligand_01"
+   232→        folder.mkdir(parents=True)
+   233→        (folder / "r.dlg").write_text("dlg", encoding="utf-8")
+   234→        code = main(
+   235→            ["docking", "collect", "--dir", str(tmp_path / "campaign"), "--dry-run"]
+   236→        )
+   237→        assert code == 0
+   238→        out = capsys.readouterr().out
+   239→        assert "dry run" in out
+   240→        assert not (tmp_path / "campaign" / "collected").exists()
+   241→
+   242→    def test_collect_pattern_mode(self, tmp_path, capsys):
+   243→        folder = tmp_path / "campaign" / "7"
+   244→        folder.mkdir(parents=True)
+   245→        (folder / "7.pdbqt").write_text("ligand", encoding="utf-8")
+   246→        code = main(
+   247→            [
+   248→                "docking", "collect", "--dir", str(tmp_path / "campaign"),
+   249→                "--pattern", r"^\d+\.pdbqt$",
+   250→            ]
+   251→        )
+   252→        assert code == 0
+   253→        assert (tmp_path / "campaign" / "collected" / "7.pdbqt").is_file()
+   254→
+   255→    def test_torsion_prints_audit(self, tmp_path, capsys):
+   256→        ligand = tmp_path / "l.pdbqt"
+   257→        ligand.write_text(
+   258→            "TORSDOF 1\nREMARK torsion: A 1\nBRANCH 1 2\n", encoding="utf-8"
+   259→        )
+   260→        code = main(["docking", "torsion", "--dir", str(tmp_path)])
+   261→        assert code == 0
+   262→        out = capsys.readouterr().out
+   263→        assert "l.pdbqt" in out
+   264→        assert "OK" in out
+   265→
+   266→    def test_gpf_scan_prints_ligand_types(self, tmp_path, sample_ligand_pdbqt, capsys):
+   267→        folder = tmp_path / "ligand_01"
+   268→        folder.mkdir()
+   269→        ligand = folder / "l.pdbqt"
+   270→        ligand.write_text(sample_ligand_pdbqt, encoding="utf-8")
+   271→        from pharmaml.docking import write_gpf
+   272→
+   273→        write_gpf(ligand)
+   274→        code = main(["docking", "gpf-scan", "--dir", str(tmp_path)])
+   275→        assert code == 0
+   276→        out = capsys.readouterr().out
+   277→        assert "ligand_01" in out
+   278→        assert "C HD N OA" in out
+   279→
+   280→    def test_vina_scan_prints_ranking(self, tmp_path, capsys):
+   281→        log = tmp_path / "ligand_x.log"
+   282→        log.write_text(
+   283→            "   1      -10.5          0          0\n"
+   284→            "   2       -9.5      1.000      2.000\n",
+   285→            encoding="utf-8",
+   286→        )
+   287→        code = main(["docking", "vina-scan", "--dir", str(tmp_path)])
+   288→        assert code == 0
+   289→        out = capsys.readouterr().out
+   290→        assert "ligand_x" in out
+   291→        assert "-10.5" in out
+   292→
+   293→    def test_campaign_list_prints_stems_and_writes_csv(self, tmp_path, capsys):
+   294→        for name in ("lig01.csv", "lig02.csv", "notes.txt"):
+   295→            (tmp_path / name).write_text("x", encoding="utf-8")
+   296→        out_csv = tmp_path / "names.csv"
+   297→        code = main(
+   298→            ["docking", "campaign", "list", "--dir", str(tmp_path), "--out", str(out_csv)]
+   299→        )
+   300→        assert code == 0
+   301→        out = capsys.readouterr().out
+   302→        assert "lig01" in out and "lig02" in out
+   303→        assert "2 file stem(s)" in out
+   304→        content = out_csv.read_text(encoding="utf-8").splitlines()
+   305→        assert content[0] == "name"
+   306→        assert "lig01" in content[1:]
+   307→
+   308→    def test_campaign_distribute_copies_into_subdirs(self, tmp_path, capsys):
+   309→        for name in ("ligand_01", "ligand_02"):
+   310→            (tmp_path / name).mkdir()
+   311→        receptor = tmp_path / "receptor.pdbqt"
+   312→        receptor.write_text("ATOM", encoding="utf-8")
+   313→        code = main(
+   314→            ["docking", "campaign", "distribute", "--dir", str(tmp_path),
+   315→             "--file", str(receptor)]
+   316→        )
+   317→        assert code == 0
+   318→        out = capsys.readouterr().out
+   319→        assert "2 cop(y/ies) written" in out
+   320→        assert (tmp_path / "ligand_01" / "receptor.pdbqt").is_file()
+   321→        assert (tmp_path / "ligand_02" / "receptor.pdbqt").is_file()
+   322→        # re-run without --overwrite skips existing copies
+   323→        code = main(
+   324→            ["docking", "campaign", "distribute", "--dir", str(tmp_path),
+   325→             "--file", str(receptor)]
+   326→        )
+   327→        assert code == 0
+   328→        assert "0 cop(y/ies) written" in capsys.readouterr().out
+   329→
+   330→    def test_campaign_cleanup_dry_run_previews_dirs(self, tmp_path, capsys):
+   331→        ligand = tmp_path / "ligand_01"
+   332→        ligand.mkdir()
+   333→        (ligand / "r.dlg").write_text("x", encoding="utf-8")
+   334→        (ligand / "junk.txt").write_text("x", encoding="utf-8")
+   335→        scratch = tmp_path / "scratch"
+   336→        scratch.mkdir()
+   337→        (scratch / "junk.txt").write_text("x", encoding="utf-8")
+   338→        code = main(
+   339→            ["docking", "campaign", "cleanup", "--dir", str(tmp_path),
+   340→             "--keep", "r.dlg", "--remove-empty", "--dry-run"]
+   341→        )
+   342→        assert code == 0
+   343→        out = capsys.readouterr().out
+   344→        assert "removed_dir" in out
+   345→        assert "(dry run)" in out
+   346→        # nothing was deleted
+   347→        assert (scratch / "junk.txt").is_file()
+   348→        assert (ligand / "junk.txt").is_file()
+   349→
+   350→    def test_campaign_cleanup_real_run(self, tmp_path, capsys):
+   351→        ligand = tmp_path / "ligand_01"
+   352→        ligand.mkdir()
+   353→        (ligand / "r.dlg").write_text("x", encoding="utf-8")
+   354→        (ligand / "junk.txt").write_text("x", encoding="utf-8")
+   355→        scratch = tmp_path / "scratch"
+   356→        scratch.mkdir()
+   357→        (scratch / "junk.txt").write_text("x", encoding="utf-8")
+   358→        code = main(
+   359→            ["docking", "campaign", "cleanup", "--dir", str(tmp_path),
+   360→             "--keep", "r.dlg", "--remove-empty"]
+   361→        )
+   362→        assert code == 0
+   363→        assert (ligand / "r.dlg").is_file()
+   364→        assert not (ligand / "junk.txt").exists()
+   365→        assert not scratch.exists()
+   366→
+   367→    def test_campaign_delete_named_counts_and_deletes(self, tmp_path, capsys):
+   368→        for name in ("ligand_01", "ligand_02"):
+   369→            folder = tmp_path / name
+   370→            folder.mkdir()
+   371→            (folder / "r.gpf").write_text("x", encoding="utf-8")
+   372→        code = main(
+   373→            ["docking", "campaign", "delete-named", "--dir", str(tmp_path),
+   374→             "--name", "r.gpf", "--dry-run"]
+   375→        )
+   376→        assert code == 0
+   377→        assert "2 file(s) named 'r.gpf' would be deleted (dry run)" in capsys.readouterr().out
+   378→        assert (tmp_path / "ligand_01" / "r.gpf").is_file()
+   379→        code = main(
+   380→            ["docking", "campaign", "delete-named", "--dir", str(tmp_path), "--name", "r.gpf"]
+   381→        )
+   382→        assert code == 0
+   383→        assert "2 file(s) named 'r.gpf' deleted" in capsys.readouterr().out
+   384→        assert not (tmp_path / "ligand_01" / "r.gpf").exists()
+   385→
+   386→    def test_campaign_reindex_writes_table(self, tmp_path, capsys):
+   387→        import pandas as pd
+   388→
+   389→        src = tmp_path / "results.csv"
+   390→        pd.DataFrame(
+   391→            {
+   392→                "name": ["1_result.dlg", "5_result.dlg", "7_result.dlg"],
+   393→                "best": [-9.1, -10.2, -8.7],
+   394→            }
+   395→        ).to_csv(src, index=False)
+   396→        out_csv = tmp_path / "reindexed.csv"
+   397→        code = main(
+   398→            [
+   399→                "docking", "campaign", "reindex",
+   400→                "--data", str(src), "--column", "name",
+   401→                "--start", "1", "--stop", "10", "--out", str(out_csv),
+   402→            ]
+   403→        )
+   404→        assert code == 0
+   405→        out = capsys.readouterr().out
+   406→        assert "3/10 ligand number(s) present in range 1..10" in out
+   407→        assert "missing numbers: 2, 3, 4, 6, 8, 9, 10" in out
+   408→        assert f"reindexed table -> {out_csv}" in out
+   409→        content = out_csv.read_text(encoding="utf-8").splitlines()
+   410→        assert content[0] == "number,name,best"
+   411→        assert content[1] == "1,1_result.dlg,-9.1"
+   412→        assert content[2] == "2,,"
+   413→        assert content[4] == "4,,"
+   414→        assert content[5] == "5,5_result.dlg,-10.2"
+   415→        assert len(content) == 11  # header + full 1..10 range
+   416→
+   417→    def test_campaign_reindex_stdout_preview_without_out(self, tmp_path, capsys):
+   418→        import pandas as pd
+   419→
+   420→        src = tmp_path / "results.csv"
+   421→        pd.DataFrame({"name": ["2_run.dlg"], "best": [-7.5]}).to_csv(src, index=False)
+   422→        code = main(
+   423→            [
+   424→                "docking", "campaign", "reindex",
+   425→                "--data", str(src), "--column", "name",
+   426→                "--start", "1", "--stop", "3",
+   427→            ]
+   428→        )
+   429→        assert code == 0
+   430→        out = capsys.readouterr().out
+   431→        assert "1/3 ligand number(s) present in range 1..3" in out
+   432→        assert "missing numbers: 1, 3" in out
+   433→        assert "2_run.dlg" in out  # the frame preview itself
+   434→        assert "number" in out
+   435→
+   436→    def test_campaign_reindex_bad_column_reports_error(self, tmp_path, capsys):
+   437→        import pandas as pd
+   438→
+   439→        src = tmp_path / "results.csv"
+   440→        pd.DataFrame({"name": ["1_result.dlg"]}).to_csv(src, index=False)
+   441→        code = main(
+   442→            [
+   443→                "docking", "campaign", "reindex",
+   444→                "--data", str(src), "--column", "bogus",
+   445→            ]
+   446→        )
+   447→        assert code == 1
+   448→        err = capsys.readouterr().err
+   449→        assert "error:" in err
+   450→        assert "bogus" in err
+   451→        assert "available columns" in err
+   452→
+   453→
+   454→class TestChemTableCommands:
+   455→    """`pharmaml chem compare` / `chem merge` surface tables.py in the CLI."""
+   456→
+   457→    def test_compare_prints_buckets_and_writes_report(self, tmp_path, capsys):
+   458→        import pandas as pd
+   459→
+   460→        table_a = tmp_path / "summary.csv"
+   461→        table_b = tmp_path / "library.csv"
+   462→        pd.DataFrame({"Ligand": ["lig1.pdbqt", "LIG2.pdbqt", "lig3.pdbqt"]}).to_csv(
+   463→            table_a, index=False
+   464→        )
+   465→        pd.DataFrame({"Ligand": ["lig2", "lig3", "lig9"]}).to_csv(table_b, index=False)
+   466→        report = tmp_path / "diff.csv"
+   467→        code = main(
+   468→            ["chem", "compare", "--data-a", str(table_a), "--data-b", str(table_b),
+   469→             "--column", "Ligand", "--out", str(report)]
+   470→        )
+   471→        assert code == 0
+   472→        out = capsys.readouterr().out
+   473→        assert "common=2" in out and "only_in_a=1" in out and "only_in_b=1" in out
+   474→        assert "lig1" in out and "lig9" in out
+   475→        assert report.is_file()
+   476→
+   477→    def test_compare_keep_case_flag(self, tmp_path, capsys):
+   478→        import pandas as pd
+   479→
+   480→        table_a = tmp_path / "a.csv"
+   481→        table_b = tmp_path / "b.csv"
+   482→        pd.DataFrame({"Ligand": ["Aspirin"]}).to_csv(table_a, index=False)
+   483→        pd.DataFrame({"Ligand": ["aspirin"]}).to_csv(table_b, index=False)
+   484→        code = main(
+   485→            ["chem", "compare", "--data-a", str(table_a), "--data-b", str(table_b),
+   486→             "--column", "Ligand", "--keep-case", "--keep-extension"]
+   487→        )
+   488→        assert code == 0
+   489→        out = capsys.readouterr().out
+   490→        assert "common=0" in out
+   491→
+   492→    def test_compare_figure_flag_writes_overlap_png(self, tmp_path, capsys):
+   493→        import pandas as pd
+   494→
+   495→        table_a = tmp_path / "summary.csv"
+   496→        table_b = tmp_path / "library.csv"
+   497→        pd.DataFrame({"Ligand": ["lig1.pdbqt", "lig2.pdbqt", "lig3.pdbqt"]}).to_csv(
+   498→            table_a, index=False
+   499→        )
+   500→        pd.DataFrame({"Ligand": ["lig2", "lig3", "lig9"]}).to_csv(table_b, index=False)
+   501→        figure = tmp_path / "overlap.png"
+   502→        code = main(
+   503→            ["chem", "compare", "--data-a", str(table_a), "--data-b", str(table_b),
+   504→             "--column", "Ligand", "--figure", str(figure)]
+   505→        )
+   506→        assert code == 0
+   507→        out = capsys.readouterr().out
+   508→        assert "overlap figure ->" in out and "overlap.png" in out
+   509→        assert figure.is_file() and figure.stat().st_size > 1_000
+   510→        # matplotlib figures must not leak between CLI invocations
+   511→        import matplotlib.pyplot as plt
+   512→
+   513→        assert plt.get_fignums() == []
+   514→
+   515→    def test_merge_writes_merged_output(self, tmp_path, capsys):
+   516→        import pandas as pd
+   517→
+   518→        pd.DataFrame({"SMILES": ["CCO"], "zeta": [1]}).to_csv(
+   519→            tmp_path / "one.csv", index=False
+   520→        )
+   521→        pd.DataFrame({"SMILES": ["CCC"], "alpha": [2]}).to_csv(
+   522→            tmp_path / "two.csv", index=False
+   523→        )
+   524→        out = tmp_path / "merged.csv"
+   525→        code = main(
+   526→            ["chem", "merge", "--dir", str(tmp_path), "--out", str(out),
+   527→             "--first-columns", "SMILES,alpha"]
+   528→        )
+   529→        assert code == 0
+   530→        out_text = capsys.readouterr().out
+   531→        assert "2 rows" in out_text and str(out) in out_text
+   532→        frame = pd.read_csv(out)
+   533→        assert list(frame.columns) == ["SMILES", "alpha", "zeta"]
+   534→
+   535→
+   536→class TestPharmaApprovalsCommand:
+   537→    """`pharmaml pharma approvals` surfaces filter_approved_drugs."""
+   538→
+   539→    def test_approvals_prints_sorted_names(self, tmp_path, capsys):
+   540→        export = tmp_path / "interactions.tsv"
+   541→        export.write_text(
+   542→            "drug\tregulatory approval\nWarfarin\tApproved\nCaffeine\tWithdrawn\n"
+   543→            "Aspirin\tapproved\n",
+   544→            encoding="utf-8",
+   545→        )
+   546→        code = main(
+   547→            ["pharma", "approvals", "--data", str(export)]
+   548→        )
+   549→        assert code == 0
+   550→        out = capsys.readouterr().out
+   551→        assert "2 unique" in out
+   552→        assert out.index("Aspirin") < out.index("Warfarin")
+   553→        assert "Caffeine" not in out
+   554→
+   555→    def test_approvals_multiple_files_and_out(self, tmp_path, capsys):
+   556→        import pandas as pd
+   557→
+   558→        first = tmp_path / "1.tsv"
+   559→        second = tmp_path / "2.tsv"
+   560→        first.write_text("drug\tregulatory approval\nIbuprofen\tApproved\n",
+   561→                         encoding="utf-8")
+   562→        second.write_text("drug\tregulatory approval\nIbuprofen\tApproved\nMetformin\tApproved\n",
+   563→                          encoding="utf-8")
+   564→        out = tmp_path / "approved.csv"
+   565→        code = main(
+   566→            ["pharma", "approvals", "--data", str(first), "--data", str(second),
+   567→             "--out", str(out)]
+   568→        )
+   569→        assert code == 0
+   570→        out_text = capsys.readouterr().out
+   571→        assert "2 unique" in out_text
+   572→        frame = pd.read_csv(out)
+   573→        assert frame["drug"].tolist() == ["Ibuprofen", "Metformin"]
+   574→
+   575→
+   576→class TestPharmaPkCommand:
+   577→    """`pharmaml pharma pk` -- NCA summary straight from a CSV."""
+   578→
+   579→    def test_pk_summary_json(self, tmp_path, capsys):
+   580→        profile = tmp_path / "profile.csv"
+   581→        profile.write_text(
+   582→            "time,conc\n0,10.0\n1,6.0\n2,3.6\n3,2.2\n", encoding="utf-8"
+   583→        )
+   584→        code = main(["pharma", "pk", "--data", str(profile)])
+   585→        assert code == 0
+   586→        payload = json.loads(capsys.readouterr().out)
+   587→        # linear trapezoid: 0.5*(10+6) + 0.5*(6+3.6) + 0.5*(3.6+2.2) = 15.7
+   588→        assert payload["AUC"] == pytest.approx(15.7)
+   589→        assert payload["Cmax"] == pytest.approx(10.0)
+   590→        assert payload["Tmax"] == pytest.approx(0.0)
+   591→
+   592→    def test_pk_out_json_file(self, tmp_path, capsys):
+   593→        profile = tmp_path / "profile.csv"
+   594→        profile.write_text(
+   595→            "time,conc\n0,10.0\n1,6.0\n2,3.6\n3,2.2\n", encoding="utf-8"
+   596→        )
+   597→        out = tmp_path / "summary.json"
+   598→        code = main(
+   599→            ["pharma", "pk", "--data", str(profile), "--out", str(out)]
+   600→        )
+   601→        assert code == 0
+   602→        assert "saved ->" in capsys.readouterr().out
+   603→        payload = json.loads(out.read_text(encoding="utf-8"))
+   604→        assert payload["AUC"] == pytest.approx(15.7)
+   605→
+   606→    def test_pk_non_numeric_concentration_clean_error(self, tmp_path, capsys):
+   607→        # Regression: a text cell ('blq') in the conc column used to surface
+   608→        # as a raw numpy conversion error; it must be a typed message that
+   609→        # names the offending values.
+   610→        messy = tmp_path / "messy.csv"
+   611→        messy.write_text("time,conc\n0,5.0\n1,blq\n2,1.0\n", encoding="utf-8")
+   612→        code = main(["pharma", "pk", "--data", str(messy)])
+   613→        assert code == 1
+   614→        err = capsys.readouterr().err
+   615→        assert "error:" in err
+   616→        assert "numeric" in err
+   617→
+   618→
+   619→class TestPharmaDoseCommand:
+   620→    """`pharmaml pharma dose` -- regimen design from CL/Vd/Css."""
+   621→
+   622→    def test_dose_regimen_output(self, capsys):
+   623→        code = main(
+   624→            [
+   625→                "pharma", "dose",
+   626→                "--cl", "5.0", "--vd", "35.0", "--target-css", "15.0",
+   627→                "--tau", "12.0", "--f", "0.9",
+   628→            ]
+   629→        )
+   630→        assert code == 0
+   631→        out = capsys.readouterr().out
+   632→        # MD = CL*Css*tau/F = 5*15*12/0.9 = 1000; LD = Vd*Css/F = 35*15/0.9.
+   633→        assert "maintenance dose : 1000.00 per 12 h" in out
+   634→        assert "loading dose     : 583.33" in out
+   635→
+   636→    def test_dose_rejects_negative_clearance(self, capsys):
+   637→        code = main(
+   638→            [
+   639→                "pharma", "dose",
+   640→                "--cl", "-5.0", "--vd", "35.0", "--target-css", "15.0",
+   641→            ]
+   642→        )
+   643→        assert code == 1
+   644→        assert "error:" in capsys.readouterr().err
+   645→
+   646→
+   647→class TestChemDescriptorsCommand:
+   648→    """`pharmaml chem descriptors` output alignment (round-19 triage item)."""
+   649→
+   650→    @staticmethod
+   651→    def _ligands_csv(tmp_path: Path) -> Path:
+   652→        csv = tmp_path / "ligands.csv"
+   653→        csv.write_text("smiles\nCCO\nCCN\n", encoding="utf-8")
+   654→        return csv
+   655→
+   656→    def test_descriptors_aligned_with_default_index_csv(self, tmp_path):
+   657→        # PINNING: the plain CSV path (default RangeIndex) is correct.
+   658→        csv = self._ligands_csv(tmp_path)
+   659→        out = tmp_path / "out.csv"
+   660→        code = main(
+   661→            [
+   662→                "chem", "descriptors", "--data", str(csv),
+   663→                "--smiles-col", "smiles", "--out", str(out),
+   664→            ]
+   665→        )
+   666→        assert code == 0
+   667→        frame = pd.read_csv(out)
+   668→        weights = frame.set_index("smiles")["MolWt"]
+   669→        assert weights["CCO"] == pytest.approx(46.07, abs=0.05)
+   670→        assert weights["CCN"] == pytest.approx(45.08, abs=0.05)
+   671→
+   672→    def test_descriptors_positionally_aligned_for_indexed_frames(
+   673→        self, tmp_path, monkeypatch
+   674→    ):
+   675→        # Regression (round-19 triage): compute_descriptors indexes rows by
+   676→        # POSITION in the SMILES column, but the CLI handler joined on the
+   677→        # caller frame's INDEX LABELS -- any frame without a default
+   678→        # RangeIndex silently attached the wrong row's descriptors.
+   679→        csv = self._ligands_csv(tmp_path)
+   680→        indexed = pd.read_csv(csv)
+   681→        indexed.index = [1, 0]  # non-default label/position permutation
+   682→
+   683→        import pharmaml.utils.io as io_module
+   684→
+   685→        monkeypatch.setattr(io_module, "read_table", lambda path: indexed.copy())
+   686→        out = tmp_path / "out.csv"
+   687→        code = main(
+   688→            [
+   689→                "chem", "descriptors", "--data", str(csv),
+   690→                "--smiles-col", "smiles", "--out", str(out),
+   691→            ]
+   692→        )
+   693→        assert code == 0
+   694→        frame = pd.read_csv(out)
+   695→        weights = frame.set_index("smiles")["MolWt"]
+   696→        # CCO (46.07 g/mol) must keep its own descriptors, not CCN's.
+   697→        assert weights["CCO"] == pytest.approx(46.07, abs=0.05)
+   698→        assert weights["CCN"] == pytest.approx(45.08, abs=0.05)
+   699→
+   700→
+   701→class TestBiologyCommands:
+   702→    """`pharmaml biology` verbs: response screens and biomarker discovery."""
+   703→
+   704→    @staticmethod
+   705→    def _screen_csv(tmp_path: Path, name: str = "screen.csv") -> Path:
+   706→        """6 cell lines x 4 compounds, one duplicate pair, one missing value."""
+   707→        import numpy as np
+   708→        import pandas as pd
+   709→
+   710→        rng = np.random.default_rng(17)
+   711→        cells = ["A549", "HCT116", "HL60", "K562", "MCF7", "U87"]
+   712→        compounds = ["cisplatin", "doxorubicin", "erlotinib", "imatinib"]
+   713→        tissue = {"A549": "lung", "HCT116": "colon", "HL60": "haematopoietic",
+   714→                  "K562": "haematopoietic", "MCF7": "breast", "U87": "brain"}
+   715→        rows = [
+   716→            {
+   717→                "cell_line": cell,
+   718→                "compound": compound,
+   719→                "tissue": tissue[cell],
+   720→                "LN_IC50": round(float(rng.uniform(-2.0, 4.0)), 4),
+   721→                "AUC": round(float(rng.uniform(0.1, 1.0)), 4),
+   722→            }
+   723→            for cell in cells
+   724→            for compound in compounds
+   725→        ]
+   726→        frame = pd.DataFrame(rows)
+   727→        extra = frame.iloc[2].copy()  # duplicate (A549, erlotinib)
+   728→        extra["LN_IC50"] = 1.5
+   729→        frame = pd.concat([frame, pd.DataFrame([extra])], ignore_index=True)
+   730→        frame.loc[3, "LN_IC50"] = float("nan")  # one missing value
+   731→        path = tmp_path / name
+   732→        frame.to_csv(path, index=False)
+   733→        return path
+   734→
+   735→    def test_response_audit_prints_summary_audit_and_compounds(
+   736→        self, tmp_path, capsys
+   737→    ):
+   738→        screen_csv = self._screen_csv(tmp_path)
+   739→        code = main(
+   740→            [
+   741→                "biology", "response-audit", "--data", str(screen_csv),
+   742→                "--tissue-column", "tissue", "--metric", "LN_IC50",
+   743→            ]
+   744→        )
+   745→        assert code == 0
+   746→        out = capsys.readouterr().out
+   747→        assert "6 cell line(s) x 4 compound(s)" in out
+   748→        assert "audit:" in out
+   749→        assert "duplicate pairs" in out and "A549 / erlotinib" in out
+   750→        assert "missing metric values" in out
+   751→        assert "per-compound summary (metric 'LN_IC50')" in out
+   752→        assert "sensitive_spread" in out
+   753→        assert "most_sensitive_cell_line" in out
+   754→        for compound in ("cisplatin", "doxorubicin", "erlotinib", "imatinib"):
+   755→            assert compound in out
+   756→
+   757→    def test_response_audit_bad_column_reports_error(self, tmp_path, capsys):
+   758→        screen_csv = self._screen_csv(tmp_path)
+   759→        code = main(
+   760→            ["biology", "response-audit", "--data", str(screen_csv),
+   761→             "--cell-column", "bogus"]
+   762→        )
+   763→        assert code == 1
+   764→        err = capsys.readouterr().err
+   765→        assert "error:" in err
+   766→        assert "bogus" in err
+   767→
+   768→    def test_top_biomarkers_end_to_end_with_planted_gene(
+   769→        self, tmp_path, capsys
+   770→    ):
+   771→        import numpy as np
+   772→        import pandas as pd
+   773→
+   774→        rng = np.random.default_rng(21)
+   775→        cells = [f"CELL{i}" for i in range(10)]
+   776→        genes = ["KRAS", "BRAF", "TP53", "MYC", "ALK", "PTEN", "RB1", "CDKN2A"]
+   777→        expression = pd.DataFrame(
+   778→            rng.normal(50, 10, size=(len(cells), len(genes))), columns=genes
+   779→        )
+   780→        expression.insert(0, "cell_line", cells)
+   781→
+   782→        # planted biomarker: high EGFR <-> high pIC50 (sensitive, pIC50 style)
+   783→        pic50 = pd.Series(rng.uniform(4.0, 8.0, size=len(cells)))
+   784→        expression["EGFR"] = 10.0 + 5.0 * pic50
+   785→        expression_csv = tmp_path / "expression.csv"
+   786→        expression.to_csv(expression_csv, index=False)
+   787→
+   788→        response_rows = []
+   789→        for i, cell in enumerate(cells):
+   790→            response_rows.append(
+   791→                {"cell_line": cell, "compound": "erlotinib",
+   792→                 "pIC50": round(float(pic50.iloc[i]), 4)}
+   793→            )
+   794→            # a second compound that must be filtered out via --compound
+   795→            response_rows.append(
+   796→                {"cell_line": cell, "compound": "sorafenib",
+   797→                 "pIC50": round(float(rng.uniform(4.0, 8.0)), 4)}
+   798→            )
+   799→        response_csv = tmp_path / "response.csv"
+   800→        pd.DataFrame(response_rows).to_csv(response_csv, index=False)
+   801→
+   802→        hits_csv = tmp_path / "hits.csv"
+   803→        code = main(
+   804→            [
+   805→                "biology", "top-biomarkers",
+   806→                "--expression", str(expression_csv),
+   807→                "--response", str(response_csv),
+   808→                "--response-column", "pIC50",
+   809→                "--compound", "erlotinib",
+   810→                "--higher-is-sensitive",
+   811→                "--top", "5",
+   812→                "--out", str(hits_csv),
+   813→            ]
+   814→        )
+   815→        assert code == 0
+   816→        out = capsys.readouterr().out
+   817→        assert "compound : erlotinib (10 cell line(s))" in out
+   818→        # the planted biomarker ranks first and is called sensitive
+   819→        first = out.splitlines()
+   820→        egfr_lines = [line for line in first if line.startswith("EGFR")]
+   821→        assert egfr_lines, "planted EGFR row missing from the CLI output"
+   822→        assert "expression high -> more sensitive" in egfr_lines[0]
+   823→        assert hits_csv.is_file()
+   824→        frame = pd.read_csv(hits_csv)
+   825→        assert frame.iloc[0]["gene"] == "EGFR"
+   826→        assert bool(frame.iloc[0]["significant"])
+   827→        assert "direction" in frame.columns
+   828→        assert len(frame) == 5
+   829→
+   830→    def test_response_audit_reports_missing_identifiers(self, tmp_path, capsys):
+   831→        screen_csv = self._screen_csv(tmp_path)
+   832→        import pandas as pd
+   833→
+   834→        frame = pd.read_csv(screen_csv)
+   835→        frame.loc[0, "cell_line"] = ""   # one row loses its cell-line identifier
+   836→        frame.loc[1, "compound"] = ""    # one row loses its compound identifier
+   837→        missing_csv = tmp_path / "screen_missing_ids.csv"
+   838→        frame.to_csv(missing_csv, index=False)
+   839→        code = main(
+   840→            [
+   841→                "biology", "response-audit", "--data", str(missing_csv),
+   842→                "--tissue-column", "tissue",
+   843→            ]
+   844→        )
+   845→        assert code == 0
+   846→        out = capsys.readouterr().out
+   847→        assert "missing identifier" in out
+   848→        assert "column 'cell_line'" in out
+   849→        assert "column 'compound'" in out
+   850→
+   851→    def test_top_biomarkers_keeps_missing_cell_line_rows_visible(
+   852→        self, tmp_path, capsys
+   853→    ):
+   854→        """A NaN cell-line row must not vanish from the reported panel size.
+   855→
+   856→        The replicate-collapse groupby used pandas' default dropna=True,
+   857→        so rows without a cell-line identifier were dropped silently;
+   858→        they now survive as their own group and the correlation
+   859→        alignment reports them as unmatched.
+   860→        """
+   861→        import numpy as np
+   862→        import pandas as pd
+   863→
+   864→        rng = np.random.default_rng(23)
+   865→        cells = ["A", "B", "C"]
+   866→        expression = pd.DataFrame(
+   867→            rng.normal(50, 5, size=(len(cells), 2)), columns=["G1", "G2"]
+   868→        )
+   869→        expression.insert(0, "cell_line", cells)
+   870→        expression_csv = tmp_path / "expression.csv"
+   871→        expression.to_csv(expression_csv, index=False)
+   872→
+   873→        rows = [
+   874→            {"cell_line": "A", "compound": "d", "pIC50": 1.0},
+   875→            {"cell_line": "A", "compound": "d", "pIC50": 3.0},   # replicate
+   876→            {"cell_line": None, "compound": "d", "pIC50": 9.0},  # no identifier
+   877→            {"cell_line": "B", "compound": "d", "pIC50": 5.0},
+   878→            {"cell_line": "C", "compound": "d", "pIC50": 7.0},
+   879→        ]
+   880→        response_csv = tmp_path / "response.csv"
+   881→        pd.DataFrame(rows).to_csv(response_csv, index=False)
+   882→
+   883→        code = main(
+   884→            [
+   885→                "biology", "top-biomarkers",
+   886→                "--expression", str(expression_csv),
+   887→                "--response", str(response_csv),
+   888→                "--response-column", "pIC50",
+   889→            ]
+   890→        )
+   891→        assert code == 0
+   892→        out = capsys.readouterr().out
+   893→        # 4 response rows survive the collapse (A, NaN, B, C), not 3
+   894→        assert "compound : d (4 cell line(s))" in out
+   895→
+   896→    def test_top_biomarkers_conflicting_direction_flags_error(
+   897→        self, tmp_path, capsys
+   898→    ):
+   899→        screen_csv = self._screen_csv(tmp_path)
+   900→        code = main(
+   901→            [
+   902→                "biology", "top-biomarkers",
+   903→                "--expression", str(screen_csv),
+   904→                "--response", str(screen_csv),
+   905→                "--response-column", "LN_IC50",
+   906→                "--lower-is-sensitive", "--higher-is-sensitive",
+   907→            ]
+   908→        )
+   909→        assert code == 1
+   910→        err = capsys.readouterr().err
+   911→        assert "error:" in err
+   912→        assert "at most one of --lower-is-sensitive / --higher-is-sensitive" in err
+   913→

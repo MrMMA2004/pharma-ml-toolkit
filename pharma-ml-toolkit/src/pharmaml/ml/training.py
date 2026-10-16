@@ -135,8 +135,18 @@ def train_model(
     Returns
     -------
     TrainingResult
+
+    Raises
+    ------
+    ModelError
+        When ``cv < 2`` — the same entry guard ``compare_models`` has;
+        pre-fix ``--no-tune`` silently ignored the value and the tuned
+        path crashed deep inside GridSearchCV with raw sklearn jargon.
     """
     import time
+
+    if isinstance(cv, int) and cv < 2:
+        raise ModelError(f"cv must be >= 2 folds, got {cv}")
 
     estimator = build_model(name, task)
     key = resolve_model_name(name)

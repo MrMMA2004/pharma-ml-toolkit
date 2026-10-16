@@ -373,6 +373,29 @@ class TestScoringObjectives:
         with pytest.raises(DataValidationError, match="non-empty string"):
             SubstructureObjective(" ")
 
+    def test_bool_arguments_are_rejected_like_novelty(self) -> None:
+        # Regression (26-R2): bools ARE ints, so radius=True passed the
+        # numeric guard (silently treated as radius 1) while
+        # NoveltyObjective raised a typed error for the very same input;
+        # LogPBandObjective(False, True) silently became the band [0, 1].
+        # Novelty's exact bool-exclusion pattern now guards every numeric
+        # parameter of the similarity and band objectives.
+        with pytest.raises(DataValidationError, match="radius"):
+            SimilarityObjective(ASPIRIN, radius=True)
+        with pytest.raises(DataValidationError, match="radius"):
+            SimilarityObjective(ASPIRIN, radius=False)
+        with pytest.raises(DataValidationError, match="n_bits"):
+            SimilarityObjective(ASPIRIN, n_bits=True)
+        with pytest.raises(DataValidationError, match="finite number"):
+            LogPBandObjective(False, True)  # used to be the band [0, 1]
+        with pytest.raises(DataValidationError, match="finite number"):
+            MolecularWeightBandObjective(True, 200.0)  # used to be [1, 200]
+        with pytest.raises(DataValidationError, match="finite number"):
+            TpsaBandObjective(True, 40.0)  # used to be [1, 40]
+        # genuine ints keep working
+        assert SimilarityObjective(ASPIRIN, radius=2, n_bits=2048).score(ASPIRIN) == 1.0
+        assert LogPBandObjective(0, 2).score("CCO") > 0.0
+
     def test_multi_objective_constructor_errors(self) -> None:
         with pytest.raises(DataValidationError, match="at least two"):
             MultiObjective([QedObjective()], weights=[1.0])
@@ -438,6 +461,63 @@ class TestScoringObjectives:
 
         with pytest.raises(DataValidationError, match="non-numeric score"):
             MultiObjective([QedObjective(), NoneObjective()]).score(ASPIRIN)
+
+    def test_multi_objective_reset_stats_resets_children(self) -> None:
+        # Regression (26-R2): reset_stats() zeroed the combinator's own
+        # counters but left the children counting -- n_invalid (a sum over
+        # the children) stayed at 4 while n_scored went 0.
+        multi = MultiObjective([QedObjective(), LogPBandObjective(1.0, 3.0)])
+        for _ in range(2):
+            multi.score(INVALID)
+        assert multi.n_scored == 2
+        assert multi.n_invalid == 4  # both children saw 2 invalid inputs
+        multi.reset_stats()
+        assert multi.n_scored == 0
+        assert multi.n_invalid == 0
+        assert [child.n_invalid for child in multi.objectives] == [0, 0]
+        # duck-typed children without counters are skipped, not crashed on
+        class DuckObjective:
+            name = "duck"
+
+            def score(self, smiles: str) -> float:
+                return 0.5
+
+        duck_multi = MultiObjective([QedObjective(), DuckObjective()])
+        duck_multi.score(INVALID)
+        assert duck_multi.n_invalid == 1  # only the counting child
+        duck_multi.reset_stats()  # must not raise
+        assert duck_multi.n_invalid == 0
+
+    def test_multi_objective_extreme_weights_compute_in_log_space(self) -> None:
+        # Regression (26-R2): the weighted geometric mean multiplied in
+        # LINEAR space -- weights [2000, 2000] underflowed prod(v**w) to
+        # 0.0 (children 0.5/0.5 -> 0.0!), [1e308, 1e308] overflowed the
+        # exponent sum to inf and fabricated a perfect 1.0 (0.0 ** 0.0),
+        # and mixed [1e307, 1e308] collapsed to 0.0 (expected ~0.767).
+        # Log-space with math.fsum and max-rescaled weights (only ratios
+        # matter) computes all three; v <= 0 still short-circuits to 0.
+        class FixedObjective:
+            def __init__(self, key: str, value: float) -> None:
+                self.name = key
+                self._value = value
+
+            def score(self, smiles: str) -> float:
+                return self._value
+
+        def total(weights: list[float], values: list[float]) -> float:
+            return MultiObjective(
+                [FixedObjective("a", values[0]), FixedObjective("b", values[1])],
+                weights=weights,
+            ).score("CCO")
+
+        assert total([2000.0, 2000.0], [0.5, 0.5]) == pytest.approx(0.5, rel=1e-12)
+        assert total([1e308, 1e308], [0.5, 0.5]) == pytest.approx(0.5, rel=1e-12)
+        # 0.5 ** (1/11) * 0.8 ** (10/11), probed: 0.7665378865
+        assert total([1e307, 1e308], [0.5, 0.8]) == pytest.approx(
+            0.5 ** (1 / 11) * 0.8 ** (10 / 11), rel=1e-9
+        )
+        # the zero-score veto survives the rewrite
+        assert total([1.0, 1.0], [0.0, 0.8]) == 0.0
 
     def test_rdkit_absent_raises_dependency_error(self, monkeypatch) -> None:
         _hide_rdkit(monkeypatch)
@@ -534,6 +614,47 @@ class TestGeneticOptimizer:
                 QedObjective(), population_size=16, generations=2, seed=5
             ).optimize(corpus=[])
 
+    def test_invalid_corpus_entries_warn_when_dropped(self, caplog) -> None:
+        # Regression (26-R2): unparseable and non-string corpus entries
+        # vanished SILENTLY (silent data loss) while invalid SEEDS always
+        # warned -- the corpus must warn too, sibling-style.  20 valid
+        # entries + 4 garbage: the warnings fire and the population draws
+        # only from the surviving valid pool.
+        import logging as _logging
+
+        # the suite's two-silencer caplog pattern (cf.
+        # TestNoveltyObjective.test_non_string_corpus_entries_warn_when_dropped)
+        prev_disable = _logging.root.manager.disable
+        pharma_root = _logging.getLogger("pharmaml")
+        prev_propagate = pharma_root.propagate
+        _logging.disable(_logging.NOTSET)
+        pharma_root.propagate = True
+        try:
+            with caplog.at_level(
+                _logging.WARNING, logger="pharmaml.generative.genetic"
+            ):
+                result = GeneticOptimizer(
+                    QedObjective(), population_size=16, generations=1, seed=1
+                ).optimize(
+                    corpus=[*DEFAULT_CORPUS[:20], INVALID, "(((((", "@@@", 123]
+                )
+        finally:
+            pharma_root.propagate = prev_propagate
+            _logging.disable(prev_disable)
+        warnings_seen = [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelno == _logging.WARNING
+        ]
+        assert any(
+            "invalid" in message and "corpus" in message for message in warnings_seen
+        ), warnings_seen
+        assert any("non-string" in message for message in warnings_seen), warnings_seen
+        # generation 0 is scored before any evolution, so every produced
+        # molecule is a member of the valid pool
+        valid_pool = set(DEFAULT_CORPUS[:20])
+        assert result.smiles and set(result.smiles) <= valid_pool
+
     def test_tiny_corpus_is_duplicated_not_hung(self) -> None:
         # Regression: a corpus with fewer unique molecules than
         # population_size used to spin FOREVER in the unique-fill loop
@@ -572,6 +693,25 @@ class TestGeneticOptimizer:
             GeneticOptimizer(
                 QedObjective(), population_size=8, generations=1, seed=1
             ).optimize(corpus=[None, 123, b"CCO"])
+
+    def test_bare_string_seed_smiles_is_a_typed_error(self) -> None:
+        # Regression (26-R2): seed_smiles="CCO" silently iterated
+        # CHARACTERS (['C', 'C', 'O'] single-atom seed molecules) -- the
+        # exact trap NoveltyObjective guards against for its corpus.  The
+        # same typed DataValidationError fires now.
+        with pytest.raises(DataValidationError, match="sequence of SMILES"):
+            GeneticOptimizer(
+                QedObjective(), population_size=8, generations=1, seed=1
+            ).optimize(seed_smiles="CCO")
+
+    def test_bare_string_corpus_is_a_typed_error(self) -> None:
+        # Regression (26-R2): corpus="CCO" silently built a corpus of the
+        # single atoms C, C, O -- the run's best molecule was literally
+        # 'C'.  Same typed error as NoveltyObjective.
+        with pytest.raises(DataValidationError, match="sequence of SMILES"):
+            GeneticOptimizer(
+                QedObjective(), population_size=8, generations=1, seed=1
+            ).optimize(corpus="CCO")
 
     def test_seeds_exceeding_population_are_all_scored(self) -> None:
         # Disclosed pinning test (behaviour documented in 100x-21-b): more
@@ -786,6 +926,38 @@ class TestSmilesRnn:
         # boundary seeds sample fine
         assert len(trained_prior.sample(2, seed=2**63)) == 2
 
+    def test_boundary_seed_derived_generators_wrap(self) -> None:
+        # Regression (26-R2): the shuffle generator (seed + 1) and the
+        # persistent sampler (seed + 2) escaped the validated interval at
+        # its upper edge -- SmilesRnn(seed=2**64 - 1).train_prior(...)
+        # crashed with torch's RAW "ValueError: Overflow when unpacking
+        # long long".  Derived seeds wrap back into the interval; sums that
+        # stay inside keep their exact historic value (determinism).
+        from pharmaml.generative.rnn import _derived_seed
+
+        # historic in-range sums keep their exact value
+        assert _derived_seed(41, 1) == 42
+        assert _derived_seed(40, 2) == 42
+        assert _derived_seed(-(2**63), 1) == -(2**63) + 1
+        # escaping sums wrap back into the torch-encodable interval
+        assert _derived_seed(2**64 - 1, 1) == -(2**63)
+        assert _derived_seed(2**64 - 1, 2) == -(2**63) + 1
+        for derived in (_derived_seed(2**64 - 1, 1), _derived_seed(2**64 - 1, 2)):
+            assert -(2**63) <= derived <= 2**64 - 1
+
+        # end-to-end at the upper boundary: train + sample on BOTH the
+        # persistent-generator (seed + 2) and explicit-seed paths
+        first = SmilesRnn(hidden_dim=32, seed=2**64 - 1)
+        losses = first.train_prior(["CCO", "CCN"], epochs=1)
+        assert len(losses) == 1 and losses[0] > 0
+        sampled = first.sample(4, seed=None)
+        assert len(sampled) == 4
+        assert len(first.sample(2, seed=2**64 - 1)) == 2
+        # determinism on the wrapped path
+        second = SmilesRnn(hidden_dim=32, seed=2**64 - 1)
+        second.train_prior(["CCO", "CCN"], epochs=1)
+        assert second.sample(4, seed=None) == sampled
+
     def test_train_prior_argument_validation(self, trained_prior) -> None:
         with pytest.raises(DataValidationError, match="empty"):
             trained_prior.train_prior([])
@@ -904,6 +1076,45 @@ class TestReinventOptimizer:
         means = [entry["mean_score"] for entry in result.history]
         assert sum(means[-3:]) / 3 > means[0]
 
+    def test_rl_improves_mean_over_a_tiny_corpus(self) -> None:
+        # Sanity requirement of the 26-R2 baseline fix: with the running
+        # baseline actually live (no per-batch mean cancellation), a QED
+        # run over a tiny corpus must still IMPROVE the objective (probed:
+        # mean climbs 0.000 -> ~0.15, best reaches ~0.51 in 12 iterations).
+        result = ReinventOptimizer(
+            QedObjective(), corpus=list(DEFAULT_CORPUS[:24]), prior_epochs=12,
+            iterations=12, batch_size=16, seed=42,
+        ).optimize()
+        means = [entry["mean_score"] for entry in result.history]
+        assert sum(means[-3:]) / 3 > means[0]
+
+    def test_injected_baseline_changes_the_run(self, trained_prior, monkeypatch) -> None:
+        # Regression (26-R2): the advertised "REINFORCE with a running
+        # baseline" was mathematically inert -- per-batch standardisation
+        # ((a - mean(a)) / std(a)) cancels ANY baseline exactly, so no
+        # baseline value could ever influence a run.  The rl._BASELINE_INIT
+        # seam proves the fix: injecting 0.5 vs the None default (seeded
+        # from the first batch's mean) must produce different losses and
+        # histories.
+        from pharmaml.generative import rl as rl_module
+
+        config = {"prior": trained_prior, "iterations": 3, "batch_size": 16, "seed": 7}
+        monkeypatch.setattr(rl_module, "_BASELINE_INIT", None)
+        default_run = ReinventOptimizer(QedObjective(), **config).optimize()
+        monkeypatch.setattr(rl_module, "_BASELINE_INIT", 0.5)
+        injected_run = ReinventOptimizer(QedObjective(), **config).optimize()
+
+        assert [entry["loss"] for entry in default_run.history] != [
+            entry["loss"] for entry in injected_run.history
+        ]
+        assert [entry["mean_score"] for entry in default_run.history] != [
+            entry["mean_score"] for entry in injected_run.history
+        ]
+        # both runs stay healthy: finite losses, in-range scores
+        for run in (default_run, injected_run):
+            assert all(math.isfinite(entry["loss"]) for entry in run.history)
+            assert all(0.0 <= score <= 1.0 for score in run.scores)
+
     def test_rl_is_deterministic_given_seed(self, trained_prior) -> None:
         config = {"prior": trained_prior, "iterations": 3, "batch_size": 16, "seed": 7}
         first = ReinventOptimizer(QedObjective(), **config).optimize()
@@ -949,6 +1160,27 @@ class TestReinventOptimizer:
             ReinventOptimizer(
                 QedObjective(), corpus=[], iterations=1, batch_size=8
             ).optimize()
+
+    def test_bare_string_corpus_is_a_typed_error(self) -> None:
+        # Regression (26-R2): corpus="CCO" silently trained the prior on
+        # the single atoms C, C, O -- the run's best molecule was 'C'.
+        # The same typed DataValidationError NoveltyObjective raises for
+        # bare strings guards the RL corpus at construction time.
+        with pytest.raises(DataValidationError, match="sequence of SMILES"):
+            ReinventOptimizer(QedObjective(), corpus="CCO", iterations=1)
+
+    def test_boundary_master_seed_runs_end_to_end(self) -> None:
+        # Regression (26-R2): seed=2**64 - 1 crashed the WHOLE RL run with
+        # torch's raw overflow (the on-the-fly prior's shuffle generator is
+        # seeded with seed + 1 inside train_prior).  Derived seeds wrap
+        # now, so both interval boundaries run end-to-end.
+        for seed in (2**64 - 1, -(2**63)):
+            result = ReinventOptimizer(
+                QedObjective(), corpus=["CCO", "CCN", "CCS"],
+                iterations=2, batch_size=8, prior_epochs=1, seed=seed,
+            ).optimize()
+            assert len(result) > 0
+            assert result.metadata["seed"] == seed
 
     def test_corpus_is_ignored_when_a_prior_is_given(self, trained_prior) -> None:
         # Documented contract: "corpus ... ignored when prior is given" --
@@ -1068,6 +1300,24 @@ class TestGenerationResult:
         frame = result.to_dataframe()
         assert list(frame.columns) == ["rank", "smiles", "score", "qed", "logp"]
         assert frame["logp"].isna().tolist() == [False, True]
+
+    def test_breakdown_keys_colliding_with_reserved_columns_raise(self) -> None:
+        # Regression (26-R2): a breakdown key literally named "score" (or
+        # "rank" / "smiles") silently CLOBBERED the leaderboard column in
+        # to_dataframe() -- the total-score column showed the breakdown
+        # value instead.  Reserved collisions are typed errors at
+        # construction now, with a rename suggestion.
+        for reserved in ("rank", "smiles", "score"):
+            with pytest.raises(DataValidationError, match="reserved"):
+                GenerationResult(
+                    smiles=["CCO"], scores=[0.5], breakdown=[{reserved: 0.123}]
+                )
+        # non-colliding keys keep working, and the score column keeps
+        # showing the TOTAL score
+        result = GenerationResult(
+            smiles=["CCO"], scores=[0.5], breakdown=[{"qed": 0.5}]
+        )
+        assert result.to_dataframe()["score"].tolist() == [0.5]
 
     def test_empty_breakdown_rows_are_independent_dicts(self) -> None:
         # Regression: the default used a shared ``[{}] * n`` list, so

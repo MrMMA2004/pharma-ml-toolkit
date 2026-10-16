@@ -203,7 +203,11 @@ class _BandObjective(ScoringObjective):
     def __init__(self, lo: float, hi: float, what: str) -> None:
         super().__init__()
         for bound, label in ((lo, "lo"), (hi, "hi")):
-            if not isinstance(bound, (int, float)) or not math.isfinite(bound):
+            if (
+                not isinstance(bound, (int, float))
+                or isinstance(bound, bool)
+                or not math.isfinite(bound)
+            ):
                 raise DataValidationError(
                     f"{what} band bound {label}={bound!r} must be a finite number"
                 )
@@ -343,9 +347,11 @@ class SimilarityObjective(ScoringObjective):
             raise DataValidationError(
                 f"seed_smiles {seed_smiles!r} is not a parseable SMILES"
             )
-        if not isinstance(radius, int) or radius < 0:
-            raise DataValidationError(f"radius must be a non-negative int, got {radius!r}")
-        if not isinstance(n_bits, int) or n_bits < 32:
+        if not isinstance(radius, int) or isinstance(radius, bool) or radius < 0:
+            raise DataValidationError(
+                f"radius must be a non-negative int, got {radius!r}"
+            )
+        if not isinstance(n_bits, int) or isinstance(n_bits, bool) or n_bits < 32:
             raise DataValidationError(f"n_bits must be an int >= 32, got {n_bits!r}")
         # The modern generator API: bit-identical to the classic
         # ``GetMorganFingerprintAsBitVect`` but without its per-call
@@ -635,6 +641,20 @@ class MultiObjective(ScoringObjective):
             )
         )
 
+    def reset_stats(self) -> None:
+        """Zero the counters of the combinator AND its children.
+
+        A ``reset_stats`` that left the children counting made the summed
+        ``n_invalid`` outlive the reset (4 while ``n_scored`` went 0).
+        Duck-typed children without the method are skipped, not crashed
+        on.
+        """
+        super().reset_stats()
+        for objective in self.objectives:
+            reset = getattr(objective, "reset_stats", None)
+            if callable(reset):
+                reset()
+
     def score_with_breakdown(self, smiles: str) -> tuple[float, dict[str, float]]:
         """Return ``(total, {objective_name: score})``.
 
@@ -666,11 +686,19 @@ class MultiObjective(ScoringObjective):
             breakdown[key] = value
         if any(value <= 0.0 for value in breakdown.values()):
             return 0.0, breakdown
-        exponent = sum(self.weights)
-        total = 1.0
-        for value, weight in zip(breakdown.values(), self.weights):
-            total *= value**weight
-        total = total ** (1.0 / exponent)
+        # Weighted geometric mean in LOG space: the linear-space product
+        # ``prod(v ** w)`` underflows to 0.0 long before the weights get
+        # extreme (weights [2000, 2000] scored 0.5/0.5 as 0.0) and the
+        # exponent sum overflows to inf ([1e308, 1e308] fabricated a
+        # perfect 1.0 via ``0.0 ** 0.0``).  Only weight RATIOS matter, so
+        # rescale by the max weight; math.fsum keeps the log-sum exact.
+        max_weight = max(self.weights)
+        log_total = math.fsum(
+            math.log(value) * (weight / max_weight)
+            for value, weight in zip(breakdown.values(), self.weights)
+        )
+        weight_sum = math.fsum(weight / max_weight for weight in self.weights)
+        total = math.exp(log_total / weight_sum)
         return float(min(max(total, 0.0), 1.0)), breakdown
 
     def score(self, smiles: str) -> float:

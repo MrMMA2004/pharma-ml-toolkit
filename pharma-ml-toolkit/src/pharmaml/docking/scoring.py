@@ -210,7 +210,13 @@ def consensus_rescore(
         span = values.max() - values.min()
         if span == 0:
             _LOG.warning("column %r has zero variance; scoring it as 0.5", col)
-            normalised.append(pd.Series(0.5, index=frame.index))
+            # The neutral 0.5 must honour the NaN policy too: rows whose
+            # value in THIS column is NaN/inf stay NaN (the warning above
+            # promises "their consensus rows will be NaN"), instead of
+            # inheriting a bogus scored 0.5.
+            normalised.append(
+                pd.Series(0.5, index=frame.index).where(values.notna())
+            )
             continue
         unit = (values - values.min()) / span
         if not direction.get(col, not col.endswith(("energy", "affinity"))):

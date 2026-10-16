@@ -260,6 +260,10 @@ def _clean_records(
         residue_key = _parse_resseq_key(line)
         atom_key = (residue_key, line[12:16].strip())
         if altloc != " ":
+            # "first": the residue's first-seen letter; otherwise the
+            # requested letter (a str by the public API's validation --
+            # mypy cannot narrow ``not in (None, "first")`` to str).
+            chosen: str | None
             if default_altloc in (None, "first"):
                 chosen = residue_letters.setdefault(residue_key, altloc)
             else:

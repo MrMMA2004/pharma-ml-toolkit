@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1134 tests).
+exceptions, input validation, and pytest coverage** (1277 tests).
 
 ---
 
@@ -25,8 +25,11 @@ exceptions, input validation, and pytest coverage** (1134 tests).
   (RDKit, Mordred, XGBoost/LightGBM/CatBoost, Meeko, gemmi) is **optional and lazily imported**;
   missing packages raise an informative `DependencyError` instead of crashing at import time.
 * **Runs anywhere**: local, Docker (`Dockerfile` included), or CI (GitHub Actions workflow included).
-* **Deterministic examples**: all example scripts run on synthetic data with fixed seeds — no
-  external datasets required.
+* **Deterministic examples**: the executed notebooks run entirely on the shipped
+  `examples/data/` inventory (43 files — every input table, the demo receptor and the demo
+  docking campaign; see the tree below), regenerated deterministically by
+  `scratch/build_example_data.py`; the example scripts keep their fixed seeds — no external
+  datasets required.
 * **Safety**: pharmaceutical functions validate every input (positive doses, ordered time series,
   bounded fractions) and raise `DataValidationError` on bad values rather than returning nonsense.
 * **Docs stay in sync with code**: `docs/INDEX.md` is auto-generated from each module's `__all__`
@@ -90,9 +93,36 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1134 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 1277 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
-│   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain) + seed_molecules.csv — 12 named drugs for generative seeding
+│   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
+│                            #   loads its inputs from here (never fabricates sample data);
+│                            #   regenerate deterministically via scratch/build_example_data.py
+│       ├── qsar_classification.csv        # ML §1      420 × 11 (active 118 / weak 155 / inactive 147)
+│       ├── screening_library.csv          # ML §2       79-row SMILES library (77 valid + 2 planted invalid)
+│       ├── library_with_descriptors.csv   # ML §3       77 × 10 (8 key descriptors + activity)
+│       ├── qsar_multiclass.csv            # ML §8      360 × 21 (inactive 125 / weak 102 / moderate 79 / strong 54)
+│       ├── qsar_regression.csv            # ML §9      260 × 21, continuous pIC50 endpoint
+│       ├── cellline_screen.csv            # cellline §1 185 rows: 23 cell lines × 8 compounds across 11 tissues
+│       │                                  #   (+1 duplicate pair, +1 missing value to audit)
+│       ├── cellline_expression.csv        # cellline §6 23 × 300 expression matrix (EGFR/KRT8 markers planted)
+│       ├── pk_profile.csv                 # PK §1       49 samples, t = 0..24 h (AUC lin 17.9607 / log 17.2536)
+│       ├── ligand_library.csv             # docking §1  10 rows (8 valid + 2 planted invalid)
+│       ├── lysozyme_1aki.pdb              # docking §2  real lysozyme, RCSB entry 1AKI (public domain)
+│       ├── docking_campaign/              # docking §6  14 folders: 12 complete runs (r.dlg cluster table
+│       │                                  #   + r.glg each) + 2 planted audit cases + ligands.csv manifest
+│       │       ├── 08_benzocaine/         #   MISSING_LOG case — README only, the log was lost
+│       │       ├── 10_nicotine/           #   INCOMPLETE case — interrupted before clustering
+│       │       └── ligands.csv            #   14-row (name, SMILES) manifest mapping folders to structures
+│       ├── seed_molecules.csv             # generative §1b  12 named drugs for seeding (443 B, pinned)
+│       ├── walkthrough_compounds.csv      # walkthrough  180 × 8 (active 39 / inactive 88 / weak 53)
+│       ├── walkthrough_classification.csv # walkthrough  300 × 9 binary target
+│       └── walkthrough_multiclass.csv     # walkthrough  300 × 9, 3 classes
+│                            # Provenance: every file is byte-identical to what the corresponding
+│                            #   notebook cell originally generated (same seeds, same code path — see
+│                            #   the map in scratch/build_example_data.py). PDBs come from RCSB entries
+│                            #   1AKI/1CRN (public domain; tests/data/1crn.pdb is the second one) and
+│                            #   are re-downloaded only when missing.
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
 ├── Dockerfile
@@ -129,7 +159,8 @@ walkthrough — a full virtual-screening campaign that now starts from the two
 data-entry stages (CSV and PDB in), executed end-to-end without a docking engine
 (the demo campaign tree uses the real AutoDock4 `.dlg` format):
 
-> §1 ligand-library import (`load_ligand_csv` on a 10-row demo `ligands.csv` —
+> §1 ligand-library import (`load_ligand_csv` on the shipped
+> `examples/data/ligand_library.csv` — 10 rows, 8 valid + 2 planted invalid;
 > SMILES column auto-detected, RDKit validation, invalid rows exported to
 > `failed_smiles.csv`, then `prepare_ligand_library` builds the folder-per-ligand
 > campaign tree) → §2 protein import & preparation (`prepare_protein` on a real
@@ -137,7 +168,8 @@ data-entry stages (CSV and PDB in), executed end-to-end without a docking engine
 > `distribute_receptor` copies it into every ligand folder) → §3 ligand
 > preparation (SMILES → 3D PDBQT via Meeko) → §4 grid box + GPF/DPF → §5 running
 > the engines (AutoDock4 / Vina, guarded failures) → §6 parsing (cluster tables,
-> completion audit, campaign scan, idempotent batch re-run) → §7 torsion QA &
+> completion audit, campaign scan, idempotent batch re-run — on a scratch copy of
+> the shipped 14-folder `examples/data/docking_campaign/` demo) → §7 torsion QA &
 > campaign housekeeping (tree-wide TORSDOF/BRANCH audit with one deliberate
 > mismatch, plus dry-run collect/cleanup/distribute/delete previews) → §8 Vina
 > pose tables → §9 rescoring (ligand efficiency + consensus) → §10
@@ -179,8 +211,10 @@ the twins' cell sources to the executed originals.
 ### The complete cell line process in one notebook
 
 `examples/complete_cellline_workflow.ipynb` — the cell line zero-to-one-hundred
-walkthrough, executed with all outputs committed (24 cell lines, 8 compounds,
-300 genes, planted structure that the analysis genuinely recovers):
+walkthrough, executed with all outputs committed (23 cell lines across 11 tissues,
+8 compounds, 300 genes — planted structure that the analysis genuinely recovers;
+the screen and the expression matrix ship as `examples/data/cellline_screen.csv`
+and `examples/data/cellline_expression.csv`):
 
 > §1 data entry (GDSC-style response screen, validated on the way in) → §2 QC
 > audit (missing values, duplicate pairs, replicate collapse) → §3 normalization
@@ -231,9 +265,10 @@ laptop CPU:
 > §9 GA-vs-RL head-to-head → §10 leaderboard CSV + one-click visual bundle
 > → §11 recap.
 
-Swap the embedded seed table for your own molecules and every cell below it
-runs unchanged. §1–§6 need RDKit (`pip install 'pharmaml[chem]'`); §7
-additionally needs PyTorch (`pip install 'pharmaml[deep]'`).
+The 12-drug seed table ships as `examples/data/seed_molecules.csv` — point
+`SEEDS_CSV` at your own CSV and every cell below it runs unchanged. §1–§6 need
+RDKit (`pip install 'pharmaml[chem]'`); §7 additionally needs PyTorch
+(`pip install 'pharmaml[deep]'`).
 
 ### Bringing your own data (CSV / TSV / Excel)
 
@@ -770,7 +805,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1153 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1296 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```
@@ -780,7 +815,10 @@ round-trips, ML pipeline behaviour (splits, metrics, persistence round-trip), **
 loading (CSV/Excel, delimiter sniffing, target auto-detection, multiclass and regression
 inference)**, **multiclass end-to-end flows (3–4 classes, scorer fallbacks, ensembles)**,
 **every plotting function / export format / HTML report path (headless Agg CI proof,
-plus a guard that the shipped notebooks stay executed and error-free)**, docking
+plus a guard that the shipped notebooks stay executed and error-free, and a
+no-inline-fabrication guard: 6 executed notebooks × 9 banned fabrication tokens = 54
+assertions with zero allowlist entries, so the notebooks can never go back to making
+their own sample data instead of loading `examples/data/`)**, docking
 preparation & parsers (ligand CSV import, receptor prep incl. the mmCIF/gemmi path,
 synthetic DLG/Vina/PDBQT fixtures), scoring functions, converter edge cases, and the
 SMI/CSV/SDF format-conversion round-trips.

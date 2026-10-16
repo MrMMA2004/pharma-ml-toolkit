@@ -515,6 +515,11 @@ class SplitResult:
         rare class forced the fallback, with a logged warning).
     paths:
         ``{'train': Path, ...}`` when the frames were written to disk.
+    source:
+        File the table was read from (``None`` for in-memory frames).
+        :meth:`write` resolves every output path against it and refuses
+        to clobber it -- a ``<prefix>_train.csv`` input plus a matching
+        ``--prefix`` used to overwrite the input with its own train side.
     """
 
     train: pd.DataFrame
@@ -524,6 +529,7 @@ class SplitResult:
     stratified: bool
     random_state: int
     paths: dict[str, Path] = field(default_factory=dict)
+    source: Path | None = None
 
     def sides(self) -> dict[str, pd.DataFrame]:
         """``{'train': ..., 'test': ..., ('val': ...)}`` without ``None``."""
@@ -533,11 +539,32 @@ class SplitResult:
         return out
 
     def write(self, output_dir: str | Path, prefix: str) -> dict[str, Path]:
-        """Write each side as ``<prefix>_<side>.csv``; records ``paths``."""
+        """Write each side as ``<prefix>_<side>.csv``; records ``paths``.
+
+        All output paths are resolved against :attr:`source` *before*
+        anything is written: when one of them is the input file itself
+        (e.g. ``--data qsar_train.csv --prefix qsar``), a
+        :class:`~pharmaml.exceptions.DataValidationError` is raised and
+        no partial files appear on disk.
+        """
+        from pharmaml.exceptions import DataValidationError
         from pharmaml.utils.io import write_table
 
-        for side, frame in self.sides().items():
-            self.paths[side] = write_table(frame, Path(output_dir) / f"{prefix}_{side}.csv")
+        sides = self.sides()
+        targets = {
+            side: Path(output_dir) / f"{prefix}_{side}.csv" for side in sides
+        }
+        if self.source is not None:
+            source = Path(self.source).resolve()
+            for side, path in targets.items():
+                if path.resolve() == source:
+                    raise DataValidationError(
+                        f"refusing to overwrite the input file {path} ({side} side "
+                        f"of prefix {prefix!r}) -- choose a different "
+                        "--prefix/output dir"
+                    )
+        for side, path in targets.items():
+            self.paths[side] = write_table(sides[side], path)
         return dict(self.paths)
 
     def _balance(self, frame: pd.DataFrame) -> dict[Any, int] | None:
@@ -608,9 +635,10 @@ def split_table(
     Raises
     ------
     DataValidationError
-        For bad fractions, missing files/columns, or a stratified split
+        For bad fractions, missing files/columns, a stratified split
         that is impossible (e.g. a class smaller than the number of
-        sides requested).
+        sides requested), NaN values in the stratify target, or output
+        paths that would overwrite the input file (``.write()``).
 
     Example
     -------
@@ -674,6 +702,17 @@ def split_table(
             )
             use_stratify = False
         else:
+            # NaN labels would crash sklearn with a raw "Input contains
+            # NaN" ValueError (value_counts() below is NaN-blind, so the
+            # class-count guard cannot catch them) -- reject them here,
+            # typed.  Continuous targets already skipped above, so rows
+            # with missing *regression* endpoints still split.
+            n_missing = int(labels.isna().sum())
+            if n_missing:
+                raise DataValidationError(
+                    f"target column {target_col!r} contains {n_missing} NaN value(s) "
+                    "-- drop or impute the target before splitting"
+                )
             counts = labels.value_counts()
             n_sides = 3 if val_size else 2
             # Each side needs at least one member of every class.
@@ -720,6 +759,7 @@ def split_table(
         target=target_col,
         stratified=use_stratify,
         random_state=random_state,
+        source=Path(path) if path is not None else None,
     )
     _LOG.info(
         "Split %d rows -> train=%d%s test=%d (%s)",

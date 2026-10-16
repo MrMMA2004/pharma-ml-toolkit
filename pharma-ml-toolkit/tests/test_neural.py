@@ -964,3 +964,96 @@ class TestTargetStandardisation:
         ).fit(X, y)
         rmse = float(np.sqrt(np.mean((model.predict(X) - y) ** 2)))
         assert rmse < 0.5, f"residual regressor off-centre target: rmse={rmse:.3f}"
+
+
+# ---------------------------------------------------------------------------
+# Global-RNG isolation + feature-name contract (26-R3 re-fix)
+# ---------------------------------------------------------------------------
+class TestGlobalRNGIsolation:
+    """``fit()`` must leave the caller's *global* torch RNG untouched (26-R3).
+
+    The training loop seeds torch's global generator with the
+    estimator's ``random_state`` (the same-seed determinism contract);
+    pre-fix it never restored the previous state, silently clobbering
+    whatever stream the caller had seeded.
+    """
+
+    def test_fit_restores_global_torch_rng_state(self, binary_data: tuple) -> None:
+        torch = pytest.importorskip("torch")
+        X_train, _, y_train, _ = binary_data
+        # No-fit control: what a 123-seeded stream yields.
+        torch.manual_seed(123)
+        control = torch.rand(8).clone()
+        # Rewind to the identical stream position, then train an
+        # estimator seeded differently (random_state=7): the draws after
+        # fit must still come from the 123 stream, not the 7 one.
+        torch.manual_seed(123)
+        fast_classifier(epochs=2, random_state=7).fit(X_train, y_train)
+        after = torch.rand(8)
+        assert torch.equal(after, control)
+
+    def test_two_fits_same_random_state_remain_identical(self, binary_data: tuple) -> None:
+        # Pin: the restore must not weaken the same-seed determinism
+        # contract (manual_seed still runs inside the protected window).
+        X_train, X_test, y_train, _ = binary_data
+        first = fast_classifier(epochs=4, random_state=7).fit(X_train, y_train)
+        second = fast_classifier(epochs=4, random_state=7).fit(X_train, y_train)
+        assert np.array_equal(first.predict(X_test), second.predict(X_test))
+
+
+class TestFeatureNameContract:
+    """``feature_names_in_`` is enforced at predict time (26-R3).
+
+    Pre-fix the attribute was stored but never checked: predicting on a
+    column-PERMUTED (or renamed) DataFrame silently mis-assigned
+    features (values are consumed positionally), and it went stale
+    after an ndarray refit.  Arrays stay positional, sklearn-style.
+    """
+
+    @staticmethod
+    def _frame(X: np.ndarray, prefix: str) -> pd.DataFrame:
+        return pd.DataFrame(X, columns=[f"{prefix}{i}" for i in range(X.shape[1])])
+
+    def test_predict_permuted_columns_raises(self, regression_data: tuple) -> None:
+        X_train, _, y_train, _ = regression_data
+        frame = self._frame(X_train, "f")
+        model = fast_regressor(epochs=2).fit(frame, y_train)
+        permuted = frame[frame.columns[::-1]]
+        with pytest.raises(DataValidationError, match="feature names"):
+            model.predict(permuted)
+
+    def test_predict_renamed_columns_raise(self, regression_data: tuple) -> None:
+        # Same order, different names: still a contract violation.
+        X_train, _, y_train, _ = regression_data
+        model = fast_regressor(epochs=2).fit(self._frame(X_train, "a"), y_train)
+        with pytest.raises(DataValidationError, match="feature names"):
+            model.predict(self._frame(X_train, "b"))
+
+    def test_predict_same_order_dataframe_works(self, regression_data: tuple) -> None:
+        X_train, X_test, y_train, _ = regression_data
+        model = fast_regressor(epochs=2).fit(self._frame(X_train, "f"), y_train)
+        from_frame = model.predict(self._frame(X_test, "f"))
+        from_array = model.predict(X_test)
+        assert np.allclose(from_frame, from_array)
+
+    def test_ndarray_refit_deletes_stale_feature_names(
+        self, regression_data: tuple
+    ) -> None:
+        # sklearn reset semantics: a positional (array) refit drops the
+        # remembered names instead of enforcing the stale column order.
+        X_train, _, y_train, _ = regression_data
+        model = fast_regressor(epochs=2).fit(self._frame(X_train, "f"), y_train)
+        assert hasattr(model, "feature_names_in_")
+        model.fit(X_train, y_train)
+        assert not hasattr(model, "feature_names_in_")
+        assert np.isfinite(model.predict(X_train[:3])).all()
+
+    def test_dataframe_refit_refreshes_feature_names(
+        self, regression_data: tuple
+    ) -> None:
+        X_train, _, y_train, _ = regression_data
+        model = fast_regressor(epochs=2).fit(self._frame(X_train, "a"), y_train)
+        model.fit(self._frame(X_train, "b"), y_train)
+        assert list(model.feature_names_in_) == [
+            f"b{i}" for i in range(X_train.shape[1])
+        ]

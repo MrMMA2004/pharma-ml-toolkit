@@ -12,6 +12,7 @@ structure) and the PDBQT passthrough mode that needs no Meeko at all.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -22,12 +23,20 @@ from pharmaml.docking.ligands import (
     load_ligand_csv,
     prepare_ligand_library,
 )
+from pharmaml.docking.preparation import (
+    compute_grid_box,
+    smiles_to_pdbqt,
+)
 from pharmaml.docking.receptor import (
     ProteinReport,
     distribute_receptor,
     prepare_protein,
 )
-from pharmaml.exceptions import DataValidationError, DependencyError
+from pharmaml.exceptions import (
+    DataValidationError,
+    DependencyError,
+    DockingError,
+)
 
 rdkit = pytest.importorskip("rdkit")
 
@@ -832,3 +841,146 @@ class TestDockingPrepCli:
         )
         assert code == 1
         assert "default_altloc" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# smiles_to_pdbqt -- charge hint, determinism, unknown-element guard
+# ---------------------------------------------------------------------------
+
+
+def _pdbqt_charges(path: Path) -> list[float]:
+    """Partial-charge column (cols 71-76) of every ATOM/HETATM record."""
+    return [
+        float(line[70:76])
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.startswith(("ATOM", "HETATM"))
+    ]
+
+
+class TestSmilesToPdbqt:
+    """Direct contracts of the SMILES -> 3D PDBQT converter."""
+
+    def test_charge_hint_warns_and_stays_neutral(self, tmp_path: Path) -> None:
+        # Regression: `charge` was dead code -- the docstring promised a
+        # protonation-state hint while the neutral state was always built.
+        with pytest.warns(UserWarning, match="charge hint is currently ignored"):
+            path = smiles_to_pdbqt("CCO", tmp_path, name="ethanol", charge=-1)
+        assert path.is_file()
+        # the generated ligand is the *neutral* state: partial charges
+        # sum to ~0 (PDBQT rounds each to 3 decimals, so allow dust)
+        assert sum(_pdbqt_charges(path)) == pytest.approx(0.0, abs=5e-3)
+
+    def test_neutral_call_emits_no_charge_warning(self, tmp_path: Path) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            smiles_to_pdbqt("CCO", tmp_path, name="ethanol")
+            smiles_to_pdbqt("CCO", tmp_path, name="ethanol2", charge=0)
+        assert not [w for w in caught if "charge hint" in str(w.message)]
+
+    def test_default_seed_is_byte_identical(self, tmp_path: Path) -> None:
+        # Regression: ETKDG() had no randomSeed -- two calls produced
+        # different conformers, making campaign trees nondeterministic.
+        first = smiles_to_pdbqt("CCCCO", tmp_path / "a", name="lig")
+        second = smiles_to_pdbqt("CCCCO", tmp_path / "b", name="lig")
+        assert first.read_text(encoding="utf-8") == second.read_text(
+            encoding="utf-8"
+        )
+
+    def test_explicit_seed_reproducible_and_distinct(
+        self, tmp_path: Path
+    ) -> None:
+        one = smiles_to_pdbqt("CCCCO", tmp_path / "one", name="lig", seed=11)
+        one_again = smiles_to_pdbqt(
+            "CCCCO", tmp_path / "one_again", name="lig", seed=11
+        )
+        two = smiles_to_pdbqt("CCCCO", tmp_path / "two", name="lig", seed=12)
+        assert one.read_text(encoding="utf-8") == one_again.read_text(
+            encoding="utf-8"
+        )
+        assert one.read_text(encoding="utf-8") != two.read_text(
+            encoding="utf-8"
+        )
+
+    def test_unknown_atom_type_raises_instead_of_dropping(
+        self, tmp_path: Path
+    ) -> None:
+        # Regression: boronic acid OB(O)c1ccccc1 silently lost its boron
+        # (net PDBQT partial charge -0.488) while the docstring promised
+        # a DockingError for atom-type repair failures.
+        with pytest.raises(DockingError, match="'B'"):
+            smiles_to_pdbqt("OB(O)c1ccccc1", tmp_path, name="boron")
+        assert not (tmp_path / "boron.pdbqt").exists()  # no corrupted ligand
+
+
+class TestLibraryPreparationGuards:
+    """prepare_ligand_library: per-ligand failure recording + seed."""
+
+    def test_unsupported_element_recorded_not_batch_fatal(
+        self, tmp_path: Path
+    ) -> None:
+        # A boron ligand fails with a typed DockingError; the batch keeps
+        # going and the report row records ok=False with the reason.
+        csv = tmp_path / "ligands.csv"
+        csv.write_text(
+            "name,SMILES\n"
+            "ethanol,CCO\n"
+            "boronate,OB(O)c1ccccc1\n"
+            "aspirin,CC(=O)Oc1ccccc1C(=O)O\n",
+            encoding="utf-8",
+        )
+        report = prepare_ligand_library(csv, tmp_path / "campaign")
+        assert report.n_prepared == 2
+        failed = report.failed_frame
+        assert list(failed["name"]) == ["boronate"]
+        assert not failed.iloc[0]["ok"]
+        assert "'B'" in failed.iloc[0]["error"]
+        # other ligands are unaffected, the failed folder is cleaned up
+        assert (tmp_path / "campaign" / "01_ethanol" / "l.pdbqt").is_file()
+        assert (tmp_path / "campaign" / "03_aspirin" / "l.pdbqt").is_file()
+        assert not (tmp_path / "campaign" / "02_boronate").exists()
+
+    def test_seed_is_threaded_through_the_batch(self, tmp_path: Path) -> None:
+        csv = tmp_path / "ligands.csv"
+        csv.write_text("name,SMILES\nflexible,CCCCOCCN\n", encoding="utf-8")
+        first = prepare_ligand_library(csv, tmp_path / "run1", seed=42)
+        second = prepare_ligand_library(csv, tmp_path / "run2", seed=42)
+        assert first.n_prepared == second.n_prepared == 1
+        text_a = (tmp_path / "run1" / "01_flexible" / "l.pdbqt").read_text(
+            encoding="utf-8"
+        )
+        text_b = (tmp_path / "run2" / "01_flexible" / "l.pdbqt").read_text(
+            encoding="utf-8"
+        )
+        assert text_a == text_b  # same seed -> identical campaign tree
+
+
+class TestCoordinateTokenFallback:
+    """Whitespace-token fallback of the PDB coordinate reader.
+
+    Chain-less records (no chain ID column) shift every token one slot
+    left; fixed offsets read ``(y, z, occupancy)`` instead of
+    ``(x, y, z)``.  The fallback must locate the
+    ``[resseq, x, y, z]`` window instead.
+    """
+
+    def test_chainless_record_gets_true_xyz(self, tmp_path: Path) -> None:
+        # single atom: the grid centre IS the atom's (x, y, z)
+        ligand = tmp_path / "chainless.pdbqt"
+        ligand.write_text(
+            "ATOM 1 CA ALA 1 11.100 22.200 33.300 1.00 C\n", encoding="utf-8"
+        )
+        box = compute_grid_box(ligand, padding=0.0)
+        assert (box.center_x, box.center_y, box.center_z) == pytest.approx(
+            (11.1, 22.2, 33.3)
+        )
+
+    def test_chained_record_unchanged(self, tmp_path: Path) -> None:
+        # the chained variant already read (x, y, z); it must stay that way
+        ligand = tmp_path / "chained.pdbqt"
+        ligand.write_text(
+            "ATOM 1 CA ALA A 1 11.100 22.200 33.300 1.00 C\n", encoding="utf-8"
+        )
+        box = compute_grid_box(ligand, padding=0.0)
+        assert (box.center_x, box.center_y, box.center_z) == pytest.approx(
+            (11.1, 22.2, 33.3)
+        )

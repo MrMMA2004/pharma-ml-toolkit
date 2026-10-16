@@ -880,3 +880,146 @@ class TestCorrelateAlignmentEdges:
                 result = correlate_with_response(frame, response)
         assert len(result) == 1  # the gene itself still gets its row
         assert "1 expression row(s) and 0 response value(s) unmatched" in caplog.text
+
+
+class TestDuplicateGeneColumns:
+    """Duplicated gene symbols (duplicate DataFrame columns) raise typed errors.
+
+    Every omics entry point used to crash with pandas' raw ``TypeError``
+    ("arg must be a list, tuple, 1-d array, or Series") when the frame
+    held a gene twice (``["BRCA1", "EGFR", "BRCA1"]``) -- the entry
+    points now own the validation and name the duplicated symbols.
+    """
+
+    @staticmethod
+    def _frame() -> pd.DataFrame:
+        return pd.DataFrame(
+            [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]],
+            index=["c0", "c1", "c2"],
+            columns=["BRCA1", "EGFR", "BRCA1"],
+        )
+
+    @pytest.mark.parametrize(
+        "entry_point",
+        [
+            "normalize_expression",
+            "impute_expression",
+            "most_variable_genes",
+            "correlate_with_response",
+            "sensitivity_associations",
+        ],
+    )
+    def test_duplicated_genes_raise_typed_error(self, entry_point: str) -> None:
+        frame = self._frame()
+        response = pd.Series([1.0, 2.0, 3.0], index=frame.index)
+        calls = {
+            "normalize_expression": lambda: normalize_expression(frame),
+            "impute_expression": lambda: impute_expression(frame),
+            "most_variable_genes": lambda: most_variable_genes(frame),
+            "correlate_with_response": lambda: correlate_with_response(
+                frame, response
+            ),
+            "sensitivity_associations": lambda: sensitivity_associations(
+                frame, response
+            ),
+        }
+        with pytest.raises(DataValidationError, match="BRCA1") as excinfo:
+            calls[entry_point]()
+        message = str(excinfo.value)
+        assert "duplicat" in message.lower()
+        assert "EGFR" not in message  # only the duplicated symbol is named
+
+    def test_message_names_every_duplicated_symbol(self) -> None:
+        frame = pd.DataFrame(
+            [[1.0] * 5, [2.0] * 5, [3.0] * 5],
+            columns=["EGFR", "TP53", "EGFR", "TP53", "AKT1"],
+        )
+        with pytest.raises(DataValidationError) as excinfo:
+            normalize_expression(frame)
+        message = str(excinfo.value)
+        assert "EGFR" in message and "TP53" in message
+        assert "AKT1" not in message  # the unique gene is not implicated
+
+    def test_unique_genes_still_pass(self) -> None:
+        frame = pd.DataFrame(
+            [[1.0, 2.0], [3.0, 4.0]], columns=["BRCA1", "EGFR"]
+        )
+        result = normalize_expression(frame)
+        assert list(result.columns) == ["BRCA1", "EGFR"]
+
+
+class TestMetricAutoDetectionExcludesDatetimes:
+    """Datetime columns are annotations, never response metrics.
+
+    ``pd.to_numeric`` happily coerces ``datetime64`` to ns-epoch
+    integers, so without an explicit exclusion a ``screened_on`` date
+    column used to sneak into ``screen.metrics`` as a bogus int-epoch
+    "potency" -- the same class of bug as the boolean-flag exclusion.
+    """
+
+    @staticmethod
+    def _frame() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "cell_line": ["A549", "HCT116", "MCF7"],
+                "compound": ["cisplatin"] * 3,
+                "LN_IC50": [1.0, 2.0, 3.0],
+                "screened_on": pd.to_datetime(
+                    ["2024-01-05", "2024-02-10", "2024-03-15"]
+                ),
+            }
+        )
+
+    def test_datetime_column_is_not_a_metric(self) -> None:
+        screen = load_response_table(self._frame())
+        assert screen.metrics == ["LN_IC50"]
+        # the column survives as a real datetime, not ns-epoch integers
+        assert pd.api.types.is_datetime64_any_dtype(screen.frame["screened_on"])
+        assert screen.frame["screened_on"].iloc[0] == pd.Timestamp("2024-01-05")
+
+    def test_datetime_column_survives_xlsx_round_trip(self, tmp_path) -> None:
+        # the classic way a screen acquires a datetime column: Excel export
+        path = tmp_path / "screen.xlsx"
+        self._frame().to_excel(path, index=False)
+        screen = load_response_table(path)
+        assert screen.metrics == ["LN_IC50"]
+        assert pd.api.types.is_datetime64_any_dtype(screen.frame["screened_on"])
+        assert screen.frame["screened_on"].iloc[0] == pd.Timestamp("2024-01-05")
+
+
+class TestSummarizeCompoundsDuplicateIndex:
+    """Duplicated row index labels raise a typed error with a fix hint.
+
+    ``summarize_compounds`` re-aligns its positional ``idxmin``/``idxmax``
+    picks onto the compound index; duplicate frame labels ([0, 0, 1])
+    used to crash that alignment with a raw ``ValueError`` about
+    mismatched lengths.
+    """
+
+    def test_duplicate_index_labels_raise_with_reset_hint(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "B", "C"],
+                "compound": ["cisplatin", "cisplatin", "cisplatin"],
+                "LN_IC50": [1.0, 2.0, 3.0],
+            },
+            index=[0, 0, 1],
+        )
+        screen = load_response_table(frame)
+        with pytest.raises(DataValidationError, match="reset_index") as excinfo:
+            summarize_compounds(screen, "LN_IC50")
+        message = str(excinfo.value)
+        assert "duplicat" in message.lower()
+
+    def test_clean_range_index_still_works(self) -> None:
+        # the guard must not reject the ordinary case
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "B"],
+                "compound": ["cisplatin", "cisplatin"],
+                "LN_IC50": [1.0, 3.0],
+            }
+        )
+        screen = load_response_table(frame)
+        summary = summarize_compounds(screen, "LN_IC50")
+        assert summary.loc["cisplatin", "n_cell_lines"] == 2
