@@ -944,3 +944,92 @@ class TestNotebookArtifacts:
             c.cell_type == "markdown" and c.source.startswith("## 10 · Recap")
             for c in nb.cells
         ), "notebook lost its recap section"
+
+    def test_complete_generative_workflow_notebook(self):
+        nb = self._read("complete_generative_workflow.ipynb")
+        code_cells, errors, figures, executed = self._stats(nb)
+        assert len(code_cells) >= 18
+        assert executed == len(code_cells), "notebook has unexecuted code cells"
+        assert not errors, f"notebook has {len(errors)} committed error output(s)"
+        assert figures >= 4, "generative notebook lost its figures"
+
+        sources = "\n".join(c.source for c in code_cells)
+        for symbol in (
+            # §1 corpus + landscape
+            "DEFAULT_CORPUS",
+            "compute_descriptors",
+            "plot_descriptor_distributions",
+            # §2–§3 the objective library + the veto
+            "QedObjective",
+            "LogPBandObjective",
+            "TpsaBandObjective",
+            "MolecularWeightBandObjective",
+            "SimilarityObjective",
+            "SubstructureObjective",
+            "NoveltyObjective",
+            "MultiObjective",
+            "score_with_breakdown",
+            # §4–§6 the GA: de novo, seeded, scaffold-preserving
+            "GeneticOptimizer",
+            "seed_smiles",
+            '"scaffold"',
+            "MurckoScaffold",
+            # §7 RL: prior + fine-tuning
+            "SmilesRnn",
+            "train_prior",
+            "ReinventOptimizer",
+            # §9–§10 head-to-head + publish
+            "to_dataframe",
+            "save_visual_bundle",
+        ):
+            assert symbol in sources, f"generative notebook lost its {symbol} section"
+
+        # The corpus audit must stay committed: 244 SMILES, all unique.
+        corpus_cell = next(
+            (c for c in code_cells if "corpus size" in c.source), None
+        )
+        assert corpus_cell is not None, "notebook lost its corpus audit cell"
+        corpus_text = "".join(
+            o.get("text", "") for o in corpus_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "corpus size : 244 SMILES" in corpus_text, "corpus audit changed"
+        assert "unique      : 244" in corpus_text, "corpus uniqueness lost"
+
+        # The scaffold A/B verdict must stay committed: 12 seeds -> 7
+        # frameworks, scaffold mode 100% retention vs uniform 50.5%.
+        scaffold_cell = next(
+            (c for c in code_cells if "seed_frameworks" in c.source), None
+        )
+        assert scaffold_cell is not None, "notebook lost its scaffold A/B cell"
+        scaffold_text = "".join(
+            o.get("text", "") for o in scaffold_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "7 distinct Murcko frameworks" in scaffold_text, (
+            "seed framework census changed"
+        )
+        retention_text = "".join(
+            "".join(o.get("data", {}).get("text/plain", ""))
+            for o in scaffold_cell.get("outputs", [])
+            if o.get("output_type") == "execute_result"
+        )
+        assert "scaffold    1.000" in retention_text, "scaffold retention changed"
+        assert "uniform     0.505" in retention_text, "uniform retention changed"
+
+        # The RL early-stop flag must stay committed (plateau detection).
+        rl_cell = next(
+            (c for c in code_cells if "early stopped" in c.source), None
+        )
+        assert rl_cell is not None, "notebook lost its RL summary cell"
+        rl_text = "".join(
+            o.get("text", "") for o in rl_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "early stopped   : True" in rl_text, "RL early-stop flag changed"
+
+        # The §11 recap must stay shipped.
+        assert any(
+            c.cell_type == "markdown" and c.source.startswith("## 11 · Recap")
+            for c in nb.cells
+        ), "notebook lost its recap section"

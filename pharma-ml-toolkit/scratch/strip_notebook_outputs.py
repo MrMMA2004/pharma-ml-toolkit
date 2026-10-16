@@ -1,9 +1,9 @@
 """Generate no-output variants of the executed workflow notebooks.
 
-The four shipped notebooks are committed with every output and inline
+The five shipped notebooks are committed with every output and inline
 figure so readers can follow the analysis offline — the ML notebook
 alone is ~1.1 MB. This script derives a bandwidth-friendly twin of each
-of the three big workflows:
+of the five big workflows:
 
 * every code cell's ``outputs`` are emptied and ``execution_count``
   reset to ``None`` (Jupyter renders them as never-run),
@@ -36,6 +36,7 @@ NOTEBOOKS = (
     "complete_docking_workflow.ipynb",
     "complete_pk_workflow.ipynb",
     "complete_cellline_workflow.ipynb",
+    "complete_generative_workflow.ipynb",
 )
 
 NOTE_SOURCE = """\

@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1128 tests).
+exceptions, input validation, and pytest coverage** (1134 tests).
 
 ---
 
@@ -90,8 +90,8 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1128 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
-├── examples/                # runnable demos + five executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · walkthrough) + four no-output twins
+├── tests/                   # 1134 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain) + seed_molecules.csv — 12 named drugs for generative seeding
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
@@ -170,7 +170,7 @@ re-run; the CLI equivalent is `pharmaml pharma pk --data profile.csv`.
 (`examples/pharmaml_walkthrough.ipynb` remains the every-domain tour including
 PK, docking and chem conversions.)
 
-Each of the four workflow notebooks also ships a **no-output twin**
+Each of the five workflow notebooks also ships a **no-output twin**
 (`*_no_output.ipynb`) — identical cells with every output stripped, 4–30 % of
 the executed size (the ML twin is 46 KB vs 1.1 MB), for slow connections; run
 it top-to-bottom to produce the results yourself. A pytest drift-guard pins
@@ -210,6 +210,30 @@ python examples/run_cellline_analysis.py --screen my_screen.csv \
 Point §1 at your own GDSC/CCLE export (same columns) and §6 at a CCLE
 expression matrix; the CLI equivalents are `pharmaml biology response-audit`
 and `pharmaml biology top-biomarkers`.
+
+### The complete molecule generation process in one notebook
+
+`examples/complete_generative_workflow.ipynb` is the molecule-building
+**zero-to-one-hundred** walkthrough — the fifth workflow notebook, executed
+with all outputs committed (numbers *and* inline figures) in ~20 s on a
+laptop CPU:
+
+> §1 the bundled 244-SMILES corpus + its property landscape (217 RDKit
+> descriptors) → §2 the objective library (QED, LogP/TPSA/MW bands,
+> similarity, pharmacophore, novelty — scored on a probe set) → §3
+> **MultiObjective** (weighted geometric mean; one zero vetoes the molecule,
+> demonstrated live) → §4 **de novo GA** (leaderboard with free breakdown
+> columns + convergence figure) → §5 **seeded GA** from your own molecules →
+> §6 **scaffold-preserving mutation** (Murcko-retention A/B: 100 % on seed
+> frameworks vs 50.5 % for uniform mutation) → §7 **RL** (char-GRU prior
+> loss curve + REINVENT-style fine-tuning with early stop) → §8 the
+> **novelty** anti-rediscovery recipe (honest strange-chemistry trade-off) →
+> §9 GA-vs-RL head-to-head → §10 leaderboard CSV + one-click visual bundle
+> → §11 recap.
+
+Swap the embedded seed table for your own molecules and every cell below it
+runs unchanged. §1–§6 need RDKit (`pip install 'pharmaml[chem]'`); §7
+additionally needs PyTorch (`pip install 'pharmaml[deep]'`).
 
 ### Bringing your own data (CSV / TSV / Excel)
 
@@ -463,7 +487,9 @@ subpackage ships the whole story on a laptop CPU: a bundled curated corpus
 (`DEFAULT_CORPUS`, 244 canonical drug-like SMILES — aspirin, paracetamol, ibuprofen,
 caffeine, … plus a heterocycle/functional-group tour), an objective library, and two
 complementary optimisers. A runnable narrative lives in
-`examples/run_generative_design.py` (~10 s end to end).
+`examples/run_generative_design.py` (~10 s end to end), and the fully
+**executed notebook** `examples/complete_generative_workflow.ipynb` walks
+every stage with committed outputs (see *Quickstart* above).
 
 ```python
 from pharmaml.generative import (
@@ -744,7 +770,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1152 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1153 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

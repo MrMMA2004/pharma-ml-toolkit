@@ -19,9 +19,12 @@ Two initialisation modes:
 
 * **de novo** (``seed_smiles=None``): the population is sampled from
   ``corpus`` (default: :data:`~pharmaml.generative.DEFAULT_CORPUS`);
-* **seeded** (``seed_smiles=[...]``): the population starts from the
-  user's molecules (duplicated to fill the population), so the search
-  explores their neighbourhood -- the "with some sample molecules" mode.
+* **seeded** (``seed_smiles=[...]``): the user's molecules anchor
+  generation 0 and corpus molecules pad the population up to
+  ``population_size`` (pass ``corpus=seed_smiles`` too for a strictly
+  seed-isolated run), so the search explores the seeds' neighbourhood
+  alongside the corpus's diversity -- the "with some sample molecules"
+  mode.
 
 Example
 -------

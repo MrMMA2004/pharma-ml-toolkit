@@ -21,6 +21,7 @@ VARIANTS = (
     "complete_docking_workflow",
     "complete_pk_workflow",
     "complete_cellline_workflow",
+    "complete_generative_workflow",
 )
 
 
