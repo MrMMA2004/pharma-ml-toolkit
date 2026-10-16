@@ -36,6 +36,7 @@ needed again to *predict*).
 
 from __future__ import annotations
 
+from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -70,8 +71,13 @@ _DEVICES: tuple[str, ...] = ("auto", "cpu", "cuda")
 # ---------------------------------------------------------------------------
 # Lazy torch access
 # ---------------------------------------------------------------------------
-def _require_torch() -> torch:
+def _require_torch() -> ModuleType:
     """Import and return torch, or raise the actionable error.
+
+    Returns the module object for callers that only need its presence;
+    functions that touch torch APIs should do a plain local ``import
+    torch`` after calling this guard so mypy sees the fully-typed module
+    (a ``ModuleType`` annotation alone does not expose attributes).
 
     Raises
     ------
@@ -420,8 +426,9 @@ class _BaseDeepEstimator(BaseEstimator):
         # torch is imported BEFORE any fitted attribute is written, so a
         # failed fit (missing torch / unusable device) leaves the
         # estimator unfitted for sklearn's check_is_fitted as well.
-        torch = _require_torch()
-        device = self._resolve_device(torch)
+        _require_torch()  # raises the actionable DependencyError
+
+        device = self._resolve_device()
 
         if self._is_classifier:
             self.classes_ = classes
@@ -465,11 +472,11 @@ class _BaseDeepEstimator(BaseEstimator):
             y_enc = (y_enc - self._y_mean_) / self._y_std_
 
         self._train_torch(
-            X_scaled, y_enc, n_out, device, torch, hidden, train_idx, val_idx, rng
+            X_scaled, y_enc, n_out, device, hidden, train_idx, val_idx, rng
         )
         return self
 
-    def _resolve_device(self, torch: torch) -> str:
+    def _resolve_device(self) -> str:
         """Map the ``device`` token to a concrete torch device string.
 
         Raises
@@ -478,6 +485,8 @@ class _BaseDeepEstimator(BaseEstimator):
             When ``device='cuda'`` is requested but no CUDA device is
             visible to torch.
         """
+        import torch
+
         if self.device == "auto":
             return "cuda" if torch.cuda.is_available() else "cpu"
         if self.device == "cuda" and not torch.cuda.is_available():
@@ -527,7 +536,6 @@ class _BaseDeepEstimator(BaseEstimator):
         y_enc: np.ndarray,
         n_out: int,
         device: str,
-        torch: torch,
         hidden: tuple[int, ...],
         train_idx: np.ndarray,
         val_idx: np.ndarray | None,
@@ -542,6 +550,7 @@ class _BaseDeepEstimator(BaseEstimator):
         seeded ``rng`` keep the whole fit one deterministic random
         stream.
         """
+        import torch
         from torch import nn
 
         torch.manual_seed(int(self.random_state))
@@ -685,7 +694,9 @@ class _BaseDeepEstimator(BaseEstimator):
         """
         network = getattr(self, "_network", None)
         if network is None:
-            torch = _require_torch()
+            _require_torch()  # raises the actionable DependencyError
+            import torch
+
             spec = self._net_spec_
             network = _build_network(
                 spec["residual"], spec["n_in"], spec["hidden"], spec["n_out"],
@@ -710,7 +721,9 @@ class _BaseDeepEstimator(BaseEstimator):
                 f"{type(self).__name__} was fitted with "
                 f"{self.n_features_in_} — pass the same features as to fit()"
             )
-        torch = _require_torch()
+        _require_torch()  # raises the actionable DependencyError
+        import torch
+
         network = self._ensure_network()
         network.eval()  # disable dropout at inference time
         X_scaled = (X_arr - self._mean_) / self._std_
@@ -934,7 +947,19 @@ class DeepMLPRegressor(RegressorMixin, _BaseDeepEstimator):
         numpy.ndarray
             Shape ``(n_samples,)``.
         """
-        return self._forward(X).reshape(-1) * self._y_std_ + self._y_mean_
+        # _check_fitted first: an unfitted estimator must raise the
+        # documented ModelError, not an AttributeError on the scaling
+        # attributes that fit() has not written yet.
+        self._check_fitted()
+        y_mean, y_std = self._y_mean_, self._y_std_
+        if y_mean is None or y_std is None:
+            # fit() always writes both for regressors; a missing pair means
+            # the estimator was never fitted in regressor mode.
+            raise ModelError(
+                f"{type(self).__name__} is missing its target scaling -- "
+                "was it fitted as a regressor?"
+            )
+        return self._forward(X).reshape(-1) * y_std + y_mean
 
 
 # ---------------------------------------------------------------------------
@@ -1064,4 +1089,16 @@ class ResidualMLPRegressor(RegressorMixin, _BaseDeepEstimator):
             Shape ``(n_samples,)`` — mapped back to the target's
             original scale (see :meth:`DeepMLPRegressor.predict`).
         """
-        return self._forward(X).reshape(-1) * self._y_std_ + self._y_mean_
+        # _check_fitted first: an unfitted estimator must raise the
+        # documented ModelError, not an AttributeError on the scaling
+        # attributes that fit() has not written yet.
+        self._check_fitted()
+        y_mean, y_std = self._y_mean_, self._y_std_
+        if y_mean is None or y_std is None:
+            # fit() always writes both for regressors; a missing pair means
+            # the estimator was never fitted in regressor mode.
+            raise ModelError(
+                f"{type(self).__name__} is missing its target scaling -- "
+                "was it fitted as a regressor?"
+            )
+        return self._forward(X).reshape(-1) * y_std + y_mean

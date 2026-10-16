@@ -231,7 +231,9 @@ def smiles_to_pdb(
         If RDKit is not installed.
     """
     Chem = require_rdkit_standardize()
-    from rdkit.Chem import AllChem
+    # AllChem only re-exports these; importing from the defining modules
+    # gives the fully-typed names in rdkit-stubs (identical objects).
+    from rdkit.Chem import rdDistGeom, rdForceFieldHelpers
     from rdkit.Chem.MolStandardize import rdMolStandardize
 
     if num_confs < 1:
@@ -272,9 +274,15 @@ def smiles_to_pdb(
 
     mol = Chem.AddHs(mol)
 
-    params = AllChem.ETKDG()
-    params.randomSeed = _RANDOM_SEED
-    conf_ids = list(AllChem.EmbedMultipleConfs(mol, numConfs=num_confs, params=params))
+    params = rdDistGeom.ETKDG()
+    # rdkit-stubs declares EmbedParameters.randomSeed with a broken
+    # property signature (untyped getter/setter pair), so mypy rejects
+    # the assignment; setting the seed on the params object is the
+    # documented runtime API.
+    params.randomSeed = _RANDOM_SEED  # type: ignore[assignment]
+    conf_ids = list(
+        rdDistGeom.EmbedMultipleConfs(mol, numConfs=num_confs, params=params)
+    )
     if not conf_ids:
         raise DataValidationError(
             f"ETKDG embedding returned no conformers for {name!r} ({smiles!r})"
@@ -282,11 +290,11 @@ def smiles_to_pdb(
 
     energies: list[tuple[int, float]] = []
     forcefield = ""
-    if AllChem.MMFFHasAllMoleculeParams(mol):
-        props = AllChem.MMFFGetMoleculeProperties(mol)
+    if rdForceFieldHelpers.MMFFHasAllMoleculeParams(mol):
+        props = rdForceFieldHelpers.MMFFGetMoleculeProperties(mol)
         for conf_id in conf_ids:
             try:
-                ff = AllChem.MMFFGetMoleculeForceField(mol, props, confId=conf_id)
+                ff = rdForceFieldHelpers.MMFFGetMoleculeForceField(mol, props, confId=conf_id)
                 ff.Minimize()
                 energies.append((conf_id, ff.CalcEnergy()))
             except Exception:  # noqa: BLE001, S112 — per-conformer FF failures are expected
@@ -296,8 +304,8 @@ def smiles_to_pdb(
     if not energies:  # UFF fallback (also the only route when MMFF lacks params)
         for conf_id in conf_ids:
             try:
-                AllChem.UFFOptimizeMolecule(mol, confId=conf_id)
-                ff = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
+                rdForceFieldHelpers.UFFOptimizeMolecule(mol, confId=conf_id)
+                ff = rdForceFieldHelpers.UFFGetMoleculeForceField(mol, confId=conf_id)
                 energies.append((conf_id, ff.CalcEnergy()))
             except Exception:  # noqa: BLE001, S112 — per-conformer FF failures are expected
                 continue

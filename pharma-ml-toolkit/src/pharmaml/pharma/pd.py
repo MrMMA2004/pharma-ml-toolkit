@@ -30,7 +30,9 @@ __all__ = [
 ]
 
 
-def _validated_concentration(concentration: float | Sequence[float]) -> np.ndarray:
+def _validated_concentration(
+    concentration: float | Sequence[float] | np.ndarray,
+) -> np.ndarray:
     """Asarray + domain checks shared by the Emax model family.
 
     Concentrations must be finite and non-negative; NaN or infinite
@@ -48,7 +50,7 @@ def _validated_concentration(concentration: float | Sequence[float]) -> np.ndarr
 
 
 def emax_effect(
-    concentration: float | Sequence[float],
+    concentration: float | Sequence[float] | np.ndarray,
     e0: float,
     emax: float,
     ec50: float,
@@ -82,7 +84,7 @@ def emax_effect(
 
 
 def sigmoid_emax_effect(
-    concentration: float | Sequence[float],
+    concentration: float | Sequence[float] | np.ndarray,
     e0: float,
     emax: float,
     ec50: float,
@@ -103,7 +105,7 @@ def sigmoid_emax_effect(
 
 
 def inhibitory_emax_effect(
-    concentration: float | Sequence[float],
+    concentration: float | Sequence[float] | np.ndarray,
     e0: float,
     imax: float,
     ic50: float,
@@ -124,7 +126,7 @@ def inhibitory_emax_effect(
 
 
 def linear_effect(
-    concentration: float | Sequence[float],
+    concentration: float | Sequence[float] | np.ndarray,
     slope: float,
     intercept: float = 0.0,
 ) -> float | np.ndarray:

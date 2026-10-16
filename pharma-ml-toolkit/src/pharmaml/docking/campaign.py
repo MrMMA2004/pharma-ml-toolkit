@@ -286,7 +286,7 @@ def distribute_files(
 
 def cleanup_tree(
     directory: str | Path,
-    keep: set[str] | list[str] = frozenset(),
+    keep: set[str] | list[str] | frozenset[str] = frozenset(),
     keep_pattern: str | None = None,
     remove_empty: bool = False,
     dry_run: bool = False,

@@ -105,8 +105,8 @@ def require_columns(frame: pd.DataFrame, columns: Sequence[str]) -> None:
 
 
 def validate_concentration_series(
-    times: Sequence[float],
-    concentrations: Sequence[float],
+    times: Sequence[float] | np.ndarray,
+    concentrations: Sequence[float] | np.ndarray,
     require_positive_conc: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Validate a paired time/concentration series for PK math.
@@ -119,6 +119,10 @@ def validate_concentration_series(
       points would silently corrupt trapezoid AUCs),
     * concentrations are non-negative (and positive when
       ``require_positive_conc`` -- log-trapezoids need this).
+
+    Both plain sequences and pre-built NumPy arrays are accepted
+    (``np.ndarray`` does not register as ``collections.abc.Sequence``
+    even though the runtime handles it identically).
 
     Returns
     -------

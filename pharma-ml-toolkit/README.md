@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1098 tests).
+exceptions, input validation, and pytest coverage** (1128 tests).
 
 ---
 
@@ -90,7 +90,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1098 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 1128 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + five executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · walkthrough) + four no-output twins
 │   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain) + seed_molecules.csv — 12 named drugs for generative seeding
 ├── docs/                    # INDEX.md — auto-generated module/API index
@@ -468,7 +468,7 @@ complementary optimisers. A runnable narrative lives in
 ```python
 from pharmaml.generative import (
     DEFAULT_CORPUS, QedObjective, LogPBandObjective, SimilarityObjective,
-    MultiObjective, GeneticOptimizer, ReinventOptimizer, SmilesRnn,
+    NoveltyObjective, MultiObjective, GeneticOptimizer, ReinventOptimizer, SmilesRnn,
 )
 
 # 1) Define what a "good" molecule means: drug-like + LogP window + aspirin-ish.
@@ -480,9 +480,15 @@ objective = MultiObjective(
 
 # 2) Genetic algorithm: character-level mutation + splice crossover over canonical
 #    SMILES, tournament selection, elitism. CPU-strong, torch not required.
+#    mutation="scaffold" keeps each parent's Murcko framework and resamples only
+#    its decorations (lead-optimisation mode).
 ga = GeneticOptimizer(objective, population_size=48, generations=20, seed=42)
 de_novo = ga.optimize()                                   # corpus-initialised
 seeded  = ga.optimize(seed_smiles=["CC(=O)Oc1ccccc1C(=O)O", "CC(=O)Nc1ccc(O)cc1"])
+leadopt = GeneticOptimizer(
+    MultiObjective([QedObjective(), NoveltyObjective()]),   # drug-like AND novel
+    population_size=48, generations=20, seed=42, mutation="scaffold",
+).optimize(seed_smiles=["CC(=O)Oc1ccccc1C(=O)O"], corpus=["CC(=O)Oc1ccccc1C(=O)O"])
 
 # 3) Reinforcement learning (REINVENT-style): train a char-level GRU prior on the
 #    corpus, then fine-tune it by policy gradient toward the same objective
@@ -497,13 +503,28 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
 * Both optimisers are **deterministic given `seed`** (GA: dedicated `random.Random`;
   RNN/RL: `torch.Generator` + per-iteration sampling seeds) and never crash on invalid
   SMILES — invalid candidates score 0.0 and are counted.
+* **Novelty as an objective:** `NoveltyObjective` scores a candidate as
+  `1 − max Tanimoto` against a reference corpus (default: the bundled corpus — a
+  corpus member scores 0, a structurally distant molecule scores high). Inside a
+  `MultiObjective` it acts as an anti-rediscovery constraint: one corpus look-alike
+  vetoes the whole molecule.
+* **Scaffold-preserving GA mode (`mutation="scaffold"`):** lead-optimisation style
+  evolution — each offspring keeps its parent's Murcko framework verbatim while a
+  random subset of decorations is resampled from a corpus-derived decoration
+  vocabulary (built once per corpus, re-assembled with `Chem.molzip`). Acyclic or
+  bare-ring parents (and any RDKit failure) fall back to the standard character
+  mutation; crossover is bypassed in this mode. Honest scope: it is decoration
+  resampling on a fixed framework, **not** a full scaffold-decorator generative model
+  like REINVENT 2.0 (no learned attachment grammar).
 * **Method trade-offs, honestly:** the GA explores wider (hundreds of unique molecules
   per run, no extra dependency, seeded *and* de novo modes) while RL fine-tunes a learned
   prior and needs fewer evaluations to focus on high-scoring neighbourhoods — but costs a
   torch install and yields fewer unique hits at this scale. Run both, compare leaderboards.
-* CLI twins: `pharmaml generative run --method ga|rl --recipe qed|logp|druglike|similar`
+* CLI twins: `pharmaml generative run --method ga|rl --recipe qed|logp|druglike|similar|novel`
   (with `--seeds examples/data/seed_molecules.csv` for the "with some sample molecules"
-  mode) and `pharmaml generative corpus`.
+  mode; `--scaffold` switches the GA to scaffold-preserving mutations — e.g.
+  `pharmaml generative run --method ga --recipe novel --scaffold --seed 42`) and
+  `pharmaml generative corpus`.
 * Requires `pip install "pharmaml[chem]"`; the RNN/RL half additionally needs
   `pip install "pharmaml[deep]"` (PyTorch is imported lazily — the package works without it).
 
@@ -723,7 +744,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1100 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1152 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```
@@ -740,7 +761,7 @@ SMI/CSV/SDF format-conversion round-trips.
 
 ## CI
 
-`.github/workflows/ci.yml` runs the matrix (Python 3.10–3.12): install → ruff → mypy (soft) → pytest.
+`.github/workflows/ci.yml` runs the matrix (Python 3.10–3.12): install → ruff → mypy (0-error baseline, blocking) → pytest (doctests included).
 
 ## Docker
 

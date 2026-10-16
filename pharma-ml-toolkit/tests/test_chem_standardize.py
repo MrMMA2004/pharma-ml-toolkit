@@ -140,9 +140,12 @@ class TestSmilesToPdb:
     def test_embedding_failure_raises(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from rdkit.Chem import AllChem
+        # smiles_to_pdb calls the defining module (rdDistGeom) directly --
+        # AllChem only re-exports the same function -- so that is the
+        # attribute the failure injection has to replace.
+        from rdkit.Chem import rdDistGeom
 
-        monkeypatch.setattr(AllChem, "EmbedMultipleConfs", lambda *args, **kwargs: [])
+        monkeypatch.setattr(rdDistGeom, "EmbedMultipleConfs", lambda *args, **kwargs: [])
         with pytest.raises(DataValidationError, match="no conformers"):
             smiles_to_pdb("CCO", tmp_path / "x.pdb")
 

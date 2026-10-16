@@ -185,10 +185,12 @@ def train_model(
         cv_scores = None
     elapsed = time.perf_counter() - started
 
+    cv_mean: float | None
+    cv_std: float | None
     if cv_scores is not None:
-        mean, std = float(cv_scores.mean()), float(cv_scores.std())
+        cv_mean, cv_std = float(cv_scores.mean()), float(cv_scores.std())
     else:
-        mean = std = None
+        cv_mean = cv_std = None
 
     return TrainingResult(
         model=fitted,
@@ -196,8 +198,8 @@ def train_model(
         task=task,
         best_params=best_params,
         cv_scores=cv_scores,
-        cv_mean=mean,
-        cv_std=std,
+        cv_mean=cv_mean,
+        cv_std=cv_std,
         fit_seconds=elapsed,
     )
 

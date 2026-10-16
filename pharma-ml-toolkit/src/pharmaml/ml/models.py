@@ -515,17 +515,28 @@ def build_model(
     spec = MODEL_REGISTRY[key]
     if task != "both" and spec.task != "both" and spec.task != task:
         raise ModelError(f"Model {key!r} supports {spec.task!r}, not {task!r}")
-    if not spec.available:
-        extra = _REQUIREMENT_EXTRAS.get(spec.requires, spec.requires)
+    requires = spec.requires
+    # ``requires is None`` entries are always available (see
+    # ModelSpec.available), so this branch always has a concrete module name.
+    if requires is not None and not spec.available:
+        extra = _REQUIREMENT_EXTRAS.get(requires, requires)
         raise DependencyError(
-            f"Model {key!r} requires the optional package '{spec.requires}'. "
+            f"Model {key!r} requires the optional package '{requires}'. "
             f"Install with:  pip install 'pharmaml[{extra}]'"
         )
 
     if spec.name in _TASK_FACTORIES:
         estimator = _TASK_FACTORIES[spec.name][task]()
     else:
-        estimator = spec.factory()
+        factory = spec.factory
+        if factory is None:
+            # Dual-task entries carry factory=None and are dispatched through
+            # _TASK_FACTORIES above; a factory-less entry outside that table
+            # would be a registry bug, not a caller error.
+            raise ModelError(
+                f"Model {key!r} has no estimator factory registered for task {task!r}"
+            )
+        estimator = factory()
 
     if params:
         unknown = set(params) - set(estimator.get_params())

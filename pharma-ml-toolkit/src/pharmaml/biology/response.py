@@ -41,6 +41,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypeAlias
 
 import numpy as np
 import pandas as pd
@@ -65,7 +66,7 @@ __all__ = [
 ]
 
 #: What a table argument may be: an in-memory frame or a csv/xlsx path.
-ResponseTableSource = pd.DataFrame | str | Path
+ResponseTableSource: TypeAlias = pd.DataFrame | str | Path
 
 #: ``ln(10)`` -- the natural-log/decade conversion factor.
 _LN10 = math.log(10.0)
@@ -176,7 +177,11 @@ class ResponseScreen:
         if not self.metrics:
             detected = _detect_metric_columns(
                 self.frame,
-                exclude=[self.cell_col, self.compound_col, self.tissue_col],
+                exclude=[
+                    column
+                    for column in (self.cell_col, self.compound_col, self.tissue_col)
+                    if column is not None
+                ],
             )
             if not detected:
                 raise DataValidationError(

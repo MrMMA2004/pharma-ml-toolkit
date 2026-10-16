@@ -149,7 +149,7 @@ def plot_receptor_atom_types(
     return fig
 
 
-def _energy_series(summary: pd.DataFrame, energy_column: str | None) -> tuple[pd.Series, str]:
+def _energy_series(summary: pd.DataFrame, energy_column: str | None) -> tuple[pd.Series, pd.Series]:
     if not isinstance(summary, pd.DataFrame):
         raise DataValidationError("summary must be a pandas DataFrame (scan_docking_directory output)")
     if "folder" not in summary.columns:

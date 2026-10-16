@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
 
@@ -34,6 +35,7 @@ _LOG = get_logger(__name__)
 __all__ = [
     "RECEPTOR_TYPES",
     "GridBox",
+    "GridParameters",
     "compute_grid_box",
     "extract_pdbqt_atom_types",
     "read_gpf",
@@ -259,7 +261,26 @@ def write_gpf(
     return out
 
 
-def read_gpf(gpf_path: str | Path) -> dict[str, object]:
+class GridParameters(TypedDict):
+    """Parsed AutoDock4 grid parameter file (GPF) content.
+
+    The structural type of :func:`read_gpf`'s return value: a plain
+    ``dict`` at runtime, with per-key types pinned so callers (and
+    mypy) know what every GPF key holds.
+    """
+
+    ligand_types: list[str]
+    receptor_types: list[str]
+    npts: tuple[int, int, int]
+    spacing: float
+    gridcenter: tuple[float, float, float] | None
+    receptor: str
+    maps: list[str]
+    smooth: float
+    dielectric: float
+
+
+def read_gpf(gpf_path: str | Path) -> GridParameters:
     """Parse an AutoDock4 grid parameter file (GPF) into a dict.
 
     Companion reader for :func:`write_gpf` (and a typed replacement for
@@ -269,7 +290,7 @@ def read_gpf(gpf_path: str | Path) -> dict[str, object]:
 
     Returns
     -------
-    dict
+    GridParameters
         Keys: ``ligand_types`` (list[str]), ``receptor_types``
         (list[str]), ``npts`` (3 ints), ``spacing`` (float),
         ``gridcenter`` (3 floats or ``None`` when absent), ``receptor``
@@ -289,7 +310,7 @@ def read_gpf(gpf_path: str | Path) -> dict[str, object]:
     except OSError as exc:
         raise DockingParseError(f"cannot read GPF {path}: {exc}") from exc
 
-    parsed: dict[str, object] = {
+    parsed: GridParameters = {
         "ligand_types": [],
         "receptor_types": [],
         "npts": (0, 0, 0),
@@ -519,7 +540,11 @@ def smiles_to_pdbqt(
     try:
         from meeko import MoleculePreparation, PDBQTWriterLegacy
         from rdkit import Chem
-        from rdkit.Chem import AllChem
+
+        # AllChem only re-exports these; importing from the defining
+        # modules gives the fully-typed names in rdkit-stubs (identical
+        # objects).
+        from rdkit.Chem import rdDistGeom, rdForceFieldHelpers
     except ImportError as exc:
         raise DependencyError(
             "smiles_to_pdbqt requires RDKit and Meeko. "
@@ -530,10 +555,10 @@ def smiles_to_pdbqt(
     if mol is None:
         raise DockingError(f"invalid SMILES: {smiles!r}")
     mol = Chem.AddHs(mol, addCoords=True)
-    if AllChem.EmbedMolecule(mol, AllChem.ETKDG()) != 0:
+    if rdDistGeom.EmbedMolecule(mol, rdDistGeom.ETKDG()) != 0:
         raise DockingError(f"3D embedding failed for {smiles!r}")
     try:
-        AllChem.MMFFOptimizeMolecule(mol)
+        rdForceFieldHelpers.MMFFOptimizeMolecule(mol)
     except Exception as exc:  # noqa: BLE001 — Boost error zoo; geometry fallback is acceptable
         _LOG.warning("MMFF optimisation failed (%s); keeping unoptimised geometry.", exc)
 

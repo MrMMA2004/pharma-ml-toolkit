@@ -37,6 +37,7 @@ from pharmaml.generative import (
     LogPBandObjective,
     MolecularWeightBandObjective,
     MultiObjective,
+    NoveltyObjective,
     QedObjective,
     ReinventOptimizer,
     ScoringObjective,
@@ -48,12 +49,25 @@ from pharmaml.generative import (
     run_rl_optimization,
 )
 from pharmaml.generative._utils import canonical_smiles
+from pharmaml.generative.genetic import (
+    _build_decoration_pool,
+    _scaffold_mutate,
+    _scaffold_split,
+)
 
 logging.disable(logging.CRITICAL)
 
 ASPIRIN = "CC(=O)Oc1ccccc1C(=O)O"
 PARACETAMOL = "CC(=O)Nc1ccc(O)cc1"
 INVALID = "not_a_smiles"
+#: Stereo-free cholesterol -- a steroid framework guaranteed structurally
+#: distant from the bundled corpus (no steroids among the 244 entries;
+#: probed max Morgan Tanimoto = 0.358 -> novelty 0.642 on rdkit 2026.09.1).
+CHOLESTEROL = "CC(C)CCCC(C)C1CCC2C3CC=C4CCCC(O)CCC4(C)C3CCC12C"
+#: Stereo-free squalene -- acyclic polyene, probed novelty 0.851.
+SQUALENE = "CC(C)=CCCC(C)=CC(C)=CCCC(C)=CCCC(C)=CCC(C)C"
+CAFFEINE = "Cn1c(=O)c2c(ncn2C)n(C)c1=O"
+NICOTINE = "CN1CCCC1c1cccnc1"
 
 
 # ---------------------------------------------------------------------------
@@ -1222,6 +1236,71 @@ class TestGenerativeCommands:
         assert list(frame.columns) == ["index", "smiles"]
         assert len(frame) == len(DEFAULT_CORPUS)
 
+    def test_novel_recipe_writes_novelty_leaderboard(self, tmp_path, capsys) -> None:
+        # 100x-22-a: the 'novel' recipe mirrors 'druglike' (QED x MW x TPSA)
+        # and adds the corpus-novelty objective; the leaderboard gains the
+        # per-objective breakdown columns including 'novelty'.
+        from pharmaml.cli import main
+
+        out = tmp_path / "ga_novel.csv"
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "novel",
+            "--iterations", "3", "--population", "16", "--seed", "42",
+            "--top", "3", "--out", str(out),
+        ])
+        assert code == 0
+        output = capsys.readouterr().out
+        assert "method   : ga" in output
+        assert "novelty" in output
+        assert out.is_file()
+        frame = pd.read_csv(out)
+        assert list(frame.columns) == [
+            "rank", "smiles", "score", "qed", "mw_band", "tpsa_band", "novelty",
+        ]
+        assert len(frame) > 0
+        assert frame["novelty"].between(0.0, 1.0).all()
+
+    def test_scaffold_flag_runs_seeded_ga(self, capsys) -> None:
+        # 100x-22-a: --scaffold switches the GA to decoration resampling;
+        # the run reports the mode.
+        from pharmaml.cli import main
+
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "qed", "--scaffold",
+            "--seed-smiles", ASPIRIN,
+            "--iterations", "3", "--population", "16", "--seed", "42", "--top", "3",
+        ])
+        assert code == 0
+        output = capsys.readouterr().out
+        assert "scaffold" in output
+        assert "genetic_algorithm" in output
+
+    def test_scaffold_flag_requires_ga_method(self, capsys) -> None:
+        # --scaffold is a GA mutation mode: asking an RL run for it must be
+        # an actionable typed error, not a silently ignored flag.
+        from pharmaml.cli import main
+
+        code = main([
+            "generative", "run",
+            "--method", "rl", "--recipe", "qed", "--scaffold",
+            "--iterations", "1",
+        ])
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "--scaffold" in error and "ga" in error
+
+    def test_run_help_documents_scaffold_and_novel(self, capsys) -> None:
+        from pharmaml.cli import main
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["generative", "run", "--help"])
+        assert excinfo.value.code == 0
+        output = capsys.readouterr().out
+        assert "--scaffold" in output
+        assert "novel" in output
+
     def test_run_help_documents_every_flag(self, capsys) -> None:
         from pharmaml.cli import main
 
@@ -1235,3 +1314,331 @@ class TestGenerativeCommands:
             "--top", "--out",
         ):
             assert flag in output, flag
+
+
+# ---------------------------------------------------------------------------
+# The novelty objective (100x-22-a)
+# ---------------------------------------------------------------------------
+class TestNoveltyObjective:
+    def test_corpus_member_scores_zero(self) -> None:
+        # A molecule present in the reference corpus is by definition not
+        # novel: max Tanimoto = 1 -> score exactly 0.0.
+        objective = NoveltyObjective()
+        for member in (ASPIRIN, PARACETAMOL, CAFFEINE):
+            assert member in DEFAULT_CORPUS
+            assert objective.score(member) == pytest.approx(0.0, abs=1e-12), member
+
+    def test_structurally_distant_molecule_scores_high(self) -> None:
+        # Probed against rdkit 2026.09.1 with the default corpus / radius 2 /
+        # 2048 bits: cholesterol max-Tanimoto 0.358 -> 0.642, squalene 0.149
+        # -> 0.851.  Both pinned with margin around the probe.
+        objective = NoveltyObjective()
+        assert objective.score(CHOLESTEROL) == pytest.approx(0.6418, abs=0.05)
+        assert objective.score(SQUALENE) == pytest.approx(0.8511, abs=0.05)
+        # the spec contract: a distant molecule scores well above 0.3
+        assert objective.score(CHOLESTEROL) > 0.3
+        for smiles in (CHOLESTEROL, SQUALENE):
+            assert 0.0 <= objective.score(smiles) <= 1.0
+
+    def test_custom_corpus_changes_the_reference(self) -> None:
+        # Aspirin-only corpus: paracetamol's Tanimoto to aspirin is the
+        # pinned 0.2222 (see test_similarity_aspirin_paracetamol_is_pinned)
+        # -> novelty 0.7778; aspirin itself is a member -> 0.0.
+        objective = NoveltyObjective(corpus=[ASPIRIN])
+        assert objective.score(PARACETAMOL) == pytest.approx(0.777778, abs=1e-3)
+        assert objective.score(ASPIRIN) == pytest.approx(0.0, abs=1e-12)
+        # widening the corpus can only *lower* novelty (more references)
+        assert (
+            NoveltyObjective(corpus=[ASPIRIN]).score(PARACETAMOL)
+            >= NoveltyObjective(corpus=[ASPIRIN, PARACETAMOL]).score(PARACETAMOL)
+        )
+
+    def test_default_corpus_is_used_and_sanitized(self) -> None:
+        # corpus=None -> DEFAULT_CORPUS; entries are canonicalised and
+        # de-duplicated (duplicate spellings must not skew anything).
+        objective = NoveltyObjective()
+        assert objective.corpus == tuple(DEFAULT_CORPUS)
+        assert len(objective.corpus) == len(DEFAULT_CORPUS) == 244
+        duplicated = NoveltyObjective(corpus=[ASPIRIN, ASPIRIN, f" {PARACETAMOL} "])
+        assert duplicated.corpus == (ASPIRIN, PARACETAMOL)
+
+    def test_empty_or_all_invalid_corpus_raises(self) -> None:
+        with pytest.raises(DataValidationError, match="corpus is empty"):
+            NoveltyObjective(corpus=[])
+        with pytest.raises(DataValidationError, match="no valid SMILES"):
+            NoveltyObjective(corpus=[INVALID, ""])
+
+    def test_duck_typed_corpus_misuse_is_a_typed_error(self) -> None:
+        # A bare string would silently iterate CHARACTERS ("CCO" -> corpus of
+        # C, C, O atoms); a non-sequence crashes with a raw TypeError.  Both
+        # must surface as the typed DataValidationError instead.
+        with pytest.raises(DataValidationError, match="sequence of SMILES"):
+            NoveltyObjective(corpus="CCO")  # type: ignore[arg-type]
+        with pytest.raises(DataValidationError, match="sequence of SMILES"):
+            NoveltyObjective(corpus=42)  # type: ignore[arg-type]
+
+    def test_non_string_corpus_entries_warn_when_dropped(self, caplog) -> None:
+        # Docstring contract (100x-22-b fail-first): "invalid entries are
+        # dropped with a warning".  Unparseable STRINGS warned; non-string
+        # entries were dropped SILENTLY -- silent data loss.  They must warn
+        # too, and the valid entries must still survive.
+        import logging as _logging
+
+        # TWO independent silencers must be lifted for caplog to see the
+        # record (established suite convention, cf. test_descriptors.py's
+        # _visible_logs fixture): sibling modules call
+        # logging.disable(CRITICAL) at import time, and CLI tests call
+        # configure_logging() which sets propagate=False on the pharmaml
+        # root logger while pytest's caplog handler lives on the true root.
+        prev_disable = _logging.root.manager.disable
+        pharma_root = _logging.getLogger("pharmaml")
+        prev_propagate = pharma_root.propagate
+        _logging.disable(_logging.NOTSET)
+        pharma_root.propagate = True
+        try:
+            with caplog.at_level(_logging.WARNING, logger="pharmaml.generative.scoring"):
+                objective = NoveltyObjective(corpus=[42, None, ASPIRIN])
+        finally:
+            pharma_root.propagate = prev_propagate
+            _logging.disable(prev_disable)
+        assert objective.corpus == (ASPIRIN,)  # the valid entry survives
+        warnings_seen = [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelno == _logging.WARNING
+        ]
+        assert any("non-string" in message for message in warnings_seen), warnings_seen
+
+    def test_invalid_smiles_scores_zero_with_accounting(self) -> None:
+        # Mirrors the sibling-objective contract (see QedObjective): invalid
+        # input scores 0.0 and is counted, never raised.
+        objective = NoveltyObjective(corpus=[ASPIRIN])
+        assert objective.score(INVALID) == 0.0
+        assert objective.score("") == 0.0
+        assert objective.n_invalid == 2
+        assert objective.n_scored == 2
+        objective.reset_stats()
+        assert objective.n_invalid == 0 and objective.n_scored == 0
+
+    def test_works_inside_multi_objective_with_veto(self) -> None:
+        objective = MultiObjective(
+            [NoveltyObjective(corpus=[ASPIRIN]), QedObjective()],
+            weights=[1.0, 1.0],
+        )
+        total, breakdown = objective.score_with_breakdown(PARACETAMOL)
+        assert set(breakdown) == {"novelty", "qed"}
+        assert breakdown["novelty"] == pytest.approx(0.777778, abs=1e-3)
+        assert breakdown["qed"] == pytest.approx(0.595026, abs=1e-4)
+        assert total == pytest.approx((0.777778 * 0.595026) ** 0.5, rel=1e-3)
+        # a corpus member vetoes the whole molecule (novelty 0 -> total 0)
+        assert objective.score(ASPIRIN) == 0.0
+        assert objective.score(INVALID) == 0.0
+
+    def test_same_input_gives_the_same_score(self) -> None:
+        batch = [ASPIRIN, PARACETAMOL, CHOLESTEROL, SQUALENE, "CCO", INVALID]
+        first = NoveltyObjective().score_many(batch)
+        second = NoveltyObjective().score_many(batch)
+        assert first == second
+
+    def test_constructor_validation(self) -> None:
+        for kwargs in ({"radius": -1}, {"radius": 1.5}, {"radius": "2"},
+                       {"n_bits": 16}, {"n_bits": 2048.5}):
+            with pytest.raises(DataValidationError):
+                NoveltyObjective(corpus=[ASPIRIN], **kwargs)  # type: ignore[arg-type]
+        # sane alternative fingerprints are accepted and stay in range
+        objective = NoveltyObjective(corpus=[ASPIRIN], radius=1, n_bits=1024)
+        assert 0.0 <= objective.score(PARACETAMOL) <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# Scaffold-preserving mutation (100x-22-a)
+# ---------------------------------------------------------------------------
+def _murcko(smiles: str) -> str:
+    """Canonical Murcko framework SMILES of ``smiles`` (test helper)."""
+    from rdkit import Chem
+    from rdkit.Chem.Scaffolds import MurckoScaffold
+
+    mol = Chem.MolFromSmiles(smiles)
+    assert mol is not None, smiles
+    return Chem.MolToSmiles(MurckoScaffold.GetScaffoldForMol(mol))
+
+
+def _reassemble(core_smi: str, frag_smis: list[str]) -> str:
+    """molzip(core, decorations) -> canonical SMILES (round-trip helper)."""
+    from rdkit import Chem
+
+    core = Chem.MolFromSmiles(core_smi)
+    side = Chem.MolFromSmiles(".".join(frag_smis))
+    zipped = Chem.molzip(core, side)
+    Chem.SanitizeMol(zipped)
+    return Chem.MolToSmiles(zipped)
+
+
+class TestScaffoldMutation:
+    def test_decoration_pool_is_built_from_the_corpus(self) -> None:
+        # Probed against rdkit 2026.09.1: the 244-entry corpus decomposes into
+        # 65 unique single-dummy decorations (acyclic only -- a ring in a
+        # decoration would be part of the Murcko framework by definition).
+        pool = _build_decoration_pool(list(DEFAULT_CORPUS))
+        assert len(pool) >= 60
+        assert len(set(pool)) == len(pool)  # de-duplicated
+        assert _build_decoration_pool(list(DEFAULT_CORPUS)) == pool  # deterministic
+
+        from rdkit import Chem
+
+        for entry in pool:
+            assert entry.count("*") == 1, entry  # exactly one dummy atom
+            frag = Chem.MolFromSmiles(entry)
+            assert frag is not None, entry
+            dummies = [a for a in frag.GetAtoms() if a.GetAtomicNum() == 0]
+            assert len(dummies) == 1, entry
+            assert frag.GetRingInfo().NumRings() == 0, entry  # acyclic vocabulary
+
+    def test_decoration_pool_skips_acyclic_and_bare_scaffolds(self) -> None:
+        # No Murcko scaffold (acyclic) or no decorations (bare ring systems)
+        # contribute nothing to the pool.
+        assert _build_decoration_pool(["CCO", "CCN", "c1ccccc1"]) == []
+
+    def test_scaffold_split_round_trips_the_parent(self) -> None:
+        # core (attachment-labelled dummies) + decorations re-zip into exactly
+        # the parent molecule: the decomposition loses nothing.
+        for parent in (ASPIRIN, PARACETAMOL, CAFFEINE, NICOTINE,
+                       "CC(=O)CC(c1ccccc1)c1c(O)c2ccccc2oc1=O"):  # warfarin
+            split = _scaffold_split(parent)
+            assert split is not None, parent
+            core_smi, frag_smis = split
+            assert "[*:" in core_smi
+            assert len(frag_smis) >= 1
+            assert _reassemble(core_smi, list(frag_smis)) == parent, parent
+
+    def test_scaffold_mutate_preserves_the_parent_scaffold(self) -> None:
+        # The operator contract: every SUCCESSFUL decoration-resampling mutant
+        # keeps the parent's Murcko framework verbatim (structural guarantee:
+        # corpus decorations are acyclic, so they can never add a ring).
+        import random
+
+        pool = _build_decoration_pool(list(DEFAULT_CORPUS))
+        rng = random.Random(123)
+        for parent in (ASPIRIN, PARACETAMOL, CAFFEINE, NICOTINE):
+            parent_scaffold = _murcko(parent)
+            mutants = [
+                _scaffold_mutate(parent, pool, rng, max_smiles_length=120)
+                for _ in range(30)
+            ]
+            successes = [m for m in mutants if m is not None]
+            # the operator almost always fires for drug-like ring parents;
+            # occasional RDKit failures fall back (returned as None)
+            assert len(successes) >= 24, (parent, len(successes))
+            for mutant in successes:
+                assert _murcko(mutant) == parent_scaffold, (parent, mutant)
+            # and it actually explores (not just cloning the parent back)
+            assert len(set(successes)) >= 2, parent
+
+    def test_scaffold_mutate_returns_none_for_acyclic_or_bare_scaffold(self) -> None:
+        # Acyclic parents have no Murcko framework and bare ring systems have
+        # no decorations: the caller must fall back to character mutation.
+        import random
+
+        pool = _build_decoration_pool([ASPIRIN])
+        rng = random.Random(0)
+        for parent in ("CCO", "c1ccccc1", INVALID):
+            assert _scaffold_mutate(parent, pool, rng, max_smiles_length=120) is None, parent
+
+    def test_scaffold_mutate_is_deterministic(self) -> None:
+        import random
+
+        pool = _build_decoration_pool(list(DEFAULT_CORPUS))
+        first = [
+            _scaffold_mutate(ASPIRIN, pool, random.Random(7), max_smiles_length=120)
+            for _ in range(40)
+        ]
+        second = [
+            _scaffold_mutate(ASPIRIN, pool, random.Random(7), max_smiles_length=120)
+            for _ in range(40)
+        ]
+        assert first == second
+
+    def test_seeded_scaffold_run_preserves_the_seed_scaffold(self) -> None:
+        # Lead-optimisation property: with the seed molecule as the only
+        # corpus entry, >= 95% of every unique molecule the GA produces keeps
+        # the aspirin seed's Murcko framework (benzene) verbatim.
+        result = GeneticOptimizer(
+            QedObjective(),
+            population_size=16,
+            generations=3,
+            seed=42,
+            mutation="scaffold",
+        ).optimize(seed_smiles=[ASPIRIN], corpus=[ASPIRIN])
+        assert len(result) >= 2
+        benzene = _murcko(ASPIRIN)
+        preserved = sum(1 for smi in result.smiles if _murcko(smi) == benzene)
+        assert preserved / len(result.smiles) >= 0.95
+        # deterministic: a second identical run reproduces the leaderboard
+        rerun = GeneticOptimizer(
+            QedObjective(),
+            population_size=16,
+            generations=3,
+            seed=42,
+            mutation="scaffold",
+        ).optimize(seed_smiles=[ASPIRIN], corpus=[ASPIRIN])
+        assert rerun.smiles == result.smiles
+        assert rerun.scores == result.scores
+
+    def test_scaffold_mode_smoke_on_the_default_corpus(self) -> None:
+        result = GeneticOptimizer(
+            QedObjective(),
+            population_size=16,
+            generations=3,
+            seed=42,
+            mutation="scaffold",
+        ).optimize()
+        assert len(result) > 0
+        assert result.metadata["mutation"] == "scaffold"
+        for smiles in result.smiles:
+            assert canonical_smiles(smiles) == smiles  # valid + canonical
+
+    def test_acyclic_seed_falls_back_without_crashing(self) -> None:
+        # A corpus with no ring systems yields an empty decoration pool, so
+        # scaffold mode degrades to the standard character mutation -- the
+        # run must still complete and produce valid molecules.
+        result = GeneticOptimizer(
+            QedObjective(),
+            population_size=12,
+            generations=2,
+            seed=42,
+            mutation="scaffold",
+        ).optimize(seed_smiles=["CCO"], corpus=["CCO", "CCN"])
+        assert len(result) > 0
+        assert all(canonical_smiles(smi) is not None for smi in result.smiles)
+
+    def test_mutation_parameter_validation_and_default(self) -> None:
+        with pytest.raises(DataValidationError, match="mutation"):
+            GeneticOptimizer(QedObjective(), mutation="bogus")
+        # the default is unchanged (back-compat): uniform character mutation
+        optimizer = GeneticOptimizer(QedObjective())
+        assert optimizer.mutation == "uniform"
+        result = optimizer.optimize(corpus=["CCO", "CCN"], seed_smiles=["CCO"])
+        assert result.metadata["mutation"] == "uniform"
+
+    def test_default_mutation_mode_results_are_unchanged(self) -> None:
+        # Back-compat pins recorded BEFORE the 100x-22-a changes (see
+        # /tmp/task22a/backcompat.txt): the uniform-mode GA must reproduce
+        # them molecule-for-molecule, generation score for generation score.
+        result = GeneticOptimizer(
+            QedObjective(), population_size=32, generations=5, seed=42
+        ).optimize()
+        assert result.best == "COc1ccc2[nH]c(CCC(C)=O)cc2c1"
+        assert result.best_score == pytest.approx(0.855097, abs=1e-6)
+        assert len(result) == 137
+
+        multi = MultiObjective(
+            [QedObjective(), LogPBandObjective(1.0, 3.0)], weights=[0.7, 0.3]
+        )
+        multi_result = GeneticOptimizer(
+            multi, population_size=24, generations=4, seed=42
+        ).optimize()
+        assert multi_result.best == "CC(=O)Nc1ccbcc2[nH]cnc2ccc1"
+        assert multi_result.best_score == pytest.approx(0.839569, abs=1e-6)
+        assert [round(entry["best_score"], 6) for entry in multi_result.history] == [
+            0.833081, 0.833081, 0.839569, 0.839569,
+        ]

@@ -110,3 +110,56 @@ class TestMolarMassRobustness:
         assert molar_mass("K4(Fe(CN)6)") == pytest.approx(
             4 * 39.098 + 55.845 + 6 * (12.011 + 14.007), rel=1e-4
         )
+
+
+class TestAtomicWeightTable:
+    """The element table must never drift from published values again.
+
+    Regression (100x-22-c): the 19-a/20-a triage list flagged missing Cu
+    and Ni; the full-table audit also found that platinum (cisplatin!),
+    arsenic (arsenic trioxide), gadolinium (MRI contrast) and 14 other
+    pharma-relevant elements were absent, so their formulas raised
+    ``"unknown element"`` instead of computing a molar mass.
+    """
+
+    def test_every_entry_matches_published_weights(self) -> None:
+        # Pin every entry against RDKit's periodic table (tolerance 0.01
+        # covers rounding-convention differences).  Two INTENTIONAL
+        # divergences: our Zn (65.38) and Se (78.971) follow the IUPAC
+        # 2021 abridged values, which are NEWER than RDKit's 65.39 /
+        # 78.96 -- documented, not drift.
+        from rdkit import Chem
+
+        from pharmaml.pharma.units import _ATOMIC_WEIGHTS
+
+        pt = Chem.GetPeriodicTable()
+        intentional = {"Zn", "Se"}
+        for symbol, ours in _ATOMIC_WEIGHTS.items():
+            z = pt.GetAtomicNumber(symbol)
+            rdkit_w = pt.GetAtomicWeight(z)
+            if symbol in intentional:
+                # 0.012 absorbs the binary dust at the 0.011 Se delta
+                assert abs(ours - rdkit_w) <= 0.012, (symbol, ours, rdkit_w)
+            else:
+                assert abs(ours - rdkit_w) <= 0.01, (symbol, ours, rdkit_w)
+
+    def test_pharma_relevant_metals_present(self) -> None:
+        from pharmaml.pharma.units import _ATOMIC_WEIGHTS
+
+        required = {
+            "Cu": 63.546, "Ni": 58.693, "Pt": 195.08, "Au": 196.967,
+            "Ag": 107.868, "As": 74.922, "Bi": 208.980, "Gd": 157.25,
+            "Ba": 137.327, "Ti": 47.867,
+        }
+        for symbol, weight in required.items():
+            assert symbol in _ATOMIC_WEIGHTS, symbol
+            assert _ATOMIC_WEIGHTS[symbol] == pytest.approx(weight, abs=1e-6)
+
+    def test_real_metal_drug_formulas_compute(self) -> None:
+        # cisplatin Pt(NH3)2Cl2 ~ 300.05 g/mol (published); arsenic
+        # trioxide As2O3 (Trisenox) ~ 197.84; copper sulfate ~ 159.6;
+        # barium sulfate radiocontrast ~ 233.4.
+        assert molar_mass("Pt(NH3)2Cl2") == pytest.approx(300.05, abs=0.02)
+        assert molar_mass("As2O3") == pytest.approx(197.84, abs=0.02)
+        assert molar_mass("CuSO4") == pytest.approx(159.61, abs=0.02)
+        assert molar_mass("BaSO4") == pytest.approx(233.39, abs=0.02)

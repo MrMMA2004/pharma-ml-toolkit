@@ -44,7 +44,17 @@ class GenerationResult:
 
     Example
     -------
-    >>> result.to_dataframe().head(10)   # ranked leaderboard
+    >>> from pharmaml.generative import GenerationResult
+    >>> result = GenerationResult(
+    ...     smiles=["CCO", "CCN"], scores=[0.5, 0.4],
+    ...     breakdown=[{"qed": 0.5, "novelty": 0.9}, {"qed": 0.4, "novelty": 0.6}],
+    ... )
+    >>> result.best, round(result.best_score, 1)
+    ('CCO', 0.5)
+    >>> result.to_dataframe()   # ranked leaderboard (rank 1 = best)
+       rank smiles  score  qed  novelty
+    0     1    CCO    0.5  0.5      0.9
+    1     2    CCN    0.4  0.4      0.6
     """
 
     smiles: list[str] = field(default_factory=list)

@@ -66,7 +66,10 @@ dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
     "mypy>=1.5",
-    "ruff>=0.4",
+    # Pinned major.minor (100x-22-c): the zero-finding lint baseline was
+    # verified under ruff 0.17 -- an unpinned ruff could change rules and
+    # turn CI red (or silently relax) on any future minor release.
+    "ruff>=0.17,<0.18",
 ]
 
 [project.scripts]
@@ -79,9 +82,13 @@ Homepage = "https://github.com/example/pharma-ml-toolkit"
 where = ["src"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "src"]
 pythonpath = ["src"]
-addopts = "-q --tb=short"
+# --doctest-modules (100x-22-c): every docstring example is a tested
+# contract -- a bare `pytest` (and CI) now collects the 19 doctest items
+# from src/pharmaml alongside the regular suite.  The 1000-round loop's
+# standard `-o addopts=` invocation simply overrides this back off.
+addopts = "-q --tb=short --doctest-modules"
 
 [tool.ruff]
 line-length = 100

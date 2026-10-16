@@ -37,18 +37,20 @@ def canonical_smiles(smiles: str) -> str | None:
     are treated as invalid here (consistent with the rest of the package).
     """
     Chem = require_rdkit()  # actionable DependencyError when RDKit is absent
-    from rdkit import RDLogger
+# rdkit-stubs does not re-export DisableLog/EnableLog on rdkit.RDLogger,
+    # but rdBase (their defining module) is fully typed.
+    from rdkit.rdBase import DisableLog, EnableLog
 
     if not isinstance(smiles, str) or not smiles.strip():
         return None
     # RDKit logs parse errors to stderr before returning None; generation
     # loops parse thousands of mutants per run and the raw parser trace is
     # pure noise (same guard family as docking/ligands._validate_smiles).
-    RDLogger.DisableLog("rdApp.error")
+    DisableLog("rdApp.error")
     try:
         mol = Chem.MolFromSmiles(smiles)
     finally:
-        RDLogger.EnableLog("rdApp.error")
+        EnableLog("rdApp.error")
     if mol is None:
         return None
     return Chem.MolToSmiles(mol)

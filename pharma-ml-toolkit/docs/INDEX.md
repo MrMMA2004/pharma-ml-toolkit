@@ -101,6 +101,7 @@ after adding new public functions.
 | `LogPBandObjective` | class | Gaussian band on Crippen LogP (wild octanol/water behaviour excluded). |
 | `MolecularWeightBandObjective` | class | Gaussian band on average molecular weight (Da).  See |
 | `MultiObjective` | class | Weighted geometric mean of several objectives, with veto semantics. |
+| `NoveltyObjective` | class | Structural novelty against a reference corpus. |
 | `QedObjective` | class | RDKit QED (quantitative estimate of drug-likeness). |
 | `ReinventOptimizer` | class | Policy-gradient fine-tuning of a SMILES RNN prior. |
 | `ScoringObjective` | class | Base class for generation objectives: ``score(smiles) -> [0, 1]``. |
@@ -185,6 +186,7 @@ after adding new public functions.
 | Symbol | Kind | Summary |
 |---|---|---|
 | `GridBox` | class | Docking search box geometry. |
+| `GridParameters` | class | Parsed AutoDock4 grid parameter file (GPF) content. |
 | `LigandLibrary` | class | A validated ligand library loaded from a table file. |
 | `LigandPreparationReport` | class | Audit of one :func:`prepare_ligand_library` batch. |
 | `ProteinReport` | class | Audit of one :func:`prepare_protein` run. |

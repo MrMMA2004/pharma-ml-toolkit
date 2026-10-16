@@ -215,18 +215,27 @@ def compute_fingerprints(
     DependencyError
         If RDKit is not installed.
     DataValidationError
-        If ``smiles`` is a bare string, or ``radius`` / ``n_bits`` are out
-        of range.
+        If ``smiles`` is a bare string, ``radius`` / ``n_bits`` are out
+        of range, or ``as_counts=True`` is combined with a ``kind``
+        other than ``'morgan'`` (the count flavour only exists for
+        Morgan fingerprints -- other kinds would silently return
+        binary bits instead).
     """
     if radius < 0:
         raise DataValidationError(f"radius must be >= 0, got {radius}")
     if not 0 < n_bits <= 65536:
         raise DataValidationError(f"n_bits out of range: {n_bits}")
+    if as_counts and kind != "morgan":
+        raise DataValidationError(
+            "as_counts=True is only supported for kind='morgan' (count "
+            f"fingerprints); got kind={kind!r} -- pass as_counts=False or "
+            "switch to morgan"
+        )
 
     smiles_list = _as_smiles_list(smiles, "smiles")
     require_rdkit()
     from rdkit import DataStructs
-    from rdkit.Chem import AllChem, rdMolDescriptors
+    from rdkit.Chem import rdMolDescriptors
 
     molecules, valid_idx, failures = _smiles_to_molecules(smiles_list)
     if failures:
@@ -244,7 +253,7 @@ def compute_fingerprints(
                     matrix[row, idx] = value
             return matrix, valid_idx
         fps = [
-            AllChem.GetMorganFingerprintAsBitVect(m, radius=radius, nBits=n_bits)
+            rdMolDescriptors.GetMorganFingerprintAsBitVect(m, radius=radius, nBits=n_bits)
             for m in molecules
         ]
     elif kind == "rdkit":
@@ -285,7 +294,7 @@ def compute_maccs(smiles: pd.Series | list[str]) -> tuple[np.ndarray, list[int]]
     """
     require_rdkit()  # import guard
     from rdkit import DataStructs
-    from rdkit.Chem import MACCSkeys
+    from rdkit.Chem import rdMolDescriptors
 
     molecules, valid_idx, failures = _smiles_to_molecules(
         _as_smiles_list(smiles, "smiles")
@@ -295,7 +304,10 @@ def compute_maccs(smiles: pd.Series | list[str]) -> tuple[np.ndarray, list[int]]
     n_bits = 167
     matrix = np.zeros((len(molecules), n_bits), dtype=np.uint8)
     for row, mol in enumerate(molecules):
-        fp = MACCSkeys.GenMACCSKeys(mol)
+        # MACCSkeys.GenMACCSKeys is a re-export of this rdMolDescriptors
+        # entry point (the same object at runtime) -- the defining module
+        # is the one rdkit-stubs actually types.
+        fp = rdMolDescriptors.GetMACCSKeysFingerprint(mol)
         DataStructs.ConvertToNumpyArray(fp, arr := np.zeros((n_bits,), dtype=np.uint8))
         matrix[row] = arr
     return matrix, valid_idx

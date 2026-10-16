@@ -6,9 +6,11 @@ CPU-friendly and deterministic given ``seed``:
 * **genome** = canonical SMILES string (character level);
 * **mutation** = random character substitution / insertion / deletion,
   followed by RDKit sanitisation and re-canonicalisation (invalid mutants
-  are discarded);
+  are discarded) -- OR, in ``mutation="scaffold"`` mode, a
+  scaffold-preserving decoration resampling (see :func:`_scaffold_mutate`);
 * **crossover** = single-point splice of two parents, sanitised the same
-  way;
+  way (not used in scaffold mode: a character splice routinely destroys
+  ring systems, defeating scaffold preservation);
 * **selection** = tournament of ``tournament_k`` molecules;
 * **elitism** = the top ``elitism`` molecules survive a generation
   verbatim, so the best score is monotone across generations.
@@ -36,18 +38,23 @@ import math
 import random
 import time
 from collections.abc import Sequence
+from functools import lru_cache
 from typing import Any
 
 from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
 
-from ._utils import canonical_smiles, smiles_alphabet
+from ._utils import canonical_smiles, require_rdkit, smiles_alphabet
 from .corpus import DEFAULT_CORPUS
 from .result import GenerationResult
 
 __all__ = ["GeneticOptimizer", "run_genetic_optimization"]
 
 _LOG = get_logger(__name__)
+
+#: Probability that a resampled decoration slot is dropped entirely (rather
+#: than replaced with a corpus decoration) by the scaffold mutation.
+_DROP_PROBABILITY = 0.25
 
 
 def _validated_score(objective: Any, smiles: str) -> float:
@@ -70,6 +77,258 @@ def _validated_score(objective: Any, smiles: str) -> float:
     return min(max(value, 0.0), 1.0)
 
 
+# ---------------------------------------------------------------------------
+# Scaffold-preserving mutation machinery
+# ---------------------------------------------------------------------------
+@lru_cache(maxsize=4096)
+def _scaffold_split(smiles: str) -> tuple[str, tuple[str, ...]] | None:
+    """Split ``smiles`` into its (labelled) Murcko core + decorations.
+
+    Returns ``(core_smiles, decoration_smiles)`` where the core carries
+    ``[*:k]`` dummy atoms at every attachment point (labelled 1..k in a
+    deterministic order) and each decoration fragment carries the matching
+    label -- so ``Chem.molzip(core, decorations)`` rebuilds exactly the
+    parent molecule.  ``None`` when there is nothing to split (acyclic
+    molecule, bare ring system without decorations, unparseable input, or
+    any RDKit failure -- robustness first).
+    """
+    Chem = require_rdkit()
+# rdkit-stubs does not re-export DisableLog/EnableLog on rdkit.RDLogger,
+    # but rdBase (their defining module) is fully typed.
+    from rdkit.Chem.Scaffolds import MurckoScaffold
+    from rdkit.rdBase import DisableLog, EnableLog
+
+    if not isinstance(smiles, str) or not smiles.strip():
+        return None
+    DisableLog("rdApp.error")
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+    except Exception:  # noqa: BLE001 - RDKit can raise on hostile input
+        return None
+    finally:
+        EnableLog("rdApp.error")
+    if mol is None:
+        return None
+
+    scaffold = MurckoScaffold.GetScaffoldForMol(mol)
+    if scaffold.GetNumAtoms() == 0:
+        return None  # acyclic parent: no framework to preserve
+    match = mol.GetSubstructMatch(scaffold)
+    if not match:
+        return None
+    in_scaffold = set(match)
+    # attachment pairs (scaffold atom position, outside neighbour), ranked
+    # deterministically: label k = k-th attachment in sorted pair order.
+    pairs = sorted(
+        (j, neighbour.GetIdx())
+        for j, atom_idx in enumerate(match)
+        for neighbour in mol.GetAtomWithIdx(atom_idx).GetNeighbors()
+        if neighbour.GetIdx() not in in_scaffold
+    )
+    if not pairs:
+        return None  # bare scaffold: no decorations to resample
+    ranks_by_j: dict[int, list[int]] = {}
+    for rank, (j, _neighbour) in enumerate(pairs, start=1):
+        ranks_by_j.setdefault(j, []).append(rank)
+
+    core = Chem.ReplaceSidechains(mol, scaffold)
+    if core is None:
+        return None
+    core_match = core.GetSubstructMatch(scaffold)
+    if not core_match:
+        return None
+    dummies_by_j: dict[int, list[int]] = {}
+    for atom in core.GetAtoms():
+        if atom.GetAtomicNum() != 0:
+            continue
+        neighbours = atom.GetNeighbors()
+        if len(neighbours) != 1:
+            return None
+        j = core_match.index(neighbours[0].GetIdx())
+        dummies_by_j.setdefault(j, []).append(atom.GetIdx())
+    rw_core = Chem.RWMol(core)
+    for j, dummy_ids in dummies_by_j.items():
+        ranks = ranks_by_j.get(j, [])
+        if len(dummy_ids) != len(ranks):
+            return None
+        for dummy_id, rank in zip(sorted(dummy_ids), ranks):
+            atom = rw_core.GetAtomWithIdx(dummy_id)
+            atom.SetAtomMapNum(rank)
+            atom.SetIsotope(0)
+    core_smiles = Chem.MolToSmiles(rw_core.GetMol())
+
+    # ReplaceCore(labelByIndex=True) labels each decoration dummy with the
+    # scaffold-atom position it was attached to -- relabel to the ranks.
+    side = Chem.ReplaceCore(mol, scaffold, labelByIndex=True)
+    if side is None:
+        return None
+    rank_queues = {j: list(ranks) for j, ranks in ranks_by_j.items()}
+    decoration_smiles: list[str] = []
+    for fragment in Chem.GetMolFrags(side, asMols=True):
+        rw_fragment = Chem.RWMol(fragment)
+        saw_dummy = False
+        for atom in rw_fragment.GetAtoms():
+            if atom.GetAtomicNum() != 0:
+                continue
+            queue = rank_queues.get(atom.GetIsotope())
+            if not queue:
+                return None
+            atom.SetAtomMapNum(queue.pop(0))
+            atom.SetIsotope(0)
+            saw_dummy = True
+        if not saw_dummy:
+            return None  # untracked fragment: refuse rather than lose atoms
+        decoration_smiles.append(Chem.MolToSmiles(rw_fragment.GetMol()))
+    return core_smiles, tuple(decoration_smiles)
+
+
+def _strip_dummy_label(fragment_smiles: str) -> str:
+    """Remove the attachment label from a single-dummy decoration SMILES."""
+    Chem = require_rdkit()
+    fragment = Chem.MolFromSmiles(fragment_smiles)
+    if fragment is None:  # pragma: no cover - split output always parses
+        return fragment_smiles
+    rw = Chem.RWMol(fragment)
+    for atom in rw.GetAtoms():
+        if atom.GetAtomicNum() == 0:
+            atom.SetAtomMapNum(0)
+            atom.SetIsotope(0)
+    return Chem.MolToSmiles(rw.GetMol())
+
+
+@lru_cache(maxsize=8)
+def _decoration_pool(corpus_key: tuple[str, ...]) -> tuple[str, ...]:
+    """Corpus-derived decoration vocabulary (memoised on the corpus tuple)."""
+    pool: list[str] = []
+    for smiles in corpus_key:
+        split = _scaffold_split(smiles)
+        if split is None:
+            continue
+        for fragment_smiles in split[1]:
+            if fragment_smiles.count("[*") != 1:
+                continue  # only single-attachment decorations are reusable
+            pool.append(fragment_smiles)
+    return tuple(dict.fromkeys(_strip_dummy_label(s) for s in pool))
+
+
+def _build_decoration_pool(corpus: Sequence[str]) -> list[str]:
+    """Decoration vocabulary derived from ``corpus`` (deterministic order).
+
+    Every corpus molecule is decomposed once into Murcko scaffold +
+    decorations (see :func:`_scaffold_split`); the single-attachment
+    decorations, label-stripped and de-duplicated, form the vocabulary the
+    scaffold mutation samples from.  Murcko decorations are always acyclic
+    (any ring would be part of the framework), which is what makes scaffold
+    preservation structural rather than lucky.
+    """
+    return list(_decoration_pool(tuple(corpus)))
+
+
+def _scaffold_mutate(
+    smiles: str,
+    pool: Sequence[str],
+    rng: random.Random,
+    max_smiles_length: int,
+) -> str | None:
+    """Decoration-resampling mutation that preserves the Murcko scaffold.
+
+    Keeps the parent's Murcko framework verbatim and replaces a random
+    non-empty subset of its decorations with entries sampled from the
+    corpus-derived ``pool`` (or drops them).  Returns the canonical mutant
+    SMILES, or ``None`` when the parent has no scaffold / no decorations,
+    the pool is unusable for it, the mutant would exceed
+    ``max_smiles_length``, or RDKit raises anywhere in the pipeline -- the
+    caller then falls back to the standard character mutation
+    (robustness first: never crash, never emit a dummy-bearing or empty
+    molecule).
+    """
+    Chem = require_rdkit()
+    from rdkit.rdBase import DisableLog, EnableLog
+
+    # Occasional chemically invalid re-attachments are EXPECTED (they fall
+    # back to the character mutation); RDKit logs the sanitisation failures
+    # to stderr before the exception surfaces -- keep the loop quiet (the
+    # canonical_smiles guard-family precedent).
+    DisableLog("rdApp.error")
+    try:
+        split = _scaffold_split(smiles)
+        if split is None:
+            return None
+        core_smiles, fragment_smiles = split
+        # only single-attachment decorations can be replaced/dropped;
+        # bridging multi-dummy fragments are always kept as-is
+        replaceable = [
+            index for index, fragment in enumerate(fragment_smiles)
+            if fragment.count("[*") == 1
+        ]
+        if not replaceable:
+            return None
+        n_change = rng.randint(1, len(replaceable))
+        chosen = set(rng.sample(replaceable, n_change))
+
+        rw_core = Chem.RWMol(Chem.MolFromSmiles(core_smiles))
+        kept: list[str] = []
+        for index, fragment in enumerate(fragment_smiles):
+            if index not in chosen:
+                kept.append(fragment)
+                continue
+            parsed = Chem.MolFromSmiles(fragment)
+            if parsed is None:  # pragma: no cover - split output always parses
+                return None
+            label = next(
+                atom.GetAtomMapNum()
+                for atom in parsed.GetAtoms()
+                if atom.GetAtomicNum() == 0
+            )
+            if rng.random() < _DROP_PROBABILITY:
+                # Drop the decoration by turning its core dummy into an
+                # explicit hydrogen (plain RemoveAtom would leave e.g. an
+                # aromatic N without its H -> "Can't kekulize" on sanitise;
+                # an unmatched dummy would leak [*:k] into the offspring).
+                # RemoveHs below collapses the graph-H back to implicit.
+                for dummy_id in (
+                    atom.GetIdx()
+                    for atom in rw_core.GetAtoms()
+                    if atom.GetAtomicNum() == 0 and atom.GetAtomMapNum() == label
+                ):
+                    hydrogen = rw_core.GetAtomWithIdx(dummy_id)
+                    hydrogen.SetAtomicNum(1)
+                    hydrogen.SetAtomMapNum(0)
+                    hydrogen.SetIsotope(0)
+                    hydrogen.SetFormalCharge(0)
+                    hydrogen.SetNumExplicitHs(0)
+                    hydrogen.SetNoImplicit(True)
+            else:
+                replacement = Chem.MolFromSmiles(pool[rng.randrange(len(pool))])
+                if replacement is None:  # pragma: no cover - pool always parses
+                    return None
+                rw_replacement = Chem.RWMol(replacement)
+                for atom in rw_replacement.GetAtoms():
+                    if atom.GetAtomicNum() == 0:
+                        atom.SetAtomMapNum(label)
+                kept.append(Chem.MolToSmiles(rw_replacement.GetMol()))
+
+        core = rw_core.GetMol()
+        Chem.SanitizeMol(core)
+        if kept:
+            side = Chem.MolFromSmiles(".".join(kept))
+            if side is None:  # pragma: no cover - kept fragments always parse
+                return None
+            product = Chem.molzip(core, side)
+        else:
+            product = core  # every decoration dropped: the bare framework
+        Chem.SanitizeMol(product)
+        product = Chem.RemoveHs(product)  # graph-H drops -> implicit / [nH]
+        mutant = Chem.MolToSmiles(product)
+        if not mutant or len(mutant) > max_smiles_length:
+            return None
+        return mutant
+    except Exception:  # noqa: BLE001 - robustness-first fallback contract
+        return None
+    finally:
+        EnableLog("rdApp.error")
+
+
 class GeneticOptimizer:
     """Tournament-selection genetic algorithm over canonical SMILES.
 
@@ -87,7 +346,8 @@ class GeneticOptimizer:
         0.08; at least one character whenever mutation fires).
     crossover_rate:
         Probability an offspring is a splice of two parents instead of a
-        clone of the first (default 0.7).
+        clone of the first (default 0.7).  Ignored in ``scaffold`` mutation
+        mode (see ``mutation``).
     elitism:
         Top molecules copied verbatim into the next generation (default
         4; guarantees a monotone best score).
@@ -96,6 +356,23 @@ class GeneticOptimizer:
     max_smiles_length:
         Hard length cap on every genome -- offspring that exceed it are
         rejected (default 120).
+    mutation:
+        ``"uniform"`` (default) -- the classic character-level
+        substitution / insertion / deletion.  ``"scaffold"`` --
+        **scaffold-preserving decoration resampling**: the offspring keeps
+        the parent's Murcko framework verbatim while a random subset of
+        its decorations is replaced with entries sampled from a
+        decoration vocabulary derived from the corpus (or dropped).  This
+        is a pragmatic lead-optimisation operator in the spirit of
+        LEADD's scaffold decoration: it explores the decoration space of
+        one fixed framework.  It is **not** a full scaffold-decorator
+        generative model like REINVENT 2.0 (no attachment-point
+        generative grammar, no learned decoration distribution -- just
+        corpus-derived resampling with ``Chem.molzip`` re-assembly).
+        Crossover is bypassed in this mode (a character splice routinely
+        destroys ring systems); parents without a Murcko scaffold
+        (acyclic molecules) or without decorations (bare ring systems)
+        fall back to the uniform mutation -- never an error.
     seed:
         Seed for the dedicated ``random.Random`` instance (default 42).
         Two runs with the same seed produce identical results.
@@ -104,6 +381,18 @@ class GeneticOptimizer:
     ------
     DataValidationError
         On out-of-range hyperparameters.
+
+    Example
+    -------
+    >>> from pharmaml.generative import GeneticOptimizer, QedObjective
+    >>> # lead-optimisation mode: keep aspirin's framework, vary decorations
+    >>> result = GeneticOptimizer(
+    ...     QedObjective(), population_size=16, generations=3, seed=42,
+    ...     mutation="scaffold",
+    ... ).optimize(seed_smiles=["CC(=O)Oc1ccccc1C(=O)O"],
+    ...              corpus=["CC(=O)Oc1ccccc1C(=O)O"])
+    >>> len(result) > 0
+    True
     """
 
     def __init__(
@@ -117,6 +406,7 @@ class GeneticOptimizer:
         elitism: int = 4,
         tournament_k: int = 3,
         max_smiles_length: int = 120,
+        mutation: str = "uniform",
         seed: int = 42,
     ) -> None:
         if not callable(getattr(objective, "score", None)):
@@ -148,6 +438,10 @@ class GeneticOptimizer:
             raise DataValidationError(
                 f"max_smiles_length must be >= 20, got {max_smiles_length}"
             )
+        if mutation not in ("uniform", "scaffold"):
+            raise DataValidationError(
+                f"mutation must be 'uniform' or 'scaffold', got {mutation!r}"
+            )
         self.objective = objective
         self.population_size = population_size
         self.generations = generations
@@ -156,6 +450,7 @@ class GeneticOptimizer:
         self.elitism = elitism
         self.tournament_k = tournament_k
         self.max_smiles_length = max_smiles_length
+        self.mutation = mutation
         self.seed = seed
 
     # -- internals -------------------------------------------------------
@@ -164,8 +459,24 @@ class GeneticOptimizer:
         alphabet = smiles_alphabet(corpus)
         return alphabet or list("CCcO()=")
 
-    def _mutate(self, smiles: str, alphabet: list[str], rng: random.Random) -> str:
-        """Substitute / insert / delete ~``mutation_rate`` of the characters."""
+    def _mutate(
+        self,
+        smiles: str,
+        alphabet: list[str],
+        rng: random.Random,
+        decoration_pool: Sequence[str] = (),
+    ) -> str:
+        """Mutate ``smiles``: decoration resampling or character edits.
+
+        In ``scaffold`` mode (with a non-empty decoration pool) the
+        scaffold-preserving operator fires first; ``None`` returns (acyclic
+        parent, RDKit failure, over-length mutant) fall through to the
+        classic character-level mutation so evolution never stalls.
+        """
+        if decoration_pool:
+            mutant = _scaffold_mutate(smiles, decoration_pool, rng, self.max_smiles_length)
+            if mutant is not None:
+                return mutant
         chars = list(smiles)
         n_mutations = max(1, round(len(chars) * self.mutation_rate))
         for _ in range(n_mutations):
@@ -335,6 +646,14 @@ class GeneticOptimizer:
             )
         alphabet = self._mutation_alphabet(canonical_pool)
         population, kept_seeds = self._initial_population(seed_smiles, canonical_pool, rng)
+        decoration_pool: list[str] = []
+        if self.mutation == "scaffold":
+            decoration_pool = _build_decoration_pool(canonical_pool)
+            if not decoration_pool:
+                _LOG.warning(
+                    "corpus yields no scaffold decorations -- scaffold "
+                    "mutations fall back to character mutation"
+                )
 
         produced: dict[str, float] = {}
         history: list[dict[str, Any]] = []
@@ -379,12 +698,19 @@ class GeneticOptimizer:
                         )
                     break
                 parent_a = self._tournament(population, fitness, rng)
-                parent_b = self._tournament(population, fitness, rng)
-                if rng.random() < self.crossover_rate:
-                    child = self._crossover(parent_a, parent_b, rng)
-                else:
+                if self.mutation == "scaffold":
+                    # Decoration resampling on a single parent IS the
+                    # variation operator: a character-level splice would
+                    # routinely destroy ring systems, defeating the mode's
+                    # purpose (crossover_rate does not apply here).
                     child = parent_a
-                child = self._mutate(child, alphabet, rng)
+                else:
+                    parent_b = self._tournament(population, fitness, rng)
+                    if rng.random() < self.crossover_rate:
+                        child = self._crossover(parent_a, parent_b, rng)
+                    else:
+                        child = parent_a
+                child = self._mutate(child, alphabet, rng, decoration_pool)
                 if not child or len(child) > self.max_smiles_length:
                     continue
                 canonical = canonical_smiles(child)
@@ -426,6 +752,7 @@ class GeneticOptimizer:
                 "valid_generated": accepted_total + len(population),
                 "unique_generated": len(smiles_list),
                 "population_size": self.population_size,
+                "mutation": self.mutation,
                 "seed_molecules": kept_seeds,
             },
         )

@@ -151,9 +151,14 @@ def plot_dose_accumulation(
     from pharmaml.pharma.pk import accumulation_ratio, elimination_rate_constant, half_life
     from pharmaml.utils.validation import validate_positive
 
-    if (t_half is None) == (ke is None):
+    # Nested form of the exactly-one check: after it, ``t_half is None`` and
+    # ``ke is None`` are mutually exclusive, which mypy can narrow.
+    if t_half is None:
+        if ke is None:
+            raise DataValidationError("pass exactly one of t_half or ke")
+    elif ke is not None:
         raise DataValidationError("pass exactly one of t_half or ke")
-    if ke is None:
+    else:
         ke = elimination_rate_constant(t_half)
     if vd is None:
         raise DataValidationError("vd is required to convert dose to concentration")

@@ -230,6 +230,15 @@ class TestComputeFingerprintsPins:
         with pytest.raises(DataValidationError, match="kind"):
             compute_fingerprints([ETHANOL], kind="dragon")
 
+    def test_as_counts_rejected_for_non_morgan_kinds(self) -> None:
+        # Regression (100x-22-c): as_counts=True used to be silently
+        # ignored for non-Morgan kinds, returning binary uint8 bits
+        # where the caller asked for counts (fail-first evidence in
+        # /tmp/task22c/failfirst_ascounts.txt).
+        for kind in ("rdkit", "atom_pair"):
+            with pytest.raises(DataValidationError, match="as_counts=True is only supported"):
+                compute_fingerprints([ETHANOL], kind=kind, as_counts=True, n_bits=256)
+
     def test_all_invalid_smiles_yields_empty_matrix(self) -> None:
         matrix, valid = compute_fingerprints([INVALID, "also bad"])
         assert matrix.shape == (0, 2048)

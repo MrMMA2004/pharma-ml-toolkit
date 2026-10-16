@@ -485,8 +485,10 @@ def table_to_sdf(
         raise DataValidationError(f"table has no rows: {source}")
 
     Chem, AllChem = _require_rdkit()
-    from rdkit import RDLogger
+# rdkit-stubs does not re-export DisableLog/EnableLog on rdkit.RDLogger,
+    # but rdBase (their defining module) is fully typed.
     from rdkit.Chem import SDWriter
+    from rdkit.rdBase import DisableLog, EnableLog
 
     embed_params = None
     if embed3d:
@@ -502,7 +504,7 @@ def table_to_sdf(
 
     # RDKit logs parse errors to stderr before returning None; the
     # report below is friendlier than the raw parser trace.
-    RDLogger.DisableLog("rdApp.error")
+    DisableLog("rdApp.error")
     try:
         for i, record in enumerate(frame.itertuples(index=False, name=None), start=1):
             values = dict(zip(columns, record))
@@ -545,7 +547,7 @@ def table_to_sdf(
                         notes.append(f"UFF optimisation did not converge for row {i}")
             prepared.append(mol)
     finally:
-        RDLogger.EnableLog("rdApp.error")
+        EnableLog("rdApp.error")
 
     if not prepared:
         raise DataValidationError(

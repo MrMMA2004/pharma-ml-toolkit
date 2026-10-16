@@ -27,13 +27,11 @@ replaces that workflow entirely:
 
 Example
 -------
->>> from pharmaml.data import load_dataset
->>> from pharmaml.ml import train_model, evaluate_model
->>>
->>> ds = load_dataset("my_compounds.csv", target="activity")
->>> ds.task                     # 'classification' (inferred)
->>> ds.classes                  # ['active', 'inactive', 'partial'] — 2+ classes OK
->>> result = train_model("random_forest", ds.task, ds.X, ds.y)
+>>> from pharmaml.data import load_dataset   # usage sketch (needs a real CSV)
+>>> ds = load_dataset("my_compounds.csv", target="activity")  # doctest: +SKIP
+>>> ds.task                     # 'classification' (inferred)  # doctest: +SKIP
+>>> ds.classes                  # ['active', 'inactive', 'partial'] — 2+ classes OK  # doctest: +SKIP
+>>> result = train_model("random_forest", ds.task, ds.X, ds.y)  # doctest: +SKIP
 >>> report = evaluate_model(result.model, ds.X_test, ds.y_test, ds.task)  # doctest: +SKIP
 
 Multiclass classification is supported natively: any target column
@@ -410,7 +408,7 @@ def load_dataset(
             _LOG.warning(
                 "Class %r has only %d member(s); consider more data or merge "
                 "rare classes before training",
-                min(class_counts, key=class_counts.get),
+                min(class_counts, key=lambda label: class_counts[label]),
                 smallest,
             )
     else:  # regression
@@ -631,7 +629,16 @@ def split_table(
     if val_size is not None and not 0.0 < val_size < 1.0:
         raise DataValidationError(f"val_size must be in (0, 1) or None, got {val_size}")
 
-    table = read_table(Path(path)) if path is not None else frame
+    # Nested so mypy can narrow: exactly one of path / frame is set here.
+    table: pd.DataFrame
+    if path is not None:
+        if frame is not None:
+            raise DataValidationError("give either path=... or frame=..., not both/neither")
+        table = read_table(Path(path))
+    else:
+        if frame is None:
+            raise DataValidationError("give either path=... or frame=..., not both/neither")
+        table = frame
     if table.empty:
         raise DataValidationError("table contains no data rows")
     if len(table) < 4:
@@ -655,27 +662,30 @@ def split_table(
     labels = table[target_col] if target_col is not None else None
 
     use_stratify = stratify and labels is not None
-    if use_stratify and looks_continuous(labels):
-        # Regression-style target column: stratification is not a thing
-        # -- skip quietly instead of warning about 1-member "classes".
-        _LOG.debug(
-            "continuous target column %r -- splitting without stratification",
-            str(target_col),
-        )
-        use_stratify = False
-    if use_stratify:
-        counts = labels.value_counts()
-        n_sides = 3 if val_size else 2
-        # Each side needs at least one member of every class.
-        if counts.min() < n_sides:
-            _LOG.warning(
-                "Class %r has %d member(s) < %d sides; falling back to an "
-                "unstratified split.",
-                str(counts.idxmin()),
-                int(counts.min()),
-                n_sides,
+    # ``labels is not None`` spelled in the condition so mypy can narrow
+    # the Optional inside the block (``use_stratify`` alone cannot).
+    if use_stratify and labels is not None:
+        if looks_continuous(labels):
+            # Regression-style target column: stratification is not a thing
+            # -- skip quietly instead of warning about 1-member "classes".
+            _LOG.debug(
+                "continuous target column %r -- splitting without stratification",
+                str(target_col),
             )
             use_stratify = False
+        else:
+            counts = labels.value_counts()
+            n_sides = 3 if val_size else 2
+            # Each side needs at least one member of every class.
+            if counts.min() < n_sides:
+                _LOG.warning(
+                    "Class %r has %d member(s) < %d sides; falling back to an "
+                    "unstratified split.",
+                    str(counts.idxmin()),
+                    int(counts.min()),
+                    n_sides,
+                )
+                use_stratify = False
 
     train_idx, test_idx = train_test_split(
         indices,
@@ -694,7 +704,7 @@ def split_table(
                 f"val_size={val_size} leaves no training rows "
                 f"(test_size={test_size})"
             )
-        sub_labels = labels.iloc[train_idx] if use_stratify else None
+        sub_labels = labels.iloc[train_idx] if labels is not None and use_stratify else None
         train_idx, val_idx = train_test_split(
             train_idx,
             test_size=adjusted,

@@ -38,7 +38,7 @@ class UnitConverter:
     --------
     >>> UnitConverter.convert(500, "mg", "g")
     0.5
-    >>> UnitConverter.convert(1.0, "uM", "nM")
+    >>> round(UnitConverter.convert(1.0, "uM", "nM"), 9)   # 1e-6/1e-9 binary dust
     1000.0
     >>> UnitConverter.convert(1.0, "mg", "mL")
     Traceback (most recent call last):
@@ -91,6 +91,20 @@ _ATOMIC_WEIGHTS: dict[str, float] = {
     "S": 32.06, "Cl": 35.45, "Ar": 39.948, "K": 39.098, "Ca": 40.078,
     "Co": 58.933, "Fe": 55.845, "Zn": 65.38, "Se": 78.971, "Br": 79.904,
     "I": 126.90,
+    # Pharma-relevant metals & heavier elements (100x-22-c): every one has
+    # a real drug / excipient / contrast-agent use-case, so formulas that
+    # contain them now compute a molar mass instead of raising "unknown
+    # element" -- Ti (TiO2 tablet excipient), V/Cr/Mn/Mo/Cu/Ni (supplement
+    # and research salts), As (arsenic trioxide, APL leukaemia therapy),
+    # Ag (silver sulfadiazine), Sn/Sb (organotin research; antimonial
+    # anti-leishmaniasis drugs), Sr (strontium ranelate), Ba (barium
+    # sulfate radiocontrast), Gd (MRI contrast agents), Pt (cisplatin /
+    # carboplatin / oxaliplatin), Au (auranofin), Hg (thimerosal,
+    # historical), Bi (bismuth subsalicylate).
+    "Ti": 47.867, "V": 50.942, "Cr": 51.996, "Mn": 54.938, "Ni": 58.693,
+    "Cu": 63.546, "As": 74.922, "Mo": 95.94, "Ag": 107.868, "Sn": 118.71,
+    "Sb": 121.760, "Sr": 87.62, "Ba": 137.327, "Gd": 157.25, "Pt": 195.08,
+    "Au": 196.967, "Hg": 200.592, "Bi": 208.980,
 }
 
 
@@ -114,6 +128,8 @@ def molar_mass(formula: str) -> float:
     18.015
     >>> round(molar_mass("C8H10N4O2"), 2)   # caffeine
     194.19
+    >>> round(molar_mass("Pt(NH3)2Cl2"), 2)   # cisplatin (Pt since 100x-22-c)
+    300.04
     """
     if not isinstance(formula, str):
         raise UnitConversionError(

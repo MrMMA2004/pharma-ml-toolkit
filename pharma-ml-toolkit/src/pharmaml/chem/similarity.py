@@ -15,6 +15,7 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
+from pharmaml.chem.descriptors import FingerprintKind
 from pharmaml.exceptions import DataValidationError, DependencyError
 from pharmaml.logger import get_logger
 
@@ -134,7 +135,7 @@ def similarity_scan(
     reference_smiles: Sequence[str],
     target_smiles: Sequence[str],
     threshold: float = 0.9,
-    fingerprint: str = "rdkit",
+    fingerprint: FingerprintKind = "rdkit",
     n_bits: int = 2048,
     radius: int = 2,
 ) -> pd.DataFrame:
@@ -232,7 +233,7 @@ def top_matches(
     query: str,
     library: Sequence[str] | pd.Series,
     k: int = 10,
-    fingerprint: str = "rdkit",
+    fingerprint: FingerprintKind = "rdkit",
     n_bits: int = 2048,
     radius: int = 2,
 ) -> pd.DataFrame:

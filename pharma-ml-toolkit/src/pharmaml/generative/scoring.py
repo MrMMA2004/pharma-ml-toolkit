@@ -12,6 +12,9 @@ common pharmacology-flavoured objectives:
   ≈0.61 at the edges, smoothly decaying outside);
 * :class:`SimilarityObjective` -- Morgan-fingerprint Tanimoto similarity
   to a seed molecule;
+* :class:`NoveltyObjective` -- structural novelty against a reference
+  corpus (``1 - max`` Tanimoto to any corpus member -- a corpus member
+  scores ``0.0``, a structurally distant molecule scores high);
 * :class:`SubstructureObjective` -- hard pharmacophore constraint (1.0 when
   the SMARTS matches, 0.0 otherwise);
 * :class:`MultiObjective` -- weighted geometric mean of several objectives
@@ -51,11 +54,13 @@ from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
 
 from ._utils import require_rdkit
+from .corpus import DEFAULT_CORPUS
 
 __all__ = [
     "LogPBandObjective",
     "MolecularWeightBandObjective",
     "MultiObjective",
+    "NoveltyObjective",
     "QedObjective",
     "ScoringObjective",
     "SimilarityObjective",
@@ -126,7 +131,9 @@ class ScoringObjective:
         Returns the RDKit ``Mol`` or ``None`` (invalid / blank / non-str).
         """
         Chem = require_rdkit()  # actionable DependencyError when RDKit is absent
-        from rdkit import RDLogger
+# rdkit-stubs does not re-export DisableLog/EnableLog on rdkit.RDLogger,
+        # but rdBase (their defining module) is fully typed.
+        from rdkit.rdBase import DisableLog, EnableLog
 
         self._n_scored += 1
         if not isinstance(smiles, str) or not smiles.strip():
@@ -135,13 +142,13 @@ class ScoringObjective:
         # RDKit logs parse errors to stderr before returning None; the
         # accounting below is friendlier than the raw parser trace, and the
         # optimisers parse thousands of candidates per run.
-        RDLogger.DisableLog("rdApp.error")
+        DisableLog("rdApp.error")
         try:
             mol = Chem.MolFromSmiles(smiles)
         except Exception:  # noqa: BLE001 - RDKit can raise on hostile input
             mol = None
         finally:
-            RDLogger.EnableLog("rdApp.error")
+            EnableLog("rdApp.error")
         if mol is None:
             self._n_invalid += 1
         return mol
@@ -232,7 +239,7 @@ class LogPBandObjective(_BandObjective):
 
     Example
     -------
-    >>> LogPBandObjective(0.31, 2.31).score("CC(=O)Oc1ccccc1C(=O)O")
+    >>> round(LogPBandObjective(0.31, 2.31).score("CC(=O)Oc1ccccc1C(=O)O"), 6)
     1.0
     """
 
@@ -244,7 +251,10 @@ class LogPBandObjective(_BandObjective):
     def _descriptor(self, mol: Any) -> float:
         from rdkit.Chem import Descriptors
 
-        return float(Descriptors.MolLogP(mol))
+        # rdkit-stubs omits the dynamically-generated descriptor functors
+        # on rdkit.Chem.Descriptors (MolLogP among them); the runtime API
+        # is stable and documented.
+        return float(Descriptors.MolLogP(mol))  # type: ignore[attr-defined]
 
 
 class MolecularWeightBandObjective(_BandObjective):
@@ -263,7 +273,10 @@ class MolecularWeightBandObjective(_BandObjective):
     def _descriptor(self, mol: Any) -> float:
         from rdkit.Chem import Descriptors
 
-        return float(Descriptors.MolWt(mol))
+        # rdkit-stubs omits the dynamically-generated descriptor functors
+        # on rdkit.Chem.Descriptors (MolWt among them); the runtime API is
+        # stable and documented.
+        return float(Descriptors.MolWt(mol))  # type: ignore[attr-defined]
 
 
 class TpsaBandObjective(_BandObjective):
@@ -314,18 +327,18 @@ class SimilarityObjective(ScoringObjective):
     def __init__(self, seed_smiles: str, radius: int = 2, n_bits: int = 2048) -> None:
         super().__init__()
         Chem = require_rdkit()
-        from rdkit import RDLogger
         from rdkit.Chem import rdFingerprintGenerator
+        from rdkit.rdBase import DisableLog, EnableLog
 
         if not isinstance(seed_smiles, str) or not seed_smiles.strip():
             raise DataValidationError("seed_smiles must be a non-empty string")
         # Silence the raw parser trace: the DataValidationError below is the
         # actionable message (the docking/ligands._validate_smiles precedent).
-        RDLogger.DisableLog("rdApp.error")
+        DisableLog("rdApp.error")
         try:
             mol = Chem.MolFromSmiles(seed_smiles)
         finally:
-            RDLogger.EnableLog("rdApp.error")
+            EnableLog("rdApp.error")
         if mol is None:
             raise DataValidationError(
                 f"seed_smiles {seed_smiles!r} is not a parseable SMILES"
@@ -355,6 +368,145 @@ class SimilarityObjective(ScoringObjective):
         return float(DataStructs.TanimotoSimilarity(fp, self._seed_fp))
 
 
+class NoveltyObjective(ScoringObjective):
+    """Structural novelty against a reference corpus.
+
+    ``score = 1 - max(Tanimoto(candidate, m) for m in corpus)`` computed on
+    Morgan fingerprints: a molecule already in the corpus is by definition
+    *not* novel (score ``0.0``), while a molecule far from every corpus
+    member scores towards ``1.0``.  Used inside a :class:`MultiObjective`
+    the objective acts as a soft anti-rediscovery constraint: one corpus
+    look-alike vetoes the whole molecule.
+
+    Parameters
+    ----------
+    corpus:
+        Reference SMILES (default: :data:`~pharmaml.generative.DEFAULT_CORPUS`).
+        Entries are canonicalised and de-duplicated; invalid entries are
+        dropped with a warning.
+    radius:
+        Morgan fingerprint radius (default 2, the "ECFP4" convention).
+    n_bits:
+        Fingerprint bit count (default 2048).
+
+    Raises
+    ------
+    DataValidationError
+        If ``corpus`` is not a sequence of SMILES, is empty, holds no
+        parseable entry, or ``radius`` / ``n_bits`` are out of range.
+
+    Example
+    -------
+    >>> NoveltyObjective(corpus=["CCO"]).score("CCO")   # corpus member
+    0.0
+    >>> round(NoveltyObjective(corpus=["CC(=O)Oc1ccccc1C(=O)O"]).score(
+    ...     "CC(=O)Nc1ccc(O)cc1"), 3)   # paracetamol vs aspirin-only corpus
+    0.778
+    """
+
+    name = "novelty"
+
+    def __init__(
+        self,
+        corpus: Sequence[str] | None = None,
+        radius: int = 2,
+        n_bits: int = 2048,
+    ) -> None:
+        super().__init__()
+        Chem = require_rdkit()
+        from rdkit.Chem import rdFingerprintGenerator
+        from rdkit.rdBase import DisableLog, EnableLog
+
+        if not isinstance(radius, int) or isinstance(radius, bool) or radius < 0:
+            raise DataValidationError(
+                f"radius must be a non-negative int, got {radius!r}"
+            )
+        if not isinstance(n_bits, int) or isinstance(n_bits, bool) or n_bits < 32:
+            raise DataValidationError(f"n_bits must be an int >= 32, got {n_bits!r}")
+
+        if corpus is None:
+            entries: list[str] = list(DEFAULT_CORPUS)
+        elif isinstance(corpus, str):
+            # iterating a bare string would treat CHARACTERS as molecules
+            raise DataValidationError(
+                "corpus must be a sequence of SMILES strings, not a single "
+                f"string (got {corpus!r} of length {len(corpus)})"
+            )
+        else:
+            try:
+                entries = list(corpus)
+            except TypeError as exc:
+                raise DataValidationError(
+                    "corpus must be a sequence of SMILES strings "
+                    f"(got {type(corpus).__name__})"
+                ) from exc
+        n_non_string = sum(1 for entry in entries if not isinstance(entry, str))
+        entries = [entry for entry in entries if isinstance(entry, str)]
+        if n_non_string:
+            # the docstring contract: invalid entries are dropped WITH A
+            # WARNING (unparseable strings warn below; non-strings must not
+            # vanish silently either -- silent data loss is the failure mode
+            # this package refuses).
+            _LOG.warning(
+                "dropping %d non-string corpus entr(ies) -- corpus entries "
+                "must be SMILES strings",
+                n_non_string,
+            )
+        if not entries:
+            raise DataValidationError(
+                "corpus is empty (or holds no string entries) -- pass a "
+                "non-empty list of SMILES strings"
+                + (
+                    f" ({n_non_string} non-string entr(ies) dropped)"
+                    if n_non_string
+                    else ""
+                )
+            )
+
+        canonical: list[str] = []
+        # RDKit logs parse errors to stderr before returning None; invalid
+        # corpus entries are dropped with a warning instead (the RL prior's
+        # corpus-sanitisation precedent).
+        DisableLog("rdApp.error")
+        try:
+            for entry in entries:
+                if not entry.strip():
+                    _LOG.warning("dropping blank corpus SMILES %r", entry)
+                    continue
+                mol = Chem.MolFromSmiles(entry)
+                if mol is None:
+                    _LOG.warning("dropping invalid corpus SMILES %r", entry)
+                    continue
+                canonical.append(Chem.MolToSmiles(mol))
+        finally:
+            EnableLog("rdApp.error")
+        canonical = list(dict.fromkeys(canonical))
+        if not canonical:
+            raise DataValidationError(
+                "corpus holds no valid SMILES -- every entry failed to parse"
+            )
+
+        self.radius = radius
+        self.n_bits = n_bits
+        self.corpus = tuple(canonical)
+        self._generator = rdFingerprintGenerator.GetMorganGenerator(
+            radius=radius, fpSize=n_bits
+        )
+        self._corpus_fps = [
+            self._generator.GetFingerprint(Chem.MolFromSmiles(smiles))
+            for smiles in canonical
+        ]
+
+    def score(self, smiles: str) -> float:
+        mol = self._parse(smiles)
+        if mol is None:
+            return 0.0
+        from rdkit import DataStructs
+
+        fp = self._generator.GetFingerprint(mol)
+        return float(1.0 - max(DataStructs.BulkTanimotoSimilarity(fp, self._corpus_fps)))
+
+
 class SubstructureObjective(ScoringObjective):
     """Hard pharmacophore constraint: 1.0 when ``smarts`` matches.
 
@@ -375,15 +527,15 @@ class SubstructureObjective(ScoringObjective):
     def __init__(self, smarts: str) -> None:
         super().__init__()
         Chem = require_rdkit()
-        from rdkit import RDLogger
+        from rdkit.rdBase import DisableLog, EnableLog
 
         if not isinstance(smarts, str) or not smarts.strip():
             raise DataValidationError("smarts must be a non-empty string")
-        RDLogger.DisableLog("rdApp.error")
+        DisableLog("rdApp.error")
         try:
             query = Chem.MolFromSmarts(smarts)
         finally:
-            RDLogger.EnableLog("rdApp.error")
+            EnableLog("rdApp.error")
         if query is None:
             raise DataValidationError(f"smarts {smarts!r} is not a parseable SMARTS")
         self.smarts = smarts

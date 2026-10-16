@@ -26,6 +26,7 @@ scans::
     pharmaml biology top-biomarkers --expression expr.csv --response resp.csv --response-column pIC50
     pharmaml generative run --recipe qed --method ga --iterations 20 --seed 42
     pharmaml generative run --recipe similar --seeds examples/data/seed_molecules.csv
+    pharmaml generative run --method ga --recipe novel --scaffold --seed 42
     pharmaml generative corpus
     pharmaml models list
 
@@ -570,10 +571,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "needed), 'rl' = REINVENT-style reinforcement learning (requires torch)",
     )
     gen_run.add_argument(
-        "--recipe", choices=("qed", "logp", "druglike", "similar"), default="qed",
+        "--recipe", choices=("qed", "logp", "druglike", "similar", "novel"),
+        default="qed",
         help="objective preset: qed (QED drug-likeness), logp (LogP 1-3 window), "
-        "'druglike' (QED x MW x TPSA multi-objective), 'similar' (similarity to "
+        "'druglike' (QED x MW x TPSA multi-objective), 'novel' (druglike x "
+        "structural novelty vs the bundled corpus), 'similar' (similarity to "
         "your seed molecules -- requires --seeds/--seed-smiles)",
+    )
+    gen_run.add_argument(
+        "--scaffold", action="store_true", default=False,
+        help="GA only: scaffold-preserving mutations -- keep each parent's "
+        "Murcko framework verbatim and resample its decorations from the "
+        "corpus-derived vocabulary (lead-optimisation mode; crossover is "
+        "bypassed)",
     )
     gen_run.add_argument(
         "--seeds", default=None,
@@ -1278,8 +1288,8 @@ def _cmd_docking_campaign(args: argparse.Namespace) -> int:
         elif missing:
             print(f"{len(missing)} missing number(s) (not listed; more than 20)")
         if args.out:
-            written = write_table(result, args.out, index=True)
-            print(f"reindexed table -> {written}")
+            out_path = write_table(result, args.out, index=True)
+            print(f"reindexed table -> {out_path}")
         else:
             print(result.to_string())
         return 0
@@ -1461,6 +1471,7 @@ def _generative_objective(recipe: str, seeds: list[str] | None) -> tuple[Any, st
         LogPBandObjective,
         MolecularWeightBandObjective,
         MultiObjective,
+        NoveltyObjective,
         QedObjective,
         SimilarityObjective,
         TpsaBandObjective,
@@ -1479,6 +1490,21 @@ def _generative_objective(recipe: str, seeds: list[str] | None) -> tuple[Any, st
             ]
         )
         return objective, "QED x MW(150-450) x TPSA(30-90) multi-objective"
+    if recipe == "novel":
+        # the 'druglike' recipe plus a hard anti-rediscovery constraint:
+        # any corpus look-alike (novelty 0) vetoes the whole molecule.
+        objective = MultiObjective(
+            [
+                QedObjective(),
+                MolecularWeightBandObjective(150, 450),
+                TpsaBandObjective(30, 90),
+                NoveltyObjective(),
+            ]
+        )
+        return (
+            objective,
+            "QED x MW(150-450) x TPSA(30-90) x novelty multi-objective",
+        )
     from pharmaml.exceptions import DataValidationError
 
     if not seeds:
@@ -1495,14 +1521,24 @@ def _generative_objective(recipe: str, seeds: list[str] | None) -> tuple[Any, st
 
 def _cmd_generative_run(args: argparse.Namespace) -> int:
     """``pharmaml generative run``: optimise molecules toward a recipe."""
+    from pharmaml.exceptions import DataValidationError
     from pharmaml.generative import DEFAULT_CORPUS, GeneticOptimizer, ReinventOptimizer
     from pharmaml.utils.io import write_table
+
+    scaffold = bool(getattr(args, "scaffold", False))
+    if scaffold and args.method != "ga":
+        raise DataValidationError(
+            "--scaffold selects the GA's scaffold-preserving mutation mode and "
+            f"applies to --method ga only (got --method {args.method!r})"
+        )
 
     seeds = _generative_seed_smiles(args)
     objective, description = _generative_objective(args.recipe, seeds)
 
     print(f"method   : {args.method} (objective: {description})")
     print(f"budget   : {args.iterations} iteration(s), seed {args.seed}")
+    if scaffold:
+        print("scaffold : on (Murcko framework kept, decorations resampled)")
     if seeds:
         print(f"seeds    : {len(seeds)} molecule(s) anchor the search")
 
@@ -1511,6 +1547,7 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             objective,
             population_size=args.population,
             generations=args.iterations,
+            mutation="scaffold" if scaffold else "uniform",
             seed=args.seed,
         ).optimize(seed_smiles=seeds)
     else:

@@ -100,16 +100,20 @@ def _validate_smiles(smiles: object) -> tuple[bool, str]:
     if not isinstance(smiles, str) or not smiles.strip():
         return False, "empty or non-text SMILES cell"
     try:
-        from rdkit import Chem, RDLogger
+        from rdkit import Chem
+
+        # rdkit-stubs does not re-export DisableLog/EnableLog on rdkit.RDLogger,
+        # but rdBase (their defining module) is fully typed.
+        from rdkit.rdBase import DisableLog, EnableLog
     except ImportError:
         return True, ""  # cannot verify without RDKit; prep will catch it
     # RDKit logs parse errors to stderr before returning None; the
     # message we build below is friendlier than the raw parser trace.
-    RDLogger.DisableLog("rdApp.error")
+    DisableLog("rdApp.error")
     try:
         ok = Chem.MolFromSmiles(smiles) is not None
     finally:
-        RDLogger.EnableLog("rdApp.error")
+        EnableLog("rdApp.error")
     return ok, "" if ok else "RDKit could not parse this SMILES"
 
 

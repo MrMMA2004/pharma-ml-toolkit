@@ -29,6 +29,7 @@ from pharmaml.docking.parsing import (
 )
 from pharmaml.docking.preparation import (
     GridBox,
+    GridParameters,
     compute_grid_box,
     extract_pdbqt_atom_types,
     read_gpf,
@@ -56,6 +57,7 @@ from pharmaml.docking.workflow import (
 
 __all__ = [
     "GridBox",
+    "GridParameters",
     "LigandLibrary",
     "LigandPreparationReport",
     "ProteinReport",
