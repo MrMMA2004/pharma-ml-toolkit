@@ -1,0 +1,1237 @@
+"""Tests for :mod:`pharmaml.generative` — the molecule-generation subpackage.
+
+Covers, in order of the 0-to-100 story: the bundled corpus (validity,
+canonicity, deduplication, size), the objective library (pinned numeric
+spot-checks probed against RDKit 2026.09.1, band semantics, similarity,
+substructure, multi-objective weighting + veto, invalid-SMILES
+accounting, constructor validation), the SMILES genetic algorithm
+(determinism, improvement, seeded mode, caller-input immutability,
+history shape), the char-level RNN prior (torch lazy-import contract,
+training, sampling validity/determinism, vocabulary safety), the
+REINVENT-style RL optimizer (smoke, determinism, prior immutability,
+hyperparameter guards), the ``pharmaml generative`` CLI twins, and the
+result container.
+
+Timings are tuned for the CPU sandbox: the shared module-scoped prior
+fixture trains in <1 s and every optimiser test stays well under a second.
+"""
+
+from __future__ import annotations
+
+import importlib
+import importlib.util
+import logging
+import math
+import sys
+
+import pandas as pd
+import pytest
+
+rdkit = pytest.importorskip("rdkit")
+
+from pharmaml.exceptions import DataValidationError, DependencyError
+from pharmaml.generative import (
+    DEFAULT_CORPUS,
+    GenerationResult,
+    GeneticOptimizer,
+    LogPBandObjective,
+    MolecularWeightBandObjective,
+    MultiObjective,
+    QedObjective,
+    ReinventOptimizer,
+    ScoringObjective,
+    SimilarityObjective,
+    SmilesRnn,
+    SubstructureObjective,
+    TpsaBandObjective,
+    run_genetic_optimization,
+    run_rl_optimization,
+)
+from pharmaml.generative._utils import canonical_smiles
+
+logging.disable(logging.CRITICAL)
+
+ASPIRIN = "CC(=O)Oc1ccccc1C(=O)O"
+PARACETAMOL = "CC(=O)Nc1ccc(O)cc1"
+INVALID = "not_a_smiles"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def _hide_torch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simulate a torch-less machine (import of torch raises ImportError)."""
+    monkeypatch.setitem(sys.modules, "torch", None)
+
+
+def _hide_rdkit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simulate an RDKit-less machine (import of rdkit raises ImportError)."""
+    monkeypatch.setitem(sys.modules, "rdkit", None)
+
+
+def _n_valid(smiles_list: list[str]) -> int:
+    """Number of RDKit-parseable strings in ``smiles_list``."""
+    return sum(canonical_smiles(smiles) is not None for smiles in smiles_list)
+
+
+@pytest.fixture(scope="module")
+def trained_prior() -> SmilesRnn:
+    """Shared char-GRU prior trained on the full corpus (8 epochs, <1 s)."""
+    prior = SmilesRnn(hidden_dim=96, seed=42)
+    prior.train_prior(DEFAULT_CORPUS, epochs=8)
+    return prior
+
+
+# ---------------------------------------------------------------------------
+# The bundled corpus
+# ---------------------------------------------------------------------------
+class TestDefaultCorpus:
+    def test_size_is_pinned_and_above_floor(self) -> None:
+        # 244 curated entries (module docstring); the floor guards the
+        # "diverse drug-like corpus" contract (~180 minimum).
+        assert len(DEFAULT_CORPUS) == 244
+        assert len(DEFAULT_CORPUS) >= 180
+
+    def test_every_smiles_is_valid_and_canonical(self) -> None:
+        from rdkit import Chem
+
+        for smiles in DEFAULT_CORPUS:
+            mol = Chem.MolFromSmiles(smiles)
+            assert mol is not None, f"corpus entry does not parse: {smiles!r}"
+            assert Chem.MolToSmiles(mol) == smiles, f"non-canonical: {smiles!r}"
+
+    def test_corpus_is_deduplicated(self) -> None:
+        assert len(set(DEFAULT_CORPUS)) == len(DEFAULT_CORPUS)
+
+    def test_recognisable_drugs_are_present(self) -> None:
+        for drug in (
+            ASPIRIN,                       # aspirin
+            PARACETAMOL,                   # paracetamol
+            "CC(C)Cc1ccc(C(C)C(=O)O)cc1",  # ibuprofen
+            "Cn1c(=O)c2c(ncn2C)n(C)c1=O",  # caffeine
+            "CN(C)C(=N)N=C(N)N",           # metformin
+            "CN1CCCC1c1cccnc1",            # nicotine
+            "CC(=O)CC(c1ccccc1)c1c(O)c2ccccc2oc1=O",  # warfarin
+            "CN=C(NC#N)NCCSCc1[nH]cnc1C",              # cimetidine
+        ):
+            assert drug in DEFAULT_CORPUS, drug
+
+    def test_corpus_is_an_immutable_tuple(self) -> None:
+        # A module-level *list* would let one caller's append/sort corrupt
+        # the default corpus for the whole process (100x-21-b fix).
+        assert isinstance(DEFAULT_CORPUS, tuple)
+        with pytest.raises(AttributeError):
+            DEFAULT_CORPUS.append("CCO")  # type: ignore[union-attr]
+
+    def test_smiles_lengths_are_bounded(self) -> None:
+        lengths = [len(smiles) for smiles in DEFAULT_CORPUS]
+        assert 3 <= min(lengths) and max(lengths) <= 60
+
+    def test_named_drugs_match_published_weights(self) -> None:
+        # 100x-21-b corpus review: 15 "named drug" entries were structurally
+        # wrong (e.g. the "pregabalin" entry was leucine, "menthol" carried
+        # +98 Da of extra skeleton, cimetidine/methimazole/trimethoprim had
+        # the wrong heteroaromatic ring).  Every corrected structure is
+        # pinned here by canonical SMILES AND by its published molecular
+        # weight, so a future corpus edit cannot reintroduce a lookalike.
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors
+
+        published = {
+            "cimetidine": ("CN=C(NC#N)NCCSCc1[nH]cnc1C", 252.346),
+            "naproxen": ("COc1ccc2cc(C(C)C(=O)O)ccc2c1", 230.262),
+            "salbutamol": ("CC(C)(C)NCC(O)c1ccc(O)c(CO)c1", 239.311),
+            "lidocaine": ("CCN(CC)CC(=O)Nc1c(C)cccc1C", 234.337),
+            "procainamide": ("CCN(CC)CCNC(=O)c1ccc(N)cc1", 235.325),
+            "trimethoprim": ("COc1cc(Cc2cnc(N)nc2N)cc(OC)c1OC", 290.321),
+            "clofibrate": ("CCOC(=O)C(C)(C)Oc1ccc(Cl)cc1", 242.699),
+            "pregabalin": ("CC(C)CCC(CN)C(=O)O", 159.226),
+            "gabapentin": ("NCC1(CC(=O)O)CCCCC1", 171.237),
+            "amantadine": ("NC1C2CC3CC(C2)CC1C3", 151.248),
+            "mefenamic acid": ("Cc1cccc(Nc2ccccc2C(=O)O)c1C", 241.289),
+            "chlorpropamide": ("CCCNC(=O)NS(=O)(=O)c1ccc(Cl)cc1", 276.745),
+            "methimazole": ("Cn1cc[nH]c1=S", 114.169),
+            "menthol": ("CC(C)C1CCC(C)C(O)C1", 156.265),
+            "thymol": ("Cc1ccc(O)c(C(C)C)c1", 150.221),
+        }
+        for name, (smiles, weight) in published.items():
+            assert smiles in DEFAULT_CORPUS, f"{name} missing from the corpus"
+            mol = Chem.MolFromSmiles(smiles)
+            assert mol is not None, name
+            assert Descriptors.MolWt(mol) == pytest.approx(weight, abs=0.05), (
+                f"{name} does not match its published molecular weight"
+            )
+
+    def test_amino_acids_and_nucleobases_are_the_real_ones(self) -> None:
+        # 100x-21-b corpus review, part 2: four "amino acid" entries were
+        # one-methylene homologs (homophenylalanine, S-methylcysteine,
+        # ornithine, 4-guanidino-2-aminobutyric acid instead of Phe/Met/
+        # Lys/Arg) and one "nucleobase" entry was a C6H5N5O imidazo-fused
+        # pyridinone that is no purine/pyrimidine at all -- guanine was
+        # missing entirely.  Every corrected entry is pinned by canonical
+        # SMILES AND published molecular weight; the homologs are pinned
+        # ABSENT so a future edit cannot silently regress to a lookalike.
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors
+
+        real = {
+            "phenylalanine": ("NC(Cc1ccccc1)C(=O)O", 165.192),
+            "methionine": ("CSCCC(N)C(=O)O", 149.215),
+            "lysine": ("NCCCCC(N)C(=O)O", 146.190),
+            "arginine": ("N=C(N)NCCCC(N)C(=O)O", 174.204),
+            "guanine": ("Nc1nc2[nH]cnc2c(=O)[nH]1", 151.129),
+        }
+        for name, (smiles, weight) in real.items():
+            assert smiles in DEFAULT_CORPUS, f"{name} missing from the corpus"
+            mol = Chem.MolFromSmiles(smiles)
+            assert mol is not None, name
+            assert Descriptors.MolWt(mol) == pytest.approx(weight, abs=0.05), (
+                f"{name} does not match its published molecular weight"
+            )
+        for homolog in (
+            "NC(CCc1ccccc1)C(=O)O",   # homophenylalanine
+            "CSCC(N)C(=O)O",          # S-methylcysteine
+            "NCCCC(N)C(=O)O",         # ornithine
+            "NC(N)=NCCC(N)C(=O)O",    # 4-guanidino-2-aminobutyric acid
+            "N=C1NC(=O)C2=NC=NC2=C1N",  # C6H5N5O non-nucleobase
+        ):
+            assert homolog not in DEFAULT_CORPUS, homolog
+
+    def test_corpus_property_ranges_match_the_docstring(self) -> None:
+        # The module docstring claims 46-365 Da, LogP -3.2 .. +4.7 and
+        # 3-48 characters; pin the claims so a corpus edit that breaks
+        # them (or a stale docstring) is caught.
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors
+
+        mols = [Chem.MolFromSmiles(smiles) for smiles in DEFAULT_CORPUS]
+        assert all(mol is not None for mol in mols)
+        weights = [Descriptors.MolWt(mol) for mol in mols]
+        logps = [Descriptors.MolLogP(mol) for mol in mols]
+        lengths = [len(smiles) for smiles in DEFAULT_CORPUS]
+        assert 45 <= min(weights) <= 47, min(weights)
+        assert 364 <= max(weights) <= 366, max(weights)
+        assert -3.3 <= min(logps) <= -3.1, min(logps)
+        assert 4.6 <= max(logps) <= 4.8, max(logps)
+        assert 3 <= min(lengths) and max(lengths) <= 48
+
+
+# ---------------------------------------------------------------------------
+# The objective library
+# ---------------------------------------------------------------------------
+class TestScoringObjectives:
+    def test_qed_aspirin_is_pinned(self) -> None:
+        # Probed against rdkit 2026.09.1: qed(aspirin) = 0.5501217966938848.
+        assert QedObjective().score(ASPIRIN) == pytest.approx(0.550122, abs=1e-4)
+
+    def test_invalid_smiles_scores_zero_with_accounting(self) -> None:
+        objective = QedObjective()
+        assert objective.score(INVALID) == 0.0
+        assert objective.score("") == 0.0
+        assert objective.n_invalid == 2
+        assert objective.n_scored == 2
+        objective.reset_stats()
+        assert objective.n_invalid == 0 and objective.n_scored == 0
+
+    def test_logp_band_scores_one_at_the_centre(self) -> None:
+        # Aspirin's Crippen LogP is 1.3101 -> band [0.31, 2.31] centres it.
+        objective = LogPBandObjective(0.31, 2.31)
+        assert objective.score(ASPIRIN) == pytest.approx(1.0, abs=1e-6)
+
+    def test_logp_band_decays_outside_the_window(self) -> None:
+        # Metformin (LogP = -1.2438) is 2.55 sigma below the centre of
+        # [0.31, 2.31]; exp(-0.5 * 2.55**2) ~ 0.039.  Ethanol (-0.0014)
+        # sits 1.31 sigma out -> ~0.42.  Both probed, then pinned.
+        objective = LogPBandObjective(0.31, 2.31)
+        assert objective.score("CN(C)C(=N)N=C(N)N") == pytest.approx(0.039, abs=0.02)
+        assert objective.score("CCO") == pytest.approx(0.424, abs=0.02)
+
+    def test_band_edges_are_one_sigma(self) -> None:
+        # A molecule exactly at a band edge is one sigma from the centre:
+        # score = exp(-0.5) ~ 0.6065 (the documented +/-1 sigma semantics).
+        import math
+
+        from pharmaml.generative.scoring import _band_score
+
+        assert _band_score(0.31, 0.31, 2.31) == pytest.approx(math.exp(-0.5))
+        assert _band_score(2.31, 0.31, 2.31) == pytest.approx(math.exp(-0.5))
+        assert _band_score(1.31, 0.31, 2.31) == pytest.approx(1.0)
+
+    def test_mw_and_tpsa_band_objectives(self) -> None:
+        # Aspirin: MolWt = 180.159, TPSA = 63.6 (probed).
+        mw = MolecularWeightBandObjective(170, 190)
+        assert mw.score(ASPIRIN) == pytest.approx(0.99987, abs=1e-4)
+        tpsa = TpsaBandObjective(60, 70)
+        assert tpsa.score(ASPIRIN) == pytest.approx(0.9616, abs=1e-3)
+
+    def test_similarity_to_self_is_one(self) -> None:
+        objective = SimilarityObjective(ASPIRIN)
+        assert objective.score(ASPIRIN) == 1.0
+        assert objective.score(objective.seed_smiles) == 1.0
+
+    def test_similarity_aspirin_paracetamol_is_pinned(self) -> None:
+        # Morgan radius-2, 2048-bit Tanimoto (probed: 2/9 shared bits).
+        assert SimilarityObjective(ASPIRIN).score(PARACETAMOL) == pytest.approx(
+            0.2222, abs=1e-3
+        )
+
+    def test_similarity_invalid_smiles_scores_zero(self) -> None:
+        objective = SimilarityObjective(ASPIRIN)
+        assert objective.score(INVALID) == 0.0
+        assert objective.n_invalid == 1
+
+    def test_substructure_objective(self) -> None:
+        objective = SubstructureObjective("c1ccccc1")  # aromatic benzene ring
+        assert objective.score(ASPIRIN) == 1.0
+        assert objective.score("CCO") == 0.0
+        # a real pharmacophore SMARTS: amide carbonyl
+        amide = SubstructureObjective("[NX3][CX3](=[OX1])")
+        assert amide.score(PARACETAMOL) == 1.0
+        assert amide.score("CCO") == 0.0
+
+    def test_multi_objective_weighted_geometric_mean(self) -> None:
+        objective = MultiObjective(
+            [QedObjective(), LogPBandObjective(1.0, 3.0)], weights=[0.7, 0.3]
+        )
+        total, breakdown = objective.score_with_breakdown(ASPIRIN)
+        assert breakdown["qed"] == pytest.approx(0.550122, abs=1e-4)
+        assert breakdown["logp_band"] == pytest.approx(0.788218, abs=1e-4)
+        expected = 0.550122**0.7 * 0.788218**0.3  # weights sum to 1.0
+        assert total == pytest.approx(expected, abs=1e-4)
+        assert 0.0 <= total <= 1.0
+
+    def test_multi_objective_veto_masks_nonzero_scores(self) -> None:
+        # Ethanol has QED > 0 but no cyclopropane ring: the hard constraint
+        # vetoes the whole molecule.
+        objective = MultiObjective(
+            [QedObjective(), SubstructureObjective("C1CC1")], weights=[1.0, 1.0]
+        )
+        total, breakdown = objective.score_with_breakdown("CCO")
+        assert breakdown["qed"] > 0.0
+        assert breakdown["substructure"] == 0.0
+        assert total == 0.0
+
+    def test_multi_objective_duplicate_names_are_disambiguated(self) -> None:
+        objective = MultiObjective(
+            [SubstructureObjective("c1ccccc1"), SubstructureObjective("C1CC1")]
+        )
+        _, breakdown = objective.score_with_breakdown(ASPIRIN)
+        assert set(breakdown) == {"substructure", "substructure_2"}
+
+    def test_custom_objective_subclass(self) -> None:
+        class HeavyAtomObjective(ScoringObjective):
+            name = "heavy_atoms"
+
+            def score(self, smiles: str) -> float:
+                mol = self._parse(smiles)
+                if mol is None:
+                    return 0.0
+                return min(mol.GetNumHeavyAtoms() / 30.0, 1.0)
+
+        objective = HeavyAtomObjective()
+        assert objective.score(ASPIRIN) == pytest.approx(13 / 30)
+        assert objective.score(INVALID) == 0.0
+        assert objective.n_invalid == 1
+        assert objective.score_many([ASPIRIN, "CCO"]) == [
+            pytest.approx(13 / 30),
+            pytest.approx(3 / 30),
+        ]
+
+    def test_band_constructor_errors(self) -> None:
+        with pytest.raises(DataValidationError, match="greater than hi"):
+            LogPBandObjective(3.0, 1.0)
+        with pytest.raises(DataValidationError, match="finite number"):
+            LogPBandObjective(float("nan"), 1.0)
+        with pytest.raises(DataValidationError, match="positive"):
+            MolecularWeightBandObjective(0, 100)
+        with pytest.raises(DataValidationError, match="positive"):
+            TpsaBandObjective(-5, 5)
+
+    def test_similarity_and_substructure_constructor_errors(self) -> None:
+        with pytest.raises(DataValidationError, match="parseable SMILES"):
+            SimilarityObjective(INVALID)
+        with pytest.raises(DataValidationError, match="non-empty string"):
+            SimilarityObjective("")
+        with pytest.raises(DataValidationError, match="negative int"):
+            SimilarityObjective(ASPIRIN, radius=-1)
+        with pytest.raises(DataValidationError, match="parseable SMARTS"):
+            SubstructureObjective("???")
+        with pytest.raises(DataValidationError, match="non-empty string"):
+            SubstructureObjective(" ")
+
+    def test_multi_objective_constructor_errors(self) -> None:
+        with pytest.raises(DataValidationError, match="at least two"):
+            MultiObjective([QedObjective()], weights=[1.0])
+        with pytest.raises(DataValidationError, match="must match"):
+            MultiObjective([QedObjective(), LogPBandObjective(1, 3)], weights=[1.0])
+        with pytest.raises(DataValidationError, match="strictly positive"):
+            MultiObjective(
+                [QedObjective(), LogPBandObjective(1, 3)], weights=[1.0, 0.0]
+            )
+        with pytest.raises(DataValidationError, match="callable score"):
+            MultiObjective([QedObjective(), "not an objective"])
+
+    def test_multi_objective_duck_typed_protocol(self) -> None:
+        # The docstring promises "any object exposing name and a callable
+        # score" -- not just ScoringObjective subclasses.
+        class DuckObjective:
+            name = "duck"
+
+            def __init__(self, value: float) -> None:
+                self.value = value
+
+            def score(self, smiles: str) -> float:
+                return self.value
+
+        objective = MultiObjective([DuckObjective(0.5), DuckObjective(0.8)])
+        total, breakdown = objective.score_with_breakdown("CCO")
+        assert breakdown == {"duck": 0.5, "duck_2": 0.8}
+        assert total == pytest.approx((0.5 * 0.8) ** 0.5)
+        # duck-typed children without counters contribute zero to n_invalid
+        assert objective.n_invalid == 0
+
+    def test_multi_objective_non_finite_child_scores_veto(self) -> None:
+        # Regression: a NaN-returning child made the total NaN (``nan <= 0``
+        # is False, so the veto never fired) -- violating the documented
+        # [0, 1] total contract.  Non-finite children now count as 0.0,
+        # matching how the optimisers clamp misbehaving objectives.
+        class NonFiniteObjective:
+            def __init__(self, value: float) -> None:
+                self.value = value
+                self.name = f"child_{self.value}"
+
+            def score(self, smiles: str) -> float:
+                return self.value
+
+        nan_obj = MultiObjective(
+            [QedObjective(), NonFiniteObjective(float("nan"))]
+        )
+        total, breakdown = nan_obj.score_with_breakdown(ASPIRIN)
+        assert breakdown["child_nan"] == 0.0
+        assert total == 0.0
+
+        inf_obj = MultiObjective(
+            [QedObjective(), NonFiniteObjective(float("inf"))]
+        )
+        total, _ = inf_obj.score_with_breakdown(ASPIRIN)
+        assert total == 0.0
+
+        class NoneObjective:
+            name = "none_child"
+
+            def score(self, smiles: str) -> None:
+                return None
+
+        with pytest.raises(DataValidationError, match="non-numeric score"):
+            MultiObjective([QedObjective(), NoneObjective()]).score(ASPIRIN)
+
+    def test_rdkit_absent_raises_dependency_error(self, monkeypatch) -> None:
+        _hide_rdkit(monkeypatch)
+        with pytest.raises(DependencyError, match="rdkit"):
+            QedObjective().score("CCO")
+        with pytest.raises(DependencyError, match=r"pharmaml\[chem\]"):
+            SimilarityObjective(ASPIRIN)
+
+    def test_scoring_module_imports_without_rdkit(self, monkeypatch) -> None:
+        _hide_rdkit(monkeypatch)
+        spec = importlib.util.find_spec("pharmaml.generative.scoring")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert hasattr(module, "MultiObjective")
+
+
+# ---------------------------------------------------------------------------
+# The genetic algorithm
+# ---------------------------------------------------------------------------
+class TestGeneticOptimizer:
+    def test_same_seed_reproduces_the_run(self) -> None:
+        config = {"population_size": 32, "generations": 10, "seed": 42}
+        first = GeneticOptimizer(QedObjective(), **config).optimize()
+        second = GeneticOptimizer(QedObjective(), **config).optimize()
+        assert first.smiles == second.smiles
+        assert first.scores == second.scores
+        assert first.history == second.history
+
+    def test_different_seed_changes_the_run(self) -> None:
+        first = GeneticOptimizer(
+            QedObjective(), population_size=24, generations=4, seed=1
+        ).optimize()
+        second = GeneticOptimizer(
+            QedObjective(), population_size=24, generations=4, seed=2
+        ).optimize()
+        assert first.smiles != second.smiles or first.history != second.history
+
+    def test_final_best_beats_initial_population(self) -> None:
+        # A far LogP target: the random initial population cannot contain
+        # the optimum, so evolution has to improve on it.
+        objective = LogPBandObjective(4.0, 6.0)
+        result = GeneticOptimizer(
+            objective, population_size=32, generations=15, seed=3
+        ).optimize()
+        initial = result.history[0]["best_score"]
+        assert result.history[-1]["best_score"] > initial
+        assert result.best_score == pytest.approx(result.history[-1]["best_score"])
+
+    def test_best_score_is_monotone_across_generations(self) -> None:
+        result = GeneticOptimizer(
+            QedObjective(), population_size=24, generations=8, seed=9
+        ).optimize()
+        best_scores = [entry["best_score"] for entry in result.history]
+        assert best_scores == sorted(best_scores)  # elitism guarantee
+
+    def test_seeded_mode_anchors_the_population(self) -> None:
+        objective = SimilarityObjective(ASPIRIN)
+        result = GeneticOptimizer(
+            objective, population_size=32, generations=8, seed=1
+        ).optimize(seed_smiles=[ASPIRIN, PARACETAMOL])
+        # generation 0 is scored before any evolution: the best of the
+        # seed molecules leads it, and both seeds are kept in metadata.
+        assert result.history[0]["best_smiles"] == ASPIRIN
+        assert result.metadata["seed_molecules"] == [ASPIRIN, PARACETAMOL]
+        assert ASPIRIN in result.smiles
+        assert result.best_score >= 0.9  # aspirin itself scores 1.0
+
+    def test_seeded_mode_does_not_mutate_caller_inputs(self) -> None:
+        seeds = [ASPIRIN, PARACETAMOL]
+        corpus = list(DEFAULT_CORPUS[:20])
+        seeds_snapshot, corpus_snapshot = list(seeds), list(corpus)
+        GeneticOptimizer(
+            QedObjective(), population_size=16, generations=3, seed=5
+        ).optimize(seed_smiles=seeds, corpus=corpus)
+        assert seeds == seeds_snapshot
+        assert corpus == corpus_snapshot
+
+    def test_invalid_seeds_are_dropped_but_not_fatal(self) -> None:
+        result = GeneticOptimizer(
+            QedObjective(), population_size=16, generations=2, seed=5
+        ).optimize(seed_smiles=["CCO", INVALID])
+        assert result.metadata["seed_molecules"] == ["CCO"]
+
+    def test_all_invalid_seeds_raise(self) -> None:
+        with pytest.raises(DataValidationError, match="no valid seed"):
+            GeneticOptimizer(
+                QedObjective(), population_size=16, generations=2, seed=5
+            ).optimize(seed_smiles=[INVALID, "also bad(("])
+
+    def test_empty_corpus_raises(self) -> None:
+        with pytest.raises(DataValidationError, match="corpus is empty"):
+            GeneticOptimizer(
+                QedObjective(), population_size=16, generations=2, seed=5
+            ).optimize(corpus=[])
+
+    def test_tiny_corpus_is_duplicated_not_hung(self) -> None:
+        # Regression: a corpus with fewer unique molecules than
+        # population_size used to spin FOREVER in the unique-fill loop
+        # (verified: timeout-20 probe of the pre-fix code never returned).
+        # The documented contract is duplication with a warning.
+        import random
+
+        optimizer = GeneticOptimizer(
+            QedObjective(), population_size=16, generations=2, seed=3
+        )
+        population, _ = optimizer._initial_population(
+            None, ["CCO", "CCN", "CCOCC"], random.Random(3)
+        )
+        assert len(population) == 16
+        assert set(population) <= {"CCO", "CCN", "CCOCC"}
+        result = optimizer.optimize(corpus=["CCO", "CCN", "CCOCC"])
+        assert len(result) > 0
+        assert len(result.history) == 2
+
+    def test_duplicate_canonical_spellings_are_deduplicated(self) -> None:
+        # "OCC" canonicalizes to "CCO": the pool must deduplicate canonical
+        # forms, or the unique-fill loop spins on duplicate spellings too
+        # (pre-fix, optimize() hung forever on exactly this corpus).
+        result = GeneticOptimizer(
+            QedObjective(), population_size=12, generations=3, seed=3
+        ).optimize(corpus=["CCO", "OCC", "CCS"])
+        assert len(result.history) == 3
+        # generation 0 holds the deduplicated pool: CCO + CCS, no raw "OCC"
+        assert result.history[0]["n_unique"] == 2
+        assert result.history[0]["best_smiles"] in ("CCO", "CCS")
+
+    def test_non_string_corpus_entries_error_names_the_problem(self) -> None:
+        # Regression: corpus=[None, 123] used to raise "corpus is empty",
+        # hiding that entries existed but none were strings.
+        with pytest.raises(DataValidationError, match="no string entries"):
+            GeneticOptimizer(
+                QedObjective(), population_size=8, generations=1, seed=1
+            ).optimize(corpus=[None, 123, b"CCO"])
+
+    def test_seeds_exceeding_population_are_all_scored(self) -> None:
+        # Disclosed pinning test (behaviour documented in 100x-21-b): more
+        # valid seeds than population_size are NEVER discarded -- generation
+        # 0 scores them all, and the population contracts afterwards.
+        seeds = ["CCO", "CCN", "CCS", "CCF", "CCCl", "CCBr", "CCI",
+                 "CC=O", "CCC", "CCCO", "CCCCO", "CCCCCO"]
+        result = GeneticOptimizer(
+            QedObjective(), population_size=8, generations=3, seed=1
+        ).optimize(seed_smiles=seeds, corpus=["CCO", "CCN"])
+        assert result.history[0]["n_unique"] == 12
+        assert result.history[1]["n_unique"] <= 8
+        assert len(result.metadata["seed_molecules"]) == 12
+
+    def test_history_shape_and_ranges(self) -> None:
+        result = GeneticOptimizer(
+            QedObjective(), population_size=24, generations=6, seed=42
+        ).optimize()
+        assert len(result.history) == 6
+        for entry in result.history:
+            assert set(entry) == {
+                "generation",
+                "best_score",
+                "mean_score",
+                "best_smiles",
+                "n_unique",
+                "valid_offspring_fraction",
+            }
+            assert 0.0 <= entry["best_score"] <= 1.0
+            assert 0.0 <= entry["mean_score"] <= 1.0
+            assert 0.0 <= entry["valid_offspring_fraction"] <= 1.0
+            assert 0 < entry["n_unique"] <= 24
+        assert [entry["generation"] for entry in result.history] == list(range(6))
+
+    def test_result_ranking_and_metadata(self) -> None:
+        result = GeneticOptimizer(
+            QedObjective(), population_size=24, generations=4, seed=42
+        ).optimize()
+        assert result.scores == sorted(result.scores, reverse=True)
+        assert result.best == result.smiles[0]
+        assert result.best_score == result.scores[0]
+        assert len(set(result.smiles)) == len(result.smiles)  # deduplicated
+        assert result.metadata["method"] == "genetic_algorithm"
+        assert result.metadata["seed"] == 42
+        assert result.metadata["iterations"] == 4
+        assert result.metadata["elapsed_s"] > 0
+        assert result.metadata["valid_generated"] > 0
+
+    def test_result_dataframe_and_summary(self) -> None:
+        objective = MultiObjective(
+            [QedObjective(), LogPBandObjective(1.0, 3.0)], weights=[0.7, 0.3]
+        )
+        result = GeneticOptimizer(
+            objective, population_size=24, generations=4, seed=42
+        ).optimize()
+        frame = result.to_dataframe()
+        assert list(frame.columns) == ["rank", "smiles", "score", "qed", "logp_band"]
+        assert frame["rank"].tolist() == list(range(1, len(result) + 1))
+        assert len(result) > 0
+        assert "genetic_algorithm" in result.summary()
+        assert "best" in result.summary()
+
+    def test_hyperparameter_validation(self) -> None:
+        for kwargs in (
+            {"population_size": 2},
+            {"generations": 0},
+            {"mutation_rate": 0.0},
+            {"mutation_rate": 1.5},
+            {"crossover_rate": -0.1},
+            {"elitism": 24, "population_size": 24},
+            {"tournament_k": 1},
+            {"max_smiles_length": 10},
+        ):
+            with pytest.raises(DataValidationError):
+                GeneticOptimizer(QedObjective(), **kwargs)
+        with pytest.raises(DataValidationError, match="score"):
+            GeneticOptimizer(objective="qed?")
+
+    def test_non_numeric_objective_return_is_a_typed_error(self) -> None:
+        # Consistency with MultiObjective: a duck-typed objective returning
+        # None used to escape as a raw TypeError from float(); the typed
+        # error names the objective and the contract.
+        class NoneScoreObjective:
+            name = "none_score"
+
+            def score(self, smiles: str):
+                return None
+
+        with pytest.raises(DataValidationError, match="non-numeric score"):
+            GeneticOptimizer(
+                NoneScoreObjective(), population_size=8, generations=1, seed=1
+            ).optimize(corpus=["CCO", "CCN"])
+
+    def test_run_genetic_optimization_convenience(self) -> None:
+        result = run_genetic_optimization(
+            QedObjective(), population_size=16, generations=3, seed=7
+        )
+        assert result.metadata["method"] == "genetic_algorithm"
+        assert len(result) > 0
+
+
+# ---------------------------------------------------------------------------
+# The RNN prior
+# ---------------------------------------------------------------------------
+class TestSmilesRnn:
+    def test_train_prior_returns_per_epoch_losses(self, trained_prior) -> None:
+        losses = trained_prior.train_prior(DEFAULT_CORPUS, epochs=1)
+        assert len(losses) == 1
+        assert all(loss > 0 for loss in losses)
+
+    def test_training_improves_the_loss(self) -> None:
+        prior = SmilesRnn(hidden_dim=64, seed=0)
+        losses = prior.train_prior(DEFAULT_CORPUS[:120], epochs=3)
+        assert losses[-1] < losses[0]
+
+    def test_is_trained_and_vocab_contains_specials(self, trained_prior) -> None:
+        assert trained_prior.is_trained
+        vocab = trained_prior.vocab
+        assert vocab is not None
+        for token in ("<pad>", "<unk>", "<start>", "<end>"):
+            assert token in vocab
+        corpus_chars = {char for smiles in DEFAULT_CORPUS for char in smiles}
+        assert corpus_chars <= set(vocab)
+
+    def test_sample_yields_valid_smiles(self, trained_prior) -> None:
+        # Probed: 8/32 valid at temperature 1.0, seed 3 (an 8-epoch prior on
+        # the full corpus).  The threshold keeps a >2x margin.
+        sampled = trained_prior.sample(32, temperature=1.0, seed=3)
+        assert len(sampled) == 32
+        assert _n_valid(sampled) >= 3
+
+    def test_sample_is_deterministic_given_seed(self, trained_prior) -> None:
+        first = trained_prior.sample(16, temperature=0.9, seed=5)
+        second = trained_prior.sample(16, temperature=0.9, seed=5)
+        assert first == second
+        other = trained_prior.sample(16, temperature=0.9, seed=6)
+        assert other != first
+
+    def test_sample_only_emits_vocabulary_characters(self, trained_prior) -> None:
+        sampled = trained_prior.sample(16, temperature=1.2, seed=8)
+        vocab_chars = set("".join(DEFAULT_CORPUS))
+        assert all(set(smiles) <= vocab_chars for smiles in sampled)
+        # special tokens are structural, never emitted
+        assert all("<" not in smiles for smiles in sampled)
+
+    def test_sample_respects_the_length_cap(self, trained_prior) -> None:
+        sampled = trained_prior.sample(8, temperature=1.0, seed=2, max_length=25)
+        assert all(len(smiles) <= 25 for smiles in sampled)
+
+    def test_training_is_deterministic(self) -> None:
+        config = {"embedding_dim": 48, "hidden_dim": 64, "seed": 11}
+        first, second = SmilesRnn(**config), SmilesRnn(**config)
+        losses_a = first.train_prior(DEFAULT_CORPUS[:80], epochs=2)
+        losses_b = second.train_prior(DEFAULT_CORPUS[:80], epochs=2)
+        assert losses_a == losses_b
+        assert first.sample(8, seed=1) == second.sample(8, seed=1)
+
+    def test_copy_is_independent_of_the_original(self, trained_prior) -> None:
+        clone = trained_prior.copy()
+        assert clone is not trained_prior
+        assert clone.vocab == trained_prior.vocab
+        assert clone.sample(8, seed=3) == trained_prior.sample(8, seed=3)
+
+    def test_untrained_sample_raises(self) -> None:
+        with pytest.raises(DataValidationError, match="untrained"):
+            SmilesRnn().sample(4)
+
+    def test_sample_argument_validation(self, trained_prior) -> None:
+        for bad_temperature in (0, -1, -0.5):
+            with pytest.raises(DataValidationError, match="temperature"):
+                trained_prior.sample(4, temperature=bad_temperature)
+        with pytest.raises(DataValidationError, match="n must be"):
+            trained_prior.sample(0)
+        with pytest.raises(DataValidationError, match="max_length"):
+            trained_prior.sample(4, max_length=0)
+
+    def test_constructor_validation(self) -> None:
+        with pytest.raises(DataValidationError, match="CPU-only"):
+            SmilesRnn(device="cuda")
+        with pytest.raises(DataValidationError, match="too small"):
+            SmilesRnn(hidden_dim=4)
+        with pytest.raises(DataValidationError, match="n_layers"):
+            SmilesRnn(n_layers=9)
+
+    def test_seed_must_be_torch_encodable(self) -> None:
+        # Regression: seeds beyond 2**64 - 1 escaped as a raw torch
+        # "ValueError: Overflow when unpacking long long" from
+        # torch.manual_seed -- only at train/sample time, deep inside the
+        # run.  The constructor now rejects them with a typed error naming
+        # the accepted interval (random.Random-based GA seeds stay legal
+        # at any magnitude; this is the torch-side contract).
+        with pytest.raises(DataValidationError, match="range torch can seed"):
+            SmilesRnn(seed=2**64)
+        with pytest.raises(DataValidationError, match="range torch can seed"):
+            SmilesRnn(seed=-(2**63) - 1)
+        with pytest.raises(DataValidationError, match="must be an int"):
+            SmilesRnn(seed="42")
+        # the closed interval itself is accepted
+        SmilesRnn(seed=2**64 - 1)
+        SmilesRnn(seed=-(2**63))
+
+    def test_rl_seed_must_be_torch_encodable(self) -> None:
+        # the same guard on the RL optimizer (its master seed threads into
+        # SmilesRnn and the per-iteration sampling generators)
+        with pytest.raises(DataValidationError, match="range torch can seed"):
+            ReinventOptimizer(QedObjective(), seed=2**64)
+        ReinventOptimizer(QedObjective(), seed=2**64 - 1)
+
+    def test_sample_seed_must_be_torch_encodable(self, trained_prior) -> None:
+        with pytest.raises(DataValidationError, match="range torch can seed"):
+            trained_prior.sample(2, seed=2**64)
+        # boundary seeds sample fine
+        assert len(trained_prior.sample(2, seed=2**63)) == 2
+
+    def test_train_prior_argument_validation(self, trained_prior) -> None:
+        with pytest.raises(DataValidationError, match="empty"):
+            trained_prior.train_prior([])
+        with pytest.raises(DataValidationError, match="epochs"):
+            trained_prior.train_prior(["CCO"], epochs=0)
+        with pytest.raises(DataValidationError, match="batch_size"):
+            trained_prior.train_prior(["CCO"], batch_size=0)
+
+    def test_train_prior_lr_and_grad_clip_are_validated(self) -> None:
+        # Regression: lr=0 trained silently (no learning at all), lr=-1/nan
+        # escaped as torch's raw "ValueError: Invalid learning rate", and
+        # lr=inf silently NaN-ed every weight (the next sample() then died
+        # with the baffling "probability tensor contains inf/nan").
+        # grad_clip=0 silently froze training the same way.  All are typed
+        # errors now; a FRESH untrained RNN keeps the shared fixture safe.
+        for bad_lr in (0.0, -1.0, float("nan"), float("inf")):
+            with pytest.raises(DataValidationError, match="lr"):
+                SmilesRnn().train_prior(["CCO", "CCN"], epochs=1, lr=bad_lr)
+        for bad_clip in (0.0, -1.0, float("nan"), float("inf")):
+            with pytest.raises(DataValidationError, match="grad_clip"):
+                SmilesRnn().train_prior(["CCO", "CCN"], epochs=1, grad_clip=bad_clip)
+
+    def test_non_finite_temperature_is_rejected(self, trained_prior) -> None:
+        # Regression: temperature=nan passed the ``temperature <= 0`` guard
+        # (NaN compares False) and crashed deep inside torch with the raw
+        # "RuntimeError: probability tensor contains either inf, nan or
+        # element < 0"; inf silently produced uniform noise.  Both are
+        # typed errors now (RL already rejected them via its (0, 5] range).
+        with pytest.raises(DataValidationError, match="temperature"):
+            trained_prior.sample(4, temperature=float("nan"), seed=1)
+        with pytest.raises(DataValidationError, match="temperature"):
+            trained_prior.sample(4, temperature=float("inf"), seed=1)
+        # finite positives still work, including the extremes
+        assert len(trained_prior.sample(2, temperature=1e-6, seed=1)) == 2
+        assert len(trained_prior.sample(2, temperature=100.0, seed=1)) == 2
+
+
+class TestTorchAbsentContract:
+    """The neural.py lazy-import contract, mirrored for the generative RNN."""
+
+    def test_rnn_module_imports_without_torch(self, monkeypatch) -> None:
+        _hide_torch(monkeypatch)
+        spec = importlib.util.find_spec("pharmaml.generative.rnn")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert hasattr(module, "SmilesRnn")
+
+    def test_rl_module_imports_without_torch(self, monkeypatch) -> None:
+        _hide_torch(monkeypatch)
+        spec = importlib.util.find_spec("pharmaml.generative.rl")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert hasattr(module, "ReinventOptimizer")
+
+    def test_generative_package_imports_without_torch(self, monkeypatch) -> None:
+        _hide_torch(monkeypatch)
+        spec = importlib.util.find_spec("pharmaml.generative")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert "GeneticOptimizer" in module.__all__
+
+    def test_train_prior_raises_dependency_error_without_torch(
+        self, monkeypatch
+    ) -> None:
+        _hide_torch(monkeypatch)
+        with pytest.raises(DependencyError, match="torch"):
+            SmilesRnn().train_prior(["CCO"])
+        with pytest.raises(DependencyError, match=r"pharmaml\[deep\]"):
+            SmilesRnn().train_prior(["CCO"])
+
+    def test_sample_raises_dependency_error_without_torch(self, monkeypatch) -> None:
+        _hide_torch(monkeypatch)
+        prior = SmilesRnn()
+        # a trained model object is required to reach the torch gate
+        prior._vocab = ["<pad>", "<unk>", "<start>", "<end>", "C"]
+        prior._model = object()
+        with pytest.raises(DependencyError, match="torch"):
+            prior.sample(2, seed=1)
+
+    def test_rl_optimize_raises_dependency_error_without_torch(
+        self, monkeypatch
+    ) -> None:
+        _hide_torch(monkeypatch)
+        with pytest.raises(DependencyError, match="torch"):
+            ReinventOptimizer(QedObjective(), iterations=1).optimize()
+        with pytest.raises(DependencyError, match=r"pharmaml\[deep\]"):
+            ReinventOptimizer(QedObjective(), iterations=1).optimize()
+
+
+# ---------------------------------------------------------------------------
+# The RL optimizer
+# ---------------------------------------------------------------------------
+class TestReinventOptimizer:
+    def test_smoke_run_produces_ranked_molecules(self, trained_prior) -> None:
+        result = ReinventOptimizer(
+            QedObjective(), prior=trained_prior, iterations=4, batch_size=16, seed=7
+        ).optimize()
+        assert len(result) > 0
+        assert all(0.0 <= score <= 1.0 for score in result.scores)
+        assert all(math.isfinite(score) for score in result.scores)
+        assert result.scores == sorted(result.scores, reverse=True)
+        assert result.metadata["method"] == "reinforce_rl"
+        assert result.metadata["iterations"] == 4
+        assert result.metadata["prior"] == "user prior"
+        assert isinstance(result.metadata["early_stopped"], bool)
+        assert result.metadata["valid_generated"] > 0
+
+    def test_rl_improves_the_mean_score(self, trained_prior) -> None:
+        # 8 probed iterations: mean QED climbs from 0.128 to ~0.24-0.33.
+        result = ReinventOptimizer(
+            QedObjective(), prior=trained_prior, iterations=8, batch_size=32, seed=42
+        ).optimize()
+        means = [entry["mean_score"] for entry in result.history]
+        assert sum(means[-3:]) / 3 > means[0]
+
+    def test_rl_is_deterministic_given_seed(self, trained_prior) -> None:
+        config = {"prior": trained_prior, "iterations": 3, "batch_size": 16, "seed": 7}
+        first = ReinventOptimizer(QedObjective(), **config).optimize()
+        second = ReinventOptimizer(QedObjective(), **config).optimize()
+        assert first.smiles == second.smiles
+        assert first.scores == second.scores
+        assert [h["mean_score"] for h in first.history] == [
+            h["mean_score"] for h in second.history
+        ]
+
+    def test_rl_does_not_mutate_the_prior(self, trained_prior) -> None:
+        before = trained_prior.sample(4, seed=99)
+        ReinventOptimizer(
+            QedObjective(), prior=trained_prior, iterations=2, batch_size=8, seed=3
+        ).optimize()
+        assert trained_prior.sample(4, seed=99) == before
+
+    def test_rl_history_shape(self, trained_prior) -> None:
+        result = ReinventOptimizer(
+            QedObjective(), prior=trained_prior, iterations=3, batch_size=16, seed=7
+        ).optimize()
+        assert len(result.history) == 3
+        for entry in result.history:
+            assert set(entry) == {
+                "iteration",
+                "best_score",
+                "mean_score",
+                "best_smiles",
+                "valid_fraction",
+                "replay_size",
+                "loss",
+            }
+            assert 0.0 <= entry["valid_fraction"] <= 1.0
+            assert 0.0 <= entry["best_score"] <= 1.0
+        assert [entry["iteration"] for entry in result.history] == [0, 1, 2]
+
+    def test_untrained_prior_raises(self) -> None:
+        with pytest.raises(DataValidationError, match="untrained"):
+            ReinventOptimizer(QedObjective(), prior=SmilesRnn()).optimize()
+
+    def test_empty_corpus_raises(self) -> None:
+        with pytest.raises(DataValidationError, match="corpus is empty"):
+            ReinventOptimizer(
+                QedObjective(), corpus=[], iterations=1, batch_size=8
+            ).optimize()
+
+    def test_corpus_is_ignored_when_a_prior_is_given(self, trained_prior) -> None:
+        # Documented contract: "corpus ... ignored when prior is given" --
+        # even an empty one must not raise (it did before the guard moved
+        # into the train-a-prior branch).
+        result = ReinventOptimizer(
+            QedObjective(), prior=trained_prior, corpus=[], iterations=2,
+            batch_size=8, seed=3,
+        ).optimize()
+        assert result.metadata["prior"] == "user prior"
+        assert len(result) > 0
+
+    def test_unparseable_corpus_entries_are_dropped(self) -> None:
+        # The prior trains on the corpus's chemistry, not its typos: invalid
+        # SMILES are dropped (with a warning) before train_prior.
+        result = run_rl_optimization(
+            QedObjective(), corpus=[INVALID, "CCO", "CCN"],
+            prior_epochs=2, iterations=2, batch_size=8, seed=3,
+        )
+        assert result.metadata["prior"] == "corpus prior (2 molecules, 2 epochs)"
+        assert len(result) > 0
+
+    def test_hyperparameter_validation(self) -> None:
+        for kwargs in (
+            {"iterations": 0},
+            {"batch_size": 2},
+            {"temperature": 0.0},
+            {"temperature": 6.0},
+            {"prior_epochs": 0},
+            {"lr": 0.0},
+            {"anchor_weight": -1.0},
+            {"entropy_bonus": -0.5},
+            {"replay_size": -1},
+            {"patience": 0},
+            {"grad_clip": 0.0},
+            {"max_smiles_length": 5},
+        ):
+            with pytest.raises(DataValidationError):
+                ReinventOptimizer(QedObjective(), **kwargs)
+        with pytest.raises(DataValidationError, match="score"):
+            ReinventOptimizer(objective=None, iterations=1)
+
+    def test_non_finite_hyperparameters_are_rejected(self) -> None:
+        # Regression: the sign-only guards (``if x <= 0`` / ``if x < 0``)
+        # let NaN through (NaN compares False to everything) and inf past
+        # the upper-unbounded ones.  Empirically: lr=inf NaN-ed the agent
+        # in ONE SGD step and the NEXT iteration's multinomial crashed
+        # with the raw "probability tensor contains inf/nan"; anchor_weight
+        # = nan silently DISABLED the mode-collapse anchor; tol=nan made
+        # every iteration look non-improving.  All float hyperparameters
+        # must be finite at construction time.
+        for kwargs in (
+            {"lr": float("nan")},
+            {"lr": float("inf")},
+            {"anchor_weight": float("nan")},
+            {"anchor_weight": float("inf")},
+            {"entropy_bonus": float("nan")},
+            {"entropy_bonus": float("inf")},
+            {"tol": float("nan")},
+            {"grad_clip": float("nan")},
+        ):
+            with pytest.raises(DataValidationError):
+                ReinventOptimizer(QedObjective(), iterations=1, **kwargs)
+
+    def test_non_numeric_objective_return_is_a_typed_error(self, trained_prior) -> None:
+        # Consistency with MultiObjective and the GA: a duck-typed objective
+        # returning None used to escape as a raw TypeError from float().
+        class NoneScoreObjective:
+            name = "none_score"
+
+            def score(self, smiles: str):
+                return None
+
+        with pytest.raises(DataValidationError, match="non-numeric score"):
+            ReinventOptimizer(
+                NoneScoreObjective(), prior=trained_prior, iterations=1,
+                batch_size=8, seed=1,
+            ).optimize()
+
+    def test_run_rl_optimization_trains_a_corpus_prior(self) -> None:
+        # Convenience path: no prior given -> one is trained on the corpus.
+        result = run_rl_optimization(
+            QedObjective(), prior_epochs=4, iterations=2, batch_size=16, seed=11
+        )
+        assert result.metadata["method"] == "reinforce_rl"
+        assert "corpus prior" in result.metadata["prior"]
+        assert len(result) > 0
+        assert result.metadata["iterations"] == 2
+
+
+# ---------------------------------------------------------------------------
+# The result container
+# ---------------------------------------------------------------------------
+class TestGenerationResult:
+    def test_empty_result_defaults(self) -> None:
+        result = GenerationResult()
+        assert result.is_empty()
+        assert len(result) == 0
+        assert result.best == ""
+        assert result.best_score == 0.0
+        assert result.to_dataframe().empty
+
+    def test_best_defaults_to_first_ranked_molecule(self) -> None:
+        result = GenerationResult(
+            smiles=["CCO", "CCN"], scores=[0.9, 0.4], best="", best_score=0.0
+        )
+        assert result.best == "CCO"
+        assert result.best_score == 0.9
+        assert not result.is_empty()
+
+    def test_breakdown_columns_widen_the_dataframe(self) -> None:
+        result = GenerationResult(
+            smiles=["CCO", "CCN"],
+            scores=[0.9, 0.4],
+            breakdown=[{"qed": 0.9, "logp": 0.2}, {"qed": 0.4}],
+        )
+        frame = result.to_dataframe()
+        assert list(frame.columns) == ["rank", "smiles", "score", "qed", "logp"]
+        assert frame["logp"].isna().tolist() == [False, True]
+
+    def test_empty_breakdown_rows_are_independent_dicts(self) -> None:
+        # Regression: the default used a shared ``[{}] * n`` list, so
+        # mutating one row's breakdown silently edited every row.
+        result = GenerationResult(smiles=["CCO", "CCN"], scores=[0.9, 0.4])
+        result.breakdown[0]["qed"] = 1.0
+        assert result.breakdown[1] == {}
+        assert len(result.breakdown) == 2
+
+    def test_mismatched_lengths_raise(self) -> None:
+        # Regression: mismatched smiles/scores used to either crash the
+        # constructor with a bare IndexError (scores shorter than smiles)
+        # or construct silently and explode later inside pandas with
+        # "All arrays must be of the same length".
+        with pytest.raises(DataValidationError, match="misaligned"):
+            GenerationResult(smiles=["CCO", "CCN", "CCC"], scores=[0.5])
+        with pytest.raises(DataValidationError, match="misaligned"):
+            GenerationResult(smiles=["CCO"], scores=[0.5, 0.9])
+        with pytest.raises(DataValidationError, match="misaligned"):
+            GenerationResult(smiles=["CCO"], scores=[])
+        with pytest.raises(DataValidationError, match="misaligned"):
+            GenerationResult(smiles=["CCO", "CCN"], scores=[0.5, 0.6],
+                             breakdown=[{"qed": 0.5}])
+        with pytest.raises(DataValidationError, match="misaligned"):
+            GenerationResult(smiles=["CCO"], scores=[0.5],
+                             breakdown=[{"qed": 0.5}, {"qed": 0.6}])
+        # an empty-breakdown list is still auto-filled per row (documented)
+        result = GenerationResult(smiles=["CCO", "CCN"], scores=[0.5, 0.6],
+                                  breakdown=[])
+        assert result.breakdown == [{}, {}]
+
+    def test_summary_mentions_method_and_best(self) -> None:
+        result = GenerationResult(
+            smiles=["CCO"], scores=[0.5], metadata={"method": "ga", "iterations": 3}
+        )
+        assert "ga" in result.summary()
+        assert "CCO" in result.summary()
+
+
+# ---------------------------------------------------------------------------
+# The CLI twins
+# ---------------------------------------------------------------------------
+class TestGenerativeCommands:
+    def test_ga_run_happy_path_writes_leaderboard(self, tmp_path, capsys) -> None:
+        from pharmaml.cli import main
+
+        out = tmp_path / "ga_qed.csv"
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "qed",
+            "--iterations", "6", "--population", "24", "--seed", "42",
+            "--top", "3", "--out", str(out),
+        ])
+        assert code == 0
+        output = capsys.readouterr().out
+        assert "genetic_algorithm" in output
+        assert "method   : ga" in output
+        assert out.is_file()
+        frame = pd.read_csv(out)
+        assert list(frame.columns) == ["rank", "smiles", "score"]
+        assert len(frame) > 0
+
+    def test_rl_run_tiny_budget(self, capsys) -> None:
+        from pharmaml.cli import main
+
+        code = main([
+            "generative", "run",
+            "--method", "rl", "--recipe", "qed",
+            "--iterations", "2", "--batch-size", "16",
+            "--prior-epochs", "8", "--seed", "42", "--top", "3",
+        ])
+        assert code == 0
+        output = capsys.readouterr().out
+        assert "reinforce_rl" in output
+        assert "method   : rl" in output
+
+    def test_seeded_similar_recipe_from_csv(self, tmp_path, capsys) -> None:
+        from pharmaml.cli import main
+
+        seeds = tmp_path / "seeds.csv"
+        pd.DataFrame(
+            {"name": ["aspirin", "paracetamol"], "smiles": [ASPIRIN, PARACETAMOL]}
+        ).to_csv(seeds, index=False)
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "similar",
+            "--seeds", str(seeds),
+            "--iterations", "5", "--population", "16", "--top", "3",
+        ])
+        assert code == 0
+        output = capsys.readouterr().out
+        assert "seeds    : 2 molecule(s)" in output
+        assert "similarity" in output
+
+    def test_seeds_table_without_smiles_column_is_a_typed_error(
+        self, tmp_path, capsys
+    ) -> None:
+        # Regression: a table with no SMILES column silently fell back to
+        # the FIRST column, so a name/ic50 table surfaced later as the
+        # baffling "seed_smiles 'aspirin' is not a parseable SMILES".
+        from pharmaml.cli import main
+
+        seeds = tmp_path / "no_smiles.csv"
+        pd.DataFrame(
+            {"name": ["aspirin", "ibuprofen"], "ic50": [3.2, 12.5]}
+        ).to_csv(seeds, index=False)
+        code = main([
+            "generative", "run", "--recipe", "similar", "--seeds", str(seeds),
+            "--iterations", "1",
+        ])
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "no SMILES column found" in error
+        assert "ic50" in error and "name" in error
+
+    def test_seeds_table_column_alias_is_detected(self, tmp_path, capsys) -> None:
+        # canonical_smiles-style headers are auto-detected (the docking
+        # ligand-loader candidate list); the name column is ignored.
+        from pharmaml.cli import main
+
+        seeds = tmp_path / "aliases.csv"
+        pd.DataFrame({
+            "name": ["aspirin", "ethanol"],
+            "canonical_smiles": [ASPIRIN, "CCO"],
+        }).to_csv(seeds, index=False)
+        code = main([
+            "generative", "run", "--recipe", "similar", "--seeds", str(seeds),
+            "--iterations", "2", "--population", "8", "--top", "2",
+        ])
+        assert code == 0
+        output = capsys.readouterr().out
+        assert "seeds    : 2 molecule(s)" in output
+        assert "similarity" in output
+
+    def test_similar_recipe_without_seeds_is_an_actionable_error(
+        self, capsys
+    ) -> None:
+        from pharmaml.cli import main
+
+        code = main(["generative", "run", "--recipe", "similar"])
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "error:" in error
+        assert "similar" in error and "--seed-smiles" in error
+
+    def test_bad_recipe_is_a_clean_argparse_error(self) -> None:
+        from pharmaml.cli import main
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["generative", "run", "--recipe", "bogus"])
+        assert excinfo.value.code == 2
+
+    def test_corpus_command_prints_the_bundled_corpus(self, tmp_path, capsys) -> None:
+        from pharmaml.cli import main
+
+        code = main(["generative", "corpus"])
+        assert code == 0
+        output = capsys.readouterr().out
+        assert str(len(DEFAULT_CORPUS)) in output
+        assert ASPIRIN in output
+
+        out = tmp_path / "corpus.csv"
+        code = main(["generative", "corpus", "--out", str(out)])
+        assert code == 0
+        frame = pd.read_csv(out)
+        assert list(frame.columns) == ["index", "smiles"]
+        assert len(frame) == len(DEFAULT_CORPUS)
+
+    def test_run_help_documents_every_flag(self, capsys) -> None:
+        from pharmaml.cli import main
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["generative", "run", "--help"])
+        assert excinfo.value.code == 0
+        output = capsys.readouterr().out
+        for flag in (
+            "--method", "--recipe", "--seeds", "--seed-smiles", "--iterations",
+            "--population", "--batch-size", "--prior-epochs", "--seed",
+            "--top", "--out",
+        ):
+            assert flag in output, flag

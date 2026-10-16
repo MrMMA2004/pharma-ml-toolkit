@@ -40,11 +40,11 @@ from pharmaml.utils.io import ensure_directory
 _LOG = get_logger(__name__)
 
 __all__ = [
-    "ProteinReport",
-    "prepare_protein",
-    "distribute_receptor",
-    "WATER_RESIDUES",
     "MODIFIED_PROTEIN_RESIDUES",
+    "WATER_RESIDUES",
+    "ProteinReport",
+    "distribute_receptor",
+    "prepare_protein",
 ]
 
 # Residue names recognised as water across the common PDB dialects.
@@ -151,8 +151,8 @@ class ProteinReport:
                 f"  residues        : {self.residues}",
                 f"  receptor        : {self.output_atoms} atoms -> {self.output_pdbqt.name}",
                 f"  atom types      : {types}",
-                f"  charges         : [{self.charge_min:+.3f}, {self.charge_max:+.3f}]"
-                f" (mean {self.charge_mean:+.3f})",
+                (f"  charges         : [{self.charge_min:+.3f}, {self.charge_max:+.3f}]"
+                f" (mean {self.charge_mean:+.3f})"),
             ]
             + [f"  note            : {note}" for note in self.notes]
         )
@@ -247,10 +247,13 @@ def _clean_records(
         if remove_waters and resname in WATER_RESIDUES:
             counters["waters_removed"] += 1
             continue
-        if line.startswith("HETATM") and resname not in MODIFIED_PROTEIN_RESIDUES:
-            if not keep_hetatm:
-                counters["hetatm_removed"] += 1
-                continue
+        if (
+            line.startswith("HETATM")
+            and resname not in MODIFIED_PROTEIN_RESIDUES
+            and not keep_hetatm
+        ):
+            counters["hetatm_removed"] += 1
+            continue
         if chain is not None and _parse_chain(line).strip() != chain:
             continue
         altloc = line[16] if len(line) > 16 else " "

@@ -24,18 +24,17 @@ import numpy as np
 import pandas as pd
 from scipy.stats import false_discovery_control
 
+from pharmaml.biology.omics import correlate_with_response
 from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
 from pharmaml.utils.validation import require_columns
 
-from pharmaml.biology.omics import correlate_with_response
-
 _LOG = get_logger(__name__)
 
 __all__ = [
+    "direction_of_association",
     "sensitivity_associations",
     "top_biomarkers",
-    "direction_of_association",
 ]
 
 #: Columns every association table produced by

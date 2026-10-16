@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (993 tests).
+exceptions, input validation, and pytest coverage** (1098 tests).
 
 ---
 
@@ -84,14 +84,15 @@ pharma-ml-toolkit/
 │   ├── cli.py               # `pharmaml` command-line interface
 │   ├── chem/                # converters, descriptors, similarity, tables, standardize
 │   ├── ml/                  # preprocessing, models (18: incl. dnn + dnn_residual PyTorch), neural.py, training, evaluation, persistence
+│   ├── generative/          # NEW: molecule generation — corpus, objective library, SMILES GA, RNN prior, RL
 │   ├── biology/             # NEW: response screens, omics, biomarkers — cell line analysis
 │   ├── pharma/              # units, pk, pd, dosage, approvals
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 993 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 1098 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + five executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · walkthrough) + four no-output twins
-│   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain)
+│   └── data/                # lysozyme_1aki.pdb — ready-to-use demo receptor input (real lysozyme, public domain) + seed_molecules.csv — 12 named drugs for generative seeding
 ├── docs/                    # INDEX.md — auto-generated module/API index
 ├── .github/workflows/       # CI matrix (Python 3.10–3.12) + full-deps job
 ├── Dockerfile
@@ -455,6 +456,57 @@ print(report.roc_auc)     # one-vs-rest multiclass AUC
   `python examples/run_classification.py --classes 4` (a cached synthetic table is
   regenerated automatically when its class count differs from the requested one).
 
+### Molecule generation (from 0 to 100)
+
+Can the toolkit **invent** molecules, not just analyse them? Yes — the `generative`
+subpackage ships the whole story on a laptop CPU: a bundled curated corpus
+(`DEFAULT_CORPUS`, 244 canonical drug-like SMILES — aspirin, paracetamol, ibuprofen,
+caffeine, … plus a heterocycle/functional-group tour), an objective library, and two
+complementary optimisers. A runnable narrative lives in
+`examples/run_generative_design.py` (~10 s end to end).
+
+```python
+from pharmaml.generative import (
+    DEFAULT_CORPUS, QedObjective, LogPBandObjective, SimilarityObjective,
+    MultiObjective, GeneticOptimizer, ReinventOptimizer, SmilesRnn,
+)
+
+# 1) Define what a "good" molecule means: drug-like + LogP window + aspirin-ish.
+#    One zero score vetoes the whole molecule (weighted geometric mean).
+objective = MultiObjective(
+    [QedObjective(), LogPBandObjective(1.0, 3.0), SimilarityObjective("CC(=O)Oc1ccccc1C(=O)O")],
+    weights=[0.5, 0.25, 0.25],
+)
+
+# 2) Genetic algorithm: character-level mutation + splice crossover over canonical
+#    SMILES, tournament selection, elitism. CPU-strong, torch not required.
+ga = GeneticOptimizer(objective, population_size=48, generations=20, seed=42)
+de_novo = ga.optimize()                                   # corpus-initialised
+seeded  = ga.optimize(seed_smiles=["CC(=O)Oc1ccccc1C(=O)O", "CC(=O)Nc1ccc(O)cc1"])
+
+# 3) Reinforcement learning (REINVENT-style): train a char-level GRU prior on the
+#    corpus, then fine-tune it by policy gradient toward the same objective
+#    (running baseline + entropy bonus + prior anchor + experience replay).
+prior = SmilesRnn(hidden_dim=96, seed=42)
+prior.train_prior(DEFAULT_CORPUS, epochs=8)               # < 1 s
+rl = ReinventOptimizer(objective, prior=prior, iterations=15, seed=42).optimize()
+
+de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, breakdown
+```
+
+* Both optimisers are **deterministic given `seed`** (GA: dedicated `random.Random`;
+  RNN/RL: `torch.Generator` + per-iteration sampling seeds) and never crash on invalid
+  SMILES — invalid candidates score 0.0 and are counted.
+* **Method trade-offs, honestly:** the GA explores wider (hundreds of unique molecules
+  per run, no extra dependency, seeded *and* de novo modes) while RL fine-tunes a learned
+  prior and needs fewer evaluations to focus on high-scoring neighbourhoods — but costs a
+  torch install and yields fewer unique hits at this scale. Run both, compare leaderboards.
+* CLI twins: `pharmaml generative run --method ga|rl --recipe qed|logp|druglike|similar`
+  (with `--seeds examples/data/seed_molecules.csv` for the "with some sample molecules"
+  mode) and `pharmaml generative corpus`.
+* Requires `pip install "pharmaml[chem]"`; the RNN/RL half additionally needs
+  `pip install "pharmaml[deep]"` (PyTorch is imported lazily — the package works without it).
+
 ### Cell line data analysis (from 0 to 100)
 
 A complete workflow for **cell line pharmacology** — GDSC/CCLE-style drug-response
@@ -632,6 +684,10 @@ pharmaml docking campaign delete-named --dir runs/ --name r.gpf --dry-run
 pharmaml docking campaign reindex --data results.csv --column name --start 1 --stop 300  # gap audit + reindex
 pharmaml biology response-audit --data screen.csv --tissue-column tissue --metric LN_IC50
 pharmaml biology top-biomarkers --expression expr.csv --response resp.csv --response-column pIC50 --compound erlotinib --top 15
+pharmaml generative run --method ga --recipe qed --iterations 20 --seed 42
+pharmaml generative run --method rl --recipe druglike --iterations 15 --out molecules.csv
+pharmaml generative run --method ga --recipe similar --seeds examples/data/seed_molecules.csv
+pharmaml generative corpus --out corpus.csv
 ```
 
 `--model` accepts registry names and aliases (`rf`, `logistic`, `xgb`,
@@ -667,7 +723,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (995 tests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1100 tests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

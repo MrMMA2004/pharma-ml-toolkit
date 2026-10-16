@@ -24,12 +24,12 @@ from pharmaml.utils.validation import looks_continuous, require_columns
 _LOG = get_logger(__name__)
 
 __all__ = [
-    "clean_numeric_frame",
     "build_preprocessor",
+    "clean_numeric_frame",
     "has_categorical_columns",
-    "split_features_target",
     "make_train_test_split",
     "remove_outliers_iqr",
+    "split_features_target",
 ]
 
 

@@ -18,9 +18,9 @@ from sklearn.metrics import (
     balanced_accuracy_score,
     confusion_matrix,
     f1_score,
+    matthews_corrcoef,
     mean_absolute_error,
     mean_squared_error,
-    matthews_corrcoef,
     precision_score,
     r2_score,
     recall_score,
@@ -32,7 +32,7 @@ from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
 
-__all__ = ["evaluate_model", "ClassificationReport", "RegressionReport"]
+__all__ = ["ClassificationReport", "RegressionReport", "evaluate_model"]
 
 
 @dataclass(slots=True)
@@ -159,7 +159,7 @@ def evaluate_model(
                     )
             else:
                 roc_auc = None
-        except Exception as exc:  # AUC undefined for some label setups
+        except Exception as exc:  # noqa: BLE001 — AUC undefined for some label setups
             _LOG.warning("ROC-AUC could not be computed: %s", exc)
             roc_auc = None
 
@@ -176,7 +176,7 @@ def evaluate_model(
             roc_auc=roc_auc,
             confusion=confusion_matrix(y_true, y_pred, labels=labels),
             labels=labels,
-            n_samples=int(len(y_true)),
+            n_samples=len(y_true),
         )
 
     if task == "regression":
@@ -185,7 +185,7 @@ def evaluate_model(
             mae=float(mean_absolute_error(y_true, y_pred)),
             r2=float(r2_score(y_true, y_pred)),
             max_error=float(np.max(np.abs(np.asarray(y_true, dtype=float) - y_pred))),
-            n_samples=int(len(y_true)),
+            n_samples=len(y_true),
             predictions=np.asarray(y_pred) if keep_predictions else None,
         )
 

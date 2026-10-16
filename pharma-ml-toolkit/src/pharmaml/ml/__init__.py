@@ -1,17 +1,11 @@
 """QSAR machine learning: preprocessing, training, evaluation, persistence."""
 
-from pharmaml.ml.preprocessing import (
-    clean_numeric_frame,
-    build_preprocessor,
-    has_categorical_columns,
-    split_features_target,
-    make_train_test_split,
-)
+from pharmaml.ml.evaluation import evaluate_model
 from pharmaml.ml.models import (
     MODEL_ALIASES,
     MODEL_REGISTRY,
-    list_models,
     build_model,
+    list_models,
     resolve_model_name,
 )
 from pharmaml.ml.neural import (
@@ -20,28 +14,34 @@ from pharmaml.ml.neural import (
     ResidualMLPClassifier,
     ResidualMLPRegressor,
 )
-from pharmaml.ml.training import train_model, compare_models
-from pharmaml.ml.evaluation import evaluate_model
-from pharmaml.ml.persistence import save_model, load_model
+from pharmaml.ml.persistence import load_model, save_model
+from pharmaml.ml.preprocessing import (
+    build_preprocessor,
+    clean_numeric_frame,
+    has_categorical_columns,
+    make_train_test_split,
+    split_features_target,
+)
+from pharmaml.ml.training import compare_models, train_model
 
 __all__ = [
     "MODEL_ALIASES",
     "MODEL_REGISTRY",
-    "list_models",
-    "build_model",
-    "resolve_model_name",
     "DeepMLPClassifier",
     "DeepMLPRegressor",
     "ResidualMLPClassifier",
     "ResidualMLPRegressor",
-    "clean_numeric_frame",
+    "build_model",
     "build_preprocessor",
-    "has_categorical_columns",
-    "split_features_target",
-    "make_train_test_split",
-    "train_model",
+    "clean_numeric_frame",
     "compare_models",
     "evaluate_model",
-    "save_model",
+    "has_categorical_columns",
+    "list_models",
     "load_model",
+    "make_train_test_split",
+    "resolve_model_name",
+    "save_model",
+    "split_features_target",
+    "train_model",
 ]

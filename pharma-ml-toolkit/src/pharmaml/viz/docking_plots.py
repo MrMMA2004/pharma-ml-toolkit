@@ -18,6 +18,7 @@ The first two accept the summary frame produced by
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -25,7 +26,7 @@ import pandas as pd
 from pharmaml.exceptions import DataValidationError
 from pharmaml.viz._compat import PALETTE, new_figure
 
-__all__ = ["plot_energy_distribution", "plot_top_ligands", "plot_receptor_atom_types"]
+__all__ = ["plot_energy_distribution", "plot_receptor_atom_types", "plot_top_ligands"]
 
 #: Column scanned for the per-ligand best affinity.
 _ENERGY_COLUMN = "best_lowest_energy"
@@ -50,7 +51,7 @@ def _receptor_type_counts(receptor) -> dict[str, int]:
 
     if hasattr(receptor, "atom_types") and hasattr(receptor, "output_pdbqt"):
         # ProteinReport from pharmaml.docking.prepare_protein
-        counts = dict(getattr(receptor, "atom_types") or {})
+        counts = dict(receptor.atom_types or {})
     elif isinstance(receptor, dict):
         counts = {
             str(k): int(v) for k, v in receptor.items() if int(v) > 0

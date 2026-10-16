@@ -78,8 +78,8 @@ from pharmaml.viz.pharma_plots import (
     plot_dose_accumulation,
 )
 from pharmaml.viz.report import (
-    HTMLReport,
     TABLE_FORMATS,
+    HTMLReport,
     export_table,
     metrics_to_dataframe,
     save_visual_bundle,
@@ -89,38 +89,38 @@ __all__ = [
     # backend
     "PALETTE",
     "PLOT_FORMATS",
+    "TABLE_FORMATS",
+    # reports & tables
+    "HTMLReport",
     "close_figure",
+    "export_table",
     "figure_to_base64",
     "get_pyplot",
+    "metrics_to_dataframe",
     "new_figure",
-    "require_matplotlib",
-    "save_figure",
     # ML figures
     "plot_calibration_curve",
     "plot_class_distribution",
+    # pharma figures
+    "plot_concentration_profile",
     "plot_confusion_matrix",
     "plot_cv_scores",
+    # chem figures
+    "plot_descriptor_distributions",
+    "plot_dose_accumulation",
+    # docking figures
+    "plot_energy_distribution",
     "plot_feature_importance",
     "plot_learning_curve",
     "plot_model_comparison",
     "plot_predicted_vs_actual",
+    "plot_receptor_atom_types",
     "plot_residuals",
     "plot_roc_curves",
-    # pharma figures
-    "plot_concentration_profile",
-    "plot_dose_accumulation",
-    # chem figures
-    "plot_descriptor_distributions",
     "plot_similarity_heatmap",
     "plot_table_comparison",
-    # docking figures
-    "plot_energy_distribution",
-    "plot_receptor_atom_types",
     "plot_top_ligands",
-    # reports & tables
-    "HTMLReport",
-    "TABLE_FORMATS",
-    "export_table",
-    "metrics_to_dataframe",
+    "require_matplotlib",
+    "save_figure",
     "save_visual_bundle",
 ]

@@ -15,18 +15,19 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-rdkit = pytest.importorskip("rdkit")  # noqa: F841  (gates the whole module)
+rdkit = pytest.importorskip("rdkit")
 
-from pharmaml.chem.converters import (  # noqa: E402
+from rdkit import Chem
+
+from pharmaml.chem.converters import (
     SdfWriteReport,
     sdf_to_table,
     smi_to_csv,
     table_to_sdf,
     table_to_smi,
 )
-from pharmaml.cli import main  # noqa: E402
-from pharmaml.exceptions import DataValidationError, DependencyError  # noqa: E402
-from rdkit import Chem  # noqa: E402
+from pharmaml.cli import main
+from pharmaml.exceptions import DataValidationError, DependencyError
 
 logging.disable(logging.CRITICAL)
 

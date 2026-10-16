@@ -47,11 +47,11 @@ from pharmaml.utils.io import safe_filename
 _LOG = get_logger(__name__)
 
 __all__ = [
-    "collect_files",
-    "list_file_names",
-    "distribute_files",
     "cleanup_tree",
+    "collect_files",
     "delete_named_files",
+    "distribute_files",
+    "list_file_names",
     "reindex_by_number",
     "scan_gpf_ligand_types",
 ]

@@ -2,13 +2,13 @@
 
 from pharmaml.chem.converters import (
     SdfWriteReport,
+    add_pic50_column,
     ic50_to_pic50,
     ki_to_pki,
-    add_pic50_column,
-    split_table_into_chunks,
-    smi_to_csv,
-    table_to_sdf,
     sdf_to_table,
+    smi_to_csv,
+    split_table_into_chunks,
+    table_to_sdf,
     table_to_smi,
 )
 from pharmaml.chem.descriptors import (
@@ -21,6 +21,12 @@ from pharmaml.chem.similarity import (
     tanimoto_from_sets,
     tanimoto_matrix,
 )
+from pharmaml.chem.standardize import (
+    UNSUPPORTED_METALS,
+    PdbLigandReport,
+    canonicalize_tautomer,
+    smiles_to_pdb,
+)
 from pharmaml.chem.tables import (
     TableComparison,
     annotate_with_smiles,
@@ -28,36 +34,30 @@ from pharmaml.chem.tables import (
     merge_table_folder,
     merge_tables,
 )
-from pharmaml.chem.standardize import (
-    UNSUPPORTED_METALS,
-    PdbLigandReport,
-    canonicalize_tautomer,
-    smiles_to_pdb,
-)
 
 __all__ = [
-    "ic50_to_pic50",
-    "ki_to_pki",
-    "add_pic50_column",
-    "split_table_into_chunks",
+    "UNSUPPORTED_METALS",
+    "PdbLigandReport",
     "SdfWriteReport",
-    "smi_to_csv",
-    "table_to_sdf",
-    "sdf_to_table",
-    "table_to_smi",
+    "TableComparison",
+    "add_pic50_column",
+    "annotate_with_smiles",
+    "canonicalize_tautomer",
+    "compare_tables",
     "compute_descriptors",
     "compute_fingerprints",
     "compute_maccs",
+    "ic50_to_pic50",
+    "ki_to_pki",
+    "merge_table_folder",
+    "merge_tables",
+    "sdf_to_table",
+    "smi_to_csv",
+    "smiles_to_pdb",
+    "split_table_into_chunks",
+    "table_to_sdf",
+    "table_to_smi",
     "tanimoto_from_bitarrays",
     "tanimoto_from_sets",
     "tanimoto_matrix",
-    "TableComparison",
-    "compare_tables",
-    "annotate_with_smiles",
-    "merge_tables",
-    "merge_table_folder",
-    "UNSUPPORTED_METALS",
-    "PdbLigandReport",
-    "canonicalize_tautomer",
-    "smiles_to_pdb",
 ]

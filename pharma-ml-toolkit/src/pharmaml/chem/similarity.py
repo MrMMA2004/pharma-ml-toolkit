@@ -10,8 +10,7 @@ the same math.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
-from typing import Any
+from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
@@ -22,10 +21,10 @@ from pharmaml.logger import get_logger
 _LOG = get_logger(__name__)
 
 __all__ = [
-    "tanimoto_from_sets",
-    "tanimoto_from_bitarrays",
-    "tanimoto_matrix",
     "similarity_scan",
+    "tanimoto_from_bitarrays",
+    "tanimoto_from_sets",
+    "tanimoto_matrix",
     "top_matches",
 ]
 
@@ -123,7 +122,7 @@ def tanimoto_matrix(
 
 def _require_rdkit_similarity() -> None:
     try:
-        import rdkit  # noqa: F401,PLC0415 -- presence check only
+        import rdkit  # noqa: F401 -- presence check only
     except ImportError as exc:
         raise DependencyError(
             "RDKit is required for the SMILES-based similarity scan. "
@@ -183,7 +182,7 @@ def similarity_scan(
         raise DataValidationError(f"threshold must be within [0, 1], got {threshold}")
     _require_rdkit_similarity()
 
-    from pharmaml.chem.descriptors import (  # noqa: PLC0415
+    from pharmaml.chem.descriptors import (
         _as_smiles_list,
         compute_fingerprints,
     )
@@ -254,7 +253,7 @@ def top_matches(
     if k < 1:
         raise DataValidationError(f"k must be >= 1, got {k}")
     _require_rdkit_similarity()
-    from pharmaml.chem.descriptors import (  # noqa: PLC0415
+    from pharmaml.chem.descriptors import (
         _as_smiles_list,
         _smiles_to_molecules,
     )

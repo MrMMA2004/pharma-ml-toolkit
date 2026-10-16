@@ -129,14 +129,14 @@ class TestPreprocessing:
 
     def test_make_train_test_split_shapes(self, classification_frame) -> None:
         X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
-        X_train, X_test, y_train, y_test = make_train_test_split(X, y, test_size=0.25)
+        X_train, X_test, y_train, _y_test = make_train_test_split(X, y, test_size=0.25)
         assert len(X_train) + len(X_test) == len(X)
         assert len(y_train) == len(X_train)
 
     def test_split_fallback_for_single_member_class(self) -> None:
         X = pd.DataFrame({"a": range(6), "b": range(6)})
         y = pd.Series([0, 0, 0, 0, 0, 1])  # class '1' has one member
-        X_train, X_test, y_train, y_test = make_train_test_split(X, y, test_size=0.3)
+        _X_train, X_test, _y_train, _y_test = make_train_test_split(X, y, test_size=0.3)
         assert len(X_test) > 0
 
     def test_regression_target_splits_quietly(self, caplog) -> None:
@@ -239,7 +239,7 @@ class TestTraining:
         )
         assert isinstance(board, pd.DataFrame)
         assert set(board["model"]) == {"logistic_regression", "knn"}
-        metric_col = [c for c in board.columns if c.endswith("_mean")][0]
+        metric_col = next(c for c in board.columns if c.endswith("_mean"))
         assert board[metric_col].notna().all()
         assert board[metric_col].is_monotonic_decreasing
 

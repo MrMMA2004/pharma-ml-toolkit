@@ -262,7 +262,7 @@ class TestDeterminism:
 # ---------------------------------------------------------------------------
 class TestPredictProba:
     def test_binary_proba_rows_sum_to_one(self, binary_data: tuple) -> None:
-        X_train, X_test, y_train, y_test = binary_data
+        X_train, X_test, y_train, _y_test = binary_data
         model = fast_classifier().fit(X_train, y_train)
         proba = model.predict_proba(X_test)
         assert proba.shape == (len(X_test), 2)
@@ -507,7 +507,7 @@ class TestPipelineIntegration:
         board = compare_models(X, y, "regression", models=["elastic_net", "dnn"], cv=3)
         assert len(board) == 2
         assert set(board["model"]) == {"elastic_net", "dnn"}
-        metric_col = [c for c in board.columns if c.endswith("_mean")][0]
+        metric_col = next(c for c in board.columns if c.endswith("_mean"))
         dnn_row = board[board["model"] == "dnn"]
         assert dnn_row[metric_col].notna().all()
         assert np.isfinite(float(dnn_row[metric_col].iloc[0]))
@@ -518,7 +518,7 @@ class TestPipelineIntegration:
             X, y, "classification", models=["logistic_regression", "dnn"], cv=3
         )
         assert len(board) == 2
-        metric_col = [c for c in board.columns if c.endswith("_mean")][0]
+        metric_col = next(c for c in board.columns if c.endswith("_mean"))
         assert metric_col == "roc_auc_ovo_mean"
         assert board[metric_col].notna().all()
 
@@ -766,7 +766,7 @@ class TestValidationSplitRegression:
         est = DeepMLPClassifier(
             hidden_layers=(4,), epochs=1, val_split=0.6, random_state=7
         )
-        train_idx, val_idx = est._train_val_split(y, len(y), np.random.default_rng(7))
+        train_idx, _val_idx = est._train_val_split(y, len(y), np.random.default_rng(7))
         assert set(y[train_idx].tolist()) == {0, 1, 2}  # every class trainable
         # end-to-end fit still works with the tiny stratified split
         fitted = DeepMLPClassifier(

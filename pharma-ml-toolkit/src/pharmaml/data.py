@@ -61,10 +61,10 @@ __all__ = [
     "Dataset",
     "DatasetSummary",
     "SplitResult",
-    "load_dataset",
-    "summarize_dataset",
     "infer_task",
+    "load_dataset",
     "split_table",
+    "summarize_dataset",
 ]
 
 _LOG = get_logger(__name__)
@@ -187,7 +187,7 @@ class Dataset:
     @property
     def n_samples(self) -> int:
         """Number of rows."""
-        return int(len(self.frame))
+        return len(self.frame)
 
     @property
     def n_features(self) -> int:

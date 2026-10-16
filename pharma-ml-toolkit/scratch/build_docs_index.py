@@ -30,6 +30,8 @@ MODULES: tuple[str, ...] = (
     "pharmaml.data",
     "pharmaml.chem",
     "pharmaml.ml",
+    "pharmaml.generative",
+    "pharmaml.biology",
     "pharmaml.pharma",
     "pharmaml.docking",
     "pharmaml.viz",
@@ -52,7 +54,8 @@ CLI_SECTION = """\
 pharmaml models | data inspect | data split | data convert | ml train
              | ml compare | chem pic50 | chem descriptors | pharma pk
              | pharma dose | docking prep-ligands | docking prep-protein
-             | docking scan | docking check
+             | docking scan | docking check | generative run
+             | generative corpus
 ```
 
 See `pharmaml/cli.py` for every flag, and `README.md` for the full manual.

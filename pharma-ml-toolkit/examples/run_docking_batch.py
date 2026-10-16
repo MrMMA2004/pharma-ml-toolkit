@@ -25,9 +25,10 @@ from __future__ import annotations
 import pandas as pd
 
 from pharmaml.docking.parsing import parse_dlg_cluster_table, parse_vina_output
-from pharmaml.docking.preparation import GridBox, compute_grid_box, write_gpf
+from pharmaml.docking.preparation import compute_grid_box, write_gpf
 from pharmaml.docking.scoring import consensus_rescore, ligand_efficiency
 from pharmaml.logger import configure_logging
+
 
 def _pdbqt_atom(
     serial: int, name: str, x: float, y: float, z: float, atom_type: str

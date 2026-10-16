@@ -32,7 +32,7 @@ FingerprintKind = Literal["morgan", "rdkit", "atom_pair"]
 def require_rdkit():
     """Import and return the RDKit ``Chem`` module or raise helpfully."""
     try:
-        from rdkit import Chem  # noqa: PLC0415 -- deliberate lazy import
+        from rdkit import Chem
     except ImportError as exc:
         raise DependencyError(
             "RDKit is required for descriptor/fingerprint computation. "
@@ -138,7 +138,7 @@ def compute_descriptors(
 
     if descriptor_set == "mordred":
         try:
-            from mordred import Calculator, descriptors  # noqa: PLC0415
+            from mordred import Calculator, descriptors
         except ImportError as exc:
             raise DependencyError(
                 "Mordred is not installed. Install with: pip install mordred"
@@ -148,8 +148,8 @@ def compute_descriptors(
             rows.append(dict(calc(mol)))
         frame = pd.DataFrame(rows)
     elif descriptor_set == "morgan":
-        Chem = require_rdkit()  # noqa: F841 -- import guard
-        from rdkit.Chem import rdMolDescriptors  # noqa: PLC0415
+        require_rdkit()
+        from rdkit.Chem import rdMolDescriptors
 
         names = [f"FP{i:03d}" for i in range(2048)]
         for mol in iterator:
@@ -161,7 +161,7 @@ def compute_descriptors(
             rows.append({name: elements.get(u, 0) for u, name in enumerate(names)})
         frame = pd.DataFrame(rows)
     elif descriptor_set == "rdkit_all":
-        from rdkit.Chem import Descriptors  # noqa: PLC0415
+        from rdkit.Chem import Descriptors
 
         for mol in iterator:
             rows.append({name: func(mol) for name, func in Descriptors.descList})
@@ -224,9 +224,9 @@ def compute_fingerprints(
         raise DataValidationError(f"n_bits out of range: {n_bits}")
 
     smiles_list = _as_smiles_list(smiles, "smiles")
-    Chem = require_rdkit()  # noqa: F841 -- import guard; failure surfaces DependencyError
-    from rdkit.Chem import AllChem, rdMolDescriptors  # noqa: PLC0415
-    from rdkit import DataStructs  # noqa: PLC0415
+    require_rdkit()
+    from rdkit import DataStructs
+    from rdkit.Chem import AllChem, rdMolDescriptors
 
     molecules, valid_idx, failures = _smiles_to_molecules(smiles_list)
     if failures:
@@ -248,7 +248,7 @@ def compute_fingerprints(
             for m in molecules
         ]
     elif kind == "rdkit":
-        from rdkit.Chem import RDKFingerprint  # noqa: PLC0415
+        from rdkit.Chem import RDKFingerprint
 
         fps = [RDKFingerprint(m, fpSize=n_bits) for m in molecules]
     elif kind == "atom_pair":
@@ -284,8 +284,8 @@ def compute_maccs(smiles: pd.Series | list[str]) -> tuple[np.ndarray, list[int]]
         If ``smiles`` is a bare string.
     """
     require_rdkit()  # import guard
-    from rdkit.Chem import MACCSkeys  # noqa: PLC0415
-    from rdkit import DataStructs  # noqa: PLC0415
+    from rdkit import DataStructs
+    from rdkit.Chem import MACCSkeys
 
     molecules, valid_idx, failures = _smiles_to_molecules(
         _as_smiles_list(smiles, "smiles")

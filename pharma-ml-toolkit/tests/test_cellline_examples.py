@@ -13,7 +13,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -29,7 +28,7 @@ _EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "examples"
 if str(_EXAMPLES_DIR) not in sys.path:
     sys.path.insert(0, str(_EXAMPLES_DIR))
 
-from make_synthetic_cellline_data import (  # noqa: E402
+from make_synthetic_cellline_data import (
     CELL_LINES,
     COMPOUNDS,
     make_expression_matrix,
@@ -152,7 +151,7 @@ class TestPlantedBiomarker:
         # Higher EGFR -> lower LN_IC50 -> strong negative association ...
         assert egfr["rho"] < -0.8
         # ... significant after BH-FDR over all 300 genes.
-        assert egfr["significant"] is True or egfr["significant"] == True  # noqa: E712
+        assert egfr["significant"] is True or egfr["significant"] == True
         # And it is the strongest association in the whole panel.
         strongest = associations.iloc[0]["gene"]
         assert strongest == "EGFR"
@@ -177,7 +176,7 @@ class TestPlantedBiomarker:
 
 class TestDemoScript:
     def test_importable(self) -> None:
-        import run_cellline_analysis  # noqa: F401
+        import run_cellline_analysis
 
         assert callable(run_cellline_analysis.main)
 

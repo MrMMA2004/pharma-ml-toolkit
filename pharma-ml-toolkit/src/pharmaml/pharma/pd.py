@@ -13,7 +13,6 @@ References
 
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 
 import numpy as np
@@ -22,12 +21,12 @@ from pharmaml.exceptions import DataValidationError
 from pharmaml.utils.validation import validate_positive
 
 __all__ = [
-    "emax_effect",
-    "sigmoid_emax_effect",
-    "inhibitory_emax_effect",
-    "linear_effect",
     "ec50_for_target_effect",
     "effect_table",
+    "emax_effect",
+    "inhibitory_emax_effect",
+    "linear_effect",
+    "sigmoid_emax_effect",
 ]
 
 

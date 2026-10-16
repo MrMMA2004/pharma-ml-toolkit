@@ -32,14 +32,14 @@ from pharmaml.logger import get_logger
 _LOG = get_logger(__name__)
 
 __all__ = [
+    "RECEPTOR_TYPES",
     "GridBox",
     "compute_grid_box",
     "extract_pdbqt_atom_types",
-    "write_gpf",
     "read_gpf",
-    "write_dpf",
     "smiles_to_pdbqt",
-    "RECEPTOR_TYPES",
+    "write_dpf",
+    "write_gpf",
 ]
 
 # AutoDock4 atom types accepted in GPF ``receptor_types`` (from gpfer.py).
@@ -517,9 +517,9 @@ def smiles_to_pdbqt(
         If embedding, writing, or atom-type repair fails.
     """
     try:
+        from meeko import MoleculePreparation, PDBQTWriterLegacy
         from rdkit import Chem
         from rdkit.Chem import AllChem
-        from meeko import MoleculePreparation, PDBQTWriterLegacy
     except ImportError as exc:
         raise DependencyError(
             "smiles_to_pdbqt requires RDKit and Meeko. "
@@ -534,7 +534,7 @@ def smiles_to_pdbqt(
         raise DockingError(f"3D embedding failed for {smiles!r}")
     try:
         AllChem.MMFFOptimizeMolecule(mol)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — Boost error zoo; geometry fallback is acceptable
         _LOG.warning("MMFF optimisation failed (%s); keeping unoptimised geometry.", exc)
 
     preparator = MoleculePreparation(merge_these_atom_types=("H",))

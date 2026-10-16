@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import ClassVar
 
 import matplotlib
 import numpy as np
@@ -18,36 +19,36 @@ import pytest
 
 matplotlib.use("Agg", force=True)
 
-from pharmaml.data import load_dataset  # noqa: E402
-from pharmaml.exceptions import DataValidationError, ModelError  # noqa: E402
-from pharmaml.ml import (  # noqa: E402
+from pharmaml.data import load_dataset
+from pharmaml.exceptions import DataValidationError, ModelError
+from pharmaml.ml import (
     compare_models,
     evaluate_model,
     make_train_test_split,
     train_model,
 )
-from pharmaml.viz import (  # noqa: E402
+from pharmaml.viz import (
     HTMLReport,
+    export_table,
+    metrics_to_dataframe,
     plot_calibration_curve,
     plot_class_distribution,
+    plot_concentration_profile,
     plot_confusion_matrix,
     plot_cv_scores,
     plot_descriptor_distributions,
     plot_dose_accumulation,
     plot_energy_distribution,
-    plot_top_ligands,
-    plot_receptor_atom_types,
     plot_feature_importance,
     plot_learning_curve,
     plot_model_comparison,
     plot_predicted_vs_actual,
+    plot_receptor_atom_types,
     plot_residuals,
     plot_roc_curves,
     plot_similarity_heatmap,
     plot_table_comparison,
-    plot_concentration_profile,
-    export_table,
-    metrics_to_dataframe,
+    plot_top_ligands,
     save_figure,
     save_visual_bundle,
 )
@@ -213,7 +214,7 @@ class TestLearningCurve:
 
 class TestRegressionPlots:
     def test_parity(self, trained_regressor, close_all):
-        _, report, _, _ = trained_regressor
+        _, _report, _, _ = trained_regressor
         fig = plot_predicted_vs_actual(
             np.arange(10, dtype=float),
             np.arange(10, dtype=float) + np.linspace(-1, 1, 10),
@@ -297,7 +298,7 @@ class TestLeaderboardAndDiagnostics:
         assert "mean" in fig.axes[0].get_legend().get_texts()[0].get_text()
 
     def test_cv_scores_from_training_result(self, trained_regressor, close_all):
-        result, _, _, _ = trained_regressor
+        _result, _, _, _ = trained_regressor
         fig = plot_cv_scores(np.array([0.6, 0.7]))
         assert fig is not None
 
@@ -529,7 +530,7 @@ class TestDockingPlots:
 
     def test_receptor_atom_types_accepts_report_like_object(self, close_all):
         class _FakeReport:
-            atom_types = {"C": 12, "OA": 3}
+            atom_types: ClassVar[dict[str, int]] = {"C": 12, "OA": 3}
             output_pdbqt = "unused.pdbqt"
 
         fig = plot_receptor_atom_types(_FakeReport())
@@ -594,7 +595,7 @@ class TestTableExport:
 
 class TestHTMLReport:
     def test_full_report(self, trained_classifier, tmp_path):
-        result, report, X_test, y_test = trained_classifier
+        _result, report, _X_test, _y_test = trained_classifier
         page = (
             HTMLReport("Test report", subtitle="unit test")
             .add_metrics(report, heading="Metrics")

@@ -27,7 +27,7 @@ _EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "examples"
 if str(_EXAMPLES_DIR) not in sys.path:
     sys.path.insert(0, str(_EXAMPLES_DIR))
 
-from make_synthetic_qsar_data import make_classification_table  # noqa: E402
+from make_synthetic_qsar_data import make_classification_table
 
 
 @pytest.fixture(scope="module")
@@ -199,7 +199,7 @@ class TestMulticlassTraining:
 
 class TestMulticlassSplitAndBoard:
     def test_stratified_split_keeps_all_classes(self, split) -> None:
-        X_train, X_test, y_train, y_test = split
+        _X_train, _X_test, y_train, y_test = split
         assert set(y_train.unique()) == {0, 1, 2}
         assert set(y_test.unique()) == {0, 1, 2}
 
@@ -209,7 +209,7 @@ class TestMulticlassSplitAndBoard:
         board = compare_models(
             X, y, "classification", models=["logistic_regression", "knn"], cv=3
         )
-        metric_col = [c for c in board.columns if c.endswith("_mean")][0]
+        metric_col = next(c for c in board.columns if c.endswith("_mean"))
         assert metric_col == "roc_auc_ovo_mean"
         assert board[metric_col].notna().all()
 
@@ -226,7 +226,7 @@ class TestMulticlassSplitAndBoard:
             cv=3,
         )
         # The whole board is scored by the label-only fallback metric.
-        metric_col = [c for c in board.columns if c.endswith("_mean")][0]
+        metric_col = next(c for c in board.columns if c.endswith("_mean"))
         assert metric_col == "balanced_accuracy_mean"
         assert board[metric_col].notna().all()
 

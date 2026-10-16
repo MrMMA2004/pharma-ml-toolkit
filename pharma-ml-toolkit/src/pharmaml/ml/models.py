@@ -15,8 +15,9 @@ registry import.
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 from sklearn.ensemble import (
     AdaBoostClassifier,
@@ -111,61 +112,61 @@ def _mlp_reg() -> MLPRegressor:
 
 
 def _xgb_cls():
-    from xgboost import XGBClassifier  # noqa: PLC0415
+    from xgboost import XGBClassifier
 
     return XGBClassifier(random_state=42, eval_metric="logloss", n_jobs=-1)
 
 
 def _xgb_reg():
-    from xgboost import XGBRegressor  # noqa: PLC0415
+    from xgboost import XGBRegressor
 
     return XGBRegressor(random_state=42, n_jobs=-1)
 
 
 def _lgbm_cls():
-    from lightgbm import LGBMClassifier  # noqa: PLC0415
+    from lightgbm import LGBMClassifier
 
     return LGBMClassifier(random_state=42, n_jobs=-1, verbose=-1)
 
 
 def _lgbm_reg():
-    from lightgbm import LGBMRegressor  # noqa: PLC0415
+    from lightgbm import LGBMRegressor
 
     return LGBMRegressor(random_state=42, n_jobs=-1, verbose=-1)
 
 
 def _cat_cls():
-    from catboost import CatBoostClassifier  # noqa: PLC0415
+    from catboost import CatBoostClassifier
 
     return CatBoostClassifier(random_state=42, verbose=False)
 
 
 def _cat_reg():
-    from catboost import CatBoostRegressor  # noqa: PLC0415
+    from catboost import CatBoostRegressor
 
     return CatBoostRegressor(random_state=42, verbose=False)
 
 
 def _dnn_cls():
-    from pharmaml.ml.neural import DeepMLPClassifier  # noqa: PLC0415 - lazy, torch-free import
+    from pharmaml.ml.neural import DeepMLPClassifier
 
     return DeepMLPClassifier(random_state=42)
 
 
 def _dnn_reg():
-    from pharmaml.ml.neural import DeepMLPRegressor  # noqa: PLC0415 - lazy, torch-free import
+    from pharmaml.ml.neural import DeepMLPRegressor
 
     return DeepMLPRegressor(random_state=42)
 
 
 def _res_dnn_cls():
-    from pharmaml.ml.neural import ResidualMLPClassifier  # noqa: PLC0415 - lazy, torch-free import
+    from pharmaml.ml.neural import ResidualMLPClassifier
 
     return ResidualMLPClassifier(random_state=42)
 
 
 def _res_dnn_reg():
-    from pharmaml.ml.neural import ResidualMLPRegressor  # noqa: PLC0415 - lazy, torch-free import
+    from pharmaml.ml.neural import ResidualMLPRegressor
 
     return ResidualMLPRegressor(random_state=42)
 

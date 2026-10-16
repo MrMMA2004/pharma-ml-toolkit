@@ -24,7 +24,7 @@ from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
 
-__all__ = ["ligand_efficiency", "ligand_efficiency_series", "consensus_rescore"]
+__all__ = ["consensus_rescore", "ligand_efficiency", "ligand_efficiency_series"]
 
 
 def _validated_atom_count(value: object, atoms_col: str) -> int:
@@ -37,9 +37,7 @@ def _validated_atom_count(value: object, atoms_col: str) -> int:
     with a raw ``ValueError``.
     """
     count: int | None = None
-    if isinstance(value, (int, np.integer)):
-        count = int(value)
-    elif isinstance(value, (float, np.floating)) and float(value).is_integer():
+    if isinstance(value, (int, np.integer)) or isinstance(value, (float, np.floating)) and float(value).is_integer():
         count = int(value)
     if count is None or count <= 0:
         raise DataValidationError(

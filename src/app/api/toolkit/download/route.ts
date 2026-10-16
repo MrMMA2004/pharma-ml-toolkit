@@ -36,6 +36,10 @@ export async function GET() {
         "*.pyc",
         "catboost_info/*",
         "*/catboost_info/*",
+        // Generated example output (leaderboards etc.) — .gitignored on the
+        // Python side, excluded here so the archive ships source only.
+        "artifacts/*",
+        "*/artifacts/*",
         "*.egg-info",
         "*.egg-info/*",
         "*/src/*.egg-info/*",

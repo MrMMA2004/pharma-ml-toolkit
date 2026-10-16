@@ -22,11 +22,10 @@ from __future__ import annotations
 
 import csv
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
-import numpy as np
 import pandas as pd
 
 from pharmaml.exceptions import DataValidationError, DependencyError
@@ -37,15 +36,15 @@ from pharmaml.utils.validation import require_columns
 _LOG = get_logger(__name__)
 
 __all__ = [
+    "SdfWriteReport",
+    "add_pic50_column",
     "ic50_to_pic50",
     "ki_to_pki",
     "pic50_from_ic50_series",
-    "add_pic50_column",
-    "split_table_into_chunks",
-    "SdfWriteReport",
-    "smi_to_csv",
-    "table_to_sdf",
     "sdf_to_table",
+    "smi_to_csv",
+    "split_table_into_chunks",
+    "table_to_sdf",
     "table_to_smi",
 ]
 
@@ -268,8 +267,8 @@ def _require_rdkit():
     message scoped to file-format conversion.
     """
     try:
-        from rdkit import Chem  # noqa: PLC0415 -- deliberate lazy import
-        from rdkit.Chem import AllChem  # noqa: PLC0415
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
     except ImportError as exc:
         raise DependencyError(
             "RDKit is required for molecular file-format conversion. "
@@ -486,8 +485,8 @@ def table_to_sdf(
         raise DataValidationError(f"table has no rows: {source}")
 
     Chem, AllChem = _require_rdkit()
-    from rdkit import RDLogger  # noqa: PLC0415
-    from rdkit.Chem import SDWriter  # noqa: PLC0415
+    from rdkit import RDLogger
+    from rdkit.Chem import SDWriter
 
     embed_params = None
     if embed3d:

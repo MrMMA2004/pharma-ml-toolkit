@@ -33,16 +33,16 @@ from pharmaml.logger import get_logger
 from pharmaml.viz._compat import PALETTE, new_figure
 
 __all__ = [
-    "plot_confusion_matrix",
-    "plot_roc_curves",
     "plot_calibration_curve",
+    "plot_class_distribution",
+    "plot_confusion_matrix",
+    "plot_cv_scores",
+    "plot_feature_importance",
     "plot_learning_curve",
+    "plot_model_comparison",
     "plot_predicted_vs_actual",
     "plot_residuals",
-    "plot_model_comparison",
-    "plot_class_distribution",
-    "plot_feature_importance",
-    "plot_cv_scores",
+    "plot_roc_curves",
 ]
 
 _LOG = get_logger(__name__)
@@ -110,7 +110,7 @@ def plot_confusion_matrix(
             share = matrix[i, j] / matrix[i].sum() if matrix[i].sum() else 0.0
             # a float-dtype matrix (e.g. re-plotted normalized counts) must
             # not hit the ":d" format code — cast integer annotations
-            cell = f"{display[i, j]:.2f}" if normalize else f"{int(round(float(display[i, j]))):d}"
+            cell = f"{display[i, j]:.2f}" if normalize else f"{round(float(display[i, j])):d}"
             annotation = cell + f"\n({share:.0%})"
             ax.text(
                 j, i, annotation, ha="center", va="center", fontsize=9,
@@ -156,7 +156,8 @@ def plot_roc_curves(
     ModelError
         If the model lacks ``predict_proba``.
     """
-    from sklearn.metrics import roc_curve, auc as sk_auc
+    from sklearn.metrics import auc as sk_auc
+    from sklearn.metrics import roc_curve
 
     if not hasattr(model, "predict_proba"):
         raise ModelError(
@@ -346,8 +347,7 @@ def plot_learning_curve(
 
     gap = float(train_mean[-1] - val_mean[-1])
     verdict = (
-        "gap ≈ %.2f — overfitting dominates, more data alone will not close it"
-        % gap
+        f"gap ≈ {gap:.2f} — overfitting dominates, more data alone will not close it"
         if gap > 0.15
         else "curves converging — additional data has diminishing returns"
     )
@@ -538,17 +538,20 @@ def _extract_importances(model_or_mapping, feature_names: list[str] | None):
             "a Pipeline containing one, or an explicit {feature: importance} mapping"
         )
 
-    if feature_names is None:
-        # A Pipeline's preprocessing steps (impute/scale/one-hot) know the
-        # transformed feature names — use them so one-hot expanded columns
-        # stay readable instead of "x0, x1, ...".
-        if hasattr(model_or_mapping, "named_steps") and len(model_or_mapping.named_steps) > 1:
-            try:
-                expanded = list(model_or_mapping[:-1].get_feature_names_out())
-            except Exception:  # noqa: BLE001 - unfitted / unsupported steps
-                expanded = []
-            if expanded and len(expanded) == len(values):
-                feature_names = expanded
+    # A Pipeline's preprocessing steps (impute/scale/one-hot) know the
+    # transformed feature names — use them so one-hot expanded columns
+    # stay readable instead of "x0, x1, ...".
+    if (
+        feature_names is None
+        and hasattr(model_or_mapping, "named_steps")
+        and len(model_or_mapping.named_steps) > 1
+    ):
+        try:
+            expanded = list(model_or_mapping[:-1].get_feature_names_out())
+        except Exception:  # noqa: BLE001 — capability probe; transformers vary
+            expanded = []
+        if expanded and len(expanded) == len(values):
+            feature_names = expanded
     if feature_names is None:
         feature_names = [f"x{i}" for i in range(len(values))]
     if len(feature_names) != len(values):

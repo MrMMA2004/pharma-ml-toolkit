@@ -26,10 +26,10 @@ _LOG = get_logger(__name__)
 __all__ = [
     "DockingCluster",
     "VinaPose",
+    "check_docking_completion",
     "parse_dlg_cluster_table",
     "parse_dlg_summary",
     "parse_vina_output",
-    "check_docking_completion",
     "scan_docking_directory",
     "scan_vina_directory",
 ]

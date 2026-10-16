@@ -27,7 +27,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
 
 import pandas as pd
 
@@ -39,14 +38,14 @@ _LOG = get_logger(__name__)
 
 __all__ = [
     "TableComparison",
-    "compare_tables",
     "annotate_with_smiles",
-    "merge_tables",
+    "compare_tables",
     "merge_table_folder",
+    "merge_tables",
 ]
 
 #: What a frame-or-path argument may be.
-TableSource = Union[pd.DataFrame, str, Path]
+TableSource = pd.DataFrame | str | Path
 
 #: Default artefact name written by :func:`merge_table_folder`
 #: (mirrors the always-write behaviour of the original ``filemerger.py``).

@@ -12,7 +12,6 @@ import re
 from functools import lru_cache
 
 from pharmaml.exceptions import UnitConversionError
-from pharmaml.utils.validation import validate_positive
 
 __all__ = ["UnitConverter", "molar_mass"]
 

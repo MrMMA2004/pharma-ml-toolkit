@@ -21,15 +21,15 @@ from pathlib import Path
 from pharmaml.exceptions import DataValidationError, DependencyError
 
 __all__ = [
-    "PLOT_FORMATS",
     "PALETTE",
-    "require_matplotlib",
+    "PLOT_FORMATS",
+    "close_figure",
+    "figure_to_base64",
     "get_pyplot",
     "new_figure",
-    "style_axis",
+    "require_matplotlib",
     "save_figure",
-    "figure_to_base64",
-    "close_figure",
+    "style_axis",
 ]
 
 #: File formats :func:`save_figure` can write (matplotlib backends).

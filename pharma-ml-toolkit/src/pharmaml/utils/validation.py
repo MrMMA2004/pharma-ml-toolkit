@@ -19,12 +19,12 @@ import pandas as pd
 from pharmaml.exceptions import DataValidationError
 
 __all__ = [
-    "validate_positive",
-    "validate_smiles_syntax",
-    "require_columns",
-    "validate_concentration_series",
     "coerce_frame",
     "looks_continuous",
+    "require_columns",
+    "validate_concentration_series",
+    "validate_positive",
+    "validate_smiles_syntax",
 ]
 
 # Cheap syntactic sanity check for SMILES: balanced brackets and only
@@ -82,9 +82,8 @@ def validate_smiles_syntax(smiles: str) -> bool:
     for char in candidate:
         if char in _BRACKET_PAIRS:
             stack.append(_BRACKET_PAIRS[char])
-        elif char in (")", "]"):
-            if not stack or stack.pop() != char:
-                return False
+        elif char in (")", "]") and (not stack or stack.pop() != char):
+            return False
     return not stack
 
 

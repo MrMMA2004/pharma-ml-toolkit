@@ -18,7 +18,6 @@ import pandas as pd
 import pytest
 
 from pharmaml.docking.ligands import (
-    LigandLibrary,
     LigandPreparationReport,
     load_ligand_csv,
     prepare_ligand_library,
@@ -30,7 +29,7 @@ from pharmaml.docking.receptor import (
 )
 from pharmaml.exceptions import DataValidationError, DependencyError
 
-rdkit = pytest.importorskip("rdkit")  # noqa: F841  (gates the whole module)
+rdkit = pytest.importorskip("rdkit")
 
 CRAMBIN = Path(__file__).parent / "data" / "1crn.pdb"
 
@@ -264,7 +263,7 @@ class TestPrepareLigandLibrary:
             "name,SMILES\naspirin,CCO\naspirin,CCC\naspirin,CCN\n",
             encoding="utf-8",
         )
-        report = prepare_ligand_library(csv, tmp_path / "dupes", folder_naming="name")
+        prepare_ligand_library(csv, tmp_path / "dupes", folder_naming="name")
         folders = sorted(p.name for p in (tmp_path / "dupes").iterdir() if p.is_dir())
         assert len(folders) == 3
         assert len(set(folders)) == 3  # no collision

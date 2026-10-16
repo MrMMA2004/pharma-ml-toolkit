@@ -64,21 +64,21 @@ from pharmaml.biology.response import (
 __all__ = [
     # response.py
     "ResponseScreen",
-    "load_response_table",
     "audit_response_table",
-    "collapse_replicates",
-    "ln_ic50_to_pic50",
-    "pic50_to_ln_ic50",
-    "response_matrix",
-    "summarize_compounds",
     "call_sensitive_resistant",
+    "collapse_replicates",
+    "correlate_with_response",
+    "direction_of_association",
+    "impute_expression",
+    "ln_ic50_to_pic50",
+    "load_response_table",
+    "most_variable_genes",
     # omics.py
     "normalize_expression",
-    "impute_expression",
-    "most_variable_genes",
-    "correlate_with_response",
+    "pic50_to_ln_ic50",
+    "response_matrix",
     # biomarkers.py
     "sensitivity_associations",
+    "summarize_compounds",
     "top_biomarkers",
-    "direction_of_association",
 ]

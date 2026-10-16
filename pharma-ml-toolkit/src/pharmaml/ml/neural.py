@@ -70,7 +70,7 @@ _DEVICES: tuple[str, ...] = ("auto", "cpu", "cuda")
 # ---------------------------------------------------------------------------
 # Lazy torch access
 # ---------------------------------------------------------------------------
-def _require_torch() -> "torch":
+def _require_torch() -> torch:
     """Import and return torch, or raise the actionable error.
 
     Raises
@@ -80,7 +80,7 @@ def _require_torch() -> "torch":
         extra that installs it).
     """
     try:
-        import torch  # noqa: PLC0415 - lazy import is the whole point
+        import torch
     except ImportError as exc:
         raise DependencyError(_TORCH_HINT) from exc
     return torch
@@ -88,7 +88,7 @@ def _require_torch() -> "torch":
 
 def _make_activation(activation: str) -> Any:
     """Return a fresh ``torch.nn`` activation module for a token."""
-    from torch import nn  # noqa: PLC0415 - lazy import
+    from torch import nn
 
     factory = {
         "relu": nn.ReLU,
@@ -118,7 +118,7 @@ def _build_network(
     if residual:
         return _torch_networks()[2](n_in, hidden, n_out, activation, dropout)
 
-    from torch import nn  # noqa: PLC0415 - lazy import
+    from torch import nn
 
     layers: list[Any] = []
     widths = [n_in, *hidden, n_out]
@@ -169,7 +169,7 @@ def _torch_networks() -> tuple[Any, type, type]:
                     nn.Identity() if width_in == width_out else nn.Linear(width_in, width_out)
                 )
 
-            def forward(self, x: "torch.Tensor") -> "torch.Tensor":
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
                 out = self.fc2(self.drop(self.act(self.fc1(x))))
                 return self.act(out + self.skip(x))
 
@@ -192,7 +192,7 @@ def _torch_networks() -> tuple[Any, type, type]:
                 )
                 self.head = nn.Linear(widths[-1], n_out)
 
-            def forward(self, x: "torch.Tensor") -> "torch.Tensor":
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
                 for block in self.blocks:
                     x = block(x)
                 return self.head(x)
@@ -326,7 +326,7 @@ class _BaseDeepEstimator(BaseEstimator):
             )
 
     # -- fit ------------------------------------------------------------
-    def fit(self, X: Any, y: Any) -> "_BaseDeepEstimator":
+    def fit(self, X: Any, y: Any) -> _BaseDeepEstimator:
         """Train the network on ``(X, y)`` with early stopping.
 
         Parameters
@@ -469,7 +469,7 @@ class _BaseDeepEstimator(BaseEstimator):
         )
         return self
 
-    def _resolve_device(self, torch: "torch") -> str:
+    def _resolve_device(self, torch: torch) -> str:
         """Map the ``device`` token to a concrete torch device string.
 
         Raises
@@ -506,7 +506,7 @@ class _BaseDeepEstimator(BaseEstimator):
             for cls in np.unique(y_enc):
                 members = np.flatnonzero(y_enc == cls)
                 members = members[rng.permutation(members.size)]
-                k = int(round(val_split * members.size))
+                k = round(val_split * members.size)
                 # every class keeps >= 1 training row, even when it has
                 # a single member (val_split can otherwise steal it).
                 k = min(k, max(members.size - 1, 0))
@@ -514,7 +514,7 @@ class _BaseDeepEstimator(BaseEstimator):
             val_idx = np.concatenate(parts).astype(int) if parts else np.array([], dtype=int)
         else:
             perm = rng.permutation(n)
-            val_idx = perm[: max(1, int(round(val_split * n)))]
+            val_idx = perm[: max(1, round(val_split * n))]
         if val_idx.size == 0 or val_idx.size >= n:
             return np.arange(n), None
         mask = np.zeros(n, dtype=bool)
@@ -527,7 +527,7 @@ class _BaseDeepEstimator(BaseEstimator):
         y_enc: np.ndarray,
         n_out: int,
         device: str,
-        torch: "torch",
+        torch: torch,
         hidden: tuple[int, ...],
         train_idx: np.ndarray,
         val_idx: np.ndarray | None,
@@ -542,7 +542,7 @@ class _BaseDeepEstimator(BaseEstimator):
         seeded ``rng`` keep the whole fit one deterministic random
         stream.
         """
-        from torch import nn  # noqa: PLC0415 - lazy import
+        from torch import nn
 
         torch.manual_seed(int(self.random_state))
 

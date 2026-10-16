@@ -738,11 +738,10 @@ class TestNaNIdentifierRows:
 
     def test_collapse_replicates_keeps_nan_key_rows(self, caplog) -> None:
         screen = load_response_table(self._frame(), metrics=["v"])
-        with _pharmaml_logs_visible():
-            with caplog.at_level(
-                logging.WARNING, logger="pharmaml.biology.response"
-            ):
-                collapsed = collapse_replicates(screen)
+        with _pharmaml_logs_visible(), caplog.at_level(
+            logging.WARNING, logger="pharmaml.biology.response"
+        ):
+            collapsed = collapse_replicates(screen)
         assert len(collapsed.frame) == 3  # (A,d) median + (nan,d) + (B,nan)
         assert collapsed.frame[collapsed.frame["cell_line"] == "A"][
             "v"

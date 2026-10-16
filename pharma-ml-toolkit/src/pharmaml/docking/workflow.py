@@ -32,12 +32,12 @@ from pharmaml.utils.io import safe_filename
 _LOG = get_logger(__name__)
 
 __all__ = [
+    "DockingRunResult",
+    "batch_run_directories",
+    "parse_vina_config",
     "run_autodock4",
     "run_vina",
     "run_vina_batch",
-    "parse_vina_config",
-    "batch_run_directories",
-    "DockingRunResult",
 ]
 
 

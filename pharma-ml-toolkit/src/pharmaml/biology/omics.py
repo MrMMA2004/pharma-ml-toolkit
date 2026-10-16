@@ -33,10 +33,10 @@ from pharmaml.logger import get_logger
 _LOG = get_logger(__name__)
 
 __all__ = [
-    "normalize_expression",
+    "correlate_with_response",
     "impute_expression",
     "most_variable_genes",
-    "correlate_with_response",
+    "normalize_expression",
 ]
 
 #: Correlation methods understood by :func:`correlate_with_response`.

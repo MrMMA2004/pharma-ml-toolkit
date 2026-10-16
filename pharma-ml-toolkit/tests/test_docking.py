@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -148,12 +147,7 @@ class TestVinaParsing:
         assert [p.mode for p in poses] == [1, 2, 3, 4]
 
     def test_remark_format(self) -> None:
-        text = "\n".join(
-            [
-                "REMARK VINA RESULT:    -9.5      1.234      2.345",
-                "REMARK VINA RESULT:    -8.9      2.000      3.000",
-            ]
-        )
+        text = "REMARK VINA RESULT:    -9.5      1.234      2.345\nREMARK VINA RESULT:    -8.9      2.000      3.000"
         poses = parse_vina_output(text)
         assert poses[0].affinity == pytest.approx(-9.5)
         assert poses[0].rmsd_lb == pytest.approx(1.234)
@@ -165,13 +159,7 @@ class TestVinaParsing:
     def test_scientific_notation_rows_are_parsed(self) -> None:
         # Regression: affinity/RMSD values in exponent form (e.g. from
         # post-processed tables) were silently dropped by the row regex.
-        text = "\n".join(
-            [
-                "   1      -1.0e+01          0          0",
-                "   2      -9.6e+00      1.842      2.301",
-                "   3       -9.4      2.105      2.777",
-            ]
-        )
+        text = "   1      -1.0e+01          0          0\n   2      -9.6e+00      1.842      2.301\n   3       -9.4      2.105      2.777"
         poses = parse_vina_output(text)
         assert len(poses) == 3
         assert poses[0].affinity == pytest.approx(-10.0)
@@ -181,13 +169,7 @@ class TestVinaParsing:
     def test_malformed_remark_line_warns_and_keeps_good_poses(self, caplog) -> None:
         # Regression: a corrupted REMARK used to crash with a raw
         # ValueError ('could not convert string to float: abc').
-        text = "\n".join(
-            [
-                "REMARK VINA RESULT:    abc      1.234      2.345",
-                "REMARK VINA RESULT:    -9.5      1.234      2.345",
-                "REMARK VINA RESULT:    -8.9      2.000      3.000",
-            ]
-        )
+        text = "REMARK VINA RESULT:    abc      1.234      2.345\nREMARK VINA RESULT:    -9.5      1.234      2.345\nREMARK VINA RESULT:    -8.9      2.000      3.000"
         with _pharmaml_logs_visible():
             with caplog.at_level(logging.WARNING, logger="pharmaml.docking.parsing"):
                 poses = parse_vina_output(text)

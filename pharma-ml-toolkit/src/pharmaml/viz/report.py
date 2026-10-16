@@ -22,7 +22,6 @@
 from __future__ import annotations
 
 import html
-import json
 from pathlib import Path
 from typing import Any
 
@@ -124,7 +123,7 @@ def _frame_to_markdown(frame: pd.DataFrame, max_rows: int | None = None) -> str:
         "| " + " | ".join(cell(value) for value in row.tolist()) + " |"
         for _, row in shown.iterrows()
     )
-    return "\n".join([header, rule, body])
+    return f"{header}\n{rule}\n{body}"
 
 
 def metrics_to_dataframe(report: Any) -> pd.DataFrame:
@@ -217,7 +216,7 @@ class HTMLReport:
         self._figure_count = 0
 
     # -- content builders -------------------------------------------------
-    def add_metrics(self, metrics: Any, heading: str | None = None) -> "HTMLReport":
+    def add_metrics(self, metrics: Any, heading: str | None = None) -> HTMLReport:
         """Metric cards from a report object or a ``{name: value}`` dict."""
         if hasattr(metrics, "as_dict"):
             payload = metrics.as_dict()
@@ -242,21 +241,21 @@ class HTMLReport:
         frame: pd.DataFrame,
         heading: str | None = None,
         max_rows: int | None = 40,
-    ) -> "HTMLReport":
+    ) -> HTMLReport:
         """Styled HTML table (long tables are truncated at ``max_rows``)."""
         parts = [f"<h2>{_escape(heading)}</h2>"] if heading else []
         parts.append(_frame_to_html(frame, max_rows=max_rows))
         self._blocks.append("".join(parts))
         return self
 
-    def add_text(self, text: str, heading: str | None = None) -> "HTMLReport":
+    def add_text(self, text: str, heading: str | None = None) -> HTMLReport:
         """A paragraph of escaped text (notes, provenance, next steps)."""
         parts = [f"<h2>{_escape(heading)}</h2>"] if heading else []
         parts.append(f"<p>{_escape(text)}</p>")
         self._blocks.append("".join(parts))
         return self
 
-    def add_figure(self, figure: Any, caption: str | None = None, fmt: str = "png") -> "HTMLReport":
+    def add_figure(self, figure: Any, caption: str | None = None, fmt: str = "png") -> HTMLReport:
         """Embed a matplotlib figure inline (base64; not saved to disk)."""
         if fmt not in {"png", "svg"}:
             raise DataValidationError(

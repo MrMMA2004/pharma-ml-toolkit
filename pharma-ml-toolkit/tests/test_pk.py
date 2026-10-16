@@ -227,7 +227,7 @@ class TestVdFromDoseAuc:
 
 def test_pharma_package_surface() -> None:
     """`from pharmaml.pharma import X` works for every public symbol."""
-    import pharmaml.pharma as pharma
+    from pharmaml import pharma
 
     expected = {
         # PK

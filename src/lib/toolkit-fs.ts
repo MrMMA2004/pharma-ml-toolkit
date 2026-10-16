@@ -13,12 +13,15 @@ export const TOOLKIT_NAME = "pharma-ml-toolkit";
 /** Generated artifacts that should never appear in the explorer or ZIP.
  * The virtualenv entries matter: a stray `uv venv` / `python -m venv` inside
  * the toolkit once inflated the live stats from 93 to 6,732 files — local
- * environments must never leak into the served tree. */
+ * environments must never leak into the served tree. `artifacts` covers
+ * generated example output (e.g. examples/artifacts/ leaderboards), which
+ * is .gitignored on the Python side but was leaking into tree/ZIP stats. */
 export const EXCLUDED_DIRS = new Set([
   ".pytest_cache",
   "__pycache__",
   "node_modules",
   "catboost_info",
+  "artifacts",
   ".venv",
   "venv",
   "env",

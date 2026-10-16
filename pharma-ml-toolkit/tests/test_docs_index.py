@@ -45,13 +45,15 @@ REGENERATE_HINT = (
     "    python scratch/build_docs_index.py"
 )
 
-#: Modules that must always keep a section in the index (the six public
+#: Modules that must always keep a section in the index (the public
 #: top-level modules plus the two documented ``utils`` submodules).
 REQUIRED_MODULES: tuple[str, ...] = (
     "pharmaml",
     "pharmaml.data",
     "pharmaml.chem",
     "pharmaml.ml",
+    "pharmaml.generative",
+    "pharmaml.biology",
     "pharmaml.pharma",
     "pharmaml.docking",
     "pharmaml.utils.io",
@@ -211,7 +213,7 @@ def test_documented_modules_are_importable() -> None:
     for name in INDEX_MODULES:
         try:
             importlib.import_module(name)
-        except Exception as exc:  # noqa: BLE001 - report every failure at once
+        except Exception as exc:  # noqa: BLE001 — report every import failure, not the first
             problems.append(f"{name}: {exc!r}")
     assert not problems, (
         "docs/INDEX.md documents modules that cannot be imported:\n- "

@@ -17,10 +17,10 @@ from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
 
 __all__ = [
-    "read_table",
-    "write_table",
     "ensure_directory",
+    "read_table",
     "safe_filename",
+    "write_table",
 ]
 
 _LOG = get_logger(__name__)

@@ -26,7 +26,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
 
 import pandas as pd
 
@@ -38,15 +37,15 @@ from pharmaml.utils.io import read_table, safe_filename, write_table
 _LOG = get_logger(__name__)
 
 __all__ = [
+    "NAME_COLUMN_CANDIDATES",
+    "SMILES_COLUMN_CANDIDATES",
     "LigandLibrary",
     "LigandPreparationReport",
-    "load_ligand_csv",
-    "prepare_ligand_library",
     "TorsionCheck",
     "check_torsion_consistency",
+    "load_ligand_csv",
+    "prepare_ligand_library",
     "scan_torsion_consistency",
-    "SMILES_COLUMN_CANDIDATES",
-    "NAME_COLUMN_CANDIDATES",
 ]
 
 # Column names auto-detected when the caller does not pin one
@@ -161,8 +160,8 @@ class LigandLibrary:
             [
                 "Ligand library",
                 f"  source        : {self.source}",
-                f"  rows          : {len(self.frame)} "
-                f"({unique} unique SMILES)",
+                (f"  rows          : {len(self.frame)} "
+                f"({unique} unique SMILES)"),
                 f"  smiles column : {self.smiles_column}",
                 f"  names         : {names}",
                 f"  valid         : {n_valid}",
@@ -225,12 +224,12 @@ class LigandPreparationReport:
             [
                 "Ligand batch preparation",
                 f"  campaign dir : {self.root}",
-                f"  prepared     : {self.n_prepared} ligands "
-                f"({atoms_total} atoms, {tors} total rotatable bonds)",
+                (f"  prepared     : {self.n_prepared} ligands "
+                f"({atoms_total} atoms, {tors} total rotatable bonds)"),
                 f"  failed       : {self.n_failed}"
                 + ("  -> failed_smiles.csv" if self.n_failed else ""),
-                f"  layout       : one folder per ligand, <name>/l.pdbqt "
-                "(scan_docking_directory-ready)",
+                ("  layout       : one folder per ligand, <name>/l.pdbqt "
+                "(scan_docking_directory-ready)"),
             ]
         )
 
@@ -537,7 +536,7 @@ def scan_torsion_consistency(directory: str | Path) -> pd.DataFrame:
 
 
 def prepare_ligand_library(
-    library: Union[LigandLibrary, str, Path],
+    library: LigandLibrary | str | Path,
     output_root: str | Path,
     *,
     smiles_col: str | None = None,
@@ -619,7 +618,7 @@ def prepare_ligand_library(
             # Missing RDKit/Meeko cannot get better by retrying: fail the
             # whole batch fast with the actionable install hint.
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — convert per-ligand failure to typed error with cleanup
             error = str(exc)
             if folder.exists():
                 try:

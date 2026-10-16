@@ -41,7 +41,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -55,18 +54,18 @@ _LOG = get_logger(__name__)
 
 __all__ = [
     "ResponseScreen",
-    "load_response_table",
     "audit_response_table",
+    "call_sensitive_resistant",
     "collapse_replicates",
     "ln_ic50_to_pic50",
+    "load_response_table",
     "pic50_to_ln_ic50",
     "response_matrix",
     "summarize_compounds",
-    "call_sensitive_resistant",
 ]
 
 #: What a table argument may be: an in-memory frame or a csv/xlsx path.
-ResponseTableSource = Union[pd.DataFrame, str, Path]
+ResponseTableSource = pd.DataFrame | str | Path
 
 #: ``ln(10)`` -- the natural-log/decade conversion factor.
 _LN10 = math.log(10.0)
@@ -202,9 +201,7 @@ class ResponseScreen:
     @property
     def n_pairs(self) -> int:
         """Number of unique (cell line, compound) pairs."""
-        return int(
-            len(self.frame[[self.cell_col, self.compound_col]].drop_duplicates())
-        )
+        return len(self.frame[[self.cell_col, self.compound_col]].drop_duplicates())
 
     def _duplicate_pairs(self) -> list[tuple[str, str]]:
         """(cell, compound) pairs that occupy more than one row.
@@ -221,8 +218,8 @@ class ResponseScreen:
     def summary(self) -> str:
         """Multi-line audit summary (the package's ``inspect`` style)."""
         lines = [
-            f"screen        : {len(self.cell_lines)} cell line(s) x "
-            f"{len(self.compounds)} compound(s) -> {self.n_pairs} (cell, compound) pair(s)"
+            (f"screen        : {len(self.cell_lines)} cell line(s) x "
+            f"{len(self.compounds)} compound(s) -> {self.n_pairs} (cell, compound) pair(s)")
         ]
         if len(self.frame) != self.n_pairs:
             lines.append(

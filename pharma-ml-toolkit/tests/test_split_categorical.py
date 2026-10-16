@@ -118,10 +118,10 @@ class TestSplitTable:
         "kwargs",
         [
             {},  # neither path nor frame
-            dict(path="x.csv", frame=pd.DataFrame()),  # both
-            dict(frame=pd.DataFrame({"a": [1]}), test_size=1.5),
-            dict(frame=pd.DataFrame({"a": [1]}), test_size=0.5, val_size=2.0),
-            dict(frame=pd.DataFrame({"a": [1]}), test_size=0.5, val_size=-0.1),
+            {"path": "x.csv", "frame": pd.DataFrame()},  # both
+            {"frame": pd.DataFrame({"a": [1]}), "test_size": 1.5},
+            {"frame": pd.DataFrame({"a": [1]}), "test_size": 0.5, "val_size": 2.0},
+            {"frame": pd.DataFrame({"a": [1]}), "test_size": 0.5, "val_size": -0.1},
         ],
     )
     def test_argument_errors(self, kwargs):
@@ -301,8 +301,8 @@ class TestResolveModelName:
 
 class TestFeatureImportanceNames:
     def test_expanded_names_used(self, mixed_frame):
-        from pharmaml.viz.ml_plots import _extract_importances
         from pharmaml.ml import train_model
+        from pharmaml.viz.ml_plots import _extract_importances
 
         X, y = mixed_frame[["d1", "d2", "assay"]], mixed_frame["Target"]
         result = train_model("rf", "classification", X, y, tune=False)

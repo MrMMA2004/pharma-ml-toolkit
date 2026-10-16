@@ -87,6 +87,15 @@ addopts = "-q --tb=short"
 line-length = 100
 target-version = "py310"
 
+[tool.ruff.lint.per-file-ignores]
+# Tests deliberately nest the `_pharmaml_logs_visible()` logging fixture inside
+# a `caplog.at_level()` context (and vice versa) to keep the restore-on-exit
+# guarantee visually explicit; collapsing the two `with` blocks hides that.
+"tests/*" = ["SIM117"]
+# Notebooks are published artefacts with committed outputs — they are reviewed
+# by hand, never auto-rewritten by formatters.
+"*.ipynb" = ["ALL"]
+
 [tool.mypy]
 python_version = "3.10"
 ignore_missing_imports = true

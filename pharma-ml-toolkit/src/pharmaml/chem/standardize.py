@@ -48,8 +48,8 @@ _LOG = get_logger(__name__)
 __all__ = [
     "UNSUPPORTED_METALS",
     "PdbLigandReport",
-    "require_rdkit_standardize",
     "canonicalize_tautomer",
+    "require_rdkit_standardize",
     "smiles_to_pdb",
 ]
 
@@ -68,7 +68,7 @@ _RANDOM_SEED = 42
 def require_rdkit_standardize():
     """Import and return the RDKit ``Chem`` module or raise helpfully."""
     try:
-        from rdkit import Chem  # noqa: PLC0415 -- deliberate lazy import
+        from rdkit import Chem
     except ImportError as exc:
         raise DependencyError(
             "RDKit is required for molecular standardization and 3D ligand "
@@ -105,7 +105,7 @@ def canonicalize_tautomer(smiles: str) -> str:
         If RDKit is not installed.
     """
     Chem = require_rdkit_standardize()
-    from rdkit.Chem.MolStandardize import rdMolStandardize  # noqa: PLC0415
+    from rdkit.Chem.MolStandardize import rdMolStandardize
 
     # Blank/non-str input must raise "Cannot parse SMILES" (see smiles_to_pdb).
     mol = (
@@ -231,8 +231,8 @@ def smiles_to_pdb(
         If RDKit is not installed.
     """
     Chem = require_rdkit_standardize()
-    from rdkit.Chem import AllChem  # noqa: PLC0415
-    from rdkit.Chem.MolStandardize import rdMolStandardize  # noqa: PLC0415
+    from rdkit.Chem import AllChem
+    from rdkit.Chem.MolStandardize import rdMolStandardize
 
     if num_confs < 1:
         raise DataValidationError(
@@ -289,7 +289,7 @@ def smiles_to_pdb(
                 ff = AllChem.MMFFGetMoleculeForceField(mol, props, confId=conf_id)
                 ff.Minimize()
                 energies.append((conf_id, ff.CalcEnergy()))
-            except Exception:  # noqa: BLE001 -- skip failing conformers, like the original
+            except Exception:  # noqa: BLE001, S112 — per-conformer FF failures are expected
                 continue
         if energies:
             forcefield = "MMFF"
@@ -299,7 +299,7 @@ def smiles_to_pdb(
                 AllChem.UFFOptimizeMolecule(mol, confId=conf_id)
                 ff = AllChem.UFFGetMoleculeForceField(mol, confId=conf_id)
                 energies.append((conf_id, ff.CalcEnergy()))
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001, S112 — per-conformer FF failures are expected
                 continue
         if energies:
             forcefield = "UFF"

@@ -14,7 +14,6 @@ from pharmaml.chem.similarity import (
     top_matches,
 )
 from pharmaml.exceptions import DataValidationError, DependencyError
-
 from pharmaml.utils.validation import (
     require_columns,
     validate_concentration_series,
@@ -128,7 +127,7 @@ class TestValidationHelpers:
             require_columns(frame, ["a", "c", "d"])
 
     def test_validate_concentration_series(self) -> None:
-        t, c = validate_concentration_series([0, 1, 2], [1.0, 2.0, 1.5])
+        t, _c = validate_concentration_series([0, 1, 2], [1.0, 2.0, 1.5])
         assert t.tolist() == [0, 1, 2]
         with pytest.raises(DataValidationError):
             validate_concentration_series([0, 1, 1], [1.0, 1.0, 1.0])

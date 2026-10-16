@@ -24,6 +24,9 @@ scans::
     pharmaml docking vina-scan --dir vina_results/
     pharmaml biology response-audit --data screen.csv --metric LN_IC50
     pharmaml biology top-biomarkers --expression expr.csv --response resp.csv --response-column pIC50
+    pharmaml generative run --recipe qed --method ga --iterations 20 --seed 42
+    pharmaml generative run --recipe similar --seeds examples/data/seed_molecules.csv
+    pharmaml generative corpus
     pharmaml models list
 
 ``--model`` accepts registry names and their aliases (``rf``,
@@ -33,6 +36,7 @@ scans::
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -548,6 +552,79 @@ def _build_parser() -> argparse.ArgumentParser:
         help="write the hits table to this path (csv/tsv/xlsx)",
     )
 
+    generative_parser = subparsers.add_parser(
+        "generative",
+        help="de novo molecule generation (genetic algorithm / reinforcement learning)",
+    )
+    generative_sub = generative_parser.add_subparsers(
+        dest="generative_command", required=True
+    )
+
+    gen_run = generative_sub.add_parser(
+        "run",
+        help="optimise molecules toward a recipe objective",
+    )
+    gen_run.add_argument(
+        "--method", choices=("ga", "rl"), default="ga",
+        help="optimiser: 'ga' = SMILES genetic algorithm (CPU-strong, no torch "
+        "needed), 'rl' = REINVENT-style reinforcement learning (requires torch)",
+    )
+    gen_run.add_argument(
+        "--recipe", choices=("qed", "logp", "druglike", "similar"), default="qed",
+        help="objective preset: qed (QED drug-likeness), logp (LogP 1-3 window), "
+        "'druglike' (QED x MW x TPSA multi-objective), 'similar' (similarity to "
+        "your seed molecules -- requires --seeds/--seed-smiles)",
+    )
+    gen_run.add_argument(
+        "--seeds", default=None,
+        help="seeded mode: CSV/TSV/Excel table with a SMILES column (a "
+        "smiles/smile/canonical_smiles-style header is auto-detected; other "
+        "columns such as 'name' are ignored); initialises the GA population "
+        "from your molecules and biases the RL prior's corpus toward them",
+    )
+    gen_run.add_argument(
+        "--seed-smiles", default=None, metavar="SMILES",
+        help="seeded mode: comma-separated SMILES (e.g. \"CCO,CCN\"); combined "
+        "with --seeds when both are given",
+    )
+    gen_run.add_argument(
+        "--iterations", type=int, default=20, metavar="N",
+        help="GA generations or RL iterations (default 20)",
+    )
+    gen_run.add_argument(
+        "--population", type=int, default=48, metavar="N",
+        help="GA population size (default 48)",
+    )
+    gen_run.add_argument(
+        "--batch-size", type=int, default=32, metavar="N",
+        help="RL: molecules sampled per iteration (default 32)",
+    )
+    gen_run.add_argument(
+        "--prior-epochs", type=int, default=8, metavar="N",
+        help="RL: epochs for the on-the-fly corpus prior (default 8)",
+    )
+    gen_run.add_argument(
+        "--seed", type=int, default=42,
+        help="random seed (two runs with the same seed are identical)",
+    )
+    gen_run.add_argument(
+        "--top", type=int, default=10, metavar="N",
+        help="leaderboard rows to print (default 10)",
+    )
+    gen_run.add_argument(
+        "--out", default=None,
+        help="write the full ranked leaderboard to this path (csv/tsv/xlsx)",
+    )
+
+    gen_corpus = generative_sub.add_parser(
+        "corpus",
+        help="print the bundled generation corpus (canonical drug-like SMILES)",
+    )
+    gen_corpus.add_argument(
+        "--out", default=None,
+        help="write the corpus to this path (csv/tsv/xlsx)",
+    )
+
     return parser
 
 
@@ -720,6 +797,7 @@ def _train_figure_bundle(result, report, dataset, X_test, y_test):
     """Collect the standard figure/table set for ``ml train --plots``."""
     import pandas as pd
 
+    from pharmaml.exceptions import DataValidationError
     from pharmaml.viz import metrics_to_dataframe, ml_plots
 
     figures: dict[str, Any] = {}
@@ -750,8 +828,8 @@ def _train_figure_bundle(result, report, dataset, X_test, y_test):
         figures["cv_scores"] = ml_plots.plot_cv_scores(result)
     try:
         figures["feature_importance"] = ml_plots.plot_feature_importance(result.model)
-    except Exception:  # noqa: BLE001 - estimator exposes no importances
-        pass  # e.g. kernel SVM / KNN — importance plot is simply skipped
+    except DataValidationError:  # kernel SVM / KNN — importance plot simply skipped
+        pass
 
     tables.setdefault(
         "held_out_metrics", metrics_to_dataframe(report)
@@ -981,7 +1059,10 @@ def _cmd_pharma_pk(args: argparse.Namespace) -> int:
     frame = read_table(args.data)
     require_columns(frame, [args.time, args.conc])
     summary = nca_summary(frame[args.time].to_numpy(), frame[args.conc].to_numpy())
-    payload = {k: (None if v != v else v) for k, v in summary.as_dict().items()}
+    payload = {
+        k: (None if isinstance(v, float) and math.isnan(v) else v)
+        for k, v in summary.as_dict().items()
+    }
     print(json.dumps(payload, indent=2))
     if args.out:
         Path(args.out).write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -1185,7 +1266,7 @@ def _cmd_docking_campaign(args: argparse.Namespace) -> int:
             stop=args.stop,
             pattern=args.pattern,
         ).rename_axis("number")
-        total = int(len(result))
+        total = len(result)
         present = int(result[args.column].notna().sum())
         print(
             f"{present}/{total} ligand number(s) present in range "
@@ -1331,6 +1412,161 @@ def _cmd_biology_top_biomarkers(args: argparse.Namespace) -> int:
     return 0
 
 
+#: Column names accepted for the generative ``--seeds`` table (case-insensitive;
+#: mirrors ``pharmaml.docking.ligands.SMILES_COLUMN_CANDIDATES``).
+_GENERATIVE_SMILES_COLUMNS = (
+    "smiles",
+    "smile",
+    "canonical_smiles",
+    "smiles_nostereo",
+    "smiles_no_stereo",
+    "smiles_string",
+    "canonical",
+)
+
+
+def _generative_seed_smiles(args: argparse.Namespace) -> list[str] | None:
+    """Collect seed molecules from ``--seeds`` (table) + ``--seed-smiles``."""
+    from pharmaml.exceptions import DataValidationError
+    from pharmaml.utils.io import read_table
+
+    seeds: list[str] = []
+    if args.seeds:
+        frame = read_table(args.seeds)
+        lowered = {str(col).strip().lower(): col for col in frame.columns}
+        smiles_col = next(
+            (lowered[candidate] for candidate in _GENERATIVE_SMILES_COLUMNS
+             if candidate in lowered),
+            None,
+        )
+        if smiles_col is None:
+            # Silent first-column guessing produced baffling downstream
+            # errors (drug *names* parsed as SMILES); name the columns instead.
+            raise DataValidationError(
+                f"no SMILES column found in {args.seeds} -- available "
+                f"columns: {list(frame.columns)} (expected one of "
+                f"{list(_GENERATIVE_SMILES_COLUMNS)})"
+            )
+        seeds.extend(str(value) for value in frame[smiles_col].dropna().tolist())
+    if args.seed_smiles:
+        seeds.extend(
+            part.strip() for part in args.seed_smiles.split(",") if part.strip()
+        )
+    return seeds or None
+
+
+def _generative_objective(recipe: str, seeds: list[str] | None) -> tuple[Any, str]:
+    """Build the recipe's scoring objective (plus a one-line description)."""
+    from pharmaml.generative import (
+        LogPBandObjective,
+        MolecularWeightBandObjective,
+        MultiObjective,
+        QedObjective,
+        SimilarityObjective,
+        TpsaBandObjective,
+    )
+
+    if recipe == "qed":
+        return QedObjective(), "QED drug-likeness"
+    if recipe == "logp":
+        return LogPBandObjective(1.0, 3.0), "Crippen LogP band [1, 3]"
+    if recipe == "druglike":
+        objective = MultiObjective(
+            [
+                QedObjective(),
+                MolecularWeightBandObjective(150, 450),
+                TpsaBandObjective(30, 90),
+            ]
+        )
+        return objective, "QED x MW(150-450) x TPSA(30-90) multi-objective"
+    from pharmaml.exceptions import DataValidationError
+
+    if not seeds:
+        raise DataValidationError(
+            "the 'similar' recipe needs seed molecules -- pass "
+            "--seeds PATH.csv (a table with a SMILES column) or "
+            "--seed-smiles \"CCO,CCN\""
+        )
+    objective = MultiObjective(
+        [SimilarityObjective(seeds[0]), QedObjective()], weights=[0.7, 0.3]
+    )
+    return objective, f"0.7 x similarity to {seeds[0]!r} + 0.3 x QED"
+
+
+def _cmd_generative_run(args: argparse.Namespace) -> int:
+    """``pharmaml generative run``: optimise molecules toward a recipe."""
+    from pharmaml.generative import DEFAULT_CORPUS, GeneticOptimizer, ReinventOptimizer
+    from pharmaml.utils.io import write_table
+
+    seeds = _generative_seed_smiles(args)
+    objective, description = _generative_objective(args.recipe, seeds)
+
+    print(f"method   : {args.method} (objective: {description})")
+    print(f"budget   : {args.iterations} iteration(s), seed {args.seed}")
+    if seeds:
+        print(f"seeds    : {len(seeds)} molecule(s) anchor the search")
+
+    if args.method == "ga":
+        result = GeneticOptimizer(
+            objective,
+            population_size=args.population,
+            generations=args.iterations,
+            seed=args.seed,
+        ).optimize(seed_smiles=seeds)
+    else:
+        # Seeded RL: bias the on-the-fly prior's corpus toward the user's
+        # molecules (de novo corpora stay untouched).
+        corpus = list(dict.fromkeys([*seeds, *DEFAULT_CORPUS])) if seeds else None
+        result = ReinventOptimizer(
+            objective,
+            corpus=corpus,
+            iterations=args.iterations,
+            batch_size=args.batch_size,
+            prior_epochs=args.prior_epochs,
+            seed=args.seed,
+        ).optimize()
+
+    print()
+    print(result.summary())
+    meta = result.metadata
+    print(
+        f"valid    : {meta.get('valid_generated', 0)} valid molecule(s), "
+        f"{meta.get('unique_generated', 0)} unique, "
+        f"{meta.get('elapsed_s', float('nan')):.1f}s"
+    )
+    if result.is_empty():
+        print("\nno valid molecule generated -- try more iterations "
+              "or a higher --prior-epochs")
+        return 0
+
+    leaderboard = result.to_dataframe()
+    shown = leaderboard.head(max(args.top, 0))
+    print()
+    print(shown.to_string(index=False))
+    if args.out:
+        written = write_table(leaderboard, args.out)
+        print(f"\nleaderboard ({len(leaderboard)} molecules) -> {written}")
+    return 0
+
+
+def _cmd_generative_corpus(args: argparse.Namespace) -> int:
+    """``pharmaml generative corpus``: dump the bundled generation corpus."""
+    import pandas as pd
+
+    from pharmaml.generative import DEFAULT_CORPUS
+    from pharmaml.utils.io import write_table
+
+    frame = pd.DataFrame(
+        {"index": range(len(DEFAULT_CORPUS)), "smiles": DEFAULT_CORPUS}
+    )
+    print(f"bundled generation corpus: {len(DEFAULT_CORPUS)} canonical SMILES")
+    print(frame.to_string(index=False))
+    if args.out:
+        written = write_table(frame, args.out)
+        print(f"\ncorpus -> {written}")
+    return 0
+
+
 _HANDLERS = {
     ("models", None): _cmd_models,
     ("data", "inspect"): _cmd_data_inspect,
@@ -1357,6 +1593,8 @@ _HANDLERS = {
     ("docking", "campaign"): _cmd_docking_campaign,
     ("biology", "response-audit"): _cmd_biology_response_audit,
     ("biology", "top-biomarkers"): _cmd_biology_top_biomarkers,
+    ("generative", "run"): _cmd_generative_run,
+    ("generative", "corpus"): _cmd_generative_corpus,
 }
 
 

@@ -232,7 +232,7 @@ def plot_table_comparison(
         )
 
     name_a, name_b = labels if labels is not None else ("A", "B")
-    buckets = [f"common (both)", f"only in {name_a}", f"only in {name_b}"]
+    buckets = ["common (both)", f"only in {name_a}", f"only in {name_b}"]
     colors = [PALETTE[0], PALETTE[1], PALETTE[3]]  # teal / amber / red
     shares = [100.0 * count / total for count in counts]
 

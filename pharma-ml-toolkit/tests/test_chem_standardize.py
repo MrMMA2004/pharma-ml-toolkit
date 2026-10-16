@@ -15,15 +15,15 @@ from pathlib import Path
 
 import pytest
 
-rdkit = pytest.importorskip("rdkit")  # noqa: F841  (gates the whole module)
+rdkit = pytest.importorskip("rdkit")
 
-from pharmaml.chem.standardize import (  # noqa: E402
+from pharmaml.chem.standardize import (
     UNSUPPORTED_METALS,
     PdbLigandReport,
     canonicalize_tautomer,
     smiles_to_pdb,
 )
-from pharmaml.exceptions import DataValidationError, DependencyError  # noqa: E402
+from pharmaml.exceptions import DataValidationError, DependencyError
 
 logging.disable(logging.CRITICAL)
 

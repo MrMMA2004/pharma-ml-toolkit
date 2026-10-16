@@ -190,16 +190,7 @@ class TestDockingCampaignCommands:
         oxygen = "ATOM      2  O   LIG A   1       4.000   2.000   3.000  1.00  0.00    0.000 OA"
         ligand = tmp_path / "l.pdbqt"
         ligand.write_text(
-            "\n".join(
-                [
-                    "REMARK  Name = cli_ligand",
-                    "ROOT",
-                    carbon,
-                    oxygen,
-                    "ENDROOT",
-                    "TORSDOF 1",
-                ]
-            )
+            f"REMARK  Name = cli_ligand\nROOT\n{carbon}\n{oxygen}\nENDROOT\nTORSDOF 1"
             + "\n",
             encoding="utf-8",
         )

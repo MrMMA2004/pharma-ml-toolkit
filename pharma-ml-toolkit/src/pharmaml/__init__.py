@@ -47,11 +47,11 @@ from pharmaml.exceptions import (
 __version__ = "1.0.0"
 
 __all__ = [
-    "PharmaMLError",
     "DataValidationError",
     "DependencyError",
     "DockingError",
     "DockingParseError",
+    "PharmaMLError",
     "UnitConversionError",
     "__version__",
 ]

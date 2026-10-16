@@ -35,7 +35,7 @@ from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
 
-__all__ = ["save_model", "load_model", "bundle_metadata", "write_metadata_sidecar"]
+__all__ = ["bundle_metadata", "load_model", "save_model", "write_metadata_sidecar"]
 
 _BUNDLE_KEY_MODEL = "model"
 _BUNDLE_KEY_META = "metadata"

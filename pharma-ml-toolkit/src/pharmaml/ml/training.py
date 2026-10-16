@@ -25,7 +25,7 @@ from pharmaml.ml.preprocessing import build_preprocessor, has_categorical_column
 
 _LOG = get_logger(__name__)
 
-__all__ = ["train_model", "TrainingResult", "compare_models"]
+__all__ = ["TrainingResult", "compare_models", "train_model"]
 
 
 @dataclass(slots=True)
@@ -356,7 +356,7 @@ def compare_models(
                     "folds": cv,
                 }
             )
-        except Exception as exc:  # keep the leaderboard alive on failures
+        except Exception as exc:  # noqa: BLE001 — keep the leaderboard alive on failures
             _LOG.warning("Model %s failed during comparison: %s", name, exc)
             rows.append({"model": name, f"{metric}_mean": np.nan, "folds": cv})
 

@@ -447,12 +447,11 @@ class TestScanGPFLigandTypes:
 class TestTorsionConsistency:
     def _pdbqt(self, torsdof: int, remarks: int, branches: int) -> str:
         lines = ["REMARK  Name = synthetic"]
-        lines += ["REMARK Active torsions: A %d" % (i + 1) for i in range(remarks)]
-        lines += ["BRANCH %d %d" % (i + 1, i + 2) for i in range(branches)]
+        lines += [f"REMARK Active torsions: A {i + 1}" for i in range(remarks)]
+        lines += [f"BRANCH {i + 1} {i + 2}" for i in range(branches)]
         lines.append(f"TORSDOF {torsdof}")
         lines += [
-            "ATOM      %d  C   LIG A   1       1.000   2.000   3.000  1.00  0.00    0.000 C"
-            % (i + 1)
+            f"ATOM      {i + 1}  C   LIG A   1       1.000   2.000   3.000  1.00  0.00    0.000 C"
             for i in range(branches)
         ]
         return "\n".join(lines) + "\n"
@@ -505,21 +504,7 @@ class TestVinaConfig:
     def test_parse_config(self, tmp_path) -> None:
         conf = tmp_path / "conf.txt"
         conf.write_text(
-            "\n".join(
-                [
-                    "# AutoDock Vina config",
-                    "receptor = r.pdbqt",
-                    "",
-                    "center_x = 11.1",
-                    "center_y = 22.2   # box centre",
-                    "center_z = 33.3",
-                    "size_x = 20",
-                    "size_y = 20",
-                    "size_z = 20",
-                    "exhaustiveness = 8",
-                    "num_modes = 9",
-                ]
-            ),
+            "# AutoDock Vina config\nreceptor = r.pdbqt\n\ncenter_x = 11.1\ncenter_y = 22.2   # box centre\ncenter_z = 33.3\nsize_x = 20\nsize_y = 20\nsize_z = 20\nexhaustiveness = 8\nnum_modes = 9",
             encoding="utf-8",
         )
         config = parse_vina_config(conf)
@@ -638,13 +623,7 @@ class TestScanVinaDirectory:
         weaker.write_text(sample_vina_output, encoding="utf-8")  # best -10.3, 4 poses
         stronger = tmp_path / "ligand_b.log"
         stronger.write_text(
-            "\n".join(
-                [
-                    "mode | affinity | dist from best mode",
-                    "   1      -11.5          0          0",
-                    "   2      -10.9      1.000      2.000",
-                ]
-            ),
+            "mode | affinity | dist from best mode\n   1      -11.5          0          0\n   2      -10.9      1.000      2.000",
             encoding="utf-8",
         )
         report = scan_vina_directory(tmp_path)

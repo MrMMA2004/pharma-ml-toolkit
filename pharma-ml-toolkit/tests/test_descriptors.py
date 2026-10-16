@@ -14,14 +14,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-rdkit = pytest.importorskip("rdkit")  # noqa: F841  (gates the whole module)
+rdkit = pytest.importorskip("rdkit")
 
-from pharmaml.chem.descriptors import (  # noqa: E402
+from pharmaml.chem.descriptors import (
     compute_descriptors,
     compute_fingerprints,
     compute_maccs,
 )
-from pharmaml.exceptions import DataValidationError  # noqa: E402
+from pharmaml.exceptions import DataValidationError
 
 ETHANOL = "CCO"
 BENZENE = "c1ccccc1"
@@ -152,7 +152,7 @@ class TestInvalidSmilesAccounting:
 
     def test_maccs_warns_about_invalid_smiles(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING, logger="pharmaml.chem.descriptors"):
-            matrix, valid = compute_maccs([ETHANOL, INVALID])
+            _matrix, valid = compute_maccs([ETHANOL, INVALID])
         assert valid == [0]
         assert "index 1" in caplog.text
 

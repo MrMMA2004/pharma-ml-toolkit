@@ -23,7 +23,6 @@ The production version:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
 
 import pandas as pd
 
@@ -36,7 +35,7 @@ _LOG = get_logger(__name__)
 __all__ = ["filter_approved_drugs"]
 
 #: What the ``data`` argument of :func:`filter_approved_drugs` may be.
-ApprovalSource = Union[pd.DataFrame, str, Path, list[Union[str, Path]]]
+ApprovalSource = pd.DataFrame | str | Path | list[str | Path]
 
 #: Extensions read with a tab separator (everything else is comma).
 _TAB_EXTENSIONS = {".tsv", ".tab"}
