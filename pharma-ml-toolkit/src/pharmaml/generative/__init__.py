@@ -17,8 +17,11 @@ runs in seconds on a laptop CPU:
    genetic algorithm: character mutation, splice **or** BREED-style
    scaffold-hop crossover -- homologous bridge cuts swap fragments,
    ring-bond cuts merge rings or transplant two-ended linkers (a single
-   atom or a short acyclic path of up to four atoms), so ring *topology*
-   recombines too; tournament selection, elitism; CPU-strong,
+   atom or a short acyclic path of up to four atoms), whole rings
+   excised between their two anchor bonds splice across the cut into
+   fused bicyclics, and whole rings spliced INTO cut acyclic bonds
+   become the linker -- so ring *topology* and ring-*system* topology
+   recombine too; tournament selection, elitism; CPU-strong,
    de novo *or* seeded from your own sample molecules -- the
    scaffold-hop crossover also works standalone via
    :func:`~pharmaml.generative.scaffold_hop_crossover`) and/or

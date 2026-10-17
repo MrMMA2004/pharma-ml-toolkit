@@ -20,6 +20,44 @@ It also carries the torsion-consistency audit of
 ``mismatch2.py``: a prepared PDBQT is only trustworthy when its
 TORSDOF equals both the count of active ``REMARK`` torsion definitions
 and the count of ``BRANCH`` records.
+
+Examples
+--------
+>>> from pathlib import Path
+>>> from pharmaml.docking.ligands import check_torsion_consistency, load_ligand_csv
+>>> mgl = Path("/tmp/pharmaml_doctest_torsion_mgl.pdbqt")
+>>> _ = mgl.write_text(
+...     "REMARK  Status 1  A  between atoms: 1_2  and  3_4\\n"
+...     "REMARK  Status 2  A  between atoms: 5_6  and  7_8\\n"
+...     "BRANCH 1 2\\n"
+...     "BRANCH 5 6\\n"
+...     "TORSDOF 2\\n"
+... )
+>>> check = check_torsion_consistency(mgl)   # auto: REMARKs present -> MGLTools rule
+>>> (check.torsdof, check.active_remarks, check.branches, check.status())
+(2, 2, 2, 'OK')
+
+>>> meeko = Path("/tmp/pharmaml_doctest_torsion_meeko.pdbqt")
+>>> _ = meeko.write_text("BRANCH 1 2\\nBRANCH 3 4\\nTORSDOF 2\\n")
+>>> check_torsion_consistency(meeko).status()          # auto: no REMARKs -> meeko rule
+'OK'
+>>> check_torsion_consistency(meeko, convention="mgltools").status()
+'MISMATCH'
+
+>>> library_csv = Path("/tmp/pharmaml_doctest_ligands.csv")
+>>> _ = library_csv.write_text("name,smiles\\nethanol,CCO\\nbroken,C1CC\\n")
+>>> library = load_ligand_csv(library_csv)   # columns auto-detected (case-insensitive)
+>>> len(library), library.validated
+(2, True)
+>>> library.frame["status"].tolist()
+['valid', 'invalid']
+>>> library.invalid_frame["error"].tolist()
+['RDKit could not parse this SMILES']
+
+>>> check_torsion_consistency("ligand.pdbqt", convention="vina")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingError: convention must be 'auto', 'mgltools' or 'meeko', got 'vina'
 """
 
 from __future__ import annotations

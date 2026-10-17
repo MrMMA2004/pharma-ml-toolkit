@@ -9,6 +9,44 @@ with:
 * explicit invalid-SMILES accounting (the original silently asserted
   "we are sure all SMILES are valid"),
 * reproducible fingerprints via fixed seeds/radii.
+
+Examples
+--------
+>>> from pharmaml.chem.descriptors import compute_descriptors
+>>> frame = compute_descriptors(["CC(=O)Oc1ccccc1C(=O)O"], progress=False)  # aspirin
+>>> round(float(frame["MolWt"].iloc[0]), 2)          # exact RDKit MolWt
+180.16
+>>> round(float(frame["MolLogP"].iloc[0]), 4)        # Crippen LogP
+1.3101
+>>> round(float(frame["TPSA"].iloc[0]), 1)           # topological polar area
+63.6
+>>> int(frame["NumHDonors"].iloc[0]), int(frame["NumHAcceptors"].iloc[0])  # HBD/HBA
+(1, 3)
+
+>>> frame = compute_descriptors(["CCO", "not-a-smiles", "CCC"], progress=False)
+>>> list(frame.index), frame["SMILES"].tolist()      # invalid row dropped
+([0, 2], ['CCO', 'CCC'])
+>>> compute_descriptors(["!!!"], progress=False)     # every row invalid -> typed error
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: No valid SMILES found in the input
+
+>>> from pharmaml.chem.descriptors import compute_fingerprints, compute_maccs
+>>> from pharmaml.chem.similarity import tanimoto_from_bitarrays
+>>> matrix, valid = compute_fingerprints(["CCO", "CCO", "C"], n_bits=64)
+>>> matrix.shape, matrix.dtype.name, valid
+((3, 64), 'uint8', [0, 1, 2])
+>>> tanimoto_from_bitarrays(matrix[0], matrix[1])    # identical molecules -> 1
+1.0
+>>> tanimoto_from_bitarrays(matrix[0], matrix[2])    # ethanol vs methane: no shared bit
+0.0
+>>> maccs, _ = compute_maccs(["CCO"])
+>>> maccs.shape, int(maccs.sum())                    # 167-bit MACCS keys
+((1, 167), 9)
+>>> compute_fingerprints(["CCO"], radius=-1)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: radius must be >= 0, got -1
 """
 
 from __future__ import annotations

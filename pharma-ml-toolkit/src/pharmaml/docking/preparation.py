@@ -12,10 +12,57 @@ Key safety improvements over the originals:
 * no ``os.chdir`` side effects -- every function takes explicit paths,
 * atom-type repair table is data, not scattered ``if`` statements,
 * subprocess calls use argument lists (never ``shell=True``).
+
+Examples
+--------
+>>> from pharmaml.docking.preparation import GridBox
+>>> box = GridBox(1.0, 2.0, 3.0, npts=(40, 40, 40), spacing=0.375)
+>>> box.size            # fencepost: (npts - 1) * spacing per axis
+(14.625, 14.625, 14.625)
+>>> box.as_vina_kwargs()["size_x"]
+14.625
+
+>>> from pathlib import Path
+>>> from tempfile import gettempdir
+>>> from pharmaml.docking.preparation import compute_grid_box, extract_pdbqt_atom_types
+>>> ligand = Path(gettempdir()) / "pharmaml_doctest_ligand.pdbqt"
+>>> _ = ligand.write_text(
+...     "ATOM      1  C   LIG A   1       0.000   0.000   0.000  1.00  0.00     C\\n"
+...     "ATOM      2  O   LIG A   1       2.000   0.000   0.000  1.00  0.00     OA\\n"
+...     "ATOM      3  N   LIG A   1       0.000   2.000   0.000  1.00  0.00     NA\\n"
+...     "TORSDOF 1\\n"
+... )
+>>> extract_pdbqt_atom_types(ligand)
+['C', 'NA', 'OA']
+>>> box = compute_grid_box(ligand)   # centre = midpoint of the ligand bounding box
+>>> (round(box.center_x, 3), round(box.center_y, 3), round(box.center_z, 3))
+(1.0, 1.0, 0.0)
+
+>>> from pharmaml.docking.preparation import read_gpf, write_gpf
+>>> gpf = write_gpf(
+...     ligand, box=GridBox(1.0, 1.0, 0.0, npts=(40, 50, 60)),
+...     output_path=Path(gettempdir()) / "pharmaml_doctest_r.gpf")
+>>> parsed = read_gpf(gpf)           # write/read round-trip
+>>> parsed["ligand_types"], parsed["npts"], parsed["gridcenter"]
+(['C', 'NA', 'OA'], (40, 50, 60), (1.0, 1.0, 0.0))
+>>> parsed["receptor"], parsed["maps"]
+('r.pdbqt', ['r.C.map', 'r.NA.map', 'r.OA.map'])
+>>> ligand.unlink(); gpf.unlink()
+
+>>> from pharmaml.docking.preparation import smiles_to_pdbqt
+>>> pdbqt = smiles_to_pdbqt("CCO", output_dir=gettempdir(), name="pharmaml_doctest_etoh")
+>>> pdbqt.name, extract_pdbqt_atom_types(pdbqt)   # seeded ETKDG + Meeko export
+('pharmaml_doctest_etoh.pdbqt', ['C', 'HD', 'OA'])
+>>> pdbqt.unlink()
+>>> compute_grid_box("missing.pdbqt")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingParseError: ligand file not found: missing.pdbqt
 """
 
 from __future__ import annotations
 
+import math
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -165,14 +212,26 @@ def compute_grid_box(
 ) -> GridBox:
     """Compute a grid box enclosing a reference ligand plus padding.
 
+    The centre is the AutoDock convention: the midpoint of the ligand's
+    bounding box (padding is symmetric, so the midpoint does not move).
+    ``npts`` is a per-axis *minimum*: each axis grows as needed so the
+    box size ``(npts - 1) * spacing`` encloses the ligand extent plus
+    ``2 * padding`` on that axis -- the default ``60 x 60 x 60`` at
+    0.375 A (22.5 A per axis) already covers drug-like ligands with the
+    default padding, so growth only shows for large ligands or margins
+    (round 100x-31: ``padding`` used to be validated and then silently
+    ignored -- the box never grew).
+
     Parameters
     ----------
     ligand_path:
         PDBQT/PDB file of the co-crystallised (reference) ligand.
     padding:
-        Margin around the ligand bounding box in Å.
-    npts, spacing:
-        AutoDock4 grid resolution parameters.
+        Margin around the ligand bounding box in Å (>= 0).
+    npts:
+        Per-axis minimum grid points; axes grow to honour ``padding``.
+    spacing:
+        AutoDock4 grid spacing in Å.
 
     Returns
     -------
@@ -183,6 +242,23 @@ def compute_grid_box(
     coords = _read_coordinates(Path(ligand_path))
     mins, maxs = coords.min(axis=0), coords.max(axis=0)
     center = (mins + maxs) / 2.0
+    # per-axis growth: the box size (npts - 1) * spacing must cover the
+    # ligand extent plus the symmetric padding margin
+    required = (maxs - mins) + 2.0 * padding
+    npts_out = (
+        int(max(npts[0], math.ceil(required[0] / spacing) + 1)),
+        int(max(npts[1], math.ceil(required[1] / spacing) + 1)),
+        int(max(npts[2], math.ceil(required[2] / spacing) + 1)),
+    )
+    if npts_out != tuple(npts):
+        _LOG.info(
+            "Grid box around %s grew npts %s -> %s to enclose the ligand "
+            "plus %.1f A padding",
+            Path(ligand_path).name,
+            tuple(npts),
+            npts_out,
+            padding,
+        )
     _LOG.info(
         "Grid box around %s: centre (%.3f, %.3f, %.3f)",
         Path(ligand_path).name,
@@ -192,7 +268,7 @@ def compute_grid_box(
         center_x=float(center[0]),
         center_y=float(center[1]),
         center_z=float(center[2]),
-        npts=npts,
+        npts=npts_out,
         spacing=spacing,
     )
 

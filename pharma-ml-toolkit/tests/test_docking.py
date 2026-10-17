@@ -86,6 +86,31 @@ class TestGridComputation:
         with pytest.raises(DataValidationError):
             compute_grid_box(ligand, padding=-1.0)
 
+    def test_padding_grows_npts_to_enclose_ligand_plus_margin(
+        self, tmp_path
+    ) -> None:
+        # round 100x-31 (subagent 100x-31-b finding): padding used to be
+        # validated and then silently ignored -- the box never grew.  Now
+        # each axis grows so the fencepost size (npts - 1) * spacing covers
+        # the ligand extent plus 2 * padding, with the requested npts as a
+        # per-axis floor (the 100x-25 fencepost convention).
+        ligand = tmp_path / "long.pdbqt"
+        ligand.write_text(
+            "ATOM      1  C   LIG A   1       0.000   0.000   0.000  1.00  0.00     C\n"
+            "ATOM      2  O   LIG A   1      20.000   0.000   0.000  1.00  0.00     OA\n",
+            encoding="utf-8",
+        )
+        tight = compute_grid_box(ligand, padding=1.0)
+        roomy = compute_grid_box(ligand, padding=5.0)
+        # 20 A extent + 2 A margin = 22 A <= 22.125 A: the floor holds
+        assert tight.npts == (60, 60, 60)
+        # 20 A extent + 10 A margin = 30 A -> ceil(30 / 0.375) + 1 = 81
+        assert roomy.npts[0] == 81
+        assert roomy.npts[1:] == (60, 60)  # the 10 A axes keep the floor
+        assert roomy.size[0] == pytest.approx(30.0)  # (81 - 1) * 0.375
+        # the centre never moves: padding is symmetric
+        assert roomy.center_x == pytest.approx(10.0)
+
 
 class TestAtomTypesAndGPF:
     def test_extract_atom_types(self, tmp_path, sample_ligand_pdbqt) -> None:

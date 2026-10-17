@@ -5,9 +5,10 @@ The structural recombination operator for
 cut and recombined so an offspring is a hybrid that keeps parts of each
 parent (Nicolaou et al.'s BREED algorithm tradition, in the pragmatic
 spirit of this package: RDKit graph surgery + ``Chem.molzip``, no
-learned model).  Three cut geometries cover the two things a scaffold
-hop actually has to recombine -- fragment *arrangement* and ring
-*topology*:
+learned model).  Five cut geometries cover the three things a scaffold
+hop actually has to recombine -- fragment *arrangement*, ring
+*topology* and *ring-system* topology -- completing the {excised
+piece} x {cut type} matrix:
 
 * **bridge** (the classic): both parents are cut at a pair of
   *homologous* single acyclic bonds and the fragments recombined
@@ -26,13 +27,27 @@ hop actually has to recombine -- fragment *arrangement* and ring
   excised and zipped into the cut: ring homologation by one atom or a
   whole chain (piperidine + an ether oxygen -> an oxazepane, + an
   ethylene bridge -> an azocane).
+* **fuse**: a whole *ring* is excised from one parent -- any ring
+  (aromatic ones included) attached to the rest of its molecule through
+  exactly two single anchor bonds at two distinct ring atoms, the
+  Nicolaou fused-ring move -- and spliced across an opened ring bond of
+  the other parent: the child is a fused / bridged bicyclic holding one
+  ring from each parent (decalin x piperidine -> an azadecalin core,
+  indane x piperidine -> a benzazocine core).
+* **insert**: the matrix's last cell -- a whole ring is excised from
+  one parent (the same donor machinery) and spliced INTO a cut
+  *acyclic* bond of the other: both bridge fragments are re-joined
+  *through* the ring, so the ring becomes the spacer -- the
+  ring-as-linker move (decalin x hexane -> a dipropylcyclohexane).
 
 All cuts are *single* bonds (aromatic ring bonds are never cut -- the
-re-zip would have to invent bond orders), and the join points must be
-**homologous**: the atoms joined by each new bond match on (atomic
-number, degree, aromaticity, formal charge), so recombination happens
-at chemically analogous positions (an aryl-CH2 bond crosses with
-another aryl-CH2 bond, not with a sulfonamide S-N).
+re-zip would have to invent bond orders; the fuse geometry's two anchor
+bonds are single bonds too, but they may themselves be ring bonds of an
+*adjacent* ring -- that is exactly what a fused system is), and the join
+points must be **homologous**: the atoms joined by each new bond match
+on (atomic number, degree, aromaticity, formal charge), so
+recombination happens at chemically analogous positions (an aryl-CH2
+bond crosses with another aryl-CH2 bond, not with a sulfonamide S-N).
 
 Deterministic given the caller's ``random.Random``; ``None`` whenever no
 viable cut exists (aromatic-only parents, no homologous pair, children
@@ -51,6 +66,15 @@ True
 >>> # glycol, the -CH2-O- path transplanted into a cut C-C bond -> 8-ring
 >>> scaffold_hop_crossover("C1CCNCC1", "OCCOCCO", random.Random(0))
 'C1CNCCCOC1'
+>>> # fused-ring splice (the Nicolaou move): decalin's left ring
+>>> # excised and spliced across a cut piperidine bond -> a bicyclic
+>>> # (a 6-ring + an 8-ring: an azadecalin core)
+>>> scaffold_hop_crossover("C1CCC2CCCCC2C1", "C1CCNCC1", random.Random(0))
+'C1CCC2CCNCCCC2C1'
+>>> # ring-as-linker insert: decalin's ring spliced INTO a cut hexane
+>>> # bond -> a single dipropylcyclohexane spacer ring
+>>> scaffold_hop_crossover("C1CCC2CCCCC2C1", "CCCCCC", random.Random(5))
+'CCCC1CCCCC1CCC'
 >>> # benzene has no acyclic single bond to cut: no crossover possible
 >>> scaffold_hop_crossover("c1ccccc1", "c1ccncc1", random.Random(0)) is None
 True
@@ -364,6 +388,166 @@ def _linker_path_units(mol: object) -> list[tuple[tuple[int, ...], tuple]]:
     return units
 
 
+def _excise_ring(
+    mol: object,
+    ring: tuple[int, ...],
+    a1: int,
+    a2: int,
+) -> tuple[object, tuple] | None:
+    """Cut a whole ring loose from its two anchor bonds; ``(piece, host_sigs)``.
+
+    The Nicolaou fused-ring move's donor half: ``ring`` is a ring of
+    ``mol`` attached to the rest of the molecule through exactly two
+    single anchor bonds -- ``a1``-host and ``a2``-host, at two DISTINCT
+    ring atoms with exactly one outside neighbour each (a spiro-style
+    single anchor carrying two outside bonds, or a tri-substituted ring
+    with three, has no two-ended semantics and never excises).  The
+    anchor bonds may themselves be ring bonds of an ADJACENT ring --
+    that is exactly the fused-system case (decalin's left ring hangs off
+    the right one through two bonds of the right ring) -- but they must
+    be single (an aromatic fusion bond, e.g. indole's benzene-pyrrole
+    seam, is never cut).  The returned piece is the intact ring carrying
+    ``[*:1]`` at ``a1`` (replacing ``a1``'s former host) and ``[*:2]`` at
+    ``a2``, ready to be spliced across an opened ring bond of the other
+    parent; ``host_sigs`` are the two former hosts' signatures in
+    ``(a1, a2)`` order for the homology check.  ``None`` on any
+    validation failure (hand-made ``ring`` tuples, dummies involved,
+    unsanitisable piece) -- robustness first.
+
+    Valence bookkeeping is exact at both seams: each anchor trades one
+    single-bonded outside host for one single-bonded dummy, every ring
+    bond is left untouched, so the piece sanitises exactly like the ring
+    sat in the parent.  Aromatic rings survive intact -- only the two
+    anchor bonds are cut, and they are single by construction.
+    """
+    Chem = require_rdkit()
+    try:
+        ring_set = set(ring)
+        if len(ring_set) != len(ring) or len(ring) < 3:
+            return None  # not a ring: repeating index or too few atoms
+        if a1 == a2 or a1 not in ring_set or a2 not in ring_set:
+            return None  # anchors must be two distinct ring atoms
+        outside: dict[int, list[int]] = {}
+        for idx in ring:
+            atom = mol.GetAtomWithIdx(idx)  # type: ignore[attr-defined]
+            if atom.GetAtomicNum() == 0:
+                return None  # a parent's dummy is never transplantable
+            outs = [
+                nbr.GetIdx()
+                for nbr in atom.GetNeighbors()  # type: ignore[attr-defined]
+                if nbr.GetIdx() not in ring_set
+            ]
+            if outs:
+                outside[idx] = outs
+        if sum(len(v) for v in outside.values()) != 2:
+            return None  # a two-ended piece needs exactly two outside bonds
+        if sorted(len(v) for v in outside.values()) != [1, 1]:
+            return None  # ...at two distinct anchors, one bond each
+        if set(outside) != {a1, a2}:
+            return None  # the caller's anchors are not the ring's anchors
+        hosts: list[int] = []
+        for anchor in (a1, a2):
+            host = outside[anchor][0]
+            if mol.GetAtomWithIdx(host).GetAtomicNum() == 0:  # type: ignore[attr-defined]
+                return None  # a dummy host would seam to another dummy
+            bond = mol.GetBondBetweenAtoms(anchor, host)  # type: ignore[attr-defined]
+            if (
+                bond is None
+                or bond.GetBondType() != Chem.BondType.SINGLE
+            ):
+                return None  # aromatic / double anchors are never cut
+            hosts.append(host)
+        rw = Chem.RWMol(mol)
+        rw.RemoveBond(a1, hosts[0])
+        rw.RemoveBond(a2, hosts[1])
+        d1 = rw.AddAtom(Chem.Atom(0))
+        d2 = rw.AddAtom(Chem.Atom(0))
+        rw.AddBond(a1, d1, Chem.BondType.SINGLE)
+        rw.AddBond(a2, d2, Chem.BondType.SINGLE)
+        # map numbers are atom properties: they survive GetMolFrags, so
+        # the two dummies stay identifiable after the renumbering
+        rw.GetAtomWithIdx(d1).SetAtomMapNum(1)
+        rw.GetAtomWithIdx(d2).SetAtomMapNum(2)
+        cut = rw.GetMol()
+        idx_frags = Chem.GetMolFrags(cut)
+        mol_frags = Chem.GetMolFrags(cut, asMols=True)
+        piece = None
+        for indices, fragment in zip(idx_frags, mol_frags):
+            if d1 in indices and d2 in indices:
+                piece = fragment
+        if piece is None:  # pragma: no cover
+            return None  # both dummies sit on ring atoms: same fragment
+        if piece.GetNumAtoms() != len(ring) + 2:  # pragma: no cover
+            return None  # belt-and-braces: the piece is the ring + 2 dummies
+        Chem.SanitizeMol(piece)
+        if piece.GetRingInfo().NumRings() < 1:  # pragma: no cover
+            return None  # belt-and-braces: the piece keeps the ring cycle
+        return piece, (
+            _atom_signature(mol.GetAtomWithIdx(hosts[0])),  # type: ignore[attr-defined]
+            _atom_signature(mol.GetAtomWithIdx(hosts[1])),  # type: ignore[attr-defined]
+        )
+    except Exception:  # noqa: BLE001 - robustness-first fallback contract
+        return None
+
+
+def _ring_units(mol: object) -> list[tuple[tuple[int, ...], int, int, tuple]]:
+    """Enumerate excisable rings: ``[(ring, a1, a2, host_sigs)]``.
+
+    Every SSSR ring whose total attachment to the rest of the molecule
+    is exactly two single anchor bonds at two distinct ring atoms (one
+    each) is a candidate donor for the fuse geometry -- a saturated
+    fused ring (decalin, hydrindane), an aromatic ring hanging off an
+    aliphatic ring (indane's benzene, through its two single aryl-CH2
+    bonds), a bridged loop (norbornane's 5-rings), or a plain
+    disubstituted monocycle.  Rings with zero, one, three or more
+    outside bonds, spiro anchors, aromatic or double anchor bonds, or
+    dummy involvement never appear.
+
+    Determinism: rings are visited in ``RingInfo().AtomRings()`` order
+    (a pure function of the molecule), and each admitted ring
+    contributes exactly one unit with its two anchors in atom-index
+    order -- a pure function of the molecule, so the crossover's
+    candidate pool stays a pure function of the parents.
+    """
+    units: list[tuple[tuple[int, ...], int, int, tuple]] = []
+    ri = mol.GetRingInfo()  # type: ignore[attr-defined]
+    for ring in ri.AtomRings():
+        ring_set = set(ring)
+        outside: dict[int, list[int]] = {}
+        for idx in ring:
+            atom = mol.GetAtomWithIdx(idx)  # type: ignore[attr-defined]
+            if atom.GetAtomicNum() == 0:
+                outside = {}
+                break
+            outs = [
+                nbr.GetIdx()
+                for nbr in atom.GetNeighbors()  # type: ignore[attr-defined]
+                if nbr.GetIdx() not in ring_set
+            ]
+            if outs:
+                outside[idx] = outs
+        if sum(len(v) for v in outside.values()) != 2:
+            continue
+        if sorted(len(v) for v in outside.values()) != [1, 1]:
+            continue
+        a1, a2 = sorted(outside)
+        if _excise_ring(mol, tuple(ring), a1, a2) is None:
+            continue  # anchor bonds not single, or a dummy host
+        hosts = (outside[a1][0], outside[a2][0])
+        units.append(
+            (
+                tuple(ring),
+                a1,
+                a2,
+                (
+                    _atom_signature(mol.GetAtomWithIdx(hosts[0])),  # type: ignore[attr-defined]
+                    _atom_signature(mol.GetAtomWithIdx(hosts[1])),  # type: ignore[attr-defined]
+                ),
+            )
+        )
+    return units
+
+
 def _zip_child(
     frag_x: object,
     frag_y: object,
@@ -389,6 +573,38 @@ def _zip_child(
     return None
 
 
+def _zip_spliced(
+    frag_begin: object,
+    piece: object,
+    frag_end: object,
+    max_smiles_length: int,
+) -> str | None:
+    """Splice ``piece`` between two bridge fragments; child SMILES/``None``.
+
+    The insert geometry's assembler: ``frag_begin`` and ``frag_end``
+    are the two halves of a bridge cut (the begin fragment's dummy is
+    ``[*:1]``, the end fragment's was relabelled to ``[*:2]``) and
+    ``piece`` is a two-ended excised ring (``[*:1]`` at one anchor,
+    ``[*:2]`` at the other).  Two ``Chem.molzip`` calls chain them --
+    begin to the piece's map-1 side, then the composite to the end
+    fragment -- so both seams bond signature-matched atoms and no dummy
+    survives.  Same belt-and-braces contract as :func:`_zip_child`.
+    """
+    Chem = require_rdkit()
+    try:
+        half = Chem.molzip(frag_begin, piece)
+        child = Chem.molzip(half, frag_end)
+        Chem.SanitizeMol(child)
+        if any(atom.GetAtomicNum() == 0 for atom in child.GetAtoms()):
+            return None
+        smiles = Chem.MolToSmiles(child)
+    except Exception:  # noqa: BLE001 - no viable child
+        return None
+    if smiles and len(smiles) <= max_smiles_length:
+        return smiles
+    return None
+
+
 def scaffold_hop_crossover(
     parent_a: str,
     parent_b: str,
@@ -398,15 +614,21 @@ def scaffold_hop_crossover(
 ) -> str | None:
     """BREED-style crossover: homologous cuts, hybrid child.
 
-    Three cut geometries compete for the rng draw -- a **bridge** cut
+    Five cut geometries compete for the rng draw -- a **bridge** cut
     per parent (fragment swap, the classic), a **ring merge** (one
     single ring bond cut per parent, the opened rings zipped into one
-    combined ring) and a **linker transplant** (a single ring bond cut
+    combined ring), a **linker transplant** (a single ring bond cut
     in one parent, a two-ended linker -- a single atom or a contiguous
     acyclic path of up to four atoms -- excised from the other and
     zipped into the cut: ring homologation by one atom or a whole
-    chain).  Aromatic ring bonds are never cut (the re-zip would have
-    to invent bond orders).
+    chain), a **fused-ring splice** (a whole ring excised from one
+    parent between its two single anchor bonds and spliced across an
+    opened ring bond of the other: a fused / bridged bicyclic child,
+    the full Nicolaou move set) and a **ring insert** (a whole ring
+    excised from one parent and spliced INTO a cut acyclic bond of the
+    other: both bridge halves re-joined through the ring -- the
+    ring-as-linker move).  Aromatic ring bonds are never cut
+    (the re-zip would have to invent bond orders).
 
     Parameters
     ----------
@@ -475,7 +697,7 @@ def scaffold_hop_crossover(
         sig_a = {atom.GetIdx(): _atom_signature(atom) for atom in mol_a.GetAtoms()}
         sig_b = {atom.GetIdx(): _atom_signature(atom) for atom in mol_b.GetAtoms()}
 
-        # Homologous cut candidates, three geometries in a fixed scan
+        # Homologous cut candidates, four geometries in a fixed scan
         # order (determinism: the pool is a pure function of the parents;
         # the rng draw then picks one uniformly).
         #
@@ -561,6 +783,60 @@ def scaffold_hop_crossover(
                             candidates.append(
                                 ("transplant_path", ring_side, bond.GetIdx(), path, direct)
                             )
+                # the same ring bonds against whole excisable RINGS of
+                # the donor (round 100x-30): the fused-ring splice, the
+                # Nicolaou move -- the donor ring is cut loose from its
+                # two single anchor bonds and spliced across the opened
+                # bond, giving a fused / bridged bicyclic child.  The
+                # anchor bonds' former hosts must match the cut bond's
+                # endpoints (homologous flanks), direct or flipped; a
+                # flipped-only match swaps the piece's dummy labels at
+                # execution time so each seam bonds signature-matched
+                # atoms (the merge geometry's label-swap trick).
+                for ring, a1, a2, host_sigs in _ring_units(other):
+                    for bond in ring_bonds:
+                        r1, r2 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+                        direct = host_sigs[0] == sig_ring[r1] and host_sigs[1] == sig_ring[r2]
+                        flipped = host_sigs[0] == sig_ring[r2] and host_sigs[1] == sig_ring[r1]
+                        if direct or flipped:
+                            candidates.append(
+                                ("fuse", ring_side, bond.GetIdx(), ring, a1, a2, direct)
+                            )
+
+        # insert (round 100x-31): the matrix's last cell -- a whole
+        # excisable ring of one parent spliced INTO a cut acyclic bond
+        # of the other.  The bridge-style cut splits the recipient into
+        # two halves, and both halves are re-joined THROUGH the excised
+        # ring: the ring becomes the spacer (ring-as-linker).  The
+        # donor ring's former outside hosts must match the cut bond's
+        # endpoints (homologous flanks), direct or flipped; a
+        # flipped-only match swaps the piece's dummy labels at
+        # execution time (the fuse geometry's label-swap trick).
+        for donor_side, donor, recipient, sig_recipient in (
+            ("a", mol_a, mol_b, sig_b),
+            ("b", mol_b, mol_a, sig_a),
+        ):
+            acyclic_bonds = [
+                bond for bond in recipient.GetBonds()
+                if not bond.IsInRing() and bond.GetBondType() == Chem.BondType.SINGLE
+            ]
+            if not acyclic_bonds:
+                continue  # no bond to splice into -- units are dead weight
+            for ring, a1, a2, host_sigs in _ring_units(donor):
+                for bond in acyclic_bonds:
+                    b1, b2 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+                    direct = (
+                        host_sigs[0] == sig_recipient[b1]
+                        and host_sigs[1] == sig_recipient[b2]
+                    )
+                    flipped = (
+                        host_sigs[0] == sig_recipient[b2]
+                        and host_sigs[1] == sig_recipient[b1]
+                    )
+                    if direct or flipped:
+                        candidates.append(
+                            ("insert", donor_side, bond.GetIdx(), ring, a1, a2, direct)
+                        )
         if not candidates:
             return None
 
@@ -622,24 +898,76 @@ def scaffold_hop_crossover(
             return _zip_child(opened, donor, max_smiles_length)
 
         # transplant_path (multi-atom linker: orientation-aware)
-        _, ring_side, ring_bond_idx, path, direct = choice
-        if ring_side == "a":
-            ring_mol, donor_mol = mol_a, mol_b
+        if choice[0] == "transplant_path":
+            _, ring_side, ring_bond_idx, path, direct = choice
+            if ring_side == "a":
+                ring_mol, donor_mol = mol_a, mol_b
+            else:
+                ring_mol, donor_mol = mol_b, mol_a
+            opened = _open_ring(ring_mol, ring_bond_idx)
+            # a flipped-only match must excise the REVERSED path so each
+            # seam bonds a path atom to a signature-matched ring endpoint
+            # (the single-atom transplant is symmetric -- reversing a
+            # one-atom path is the identity -- which is why orientation
+            # could be admission-only before paths existed)
+            excision = _excise_linker_path(
+                donor_mol, path if direct else tuple(reversed(path))
+            )
+            if opened is None or excision is None:
+                return None
+            donor, _ = excision
+            return _zip_child(opened, donor, max_smiles_length)
+
+        # fuse (whole-ring splice: orientation-aware like the merge -- a
+        # flipped-only match swaps the piece's dummy labels so each seam
+        # bonds an anchor to a signature-matched ring endpoint; excising
+        # with the anchors swapped instead would build the same piece,
+        # so the label swap is the cheaper bookkeeping)
+        if choice[0] == "fuse":
+            _, ring_side, ring_bond_idx, ring, a1, a2, direct = choice
+            if ring_side == "a":
+                ring_mol, donor_mol = mol_a, mol_b
+            else:
+                ring_mol, donor_mol = mol_b, mol_a
+            opened = _open_ring(ring_mol, ring_bond_idx)
+            excision = _excise_ring(donor_mol, ring, a1, a2)
+            if opened is None or excision is None:
+                return None
+            donor, _ = excision
+            if not direct:
+                # flipped-only match: swap the piece's dummy labels so the
+                # seams join a1-end_b / a2-begin_b -- the signature-matched
+                # orientation (the merge geometry's label-swap trick)
+                for dummy in donor.GetAtoms():  # type: ignore[attr-defined]
+                    if dummy.GetAtomicNum() == 0:
+                        dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
+            return _zip_child(opened, donor, max_smiles_length)
+
+        # insert (ring-as-linker: the recipient's bridge cut leaves two
+        # [*:1]-dummied halves; the end half's dummy is relabelled to
+        # [*:2] so the excised ring splices BETWEEN them -- begin to
+        # the ring's map-1 side, then the composite to the end half.
+        # A flipped-only match swaps the ring's own labels so each seam
+        # bonds an anchor to a signature-matched endpoint)
+        _, donor_side, bond_idx, ring, a1, a2, direct = choice
+        if donor_side == "a":
+            donor_mol, recipient_mol = mol_a, mol_b
         else:
-            ring_mol, donor_mol = mol_b, mol_a
-        opened = _open_ring(ring_mol, ring_bond_idx)
-        # a flipped-only match must excise the REVERSED path so each seam
-        # bonds a path atom to a signature-matched ring endpoint (the
-        # single-atom transplant is symmetric -- reversing a one-atom
-        # path is the identity -- which is why orientation could be
-        # admission-only before paths existed)
-        excision = _excise_linker_path(
-            donor_mol, path if direct else tuple(reversed(path))
-        )
-        if opened is None or excision is None:
+            donor_mol, recipient_mol = mol_b, mol_a
+        cut = _cut_into_two(recipient_mol, bond_idx)
+        excision = _excise_ring(donor_mol, ring, a1, a2)
+        if cut is None or excision is None:
             return None
-        donor, _ = excision
-        return _zip_child(opened, donor, max_smiles_length)
+        begin_frag, end_frag = cut
+        piece, _ = excision
+        for atom in end_frag.GetAtoms():  # type: ignore[attr-defined]
+            if atom.GetAtomicNum() == 0:
+                atom.SetAtomMapNum(2)
+        if not direct:
+            for dummy in piece.GetAtoms():  # type: ignore[attr-defined]
+                if dummy.GetAtomicNum() == 0:
+                    dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
+        return _zip_spliced(begin_frag, piece, end_frag, max_smiles_length)
     except Exception:  # noqa: BLE001 - robustness-first fallback contract
         return None
     finally:

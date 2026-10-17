@@ -111,7 +111,7 @@ after adding new public functions.
 | `TpsaBandObjective` | class | Gaussian band on topological polar surface area (Å²).  See |
 | `run_genetic_optimization` | function | One-call genetic optimisation (thin :class:`GeneticOptimizer` wrapper). |
 | `run_rl_optimization` | function | One-call RL optimisation (trains a prior from the corpus if needed). |
-| `scaffold_hop_crossover` | function | BREED-style crossover: one homologous cut per parent, hybrid child. |
+| `scaffold_hop_crossover` | function | BREED-style crossover: homologous cuts, hybrid child. |
 
 ## `pharmaml.biology`
 

@@ -34,6 +34,36 @@ global stream exactly as it found it.  Fitted weights are always
 stored as plain NumPy arrays, so pickled estimators stay portable
 across torch versions — and even across machines without torch
 installed (torch is only needed again to *predict*).
+
+Examples
+--------
+>>> from pharmaml.ml.models import MODEL_REGISTRY
+>>> spec = MODEL_REGISTRY["dnn"]    # registry key of the DeepMLP estimators
+>>> spec.task, spec.requires
+('both', 'torch')
+>>> sorted(spec.param_grid)
+['dropout', 'hidden_layers', 'learning_rate']
+
+>>> from pharmaml.ml.neural import DeepMLPRegressor
+>>> DeepMLPRegressor().predict([[0.0]])  # sklearn contract: fit before predict
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: DeepMLPRegressor has not been fitted yet — call fit(X, y) first
+
+>>> DeepMLPRegressor(dropout=1.5).fit([[0.0], [1.0]], [0.0, 1.0])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: dropout must be in [0, 1), got 1.5
+
+>>> import numpy as np
+>>> X = np.linspace(0.0, 1.0, 40).reshape(-1, 1)
+>>> y = 2.0 * X[:, 0] + 1.0
+>>> net = DeepMLPRegressor(hidden_layers=(32,), epochs=300, random_state=0).fit(X, y)
+>>> net.score(X, y) > 0.99   # R^2 on a 40-point linear function (seed 0)
+True
+>>> twin = DeepMLPRegressor(hidden_layers=(32,), epochs=300, random_state=0).fit(X, y)
+>>> np.array_equal(net.predict(X), twin.predict(X))   # same seed, identical net
+True
 """
 
 from __future__ import annotations

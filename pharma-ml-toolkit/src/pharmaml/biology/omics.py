@@ -16,6 +16,48 @@ directly after :func:`normalize_expression` and
 * :func:`correlate_with_response` correlates every gene against one
   drug's response vector across the panel (Spearman by default,
   Pearson optional), NaN-safe and constant-gene-safe.
+
+Examples
+--------
+>>> import numpy as np
+>>> import pandas as pd
+>>> from pharmaml.biology.omics import (
+...     correlate_with_response, impute_expression,
+...     most_variable_genes, normalize_expression,
+... )
+
+>>> frame = pd.DataFrame({"G1": [1.0, 3.0], "G2": [7.0, 7.0]}, index=["cell_a", "cell_b"])
+>>> normalised = normalize_expression(frame)
+>>> normalised["G1"].round(3).tolist()   # log2(x+1) then z: 1, 2 -> -1, +1
+[-1.0, 1.0]
+>>> normalised["G2"].tolist()            # constant gene -> z of 0, not NaN
+[0.0, 0.0]
+
+>>> impute_expression(pd.DataFrame({"G1": [1.0, np.nan, 3.0]}))["G1"].tolist()
+[1.0, 2.0, 3.0]
+>>> impute_expression(frame, strategy="mode")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: strategy must be 'median' or 'mean', got 'mode'
+
+>>> variability = pd.DataFrame(
+...     {"ACTB": [1.0, 1.0, 1.0], "BRAF": [1.0, 5.0, 9.0], "CDK4": [0.0, 2.0, 4.0]}
+... )
+>>> most_variable_genes(variability, n=2)   # MAD ranking: BRAF 4, CDK4 2, ACTB 0
+['BRAF', 'CDK4']
+>>> most_variable_genes(variability, n=0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: n must be >= 1, got 0
+
+>>> expression = pd.DataFrame(
+...     {"G1": [1.0, 2.0, 3.0], "G2": [3.0, 2.0, 1.0], "G3": [1.0, np.nan, 1.0]},
+...     index=["cell_a", "cell_b", "cell_c"],
+... )
+>>> response = pd.Series([1.0, 2.0, 3.0], index=["cell_a", "cell_b", "cell_c"])
+>>> corr = correlate_with_response(expression, response)
+>>> corr.set_index("gene")["rho"].round(3).to_dict()
+{'G1': 1.0, 'G2': -1.0, 'G3': nan}
 """
 
 from __future__ import annotations

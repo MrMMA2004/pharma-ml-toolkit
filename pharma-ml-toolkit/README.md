@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1322 tests).
+exceptions, input validation, and pytest coverage** (1339 tests).
 
 ---
 
@@ -93,7 +93,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1322 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 1339 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -592,7 +592,8 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
 * **Scaffold-hop crossover (`crossover="scaffold_hop"`):** BREED-style structural
   recombination — both parents are cut at a pair of *homologous* single bonds
   (join atoms match on element, degree, aromaticity, charge) and recombined
-  with `Chem.molzip`. Three geometries: classic **bridge cuts** swap fragments
+  with `Chem.molzip`. Five geometries, completing the {excised piece} × {cut
+  type} matrix: classic **bridge cuts** swap fragments
   cross-wise (ring systems survive by construction; the offspring's framework
   differs from both parents whenever the parents' frameworks span different
   fragments — biaryls, diaryl ethers, sulfonyl bridges); **ring merges** zip
@@ -603,7 +604,20 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   one parent and zip it into a cut ring
   bond of the other — ring homologation by one atom or a whole chain:
   piperidine + diethyl ether → `C1CNCCOC1` (a 7-ring oxazepane), piperidine
-  + hexane → an 8-ring azocane via the transplanted `-CH2CH2-`.
+  + hexane → an 8-ring azocane via the transplanted `-CH2CH2-`;
+  **fused-ring splices** (the full Nicolaou move set) excise a whole ring —
+  any ring attached to its molecule through exactly two single anchor bonds,
+  aromatic ones included — and splice it across the other parent's opened
+  ring bond, giving fused / bridged bicyclic offspring that hold one ring
+  from each parent: decalin × piperidine → `C1CCC2CCNCCCC2C1` (an azadecalin
+  core), indane × piperidine → `c1ccc2c(c1)CCCCNC2` (a benzo-fused azocane —
+  the aromatic donor ring survives intact, only its two aryl-CH2 anchor
+  bonds are cut);
+  **ring inserts** splice that same excised ring INTO the other parent's cut
+  *acyclic* bond — both bridge halves re-join *through* the ring, so it
+  becomes the spacer: ring-as-linker (decalin × hexane → `CCCC1CCCCC1CCC`,
+  a dipropylcyclohexane; indane × heptane → `CCCCCc1ccccc1CC`, a
+  dialkylbenzene).
   Aromatic ring bonds are never cut (the
   re-zip would have to invent bond orders). Also usable standalone via
   `scaffold_hop_crossover(parent_a, parent_b, rng)`; deterministic; `None`
@@ -840,7 +854,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1351 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1375 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

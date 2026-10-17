@@ -8,6 +8,56 @@ unit-tested.  Conventions used throughout:
   administered dose);
 * ``times`` -- sample times in hours;
 * ``conc``  -- concentrations in the same unit as ``c0``/``Css``.
+
+Examples
+--------
+>>> import math
+>>> from pharmaml.pharma.pk import (
+...     elimination_rate_constant, half_life, iv_bolus_concentration)
+>>> half_life(0.693)                          # ln(2)/ke
+1.000212381760383
+>>> elimination_rate_constant(half_life(1.5))  # exact ke/t-half round-trip
+1.5
+>>> iv_bolus_concentration(100.0, math.log(2), 1.0)  # one half-life -> halved
+50.0
+>>> half_life(0.0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: ke must be > 0 (or >= 0 if allow_zero), got 0.0
+>>> iv_bolus_concentration(100.0, 0.5, -1.0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: time t must be non-negative
+
+>>> from pharmaml.pharma.pk import (
+...     accumulation_ratio, clearance, creatinine_clearance,
+...     iv_infusion_steady_state, oral_tmax, volume_of_distribution)
+>>> iv_infusion_steady_state(rate=300.0, clearance_=30.0)  # Css = R/CL
+10.0
+>>> clearance(dose=500.0, auc=20.0)                        # CL = F*D/AUC
+25.0
+>>> volume_of_distribution(clearance_=5.0, ke=0.5)         # Vd = CL/ke
+10.0
+>>> accumulation_ratio(tau=6.0, t_half=6.0)   # dosing every t-half -> R = 2
+2.0
+>>> round(oral_tmax(ka=1.5, ke=0.5), 9)       # ln(ka/ke)/(ka-ke) = ln(3)
+1.098612289
+>>> round(creatinine_clearance(40.0, 70.0, 1.0, "female"), 2)  # Cockcroft-Gault x0.85
+82.64
+>>> creatinine_clearance(40.0, 70.0, 1.0, "robot")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: sex must be 'male' or 'female', got 'robot'
+
+>>> from pharmaml.pharma.pk import auc_trapezoid, nca_summary
+>>> auc_trapezoid([0, 1, 2], [0.0, 10.0, 0.0])       # linear trapezoid
+10.0
+>>> round(auc_trapezoid([0.0, 1.0], [10.0, 5.0], method="log"), 9)  # exact on exp decay
+7.213475204
+>>> summary = nca_summary([0, 1, 2, 4], [10.0, 5.0, 2.5, 1.25])
+>>> (round(summary.auc, 6), round(summary.mrt, 6),
+...  round(float(summary.half_life_terminal), 6))   # tail secant: -ln(2)/2 per h
+(15.0, 1.166667, 2.0)
 """
 
 from __future__ import annotations

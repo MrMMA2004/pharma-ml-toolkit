@@ -18,6 +18,46 @@ CV error bars (:func:`plot_model_comparison`), class balance
 Every function returns a matplotlib ``Figure`` (Agg backend, safe on
 headless machines); persist it with
 :func:`pharmaml.viz.save_figure` in png/svg/pdf.
+
+Examples
+--------
+>>> from pharmaml.viz import close_figure
+>>> from pharmaml.viz.ml_plots import plot_confusion_matrix
+>>> fig = plot_confusion_matrix([[3, 1], [0, 4]], labels=["active", "inactive"])
+>>> len(fig.axes)            # heat-map axes + colour bar
+2
+>>> ax = fig.axes[0]
+>>> (ax.get_xlabel(), ax.get_ylabel(), ax.get_title())
+('Predicted label', 'True label', 'Confusion matrix')
+>>> plot_confusion_matrix([[1, 2, 3], [4, 5, 6]])   # non-square -> typed error
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: confusion matrix must be square, got shape (2, 3)
+>>> close_figure(fig)
+
+>>> from pharmaml.viz.ml_plots import plot_predicted_vs_actual
+>>> fig = plot_predicted_vs_actual([1.0, 2.0, 3.0], [0.9, 2.2, 2.8])
+>>> len(fig.axes), fig.axes[0].get_xlabel(), fig.axes[0].get_ylabel()
+(1, 'actual', 'predicted (ŷ)')
+>>> plot_predicted_vs_actual([1.0, 2.0], [1.0, 2.0, 3.0])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: y_true (2,) and y_pred (3,) must match
+>>> close_figure(fig)
+
+>>> from pharmaml.viz import figure_to_base64, save_figure
+>>> from pharmaml.viz.ml_plots import plot_class_distribution
+>>> fig = plot_class_distribution({"active": 30, "inactive": 10})
+>>> fig.axes[0].get_ylabel(), fig.axes[0].get_title()
+('samples', 'Class distribution — 40 sample(s), 2 class(es)')
+>>> out = save_figure(fig, "/tmp/pharmaml_doctest_class_distribution.png")
+>>> out.as_posix()
+'/tmp/pharmaml_doctest_class_distribution.png'
+>>> figure_to_base64(fig, fmt="gif")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Unsupported figure format 'gif'; supported: png, svg, pdf
+>>> close_figure(fig); out.unlink()
 """
 
 from __future__ import annotations

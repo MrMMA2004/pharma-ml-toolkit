@@ -2428,3 +2428,485 @@ class TestScaffoldHopPathTransplants:
         first, second = run(), run()
         assert first.smiles == second.smiles
         assert all(canonical_smiles(smi) is not None for smi in first.smiles)
+
+
+class TestScaffoldHopFusedRings:
+    """Whole-ring excision + splice (round 100x-30): the fuse geometry.
+
+    The 100x-28/29 geometries recombined ring *content* (merge) and
+    ring *size* (transplant).  The full Nicolaou move set's missing
+    member recombines ring *systems*: a whole ring is excised from one
+    parent -- any ring (aromatic ones included) attached to the rest of
+    its molecule through exactly two single anchor bonds at two distinct
+    ring atoms -- and spliced across an opened ring bond of the other
+    parent.  The child is a fused / bridged bicyclic holding one ring
+    from each parent: decalin x piperidine -> azadecalin cores,
+    indane x piperidine -> benzazocine cores (the aromatic donor ring
+    survives intact -- only its two single aryl-CH2 anchor bonds are
+    cut).  Rings with zero/one/three+ outside bonds, spiro anchors
+    (one atom, two outside bonds) and aromatic or double anchor bonds
+    (naphthalene, indole) never excise.  Flipped-only matches (anchor
+    hosts matching the cut bond's endpoints in reverse order) swap the
+    piece's dummy labels at execution time -- the merge geometry's
+    label-swap trick (100x-28 finding 2).
+    """
+
+    @staticmethod
+    def _ring_sizes(smiles: str) -> list[int]:
+        mol = rdkit.Chem.MolFromSmiles(smiles)
+        assert mol is not None
+        return sorted(len(ring) for ring in mol.GetRingInfo().AtomRings())
+
+    def test_fuse_splices_whole_ring_across_cut_bond(self) -> None:
+        # decalin x piperidine, seed 0: the drawn candidate is a fuse --
+        # decalin's left 6-ring excised at its two anchor bonds and
+        # spliced across a cut piperidine C-C bond -> a bicyclic
+        # (6-ring + 8-ring, an azadecalin core), single fragment, no
+        # dummy leaked.  Probe on rdkit 2026.09.1.
+        child = scaffold_hop_crossover(
+            "C1CCC2CCCCC2C1", "C1CCNCC1", random.Random(0)
+        )
+        assert child == "C1CCC2CCNCCCC2C1"
+        assert self._ring_sizes(child) == [6, 8]
+        mol = rdkit.Chem.MolFromSmiles(child)
+        assert mol is not None
+        assert len(rdkit.Chem.GetMolFrags(mol)) == 1
+        assert mol.GetNumAtoms() == 12  # both parents' 6-rings, spliced
+        assert {a.GetSymbol() for a in mol.GetAtoms()} == {"C", "N"}
+        assert not any(a.GetAtomicNum() == 0 for a in mol.GetAtoms())
+        again = scaffold_hop_crossover(
+            "C1CCC2CCCCC2C1", "C1CCNCC1", random.Random(0)
+        )
+        assert again == child  # pure function of (parents, rng state)
+
+    def test_fuse_aromatic_donor_ring_survives_intact(self) -> None:
+        # indane x piperidine, seed 5: the BENZENE ring is the excised
+        # donor (its two single aryl-CH2 anchor bonds cut, every
+        # aromatic ring bond untouched) -> a benzo-fused azocane core;
+        # the child keeps exactly one aromatic 6-ring.  Probe on
+        # rdkit 2026.09.1.
+        child = scaffold_hop_crossover(
+            "C1Cc2ccccc2C1", "C1CCNCC1", random.Random(5)
+        )
+        assert child == "c1ccc2c(c1)CCCCNC2"
+        assert self._ring_sizes(child) == [6, 8]
+        mol = rdkit.Chem.MolFromSmiles(child)
+        assert mol is not None
+        aromatic_rings = [
+            ring for ring in mol.GetRingInfo().AtomRings()
+            if all(mol.GetAtomWithIdx(i).GetIsAromatic() for i in ring)
+        ]
+        assert len(aromatic_rings) == 1  # the donor benzene, intact
+        again = scaffold_hop_crossover(
+            "C1Cc2ccccc2C1", "C1CCNCC1", random.Random(5)
+        )
+        assert again == child
+
+    def test_fuse_children_are_always_valid_connected_and_capped(self) -> None:
+        # invariant sweep: whatever geometry a seed draws, a non-None
+        # child is a parseable, single-fragment, dummy-free molecule
+        # under the cap -- the fuse geometry obeys the module contract
+        for parent_a, parent_b in (
+            ("C1CCC2CCCCC2C1", "C1CCNCC1"),
+            ("C1CCC2CCCCC2C1", "C1COCC1"),
+            ("C1Cc2ccccc2C1", "C1CCNCC1"),
+        ):
+            for seed in range(40):
+                child = scaffold_hop_crossover(
+                    parent_a, parent_b, random.Random(seed)
+                )
+                if child is None:
+                    continue
+                assert len(child) <= 120, (parent_a, seed, child)
+                mol = rdkit.Chem.MolFromSmiles(child)
+                assert mol is not None, (parent_a, seed, child)
+                assert len(rdkit.Chem.GetMolFrags(mol)) == 1
+                assert not any(
+                    a.GetAtomicNum() == 0 for a in mol.GetAtoms()
+                ), (parent_a, seed, child)
+                assert mol.GetRingInfo().NumRings() >= 1
+
+    def test_ring_units_enumeration_is_pinned(self) -> None:
+        # white-box: a ring admits exactly when its total outside-bond
+        # count is two, at two distinct anchors, both bonds single.
+        # Decalin: BOTH 6-rings (each hangs off the other through two
+        # single bonds of the adjacent ring -- the fused-system case);
+        # indane: only the benzene (the 5-ring has three outside bonds).
+        from pharmaml.generative.scaffold_hop import _ring_units
+
+        decalin = _ring_units(rdkit.Chem.MolFromSmiles("C1CCC2CCCCC2C1"))
+        assert decalin == [
+            ((0, 1, 2, 3, 8, 9), 3, 8, ((6, 2, False, 0), (6, 2, False, 0))),
+            ((3, 4, 5, 6, 7, 8), 3, 8, ((6, 2, False, 0), (6, 2, False, 0))),
+        ]
+        indane = _ring_units(rdkit.Chem.MolFromSmiles("C1Cc2ccccc2C1"))
+        assert indane == [
+            ((2, 3, 4, 5, 6, 7), 2, 7, ((6, 2, False, 0), (6, 2, False, 0))),
+        ]
+        # rejections: attachment count, spiro anchor, aromatic fusion
+        for smi in (
+            "C1CCC2(CC1)CCCC2",  # spiro: one anchor, two outside bonds
+            "CC1(C)CCCCC1(C)C",  # tri-substituted: three outside bonds
+            "c1ccc2ccccc2c1",  # naphthalene: aromatic anchor bonds
+            "c1ccc2[nH]ccc2c1",  # indole: aromatic fusion seam
+            "Cc1ccccc1",  # mono-substituted: one outside bond
+            "C1CCNCC1",  # plain ring: zero outside bonds
+        ):
+            assert _ring_units(rdkit.Chem.MolFromSmiles(smi)) == [], smi
+
+    def test_excise_ring_builds_zippable_piece(self) -> None:
+        # white-box: the piece is the intact ring with map-numbered
+        # dummies at the two anchors; host signatures returned in
+        # (a1, a2) order for the homology check
+        from pharmaml.generative.scaffold_hop import _excise_ring
+
+        decalin = rdkit.Chem.MolFromSmiles("C1CCC2CCCCC2C1")
+        excision = _excise_ring(decalin, (0, 1, 2, 3, 8, 9), 3, 8)
+        assert excision is not None
+        piece, host_sigs = excision
+        dummies = [a for a in piece.GetAtoms() if a.GetAtomicNum() == 0]
+        assert sorted(d.GetAtomMapNum() for d in dummies) == [1, 2]
+        assert piece.GetNumAtoms() == 8  # six ring atoms + two dummies
+        assert rdkit.Chem.MolToSmiles(piece) == "C1CCC([*:2])C([*:1])C1"
+        assert host_sigs == ((6, 2, False, 0), (6, 2, False, 0))
+        # robustness contract: garbage ring/anchor tuples never assemble
+        assert _excise_ring(decalin, (0, 1, 2, 3, 8, 9), 3, 3) is None
+        assert _excise_ring(decalin, (0, 1, 2, 3, 8, 9), 4, 8) is None
+        assert _excise_ring(decalin, (0, 1, 2, 3, 8, 8), 3, 8) is None
+        assert _excise_ring(decalin, (0, 1, 2, 3, 8), 3, 8) is None
+
+    def test_flipped_fuse_candidate_assembles_homologously(self) -> None:
+        # asymmetric donor (ring O breaks the anchor symmetry) x
+        # morpholine: the C-O cut bonds create both direct-only and
+        # flipped-only candidates.  The flipped-only match must swap the
+        # piece's dummy labels -- the two possible assemblies are
+        # DIFFERENT molecules (O placement flips), and only the
+        # homologous one ever appears.  Probe on rdkit 2026.09.1.
+        from pharmaml.generative.scaffold_hop import (
+            _excise_ring,
+            _open_ring,
+            _ring_units,
+            _zip_child,
+        )
+
+        donor_smi, recipient_smi = "COC1CCOCC1CC", "C1COCC1"
+        donor = rdkit.Chem.MolFromSmiles(donor_smi)
+        recipient = rdkit.Chem.MolFromSmiles(recipient_smi)
+        sig_r = {
+            a.GetIdx(): (
+                a.GetAtomicNum(), a.GetDegree(), a.GetIsAromatic(),
+                a.GetFormalCharge(),
+            )
+            for a in recipient.GetAtoms()
+        }
+        ring_bonds = [
+            b for b in recipient.GetBonds()
+            if b.IsInRing() and b.GetBondType() == rdkit.Chem.BondType.SINGLE
+        ]
+        correct, wrong = set(), set()
+        for ring, a1, a2, host_sigs in _ring_units(donor):
+            for bond in ring_bonds:
+                r1, r2 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+                direct = (
+                    host_sigs[0] == sig_r[r1] and host_sigs[1] == sig_r[r2]
+                )
+                flipped = (
+                    host_sigs[0] == sig_r[r2] and host_sigs[1] == sig_r[r1]
+                )
+                if not (direct or flipped):
+                    continue
+                opened = _open_ring(recipient, bond.GetIdx())
+                excision = _excise_ring(donor, ring, a1, a2)
+                assert opened is not None and excision is not None
+                piece, _ = excision
+                homologous = rdkit.Chem.Mol(piece)
+                if not direct:  # the operator's swap: labels 1 <-> 2
+                    for dummy in homologous.GetAtoms():
+                        if dummy.GetAtomicNum() == 0:
+                            dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
+                child = _zip_child(opened, homologous, 120)
+                if child is not None:
+                    correct.add(child)
+                crossed = rdkit.Chem.Mol(piece)
+                if direct:  # the anti-swap: the non-homologous assembly
+                    for dummy in crossed.GetAtoms():
+                        if dummy.GetAtomicNum() == 0:
+                            dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
+                    child = _zip_child(opened, crossed, 120)
+                    if child is not None:
+                        wrong.add(child)
+        assert correct == {"C1CCC2COCCC2OC1"}  # O neighbours match hosts
+        assert wrong == {"C1CCC2CCOCC2OC1"}  # different constitution
+        assert not correct & wrong
+        for seed in range(80):
+            child = scaffold_hop_crossover(
+                donor_smi, recipient_smi, random.Random(seed)
+            )
+            if child is None:
+                continue
+            mol = rdkit.Chem.MolFromSmiles(child)
+            assert mol is not None
+            if len(mol.GetRingInfo().AtomRings()) == 2:  # a fuse child
+                assert child in correct, (seed, child)
+
+    def test_fuse_works_in_both_argument_orders(self) -> None:
+        # ring parent first or second: the fuse scan covers both sides
+        first = scaffold_hop_crossover(
+            "C1CCC2CCCCC2C1", "C1CCNCC1", random.Random(0)
+        )
+        second = scaffold_hop_crossover(
+            "C1CCNCC1", "C1CCC2CCCCC2C1", random.Random(0)
+        )
+        assert first is not None and second is not None
+        assert self._ring_sizes(first) == [6, 8]
+        assert self._ring_sizes(second) == [6, 8]
+
+    def test_ga_crossover_reaches_fuse_children(self) -> None:
+        # the GA's _crossover wires the fuse geometry through: seed 0
+        # draws a whole-ring splice (decalin x piperidine -> azadecalin)
+        optimizer = GeneticOptimizer(QedObjective(), crossover="scaffold_hop")
+        child = optimizer._crossover(
+            "C1CCC2CCCCC2C1", "C1CCNCC1", random.Random(0)
+        )
+        assert child == "C1CCC2CCNCCCC2C1"
+        assert self._ring_sizes(child) == [6, 8]
+
+    def test_ga_hop_mode_absorbs_fused_donors_deterministically(self) -> None:
+        # corpus with a fused-ring donor + a saturated acceptor: the
+        # structural GA runs (the fuse geometry reachable from the
+        # steroids-and-rings corpus) and stays a pure function of the seed
+        def run() -> GenerationResult:
+            return GeneticOptimizer(
+                QedObjective(), population_size=16, generations=3, seed=11,
+                crossover="scaffold_hop",
+            ).optimize(
+                seed_smiles=["C1CCNCC1"],
+                corpus=["C1CCNCC1", "C1CCC2CCCCC2C1", "C1Cc2ccccc2C1"],
+            )
+
+        first, second = run(), run()
+        assert first.smiles == second.smiles
+        assert all(canonical_smiles(smi) is not None for smi in first.smiles)
+
+
+class TestScaffoldHopRingInserts:
+    """Ring-as-linker inserts (round 100x-31): the matrix's last cell.
+
+    {excised piece} x {cut type} is now complete: acyclic pieces into
+    ring cuts (transplant / transplant_path), ring pieces into ring
+    cuts (fuse), acyclic pieces into acyclic cuts (bridge -- the
+    fragments themselves swap), and ring pieces into ACYCLIC cuts --
+    the **insert** geometry: a whole ring is excised from one parent
+    (the same two-anchor donor machinery as fuse) and spliced INTO a
+    cut acyclic bond of the other.  Both bridge halves are re-joined
+    THROUGH the ring, so the ring becomes the spacer: ring-as-linker
+    (decalin x hexane -> a dipropylcyclohexane, indane x heptane -> a
+    dialkylbenzene).  The donor ring's former hosts must match the cut
+    bond's endpoints (homologous flanks); a flipped-only match swaps
+    the piece's dummy labels -- and the two possible assemblies are
+    DIFFERENT molecules when the donor ring is asymmetric, so the flip
+    is observable, exactly like the fuse geometry's.
+    """
+
+    @staticmethod
+    def _ring_sizes(smiles: str) -> list[int]:
+        mol = rdkit.Chem.MolFromSmiles(smiles)
+        assert mol is not None
+        return sorted(len(ring) for ring in mol.GetRingInfo().AtomRings())
+
+    def test_insert_splices_ring_into_acyclic_bond(self) -> None:
+        # decalin x hexane, seed 5: the drawn candidate is an insert --
+        # decalin's left 6-ring excised and spliced INTO a cut hexane
+        # bond -> a single dipropylcyclohexane spacer ring, 12 atoms
+        # (both parents' whole heavy-atom inventory), one fragment, no
+        # dummy leaked.  Probe on rdkit 2026.09.1.
+        child = scaffold_hop_crossover(
+            "C1CCC2CCCCC2C1", "CCCCCC", random.Random(5)
+        )
+        assert child == "CCCC1CCCCC1CCC"
+        assert self._ring_sizes(child) == [6]
+        mol = rdkit.Chem.MolFromSmiles(child)
+        assert mol is not None
+        assert len(rdkit.Chem.GetMolFrags(mol)) == 1
+        assert mol.GetNumAtoms() == 12  # hexane's 6 + the donor 6-ring
+        assert {a.GetSymbol() for a in mol.GetAtoms()} == {"C"}
+        assert not any(a.GetAtomicNum() == 0 for a in mol.GetAtoms())
+        again = scaffold_hop_crossover(
+            "C1CCC2CCCCC2C1", "CCCCCC", random.Random(5)
+        )
+        assert again == child  # pure function of (parents, rng state)
+
+    def test_insert_aromatic_donor_ring_becomes_the_spacer(self) -> None:
+        # indane x heptane, seed 0: the BENZENE ring is the excised
+        # donor, spliced into a cut heptane bond -> a dialkylbenzene;
+        # the child keeps exactly one aromatic 6-ring (the spacer).
+        # Probe on rdkit 2026.09.1.
+        child = scaffold_hop_crossover(
+            "C1Cc2ccccc2C1", "CCCCCCC", random.Random(0)
+        )
+        assert child == "CCCCCc1ccccc1CC"
+        assert self._ring_sizes(child) == [6]
+        mol = rdkit.Chem.MolFromSmiles(child)
+        assert mol is not None
+        assert mol.GetNumAtoms() == 13  # heptane's 7 + the benzene's 6
+        aromatic_rings = [
+            ring for ring in mol.GetRingInfo().AtomRings()
+            if all(mol.GetAtomWithIdx(i).GetIsAromatic() for i in ring)
+        ]
+        assert len(aromatic_rings) == 1  # the donor benzene, intact
+        again = scaffold_hop_crossover(
+            "C1Cc2ccccc2C1", "CCCCCCC", random.Random(0)
+        )
+        assert again == child
+
+    def test_insert_children_are_always_valid_connected_and_capped(self) -> None:
+        # invariant sweep: whatever geometry a seed draws, a non-None
+        # child is a parseable, single-fragment, dummy-free molecule
+        # under the cap -- the insert geometry obeys the module contract
+        for parent_a, parent_b in (
+            ("C1CCC2CCCCC2C1", "CCCCCC"),
+            ("C1Cc2ccccc2C1", "CCCCCCC"),
+            ("C1CCC2CCCCC2C1", "CCOCC"),
+        ):
+            for seed in range(40):
+                child = scaffold_hop_crossover(
+                    parent_a, parent_b, random.Random(seed)
+                )
+                if child is None:
+                    continue
+                assert len(child) <= 120, (parent_a, seed, child)
+                mol = rdkit.Chem.MolFromSmiles(child)
+                assert mol is not None, (parent_a, seed, child)
+                assert len(rdkit.Chem.GetMolFrags(mol)) == 1
+                assert not any(
+                    a.GetAtomicNum() == 0 for a in mol.GetAtoms()
+                ), (parent_a, seed, child)
+                assert mol.GetRingInfo().NumRings() >= 1
+
+    def test_insert_works_in_both_argument_orders(self) -> None:
+        # ring donor first or second: the insert scan covers both sides
+        # (hexane x decalin -- the ring donor as parent_b)
+        first = scaffold_hop_crossover(
+            "C1CCC2CCCCC2C1", "CCCCCC", random.Random(5)
+        )
+        second = scaffold_hop_crossover(
+            "CCCCCC", "C1CCC2CCCCC2C1", random.Random(5)
+        )
+        assert first is not None and second is not None
+        assert self._ring_sizes(first) == [6]
+        assert self._ring_sizes(second) == [6]
+        assert rdkit.Chem.MolFromSmiles(second).GetNumAtoms() == 12
+
+    def test_flipped_insert_candidate_assembles_homologously(self) -> None:
+        # asymmetric donor (ring O breaks the anchor symmetry) x diethyl
+        # ether: the C-O cut bonds create both direct-only and
+        # flipped-only candidates.  The flipped-only match must swap the
+        # piece's dummy labels -- the two possible assemblies are
+        # DIFFERENT molecules (the ring O lands beside a different
+        # fragment), and only the homologous one ever appears.
+        # Probe on rdkit 2026.09.1.
+        import rdkit.Chem
+
+        from pharmaml.generative.scaffold_hop import (
+            _cut_into_two,
+            _excise_ring,
+            _ring_units,
+            _zip_spliced,
+        )
+
+        donor_smi, recipient_smi = "COC1CCOCC1CC", "CCOCC"
+        donor = rdkit.Chem.MolFromSmiles(donor_smi)
+        recipient = rdkit.Chem.MolFromSmiles(recipient_smi)
+        sig_r = {
+            a.GetIdx(): (
+                a.GetAtomicNum(), a.GetDegree(), a.GetIsAromatic(),
+                a.GetFormalCharge(),
+            )
+            for a in recipient.GetAtoms()
+        }
+        acyclic_bonds = [
+            b for b in recipient.GetBonds()
+            if not b.IsInRing() and b.GetBondType() == rdkit.Chem.BondType.SINGLE
+        ]
+        correct, wrong = set(), set()
+        for ring, a1, a2, host_sigs in _ring_units(donor):
+            for bond in acyclic_bonds:
+                b1, b2 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+                direct = (
+                    host_sigs[0] == sig_r[b1] and host_sigs[1] == sig_r[b2]
+                )
+                flipped = (
+                    host_sigs[0] == sig_r[b2] and host_sigs[1] == sig_r[b1]
+                )
+                if not (direct or flipped):
+                    continue
+                cut = _cut_into_two(recipient, bond.GetIdx())
+                excision = _excise_ring(donor, ring, a1, a2)
+                assert cut is not None and excision is not None
+                begin_frag, end_frag = cut
+                piece, _ = excision
+                end_c = rdkit.Chem.Mol(end_frag)
+                for atom in end_c.GetAtoms():  # the operator's relabel
+                    if atom.GetAtomicNum() == 0:
+                        atom.SetAtomMapNum(2)
+                homologous = rdkit.Chem.Mol(piece)
+                if not direct:
+                    for dummy in homologous.GetAtoms():
+                        if dummy.GetAtomicNum() == 0:
+                            dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
+                child = _zip_spliced(begin_frag, homologous, end_c, 120)
+                if child is not None:
+                    correct.add(child)
+                crossed = rdkit.Chem.Mol(piece)
+                if direct:  # the anti-swap: non-homologous assembly
+                    for dummy in crossed.GetAtoms():
+                        if dummy.GetAtomicNum() == 0:
+                            dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
+                    child = _zip_spliced(begin_frag, crossed, end_c, 120)
+                    if child is not None:
+                        wrong.add(child)
+        assert correct == {"CCOC1CCOCC1CC"}  # O neighbours match hosts
+        assert wrong == {"CCOC1COCCC1CC"}  # different constitution
+        assert not correct & wrong
+        # the recipient is acyclic, so bridge children exist alongside
+        # insert children -- the shape filter cannot isolate inserts.
+        # The rigorous assertions: the NON-homologous assembly never
+        # appears in ANY child, and the homologous one is reachable.
+        seen_correct: set[str] = set()
+        for seed in range(80):
+            child = scaffold_hop_crossover(
+                donor_smi, recipient_smi, random.Random(seed)
+            )
+            if child is None:
+                continue
+            assert child not in wrong, (seed, child)
+            if child in correct:
+                seen_correct.add(child)
+        assert seen_correct == correct  # the homologous insert is drawn
+
+    def test_ga_crossover_reaches_insert_children(self) -> None:
+        # the GA's _crossover wires the insert geometry through: seed 5
+        # draws a ring-as-linker splice (decalin x hexane -> spacer ring)
+        optimizer = GeneticOptimizer(QedObjective(), crossover="scaffold_hop")
+        child = optimizer._crossover(
+            "C1CCC2CCCCC2C1", "CCCCCC", random.Random(5)
+        )
+        assert child == "CCCC1CCCCC1CCC"
+        assert self._ring_sizes(child) == [6]
+
+    def test_ga_hop_mode_absorbs_insert_donors_deterministically(self) -> None:
+        # corpus with a ring donor + a chain acceptor: the structural GA
+        # runs (the insert geometry reachable) and stays a pure function
+        # of the seed
+        def run() -> GenerationResult:
+            return GeneticOptimizer(
+                QedObjective(), population_size=16, generations=3, seed=11,
+                crossover="scaffold_hop",
+            ).optimize(
+                seed_smiles=["CCCCCC"],
+                corpus=["CCCCCC", "C1CCC2CCCCC2C1", "C1Cc2ccccc2C1"],
+            )
+
+        first, second = run(), run()
+        assert first.smiles == second.smiles
+        assert all(canonical_smiles(smi) is not None for smi in first.smiles)
