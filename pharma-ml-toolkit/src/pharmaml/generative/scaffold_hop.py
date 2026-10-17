@@ -19,10 +19,13 @@ hop actually has to recombine -- fragment *arrangement* and ring
   the two opened rings are zipped into one combined ring holding atoms
   from both parents (ring expansion / macrocycle formation).
 * **transplant**: one parent is cut at a single ring bond and a
-  two-ended linker atom from the other parent (acyclic, two single
-  bonds, homologous flanks -- an ether O, a methylene, a secondary
-  amine N, ...) is excised and zipped into the cut: ring homologation
-  (piperidine + an ether oxygen -> an oxazepane).
+  two-ended linker from the other parent -- a single atom (an ether O,
+  a methylene, a secondary amine N, ...) or a short contiguous acyclic
+  *path* of up to four atoms (an ethylene bridge ``-CH2CH2-``, an
+  oxyethylene ``-OCH2-`` segment, a diethylene ``-OCH2CH2O-``) -- is
+  excised and zipped into the cut: ring homologation by one atom or a
+  whole chain (piperidine + an ether oxygen -> an oxazepane, + an
+  ethylene bridge -> an azocane).
 
 All cuts are *single* bonds (aromatic ring bonds are never cut -- the
 re-zip would have to invent bond orders), and the join points must be
@@ -44,6 +47,10 @@ Example
 ...                                random.Random(11))
 >>> child is not None   # a valid hybrid of both parents
 True
+>>> # ring expansion by a whole linker path: piperidine x diethylene
+>>> # glycol, the -CH2-O- path transplanted into a cut C-C bond -> 8-ring
+>>> scaffold_hop_crossover("C1CCNCC1", "OCCOCCO", random.Random(0))
+'C1CNCCCOC1'
 >>> # benzene has no acyclic single bond to cut: no crossover possible
 >>> scaffold_hop_crossover("c1ccccc1", "c1ccncc1", random.Random(0)) is None
 True
@@ -51,6 +58,7 @@ True
 
 from __future__ import annotations
 
+import itertools
 import random
 
 from ._utils import require_rdkit
@@ -59,6 +67,13 @@ from ._utils import require_rdkit
 #: :class:`~pharmaml.generative.GeneticOptimizer` floor, so the standalone
 #: use cannot be configured weaker than the GA use).
 _MIN_LENGTH_CAP = 20
+
+#: Maximum atoms in an excised multi-atom linker *path*.  Drug-like
+#: linkers are short (ethylene, oxyethylene, diethyleneoxy); longer
+#: chains would grow the candidate pool quadratically and the offspring
+#: past drug-like size -- the ``max_smiles_length`` cap polices the
+#: output, this cap keeps the search honest.
+_MAX_LINKER_PATH_ATOMS = 4
 
 
 def _atom_signature(atom: object) -> tuple[int, int, bool, int]:
@@ -177,59 +192,176 @@ def _open_ring(mol: object, bond_idx: int) -> object | None:
         return None
 
 
-def _excise_linker_atom(mol: object, atom_idx: int) -> tuple[object, tuple] | None:
-    """Cut a two-ended linker atom loose; return ``(donor, host_sigs)``.
+def _excise_linker_path(
+    mol: object,
+    path: tuple[int, ...],
+) -> tuple[object, tuple] | None:
+    """Cut a contiguous acyclic linker path loose; return ``(donor, host_sigs)``.
 
-    A linker is an atom with exactly two neighbours, both reached via
-    single acyclic bonds (an ether O, a methylene, a secondary amine
-    N, a thioether S ...).  Attachment dummies (atomic number 0) are
-    never linkers -- a parent's dummy must not be transplanted into a
-    child.  The donor is a fresh molecule holding the
-    atom and two dummies -- ``[*:1]`` replacing the bond to the first
-    host, ``[*:2]`` the second -- ready to be zipped into a ring cut of
-    the other parent.  ``host_sigs`` are the two former neighbours'
-    signatures (in the atom's own neighbour order) for the homology
-    check.  ``None`` when the atom is not a two-ended linker.
+    A linker path is either a single atom (the classic two-ended linker:
+    an ether O, a methylene, a secondary amine N, a thioether S ...) or
+    a contiguous chain of up to ``_MAX_LINKER_PATH_ATOMS`` such atoms
+    (an ethylene bridge, an oxyethylene segment).  Every path atom must
+    have exactly two neighbours, both reached via single acyclic bonds,
+    and be outside every ring; attachment dummies (atomic number 0) are
+    never excisable -- a parent's dummy must not be transplanted into a
+    child.  The donor is a fresh molecule holding the path atoms and two
+    dummies -- ``[*:1]`` replacing the bond to the first path atom's
+    outside host, ``[*:2]`` the last's -- ready to be zipped into a ring
+    cut of the other parent.  ``host_sigs`` are the two former outside
+    neighbours' signatures, in the path's own orientation, for the
+    homology check.  ``None`` when any validation fails (a chain that
+    runs through a double-bonded atom -- e.g. an aldehyde carbon --
+    never excises).
+
+    Valence bookkeeping is exact for every seam: each path end atom
+    trades one single-bonded host for one single-bonded dummy, interior
+    atoms keep both neighbours, so the donor sanitises exactly like the
+    corresponding parent fragment.
     """
     Chem = require_rdkit()
     try:
-        atom = mol.GetAtomWithIdx(atom_idx)  # type: ignore[attr-defined]
-        if atom.GetDegree() != 2 or atom.IsInRing():
+        if not path or len(path) > _MAX_LINKER_PATH_ATOMS:
             return None
-        if atom.GetAtomicNum() == 0:  # attachment dummy: never a linker
-            return None
-        neighbours = list(atom.GetNeighbors())
-        host_sigs = tuple(_atom_signature(nbr) for nbr in neighbours)
-        for nbr in neighbours:
-            bond = mol.GetBondBetweenAtoms(  # type: ignore[attr-defined]
-                atom_idx, nbr.GetIdx()
-            )
-            if (
-                bond is None
-                or bond.IsInRing()
-                or bond.GetBondType() != Chem.BondType.SINGLE
-            ):
+        if len(set(path)) != len(path):
+            return None  # a repeating index is not a path
+        for idx in path:
+            atom = mol.GetAtomWithIdx(idx)  # type: ignore[attr-defined]
+            if atom.GetDegree() != 2 or atom.IsInRing():
                 return None
+            if atom.GetAtomicNum() == 0:  # attachment dummy: never excised
+                return None
+            # degree 2 -> exactly these two bonds, so one loop covers both
+            # the interior path bonds and the two host bonds
+            for nbr in atom.GetNeighbors():
+                bond = mol.GetBondBetweenAtoms(  # type: ignore[attr-defined]
+                    idx, nbr.GetIdx()
+                )
+                if (
+                    bond is None
+                    or bond.IsInRing()
+                    or bond.GetBondType() != Chem.BondType.SINGLE
+                ):
+                    return None
+        # consecutive path atoms must actually be bonded (the enumeration
+        # emits true chains; a hand-made tuple may not be one)
+        for left, right in itertools.pairwise(path):
+            if mol.GetBondBetweenAtoms(left, right) is None:  # type: ignore[attr-defined]
+                return None
+        # hosts: n == 1 -> the atom's two neighbours in GetNeighbors
+        # order (the classic linker semantics); n >= 2 -> each end's
+        # unique outside neighbour (the other neighbour is the next path
+        # atom, so the lookups are unambiguous)
+        if len(path) == 1:
+            nbrs = list(mol.GetAtomWithIdx(path[0]).GetNeighbors())  # type: ignore[attr-defined]
+            host_first, host_second = nbrs[0], nbrs[1]
+        else:
+            first_outside = [
+                nbr
+                for nbr in mol.GetAtomWithIdx(path[0]).GetNeighbors()  # type: ignore[attr-defined]
+                if nbr.GetIdx() != path[1]
+            ]
+            last_outside = [
+                nbr
+                for nbr in mol.GetAtomWithIdx(path[-1]).GetNeighbors()  # type: ignore[attr-defined]
+                if nbr.GetIdx() != path[-2]
+            ]
+            if len(first_outside) != 1 or len(last_outside) != 1:
+                return None
+            host_first, host_second = first_outside[0], last_outside[0]
         rw = Chem.RWMol()
-        anchor = Chem.Atom(atom)
-        anchor.SetAtomMapNum(0)
-        anchor.SetIsotope(0)
-        anchor.SetChiralTag(Chem.ChiralType.CHI_UNSPECIFIED)
-        new_idx = rw.AddAtom(anchor)
+        for idx in path:
+            anchor = Chem.Atom(mol.GetAtomWithIdx(idx))  # type: ignore[attr-defined]
+            anchor.SetAtomMapNum(0)
+            anchor.SetIsotope(0)
+            anchor.SetChiralTag(Chem.ChiralType.CHI_UNSPECIFIED)
+            rw.AddAtom(anchor)
         d_first = rw.AddAtom(Chem.Atom(0))
         d_second = rw.AddAtom(Chem.Atom(0))
-        rw.AddBond(new_idx, d_first, Chem.BondType.SINGLE)
-        rw.AddBond(new_idx, d_second, Chem.BondType.SINGLE)
+        for i in range(len(path) - 1):
+            rw.AddBond(i, i + 1, Chem.BondType.SINGLE)
+        rw.AddBond(0, d_first, Chem.BondType.SINGLE)
+        rw.AddBond(len(path) - 1, d_second, Chem.BondType.SINGLE)
         donor = rw.GetMol()
         Chem.SanitizeMol(donor)
-        # The donor was hand-built (anchor, first dummy, second dummy in
-        # exactly that atom order), so the dummy indices are fixed: label
-        # the first-host-side dummy [*:1], the second [*:2].
-        donor.GetAtomWithIdx(1).SetAtomMapNum(1)
-        donor.GetAtomWithIdx(2).SetAtomMapNum(2)
-        return donor, host_sigs
+        # The donor was hand-built (path atoms in order, then the two
+        # dummies in exactly that atom order), so the dummy indices are
+        # fixed: label the first-host-side dummy [*:1], the second [*:2].
+        donor.GetAtomWithIdx(d_first).SetAtomMapNum(1)
+        donor.GetAtomWithIdx(d_second).SetAtomMapNum(2)
+        return donor, (_atom_signature(host_first), _atom_signature(host_second))
     except Exception:  # noqa: BLE001 - robustness-first fallback contract
         return None
+
+
+def _linker_path_units(mol: object) -> list[tuple[tuple[int, ...], tuple]]:
+    """Enumerate multi-atom linker units: ``[(path, host_sigs)]``.
+
+    Every maximal run ("chain") of linker-eligible atoms -- degree two,
+    acyclic, non-dummy -- contributes its contiguous sublists of two up
+    to ``_MAX_LINKER_PATH_ATOMS`` atoms as candidate excisions; the
+    single atoms keep their dedicated scan in
+    :func:`scaffold_hop_crossover` so that geometry's candidate pool is
+    unchanged.  A sublist is admitted only when
+    :func:`_excise_linker_path` validates it -- a chain may run through
+    a double-bonded atom (an aldehyde carbon, a carbonyl), and any unit
+    containing it never excises, so it is silently dropped here.
+
+    Determinism: chains are discovered in order of their smallest atom
+    index (the first unvisited eligible atom in index order is its
+    chain's minimum), each chain oriented smallest-index end first, and
+    sublists emitted left-to-right, shorter before longer within the
+    same start -- a pure function of the molecule, so the crossover's
+    candidate pool stays a pure function of the parents.
+    """
+    assigned: set[int] = set()
+    units: list[tuple[tuple[int, ...], tuple]] = []
+
+    def eligible(atom: object) -> bool:
+        return (
+            atom.GetDegree() == 2  # type: ignore[attr-defined]
+            and not atom.IsInRing()  # type: ignore[attr-defined]
+            and atom.GetAtomicNum() != 0  # type: ignore[attr-defined]
+        )
+
+    for atom in mol.GetAtoms():  # type: ignore[attr-defined]
+        start = atom.GetIdx()  # type: ignore[attr-defined]
+        if start in assigned or not eligible(atom):
+            continue
+        # Walk the maximal chain through `start` in both directions:
+        # both of its neighbours are eligible-or-host, each eligible
+        # neighbour extends the run until a host (degree != 2, ring
+        # atom, dummy) terminates it.
+        chain = [start]
+        neighbours = list(atom.GetNeighbors())  # type: ignore[attr-defined]
+        for is_first_side, seed in (
+            (True, neighbours[1]),
+            (False, neighbours[0]),
+        ):
+            prev, cur = start, seed.GetIdx()
+            while eligible(mol.GetAtomWithIdx(cur)):  # type: ignore[attr-defined]
+                chain.append(cur)
+                nxt = [
+                    nbr.GetIdx()
+                    for nbr in mol.GetAtomWithIdx(cur).GetNeighbors()  # type: ignore[attr-defined]
+                    if nbr.GetIdx() != prev
+                ]
+                prev, cur = cur, nxt[0]
+            if is_first_side:
+                chain.reverse()  # the far side becomes the front
+        assigned.update(chain)
+        if chain[0] > chain[-1]:
+            chain.reverse()  # canonical orientation: smaller end first
+        for begin in range(len(chain)):
+            for length in range(
+                2, min(_MAX_LINKER_PATH_ATOMS, len(chain) - begin) + 1
+            ):
+                path = tuple(chain[begin:begin + length])
+                excision = _excise_linker_path(mol, path)
+                if excision is None:
+                    continue
+                units.append((path, excision[1]))
+    return units
 
 
 def _zip_child(
@@ -270,9 +402,11 @@ def scaffold_hop_crossover(
     per parent (fragment swap, the classic), a **ring merge** (one
     single ring bond cut per parent, the opened rings zipped into one
     combined ring) and a **linker transplant** (a single ring bond cut
-    in one parent, a two-ended linker atom excised from the other and
-    zipped into the cut: ring homologation).  Aromatic ring bonds are
-    never cut (the re-zip would have to invent bond orders).
+    in one parent, a two-ended linker -- a single atom or a contiguous
+    acyclic path of up to four atoms -- excised from the other and
+    zipped into the cut: ring homologation by one atom or a whole
+    chain).  Aromatic ring bonds are never cut (the re-zip would have
+    to invent bond orders).
 
     Parameters
     ----------
@@ -385,12 +519,15 @@ def scaffold_hop_crossover(
                     candidates.append(("merge", bond_a.GetIdx(), bond_b.GetIdx(), direct))
 
         # transplant: a single ring bond in one parent + a two-ended
-        # linker atom in the other (homologous flanks: the linker's
-        # former neighbours must match the cut bond's endpoints, so the
-        # linker lands in a chemically analogous environment).  Both
-        # argument orders are scanned.  (Orientation is admission-only:
-        # the anchor bonds to BOTH ring endpoints, so the child's edge
-        # set is orientation-independent.)
+        # linker in the other -- a single atom or a multi-atom path
+        # (homologous flanks: the linker's former outside hosts must
+        # match the cut bond's endpoints, so the linker lands in a
+        # chemically analogous environment).  Both argument orders are
+        # scanned.  For single atoms the orientation is admission-only
+        # (the anchor bonds to BOTH ring endpoints, so the child's edge
+        # set is orientation-independent); a *path* is asymmetric, so
+        # flipped-only matches must excise the reversed path at
+        # execution time (handled below).
         for ring_side, other, ring_bonds, sig_ring in (
             ("a", mol_b, ring_bonds_a, sig_a),
             ("b", mol_a, ring_bonds_b, sig_b),
@@ -400,7 +537,7 @@ def scaffold_hop_crossover(
                 for atom in other.GetAtoms():
                     if atom.GetDegree() != 2 or atom.IsInRing():
                         continue
-                    excision = _excise_linker_atom(other, atom.GetIdx())
+                    excision = _excise_linker_path(other, (atom.GetIdx(),))
                     if excision is None:
                         continue
                     _, host_sigs = excision
@@ -410,6 +547,20 @@ def scaffold_hop_crossover(
                         candidates.append(
                             ("transplant", ring_side, bond.GetIdx(), atom.GetIdx())
                         )
+            # the same ring bonds against multi-atom linker paths of the
+            # donor (round 100x-29): ring expansion by 2-4 atoms.  The
+            # guard skips the enumeration for acyclic donors (no ring
+            # bond to transplant into -- the units would be dead weight)
+            if ring_bonds:
+                for path, host_sigs in _linker_path_units(other):
+                    for bond in ring_bonds:
+                        r1, r2 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+                        direct = host_sigs[0] == sig_ring[r1] and host_sigs[1] == sig_ring[r2]
+                        flipped = host_sigs[0] == sig_ring[r2] and host_sigs[1] == sig_ring[r1]
+                        if direct or flipped:
+                            candidates.append(
+                                ("transplant_path", ring_side, bond.GetIdx(), path, direct)
+                            )
         if not candidates:
             return None
 
@@ -456,14 +607,35 @@ def scaffold_hop_crossover(
                         dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
             return _zip_child(open_a, open_b, max_smiles_length)
 
-        # transplant
-        _, ring_side, ring_bond_idx, donor_atom_idx = choice
+        # transplant (single-atom linker: orientation-independent)
+        if choice[0] == "transplant":
+            _, ring_side, ring_bond_idx, donor_atom_idx = choice
+            if ring_side == "a":
+                ring_mol, donor_mol = mol_a, mol_b
+            else:
+                ring_mol, donor_mol = mol_b, mol_a
+            opened = _open_ring(ring_mol, ring_bond_idx)
+            excision = _excise_linker_path(donor_mol, (donor_atom_idx,))
+            if opened is None or excision is None:
+                return None
+            donor, _ = excision
+            return _zip_child(opened, donor, max_smiles_length)
+
+        # transplant_path (multi-atom linker: orientation-aware)
+        _, ring_side, ring_bond_idx, path, direct = choice
         if ring_side == "a":
             ring_mol, donor_mol = mol_a, mol_b
         else:
             ring_mol, donor_mol = mol_b, mol_a
         opened = _open_ring(ring_mol, ring_bond_idx)
-        excision = _excise_linker_atom(donor_mol, donor_atom_idx)
+        # a flipped-only match must excise the REVERSED path so each seam
+        # bonds a path atom to a signature-matched ring endpoint (the
+        # single-atom transplant is symmetric -- reversing a one-atom
+        # path is the identity -- which is why orientation could be
+        # admission-only before paths existed)
+        excision = _excise_linker_path(
+            donor_mol, path if direct else tuple(reversed(path))
+        )
         if opened is None or excision is None:
             return None
         donor, _ = excision

@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1313 tests).
+exceptions, input validation, and pytest coverage** (1322 tests).
 
 ---
 
@@ -93,7 +93,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1313 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 1322 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -261,9 +261,10 @@ laptop CPU:
 > §6 **scaffold-preserving mutation** (Murcko-retention A/B: 100 % on seed
 > frameworks vs 50.5 % for uniform mutation) → §6b **scaffold-hop
 > crossover** (BREED-style homologous cuts: aspirin × naproxen → a hybrid
-> carrying one fragment of each; ring-bond cuts — rings merged or a linker
-> atom transplanted: piperidine × an ether oxygen → a 7-ring oxazepane;
-> the structural mode's leaderboard) →
+> carrying one fragment of each; ring-bond cuts — rings merged, or a linker
+> transplanted: piperidine × an ether oxygen → a 7-ring oxazepane, piperidine ×
+> diethylene glycol → an 8-ring via the whole `-CH2O-` path; the structural
+> mode's leaderboard) →
 > §7 **RL** (char-GRU prior loss curve + REINVENT-style fine-tuning with
 > early stop) → §8 the **novelty** anti-rediscovery recipe (honest
 > strange-chemistry trade-off) → §9 GA-vs-RL head-to-head → §10 leaderboard
@@ -596,10 +597,14 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   differs from both parents whenever the parents' frameworks span different
   fragments — biaryls, diaryl ethers, sulfonyl bridges); **ring merges** zip
   two opened rings into one combined ring holding atoms from both parents;
-  **linker transplants** excise a two-ended linker atom (an ether O, a
-  methylene, a secondary amine N) from one parent and zip it into a cut ring
-  bond of the other — ring homologation: piperidine + diethyl ether →
-  `C1CNCCOC1` (a 7-ring oxazepane). Aromatic ring bonds are never cut (the
+  **linker transplants** excise a two-ended linker — a single atom (an ether
+  O, a methylene, a secondary amine N) or a contiguous acyclic path of up
+  to four atoms (an ethylene bridge, an oxyethylene `-OCH2-` segment) — from
+  one parent and zip it into a cut ring
+  bond of the other — ring homologation by one atom or a whole chain:
+  piperidine + diethyl ether → `C1CNCCOC1` (a 7-ring oxazepane), piperidine
+  + hexane → an 8-ring azocane via the transplanted `-CH2CH2-`.
+  Aromatic ring bonds are never cut (the
   re-zip would have to invent bond orders). Also usable standalone via
   `scaffold_hop_crossover(parent_a, parent_b, rng)`; deterministic; `None`
   (fall back) when no viable cut exists. Combine with `mutation="scaffold"`
@@ -835,7 +840,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1339 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1351 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

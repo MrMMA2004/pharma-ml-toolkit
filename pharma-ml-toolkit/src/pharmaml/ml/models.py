@@ -10,6 +10,17 @@ algorithm.
 Optional backends (XGBoost, LightGBM, CatBoost, PyTorch deep nets) are
 imported lazily and reported as unavailable rather than crashing the
 registry import.
+
+Examples
+--------
+>>> from pharmaml.ml.models import MODEL_REGISTRY
+>>> spec = MODEL_REGISTRY["random_forest"]
+>>> spec.task
+'both'
+>>> sorted(spec.param_grid)
+['max_depth', 'min_samples_split', 'n_estimators']
+>>> spec.available            # sklearn-backed: no optional dependency
+True
 """
 
 from __future__ import annotations

@@ -20,6 +20,23 @@ Design changes over the originals: every function accepts DataFrames
 comparison results come back as a typed :class:`TableComparison` instead
 of being written to a fixed ``differences_output.csv``, and callers'
 frames are never mutated in place.
+
+Examples
+--------
+>>> import pandas as pd
+>>> from pharmaml.chem.tables import annotate_with_smiles, compare_tables
+>>> left = pd.DataFrame({"Ligand": ["A.pdbqt", "b.pdbqt", "c"]})
+>>> right = pd.DataFrame({"Ligand": ["B", "c", "d"]})
+>>> comparison = compare_tables(left, right, column="Ligand")
+>>> comparison.only_in_a          # names normalised: case + extension
+['a']
+>>> sorted(comparison.common)
+['b', 'c']
+>>> library = pd.DataFrame({"Ligand": ["a.pdbqt", "b"], "SMILES": ["CCO", "c1ccccc1"]})
+>>> annotated = annotate_with_smiles(
+...     pd.DataFrame({"Ligand": ["A.pdbqt", "z"]}), library, name_columns=["Ligand"])
+>>> annotated["Ligand_SMILES"].tolist()
+['CCO', '']
 """
 
 from __future__ import annotations

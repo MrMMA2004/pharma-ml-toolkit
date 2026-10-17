@@ -34,6 +34,16 @@ Direction conventions matter everywhere here: for ``LN_IC50``-style
 metrics *lower* means more sensitive, for pIC50-style metrics *higher*
 means more sensitive.  Every direction-sensitive function documents
 its assumption and exposes a switch.
+
+Examples
+--------
+>>> from pharmaml.biology.response import ln_ic50_to_pic50, pic50_to_ln_ic50
+>>> ln_ic50_to_pic50(0.0)        # LN_IC50 0 -> IC50 1 uM -> pIC50 6
+6.0
+>>> pic50_to_ln_ic50(6.0)        # ... and back
+0.0
+>>> round(ln_ic50_to_pic50(3.0), 3)   # IC50 ~20.1 uM
+4.697
 """
 
 from __future__ import annotations

@@ -596,8 +596,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--scaffold-hop", action="store_true", default=False,
         help="GA only: BREED-style scaffold-hop crossover -- cut two parents "
         "at a pair of homologous single bonds and recombine them "
-        "(fragments swapped, rings merged, or a linker atom transplanted "
-        "into a cut ring bond), so ring systems survive and the offspring's "
+        "(fragments swapped, rings merged, or a two-ended linker -- a "
+        "single atom or a short acyclic path -- transplanted into a cut "
+        "ring bond), so ring systems survive and the offspring's "
         "framework can differ from both parents",
     )
     gen_run.add_argument(

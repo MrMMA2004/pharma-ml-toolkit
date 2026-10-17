@@ -2256,3 +2256,175 @@ class TestScaffoldHopRingCuts:
         assert has_nn_bond, f"non-homologous seam assembly: {child}"
         again = scaffold_hop_crossover("C1CCNCC1", "C1COCCN1", random.Random(0))
         assert again == child  # the flip is deterministic, not accidental
+
+
+class TestScaffoldHopPathTransplants:
+    """Multi-atom linker transplants (round 100x-29): excise a *path*.
+
+    The 100x-28 transplant geometry excised a single two-ended linker
+    atom (an ether O, a methylene).  A whole short acyclic *path* -- an
+    ethylene bridge ``-CH2CH2-``, an oxyethylene ``-OCH2-``, a diethylene
+    ``-OCH2CH2O-`` -- is the same move with more atoms: the path is cut
+    loose from its two hosts and zipped into a cut ring bond of the other
+    parent, homologously (each seam atom must match its counterpart's
+    signature).  Ring expansion by 2-4 atoms: piperidine -> azocane,
+    piperidine + diethylene glycol -> 8/9-rings -- the ring-size axis of
+    scaffold morphing.  Flipped-only matches (path hosts matching the cut
+    bond's endpoints in reverse order) must excise the *reversed* path,
+    exactly like the flipped merge swaps dummy labels (100x-28 finding 2).
+    """
+
+    @staticmethod
+    def _ring_sizes(smiles: str) -> list[int]:
+        mol = rdkit.Chem.MolFromSmiles(smiles)
+        assert mol is not None
+        return sorted(len(ring) for ring in mol.GetRingInfo().AtomRings())
+
+    def test_two_atom_path_expands_ring_to_eight(self) -> None:
+        # piperidine x hexane: hexane's middle -CH2CH2- has homologous
+        # degree-2 CH2 hosts, so it transplants into a cut piperidine
+        # C-C bond -> an 8-ring azocane; the single-atom CH2 transplants
+        # (7-ring azepanes) stay available too
+        observed = set()
+        for seed in range(18):
+            child = scaffold_hop_crossover(
+                "C1CCNCC1", "CCCCCC", random.Random(seed)
+            )
+            assert child is not None, seed
+            sizes = self._ring_sizes(child)
+            assert sizes in ([7], [8]), (seed, child, sizes)
+            observed.update(sizes)
+            mol = rdkit.Chem.MolFromSmiles(child)
+            assert {a.GetSymbol() for a in mol.GetAtoms()} == {"C", "N"}
+        assert observed == {7, 8}  # the new geometry is actually reachable
+        again = scaffold_hop_crossover(
+            "C1CCNCC1", "CCCCCC", random.Random(5)
+        )
+        assert again is not None and self._ring_sizes(again) == [8]
+
+    def test_hetero_path_transplants_insert_oxygen_chains(self) -> None:
+        # piperidine x diethylene glycol: -CH2O- paths -> 8-rings,
+        # -CH2OCH2- paths -> 9-rings, the single O -> 7-ring: the ring
+        # grows along the linker alphabet, O always inside the ring
+        observed = set()
+        for seed in range(30):
+            child = scaffold_hop_crossover(
+                "C1CCNCC1", "OCCOCCO", random.Random(seed)
+            )
+            assert child is not None, seed
+            sizes = self._ring_sizes(child)
+            assert sizes in ([7], [8], [9]), (seed, child, sizes)
+            observed.update(sizes)
+            mol = rdkit.Chem.MolFromSmiles(child)
+            assert {a.GetSymbol() for a in mol.GetAtoms()} == {"C", "N", "O"}
+        assert observed == {7, 8, 9}
+        again = scaffold_hop_crossover(
+            "C1CCNCC1", "OCCOCCO", random.Random(0)
+        )
+        assert again is not None and self._ring_sizes(again) == [8]
+
+    def test_path_length_is_capped_at_four_atoms(self) -> None:
+        # triethylene glycol has a 6-atom maximal chain: the 5-atom
+        # middle path WOULD be homologous, but excisions are capped at
+        # four atoms, so no child may carry an 11-ring (6 + 5)
+        for seed in range(40):
+            child = scaffold_hop_crossover(
+                "C1CCNCC1", "OCCOCCOCCO", random.Random(seed)
+            )
+            if child is None:
+                continue
+            assert max(self._ring_sizes(child)) <= 10, (seed, child)
+
+    def test_linker_path_units_enumeration_is_pinned(self) -> None:
+        # white-box: maximal chains -> contiguous sublists of length 2..4,
+        # chains in order of their smallest atom, sublists left-to-right;
+        # hexane's chain is C2-C3-C4-C5 (methyls are degree-1 hosts)
+        from pharmaml.generative.scaffold_hop import _linker_path_units
+
+        units = _linker_path_units(rdkit.Chem.MolFromSmiles("CCCCCC"))
+        assert units == [
+            ((1, 2), ((6, 1, False, 0), (6, 2, False, 0))),
+            ((1, 2, 3), ((6, 1, False, 0), (6, 2, False, 0))),
+            ((1, 2, 3, 4), ((6, 1, False, 0), (6, 1, False, 0))),
+            ((2, 3), ((6, 2, False, 0), (6, 2, False, 0))),
+            ((2, 3, 4), ((6, 2, False, 0), (6, 1, False, 0))),
+            ((3, 4), ((6, 2, False, 0), (6, 1, False, 0))),
+        ]
+        # diethylene glycol: one 5-atom chain O-adjacent hosts included
+        deg = _linker_path_units(rdkit.Chem.MolFromSmiles("OCCOCCO"))
+        assert len(deg) == 9
+        assert all(len(path) <= 4 for path, _ in deg)
+        # a unit crossing a double bond (propanal's C-C(=O)) never excises
+        propanal = _linker_path_units(rdkit.Chem.MolFromSmiles("CCC=O"))
+        assert propanal == []
+
+    def test_excise_linker_path_builds_zippable_donor(self) -> None:
+        # white-box: the donor is [*:1]-path-[*:2] with map-numbered
+        # dummies at both ends; n == 1 degenerates to the atom linker
+        from pharmaml.generative.scaffold_hop import _excise_linker_path
+
+        deg = rdkit.Chem.MolFromSmiles("OCCOCCO")
+        excision = _excise_linker_path(deg, (2, 3))  # -CH2-O-
+        assert excision is not None
+        donor, host_sigs = excision
+        dummies = [a for a in donor.GetAtoms() if a.GetAtomicNum() == 0]
+        assert sorted(d.GetAtomMapNum() for d in dummies) == [1, 2]
+        # canonical rendering of a mapped-dummy chain (the map numbers
+        # break the terminal symmetry, so RDKit branches from the middle)
+        assert rdkit.Chem.MolToSmiles(donor) == "C(O[*:2])[*:1]"
+        assert host_sigs == ((6, 2, False, 0), (6, 2, False, 0))
+        # single-atom path: hosts in neighbour order, like _excise_linker_atom
+        single = _excise_linker_path(deg, (3,))
+        assert single is not None
+        assert single[1] == ((6, 2, False, 0), (6, 2, False, 0))
+        assert rdkit.Chem.MolToSmiles(single[0]) == "O([*:1])[*:2]"
+        # non-adjacent / repeating indices are rejected, never assembled
+        assert _excise_linker_path(deg, (1, 3)) is None
+        assert _excise_linker_path(deg, (3, 3)) is None
+
+    def test_flipped_path_candidate_assembles_homologously(self) -> None:
+        # piperazine x CNCOCCC, seed 3: the drawn candidate is a
+        # flipped-only match (path hosts N-then-C vs the cut bond's
+        # C-then-N), so the path must be excised REVERSED -- the ether O's
+        # donor host was a carbon, so in the child O must bond carbons
+        # only (an as-is excision would seam O to N: C1CNCCNOC1)
+        child = scaffold_hop_crossover("N1CCNCC1", "CNCOCCC", random.Random(3))
+        assert child is not None
+        assert child == "C1CNCOCCN1"  # probe on rdkit 2026.09.1
+        assert self._ring_sizes(child) == [8]
+        mol = rdkit.Chem.MolFromSmiles(child)
+        assert {a.GetSymbol() for a in mol.GetAtoms()} == {"C", "N", "O"}
+        for bond in mol.GetBonds():
+            pair = {bond.GetBeginAtom().GetSymbol(), bond.GetEndAtom().GetSymbol()}
+            assert pair != {"O", "N"}, f"non-homologous seam: {child}"
+        again = scaffold_hop_crossover("N1CCNCC1", "CNCOCCC", random.Random(3))
+        assert again == child  # the flip is deterministic, not accidental
+
+    def test_path_transplant_works_in_both_argument_orders(self) -> None:
+        # ring parent first or second: the path scan covers both sides
+        first = scaffold_hop_crossover("CNCOCCC", "N1CCNCC1", random.Random(3))
+        second = scaffold_hop_crossover("N1CCNCC1", "CNCOCCC", random.Random(3))
+        assert first is not None and second is not None
+        assert self._ring_sizes(first) == [8]
+        assert self._ring_sizes(second) == [8]
+
+    def test_ga_crossover_reaches_path_children(self) -> None:
+        # the GA's _crossover wires the path geometry through: seed 5
+        # draws a -CH2CH2- transplant (piperidine x hexane -> azocane)
+        optimizer = GeneticOptimizer(QedObjective(), crossover="scaffold_hop")
+        child = optimizer._crossover("C1CCNCC1", "CCCCCC", random.Random(5))
+        assert child is not None
+        assert self._ring_sizes(child) == [8]
+
+    def test_ga_hop_mode_absorbs_path_donors_deterministically(self) -> None:
+        # corpus with a saturated ring + a multi-atom linker donor: the
+        # structural GA stays a pure function of the seed
+        def run() -> GenerationResult:
+            return GeneticOptimizer(
+                QedObjective(), population_size=16, generations=3, seed=11,
+                crossover="scaffold_hop",
+            ).optimize(seed_smiles=["C1CCNCC1"], corpus=["C1CCNCC1", "OCCOCCO"])
+
+        first, second = run(), run()
+        assert first.smiles == second.smiles
+        assert all(canonical_smiles(smi) is not None for smi in first.smiles)
