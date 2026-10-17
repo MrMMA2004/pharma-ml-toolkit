@@ -385,6 +385,104 @@ class TestEvaluationEdgeCases:
         with pytest.raises(ModelError, match="y_test is empty"):
             evaluate_model(result.model, X.iloc[:0], y.iloc[:0], "classification")
 
+    def test_roc_auc_column_located_via_estimator_classes(self) -> None:
+        # 100x-34 fail-first: a perfect classifier whose predict_proba
+        # columns follow a NON-sorted classes_ order (col 0 = P('low'),
+        # col 1 = P('high') over {'high','low'} labels) reported
+        # roc_auc = 0.0 -- proba[:, 1] was assumed to be the positive
+        # class's column, but roc_auc_score's positive is y_true's
+        # sorted-LAST label. The column must be located through the
+        # estimator's own classes_.
+        X = np.array([[0.0], [1.0], [0.0], [1.0], [0.0], [1.0]])
+        y = np.array(["low", "high", "low", "high", "low", "high"])
+
+        class NonConformantPerfect:
+            classes_ = np.array(["low", "high"])  # not alphabetical
+
+            def predict(self, X):
+                return np.array(["low", "high", "low", "high", "low", "high"])
+
+            def predict_proba(self, X):
+                # col 0 = P(low), col 1 = P(high): perfect confidence
+                return np.array(
+                    [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0]]
+                )
+
+        report = evaluate_model(NonConformantPerfect(), X, y, "classification")
+        assert report.roc_auc == 1.0  # was 0.0 before the fix (inverted)
+
+    def test_roc_auc_conformant_estimator_unchanged(self) -> None:
+        # sklearn estimators lay proba columns out in sorted classes_
+        # order -- the column-location fix must not change their AUC.
+        X = np.array([[0.0], [1.0], [0.0], [1.0], [0.0], [1.0]])
+        y = np.array(["low", "high", "low", "high", "low", "high"])
+        clf = LogisticRegression().fit(X[:4], y[:4])
+        report = evaluate_model(clf, X, y, "classification")
+        assert report.roc_auc == 1.0
+
+    def test_roc_auc_classes_missing_positive_falls_back(self) -> None:
+        # estimator's classes_ shares no label with y_true (train/test
+        # label-set mismatch): the column lookup misses and the sklearn
+        # convention applies -- column 1 IS the score vector used. Pin
+        # that fallback semantics: column 1 separates the classes
+        # perfectly, column 0 anti-separates (a wrong 'use column 0'
+        # heuristic would report 0.0).
+        X = np.array([[0.0], [1.0], [0.0], [1.0]])
+        y = np.array(["low", "high", "low", "high"])
+
+        class UnrelatedClasses:
+            classes_ = np.array(["a", "b"])  # neither y_true label
+
+            def predict(self, X):
+                return np.array(["low", "high", "low", "high"])
+
+            def predict_proba(self, X):
+                # col 0 anti-separates, col 1 separates perfectly
+                return np.array([[0.1, 0.9], [0.9, 0.1], [0.1, 0.9], [0.9, 0.1]])
+
+        report = evaluate_model(UnrelatedClasses(), X, y, "classification")
+        assert report.roc_auc == 1.0  # column 1 used, per the fallback
+
+    def test_roc_auc_single_class_y_true_is_none(self) -> None:
+        # y_true carries a single label: roc_auc_score raises ("only one
+        # class present") and the warning path returns None -- never a
+        # crash.
+        X = np.array([[0.0], [1.0], [0.0], [1.0]])
+        y = np.array(["low", "low", "low", "low"])
+
+        class ConstantModel:
+            classes_ = np.array(["low", "high"])
+
+            def predict(self, X):
+                return np.array(["low", "low", "low", "low"])
+
+            def predict_proba(self, X):
+                return np.array([[0.9, 0.1], [0.9, 0.1], [0.9, 0.1], [0.9, 0.1]])
+
+        report = evaluate_model(ConstantModel(), X, y, "classification")
+        assert report.roc_auc is None
+
+    def test_report_labels_are_plain_python_scalars(self) -> None:
+        # 100x-34 (33-b finding #4): .tolist() used to sit INSIDE
+        # np.unique's argument, so np.unique re-wrapped it as an ndarray
+        # and sorted() yielded np.int64 entries; the union labels must
+        # be plain python scalars.
+        X = np.array([[0.0], [1.0], [0.0], [1.0]])
+        y = np.array([0, 1, 0, 1])
+
+        class IntPerfect:
+            classes_ = np.array([0, 1])
+
+            def predict(self, X):
+                return np.array([0, 1, 0, 1])
+
+            def predict_proba(self, X):
+                return np.array([[0.9, 0.1], [0.1, 0.9], [0.9, 0.1], [0.1, 0.9]])
+
+        report = evaluate_model(IntPerfect(), X, y, "classification")
+        assert report.labels == [0, 1]
+        assert all(not isinstance(v, np.generic) for v in report.labels)
+
 
 class TestRegistryEdgeCases:
     """Regression tests from the ml/models.py deep review (100x-14-a)."""

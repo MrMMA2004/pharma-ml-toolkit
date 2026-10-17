@@ -14,7 +14,8 @@ runs in seconds on a laptop CPU:
    blending several (one zero vetoes the whole molecule);
 3. **Optimise** --
    :class:`~pharmaml.generative.GeneticOptimizer` (a pragmatic SMILES
-   genetic algorithm: character mutation, splice **or** BREED-style
+   genetic algorithm: character, scaffold-preserving or ring-topology
+   mutation; splice **or** BREED-style
    scaffold-hop crossover -- homologous bridge cuts swap fragments,
    ring-bond cuts merge rings or transplant two-ended linkers (a single
    atom or a short acyclic path of up to four atoms), whole rings
@@ -24,7 +25,10 @@ runs in seconds on a laptop CPU:
    recombine too; tournament selection, elitism; CPU-strong,
    de novo *or* seeded from your own sample molecules -- the
    scaffold-hop crossover also works standalone via
-   :func:`~pharmaml.generative.scaffold_hop_crossover`) and/or
+   :func:`~pharmaml.generative.scaffold_hop_crossover`, and the
+   single-parent ring-size moves (contraction / expansion) via
+   :func:`~pharmaml.generative.ring_topology_moves` /
+   :func:`~pharmaml.generative.ring_topology_mutate`) and/or
    :class:`~pharmaml.generative.ReinventOptimizer`
    (REINVENT-style reinforcement learning: a character-level GRU prior
    trained on the corpus, fine-tuned by REINFORCE with a running
@@ -77,6 +81,7 @@ from .scoring import (
     SubstructureObjective,
     TpsaBandObjective,
 )
+from .topology import ring_topology_moves, ring_topology_mutate
 
 __all__ = [
     "DEFAULT_CORPUS",
@@ -93,6 +98,8 @@ __all__ = [
     "SmilesRnn",
     "SubstructureObjective",
     "TpsaBandObjective",
+    "ring_topology_moves",
+    "ring_topology_mutate",
     "run_genetic_optimization",
     "run_rl_optimization",
     "scaffold_hop_crossover",

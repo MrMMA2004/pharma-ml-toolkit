@@ -30,6 +30,17 @@ import pytest
 
 rdkit = pytest.importorskip("rdkit")
 
+# 100x-32-a: the generative package imports rdkit lazily (in-function, for
+# the DependencyError contracts), so ``import rdkit`` alone leaves the
+# ``rdkit.Chem`` attribute unset -- the 55 ``rdkit.Chem.*`` accesses below
+# worked only when an earlier test happened to trigger the submodule load.
+# Load the submodule once here and every attribute access is
+# order-independent (fail-first: the isolated runs of
+# TestScaffoldHopPathTransplants::test_linker_path_units_enumeration_is_
+# pinned and ::test_excise_linker_path_builds_zippable_donor crashed with
+# AttributeError: module 'rdkit' has no attribute 'Chem').
+pytest.importorskip("rdkit.Chem")
+
 from pharmaml.exceptions import DataValidationError, DependencyError
 from pharmaml.generative import (
     DEFAULT_CORPUS,
@@ -46,6 +57,8 @@ from pharmaml.generative import (
     SmilesRnn,
     SubstructureObjective,
     TpsaBandObjective,
+    ring_topology_moves,
+    ring_topology_mutate,
     run_genetic_optimization,
     run_rl_optimization,
     scaffold_hop_crossover,
@@ -2910,3 +2923,134 @@ class TestScaffoldHopRingInserts:
         first, second = run(), run()
         assert first.smiles == second.smiles
         assert all(canonical_smiles(smi) is not None for smi in first.smiles)
+
+
+# ---------------------------------------------------------------------------
+# Ring-topology mutations (100x-33)
+# ---------------------------------------------------------------------------
+class TestRingTopologyMutations:
+    """Contracts of the single-parent ring-size move set.
+
+    ``ring_topology_moves`` enumerates every distinct one-step mutant
+    (contraction / expansion over saturated single-bond rings, fused and
+    spiro atoms/bonds conservatively skipped, the 5..8 window enforced);
+    ``ring_topology_mutate`` draws one with the caller's rng or returns
+    ``None``; the GA's ``mutation="topology"`` mode wires the draw with
+    the character-mutation fallback.
+    """
+
+    def test_moves_pinned_piperidine(self) -> None:
+        # piperidine -> cyclopentane (contract the N), pyrrolidine
+        # (contract a CH2), azepane (expand) -- the whole ring-size axis
+        assert ring_topology_moves("C1CCNCC1") == [
+            "C1CCCC1",
+            "C1CCCNCC1",
+            "C1CCNC1",
+        ]
+
+    def test_moves_pinned_symmetric_and_capped(self) -> None:
+        assert ring_topology_moves("C1CCCCC1") == ["C1CCCC1", "C1CCCCCC1"]
+        assert ring_topology_moves("N1CCCC1") == ["C1CCNCC1"]  # 5-ring: expand only
+        # 8-ring: contract only -- expansion past the window is blocked
+        assert ring_topology_moves("N1CCCCCCC1") == ["C1CCCCCC1", "C1CCCNCC1"]
+
+    def test_moves_morpholine_heteroatom_contraction(self) -> None:
+        # removing the O -> pyrrolidine, the N -> tetrahydrofuran, a CH2
+        # -> the oxazolidine; expansion -> the 7-ring oxazepane
+        assert ring_topology_moves("C1COCCN1") == [
+            "C1CCNC1",
+            "C1CCOC1",
+            "C1CNCCOC1",
+            "C1COCN1",
+        ]
+
+    def test_aromatic_and_unsaturated_rings_untouched(self) -> None:
+        assert ring_topology_moves("c1ccccc1") == []  # aromatic: never touched
+        assert ring_topology_moves("C1=CCCCC1") == []  # unsaturated: never touched
+
+    def test_fused_systems_conservative(self) -> None:
+        # decalin: the 8 non-fused carbons all contract to the same
+        # hydrindane (symmetry dedup); non-shared bonds expand; the four
+        # fused atoms and the two shared bonds never move
+        assert ring_topology_moves("C1CCC2CCCCC2C1") == [
+            "C1CCC2CCCC2C1",
+            "C1CCC2CCCCC2CC1",
+        ]
+
+    def test_invalid_and_acyclic_input_is_empty(self) -> None:
+        assert ring_topology_moves("not-a-smiles") == []
+        assert ring_topology_moves("") == []
+        assert ring_topology_moves("CCO") == []
+
+    def test_ring_size_window_validated_and_respected(self) -> None:
+        with pytest.raises(DataValidationError, match="ring-size window"):
+            ring_topology_moves("C1CCCCC1", min_ring_size=2, max_ring_size=8)
+        with pytest.raises(DataValidationError, match="ring-size window"):
+            ring_topology_moves("C1CCCCC1", min_ring_size=5, max_ring_size=5)
+        # min=4 lets cyclopentane contract to cyclobutane
+        assert ring_topology_moves("C1CCCC1", min_ring_size=4) == [
+            "C1CCC1",
+            "C1CCCCC1",
+        ]
+        # max=6 blocks piperidine's azepane expansion, keeps contraction
+        assert ring_topology_moves("C1CCNCC1", max_ring_size=6) == [
+            "C1CCCC1",
+            "C1CCNC1",
+        ]
+
+    def test_mutate_deterministic_draw(self) -> None:
+        assert ring_topology_mutate("C1COCCN1", random.Random(0)) == "C1COCN1"
+        assert ring_topology_mutate("C1COCCN1", random.Random(0)) == "C1COCN1"
+
+    def test_mutate_none_contract(self) -> None:
+        assert ring_topology_mutate("CCO", random.Random(0)) is None
+        assert ring_topology_mutate("not-a-smiles", random.Random(0)) is None
+
+    def test_mutate_length_cap_filters_then_rejects(self) -> None:
+        # cap 7 keeps three of morpholine's four moves (the 9-char
+        # oxazepane is filtered out -- the draw changes accordingly)
+        assert (
+            ring_topology_mutate("C1COCCN1", random.Random(0), max_smiles_length=7)
+            == "C1CCOC1"
+        )
+        # cap 6 rejects every morpholine move
+        assert (
+            ring_topology_mutate("C1COCCN1", random.Random(0), max_smiles_length=6)
+            is None
+        )
+
+    def test_mutate_length_validation(self) -> None:
+        with pytest.raises(DataValidationError, match="max_smiles_length"):
+            ring_topology_mutate("C1CCNCC1", random.Random(0), max_smiles_length=0)
+
+    def test_ga_topology_mode_wiring_and_determinism(self) -> None:
+        ring_seeds = [s for s in DEFAULT_CORPUS if ring_topology_moves(s)][:12]
+
+        def run() -> GenerationResult:
+            return GeneticOptimizer(
+                QedObjective(),
+                population_size=24,
+                generations=6,
+                seed=7,
+                mutation="topology",
+            ).optimize(seed_smiles=ring_seeds)
+
+        first, second = run(), run()
+        assert first.metadata["mutation"] == "topology"
+        assert first.smiles == second.smiles  # deterministic given the seed
+        assert first.best_score > 0.0
+        assert all(canonical_smiles(smi) is not None for smi in first.smiles)
+
+    def test_ga_mode_validation_rejects_unknown_mutation(self) -> None:
+        with pytest.raises(DataValidationError, match="mutation must be"):
+            GeneticOptimizer(
+                QedObjective(), population_size=8, generations=1, mutation="rings"
+            )
+
+    def test_corpus_move_census_pinned(self) -> None:
+        # the 100x-33 census: 30 of the 244 corpus molecules carry viable
+        # ring-size moves, 133 distinct one-step mutants in total
+        reachable = sum(1 for s in DEFAULT_CORPUS if ring_topology_moves(s))
+        total = sum(len(ring_topology_moves(s)) for s in DEFAULT_CORPUS)
+        assert reachable == 30
+        assert total == 133

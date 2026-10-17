@@ -605,6 +605,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "framework can differ from both parents",
     )
     gen_run.add_argument(
+        "--topology", action="store_true", default=False,
+        help="GA only: ring-topology mutations -- each offspring undergoes "
+        "one ring contraction (an atom removed from a saturated ring, "
+        "its ring neighbours rejoined) or expansion (a methylene "
+        "inserted into a saturated single ring bond) within the 5..8 "
+        "ring-size window (piperidine <-> pyrrolidine/azepane, decalin "
+        "-> hydrindane); acyclic or aromatic-only parents fall back to "
+        "character mutation -- pair with --scaffold-hop for the full "
+        "structural move set",
+    )
+    gen_run.add_argument(
         "--seeds", default=None,
         help="seeded mode: CSV/TSV/Excel table with a SMILES column (a "
         "smiles/smile/canonical_smiles-style header is auto-detected; other "
@@ -1589,6 +1600,18 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             "crossover and applies to --method ga only (got --method "
             f"{args.method!r})"
         )
+    topology = bool(getattr(args, "topology", False))
+    if topology and args.method != "ga":
+        raise DataValidationError(
+            "--topology selects the GA's ring-topology mutation mode and "
+            f"applies to --method ga only (got --method {args.method!r})"
+        )
+    if topology and scaffold:
+        raise DataValidationError(
+            "--topology and --scaffold select different GA mutation modes "
+            "-- pick one (topology: ring-size moves; scaffold: Murcko "
+            "decoration resampling)"
+        )
 
     seeds = _generative_seed_smiles(args)
     objective, description = _generative_objective(args.recipe, seeds)
@@ -1599,6 +1622,8 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
         print("scaffold : on (Murcko framework kept, decorations resampled)")
     if scaffold_hop:
         print("hop      : on (BREED-style homologous-cut recombination)")
+    if topology:
+        print("topology : on (ring contraction/expansion mutations)")
     if seeds:
         print(f"seeds    : {len(seeds)} molecule(s) anchor the search")
 
@@ -1607,7 +1632,7 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             objective,
             population_size=args.population,
             generations=args.iterations,
-            mutation="scaffold" if scaffold else "uniform",
+            mutation="topology" if topology else ("scaffold" if scaffold else "uniform"),
             crossover="scaffold_hop" if scaffold_hop else "splice",
             seed=args.seed,
         ).optimize(seed_smiles=seeds)

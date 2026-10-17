@@ -15,6 +15,73 @@ Design changes vs. the originals:
 * Idempotency: existing output files are skipped unless overwritten.
 * Parallelism via ``ThreadPoolExecutor`` instead of spawning one CMD
   console per ligand and polling ``.done`` signal files.
+
+Examples
+--------
+>>> from pathlib import Path
+>>> from pharmaml.docking.workflow import DockingRunResult
+>>> DockingRunResult(Path("/tmp"), True, None, 1.5)   # a healthy single run
+DockingRunResult(directory=PosixPath('/tmp'), ok=True, log_file=None, seconds=1.5, error=None)
+
+>>> from pharmaml.docking.workflow import parse_vina_config
+>>> conf = Path("/tmp/pharmaml_doctest_vina.conf")
+>>> _ = conf.write_text(
+...     "# Vina config\\n"
+...     "receptor = r.pdbqt\\n"
+...     "\\n"
+...     "center_x = 1.5   # angstrom\\n"
+...     "size_x = 20\\n"
+...     "exhaustiveness = 8\\n"
+... )
+>>> parse_vina_config(conf)   # comments/blanks stripped, values stay strings
+{'receptor': 'r.pdbqt', 'center_x': '1.5', 'size_x': '20', 'exhaustiveness': '8'}
+>>> conf.unlink()
+>>> parse_vina_config(conf)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingError: config file not found: /tmp/pharmaml_doctest_vina.conf
+
+>>> from pharmaml.docking.workflow import run_autodock4
+>>> run_autodock4("/tmp/pharmaml_doctest_no_such_dir")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingError: docking directory not found: /tmp/pharmaml_doctest_no_such_dir
+>>> work = Path("/tmp/pharmaml_doctest_run")
+>>> work.mkdir()
+>>> run_autodock4(work)    # no r.gpf -> typed error before anything executes
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingError: missing r.gpf in /tmp/pharmaml_doctest_run
+>>> _ = (work / "r.gpf").write_text("# stub\\n")
+>>> _ = (work / "r.dpf").write_text("# stub\\n")
+>>> result = run_autodock4(work, timeout_s=10.0)  # engine absent -> not-ok
+>>> (result.ok, result.log_file, result.error is not None)
+(False, None, True)
+>>> (work / "r.gpf").unlink()
+>>> (work / "r.dpf").unlink()
+>>> work.rmdir()
+
+>>> from pharmaml.docking.workflow import batch_run_directories, run_vina_batch
+>>> batch_run_directories("/tmp/pharmaml_doctest_base", engine="vina")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingError: batch engine must be 'autodock4', got 'vina'
+>>> base = Path("/tmp/pharmaml_doctest_base")
+>>> base.mkdir()
+>>> batch_run_directories(base)    # no ligand sub-directories inside
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingError: no ligand sub-directories found under /tmp/pharmaml_doctest_base
+>>> base.rmdir()
+>>> conf = Path("/tmp/pharmaml_doctest_batch.conf")
+>>> _ = conf.write_text("receptor = pharmaml_doctest_rec.pdbqt\\n")
+>>> _ = (conf.parent / "pharmaml_doctest_rec.pdbqt").write_text("REMARK stub\\n")
+>>> run_vina_batch(conf, "/tmp/pharmaml_doctest_missing_ligs")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingError: ligands directory not found: /tmp/pharmaml_doctest_missing_ligs
+>>> conf.unlink()
+>>> (conf.parent / "pharmaml_doctest_rec.pdbqt").unlink()
 """
 
 from __future__ import annotations

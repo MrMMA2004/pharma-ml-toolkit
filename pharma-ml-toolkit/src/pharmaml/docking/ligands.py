@@ -36,6 +36,7 @@ Examples
 >>> check = check_torsion_consistency(mgl)   # auto: REMARKs present -> MGLTools rule
 >>> (check.torsdof, check.active_remarks, check.branches, check.status())
 (2, 2, 2, 'OK')
+>>> mgl.unlink(missing_ok=True)
 
 >>> meeko = Path("/tmp/pharmaml_doctest_torsion_meeko.pdbqt")
 >>> _ = meeko.write_text("BRANCH 1 2\\nBRANCH 3 4\\nTORSDOF 2\\n")
@@ -43,6 +44,7 @@ Examples
 'OK'
 >>> check_torsion_consistency(meeko, convention="mgltools").status()
 'MISMATCH'
+>>> meeko.unlink(missing_ok=True)
 
 >>> library_csv = Path("/tmp/pharmaml_doctest_ligands.csv")
 >>> _ = library_csv.write_text("name,smiles\\nethanol,CCO\\nbroken,C1CC\\n")
@@ -53,6 +55,7 @@ Examples
 ['valid', 'invalid']
 >>> library.invalid_frame["error"].tolist()
 ['RDKit could not parse this SMILES']
+>>> library_csv.unlink(missing_ok=True)
 
 >>> check_torsion_consistency("ligand.pdbqt", convention="vina")
 Traceback (most recent call last):

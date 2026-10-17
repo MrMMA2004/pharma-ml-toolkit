@@ -9,6 +9,50 @@ References
        dose-effect relationship: clinical application of
        pharmacokinetic-pharmacodynamic models." Clin.
        Pharmacokinet. 6 (1981): 429-453.
+
+Examples
+--------
+>>> from pharmaml.pharma.pd import emax_effect, inhibitory_emax_effect
+>>> emax_effect(0.0, e0=10.0, emax=5.0, ec50=2.0)     # C = 0 -> baseline
+10.0
+>>> emax_effect(2.0, e0=10.0, emax=5.0, ec50=2.0)     # C = EC50 -> E0 + Emax/2
+12.5
+>>> emax_effect([0.0, 2.0, 18.0], e0=10.0, emax=5.0, ec50=2.0)  # approaching 15
+array([10. , 12.5, 14.5])
+>>> inhibitory_emax_effect([0.0, 5.0], e0=100.0, imax=40.0, ic50=5.0)  # C=IC50
+array([100.,  80.])
+
+>>> from pharmaml.pharma.pd import linear_effect, sigmoid_emax_effect
+>>> sigmoid_emax_effect(2.0, e0=10.0, emax=5.0, ec50=2.0, hill=3.0)  # EC50 pivot
+12.5
+>>> sigmoid_emax_effect(1.0, e0=10.0, emax=5.0, ec50=2.0, hill=2.0)  # steeper
+11.0
+>>> sigmoid_emax_effect(1.0, 10.0, 5.0, 2.0, hill=1.0) == emax_effect(1.0, 10.0, 5.0, 2.0)
+True
+>>> linear_effect([0.0, 1.0], slope=2.0)
+array([0., 2.])
+
+>>> from pharmaml.pharma.pd import ec50_for_target_effect, effect_table
+>>> ec50_for_target_effect(12.5, ec50=2.0, e0=10.0, emax=5.0)  # inverse of Emax
+2.0
+>>> round(ec50_for_target_effect(14.0, ec50=2.0, e0=10.0, emax=5.0), 9)  # f = 0.8
+8.0
+>>> ec50_for_target_effect(10.0, ec50=2.0, e0=10.0, emax=5.0)   # E0 at C = 0
+0.0
+>>> effect_table([0.0, 2.0, 8.0], e0=10.0, emax=5.0, ec50=2.0)
+{'concentration': [0.0, 2.0, 8.0], 'effect': [10.0, 12.5, 14.0]}
+>>> emax_effect(-1.0, e0=10.0, emax=5.0, ec50=2.0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: concentrations must be non-negative
+>>> emax_effect(float("nan"), e0=10.0, emax=5.0, ec50=2.0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: concentrations must be finite numbers (NaN/inf rejected)
+>>> emax_effect(1.0, e0=10.0, emax=5.0, ec50=0.0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: ec50 must be > 0 (or >= 0 if allow_zero), got 0.0
 """
 
 from __future__ import annotations

@@ -7,7 +7,11 @@ CPU-friendly and deterministic given ``seed``:
 * **mutation** = random character substitution / insertion / deletion,
   followed by RDKit sanitisation and re-canonicalisation (invalid mutants
   are discarded) -- OR, in ``mutation="scaffold"`` mode, a
-  scaffold-preserving decoration resampling (see :func:`_scaffold_mutate`);
+  scaffold-preserving decoration resampling (see :func:`_scaffold_mutate`)
+  -- OR, in ``mutation="topology"`` mode, a ring-size move drawn from
+  :func:`~pharmaml.generative.ring_topology_mutate` (ring contraction /
+  expansion, the single-parent medchem counterpart of the scaffold-hop
+  crossover's ring-topology geometry);
 * **crossover** = single-point splice of two parents, sanitised the same
   way -- OR, with ``crossover="scaffold_hop"``, a BREED-style
   homologous-cut recombination (see
@@ -67,6 +71,7 @@ from ._utils import canonical_smiles, require_rdkit, smiles_alphabet
 from .corpus import DEFAULT_CORPUS
 from .result import GenerationResult
 from .scaffold_hop import scaffold_hop_crossover
+from .topology import ring_topology_mutate
 
 __all__ = ["GeneticOptimizer", "run_genetic_optimization"]
 
@@ -391,7 +396,18 @@ class GeneticOptimizer:
         corpus-derived resampling with ``Chem.molzip`` re-assembly).
         Parents without a Murcko scaffold (acyclic molecules) or without
         decorations (bare ring systems) fall back to the uniform
-        mutation -- never an error.
+        mutation -- never an error.  ``"topology"`` --
+        **ring-size mutation**: each offspring undergoes one ring
+        contraction (an atom removed from a saturated ring, its ring
+        neighbours rejoined) or expansion (a methylene inserted into a
+        saturated single ring bond), drawn from
+        :func:`~pharmaml.generative.ring_topology_moves` (only fully
+        saturated single-bond rings are touched; fused/spiro atoms and
+        shared bonds stay put; the ring-size window is 5..8 by
+        default).  Acyclic or aromatic-only parents fall back to the
+        uniform mutation -- never an error.  Pair with
+        ``crossover="scaffold_hop"`` for the full structural move set:
+        recombination plus ring-size mutation.
     crossover:
         ``"splice"`` (default) -- the classic single-point character
         splice.  ``"scaffold_hop"`` -- **BREED-style structural
@@ -496,9 +512,10 @@ class GeneticOptimizer:
             raise DataValidationError(
                 f"max_smiles_length must be >= 20, got {max_smiles_length}"
             )
-        if mutation not in ("uniform", "scaffold"):
+        if mutation not in ("uniform", "scaffold", "topology"):
             raise DataValidationError(
-                f"mutation must be 'uniform' or 'scaffold', got {mutation!r}"
+                f"mutation must be 'uniform', 'scaffold' or 'topology', "
+                f"got {mutation!r}"
             )
         if crossover not in ("splice", "scaffold_hop"):
             raise DataValidationError(
@@ -529,13 +546,22 @@ class GeneticOptimizer:
         rng: random.Random,
         decoration_pool: Sequence[str] = (),
     ) -> str:
-        """Mutate ``smiles``: decoration resampling or character edits.
+        """Mutate ``smiles``: ring-size move, decoration resampling or character edits.
 
-        In ``scaffold`` mode (with a non-empty decoration pool) the
-        scaffold-preserving operator fires first; ``None`` returns (acyclic
-        parent, RDKit failure, over-length mutant) fall through to the
-        classic character-level mutation so evolution never stalls.
+        In ``topology`` mode a ring contraction / expansion is drawn
+        first (``None`` returns -- acyclic parent, aromatic-only rings,
+        over-length mutant -- fall through).  In ``scaffold`` mode (with
+        a non-empty decoration pool) the scaffold-preserving operator
+        fires next; ``None`` returns (acyclic parent, RDKit failure,
+        over-length mutant) fall through to the classic character-level
+        mutation so evolution never stalls.
         """
+        if self.mutation == "topology":
+            mutant = ring_topology_mutate(
+                smiles, rng, max_smiles_length=self.max_smiles_length
+            )
+            if mutant is not None:
+                return mutant
         if decoration_pool:
             mutant = _scaffold_mutate(smiles, decoration_pool, rng, self.max_smiles_length)
             if mutant is not None:

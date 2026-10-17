@@ -4,6 +4,56 @@ The original scripts called ``pd.read_csv``/``pd.read_excel`` directly
 with hardcoded Windows paths scattered across ~30 files.  This module
 centralises all persistence so filename handling, extension dispatch
 and error reporting live in exactly one place.
+
+Examples
+--------
+>>> import pandas as pd
+>>> from pharmaml.utils.io import read_table, write_table
+>>> frame = pd.DataFrame({"ligand": ["aspirin", "ibuprofen"], "ic50": [3.4, 5.6]})
+>>> out = write_table(frame, "/tmp/pharmaml_doctest_round.csv")
+>>> out
+PosixPath('/tmp/pharmaml_doctest_round.csv')
+>>> back = read_table(out)
+>>> back["ligand"].tolist(), back["ic50"].tolist()
+(['aspirin', 'ibuprofen'], [3.4, 5.6])
+>>> out.unlink()
+
+>>> from pathlib import Path
+>>> from pharmaml.utils.io import read_table
+>>> semi = Path("/tmp/pharmaml_doctest_semi.csv")
+>>> _ = semi.write_text("ligand;pic50\\naspirin;3.2\\nibuprofen;4.1\\n")
+>>> frame = read_table(semi)     # semicolon sniffed, not one mangled column
+>>> frame.shape, list(frame.columns)
+((2, 2), ['ligand', 'pic50'])
+>>> frame["pic50"].tolist()
+[3.2, 4.1]
+>>> semi.unlink()
+>>> read_table(semi)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Input file not found: /tmp/pharmaml_doctest_semi.csv
+
+>>> from pharmaml.utils.io import safe_filename
+>>> safe_filename("Ligand 1: active/v2")   # unsafe runs collapse to one "_"
+'Ligand_1_active_v2'
+>>> safe_filename("CON.csv")               # Windows reserved device name
+'_CON.csv'
+>>> safe_filename("...")                   # dots-only -> fallback
+'unnamed'
+>>> safe_filename("ligand (1).sdf")
+'ligand_1_.sdf'
+
+>>> import shutil
+>>> from pharmaml.utils.io import ensure_directory, write_table
+>>> frame = pd.DataFrame({"smiles": ["CCO"]})
+>>> out = write_table(frame, "/tmp/pharmaml_doctest_profile.dat")
+>>> out                              # unknown extension falls back to CSV
+PosixPath('/tmp/pharmaml_doctest_profile.csv')
+>>> out.unlink()
+>>> runs = ensure_directory("/tmp/pharmaml_doctest_nested/runs/lig1")
+>>> runs.is_dir()
+True
+>>> shutil.rmtree("/tmp/pharmaml_doctest_nested")
 """
 
 from __future__ import annotations

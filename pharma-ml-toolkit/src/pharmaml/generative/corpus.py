@@ -32,6 +32,41 @@ Design rationale
 Every entry is the exact output of ``Chem.MolToSmiles`` for its molecule
 (canonical form); ``tests/test_generative.py`` re-verifies validity,
 canonicity and deduplication on every run.
+
+Examples
+--------
+>>> from pharmaml.generative import DEFAULT_CORPUS
+>>> len(DEFAULT_CORPUS), len(set(DEFAULT_CORPUS))   # no duplicates
+(244, 244)
+>>> DEFAULT_CORPUS[0]                        # aspirin anchors the corpus
+'CC(=O)Oc1ccccc1C(=O)O'
+>>> "CCO" in DEFAULT_CORPUS                  # ethanol is part of the vocabulary
+True
+>>> type(DEFAULT_CORPUS).__name__            # immutable: safe package default
+'tuple'
+
+>>> from rdkit import Chem
+>>> from rdkit.Chem import Descriptors
+>>> mols = [Chem.MolFromSmiles(s) for s in DEFAULT_CORPUS]
+>>> all(mol is not None for mol in mols)     # every entry parses
+True
+>>> all(Chem.MolToSmiles(mol) == s for s, mol in zip(DEFAULT_CORPUS, mols))
+True
+>>> any("@" in s for s in DEFAULT_CORPUS)    # stereo-free by design
+False
+>>> min(len(s) for s in DEFAULT_CORPUS), max(len(s) for s in DEFAULT_CORPUS)
+(3, 48)
+>>> weights = [Descriptors.MolWt(mol) for mol in mols]
+>>> round(min(weights), 2), round(max(weights), 2)   # the 46-365 Da envelope
+(46.07, 365.41)
+
+>>> import pandas as pd
+>>> from pharmaml.utils.io import read_table, write_table
+>>> frame = pd.DataFrame({"smiles": list(DEFAULT_CORPUS[:3])})
+>>> out = write_table(frame, "/tmp/pharmaml_doctest_corpus.csv")
+>>> read_table(out)["smiles"].tolist()       # aspirin, paracetamol, ibuprofen
+['CC(=O)Oc1ccccc1C(=O)O', 'CC(=O)Nc1ccc(O)cc1', 'CC(C)Cc1ccc(C(C)C(=O)O)cc1']
+>>> out.unlink()
 """
 
 from __future__ import annotations

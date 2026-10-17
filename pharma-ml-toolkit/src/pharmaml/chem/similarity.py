@@ -6,6 +6,55 @@ separated from the *chemistry* (building fingerprints).  The pure
 functions run on any bit representation and are unit-tested without
 RDKit; the RDKit-backed scan functions build fingerprints then reuse
 the same math.
+
+Examples
+--------
+>>> from pharmaml.chem.similarity import (
+...     tanimoto_from_bitarrays, tanimoto_from_sets)
+>>> tanimoto_from_sets({"donor", "aromatic", "acid"}, {"donor", "aromatic", "base"})
+0.5
+>>> tanimoto_from_sets(set(), set())       # both empty -> identical
+1.0
+>>> tanimoto_from_sets({"donor"}, set())   # one empty -> nothing in common
+0.0
+>>> tanimoto_from_bitarrays([1, 1, 0], [1, 0, 0])  # the same math on bits
+0.5
+>>> tanimoto_from_bitarrays([1, 0], [1, 0, 0])     # unequal lengths rejected
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: bit arrays must have equal length, got (2,) vs (3,)
+
+>>> import numpy as np
+>>> from pharmaml.chem.similarity import tanimoto_matrix
+>>> reference = np.array([[1, 1, 0, 0], [1, 0, 0, 0]])
+>>> targets = np.array([[1, 1, 0, 0], [0, 0, 1, 1], [0, 0, 0, 0]])
+>>> sims = tanimoto_matrix(reference, targets)
+>>> sims.shape, sims.dtype.name
+((2, 3), 'float64')
+>>> sims.tolist()   # identical -> 1; disjoint or one-sided-empty -> 0; subset -> 0.5
+[[1.0, 0.0, 0.0], [0.5, 0.0, 0.0]]
+
+>>> from pharmaml.chem.similarity import similarity_scan
+>>> scan = similarity_scan(["CCO"], ["CCO", "CCC", "c1ccccc1O"], threshold=0.25)
+>>> scan["target"].tolist(), scan["target_index"].tolist()  # phenol is dropped
+(['CCO', 'CCC'], [0, 1])
+>>> scan["similarity"].tolist()   # kept at >= threshold, best first
+[1.0, 0.25]
+>>> similarity_scan(["CCO"], ["CCO"], threshold=1.5)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: threshold must be within [0, 1], got 1.5
+
+>>> from pharmaml.chem.similarity import top_matches
+>>> matches = top_matches("CCO", ["CCO", "CCC", "c1ccccc1O", "CO"], k=3)
+>>> matches["target"].tolist()
+['CCO', 'CO', 'CCC']
+>>> [round(v, 4) for v in matches["similarity"]]   # ethanol > methanol > propane
+[1.0, 0.3333, 0.25]
+>>> top_matches("CCO", ["CCO"], k=0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: k must be >= 1, got 0
 """
 
 from __future__ import annotations

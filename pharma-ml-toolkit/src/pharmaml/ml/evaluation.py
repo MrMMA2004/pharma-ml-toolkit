@@ -4,6 +4,72 @@ The legacy scripts printed ``classification_report`` to stdout and
 immediately dumped PNG/PDF files; this module returns typed report
 objects (dataclasses) that callers can print, serialise, or feed into
 report generators -- printing is a one-line convenience.
+
+Examples
+--------
+>>> import numpy as np
+>>> from pharmaml.ml.evaluation import evaluate_model
+>>> class EchoClassifier:  # toy fitted estimator echoing a fixed vector
+...     def __init__(self, predictions):
+...         self._preds = np.asarray(predictions)
+...     def predict(self, X):
+...         return self._preds[: len(X)]
+...     def predict_proba(self, X):
+...         pos = (self._preds[: len(X)] == 1).astype(float)
+...         return np.column_stack([1 - pos, pos])
+>>> y_true = [0, 0, 1, 1]
+>>> X_test = [[0.0], [1.0], [2.0], [3.0]]
+>>> report = evaluate_model(EchoClassifier(y_true), X_test, y_true, "classification")
+>>> report.accuracy, report.balanced_accuracy, report.mcc, report.roc_auc
+(1.0, 1.0, 1.0, 1.0)
+>>> report.confusion.tolist()               # rows: true label, columns: predicted
+[[2, 0], [0, 2]]
+>>> [int(v) for v in report.labels]         # union of true and predicted labels
+[0, 1]
+>>> str(report)                             # one-line presentation
+'accuracy=1.0000  balanced=1.0000  f1(macro)=1.0000  mcc=1.0000  roc_auc=1.0000  n=4'
+
+>>> report = evaluate_model(EchoClassifier([0, 1, 1, 1]), X_test, y_true, "classification")
+>>> report.accuracy, report.balanced_accuracy, round(report.mcc, 4), report.roc_auc
+(0.75, 0.75, 0.5774, 0.75)
+>>> report.confusion.tolist()               # one false positive (row 0, column 1)
+[[1, 1], [0, 2]]
+
+>>> class HardClassifier:  # toy estimator without predict_proba
+...     def __init__(self, predictions):
+...         self._preds = np.asarray(predictions)
+...     def predict(self, X):
+...         return self._preds[: len(X)]
+>>> evaluate_model(HardClassifier(y_true), X_test, y_true, "classification").roc_auc is None
+True
+
+>>> class OffsetRegressor:  # toy fitted estimator: predictions = features + offset
+...     def __init__(self, offset=1.0):
+...         self.offset = offset
+...     def predict(self, X):
+...         return np.asarray(X, dtype=float).ravel() + self.offset
+>>> y_reg = [1.0, 2.0, 3.0]
+>>> evaluate_model(OffsetRegressor(0.0), [[1.0], [2.0], [3.0]], y_reg, "regression").as_dict()
+{'rmse': 0.0, 'mae': 0.0, 'r2': 1.0, 'max_error': 0.0, 'n_samples': 3}
+>>> evaluate_model(OffsetRegressor(1.0), [[1.0], [2.0], [3.0]], y_reg, "regression").as_dict()
+{'rmse': 1.0, 'mae': 1.0, 'r2': -0.5, 'max_error': 1.0, 'n_samples': 3}
+>>> fitted = evaluate_model(OffsetRegressor(1.0), [[1.0], [2.0], [3.0]], y_reg,
+...                         "regression", keep_predictions=True)
+>>> fitted.predictions.tolist()             # kept for parity plots
+[2.0, 3.0, 4.0]
+
+>>> evaluate_model(OffsetRegressor(0.0), [[1.0]], [1.0], "banana")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: task must be 'classification' or 'regression', got 'banana'
+>>> evaluate_model(OffsetRegressor(0.0), [[1.0], [2.0]], [1.0, 2.0, 3.0], "regression")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: prediction length 2 != target length 3
+>>> evaluate_model(OffsetRegressor(0.0), [[]], [], "regression")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: y_test is empty — evaluate_model needs at least one held-out sample
 """
 
 from __future__ import annotations
@@ -147,12 +213,36 @@ def evaluate_model(
         )
 
     if task == "classification":
-        labels = sorted(np.unique(np.concatenate([y_true, y_pred]).tolist()))
+        # .tolist() lives OUTSIDE np.unique so labels are plain python
+        # scalars -- inside, np.unique re-wraps its input as an ndarray
+        # and sorted() then yields np.int64/np.str_ entries (100x-34,
+        # 33-b finding #4)
+        labels = sorted(np.unique(np.concatenate([y_true, y_pred])).tolist())
         try:
             if hasattr(model, "predict_proba"):
                 proba = model.predict_proba(X_test)
                 if proba.shape[1] == 2:
-                    roc_auc = float(roc_auc_score(y_true, proba[:, 1]))
+                    # 100x-34: locate the positive-class column instead of
+                    # assuming column 1.  roc_auc_score treats the
+                    # sorted-last label of y_true as positive; a conformant
+                    # sklearn estimator lays predict_proba columns out in
+                    # its own (sorted) classes_ order, so column 1 happens
+                    # to match -- but a custom estimator is free to expose
+                    # classes_ in its own order, and then a PERFECT
+                    # classifier reported AUC 0.0 (silently inverted; the
+                    # 100x-34 fail-first probe).  Index the column through
+                    # the estimator's own classes_ when it exposes one;
+                    # without classes_ the sklearn convention (column 1) is
+                    # the only information available.
+                    pos_col = 1
+                    model_classes = getattr(model, "classes_", None)
+                    if model_classes is not None and len(model_classes) == 2:
+                        pos_label = np.unique(y_true)[-1]
+                        for col, cls in enumerate(model_classes):
+                            if cls == pos_label:
+                                pos_col = col
+                                break
+                    roc_auc = float(roc_auc_score(y_true, proba[:, pos_col]))
                 else:
                     roc_auc = float(
                         roc_auc_score(y_true, proba, multi_class="ovr", labels=labels)

@@ -32,6 +32,47 @@ Differences to the rar originals:
 RDKit remains an optional dependency: both public functions import it
 lazily and raise an actionable
 :class:`~pharmaml.exceptions.DependencyError` when it is missing.
+
+Examples
+--------
+>>> from pharmaml.chem.standardize import (
+...     UNSUPPORTED_METALS, canonicalize_tautomer)
+>>> canonicalize_tautomer("CC(=O)CC(C)=O")   # the keto form ...
+'CC(=O)CC(C)=O'
+>>> canonicalize_tautomer("CC(O)=CC(C)=O")   # ... and its enol agree
+'CC(=O)CC(C)=O'
+>>> sorted(UNSUPPORTED_METALS)               # screened out by smiles_to_pdb
+['Co', 'Cu', 'Fe', 'Mn', 'Mo', 'Ni', 'W', 'Zn']
+>>> canonicalize_tautomer("not-a-smiles")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Cannot parse SMILES: 'not-a-smiles'
+
+>>> from pathlib import Path
+>>> from pharmaml.chem.standardize import smiles_to_pdb
+>>> pdb_path = Path("/tmp/pharmaml_doctest_standardize.pdb")
+>>> report = smiles_to_pdb("CCO", pdb_path, name="ETHANOL", num_confs=3)
+>>> (report.num_conformers, report.forcefield, report.num_atoms, report.num_bonds)
+(3, 'MMFF', 9, 8)
+>>> lines = pdb_path.read_text().splitlines()
+>>> lines[0]                                 # COMPND records the caller's name
+'COMPND    ETHANOL'
+>>> sum(1 for line in lines if line.startswith(("ATOM", "HETATM")))  # explicit H
+9
+>>> {line[60:66] for line in lines if line.startswith(("ATOM", "HETATM"))}
+{' 20.00'}
+>>> sum(1 for line in lines if line.startswith("CONECT"))   # connectivity
+3
+>>> pdb_path.unlink()
+
+>>> smiles_to_pdb("CCO", "/tmp/pharmaml_doctest_standardize.pdb", num_confs=0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: num_confs must be at least 1, got 0
+>>> smiles_to_pdb("C1CC", "/tmp/pharmaml_doctest_standardize.pdb")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Cannot parse SMILES: 'C1CC'
 """
 
 from __future__ import annotations

@@ -109,6 +109,8 @@ after adding new public functions.
 | `SmilesRnn` | class | Character-level GRU SMILES generator (CPU-only, torch optional). |
 | `SubstructureObjective` | class | Hard pharmacophore constraint: 1.0 when ``smarts`` matches. |
 | `TpsaBandObjective` | class | Gaussian band on topological polar surface area (Å²).  See |
+| `ring_topology_moves` | function | Every distinct one-step ring-size mutant of ``smiles`` (sorted). |
+| `ring_topology_mutate` | function | Draw one ring-size mutant of ``smiles`` with ``rng`` (or ``None``). |
 | `run_genetic_optimization` | function | One-call genetic optimisation (thin :class:`GeneticOptimizer` wrapper). |
 | `run_rl_optimization` | function | One-call RL optimisation (trains a prior from the corpus if needed). |
 | `scaffold_hop_crossover` | function | BREED-style crossover: homologous cuts, hybrid child. |

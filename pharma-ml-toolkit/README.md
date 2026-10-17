@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1339 tests).
+exceptions, input validation, and pytest coverage** (1359 tests).
 
 ---
 
@@ -93,7 +93,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1339 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 1359 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -267,7 +267,10 @@ laptop CPU:
 > mode's leaderboard) →
 > §7 **RL** (char-GRU prior loss curve + REINVENT-style fine-tuning with
 > early stop) → §8 the **novelty** anti-rediscovery recipe (honest
-> strange-chemistry trade-off) → §9 GA-vs-RL head-to-head → §10 leaderboard
+> strange-chemistry trade-off) → §9 the four-arm **GA-vs-RL head-to-head**
+> (de novo, seeded, structural-mode GA and RL — on this objective the
+> structural arm's framework recombinations win, 0.749 vs 0.699 seeded)
+> → §10 leaderboard
 > CSV + one-click visual bundle → §11 recap.
 
 The 12-drug seed table ships as `examples/data/seed_molecules.csv` — point
@@ -527,7 +530,8 @@ subpackage ships the whole story on a laptop CPU: a bundled curated corpus
 (`DEFAULT_CORPUS`, 244 canonical drug-like SMILES — aspirin, paracetamol, ibuprofen,
 caffeine, … plus a heterocycle/functional-group tour), an objective library, and two
 complementary optimisers. A runnable narrative lives in
-`examples/run_generative_design.py` (~10 s end to end), and the fully
+`examples/run_generative_design.py` (~15 s end to end, the GA running
+denovo / seeded / structural), and the fully
 **executed notebook** `examples/complete_generative_workflow.ipynb` walks
 every stage with committed outputs (see *Quickstart* above).
 
@@ -622,17 +626,32 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   re-zip would have to invent bond orders). Also usable standalone via
   `scaffold_hop_crossover(parent_a, parent_b, rng)`; deterministic; `None`
   (fall back) when no viable cut exists. Combine with `mutation="scaffold"`
-  for the full structural mode: framework recombination + decoration
-  resampling. Pinned demo: aspirin × naproxen →
+  (decoration resampling) or `mutation="topology"` (ring-size moves) for
+  the full structural mode. Pinned demo: aspirin × naproxen →
   `COc1ccc2cc(C(C)C(=O)C(=O)c3ccccc3OC(C)=O)ccc2c1` (one fragment per parent).
+* **Ring-topology mutations** (`ring_topology_moves` /
+  `ring_topology_mutate`, the GA's `mutation="topology"` mode): the
+  single-parent medchem moves — one atom removed from a saturated ring
+  with its neighbours rejoined (**contraction**: piperidine →
+  pyrrolidine, morpholine → pyrrolidine / tetrahydrofuran, decalin →
+  hydrindane) or one methylene inserted into a saturated single ring
+  bond (**expansion**: pyrrolidine → piperidine, piperidine → azepane).
+  Aromatic and unsaturated rings are never touched; fused/spiro atoms
+  and shared bonds stay put; the ring-size window is 5–8. Acyclic or
+  aromatic-only parents fall back to character mutation — never an
+  error. Pinned: piperidine's full move set is exactly
+  `{cyclopentane, pyrrolidine, azepane}` (contract the N, contract a
+  CH2, expand); 30 of the 244 corpus molecules carry viable moves (133
+  distinct one-step mutants).
 * **Method trade-offs, honestly:** the GA explores wider (hundreds of unique molecules
   per run, no extra dependency, seeded *and* de novo modes) while RL fine-tunes a learned
   prior and needs fewer evaluations to focus on high-scoring neighbourhoods — but costs a
   torch install and yields fewer unique hits at this scale. Run both, compare leaderboards.
 * CLI twins: `pharmaml generative run --method ga|rl --recipe qed|logp|druglike|similar|novel`
   (with `--seeds examples/data/seed_molecules.csv` for the "with some sample molecules"
-  mode; `--scaffold` switches the GA to scaffold-preserving mutations and
-  `--scaffold-hop` to the BREED-style crossover — e.g.
+  mode; `--scaffold` switches the GA to scaffold-preserving mutations,
+  `--scaffold-hop` to the BREED-style crossover and `--topology` to the
+  ring-size mutation mode — e.g.
   `pharmaml generative run --method ga --recipe novel --scaffold --scaffold-hop --seed 42`
   is the full structural mode) and `pharmaml generative corpus`.
 * Requires `pip install "pharmaml[chem]"`; the RNN/RL half additionally needs
@@ -854,7 +873,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1375 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1404 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

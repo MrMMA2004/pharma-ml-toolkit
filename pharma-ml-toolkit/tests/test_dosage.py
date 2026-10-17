@@ -70,7 +70,9 @@ class TestLegacyPaediatricRules:
     def test_youngs_rule_age_bounds(self) -> None:
         with pytest.raises(DataValidationError):
             youngs_rule(0.5, 500.0)
-        with pytest.raises(DataValidationError):
+        # post-cast rendering, consistent with the validate_positive
+        # family's message convention (100x-34)
+        with pytest.raises(DataValidationError, match="got 15.0"):
             youngs_rule(15, 500.0)
 
     def test_clarks_rule(self) -> None:
@@ -100,6 +102,13 @@ class TestTDM:
 
     def test_min_dose_floor(self) -> None:
         assert tdm_trough_adjustment(500.0, 30.0, 10.0, min_dose=250.0) == pytest.approx(250.0)
+
+    def test_min_dose_floor_returns_float(self) -> None:
+        # int min_dose used to pass through as int, violating the
+        # -> float contract (100x-34, 33-b finding #2)
+        clamped = tdm_trough_adjustment(500.0, 30.0, 10.0, min_dose=250)
+        assert clamped == 250.0
+        assert isinstance(clamped, float)
 
     def test_extreme_ratio_refused(self) -> None:
         with pytest.raises(DataValidationError, match="non-linear"):

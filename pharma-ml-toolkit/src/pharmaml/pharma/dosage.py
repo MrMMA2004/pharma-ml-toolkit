@@ -8,6 +8,65 @@ Every function is pure and defensive: parameters are range-checked
 with actionable :class:`~pharmaml.exceptions.DataValidationError`
 messages, because dosage math is exactly where silent errors become
 patient-safety incidents.
+
+Examples
+--------
+>>> from pharmaml.pharma.dosage import infusion_rate, loading_dose, maintenance_dose
+>>> maintenance_dose(10, 5, 12)            # CL * Css * tau / F
+600.0
+>>> maintenance_dose(10, 5, 12, f=0.5)     # halved bioavailability doubles it
+1200.0
+>>> loading_dose(50, 2)                    # Vd * C_target / F
+100.0
+>>> infusion_rate(10, 5)                   # R = CL * Css
+50.0
+>>> maintenance_dose(10, 5, 12, f=1.5)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: bioavailability F cannot exceed 1, got 1.5
+>>> maintenance_dose(-1, 5, 12)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: clearance must be > 0 (or >= 0 if allow_zero), got -1.0
+
+>>> from pharmaml.pharma.dosage import (
+...     bsa_mosteller, clarks_rule, dose_by_bsa, dose_by_weight, youngs_rule)
+>>> round(bsa_mosteller(170, 70), 4)       # sqrt(170 * 70 / 3600)
+1.8181
+>>> round(dose_by_bsa(100, 170, 70), 4)    # 100 mg/m2 over 1.8181 m2
+181.8119
+>>> dose_by_weight(2, 70)                  # 2 mg/kg for a 70 kg adult
+140.0
+>>> youngs_rule(4, 500)                    # 500 * 4 / (4 + 12)
+125.0
+>>> clarks_rule(75, 500)                   # 500 * 75 / 150
+250.0
+>>> youngs_rule(15, 500)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Young's rule applies to ages 1–12 years, got 15.0
+>>> bsa_mosteller(300, 70)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: height 300.0 cm is outside the plausible range
+
+>>> from pharmaml.pharma.dosage import renal_dose_adjustment, tdm_trough_adjustment
+>>> renal_dose_adjustment(500, 25)         # CrCl 25 of 100 -> quarter dose
+125.0
+>>> renal_dose_adjustment(500, 0)          # anuric: floored at 0.25 * CrCl_normal
+125.0
+>>> renal_dose_adjustment(500, 200)        # bidirectional: high clearance scales up
+1000.0
+>>> tdm_trough_adjustment(1000, 8, 15)     # linear kinetics: 1000 * 15 / 8
+1875.0
+>>> tdm_trough_adjustment(1000, 8, 15, min_dose=2000.0)
+2000.0
+>>> tdm_trough_adjustment(1000, 8, 15, min_dose=2000)   # int floor clamps to float
+2000.0
+>>> renal_dose_adjustment(500, 25, floor_fraction=0.0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: floor_fraction must be in (0, 1], got 0.0
 """
 
 from __future__ import annotations
@@ -162,7 +221,10 @@ def youngs_rule(child_age_years: float, adult_dose: float) -> float:
     """
     if not 1 <= child_age_years <= 12:
         raise DataValidationError(
-            f"Young's rule applies to ages 1–12 years, got {child_age_years}"
+            # post-cast rendering, consistent with the validate_positive
+            # family's message convention (100x-34: youngs pre-cast vs bsa
+            # post-cast was an inconsistency found by the 33-b probe)
+            f"Young's rule applies to ages 1–12 years, got {float(child_age_years)}"
         )
     validate_positive(adult_dose, "adult_dose")
     return adult_dose * child_age_years / (child_age_years + 12.0)
@@ -247,5 +309,7 @@ def tdm_trough_adjustment(
         )
     adjusted = current_dose * ratio
     if min_dose is not None and adjusted < min_dose:
-        adjusted = min_dose
+        # float() cast: an int min_dose used to pass through as int,
+        # violating the -> float contract (100x-34, 33-b finding #2)
+        adjusted = float(min_dose)
     return adjusted
