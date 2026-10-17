@@ -13,7 +13,9 @@ CPU-friendly and deterministic given ``seed``:
   homologous-cut recombination (see
   :func:`~pharmaml.generative.scaffold_hop_crossover`): both parents are
   cut at a pair of matching single acyclic bonds and the fragments
-  recombined cross-wise, so ring systems survive by construction and
+  recombined cross-wise, or at matching single ring bonds (rings merged
+  or a linker atom transplanted -- ring topology recombines too), so
+  ring systems survive by construction and
   the offspring can hop scaffolds.  The character splice is not used in
   ``mutation="scaffold"`` mode (it routinely destroys ring systems,
   defeating scaffold preservation); the structural scaffold-hop
@@ -388,10 +390,13 @@ class GeneticOptimizer:
         splice.  ``"scaffold_hop"`` -- **BREED-style structural
         recombination** via
         :func:`~pharmaml.generative.scaffold_hop_crossover`: both parents
-        are cut at a pair of homologous single acyclic bonds (matching
+        are cut at a pair of homologous bonds (matching
         atomic number / degree / aromaticity / formal charge at the
-        join) and the fragments recombined cross-wise with
-        ``Chem.molzip``.  Every fragment arrives intact, so ring systems
+        join) and recombined with ``Chem.molzip`` -- either a pair of
+        single acyclic bonds (fragments swapped cross-wise) or single
+        ring bonds (rings merged into one combined ring, or a two-ended
+        linker atom transplanted into a cut ring bond: ring
+        homologation).  Every fragment arrives intact, so ring systems
         survive by construction, and whenever the parents' frameworks
         span different fragments (biaryls, diaryl ethers, sulfonyl
         bridges) the offspring's framework differs from BOTH parents --

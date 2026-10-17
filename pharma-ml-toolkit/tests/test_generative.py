@@ -2104,3 +2104,155 @@ class TestScaffoldHopCrossover:
             QedObjective(), generations=2, seed=42, crossover="scaffold_hop"
         )
         assert result.metadata["crossover"] == "scaffold_hop"
+
+
+class TestScaffoldHopRingCuts:
+    """Ring-bond cuts (round 100x-28): merge + transplant geometries.
+
+    The BREED crossover historically cut *acyclic bridge* bonds only, so
+    ring *topology* never recombined.  The two new geometries:
+
+    * **merge** -- one single ring bond cut per parent, the two opened
+      rings zipped into one combined ring holding atoms from both;
+    * **transplant** -- one single ring bond cut in the ring parent, a
+      two-ended linker atom (acyclic, two single bonds, homologous
+      flanks) excised from the other parent and zipped into the cut:
+      ring expansion / homologation with one atom from the other parent.
+    """
+
+    @staticmethod
+    def _ring_sizes(smiles: str) -> list[int]:
+        mol = rdkit.Chem.MolFromSmiles(smiles)
+        assert mol is not None
+        return sorted(len(ring) for ring in mol.GetRingInfo().AtomRings())
+
+    def test_ring_merge_combines_both_parents_rings(self) -> None:
+        # cyclohexane x piperidine: every atom is in a ring, so the only
+        # viable geometry is the merge -> a single 12-ring, C + N, from
+        # both parents, deterministic per rng state
+        for seed in range(6):
+            child = scaffold_hop_crossover(
+                "C1CCCCC1", "C1CCNCC1", random.Random(seed)
+            )
+            assert child is not None
+            assert self._ring_sizes(child) == [12]
+            mol = rdkit.Chem.MolFromSmiles(child)
+            assert {a.GetSymbol() for a in mol.GetAtoms()} == {"C", "N"}
+            again = scaffold_hop_crossover(
+                "C1CCCCC1", "C1CCNCC1", random.Random(seed)
+            )
+            assert again == child
+
+    def test_ring_transplant_inserts_linker_atom(self) -> None:
+        # piperidine x diethyl ether: the ether oxygen is transplanted
+        # into a cut piperidine C-C bond -> a 7-ring oxazepane keeping
+        # the N (from A) and gaining the O (from B)
+        for seed in range(12):
+            child = scaffold_hop_crossover(
+                "C1CCNCC1", "CCOCC", random.Random(seed)
+            )
+            assert child is not None
+            assert self._ring_sizes(child) == [7]
+            mol = rdkit.Chem.MolFromSmiles(child)
+            syms = {a.GetSymbol() for a in mol.GetAtoms()}
+            assert syms == {"C", "N", "O"}  # provenance: A + B
+            assert all(a.GetAtomicNum() != 0 for a in mol.GetAtoms())
+            again = scaffold_hop_crossover(
+                "C1CCNCC1", "CCOCC", random.Random(seed)
+            )
+            assert again == child
+
+    def test_transplant_works_in_both_argument_orders(self) -> None:
+        # ring parent first or second: the scan covers both orientations
+        first = scaffold_hop_crossover("CCOCC", "C1CCNCC1", random.Random(3))
+        second = scaffold_hop_crossover("C1CCNCC1", "CCOCC", random.Random(3))
+        assert first is not None and second is not None
+        assert self._ring_sizes(first) == [7]
+        assert self._ring_sizes(second) == [7]
+
+    def test_transplant_from_thioether_and_amine_linkers(self) -> None:
+        # S linker -> 7-ring thiazepane; NH linker -> azepane: the
+        # geometry is linker-agnostic (any degree-2 acyclic atom with
+        # homologous flanks)
+        child_s = scaffold_hop_crossover("C1CCNCC1", "CCSCC", random.Random(0))
+        child_n = scaffold_hop_crossover("C1CCCCC1", "CCNCC", random.Random(0))
+        assert child_s is not None and self._ring_sizes(child_s) == [7]
+        assert child_n is not None and self._ring_sizes(child_n) == [7]
+        assert "S" in {a.GetSymbol() for a in rdkit.Chem.MolFromSmiles(child_s).GetAtoms()}
+
+    def test_aromatic_ring_bonds_are_never_cut(self) -> None:
+        # benzene's ring bonds are aromatic: not single-bond candidates,
+        # and benzene has no acyclic degree-2 linker either -> no geometry
+        assert scaffold_hop_crossover("c1ccccc1", "C1CCNCC1", random.Random(0)) is None
+        # purely aromatic parents stay on the classic bridge geometry
+        assert scaffold_hop_crossover("c1ccccc1", "c1ccncc1", random.Random(0)) is None
+
+    def test_ring_merge_respects_length_cap(self) -> None:
+        # two cyclododecanes: the only geometry is the 24-ring merge whose
+        # canonical SMILES (26 chars) cannot fit the 20-char floor cap
+        cyclododecane = "C1CCCCCCCCCCCC1"
+        for seed in range(4):
+            assert (
+                scaffold_hop_crossover(
+                    cyclododecane,
+                    cyclododecane,
+                    random.Random(seed),
+                    max_smiles_length=20,
+                )
+                is None
+            )
+
+    def test_ga_crossover_reaches_ring_cut_children(self) -> None:
+        # unit level: the GA's _crossover wires the operator's new ring
+        # geometries through (fallback contract: parent_a when None)
+        optimizer = GeneticOptimizer(QedObjective(), crossover="scaffold_hop")
+        child = optimizer._crossover("C1CCNCC1", "CCOCC", random.Random(5))
+        assert child is not None
+        assert self._ring_sizes(child) == [7]
+
+    def test_ga_hop_mode_absorbs_ring_parents_deterministically(self) -> None:
+        # corpus with a saturated ring + an acyclic linker donor: the
+        # structural GA runs (new geometries reachable) and stays a pure
+        # function of the seed
+        def run() -> GenerationResult:
+            return GeneticOptimizer(
+                QedObjective(), population_size=16, generations=3, seed=11,
+                crossover="scaffold_hop",
+            ).optimize(seed_smiles=["C1CCNCC1"], corpus=["C1CCNCC1", "CCOCC"])
+
+        first, second = run(), run()
+        assert first.smiles == second.smiles
+        assert all(canonical_smiles(smi) is not None for smi in first.smiles)
+
+    def test_dummy_bearing_parents_are_rejected_not_transplanted(self) -> None:
+        # a parent containing a bare dummy atom (*, atomic number 0) is
+        # parseable and connected -- but a dummy is NOT a transplantable
+        # linker: no child may ever carry an attachment point (round
+        # 100x-28 review finding 1)
+        for parents in (
+            ("C1CCNCC1", "CC*CC"),
+            ("CC*CC", "C1CCNCC1"),
+            ("C1CCCCC1", "*CC*"),
+        ):
+            for seed in range(4):
+                child = scaffold_hop_crossover(*parents, random.Random(seed))
+                assert child is None, (parents, seed, child)
+
+    def test_flipped_merge_candidate_assembles_homologously(self) -> None:
+        # piperidine x morpholine, seed 0: the drawn candidate is a
+        # flipped-only match (cut bonds stored N-C vs C-N) -- the merge
+        # must then join N-N and C-C seams (the homologous orientation),
+        # visible as an N-N bond in the merged ring; joining N-C / C-N
+        # would violate the module's signature-matching invariant
+        # (round 100x-28 review finding 2).  Probe on rdkit 2026.09.1.
+        child = scaffold_hop_crossover("C1CCNCC1", "C1COCCN1", random.Random(0))
+        assert child is not None
+        assert self._ring_sizes(child) == [12]
+        mol = rdkit.Chem.MolFromSmiles(child)
+        has_nn_bond = any(
+            {b.GetBeginAtom().GetAtomicNum(), b.GetEndAtom().GetAtomicNum()} == {7}
+            for b in mol.GetBonds()
+        )
+        assert has_nn_bond, f"non-homologous seam assembly: {child}"
+        again = scaffold_hop_crossover("C1CCNCC1", "C1COCCN1", random.Random(0))
+        assert again == child  # the flip is deterministic, not accidental

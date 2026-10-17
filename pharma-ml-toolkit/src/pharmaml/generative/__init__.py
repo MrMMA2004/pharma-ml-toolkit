@@ -15,7 +15,9 @@ runs in seconds on a laptop CPU:
 3. **Optimise** --
    :class:`~pharmaml.generative.GeneticOptimizer` (a pragmatic SMILES
    genetic algorithm: character mutation, splice **or** BREED-style
-   scaffold-hop crossover, tournament selection, elitism; CPU-strong,
+   scaffold-hop crossover -- homologous bridge cuts swap fragments,
+   ring-bond cuts merge rings or transplant linker atoms, so ring
+   *topology* recombines too; tournament selection, elitism; CPU-strong,
    de novo *or* seeded from your own sample molecules -- the
    scaffold-hop crossover also works standalone via
    :func:`~pharmaml.generative.scaffold_hop_crossover`) and/or
