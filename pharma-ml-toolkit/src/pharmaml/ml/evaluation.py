@@ -70,6 +70,26 @@ pharmaml.exceptions.ModelError: prediction length 2 != target length 3
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.ModelError: y_test is empty — evaluate_model needs at least one held-out sample
+>>> evaluate_model(EchoClassifier([0, 1, 0, 1]), X_test,
+...                [0.0, 1.0, float("nan"), 1.0], "classification")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: y_test contains 1 NaN value(s) — drop or impute the target before evaluating
+>>> evaluate_model(OffsetRegressor(0.0), [[1.0], [2.0], [3.0]], [1.0, float("inf"), 3.0],
+...                "regression")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: y_test contains 1 infinite value(s) — regression metrics need finite targets
+>>> evaluate_model(EchoClassifier([0, 1, 0, 1]), X_test,
+...                [0.0, 1.0, float("inf"), 1.0], "classification")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: y_test contains 1 infinite value(s) — classification metrics need finite targets
+>>> evaluate_model(EchoClassifier([0.0, 1.0, 0.0, float("-inf")]), X_test,
+...                [0.0, 1.0, 0.0, 1.0], "classification")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: model predictions contain 1 infinite value(s) — the estimator returned non-finite values
 """
 
 from __future__ import annotations
@@ -203,8 +223,9 @@ def evaluate_model(
     ------
     ModelError
         On invalid task, empty ``y_test``, prediction-length
-        mismatch, or classification label-type mismatch (a numeric
-        ``y_test`` with string predictions, or vice versa).
+        mismatch, NaN or ±inf values in ``y_test`` or the model
+        predictions (both tasks), or a label-type mismatch (a
+        numeric ``y_test`` with string predictions, or vice versa).
     """
     y_true = np.asarray(y_test)
     if y_true.size == 0:
@@ -220,20 +241,76 @@ def evaluate_model(
             f"prediction length {len(y_pred)} != target length {len(y_true)}"
         )
 
-    if task == "classification":
-        # 100x-36: a custom estimator that predicts string labels for a
-        # numeric y_test (or vice versa) used to surface as a RAW
-        # sklearn ``ValueError: Mix of label input types`` from deep
-        # inside the metric calls (fail-first /tmp/task36 probe) --
-        # name the mismatch instead, the house error contract.  The
-        # registry never hits this (its models are fitted on y itself);
-        # the guard is for direct evaluate_model callers.
-        if (y_true.dtype.kind in _NUMERIC_KINDS) != (y_pred.dtype.kind in _NUMERIC_KINDS):
+    # 100x-36: a custom estimator that predicts string labels for a
+    # numeric y_test (or vice versa) used to surface as a RAW sklearn
+    # ``ValueError: Mix of label input types`` from deep inside the
+    # metric calls (fail-first /tmp/task36 probe) -- name the mismatch
+    # instead, the house error contract.  The registry never hits this
+    # (its models are fitted on y itself); the guard is for direct
+    # evaluate_model callers.  100x-41-F hoisted it above the task
+    # branch: the mismatch is task-independent, and the regression
+    # metrics used to leak their own raw sklearn ``ValueError:
+    # dtype='numeric' is not compatible with arrays of bytes/strings``
+    # for the very same mistake (fail-first
+    # /tmp/task41f/probe_eval_labeltype.py).
+    if (y_true.dtype.kind in _NUMERIC_KINDS) != (y_pred.dtype.kind in _NUMERIC_KINDS):
+        raise ModelError(
+            "y_test labels and model predictions carry different label "
+            f"types ({y_true.dtype} vs {y_pred.dtype}): the estimator's "
+            "predict() must return the same label type it was fitted on"
+        )
+
+    # 100x-41-F: NaN in either vector used to surface as RAW sklearn
+    # ValueErrors in BOTH task paths -- ``Input y_true contains NaN.``
+    # / ``Input y_pred contains NaN.`` from the classification metrics,
+    # ``Input contains NaN`` and ``Input contains infinity or a value
+    # too large for dtype('float64')`` from the regression metrics
+    # (fail-first /tmp/task41f/probe_eval_nan.py) -- mirroring the NaN
+    # guard make_train_test_split already carries (preprocessing.py).
+    # Only float-kind arrays can hold NaN; string/int/bool targets are
+    # structurally immune.
+    if y_true.dtype.kind == "f":
+        n_nan = int(np.isnan(y_true).sum())
+        if n_nan:
             raise ModelError(
-                "y_test labels and model predictions carry different label "
-                f"types ({y_true.dtype} vs {y_pred.dtype}): the estimator's "
-                "predict() must return the same label type it was fitted on"
+                f"y_test contains {n_nan} NaN value(s) — drop or impute the "
+                "target before evaluating"
             )
+    if y_pred.dtype.kind == "f":
+        n_nan = int(np.isnan(y_pred).sum())
+        if n_nan:
+            raise ModelError(
+                f"model predictions contain {n_nan} NaN value(s) — the "
+                "estimator returned NaN"
+            )
+    # ±inf guard, both tasks.  100x-41-F scoped it to the regression
+    # task (rmse/mae/r2/max_error all die with the raw sklearn
+    # infinity ValueError); 100x-42-B closed the carried
+    # classification half: a float-kind y_test/y_pred with ±inf also
+    # trips sklearn's own infinity check inside type_of_target, so
+    # accuracy_score's _check_targets raises the raw ``Input y_true
+    # contains infinity or a value too large for dtype('float64')``
+    # before any pharmaml code can name it (fail-first
+    # /tmp/task42b/probe_eval_inf.py).  The task name interpolates
+    # into the first message, keeping 41-F's regression wording
+    # byte-identical; the prediction message is task-independent.
+    if task in ("classification", "regression"):
+        if y_true.dtype.kind == "f":
+            n_inf = int(np.isinf(y_true).sum())
+            if n_inf:
+                raise ModelError(
+                    f"y_test contains {n_inf} infinite value(s) — {task} "
+                    "metrics need finite targets"
+                )
+        if y_pred.dtype.kind == "f":
+            n_inf = int(np.isinf(y_pred).sum())
+            if n_inf:
+                raise ModelError(
+                    f"model predictions contain {n_inf} infinite value(s) — the "
+                    "estimator returned non-finite values"
+                )
+
+    if task == "classification":
         # .tolist() lives OUTSIDE np.unique so labels are plain python
         # scalars -- inside, np.unique re-wraps its input as an ndarray
         # and sorted() then yields np.int64/np.str_ entries (100x-34,

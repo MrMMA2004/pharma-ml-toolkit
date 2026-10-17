@@ -30,6 +30,18 @@ Examples
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: No valid SMILES found in the input
+>>> compute_descriptors([], progress=False)          # empty input -> typed error
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: smiles is empty -- pass at least one SMILES string
+
+>>> frame = compute_descriptors(["CCO", "[H]", "CCC"], progress=False)
+>>> list(frame.index), frame["SMILES"].tolist()      # zero-heavy-atom [H] dropped
+([0, 2], ['CCO', 'CCC'])
+>>> compute_descriptors(["[H]"], progress=False)    # every row failed -> typed error
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Descriptor computation failed for every valid molecule
 
 >>> from pharmaml.chem.descriptors import compute_fingerprints, compute_maccs
 >>> from pharmaml.chem.similarity import tanimoto_from_bitarrays
@@ -47,6 +59,10 @@ pharmaml.exceptions.DataValidationError: No valid SMILES found in the input
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: radius must be >= 0, got -1
+>>> compute_fingerprints(["CCO"], radius="2")        # non-int radius -> typed error
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: radius must be an integer >= 0, got '2'
 """
 
 from __future__ import annotations
@@ -151,18 +167,34 @@ def compute_descriptors(
         One row per *valid* molecule, indexed by the original position,
         with a ``SMILES`` column followed by descriptor columns.  Blank /
         whitespace-only SMILES count as invalid, like any other parse
-        failure.  Use :func:`compute_fingerprints` for bit/count
-        fingerprints instead.
+        failure.  For ``'rdkit_all'``, a molecule whose descriptor
+        computation raises is dropped the same way, with a warning naming
+        its original index -- e.g. zero-heavy-atom species such as ``[H]``
+        (RDKit's SPS descriptor divides by the heavy-atom count).  Use
+        :func:`compute_fingerprints` for bit/count fingerprints instead.
 
     Raises
     ------
     DependencyError
         If RDKit (or Mordred when selected) is not installed.
     DataValidationError
-        If no SMILES parses to a valid molecule, ``smiles`` is a bare
-        string, or ``descriptor_set`` is unknown.
+        If ``smiles`` is a bare string or empty, ``descriptor_set`` is
+        unknown, no SMILES parses to a valid molecule, or (for
+        ``'rdkit_all'``) descriptor computation fails for every valid
+        molecule.
     """
     smiles_list = _as_smiles_list(smiles, "smiles")
+    # Cheap validation BEFORE the parse loop (and before any progress-bar
+    # spin-up): an empty input is a caller bug rather than a parse outcome,
+    # and an unknown descriptor_set must not wait for a full parse to
+    # surface (error types unchanged -- only ordering and message quality).
+    if not smiles_list:
+        raise DataValidationError("smiles is empty -- pass at least one SMILES string")
+    if descriptor_set not in ("rdkit_all", "morgan", "mordred"):
+        raise DataValidationError(
+            "descriptor_set must be one of 'rdkit_all', 'morgan' or 'mordred', "
+            f"got {descriptor_set!r}"
+        )
     molecules, valid_idx, failures = _smiles_to_molecules(smiles_list)
     if failures:
         _LOG.warning("Dropping %d invalid SMILES: %s", len(failures), failures[:5])
@@ -206,14 +238,34 @@ def compute_descriptors(
     elif descriptor_set == "rdkit_all":
         from rdkit.Chem import Descriptors
 
-        for mol in iterator:
-            rows.append({name: func(mol) for name, func in Descriptors.descList})
+        # Per-molecule guard: some RDKit descriptors divide by the heavy-atom
+        # count (SPS), which is zero for species like "[H]"/"[H][H]" -- a
+        # single such molecule used to crash the whole batch with a raw
+        # ZeroDivisionError.  Drop the offending row with a warning naming
+        # its original index (the invalid-SMILES accounting style) and keep
+        # valid_idx aligned with the surviving rows.
+        kept_idx: list[int] = []
+        for orig_idx, mol in zip(valid_idx, iterator):
+            try:
+                rows.append({name: func(mol) for name, func in Descriptors.descList})
+            except Exception as exc:  # noqa: BLE001 — RDKit raises a zoo per molecule
+                _LOG.warning(
+                    "Dropping molecule at index %d (%r): descriptor computation "
+                    "failed (%s: %s)",
+                    orig_idx,
+                    smiles_list[orig_idx],
+                    type(exc).__name__,
+                    exc,
+                )
+                continue
+            kept_idx.append(orig_idx)
+        valid_idx = kept_idx
+        if not rows:
+            raise DataValidationError(
+                "Descriptor computation failed for every valid molecule"
+            )
         frame = pd.DataFrame(rows)
-    else:
-        raise DataValidationError(
-            "descriptor_set must be one of 'rdkit_all', 'morgan' or 'mordred', "
-            f"got {descriptor_set!r}"
-        )
+    # No else: descriptor_set membership is validated before parsing above.
 
     frame.insert(0, "SMILES", [str(smiles_list[i]) for i in valid_idx])
     frame.index = pd.Index(valid_idx, name="original_index")
@@ -238,9 +290,11 @@ def compute_fingerprints(
         ``'morgan'`` (ECFP-style), ``'rdkit'`` (path-based) or
         ``'atom_pair'`` fingerprint.
     radius:
-        Fingerprint radius for Morgan fingerprints.
+        Fingerprint radius for Morgan fingerprints.  Must be an integer
+        (numpy integers are accepted); bools are rejected -- see Raises.
     n_bits:
-        Fold length for hashed fingerprints.
+        Fold length for hashed fingerprints.  Must be an integer in
+        ``(0, 65536]`` (numpy integers are accepted); bools are rejected.
     as_counts:
         Return count fingerprints instead of binary bits (Morgan only).
 
@@ -258,14 +312,31 @@ def compute_fingerprints(
     DependencyError
         If RDKit is not installed.
     DataValidationError
-        If ``smiles`` is a bare string, ``radius`` / ``n_bits`` are out
-        of range, or ``as_counts=True`` is combined with a ``kind``
-        other than ``'morgan'`` (the count flavour only exists for
-        Morgan fingerprints -- other kinds would silently return
-        binary bits instead).
+        If ``smiles`` is a bare string, ``radius`` / ``n_bits`` are not
+        integers or are out of range, or ``as_counts=True`` is combined
+        with a ``kind`` other than ``'morgan'`` (the count flavour only
+        exists for Morgan fingerprints -- other kinds would silently
+        return binary bits instead).  bools count as non-integers here by
+        decision: ``True``/``False`` are nonsense as a radius or bit
+        count, so they are rejected instead of being silently read as
+        ``1``/``0``.
     """
+    # Int-ness BEFORE the range checks: str/None leak a raw TypeError from
+    # the comparisons below, and floats pass them only to blow up inside
+    # the RDKit bindings with a Boost.Python ArgumentError (C++ signature
+    # dump).  bools are int subclasses but are rejected explicitly (see
+    # docstring); numpy integers are accepted and normalised to plain int
+    # (the Boost bindings reject numpy scalar types).
+    if not isinstance(radius, (int, np.integer)) or isinstance(radius, bool):
+        raise DataValidationError(f"radius must be an integer >= 0, got {radius!r}")
+    radius = int(radius)
     if radius < 0:
         raise DataValidationError(f"radius must be >= 0, got {radius}")
+    if not isinstance(n_bits, (int, np.integer)) or isinstance(n_bits, bool):
+        raise DataValidationError(
+            f"n_bits must be an integer in (0, 65536], got {n_bits!r}"
+        )
+    n_bits = int(n_bits)
     if not 0 < n_bits <= 65536:
         raise DataValidationError(f"n_bits out of range: {n_bits}")
     if as_counts and kind != "morgan":

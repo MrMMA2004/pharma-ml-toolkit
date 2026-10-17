@@ -29,7 +29,9 @@ runs in seconds on a laptop CPU:
    selection** -- ``operator_selection="adaptive"`` makes the GA learn
    in-run which operators pay off (credit-assigned softmax-with-floor
    draws over crossover-vs-clone, the crossover geometries and the
-   mutation families, with per-operator statistics in the result
+   mutation families, with per-operator statistics and the per-generation
+   operator-mix trajectory ``metadata["operator_trajectory"]`` (rendered
+   by :func:`pharmaml.viz.plot_operator_trajectory`) in the result
    metadata; CLI ``--adaptive-operators``); CPU-strong,
    de novo *or* seeded from your own sample molecules -- the
    scaffold-hop crossover also works standalone via

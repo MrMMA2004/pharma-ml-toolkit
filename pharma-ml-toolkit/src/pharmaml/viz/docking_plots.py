@@ -212,8 +212,13 @@ def _energy_series(summary: pd.DataFrame, energy_column: str | None) -> tuple[pd
             f"no energy column found (looked for '{_ENERGY_COLUMN}' / "
             f"'{_TOP_ENERGY_COLUMN}'); available: {list(summary.columns)}"
         )
-    series = pd.to_numeric(summary[column], errors="coerce").dropna()
-    folders = summary.loc[series.index, "folder"]
+    numeric = pd.to_numeric(summary[column], errors="coerce")
+    mask = numeric.notna()
+    # Boolean-mask selection, NOT label lookup: with a duplicated frame
+    # index (the classic append-a-re-run concat) `.loc[series.index]`
+    # EXPANDS the repeated labels, misaligning folders vs energies.
+    series = numeric[mask]
+    folders = summary.loc[mask, "folder"]
     if series.empty:
         raise DataValidationError(
             f"column {column!r} has no numeric values (check the scan status column)"
@@ -275,7 +280,9 @@ def plot_top_ligands(
     folders, energies = _energy_series(summary, energy_column)
     frame = pd.DataFrame({"ligand": [str(name) for name in folders],
                           "energy": energies.to_numpy(dtype=float)})
-    frame = frame.sort_values("energy", ascending=True).head(
+    # kind="stable": ties resolve first-declared-wins — the default
+    # quicksort cut is an arbitrary block from the middle of the frame at scale
+    frame = frame.sort_values("energy", ascending=True, kind="stable").head(
         top_n if top_n and top_n > 0 else len(frame)
     )
     frame = frame.iloc[::-1]  # strongest binder at the top of the axis

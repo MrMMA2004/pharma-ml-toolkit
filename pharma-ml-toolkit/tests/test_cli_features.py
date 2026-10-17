@@ -1077,3 +1077,74 @@ class TestMlTrainHelp:
         out = capsys.readouterr().out
         assert "plots/report output directory" in out
         assert "always saved under ./artifacts/" in out
+
+
+class TestGenerativeRunPlotFlag:
+    """`generative run --plot <path>`: the adaptive run's trajectory figure."""
+
+    def test_plot_on_adaptive_run_writes_png(self, tmp_path, capsys):
+        # 100x-44-A: --adaptive-operators + --plot saves the run's
+        # operator-trajectory figure (plot_operator_trajectory) via
+        # save_figure -- the chem compare --figure idiom on the GA path.
+        figure = tmp_path / "operators.png"
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "qed", "--adaptive-operators",
+            "--iterations", "4", "--population", "12", "--seed", "42",
+            "--top", "3", "--plot", str(figure),
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "adaptive : on" in out
+        assert "operators.png" in out  # the artifact path is echoed back
+        assert figure.is_file() and figure.stat().st_size > 1_000
+        assert figure.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"  # PNG magic
+        # matplotlib figures must not leak between CLI invocations
+        import matplotlib.pyplot as plt
+
+        assert plt.get_fignums() == []
+
+    def test_plot_on_uniform_run_is_an_actionable_error(self, tmp_path, capsys):
+        # a uniform run has no operator trajectory to draw: the flag must
+        # fail loudly with the fix, not write an empty/vacuous figure.
+        figure = tmp_path / "never.png"
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "qed",
+            "--iterations", "1", "--population", "8", "--plot", str(figure),
+        ])
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "error:" in error
+        assert "--plot" in error and "--adaptive-operators" in error
+        assert not figure.exists()
+
+    def test_plot_with_svg_extension_writes_svg(self, tmp_path, capsys):
+        # save_figure infers the format from the extension; svg is
+        # byte-reproducible since 100x-41-E but this pins structure only.
+        figure = tmp_path / "nested" / "operators.svg"
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "qed", "--adaptive-operators",
+            "--iterations", "3", "--population", "10", "--seed", "42",
+            "--top", "2", "--plot", str(figure),
+        ])
+        assert code == 0
+        assert figure.is_file() and figure.stat().st_size > 1_000
+        head = figure.read_bytes()[:512]
+        assert head.lstrip().startswith(b"<?xml") and b"<svg" in head
+
+    def test_plot_on_rl_method_is_a_typed_error(self, tmp_path, capsys):
+        # --plot is the GA's adaptive introspection artifact: asking an RL
+        # run for it must be an actionable typed error (the --scaffold /
+        # --adaptive-operators convention), not a silently ignored flag.
+        figure = tmp_path / "never.png"
+        code = main([
+            "generative", "run",
+            "--method", "rl", "--recipe", "qed", "--plot", str(figure),
+            "--iterations", "1",
+        ])
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "--plot" in error and "ga only" in error
+        assert not figure.exists()

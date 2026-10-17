@@ -341,6 +341,19 @@ class HTMLReport:
         return file_path
 
 
+def _validate_bundle_name(name: str) -> None:
+    """Reject stem keys that would escape the bundle directory.
+
+    ``../escape`` or ``sub/fig`` flow unvalidated into ``out / f"{name}.{fmt}"``
+    and would write OUTSIDE the bundle dir; only plain file names are safe.
+    """
+    if Path(name).name != name:
+        raise DataValidationError(
+            f"bundle artifact name {name!r} must be a plain file name "
+            "(no directories or '..' components)"
+        )
+
+
 def save_visual_bundle(
     figures: dict[str, Any],
     tables: dict[str, pd.DataFrame] | None = None,
@@ -380,6 +393,13 @@ def save_visual_bundle(
     list[Path]
         Every artifact written, in a stable order (report first).
     """
+    # Validate stem keys BEFORE creating anything: a "../x" key must fail
+    # typed instead of writing outside out_dir.
+    for name in figures:
+        _validate_bundle_name(name)
+    for name in tables or {}:
+        _validate_bundle_name(name)
+
     out = ensure_directory(out_dir)
     written: list[Path] = []
 

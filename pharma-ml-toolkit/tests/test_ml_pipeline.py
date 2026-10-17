@@ -633,6 +633,131 @@ class TestEvaluationEdgeCases:
         assert report.accuracy == 1.0
         assert report.labels == [False, True]
 
+    def test_nan_targets_raise_typed_error_both_tasks(self) -> None:
+        # 100x-41-F fail-first (probe /tmp/task41f/probe_eval_nan.py):
+        # NaN in y_test or the predictions used to leak RAW sklearn
+        # ValueErrors in BOTH task paths -- ``Input y_true contains
+        # NaN.`` from the classification metrics, ``Input contains
+        # NaN`` from the regression metrics -- despite the docstring
+        # promising ModelError only.  The guard mirrors the NaN check
+        # make_train_test_split already carries (preprocessing.py).
+        X = np.arange(4).reshape(-1, 1)
+
+        class Echo:
+            def __init__(self, preds):
+                self._preds = np.asarray(preds)
+
+            def predict(self, X):
+                return self._preds[: len(X)]
+
+        with pytest.raises(ModelError, match="y_test contains 1 NaN value"):
+            evaluate_model(
+                Echo([0, 1, 0, 1]), X, [0.0, 1.0, float("nan"), 1.0], "classification"
+            )
+        with pytest.raises(ModelError, match="predictions contain 1 NaN value"):
+            evaluate_model(
+                Echo([0.0, float("nan"), 1.0, 1.0]), X, [0, 1, 1, 0], "classification"
+            )
+        with pytest.raises(ModelError, match="y_test contains 1 NaN value"):
+            evaluate_model(
+                Echo([1.0, 2.0, 3.0, 4.0]), X, [1.0, float("nan"), 3.0, 4.0], "regression"
+            )
+        with pytest.raises(ModelError, match="predictions contain 1 NaN value"):
+            evaluate_model(
+                Echo([1.0, float("nan"), 3.0, 4.0]), X, [1.0, 2.0, 3.0, 4.0], "regression"
+            )
+
+    def test_regression_infinite_values_raise_typed_error(self) -> None:
+        # 100x-41-F fail-first (probe /tmp/task41f/probe_eval_nan.py):
+        # ±inf used to leak the RAW sklearn ``Input contains infinity
+        # or a value too large for dtype('float64')`` from the
+        # regression metrics.  (The classification twin of this guard
+        # landed in 100x-42-B -- see
+        # test_classification_infinite_values_raise_typed_error; the
+        # regression wording is byte-identical to 41-F's.)
+        X = np.arange(4).reshape(-1, 1)
+
+        class Echo:
+            def __init__(self, preds):
+                self._preds = np.asarray(preds)
+
+            def predict(self, X):
+                return self._preds[: len(X)]
+
+        with pytest.raises(ModelError, match="y_test contains 1 infinite value"):
+            evaluate_model(
+                Echo([1.0, 2.0, 3.0, 4.0]), X, [1.0, float("-inf"), 3.0, 4.0], "regression"
+            )
+        with pytest.raises(ModelError, match="predictions contain 1 infinite value"):
+            evaluate_model(
+                Echo([1.0, float("inf"), 3.0, 4.0]), X, [1.0, 2.0, 3.0, 4.0], "regression"
+            )
+
+    def test_classification_infinite_values_raise_typed_error(self) -> None:
+        # 100x-42-B fail-first (probe /tmp/task42b/probe_eval_inf.py):
+        # ±inf in a float-kind y_test or prediction vector on the
+        # CLASSIFICATION task used to leak the RAW sklearn ``Input
+        # y_true contains infinity or a value too large for
+        # dtype('float64')`` from accuracy_score's type_of_target label
+        # check -- 100x-41-F had scoped the ±inf guard to the regression
+        # task and carried the classification half.  The guard now
+        # covers both tasks; the task name is interpolated into the
+        # message, so the regression wording stayed byte-identical.
+        X = np.arange(4).reshape(-1, 1)
+
+        class Echo:
+            def __init__(self, preds):
+                self._preds = np.asarray(preds)
+
+            def predict(self, X):
+                return self._preds[: len(X)]
+
+        with pytest.raises(ModelError, match="y_test contains 1 infinite value"):
+            evaluate_model(
+                Echo([0.0, 1.0, 0.0, 1.0]), X, [0.0, float("inf"), 0.0, 1.0], "classification"
+            )
+        with pytest.raises(ModelError, match="classification metrics need finite"):
+            evaluate_model(
+                Echo([0, 1, 0, 1]), X, [0.0, 1.0, float("-inf"), 1.0], "classification"
+            )
+        with pytest.raises(ModelError, match="predictions contain 1 infinite value"):
+            evaluate_model(
+                Echo([0.0, 1.0, 0.0, float("inf")]), X, [0, 1, 0, 1], "classification"
+            )
+        with pytest.raises(ModelError, match="estimator returned non-finite"):
+            evaluate_model(
+                Echo([0.0, float("-inf"), 1.0, 1.0]), X, [0.0, 1.0, 1.0, 0.0], "classification"
+            )
+        # the guard must not over-fire: finite float labels still
+        # evaluate through the classification metrics untouched.
+        report = evaluate_model(
+            Echo([0.0, 1.0, 0.0, 1.0]), X, [0.0, 1.0, 0.0, 1.0], "classification"
+        )
+        assert report.accuracy == 1.0
+
+    def test_regression_string_predictions_raise_typed_error(self) -> None:
+        # 100x-41-F fail-first (probe /tmp/task41f/probe_eval_labeltype.py):
+        # the regression path lacked the 100x-36 label-type guard, so
+        # string predictions vs a numeric y_test (or vice versa) leaked
+        # a RAW sklearn ``ValueError: dtype='numeric' is not compatible
+        # with arrays of bytes/strings`` -- the guard is now hoisted
+        # above the task branch and covers both paths, with the
+        # classification behavior byte-identical (same message).
+        X = np.arange(4).reshape(-1, 1)
+
+        class StrPredicting:
+            def predict(self, X):
+                return np.asarray(["a", "b", "c", "d"])
+
+        class NumPredicting:
+            def predict(self, X):
+                return np.asarray([1.0, 2.0, 3.0, 4.0])
+
+        with pytest.raises(ModelError, match="different label types"):
+            evaluate_model(StrPredicting(), X, [1.0, 2.0, 3.0, 4.0], "regression")
+        with pytest.raises(ModelError, match="different label types"):
+            evaluate_model(NumPredicting(), X, ["a", "b", "c", "d"], "regression")
+
 
 class TestRegistryEdgeCases:
     """Regression tests from the ml/models.py deep review (100x-14-a)."""
@@ -794,6 +919,43 @@ class TestPreprocessingEdgeCases:
         y = pd.Series([0, 0, 1, 1, 0, 0, 1, 1, np.nan, np.nan])
         with pytest.raises(DataValidationError, match="y contains 2 NaN"):
             make_train_test_split(X, y, test_size=0.4)
+
+    def test_make_train_test_split_rejects_empty_y(self) -> None:
+        # 100x-41-F fail-first (probe /tmp/task41f/probe_prep_split.py):
+        # an empty y fell through every guard (isna counts nothing,
+        # value_counts on empty never trips the min-class fallback)
+        # and died inside sklearn with a RAW ``ValueError: With
+        # n_samples=0, test_size=0.2 and train_size=None, the
+        # resulting train set will be empty``.
+        X = pd.DataFrame({"a": range(10)})
+        with pytest.raises(DataValidationError, match="y is empty"):
+            make_train_test_split(X.iloc[:0], pd.Series([], dtype=float))
+
+    def test_make_train_test_split_boundary_test_size_raises_typed(self) -> None:
+        # 100x-41-F fail-first (probe /tmp/task41f/probe_prep_split.py):
+        # test_size values INSIDE the documented (0, 1) domain still hit
+        # sklearn's own degenerate-split corners -- 0.999 with n=10
+        # ("the resulting train set will be empty") and 1e-9 stratified
+        # ("The test_size = 1 should be greater or equal to the number
+        # of classes = 2") used to leak those raw ValueErrors; the
+        # splitter call now wraps them in the typed error.
+        X = pd.DataFrame({"a": range(10)})
+        y = pd.Series([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+        with pytest.raises(DataValidationError, match="invalid split configuration"):
+            make_train_test_split(X, y, test_size=0.999)
+        with pytest.raises(DataValidationError, match="invalid split configuration"):
+            make_train_test_split(X, y, test_size=1e-9)
+
+    def test_remove_outliers_iqr_rejects_nan_factor(self) -> None:
+        # 100x-41-F fail-first (probe /tmp/task41f/probe_prep_iqr.py):
+        # ``factor <= 0`` is False for NaN, so factor=nan slipped past
+        # the guard and NaN fences silently disabled the filter (every
+        # comparison False -> all rows kept, no warning), violating the
+        # documented "factor must be > 0".  ``not factor > 0`` rejects
+        # it; +inf stays allowed (infinitely wide fence = keep all).
+        frame = pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0, 100.0]})
+        with pytest.raises(DataValidationError, match="factor must be > 0, got nan"):
+            remove_outliers_iqr(frame, factor=float("nan"))
 
 
 # ---------------------------------------------------------------------------

@@ -48,6 +48,10 @@ False
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: factor must be > 0, got 0
+>>> remove_outliers_iqr(vals, factor=float("nan"))
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: factor must be > 0, got nan
 
 >>> from pharmaml.ml.preprocessing import make_train_test_split
 >>> Xs = pd.DataFrame({"f": np.arange(10.0)})
@@ -59,6 +63,10 @@ pharmaml.exceptions.DataValidationError: factor must be > 0, got 0
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: test_size must be in (0, 1), got 1.5
+>>> make_train_test_split(Xs.iloc[:0], pd.Series([], dtype=float))
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: y is empty -- make_train_test_split needs at least one labeled sample
 """
 
 from __future__ import annotations
@@ -280,12 +288,23 @@ def make_train_test_split(
     Raises
     ------
     DataValidationError
-        When ``test_size`` is outside (0, 1) or ``y`` contains NaN
-        values (the stratified splitter used to surface a raw sklearn
-        ``ValueError: Input y contains NaN``).
+        When ``test_size`` is outside (0, 1), ``y`` is empty, ``y``
+        contains NaN values (the stratified splitter used to surface
+        a raw sklearn ``ValueError: Input y contains NaN``), or the
+        split configuration cannot produce a valid split for the data
+        shape (e.g. ``test_size`` so close to 1 that the training set
+        would be empty).
     """
     if not 0.0 < test_size < 1.0:
         raise DataValidationError(f"test_size must be in (0, 1), got {test_size}")
+    # 100x-41-F: an empty y used to fall through every guard and die
+    # inside sklearn with a raw ``ValueError: With n_samples=0, ...``
+    # (the stratify bookkeeping cannot even count classes) -- name it
+    # up front instead.
+    if len(np.asarray(y)) == 0:
+        raise DataValidationError(
+            "y is empty -- make_train_test_split needs at least one labeled sample"
+        )
     n_missing = int(pd.isna(np.asarray(y)).sum())
     if n_missing:
         raise DataValidationError(
@@ -309,13 +328,22 @@ def make_train_test_split(
                     min_class_count,
                 )
                 use_stratify = False
-    return train_test_split(
-        X,
-        y,
-        test_size=test_size,
-        random_state=random_state,
-        stratify=y if use_stratify else None,
-    )
+    try:
+        return train_test_split(
+            X,
+            y,
+            test_size=test_size,
+            random_state=random_state,
+            stratify=y if use_stratify else None,
+        )
+    except ValueError as exc:
+        # 100x-41-F: in-(0,1)-boundary corners still belong to sklearn
+        # -- test_size=0.999 with n=10 ("the resulting train set will
+        # be empty"), 1e-9 stratified ("The test_size = 1 should be
+        # greater or equal to the number of classes = 2") -- wrap them
+        # so the module's typed-error contract holds for the whole
+        # split, not just the pre-checked inputs.
+        raise DataValidationError(f"invalid split configuration: {exc}") from exc
 
 
 def remove_outliers_iqr(
@@ -330,8 +358,21 @@ def remove_outliers_iqr(
     considers all numeric columns.  ``subset`` entries that are missing
     from the frame or non-numeric are ignored with a warning (a typo
     used to silently disable the filter for that column).
+
+    Raises
+    ------
+    DataValidationError
+        When ``factor`` is not strictly positive -- including NaN,
+        which used to slip past ``factor <= 0`` and silently disable
+        the filter entirely (NaN fences compare False against every
+        value, so all rows were kept without any warning).
     """
-    if factor <= 0:
+    # 100x-41-F: ``factor <= 0`` let NaN through (every NaN comparison
+    # is False) -- NaN fences then disabled the filter silently.
+    # ``not factor > 0`` rejects NaN alongside non-positive factors;
+    # +inf stays allowed (an infinitely wide fence is a legitimate
+    # keep-everything choice).
+    if not factor > 0:
         raise DataValidationError(f"factor must be > 0, got {factor}")
     numeric = frame.select_dtypes(include=[np.number])
     if subset is None:

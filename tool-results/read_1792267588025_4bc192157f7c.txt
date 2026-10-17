@@ -1,0 +1,1364 @@
+     1→"""SMILES genetic algorithm: de novo and seeded molecule generation.
+     2→
+     3→A pragmatic population-based optimiser in the GuacaMol / LEADD tradition,
+     4→CPU-friendly and deterministic given ``seed``:
+     5→
+     6→* **genome** = canonical SMILES string (character level);
+     7→* **mutation** = random character substitution / insertion / deletion,
+     8→  followed by RDKit sanitisation and re-canonicalisation (invalid mutants
+     9→  are discarded) -- OR, in ``mutation="scaffold"`` mode, a
+    10→  scaffold-preserving decoration resampling (see :func:`_scaffold_mutate`)
+    11→  -- OR, in ``mutation="topology"`` mode, a ring-size move drawn from
+    12→  :func:`~pharmaml.generative.ring_topology_mutate` (ring contraction /
+    13→  expansion, the single-parent medchem counterpart of the scaffold-hop
+    14→  crossover's ring-topology geometry);
+    15→* **crossover** = single-point splice of two parents, sanitised the same
+    16→  way -- OR, with ``crossover="scaffold_hop"``, a BREED-style
+    17→  homologous-cut recombination (see
+    18→  :func:`~pharmaml.generative.scaffold_hop_crossover`): both parents are
+    19→  cut at a pair of matching single acyclic bonds and the fragments
+    20→  recombined cross-wise, or at matching single ring bonds (rings merged,
+    21→  or a two-ended linker -- a single atom or a short acyclic path of up
+    22→  to four atoms -- transplanted into the cut: ring homologation by a
+    23→  whole linker alphabet -- ring topology recombines too), or a whole
+    24→  ring excised from one parent between its two single anchor bonds and
+    25→  spliced across the other's opened ring bond (fused / bridged
+    26→  bicyclics -- ring-*system* topology recombines too), or a whole ring
+    27→  spliced INTO the other's cut acyclic bond (the ring becomes the
+    28→  spacer -- ring-as-linker), or each parent's bounded acyclic middle
+    29→  exchanged for the other's homologous middle (two-point segment
+    30→  swap -- the linker / bioisostere exchange: an ester O for an amide
+    31→  N), so
+    32→  ring systems survive by construction and
+    33→  the offspring can hop scaffolds.  The character splice is not used in
+    34→  ``mutation="scaffold"`` mode (it routinely destroys ring systems,
+    35→  defeating scaffold preservation); the structural scaffold-hop
+    36→  crossover IS available there;
+    37→* **selection** = tournament of ``tournament_k`` molecules;
+    38→* **elitism** = the top ``elitism`` molecules survive a generation
+    39→  verbatim, so the best score is monotone across generations;
+    40→* **operator selection** = fixed-rate by default
+    41→  (``operator_selection="uniform"``: the ``crossover_rate`` Bernoulli,
+    42→  the flat candidate-pool draw inside the scaffold-hop crossover, the
+    43→  mutation mode's structural if-chain -- bit-identical to the
+    44→  historical optimizer) **or adaptive** (``operator_selection=
+    45→  "adaptive"``): three levels of operator choice bias themselves by
+    46→  per-operator credit instead of staying fixed -- level 1 (crossover vs
+    47→  clone), the scaffold-hop geometry (the seven buckets, renormalised
+    48→  over the geometries present in each pair's candidate pool; the splice
+    49→  crossover degenerates to the single "splice" operator) and the
+    50→  mutation family (the mode's primary mutation vs the character
+    51→  mutation).  A drawn operator earns ``(valid offspring ? score : 0.0)
+    52→  - mid-parent`` on a sliding ``aos_window``-attempt window (a drawn
+    53→  operator whose own product was discarded earns the null reward
+    54→  ``0.0 - mid-parent``); selection is a softmax over the windowed
+    55→  credit at ``aos_temperature`` with an exploration floor of
+    56→  ``1/(k*5)`` -- exactly one ``rng.random()`` per selection, so an
+    57→  adaptive run is just as deterministic as a uniform one.  Adaptive
+    58→  runs gain ``"operator_selection"`` and the per-level
+    59→  ``"operator_stats"`` tables in the result metadata; uniform runs'
+    60→  metadata is unchanged.
+    61→
+    62→Two initialisation modes:
+    63→
+    64→* **de novo** (``seed_smiles=None``): the population is sampled from
+    65→  ``corpus`` (default: :data:`~pharmaml.generative.DEFAULT_CORPUS`);
+    66→* **seeded** (``seed_smiles=[...]``): the user's molecules anchor
+    67→  generation 0 and corpus molecules pad the population up to
+    68→  ``population_size`` (pass ``corpus=seed_smiles`` too for a strictly
+    69→  seed-isolated run), so the search explores the seeds' neighbourhood
+    70→  alongside the corpus's diversity -- the "with some sample molecules"
+    71→  mode.
+    72→
+    73→Example
+    74→-------
+    75→>>> from pharmaml.generative import GeneticOptimizer, QedObjective
+    76→>>> result = GeneticOptimizer(QedObjective(), population_size=32,
+    77→...                           generations=5, seed=42).optimize()
+    78→>>> result.best_score >= 0.5
+    79→True
+    80→>>> # adaptive operator selection: the GA learns which operators pay off
+    81→>>> adaptive = GeneticOptimizer(QedObjective(), population_size=16,
+    82→...                             generations=4, seed=42,
+    83→...                             operator_selection="adaptive").optimize()
+    84→>>> adaptive.metadata["operator_selection"]
+    85→'adaptive'
+    86→>>> stats = adaptive.metadata["operator_stats"]
+    87→>>> sorted(stats)
+    88→['geometry', 'level1', 'mutation']
+    89→>>> sorted(stats["level1"])
+    90→['clone', 'crossover']
+    91→>>> stats["level1"]["clone"]["draws"] > 0 and stats["mutation"]["character"]["draws"] > 0
+    92→True
+    93→"""
+    94→
+    95→from __future__ import annotations
+    96→
+    97→import math
+    98→import random
+    99→import time
+   100→from collections import deque
+   101→from collections.abc import Mapping, Sequence
+   102→from functools import lru_cache
+   103→from typing import Any
+   104→
+   105→from pharmaml.exceptions import DataValidationError
+   106→from pharmaml.logger import get_logger
+   107→
+   108→from ._utils import canonical_smiles, require_rdkit, smiles_alphabet
+   109→from .corpus import DEFAULT_CORPUS
+   110→from .result import GenerationResult
+   111→from .scaffold_hop import GEOMETRY_ORDER, _scaffold_hop_core, scaffold_hop_crossover
+   112→from .topology import ring_topology_mutate
+   113→
+   114→__all__ = ["GeneticOptimizer", "run_genetic_optimization"]
+   115→
+   116→_LOG = get_logger(__name__)
+   117→
+   118→#: Probability that a resampled decoration slot is dropped entirely (rather
+   119→#: than replaced with a corpus decoration) by the scaffold mutation.
+   120→_DROP_PROBABILITY = 0.25
+   121→
+   122→#: Exploration-floor margin for the adaptive operator selection: every
+   123→#: operator keeps at least ``1 / (k * margin)`` of its level's draw
+   124→#: probability (``k`` = operators at the level), so a consistently failing
+   125→#: operator starves towards the floor but can never be fully abandoned --
+   126→#: the starvation pathology guard (credits stay finite, selection never
+   127→#: degenerates into a NaN or a division by zero).
+   128→_AOS_FLOOR_MARGIN = 5.0
+   129→
+   130→
+   131→def _validated_score(objective: Any, smiles: str) -> float:
+   132→    """Score ``smiles``, coercing stray values into ``[0, 1]``.
+   133→
+   134→    A non-numeric return value raises the same typed error as
+   135→    :class:`~pharmaml.generative.MultiObjective` -- the objective contract
+   136→    (``score(smiles) -> float``) is enforced consistently everywhere.
+   137→    """
+   138→    try:
+   139→        value = float(objective.score(smiles))
+   140→    except (TypeError, ValueError) as exc:
+   141→        raise DataValidationError(
+   142→            f"objective {getattr(objective, 'name', objective)!r} returned a "
+   143→            f"non-numeric score for {smiles!r} -- objectives must map SMILES "
+   144→            "to floats"
+   145→        ) from exc
+   146→    if not math.isfinite(value):
+   147→        return 0.0
+   148→    return min(max(value, 0.0), 1.0)
+   149→
+   150→
+   151→# ---------------------------------------------------------------------------
+   152→# Scaffold-preserving mutation machinery
+   153→# ---------------------------------------------------------------------------
+   154→@lru_cache(maxsize=4096)
+   155→def _scaffold_split(smiles: str) -> tuple[str, tuple[str, ...]] | None:
+   156→    """Split ``smiles`` into its (labelled) Murcko core + decorations.
+   157→
+   158→    Returns ``(core_smiles, decoration_smiles)`` where the core carries
+   159→    ``[*:k]`` dummy atoms at every attachment point (labelled 1..k in a
+   160→    deterministic order) and each decoration fragment carries the matching
+   161→    label -- so ``Chem.molzip(core, decorations)`` rebuilds exactly the
+   162→    parent molecule.  ``None`` when there is nothing to split (acyclic
+   163→    molecule, bare ring system without decorations, unparseable input, or
+   164→    any RDKit failure -- robustness first).
+   165→    """
+   166→    Chem = require_rdkit()
+   167→# rdkit-stubs does not re-export DisableLog/EnableLog on rdkit.RDLogger,
+   168→    # but rdBase (their defining module) is fully typed.
+   169→    from rdkit.Chem.Scaffolds import MurckoScaffold
+   170→    from rdkit.rdBase import DisableLog, EnableLog
+   171→
+   172→    if not isinstance(smiles, str) or not smiles.strip():
+   173→        return None
+   174→    DisableLog("rdApp.error")
+   175→    try:
+   176→        mol = Chem.MolFromSmiles(smiles)
+   177→    except Exception:  # noqa: BLE001 - RDKit can raise on hostile input
+   178→        return None
+   179→    finally:
+   180→        EnableLog("rdApp.error")
+   181→    if mol is None:
+   182→        return None
+   183→
+   184→    scaffold = MurckoScaffold.GetScaffoldForMol(mol)
+   185→    if scaffold.GetNumAtoms() == 0:
+   186→        return None  # acyclic parent: no framework to preserve
+   187→    match = mol.GetSubstructMatch(scaffold)
+   188→    if not match:
+   189→        return None
+   190→    in_scaffold = set(match)
+   191→    # attachment pairs (scaffold atom position, outside neighbour), ranked
+   192→    # deterministically: label k = k-th attachment in sorted pair order.
+   193→    pairs = sorted(
+   194→        (j, neighbour.GetIdx())
+   195→        for j, atom_idx in enumerate(match)
+   196→        for neighbour in mol.GetAtomWithIdx(atom_idx).GetNeighbors()
+   197→        if neighbour.GetIdx() not in in_scaffold
+   198→    )
+   199→    if not pairs:
+   200→        return None  # bare scaffold: no decorations to resample
+   201→    ranks_by_j: dict[int, list[int]] = {}
+   202→    for rank, (j, _neighbour) in enumerate(pairs, start=1):
+   203→        ranks_by_j.setdefault(j, []).append(rank)
+   204→
+   205→    core = Chem.ReplaceSidechains(mol, scaffold)
+   206→    if core is None:
+   207→        return None
+   208→    core_match = core.GetSubstructMatch(scaffold)
+   209→    if not core_match:
+   210→        return None
+   211→    dummies_by_j: dict[int, list[int]] = {}
+   212→    for atom in core.GetAtoms():
+   213→        if atom.GetAtomicNum() != 0:
+   214→            continue
+   215→        neighbours = atom.GetNeighbors()
+   216→        if len(neighbours) != 1:
+   217→            return None
+   218→        j = core_match.index(neighbours[0].GetIdx())
+   219→        dummies_by_j.setdefault(j, []).append(atom.GetIdx())
+   220→    rw_core = Chem.RWMol(core)
+   221→    for j, dummy_ids in dummies_by_j.items():
+   222→        ranks = ranks_by_j.get(j, [])
+   223→        if len(dummy_ids) != len(ranks):
+   224→            return None
+   225→        for dummy_id, rank in zip(sorted(dummy_ids), ranks):
+   226→            atom = rw_core.GetAtomWithIdx(dummy_id)
+   227→            atom.SetAtomMapNum(rank)
+   228→            atom.SetIsotope(0)
+   229→    core_smiles = Chem.MolToSmiles(rw_core.GetMol())
+   230→
+   231→    # ReplaceCore(labelByIndex=True) labels each decoration dummy with the
+   232→    # scaffold-atom position it was attached to -- relabel to the ranks.
+   233→    side = Chem.ReplaceCore(mol, scaffold, labelByIndex=True)
+   234→    if side is None:
+   235→        return None
+   236→    rank_queues = {j: list(ranks) for j, ranks in ranks_by_j.items()}
+   237→    decoration_smiles: list[str] = []
+   238→    for fragment in Chem.GetMolFrags(side, asMols=True):
+   239→        rw_fragment = Chem.RWMol(fragment)
+   240→        saw_dummy = False
+   241→        for atom in rw_fragment.GetAtoms():
+   242→            if atom.GetAtomicNum() != 0:
+   243→                continue
+   244→            queue = rank_queues.get(atom.GetIsotope())
+   245→            if not queue:
+   246→                return None
+   247→            atom.SetAtomMapNum(queue.pop(0))
+   248→            atom.SetIsotope(0)
+   249→            saw_dummy = True
+   250→        if not saw_dummy:
+   251→            return None  # untracked fragment: refuse rather than lose atoms
+   252→        decoration_smiles.append(Chem.MolToSmiles(rw_fragment.GetMol()))
+   253→    return core_smiles, tuple(decoration_smiles)
+   254→
+   255→
+   256→def _strip_dummy_label(fragment_smiles: str) -> str:
+   257→    """Remove the attachment label from a single-dummy decoration SMILES."""
+   258→    Chem = require_rdkit()
+   259→    fragment = Chem.MolFromSmiles(fragment_smiles)
+   260→    if fragment is None:  # pragma: no cover - split output always parses
+   261→        return fragment_smiles
+   262→    rw = Chem.RWMol(fragment)
+   263→    for atom in rw.GetAtoms():
+   264→        if atom.GetAtomicNum() == 0:
+   265→            atom.SetAtomMapNum(0)
+   266→            atom.SetIsotope(0)
+   267→    return Chem.MolToSmiles(rw.GetMol())
+   268→
+   269→
+   270→@lru_cache(maxsize=8)
+   271→def _decoration_pool(corpus_key: tuple[str, ...]) -> tuple[str, ...]:
+   272→    """Corpus-derived decoration vocabulary (memoised on the corpus tuple)."""
+   273→    pool: list[str] = []
+   274→    for smiles in corpus_key:
+   275→        split = _scaffold_split(smiles)
+   276→        if split is None:
+   277→            continue
+   278→        for fragment_smiles in split[1]:
+   279→            if fragment_smiles.count("[*") != 1:
+   280→                continue  # only single-attachment decorations are reusable
+   281→            pool.append(fragment_smiles)
+   282→    return tuple(dict.fromkeys(_strip_dummy_label(s) for s in pool))
+   283→
+   284→
+   285→def _build_decoration_pool(corpus: Sequence[str]) -> list[str]:
+   286→    """Decoration vocabulary derived from ``corpus`` (deterministic order).
+   287→
+   288→    Every corpus molecule is decomposed once into Murcko scaffold +
+   289→    decorations (see :func:`_scaffold_split`); the single-attachment
+   290→    decorations, label-stripped and de-duplicated, form the vocabulary the
+   291→    scaffold mutation samples from.  Murcko decorations are always acyclic
+   292→    (any ring would be part of the framework), which is what makes scaffold
+   293→    preservation structural rather than lucky.
+   294→    """
+   295→    return list(_decoration_pool(tuple(corpus)))
+   296→
+   297→
+   298→def _scaffold_mutate(
+   299→    smiles: str,
+   300→    pool: Sequence[str],
+   301→    rng: random.Random,
+   302→    max_smiles_length: int,
+   303→) -> str | None:
+   304→    """Decoration-resampling mutation that preserves the Murcko scaffold.
+   305→
+   306→    Keeps the parent's Murcko framework verbatim and replaces a random
+   307→    non-empty subset of its decorations with entries sampled from the
+   308→    corpus-derived ``pool`` (or drops them).  Returns the canonical mutant
+   309→    SMILES, or ``None`` when the parent has no scaffold / no decorations,
+   310→    the pool is unusable for it, the mutant would exceed
+   311→    ``max_smiles_length``, or RDKit raises anywhere in the pipeline -- the
+   312→    caller then falls back to the standard character mutation
+   313→    (robustness first: never crash, never emit a dummy-bearing or empty
+   314→    molecule).
+   315→    """
+   316→    Chem = require_rdkit()
+   317→    from rdkit.rdBase import DisableLog, EnableLog
+   318→
+   319→    # Occasional chemically invalid re-attachments are EXPECTED (they fall
+   320→    # back to the character mutation); RDKit logs the sanitisation failures
+   321→    # to stderr before the exception surfaces -- keep the loop quiet (the
+   322→    # canonical_smiles guard-family precedent).
+   323→    DisableLog("rdApp.error")
+   324→    try:
+   325→        split = _scaffold_split(smiles)
+   326→        if split is None:
+   327→            return None
+   328→        core_smiles, fragment_smiles = split
+   329→        # only single-attachment decorations can be replaced/dropped;
+   330→        # bridging multi-dummy fragments are always kept as-is
+   331→        replaceable = [
+   332→            index for index, fragment in enumerate(fragment_smiles)
+   333→            if fragment.count("[*") == 1
+   334→        ]
+   335→        if not replaceable:
+   336→            return None
+   337→        n_change = rng.randint(1, len(replaceable))
+   338→        chosen = set(rng.sample(replaceable, n_change))
+   339→
+   340→        rw_core = Chem.RWMol(Chem.MolFromSmiles(core_smiles))
+   341→        kept: list[str] = []
+   342→        for index, fragment in enumerate(fragment_smiles):
+   343→            if index not in chosen:
+   344→                kept.append(fragment)
+   345→                continue
+   346→            parsed = Chem.MolFromSmiles(fragment)
+   347→            if parsed is None:  # pragma: no cover - split output always parses
+   348→                return None
+   349→            label = next(
+   350→                atom.GetAtomMapNum()
+   351→                for atom in parsed.GetAtoms()
+   352→                if atom.GetAtomicNum() == 0
+   353→            )
+   354→            if rng.random() < _DROP_PROBABILITY:
+   355→                # Drop the decoration by turning its core dummy into an
+   356→                # explicit hydrogen (plain RemoveAtom would leave e.g. an
+   357→                # aromatic N without its H -> "Can't kekulize" on sanitise;
+   358→                # an unmatched dummy would leak [*:k] into the offspring).
+   359→                # RemoveHs below collapses the graph-H back to implicit.
+   360→                for dummy_id in (
+   361→                    atom.GetIdx()
+   362→                    for atom in rw_core.GetAtoms()
+   363→                    if atom.GetAtomicNum() == 0 and atom.GetAtomMapNum() == label
+   364→                ):
+   365→                    hydrogen = rw_core.GetAtomWithIdx(dummy_id)
+   366→                    hydrogen.SetAtomicNum(1)
+   367→                    hydrogen.SetAtomMapNum(0)
+   368→                    hydrogen.SetIsotope(0)
+   369→                    hydrogen.SetFormalCharge(0)
+   370→                    hydrogen.SetNumExplicitHs(0)
+   371→                    hydrogen.SetNoImplicit(True)
+   372→            else:
+   373→                replacement = Chem.MolFromSmiles(pool[rng.randrange(len(pool))])
+   374→                if replacement is None:  # pragma: no cover - pool always parses
+   375→                    return None
+   376→                rw_replacement = Chem.RWMol(replacement)
+   377→                for atom in rw_replacement.GetAtoms():
+   378→                    if atom.GetAtomicNum() == 0:
+   379→                        atom.SetAtomMapNum(label)
+   380→                kept.append(Chem.MolToSmiles(rw_replacement.GetMol()))
+   381→
+   382→        core = rw_core.GetMol()
+   383→        Chem.SanitizeMol(core)
+   384→        if kept:
+   385→            side = Chem.MolFromSmiles(".".join(kept))
+   386→            if side is None:  # pragma: no cover - kept fragments always parse
+   387→                return None
+   388→            product = Chem.molzip(core, side)
+   389→        else:
+   390→            product = core  # every decoration dropped: the bare framework
+   391→        Chem.SanitizeMol(product)
+   392→        product = Chem.RemoveHs(product)  # graph-H drops -> implicit / [nH]
+   393→        mutant = Chem.MolToSmiles(product)
+   394→        if not mutant or len(mutant) > max_smiles_length:
+   395→            return None
+   396→        return mutant
+   397→    except Exception:  # noqa: BLE001 - robustness-first fallback contract
+   398→        return None
+   399→    finally:
+   400→        EnableLog("rdApp.error")
+   401→
+   402→
+   403→class _OperatorBook:
+   404→    """Sliding-window credit book + softmax-with-floor selection (one level).
+   405→
+   406→    The adaptive operator selection's bookkeeping for ONE biasable level
+   407→    of the GA loop: level 1 (crossover vs clone), the recombination
+   408→    geometry (the seven scaffold-hop buckets, or the single ``"splice"``
+   409→    bucket in splice mode) or the mutation family (the mode's primary
+   410→    mutation vs the character mutation).  Each drawn operator earns one
+   411→    reward per attempt,
+   412→
+   413→    ``reward = (valid offspring ? score(offspring) : 0.0) - mid_parent``,
+   414→
+   415→    pushed into a sliding window of the last ``window`` attempts.  The
+   416→    null-reward convention: a drawn operator whose own product was
+   417→    discarded (its call returned ``None`` / fell back) takes ``0.0 -
+   418→    mid_parent`` -- failed operators are charged, not forgiven.  Credit
+   419→    is the window mean (an empty window reads as the neutral ``0.0``,
+   420→    never NaN); selection is
+   421→
+   422→    ``p_i = floor + (1 - k * floor) * softmax(credit_i / temperature)``
+   423→
+   424→    with ``floor = 1 / (k * _AOS_FLOOR_MARGIN)`` -- exactly one
+   425→    ``rng.random()`` per selection, resolved by cumulative-sum inversion
+   426→    over the book's fixed operator order.
+   427→    """
+   428→
+   429→    def __init__(
+   430→        self, operators: Sequence[str], window: int, temperature: float
+   431→    ) -> None:
+   432→        self.operators: list[str] = list(operators)
+   433→        self.window = window
+   434→        self.temperature = temperature
+   435→        self.rewards: dict[str, deque[float]] = {
+   436→            op: deque(maxlen=window) for op in self.operators
+   437→        }
+   438→        self.draws: dict[str, int] = {op: 0 for op in self.operators}
+   439→        self.successes: dict[str, int] = {op: 0 for op in self.operators}
+   440→        self.best: dict[str, tuple[float, str]] = {}
+   441→
+   442→    def credit(self, op: str) -> float:
+   443→        """Mean of ``op``'s reward window (0.0 when the window is empty)."""
+   444→        window = self.rewards[op]
+   445→        if not window:
+   446→            return 0.0  # empty window -> neutral prior, never NaN
+   447→        return sum(window) / len(window)
+   448→
+   449→    def probabilities(
+   450→        self, present: Sequence[str] | None = None
+   451→    ) -> dict[str, float]:
+   452→        """Selection probabilities over ``present`` (default: all operators).
+   453→
+   454→        The floor keeps every operator a minimum ``1 / (k * margin)``
+   455→        share of the draws, so a starving operator is demoted, never
+   456→        abandoned; the softmax rest carries the credit signal.
+   457→        """
+   458→        ops = [op for op in self.operators if present is None or op in present]
+   459→        if not ops:
+   460→            return {}
+   461→        if len(ops) == 1:
+   462→            return {ops[0]: 1.0}
+   463→        k = len(ops)
+   464→        floor = 1.0 / (k * _AOS_FLOOR_MARGIN)
+   465→        credits = [self.credit(op) for op in ops]
+   466→        top = max(credits)
+   467→        exps = [math.exp((value - top) / self.temperature) for value in credits]
+   468→        total = sum(exps)
+   469→        return {
+   470→            op: floor + (1.0 - k * floor) * (weight / total)
+   471→            for op, weight in zip(ops, exps)
+   472→        }
+   473→
+   474→    def draw(self, rng: random.Random, present: Sequence[str] | None = None) -> str:
+   475→        """Draw one operator: a single ``rng.random()`` via cumsum inversion.
+   476→
+   477→        Raises ``ValueError`` when ``present`` names no operator of this
+   478→        book (an empty draw is a caller bug, not a float-tail case).
+   479→        """
+   480→        probabilities = self.probabilities(present)
+   481→        operators = list(probabilities)
+   482→        if not operators:
+   483→            raise ValueError(
+   484→                f"no operator of this book is present in {present!r}"
+   485→            )
+   486→        pick = rng.random()
+   487→        cumulative = 0.0
+   488→        for op in operators:
+   489→            cumulative += probabilities[op]
+   490→            if pick < cumulative:
+   491→                return op
+   492→        return operators[-1]  # float-tail guard (deterministic)
+   493→
+   494→    def push(
+   495→        self,
+   496→        op: str,
+   497→        reward: float,
+   498→        success: bool,
+   499→        child: str | None,
+   500→        child_score: float | None,
+   501→    ) -> None:
+   502→        """Record one attempt: reward into the window, tallies, best offspring."""
+   503→        self.rewards[op].append(reward)
+   504→        self.draws[op] += 1
+   505→        if success:
+   506→            self.successes[op] += 1
+   507→            if (
+   508→                child is not None
+   509→                and child_score is not None
+   510→                and (op not in self.best or child_score > self.best[op][0])
+   511→            ):
+   512→                self.best[op] = (child_score, child)
+   513→
+   514→    def snapshot(self) -> dict[str, dict[str, Any]]:
+   515→        """The metadata artifact: operator -> tallies / credit / probability."""
+   516→        probabilities = self.probabilities()
+   517→        table: dict[str, dict[str, Any]] = {}
+   518→        for op in self.operators:
+   519→            best_score, best_child = self.best.get(op, (0.0, None))
+   520→            table[op] = {
+   521→                "draws": self.draws[op],
+   522→                "successes": self.successes[op],
+   523→                "credit": round(self.credit(op), 4),
+   524→                "final_probability": round(probabilities.get(op, 0.0), 4),
+   525→                "best_offspring": best_child,
+   526→                "best_offspring_score": round(best_score, 4),
+   527→            }
+   528→        return table
+   529→
+   530→
+   531→class GeneticOptimizer:
+   532→    """Tournament-selection genetic algorithm over canonical SMILES.
+   533→
+   534→    Parameters
+   535→    ----------
+   536→    objective:
+   537→        Anything with ``score(smiles) -> float`` (any
+   538→        :class:`~pharmaml.generative.ScoringObjective`).
+   539→    population_size:
+   540→        Molecules per generation (default 64).
+   541→    generations:
+   542→        Number of generations (default 20).
+   543→    mutation_rate:
+   544→        Expected fraction of characters mutated per offspring (default
+   545→        0.08; at least one character whenever mutation fires).
+   546→    crossover_rate:
+   547→        Probability an offspring is a splice of two parents instead of a
+   548→        clone of the first (default 0.7).  Ignored in ``scaffold`` mutation
+   549→        mode (see ``mutation``) and in adaptive operator selection (the
+   550→        crossover-vs-clone choice becomes a credit-driven draw -- see
+   551→        ``operator_selection``).
+   552→    elitism:
+   553→        Top molecules copied verbatim into the next generation (default
+   554→        4; guarantees a monotone best score).
+   555→    tournament_k:
+   556→        Molecules compared per selection tournament (default 3).
+   557→    max_smiles_length:
+   558→        Hard length cap on every genome -- offspring that exceed it are
+   559→        rejected (default 120).
+   560→    mutation:
+   561→        ``"uniform"`` (default) -- the classic character-level
+   562→        substitution / insertion / deletion.  ``"scaffold"`` --
+   563→        **scaffold-preserving decoration resampling**: the offspring keeps
+   564→        the parent's Murcko framework verbatim while a random subset of
+   565→        its decorations is replaced with entries sampled from a
+   566→        decoration vocabulary derived from the corpus (or dropped).  This
+   567→        is a pragmatic lead-optimisation operator in the spirit of
+   568→        LEADD's scaffold decoration: it explores the decoration space of
+   569→        one fixed framework.  It is **not** a full scaffold-decorator
+   570→        generative model like REINVENT 2.0 (no attachment-point
+   571→        generative grammar, no learned decoration distribution -- just
+   572→        corpus-derived resampling with ``Chem.molzip`` re-assembly).
+   573→        Parents without a Murcko scaffold (acyclic molecules) or without
+   574→        decorations (bare ring systems) fall back to the uniform
+   575→        mutation -- never an error.  ``"topology"`` --
+   576→        **ring-size mutation**: each offspring undergoes one ring
+   577→        contraction (an atom removed from a saturated ring, its ring
+   578→        neighbours rejoined) or expansion (a methylene inserted into a
+   579→        saturated single ring bond), drawn from
+   580→        :func:`~pharmaml.generative.ring_topology_moves` (only fully
+   581→        saturated single-bond rings are touched; fused/spiro atoms and
+   582→        shared bonds stay put; the ring-size window is 5..8 by
+   583→        default).  Acyclic or aromatic-only parents fall back to the
+   584→        uniform mutation -- never an error.  Pair with
+   585→        ``crossover="scaffold_hop"`` for the full structural move set:
+   586→        recombination plus ring-size mutation.
+   587→    crossover:
+   588→        ``"splice"`` (default) -- the classic single-point character
+   589→        splice.  ``"scaffold_hop"`` -- **BREED-style structural
+   590→        recombination** via
+   591→        :func:`~pharmaml.generative.scaffold_hop_crossover`: both parents
+   592→        are cut at a pair of homologous bonds (matching
+   593→        atomic number / degree / aromaticity / formal charge at the
+   594→        join) and recombined with ``Chem.molzip`` -- either a pair of
+   595→        single acyclic bonds (fragments swapped cross-wise) or single
+   596→        ring bonds (rings merged into one combined ring, or a two-ended
+   597→        linker -- a single atom or a contiguous acyclic path of up to
+   598→        four atoms -- transplanted into a cut ring bond: ring
+   599→        homologation by one atom or a whole linker chain -- or a whole
+   600→        ring excised from one parent between its two single anchor
+   601→        bonds and spliced across the other's opened ring bond: a fused
+   602→        / bridged bicyclic child holding one ring from each parent, the
+   603→        full Nicolaou move set -- or a whole ring spliced INTO the
+   604→        other's cut acyclic bond, so both bridge halves re-join
+   605→        *through* it: the ring becomes the spacer, the ring-as-linker
+   606→        move -- or a two-point segment swap: each parent's bounded
+   607→        acyclic middle (a single atom or a contiguous path of up to
+   608→        four atoms) excised from the flank parent and replaced by the
+   609→        other's homologous middle, the only size-conserving geometry
+   610→        and the medchem linker / bioisostere exchange -- an ester O for
+   611→        an amide N, an ether O for a thioether S).  Every
+   612→        fragment arrives intact, so ring systems
+   613→        survive by construction, and whenever the parents' frameworks
+   614→        span different fragments (biaryls, diaryl ethers, sulfonyl
+   615→        bridges) the offspring's framework differs from BOTH parents --
+   616→        the scaffold-hopping operator.  Parents without a viable cut
+   617→        fall back to ``parent_a`` -- never an error.  The character
+   618→        splice is bypassed in ``mutation="scaffold"`` mode (it destroys
+   619→        ring systems); the structural scaffold-hop crossover is NOT --
+   620→        ``mutation="scaffold", crossover="scaffold_hop"`` is the full
+   621→        structural mode (framework recombination + decoration
+   622→        resampling).
+   623→    seed:
+   624→        Seed for the dedicated ``random.Random`` instance (default 42).
+   625→        Two runs with the same seed produce identical results -- in
+   626→        uniform AND adaptive operator-selection mode.
+   627→    operator_selection:
+   628→        ``"uniform"`` (default) -- the historical fixed-rate operator
+   629→        draws: the ``crossover_rate`` Bernoulli, the flat candidate-pool
+   630→        draw inside the scaffold-hop crossover, the mutation mode's
+   631→        structural if-chain.  The run is bit-identical to the optimizer
+   632→        without this parameter.  ``"adaptive"`` -- **adaptive operator
+   633→        selection**: three levels of operator choice bias themselves by
+   634→        per-operator credit -- level 1 (crossover vs clone per
+   635→        offspring), the recombination geometry (per scaffold-hop
+   636→        crossover: the seven buckets of
+   637→        :data:`~pharmaml.generative.scaffold_hop.GEOMETRY_ORDER`,
+   638→        renormalised over the geometries present in the pair's candidate
+   639→        pool; the splice crossover degenerates to the single
+   640→        ``"splice"`` operator) and the mutation family (per offspring:
+   641→        the mode's primary mutation -- topology moves or scaffold
+   642→        decoration resampling -- vs the character mutation; uniform
+   643→        mutation mode has no family choice, so no draw is spent).  A
+   644→        drawn operator earns ``(valid offspring ? score : 0.0) -
+   645→        mid-parent`` on a sliding ``aos_window``-attempt window (its
+   646→        product discarded -- ``None`` return / fallback -- the null
+   647→        reward ``0.0 - mid_parent``); selection is a softmax over the
+   648→        windowed credit at ``aos_temperature`` with an exploration
+   649→        floor of ``1 / (k * 5)``, one ``rng.random()`` per selection.
+   650→        Adaptive runs add ``"operator_selection": "adaptive"`` and
+   651→        ``"operator_stats"`` (per level: ``{operator: {draws,
+   652→        successes, credit, final_probability, best_offspring,
+   653→        best_offspring_score}}``) to the result metadata; uniform runs'
+   654→        metadata is unchanged.
+   655→    aos_window:
+   656→        Adaptive mode: the sliding credit window per operator (default
+   657→        20 -- the last 20 attempts of each operator decide its credit).
+   658→    aos_temperature:
+   659→        Adaptive mode: the softmax temperature over credits (default
+   660→        0.1 -- credit differences of about 0.1 already swing the draw
+   661→        probabilities decisively; higher flattens the selection, lower
+   662→        hardens it).
+   663→
+   664→    Raises
+   665→    ------
+   666→    DataValidationError
+   667→        On out-of-range hyperparameters.
+   668→
+   669→    Example
+   670→    -------
+   671→    >>> from pharmaml.generative import GeneticOptimizer, QedObjective
+   672→    >>> # lead-optimisation mode: keep aspirin's framework, vary decorations
+   673→    >>> result = GeneticOptimizer(
+   674→    ...     QedObjective(), population_size=16, generations=3, seed=42,
+   675→    ...     mutation="scaffold",
+   676→    ... ).optimize(seed_smiles=["CC(=O)Oc1ccccc1C(=O)O"],
+   677→    ...              corpus=["CC(=O)Oc1ccccc1C(=O)O"])
+   678→    >>> len(result) > 0
+   679→    True
+   680→    >>> # scaffold-hop mode: BREED-style homologous-cut recombination
+   681→    >>> hopped = GeneticOptimizer(
+   682→    ...     QedObjective(), population_size=16, generations=3, seed=42,
+   683→    ...     crossover="scaffold_hop",
+   684→    ... ).optimize()
+   685→    >>> hopped.metadata["crossover"]
+   686→    'scaffold_hop'
+   687→    >>> # adaptive mode: operator draws follow per-operator credit
+   688→    >>> tuned = GeneticOptimizer(
+   689→    ...     QedObjective(), population_size=16, generations=3, seed=42,
+   690→    ...     crossover="scaffold_hop", operator_selection="adaptive",
+   691→    ... ).optimize()
+   692→    >>> tuned.metadata["operator_selection"]
+   693→    'adaptive'
+   694→    >>> "geometry" in tuned.metadata["operator_stats"]
+   695→    True
+   696→    """
+   697→
+   698→    def __init__(
+   699→        self,
+   700→        objective: Any,
+   701→        *,
+   702→        population_size: int = 64,
+   703→        generations: int = 20,
+   704→        mutation_rate: float = 0.08,
+   705→        crossover_rate: float = 0.7,
+   706→        elitism: int = 4,
+   707→        tournament_k: int = 3,
+   708→        max_smiles_length: int = 120,
+   709→        mutation: str = "uniform",
+   710→        crossover: str = "splice",
+   711→        operator_selection: str = "uniform",
+   712→        aos_window: int = 20,
+   713→        aos_temperature: float = 0.1,
+   714→        seed: int = 42,
+   715→    ) -> None:
+   716→        if not callable(getattr(objective, "score", None)):
+   717→            raise DataValidationError(
+   718→                "objective must expose a callable score(smiles) method"
+   719→            )
+   720→        if population_size < 4:
+   721→            raise DataValidationError(
+   722→                f"population_size must be >= 4, got {population_size}"
+   723→            )
+   724→        if generations < 1:
+   725→            raise DataValidationError(f"generations must be >= 1, got {generations}")
+   726→        if not 0.0 < mutation_rate <= 1.0:
+   727→            raise DataValidationError(
+   728→                f"mutation_rate must be in (0, 1], got {mutation_rate}"
+   729→            )
+   730→        if not 0.0 <= crossover_rate <= 1.0:
+   731→            raise DataValidationError(
+   732→                f"crossover_rate must be in [0, 1], got {crossover_rate}"
+   733→            )
+   734→        if not 0 <= elitism < population_size:
+   735→            raise DataValidationError(
+   736→                f"elitism must be in [0, population_size), got {elitism} "
+   737→                f"with population_size={population_size}"
+   738→            )
+   739→        if tournament_k < 2:
+   740→            raise DataValidationError(f"tournament_k must be >= 2, got {tournament_k}")
+   741→        if max_smiles_length < 20:
+   742→            raise DataValidationError(
+   743→                f"max_smiles_length must be >= 20, got {max_smiles_length}"
+   744→            )
+   745→        if mutation not in ("uniform", "scaffold", "topology"):
+   746→            raise DataValidationError(
+   747→                f"mutation must be 'uniform', 'scaffold' or 'topology', "
+   748→                f"got {mutation!r}"
+   749→            )
+   750→        if crossover not in ("splice", "scaffold_hop"):
+   751→            raise DataValidationError(
+   752→                f"crossover must be 'splice' or 'scaffold_hop', got {crossover!r}"
+   753→            )
+   754→        if operator_selection not in ("uniform", "adaptive"):
+   755→            raise DataValidationError(
+   756→                f"operator_selection must be 'uniform' or 'adaptive', "
+   757→                f"got {operator_selection!r}"
+   758→            )
+   759→        if aos_window < 1:
+   760→            raise DataValidationError(f"aos_window must be >= 1, got {aos_window}")
+   761→        if not math.isfinite(aos_temperature) or aos_temperature <= 0.0:
+   762→            raise DataValidationError(
+   763→                f"aos_temperature must be a finite positive number, "
+   764→                f"got {aos_temperature}"
+   765→            )
+   766→        self.objective = objective
+   767→        self.population_size = population_size
+   768→        self.generations = generations
+   769→        self.mutation_rate = mutation_rate
+   770→        self.crossover_rate = crossover_rate
+   771→        self.elitism = elitism
+   772→        self.tournament_k = tournament_k
+   773→        self.max_smiles_length = max_smiles_length
+   774→        self.mutation = mutation
+   775→        self.crossover = crossover
+   776→        self.operator_selection = operator_selection
+   777→        self.aos_window = aos_window
+   778→        self.aos_temperature = aos_temperature
+   779→        self.seed = seed
+   780→
+   781→    # -- internals -------------------------------------------------------
+   782→    def _mutation_alphabet(self, corpus: list[str]) -> list[str]:
+   783→        """Characters the mutator draws from (the corpus alphabet)."""
+   784→        alphabet = smiles_alphabet(corpus)
+   785→        return alphabet or list("CCcO()=")
+   786→
+   787→    def _mutate(
+   788→        self,
+   789→        smiles: str,
+   790→        alphabet: list[str],
+   791→        rng: random.Random,
+   792→        decoration_pool: Sequence[str] = (),
+   793→    ) -> str:
+   794→        """Mutate ``smiles``: ring-size move, decoration resampling or character edits.
+   795→
+   796→        In ``topology`` mode a ring contraction / expansion is drawn
+   797→        first (``None`` returns -- acyclic parent, aromatic-only rings,
+   798→        over-length mutant -- fall through).  In ``scaffold`` mode (with
+   799→        a non-empty decoration pool) the scaffold-preserving operator
+   800→        fires next; ``None`` returns (acyclic parent, RDKit failure,
+   801→        over-length mutant) fall through to the classic character-level
+   802→        mutation so evolution never stalls.
+   803→        """
+   804→        if self.mutation == "topology":
+   805→            mutant = ring_topology_mutate(
+   806→                smiles, rng, max_smiles_length=self.max_smiles_length
+   807→            )
+   808→            if mutant is not None:
+   809→                return mutant
+   810→        if decoration_pool:
+   811→            mutant = _scaffold_mutate(smiles, decoration_pool, rng, self.max_smiles_length)
+   812→            if mutant is not None:
+   813→                return mutant
+   814→        return self._character_mutate(smiles, alphabet, rng)
+   815→
+   816→    def _character_mutate(
+   817→        self, smiles: str, alphabet: list[str], rng: random.Random
+   818→    ) -> str:
+   819→        """Character-level substitution / insertion / deletion mutation.
+   820→
+   821→        The classic uniform mutation and the universal fallback: at
+   822→        least one character is substituted, inserted or deleted, drawn
+   823→        from the corpus alphabet.  Extracted verbatim from ``_mutate``
+   824→        (round 100x-38) so the adaptive mutation-family stage can draw
+   825→        it directly with identical rng behaviour.
+   826→        """
+   827→        chars = list(smiles)
+   828→        n_mutations = max(1, round(len(chars) * self.mutation_rate))
+   829→        for _ in range(n_mutations):
+   830→            if not chars:
+   831→                break
+   832→            position = rng.randrange(len(chars))
+   833→            draw = rng.random()
+   834→            if draw < 0.45:  # substitute
+   835→                chars[position] = alphabet[rng.randrange(len(alphabet))]
+   836→            elif draw < 0.8:  # insert
+   837→                chars.insert(position, alphabet[rng.randrange(len(alphabet))])
+   838→            else:  # delete
+   839→                del chars[position]
+   840→        return "".join(chars)
+   841→
+   842→    def _crossover(self, parent_a: str, parent_b: str, rng: random.Random) -> str:
+   843→        """Recombine two parents: splice or scaffold-hop BREED cut.
+   844→
+   845→        Both operators fall back to ``parent_a`` when they cannot
+   846→        produce a viable child (short genomes for the splice; no
+   847→        homologous cut or both recombinations unsanitisable / over-length
+   848→        for the scaffold hop).
+   849→        """
+   850→        if self.crossover == "scaffold_hop":
+   851→            child = scaffold_hop_crossover(
+   852→                parent_a, parent_b, rng, max_smiles_length=self.max_smiles_length
+   853→            )
+   854→            return child if child is not None else parent_a
+   855→        if len(parent_a) < 2 or len(parent_b) < 2:
+   856→            return parent_a
+   857→        cut_a = rng.randrange(1, len(parent_a))
+   858→        cut_b = rng.randrange(1, len(parent_b))
+   859→        child = parent_a[:cut_a] + parent_b[cut_b:]
+   860→        if len(child) > self.max_smiles_length:
+   861→            return parent_a
+   862→        return child
+   863→
+   864→    def _recombine(
+   865→        self,
+   866→        parent_a: str,
+   867→        parent_b: str,
+   868→        rng: random.Random,
+   869→        geometry_weights: Mapping[str, float],
+   870→    ) -> tuple[str, bool, str | None]:
+   871→        """Adaptive-mode recombination with an operator trace.
+   872→
+   873→        Returns ``(child, recombined, geometry)``: ``child`` is the
+   874→        product (``parent_a`` whenever the crossover operator fell
+   875→        back), ``recombined`` tells whether the drawn crossover
+   876→        operator's own product survived into the child (``False`` on
+   877→        every fallback -- the null-reward case), and ``geometry`` is the
+   878→        drawn geometry for the level-2 credit (``None`` only when the
+   879→        scaffold-hop scan found no candidate at all).  The level-2
+   880→        weights flow into :func:`_scaffold_hop_core`, which renormalises
+   881→        them over the geometries present in the pair's pool.  The splice
+   882→        branch mirrors :meth:`_crossover` line for line -- deliberately
+   883→        not shared with it, so the uniform-mode path stays
+   884→        byte-identical.
+   885→        """
+   886→        if self.crossover == "scaffold_hop":
+   887→            child, geometry = _scaffold_hop_core(
+   888→                parent_a,
+   889→                parent_b,
+   890→                rng,
+   891→                max_smiles_length=self.max_smiles_length,
+   892→                geometry_weights=geometry_weights,
+   893→            )
+   894→            if child is not None:
+   895→                return child, True, geometry
+   896→            return parent_a, False, geometry
+   897→        # splice crossover: the geometry level degenerates to the single
+   898→        # "splice" operator -- no draw, no rng consumption
+   899→        if len(parent_a) < 2 or len(parent_b) < 2:
+   900→            return parent_a, False, "splice"
+   901→        cut_a = rng.randrange(1, len(parent_a))
+   902→        cut_b = rng.randrange(1, len(parent_b))
+   903→        child = parent_a[:cut_a] + parent_b[cut_b:]
+   904→        if len(child) > self.max_smiles_length:
+   905→            return parent_a, False, "splice"
+   906→        return child, True, "splice"
+   907→
+   908→    def _tournament(
+   909→        self, population: list[str], fitness: dict[str, float], rng: random.Random
+   910→    ) -> str:
+   911→        """Pick the fittest of ``tournament_k`` random molecules."""
+   912→        best = population[rng.randrange(len(population))]
+   913→        for _ in range(self.tournament_k - 1):
+   914→            candidate = population[rng.randrange(len(population))]
+   915→            if fitness[candidate] > fitness[best]:
+   916→                best = candidate
+   917→        return best
+   918→
+   919→    def _initial_population(
+   920→        self, seed_smiles: Sequence[str] | None, canonical_pool: list[str], rng: random.Random
+   921→    ) -> tuple[list[str], list[str]]:
+   922→        """Build the generation-0 population (seeds first, corpus padding).
+   923→
+   924→        Returns ``(population, canonical_seeds_used)``.
+   925→        """
+   926→        initial: list[str] = []
+   927→        kept: list[str] = []
+   928→        if seed_smiles is not None:
+   929→            for smiles in list(seed_smiles):  # caller's sequence stays untouched
+   930→                canonical = (
+   931→                    canonical_smiles(smiles) if isinstance(smiles, str) else None
+   932→                )
+   933→                if canonical is None:
+   934→                    _LOG.warning("dropping invalid seed SMILES %r", smiles)
+   935→                elif len(canonical) > self.max_smiles_length:
+   936→                    _LOG.warning(
+   937→                        "dropping seed SMILES %r -- longer than max_smiles_length=%d",
+   938→                        smiles,
+   939→                        self.max_smiles_length,
+   940→                    )
+   941→                else:
+   942→                    kept.append(canonical)
+   943→            if not kept:
+   944→                raise DataValidationError(
+   945→                    "no valid seed molecule(s) provided -- invalid entries were "
+   946→                    "dropped with a warning, but at least one must survive"
+   947→                )
+   948→            _LOG.info(
+   949→                "seeded mode: %d user molecule(s) anchor the population", len(kept)
+   950→            )
+   951→            initial.extend(kept)
+   952→        while len(initial) < self.population_size:
+   953→            initial.append(canonical_pool[rng.randrange(len(canonical_pool))])
+   954→        # de-duplicate while preserving order (seeds come first)
+   955→        seen: set[str] = set()
+   956→        population: list[str] = []
+   957→        for smiles in initial:
+   958→            if smiles not in seen:
+   959→                seen.add(smiles)
+   960→                population.append(smiles)
+   961→        # top up with *unique* corpus molecules where the pool allows it...
+   962→        attempts = 0
+   963→        while (
+   964→            len(population) < self.population_size
+   965→            and attempts < 10 * self.population_size
+   966→        ):
+   967→            attempts += 1
+   968→            candidate = canonical_pool[rng.randrange(len(canonical_pool))]
+   969→            if candidate not in seen:
+   970→                seen.add(candidate)
+   971→                population.append(candidate)
+   972→        if len(population) < self.population_size:
+   973→            # ... and with duplicated members when the corpus holds fewer
+   974→            # unique molecules than population_size (a tiny user corpus must
+   975→            # not hang the run: evolution still works on repeated genomes).
+   976→            _LOG.warning(
+   977→                "corpus holds only %d unique molecule(s) -- duplicating members "
+   978→                "to reach population_size=%d",
+   979→                len(population),
+   980→                self.population_size,
+   981→            )
+   982→            base = list(population)
+   983→            index = 0
+   984→            while len(population) < self.population_size:
+   985→                population.append(base[index % len(base)])
+   986→                index += 1
+   987→        return population, kept
+   988→
+   989→    # -- public API ------------------------------------------------------
+   990→    def optimize(
+   991→        self,
+   992→        seed_smiles: Sequence[str] | None = None,
+   993→        corpus: Sequence[str] | None = None,
+   994→    ) -> GenerationResult:
+   995→        """Run the evolution and return the ranked :class:`GenerationResult`.
+   996→
+   997→        Parameters
+   998→        ----------
+   999→        seed_smiles:
+  1000→            Seeded mode: molecules the population is initialised from.
+  1001→            Invalid entries are warned about and dropped (an error is
+  1002→            raised only when *no* seed survives).  The caller's list is
+  1003→            never mutated.  When MORE valid seeds arrive than
+  1004→            ``population_size``, generation 0 scores them all and the
+  1005→            population contracts to ``population_size`` from the next
+  1006→            generation (user molecules are never silently discarded).
+  1007→        corpus:
+  1008→            De novo mode: sampling pool for the initial population
+  1009→            (default: :data:`~pharmaml.generative.DEFAULT_CORPUS`, an
+  1010→            immutable tuple).  A pool with fewer unique valid molecules
+  1011→            than ``population_size`` is tolerated: members are
+  1012→            duplicated (with a warning) rather than hanging the run.
+  1013→
+  1014→        Raises
+  1015→        ------
+  1016→        DataValidationError
+  1017→            If ``seed_smiles`` / ``corpus`` is a bare string (it would
+  1018→            otherwise be iterated as single-atom CHARACTERS), every
+  1019→            provided seed molecule is invalid, or the corpus is empty
+  1020→            after validity / length filtering.  Invalid corpus entries
+  1021→            are dropped with a warning, never silently.
+  1022→        """
+  1023→        started = time.perf_counter()
+  1024→        rng = random.Random(self.seed)
+  1025→
+  1026→        # A bare string would silently iterate as CHARACTERS ("CCO" ->
+  1027→        # ['C', 'C', 'O'] single-atom molecules) -- the exact trap
+  1028→        # NoveltyObjective guards against for its corpus, so the same
+  1029→        # typed DataValidationError fires here.
+  1030→        if seed_smiles is not None and isinstance(seed_smiles, str):
+  1031→            raise DataValidationError(
+  1032→                "seed_smiles must be a sequence of SMILES strings, not a "
+  1033→                f"single string (got {seed_smiles!r} of length "
+  1034→                f"{len(seed_smiles)})"
+  1035→            )
+  1036→        if corpus is not None and isinstance(corpus, str):
+  1037→            raise DataValidationError(
+  1038→                "corpus must be a sequence of SMILES strings, not a single "
+  1039→                f"string (got {corpus!r} of length {len(corpus)})"
+  1040→            )
+  1041→
+  1042→        # An explicitly passed *empty* corpus must raise (not silently fall
+  1043→        # back to the default corpus), so truthiness tricks are off limits.
+  1044→        pool = list(DEFAULT_CORPUS if corpus is None else corpus)
+  1045→        n_non_string = sum(1 for s in pool if not isinstance(s, str))
+  1046→        if n_non_string:
+  1047→            # silent data loss is the failure mode this package refuses:
+  1048→            # invalid SEEDS warn, so must non-string corpus entries
+  1049→            # (the NoveltyObjective warning, sibling-style).
+  1050→            _LOG.warning(
+  1051→                "dropping %d non-string corpus entr(ies) -- corpus entries "
+  1052→                "must be SMILES strings",
+  1053→                n_non_string,
+  1054→            )
+  1055→        pool = [s for s in pool if isinstance(s, str)]
+  1056→        if not pool:
+  1057→            raise DataValidationError(
+  1058→                "corpus is empty (or holds no string entries) -- pass a "
+  1059→                "non-empty list of SMILES strings"
+  1060→                + (f" ({n_non_string} non-string entr(ies) dropped)" if n_non_string else "")
+  1061→            )
+  1062→        canonical_pool = []
+  1063→        for smiles in pool:
+  1064→            canonical = canonical_smiles(smiles)
+  1065→            if canonical is not None and len(canonical) <= self.max_smiles_length:
+  1066→                canonical_pool.append(canonical)
+  1067→        n_dropped = len(pool) - len(canonical_pool)
+  1068→        if n_dropped:
+  1069→            # same sibling-style warning the optimizer already gives for
+  1070→            # invalid seeds: dropped entries must not vanish silently
+  1071→            _LOG.warning(
+  1072→                "dropping %d invalid/unparseable corpus entr(ies) (or over "
+  1073→                "the max_smiles_length cap) -- the initial population is "
+  1074→                "drawn from the remaining %d valid molecule(s)",
+  1075→                n_dropped,
+  1076→                len(canonical_pool),
+  1077→            )
+  1078→        # de-duplicate while preserving order: duplicate spellings of the
+  1079→        # same molecule (e.g. "CCO" and "OCC") must not skew the initial
+  1080→        # sampling, and a pool with fewer UNIQUE molecules than
+  1081→        # population_size must not hang the unique-fill loop below.
+  1082→        canonical_pool = list(dict.fromkeys(canonical_pool))
+  1083→        if not canonical_pool:
+  1084→            raise DataValidationError(
+  1085→                "corpus holds no valid SMILES under the length cap -- nothing "
+  1086→                "to initialise the population from"
+  1087→            )
+  1088→        alphabet = self._mutation_alphabet(canonical_pool)
+  1089→        population, kept_seeds = self._initial_population(seed_smiles, canonical_pool, rng)
+  1090→        decoration_pool: list[str] = []
+  1091→        if self.mutation == "scaffold":
+  1092→            decoration_pool = _build_decoration_pool(canonical_pool)
+  1093→            if not decoration_pool:
+  1094→                _LOG.warning(
+  1095→                    "corpus yields no scaffold decorations -- scaffold "
+  1096→                    "mutations fall back to character mutation"
+  1097→                )
+  1098→
+  1099→        # Adaptive operator selection: one credit book per biasable level
+  1100→        # (level 1 crossover-vs-clone; the recombination geometry -- the
+  1101→        # seven scaffold-hop buckets, or the single "splice" bucket in
+  1102→        # splice mode; the mutation family -- the mode's primary operator
+  1103→        # vs the character mutation, character alone when the mode has no
+  1104→        # second operator).  Constructing the books is side-effect-free,
+  1105→        # so the uniform path is untouched.
+  1106→        adaptive = self.operator_selection == "adaptive"
+  1107→        level1_book = _OperatorBook(
+  1108→            ("crossover", "clone"), self.aos_window, self.aos_temperature
+  1109→        )
+  1110→        geometry_operators: tuple[str, ...] = (
+  1111→            ("splice",) if self.crossover == "splice" else GEOMETRY_ORDER
+  1112→        )
+  1113→        geometry_book = _OperatorBook(
+  1114→            geometry_operators, self.aos_window, self.aos_temperature
+  1115→        )
+  1116→        if self.mutation == "topology":
+  1117→            family_operators: tuple[str, ...] = ("topology", "character")
+  1118→        elif self.mutation == "scaffold" and decoration_pool:
+  1119→            family_operators = ("scaffold", "character")
+  1120→        else:
+  1121→            family_operators = ("character",)
+  1122→        mutation_book = _OperatorBook(
+  1123→            family_operators, self.aos_window, self.aos_temperature
+  1124→        )
+  1125→
+  1126→        produced: dict[str, float] = {}
+  1127→        history: list[dict[str, Any]] = []
+  1128→        accepted_total = 0
+  1129→        attempts_total = 0
+  1130→        last_fraction = 1.0
+  1131→
+  1132→        for generation in range(self.generations):
+  1133→            fitness = {
+  1134→                smiles: _validated_score(self.objective, smiles)
+  1135→                for smiles in population
+  1136→            }
+  1137→            for smiles, score in fitness.items():
+  1138→                produced[smiles] = max(produced.get(smiles, 0.0), score)
+  1139→            ranked = sorted(population, key=lambda s: (-fitness[s], s))
+  1140→            history.append(
+  1141→                {
+  1142→                    "generation": generation,
+  1143→                    "best_score": fitness[ranked[0]],
+  1144→                    "mean_score": sum(fitness.values()) / len(fitness),
+  1145→                    "best_smiles": ranked[0],
+  1146→                    "n_unique": len(set(population)),
+  1147→                    "valid_offspring_fraction": last_fraction,
+  1148→                }
+  1149→            )
+  1150→            if generation == self.generations - 1:
+  1151→                break
+  1152→
+  1153→            next_population = ranked[: self.elitism]
+  1154→            attempts = 0
+  1155→            while len(next_population) < self.population_size:
+  1156→                attempts += 1
+  1157→                if attempts > 50 * self.population_size:  # pragma: no cover
+  1158→                    _LOG.warning(
+  1159→                        "mutation/crossover yield collapsed in generation %d "
+  1160→                        "-- padding the population with corpus molecules",
+  1161→                        generation,
+  1162→                    )
+  1163→                    while len(next_population) < self.population_size:
+  1164→                        next_population.append(
+  1165→                            canonical_pool[rng.randrange(len(canonical_pool))]
+  1166→                        )
+  1167→                    break
+  1168→                parent_a = self._tournament(population, fitness, rng)
+  1169→                drawn_l1: str | None = None
+  1170→                drawn_geometry: str | None = None
+  1171→                drawn_family: str | None = None
+  1172→                recombined = False
+  1173→                family_survived = False
+  1174→                mid_parent = 0.0
+  1175→                if self.mutation == "scaffold" and self.crossover == "splice":
+  1176→                    # The character-level splice destroys ring systems and
+  1177→                    # would defeat scaffold preservation, so it is bypassed
+  1178→                    # in scaffold mode (crossover_rate does not apply).
+  1179→                    # The structural scaffold-hop crossover is NOT bypassed
+  1180→                    # -- it is the mode's natural partner.
+  1181→                    child = parent_a
+  1182→                else:
+  1183→                    parent_b = self._tournament(population, fitness, rng)
+  1184→                    mid_parent = (fitness[parent_a] + fitness[parent_b]) / 2.0
+  1185→                    if adaptive:
+  1186→                        # level 1: the crossover-vs-clone Bernoulli becomes a
+  1187→                        # credit-driven draw (uniform mode: the exact
+  1188→                        # historical rng.random() comparison, unchanged)
+  1189→                        drawn_l1 = level1_book.draw(rng)
+  1190→                        use_cross = drawn_l1 == "crossover"
+  1191→                    else:
+  1192→                        use_cross = rng.random() < self.crossover_rate
+  1193→                    if use_cross:
+  1194→                        if adaptive:
+  1195→                            (
+  1196→                                child,
+  1197→                                recombined,
+  1198→                                drawn_geometry,
+  1199→                            ) = self._recombine(
+  1200→                                parent_a,
+  1201→                                parent_b,
+  1202→                                rng,
+  1203→                                geometry_book.probabilities(),
+  1204→                            )
+  1205→                        else:
+  1206→                            child = self._crossover(parent_a, parent_b, rng)
+  1207→                    else:
+  1208→                        child = parent_a
+  1209→                if not adaptive:
+  1210→                    child = self._mutate(child, alphabet, rng, decoration_pool)
+  1211→                elif len(family_operators) == 2:
+  1212→                    # level 3: the mutation family's structural if-chain
+  1213→                    # becomes a weighted draw with identical fallback
+  1214→                    # semantics (a failed primary mutation falls back to
+  1215→                    # the character mutation -- the surviving operator
+  1216→                    # earns the reward, the failed one the null reward)
+  1217→                    drawn_family = mutation_book.draw(rng)
+  1218→                    if drawn_family == family_operators[0]:
+  1219→                        if self.mutation == "topology":
+  1220→                            mutant = ring_topology_mutate(
+  1221→                                child, rng, max_smiles_length=self.max_smiles_length
+  1222→                            )
+  1223→                        else:
+  1224→                            mutant = _scaffold_mutate(
+  1225→                                child, decoration_pool, rng, self.max_smiles_length
+  1226→                            )
+  1227→                        if mutant is not None:
+  1228→                            child = mutant
+  1229→                            family_survived = True
+  1230→                        else:
+  1231→                            child = self._character_mutate(child, alphabet, rng)
+  1232→                    else:
+  1233→                        child = self._character_mutate(child, alphabet, rng)
+  1234→                        family_survived = True
+  1235→                else:
+  1236→                    # single-operator family (uniform mutation, or a scaffold
+  1237→                    # corpus without decorations): no draw, no rng spent --
+  1238→                    # the character mutation is the only operator
+  1239→                    child = self._character_mutate(child, alphabet, rng)
+  1240→                    drawn_family = family_operators[0]
+  1241→                    family_survived = True
+  1242→                # validity gates -- the uniform path's two `continue`s,
+  1243→                # restructured so the adaptive credit assignment also sees
+  1244→                # the failed attempts (identical call order and appends)
+  1245→                valid = False
+  1246→                child_canonical: str | None = None
+  1247→                score_child: float | None = None
+  1248→                if child and len(child) <= self.max_smiles_length:
+  1249→                    child_canonical = canonical_smiles(child)
+  1250→                    if (
+  1251→                        child_canonical is not None
+  1252→                        and len(child_canonical) <= self.max_smiles_length
+  1253→                    ):
+  1254→                        valid = True
+  1255→                        if adaptive:
+  1256→                            score_child = _validated_score(
+  1257→                                self.objective, child_canonical
+  1258→                            )
+  1259→                        if child_canonical not in next_population:
+  1260→                            next_population.append(child_canonical)
+  1261→                if adaptive:
+  1262→                    # credit assignment: the end-to-end reward vs the null
+  1263→                    # reward for a drawn operator whose product was
+  1264→                    # discarded (mid_parent = 0.0 in the scaffold+splice
+  1265→                    # bypass, where no second parent exists)
+  1266→                    end_to_end = (score_child if score_child is not None else 0.0) - (
+  1267→                        mid_parent
+  1268→                    )
+  1269→                    null_reward = -mid_parent
+  1270→                    if drawn_l1 is not None:
+  1271→                        level1_book.push(
+  1272→                            drawn_l1,
+  1273→                            end_to_end
+  1274→                            if (drawn_l1 == "clone" or recombined)
+  1275→                            else null_reward,
+  1276→                            valid,
+  1277→                            child_canonical if valid else None,
+  1278→                            score_child,
+  1279→                        )
+  1280→                    if drawn_geometry is not None:
+  1281→                        geometry_book.push(
+  1282→                            drawn_geometry,
+  1283→                            end_to_end if recombined else null_reward,
+  1284→                            valid and recombined,
+  1285→                            child_canonical if valid else None,
+  1286→                            score_child,
+  1287→                        )
+  1288→                    if drawn_family is not None:
+  1289→                        mutation_book.push(
+  1290→                            drawn_family,
+  1291→                            end_to_end if family_survived else null_reward,
+  1292→                            valid and family_survived,
+  1293→                            child_canonical if valid else None,
+  1294→                            score_child,
+  1295→                        )
+  1296→            accepted = self.population_size - self.elitism
+  1297→            attempts_total += attempts
+  1298→            accepted_total += accepted
+  1299→            if attempts:
+  1300→                last_fraction = accepted / attempts
+  1301→            history[-1]["valid_offspring_fraction"] = last_fraction
+  1302→            population = next_population
+  1303→
+  1304→        ranked_all = sorted(produced.items(), key=lambda kv: (-kv[1], kv[0]))
+  1305→        smiles_list = [smiles for smiles, _ in ranked_all]
+  1306→        score_list = [score for _, score in ranked_all]
+  1307→        breakdown: list[dict[str, float]] = []
+  1308→        score_with_breakdown = getattr(self.objective, "score_with_breakdown", None)
+  1309→        for smiles in smiles_list:
+  1310→            if callable(score_with_breakdown):
+  1311→                breakdown.append(score_with_breakdown(smiles)[1])
+  1312→            else:
+  1313→                breakdown.append({})
+  1314→        elapsed = time.perf_counter() - started
+  1315→        metadata: dict[str, Any] = {
+  1316→            "method": "genetic_algorithm",
+  1317→            "seed": self.seed,
+  1318→            "iterations": self.generations,
+  1319→            "elapsed_s": elapsed,
+  1320→            "valid_generated": accepted_total + len(population),
+  1321→            "unique_generated": len(smiles_list),
+  1322→            "population_size": self.population_size,
+  1323→            "mutation": self.mutation,
+  1324→            "crossover": self.crossover,
+  1325→            "seed_molecules": kept_seeds,
+  1326→        }
+  1327→        if adaptive:
+  1328→            # adaptive runs ONLY -- uniform-run metadata stays byte-
+  1329→            # identical (no new keys, no reordered values)
+  1330→            metadata["operator_selection"] = "adaptive"
+  1331→            metadata["operator_stats"] = {
+  1332→                "level1": level1_book.snapshot(),
+  1333→                "geometry": geometry_book.snapshot(),
+  1334→                "mutation": mutation_book.snapshot(),
+  1335→            }
+  1336→        return GenerationResult(
+  1337→            smiles=smiles_list,
+  1338→            scores=score_list,
+  1339→            breakdown=breakdown,
+  1340→            best=smiles_list[0] if smiles_list else "",
+  1341→            best_score=score_list[0] if score_list else 0.0,
+  1342→            history=history,
+  1343→            metadata=metadata,
+  1344→        )
+  1345→
+  1346→
+  1347→def run_genetic_optimization(
+  1348→    objective: Any,
+  1349→    seed_smiles: Sequence[str] | None = None,
+  1350→    corpus: Sequence[str] | None = None,
+  1351→    **kwargs: Any,
+  1352→) -> GenerationResult:
+  1353→    """One-call genetic optimisation (thin :class:`GeneticOptimizer` wrapper).
+  1354→
+  1355→    Example
+  1356→    -------
+  1357→    >>> from pharmaml.generative import QedObjective, run_genetic_optimization
+  1358→    >>> result = run_genetic_optimization(QedObjective(), generations=5, seed=7)
+  1359→    >>> len(result) > 0
+  1360→    True
+  1361→    """
+  1362→    optimizer = GeneticOptimizer(objective, **kwargs)
+  1363→    return optimizer.optimize(seed_smiles=seed_smiles, corpus=corpus)
+  1364→

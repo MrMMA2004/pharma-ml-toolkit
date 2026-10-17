@@ -171,6 +171,160 @@ class TestInvalidSmilesAccounting:
         assert "index 1" in caplog.text
 
 
+class TestZeroHeavyAtomMolecules:
+    """Fail-first (100x-41-G): a single ``[H]`` crashed the whole batch.
+
+    RDKit's SPS descriptor divides by ``GetNumHeavyAtoms()`` -- zero for
+    ``[H]``/``[H][H]`` -- so ``compute_descriptors`` leaked a raw
+    ``ZeroDivisionError`` and lost every *other* row of the batch as
+    collateral (fail-first evidence: /tmp/task41g/probe_hydrogen_FAIL.txt).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _visible_logs(self):
+        """Same two silencers as TestInvalidSmilesAccounting (suite
+        convention, cf. tests/test_format_converters.py): module-level
+        ``logging.disable`` plus ``propagate=False`` on the pharmaml root
+        logger both hide module warnings from caplog until lifted."""
+        prev_disable = logging.root.manager.disable
+        pharma_root = logging.getLogger("pharmaml")
+        prev_propagate = pharma_root.propagate
+        logging.disable(logging.NOTSET)
+        pharma_root.propagate = True
+        yield
+        pharma_root.propagate = prev_propagate
+        logging.disable(prev_disable)
+
+    def test_hydrogen_dropped_from_mixed_batch(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger="pharmaml.chem.descriptors"):
+            frame = compute_descriptors([ETHANOL, "[H]", BENZENE], progress=False)
+        # the [H] row is dropped like an invalid SMILES, index stays aligned
+        assert frame.index.tolist() == [0, 2]
+        assert frame["SMILES"].tolist() == [ETHANOL, BENZENE]
+        assert frame.index.name == "original_index"
+        assert "index 1" in caplog.text
+        assert "[H]" in caplog.text
+        assert "descriptor computation failed" in caplog.text
+
+    def test_hydrogen_drop_composes_with_invalid_smiles(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # parse-drop (index 1) and descriptor-drop (index 0) in one batch
+        with caplog.at_level(logging.WARNING, logger="pharmaml.chem.descriptors"):
+            frame = compute_descriptors(["[H]", INVALID, ETHANOL], progress=False)
+        assert frame.index.tolist() == [2]
+        assert frame["SMILES"].tolist() == [ETHANOL]
+        assert "index 0" in caplog.text
+        assert "index 1" in caplog.text
+
+    @pytest.mark.parametrize("batch", [["[H]"], ["[H]", "[H][H]"]])
+    def test_all_zero_heavy_atoms_raise_typed_error(self, batch: list[str]) -> None:
+        # every row dropped -> the module's typed empty-result contract,
+        # mirroring the all-invalid-SMILES DataValidationError
+        with pytest.raises(DataValidationError, match="every valid molecule"):
+            compute_descriptors(batch, progress=False)
+
+    def test_fingerprints_and_maccs_on_hydrogen_unchanged(self) -> None:
+        # the drop is rdkit_all-only: fingerprint paths compute on [H]
+        matrix, valid = compute_fingerprints(["[H]"], n_bits=64)
+        assert matrix.shape == (1, 64)
+        assert valid == [0]
+        maccs, maccs_valid = compute_maccs(["[H]"])
+        assert maccs.shape == (1, 167)
+        assert maccs_valid == [0]
+
+
+class TestFingerprintParameterTypes:
+    """Fail-first (100x-41-G): non-int ``radius``/``n_bits`` leaked raw errors.
+
+    str/None raised a raw ``TypeError`` from the guard comparison itself,
+    floats passed the range guard and blew up in the Boost.Python binding
+    (``ArgumentError`` plus a C++ signature dump), and bools were silently
+    read as ``1``/``0`` (radius) or raw-errored deeper (n_bits).  All now
+    raise the documented ``DataValidationError``; bools are rejected by
+    decision -- ``True``/``False`` are nonsense as a radius/bit count
+    (fail-first evidence: /tmp/task41g/probe_params_FAIL.txt).
+    """
+
+    @pytest.mark.parametrize("value", ["2", None, 2.5, True, False])
+    def test_non_int_radius_raises_typed(self, value: object) -> None:
+        with pytest.raises(
+            DataValidationError, match="radius must be an integer"
+        ) as excinfo:
+            compute_fingerprints([ETHANOL], radius=value)
+        assert repr(value) in str(excinfo.value)
+
+    @pytest.mark.parametrize("value", ["64", None, 64.0, 16.5, True, False])
+    def test_non_int_n_bits_raises_typed(self, value: object) -> None:
+        with pytest.raises(
+            DataValidationError, match="n_bits must be an integer"
+        ) as excinfo:
+            compute_fingerprints([ETHANOL], n_bits=value)
+        assert repr(value) in str(excinfo.value)
+
+    def test_numpy_integers_accepted(self) -> None:
+        # numpy ints pass the guard and are normalised to plain int (the
+        # Boost bindings reject numpy scalar types -- raw ArgumentError
+        # pre-fix)
+        matrix, valid = compute_fingerprints(
+            [ETHANOL], radius=np.int64(2), n_bits=np.int64(64)
+        )
+        assert matrix.shape == (1, 64)
+        assert valid == [0]
+
+    def test_range_guards_unchanged_for_plain_ints(self) -> None:
+        # boundary values behave exactly as before the int-ness guards
+        assert compute_fingerprints([ETHANOL], radius=0, n_bits=1)[0].shape == (1, 1)
+        with pytest.raises(DataValidationError, match="radius must be >= 0"):
+            compute_fingerprints([ETHANOL], radius=-1)
+        with pytest.raises(DataValidationError, match="n_bits out of range"):
+            compute_fingerprints([ETHANOL], n_bits=0)
+
+
+class TestEarlyValidationOrdering:
+    """Fail-first (100x-41-G): empty input / unknown ``descriptor_set`` were
+    validated only after the parse loop and the tqdm spin-up (finding G5).
+
+    Error *types* are unchanged (DataValidationError); only ordering and
+    message quality improve (fail-first evidence:
+    /tmp/task41g/probe_ordering_FAIL.txt).
+    """
+
+    def test_empty_list_message_names_the_problem(self) -> None:
+        # an empty input is a caller bug, not a parse outcome -- the old
+        # message ("No valid SMILES found in the input") misled about both
+        with pytest.raises(DataValidationError, match="empty") as excinfo:
+            compute_descriptors([], progress=False)
+        assert "No valid SMILES" not in str(excinfo.value)
+
+    def test_empty_generator_treated_like_empty_list(self) -> None:
+        with pytest.raises(DataValidationError, match="empty"):
+            compute_descriptors(iter([]), progress=False)
+
+    def test_descriptor_set_validated_before_parsing(self) -> None:
+        # a batch whose SMILES are ALL invalid must still surface the
+        # descriptor_set error (pre-fix the parse accounting won the race)
+        with pytest.raises(DataValidationError, match="descriptor_set"):
+            compute_descriptors(
+                [INVALID, "also bad"], descriptor_set="typo", progress=False
+            )
+
+    def test_no_progress_bar_spins_up_before_validation(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(DataValidationError, match="descriptor_set"):
+            compute_descriptors([ETHANOL] * 20, descriptor_set="typo", progress=True)
+        assert "Descriptors" not in capsys.readouterr().err
+
+    def test_all_invalid_non_empty_batch_error_unchanged(self) -> None:
+        # the neighbouring contract is untouched: a NON-empty all-invalid
+        # batch still raises the parse-accounting error
+        with pytest.raises(DataValidationError, match="No valid SMILES found"):
+            compute_descriptors([INVALID, "also bad"], progress=False)
+
+
 # ---------------------------------------------------------------------------
 # Pinning tests: behaviour that was already correct (disclosed, non-obvious)
 # ---------------------------------------------------------------------------

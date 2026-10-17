@@ -416,6 +416,8 @@ def plot_predicted_vs_actual(
         raise DataValidationError(
             f"y_true {truth.shape} and y_pred {prediction.shape} must match"
         )
+    if truth.size == 0:
+        raise DataValidationError("no values to plot (empty y_true/y_pred)")
 
     fig, ax = new_figure(figsize=(6.4, 6.0))
     low = float(min(truth.min(), prediction.min()))
@@ -452,6 +454,9 @@ def plot_residuals(
     """
     truth = np.asarray(y_true, dtype=float)
     prediction = np.asarray(y_pred, dtype=float)
+    if truth.size == 0:  # same contract as plot_predicted_vs_actual (not a
+        # silent empty figure — every sibling plotter raises typed on empty)
+        raise DataValidationError("no values to plot (empty y_true/y_pred)")
     residuals = truth - prediction
 
     fig, (ax_res, ax_hist) = new_figure(nrows=1, ncols=2, figsize=(11.0, 4.8))
@@ -615,7 +620,11 @@ def plot_feature_importance(
     scores yourself.
     """
     names, values = _extract_importances(model_or_mapping, feature_names)
-    order = np.argsort(values)[::-1][: min(top_n, len(values))][::-1]
+    # Stable argsort on the NEGATED values: descending by importance with
+    # ties resolving first-declared-wins (matches plot_top_ligands); the
+    # trailing reversal only flips display order so the top feature sits
+    # highest on the axis. argsort(values)[::-1] would flip tied groups.
+    order = np.argsort(-values, kind="stable")[: min(top_n, len(values))][::-1]
 
     fig, ax = new_figure(figsize=(8.4, 0.42 * len(order) + 1.7))
     positions = np.arange(len(order))

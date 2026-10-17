@@ -12,15 +12,21 @@ End-to-end generative-design story on a laptop CPU:
 4. train a character-level GRU prior on the corpus, then fine-tune it
    with REINVENT-style reinforcement learning toward the same objective;
 5. print the leaderboards, a four-arm GA-vs-RL comparison, and save the
-   ranked table to ``examples/artifacts/generative_design_leaderboard.csv``.
+   ranked table to ``examples/artifacts/generative_design_leaderboard.csv``;
+6. run the GA once more with adaptive operator selection and watch it
+   learn -- the per-generation operator mix (its trajectory, printed for
+   the first/last generation and saved as a figure) is the GA's own
+   learning curve, written to
+   ``examples/artifacts/generative_design_operator_trajectory.png``.
 
 Usage::
 
     python examples/run_generative_design.py
 
 Requires RDKit (``pip install "pharmaml[chem]"``) and, for the RL half,
-torch (``pip install "pharmaml[deep]"``).  Runtime: ~15 s on one CPU core
-(the structural GA arm is the slowest of the four).
+torch (``pip install "pharmaml[deep]"``); the trajectory figure needs
+matplotlib (``pip install "pharmaml[reports]"``).  Runtime: ~17 s on one
+CPU core (the structural GA arm is the slowest of the four).
 """
 
 from __future__ import annotations
@@ -39,10 +45,12 @@ from pharmaml.generative import (
     SimilarityObjective,
     SmilesRnn,
 )
+from pharmaml.viz import close_figure, plot_operator_trajectory, save_figure
 
 HERE = Path(__file__).resolve().parent
 SEEDS_CSV = HERE / "data" / "seed_molecules.csv"
 OUT_CSV = HERE / "artifacts" / "generative_design_leaderboard.csv"
+OUT_PNG = HERE / "artifacts" / "generative_design_operator_trajectory.png"
 
 ASPIRIN = "CC(=O)Oc1ccccc1C(=O)O"
 
@@ -145,6 +153,23 @@ def main() -> None:
     )
     leaderboard.to_csv(OUT_CSV, index=False)
     print(f"\nranked leaderboard ({len(leaderboard)} rows) -> {OUT_CSV}")
+
+    # ---- 6. Adaptive operators (the GA that learns) ------------------
+    print("\n=== 6. Adaptive operators (the GA that learns) ===")
+    ga_adaptive = GeneticOptimizer(
+        objective, population_size=16, generations=12, seed=42,
+        mutation="topology", operator_selection="adaptive",
+    ).optimize()
+    print(ga_adaptive.summary())
+    traj = ga_adaptive.metadata["operator_trajectory"]
+    print(f"mutation mix, generation {traj[0]['generation']:>2}: "
+          f"{traj[0]['mutation']}")
+    print(f"mutation mix, generation {traj[-1]['generation']:>2}: "
+          f"{traj[-1]['mutation']}")
+    fig = plot_operator_trajectory(ga_adaptive)
+    save_figure(fig, OUT_PNG)
+    close_figure(fig)
+    print(f"operator trajectory -> {OUT_PNG}")
 
 
 if __name__ == "__main__":

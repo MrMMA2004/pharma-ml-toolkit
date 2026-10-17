@@ -1,0 +1,1093 @@
+     1→"""Tests for :mod:`pharmaml.viz` — every plot, every export format, the
+     2→HTML report and the one-click visual bundle.
+     3→
+     4→All figures render through the headless Agg backend (pytest runs in a
+     5→plain Python process), so these tests double as the CI proof that
+     6→plotting works on servers without a display.
+     7→"""
+     8→
+     9→from __future__ import annotations
+    10→
+    11→import json
+    12→from pathlib import Path
+    13→from typing import ClassVar
+    14→
+    15→import matplotlib
+    16→import numpy as np
+    17→import pandas as pd
+    18→import pytest
+    19→
+    20→matplotlib.use("Agg", force=True)
+    21→
+    22→from pharmaml.data import load_dataset
+    23→from pharmaml.exceptions import DataValidationError, ModelError
+    24→from pharmaml.ml import (
+    25→    compare_models,
+    26→    evaluate_model,
+    27→    make_train_test_split,
+    28→    train_model,
+    29→)
+    30→from pharmaml.viz import (
+    31→    HTMLReport,
+    32→    export_table,
+    33→    metrics_to_dataframe,
+    34→    plot_calibration_curve,
+    35→    plot_class_distribution,
+    36→    plot_concentration_profile,
+    37→    plot_confusion_matrix,
+    38→    plot_cv_scores,
+    39→    plot_descriptor_distributions,
+    40→    plot_dose_accumulation,
+    41→    plot_energy_distribution,
+    42→    plot_feature_importance,
+    43→    plot_learning_curve,
+    44→    plot_model_comparison,
+    45→    plot_predicted_vs_actual,
+    46→    plot_receptor_atom_types,
+    47→    plot_residuals,
+    48→    plot_roc_curves,
+    49→    plot_similarity_heatmap,
+    50→    plot_table_comparison,
+    51→    plot_top_ligands,
+    52→    save_figure,
+    53→    save_visual_bundle,
+    54→)
+    55→
+    56→
+    57→@pytest.fixture(scope="module")
+    58→def trained_classifier(classification_frame):
+    59→    """Fitted RF + held-out evaluation report on the shared fixture."""
+    60→    ds = load_dataset(
+    61→        _write_csv(classification_frame, "clf_fixture.csv"), target="Target"
+    62→    )
+    63→    X_train, X_test, y_train, y_test = make_train_test_split(
+    64→        ds.X, ds.y, test_size=0.25, random_state=42
+    65→    )
+    66→    result = train_model(
+    67→        "random_forest", "classification", X_train, y_train, tune=False
+    68→    )
+    69→    report = evaluate_model(result.model, X_test, y_test, "classification")
+    70→    return result, report, X_test, y_test
+    71→
+    72→
+    73→@pytest.fixture(scope="module")
+    74→def trained_regressor(regression_frame):
+    75→    ds = load_dataset(_write_csv(regression_frame, "reg_fixture.csv"), target="pIC50")
+    76→    X_train, X_test, y_train, y_test = make_train_test_split(
+    77→        ds.X, ds.y, test_size=0.25, random_state=42
+    78→    )
+    79→    result = train_model("random_forest", "regression", X_train, y_train, tune=False)
+    80→    report = evaluate_model(
+    81→        result.model, X_test, y_test, "regression", keep_predictions=True
+    82→    )
+    83→    return result, report, X_test, y_test
+    84→
+    85→
+    86→def _write_csv(frame: pd.DataFrame, name: str) -> Path:
+    87→    target = Path("/tmp") / name
+    88→    frame.to_csv(target, index=False)
+    89→    return target
+    90→
+    91→
+    92→@pytest.fixture()
+    93→def close_all():
+    94→    """Close every figure after each test (keeps the suite light)."""
+    95→    yield
+    96→    import matplotlib.pyplot as plt
+    97→
+    98→    plt.close("all")
+    99→
+   100→
+   101→# ---------------------------------------------------------------- ML plots
+   102→class TestConfusionMatrix:
+   103→    def test_from_report(self, trained_classifier, close_all):
+   104→        _, report, _, _ = trained_classifier
+   105→        fig = plot_confusion_matrix(report)
+   106→        assert fig.axes[0].get_xlabel() == "Predicted label"
+   107→        assert len(fig.axes[0].images) == 1
+   108→
+   109→    def test_raw_matrix_with_labels(self, close_all):
+   110→        fig = plot_confusion_matrix([[7, 2], [1, 9]], labels=["neg", "pos"])
+   111→        assert fig is not None
+   112→
+   113→    def test_normalized(self, trained_classifier, close_all):
+   114→        _, report, _, _ = trained_classifier
+   115→        fig = plot_confusion_matrix(report, normalize=True)
+   116→        assert "row-normalized" in fig.axes[0].get_title()
+   117→
+   118→    def test_rejects_non_square(self, close_all):
+   119→        with pytest.raises(DataValidationError):
+   120→            plot_confusion_matrix(np.zeros((2, 3)))
+   121→
+   122→    def test_rejects_label_count_mismatch(self, close_all):
+   123→        with pytest.raises(DataValidationError):
+   124→            plot_confusion_matrix([[1, 0], [0, 1]], labels=["a", "b", "c"])
+   125→
+   126→    def test_float_dtype_matrix(self, close_all):
+   127→        """Regression: a float-dtype matrix used to hit the ':d' format
+   128→        code and raise ``ValueError: Unknown format code 'd'``."""
+   129→        fig = plot_confusion_matrix(np.array([[4.0, 1.0], [0.0, 5.0]]))
+   130→        annotations = [t.get_text() for t in fig.axes[0].texts]
+   131→        assert any("4" in text for text in annotations)
+   132→
+   133→
+   134→class TestRocCurves:
+   135→    def test_binary(self, trained_classifier, close_all):
+   136→        result, _, X_test, y_test = trained_classifier
+   137→        fig = plot_roc_curves(result.model, X_test, y_test)
+   138→        legend = fig.axes[0].get_legend().get_texts()
+   139→        assert any("AUC" in text.get_text() for text in legend)
+   140→
+   141→    def test_multiclass_per_class_curves(self, close_all):
+   142→        from sklearn.datasets import make_classification as mk
+   143→        from sklearn.linear_model import LogisticRegression
+   144→
+   145→        X, y = mk(n_samples=150, n_features=5, n_informative=4, n_redundant=0,
+   146→                  n_classes=3, n_clusters_per_class=1, random_state=3)
+   147→        model = LogisticRegression(max_iter=2000).fit(X, y)
+   148→        fig = plot_roc_curves(model, X, y)
+   149→        assert len(fig.axes[0].get_legend().get_texts()) == 4  # 3 classes + chance
+   150→
+   151→    def test_model_without_proba_rejected(self, trained_classifier, close_all):
+   152→        from sklearn.linear_model import RidgeClassifier
+   153→
+   154→        model = RidgeClassifier().fit([[0], [1], [2], [3]], [0, 1, 0, 1])
+   155→        with pytest.raises(ModelError):
+   156→            plot_roc_curves(model, [[0], [1]], [0, 1])
+   157→
+   158→
+   159→class TestCalibrationCurve:
+   160→    def test_binary_with_brier(self, trained_classifier, close_all):
+   161→        result, _, X_test, y_test = trained_classifier
+   162→        fig = plot_calibration_curve(result.model, X_test, y_test)
+   163→        labels = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+   164→        assert any("Brier" in label for label in labels)
+   165→        assert any("perfectly calibrated" in label for label in labels)
+   166→
+   167→    def test_multiclass_one_curve_per_class(self, close_all):
+   168→        from sklearn.datasets import make_classification as mk
+   169→        from sklearn.linear_model import LogisticRegression
+   170→
+   171→        X, y = mk(n_samples=150, n_features=5, n_informative=4, n_redundant=0,
+   172→                   n_classes=3, n_clusters_per_class=1, random_state=3)
+   173→        model = LogisticRegression(max_iter=2000).fit(X, y)
+   174→        fig = plot_calibration_curve(model, X, y)
+   175→        labels = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+   176→        assert len(labels) == 4  # 3 one-vs-rest curves + the diagonal reference
+   177→
+   178→    def test_model_without_proba_rejected(self, close_all):
+   179→        from sklearn.linear_model import RidgeClassifier
+   180→
+   181→        model = RidgeClassifier().fit([[0], [1], [2], [3]], [0, 1, 0, 1])
+   182→        with pytest.raises(ModelError):
+   183→            plot_calibration_curve(model, [[0], [1]], [0, 1])
+   184→
+   185→    def test_rejects_single_bin(self, trained_classifier, close_all):
+   186→        result, _, X_test, y_test = trained_classifier
+   187→        with pytest.raises(DataValidationError, match="n_bins"):
+   188→            plot_calibration_curve(result.model, X_test, y_test, n_bins=1)
+   189→
+   190→
+   191→class TestLearningCurve:
+   192→    def test_curves_and_verdict(self, close_all):
+   193→        from sklearn.datasets import make_classification as mk
+   194→        from sklearn.ensemble import RandomForestClassifier
+   195→
+   196→        X, y = mk(n_samples=120, n_features=6, n_informative=4, random_state=7)
+   197→        model = RandomForestClassifier(n_estimators=25, random_state=0)
+   198→        fig = plot_learning_curve(model, X, y, cv=3, scoring="accuracy",
+   199→                                  train_sizes=np.linspace(0.3, 1.0, 4))
+   200→        labels = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+   201→        assert any(label.startswith("training score") for label in labels)
+   202→        assert any(label.startswith("CV score") for label in labels)
+   203→        title = fig.axes[0].get_title()
+   204→        assert "converging" in title or "overfitting" in title  # the verdict line
+   205→        assert len(fig.axes[0].collections) == 2  # ± std bands
+   206→
+   207→    def test_rejects_single_fold(self, close_all):
+   208→        from sklearn.datasets import make_classification as mk
+   209→
+   210→        X, y = mk(n_samples=40, n_features=4, random_state=1)
+   211→        with pytest.raises(DataValidationError, match="cv"):
+   212→            plot_learning_curve("not a model", X, y, cv=1)  # type: ignore[arg-type]
+   213→
+   214→
+   215→class TestRegressionPlots:
+   216→    def test_parity(self, trained_regressor, close_all):
+   217→        _, _report, _, _ = trained_regressor
+   218→        fig = plot_predicted_vs_actual(
+   219→            np.arange(10, dtype=float),
+   220→            np.arange(10, dtype=float) + np.linspace(-1, 1, 10),
+   221→            metrics={"RMSE": 0.5},
+   222→        )
+   223→        assert fig is not None
+   224→
+   225→    def test_parity_shape_mismatch(self, close_all):
+   226→        with pytest.raises(DataValidationError):
+   227→            plot_predicted_vs_actual([1, 2, 3], [1, 2])
+   228→
+   229→    def test_residuals(self, close_all):
+   230→        rng = np.random.default_rng(0)
+   231→        y = rng.normal(size=60)
+   232→        fig = plot_residuals(y, y + rng.normal(scale=0.2, size=60))
+   233→        assert len(fig.axes) == 2
+   234→
+   235→    def test_parity_from_regression_report(self, trained_regressor, close_all):
+   236→        _, report, _, _ = trained_regressor
+   237→        fig = plot_predicted_vs_actual(
+   238→            report.predictions, report.predictions, title="self-check"
+   239→        )
+   240→        assert "self-check" in fig.axes[0].get_title()
+   241→
+   242→
+   243→class TestLeaderboardAndDiagnostics:
+   244→    def test_model_comparison_bars(self, regression_frame, close_all):
+   245→        frame = regression_frame
+   246→        board = compare_models(
+   247→            frame.drop(columns=["pIC50"]), frame["pIC50"], "regression",
+   248→            models=["ridge", "random_forest"], cv=3,
+   249→        )
+   250→        fig = plot_model_comparison(board)
+   251→        assert len(fig.axes[0].patches) == 2
+   252→
+   253→    def test_model_comparison_requires_model_column(self, close_all):
+   254→        with pytest.raises(DataValidationError):
+   255→            plot_model_comparison(pd.DataFrame({"a": [1]}))
+   256→
+   257→    def test_model_comparison_metric_autodetect(self, close_all):
+   258→        board = pd.DataFrame({
+   259→            "model": ["a", "b"],
+   260→            "r2_mean": [0.5, 0.7],
+   261→            "r2_std": [0.05, 0.02],
+   262→        })
+   263→        fig = plot_model_comparison(board)
+   264→        assert "r2" in fig.axes[0].get_xlabel()
+   265→
+   266→    def test_class_distribution_mapping(self, close_all):
+   267→        fig = plot_class_distribution({"active": 30, "inactive": 70})
+   268→        assert len(fig.axes[0].patches) == 2
+   269→
+   270→    def test_class_distribution_from_dataset(self, classification_frame, close_all):
+   271→        ds = load_dataset(_write_csv(classification_frame, "clf_cd.csv"), target="Target")
+   272→        fig = plot_class_distribution(ds)
+   273→        assert fig is not None
+   274→
+   275→    def test_class_distribution_rejects_empty(self, close_all):
+   276→        with pytest.raises(DataValidationError):
+   277→            plot_class_distribution({})
+   278→
+   279→    def test_feature_importance_from_model(self, trained_classifier, close_all):
+   280→        result, _, _, _ = trained_classifier
+   281→        fig = plot_feature_importance(result.model, feature_names=[f"f{i}" for i in range(6)])
+   282→        assert len(fig.axes[0].patches) == 6
+   283→
+   284→    def test_feature_importance_from_mapping(self, close_all):
+   285→        fig = plot_feature_importance({"logp": 0.8, "mw": 0.4, "tpsa": 0.1})
+   286→        assert len(fig.axes[0].patches) == 3
+   287→
+   288→    def test_feature_importance_top_n(self, close_all):
+   289→        fig = plot_feature_importance({f"f{i}": i / 10 for i in range(10)}, top_n=4)
+   290→        assert len(fig.axes[0].patches) == 4
+   291→
+   292→    def test_feature_importance_unsupported_model(self, close_all):
+   293→        with pytest.raises(DataValidationError):
+   294→            plot_feature_importance(object())
+   295→
+   296→    def test_cv_scores_array(self, close_all):
+   297→        fig = plot_cv_scores([0.7, 0.8, 0.75])
+   298→        assert "mean" in fig.axes[0].get_legend().get_texts()[0].get_text()
+   299→
+   300→    def test_cv_scores_from_training_result(self, trained_regressor, close_all):
+   301→        _result, _, _, _ = trained_regressor
+   302→        fig = plot_cv_scores(np.array([0.6, 0.7]))
+   303→        assert fig is not None
+   304→
+   305→    def test_cv_scores_empty(self, close_all):
+   306→        with pytest.raises(DataValidationError):
+   307→            plot_cv_scores([])
+   308→
+   309→
+   310→# ---------------------------------------------------------------- pharma
+   311→class TestPharmaPlots:
+   312→    def test_concentration_profile(self, close_all):
+   313→        t = np.array([0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 12.0])
+   314→        c = 10.0 * np.exp(-0.25 * t)
+   315→        fig = plot_concentration_profile(t, c)
+   316→        assert len(fig.axes) == 2
+   317→
+   318→    def test_concentration_profile_with_summary(self, close_all):
+   319→        from pharmaml.pharma.pk import nca_summary
+   320→
+   321→        t = np.array([0.0, 1.0, 4.0, 8.0, 12.0])
+   322→        c = np.array([0.0, 9.8, 5.1, 2.2, 0.9])
+   323→        fig = plot_concentration_profile(t, c, summary=nca_summary(t, c))
+   324→        assert "t½" in fig.axes[1].get_title()
+   325→
+   326→    def test_concentration_profile_non_positive_log_panel(self, close_all):
+   327→        t = np.array([0.0, 1.0, 2.0])
+   328→        c = np.array([0.0, 0.0, 0.0])
+   329→        fig = plot_concentration_profile(t, c)
+   330→        assert "no positive concentrations" in fig.axes[1].texts[0].get_text()
+   331→
+   332→    def test_dose_accumulation(self, close_all):
+   333→        fig = plot_dose_accumulation(dose=500, tau=8, t_half=6, vd=40, n_doses=5)
+   334→        labels = [text.get_text() for text in fig.axes[0].get_legend().get_texts()]
+   335→        assert any("Cmax,ss" in label for label in labels)
+   336→
+   337→    def test_dose_accumulation_requires_exactly_one_rate(self, close_all):
+   338→        with pytest.raises(DataValidationError):
+   339→            plot_dose_accumulation(dose=100, tau=8, t_half=6, ke=0.1, vd=40)
+   340→        with pytest.raises(DataValidationError):
+   341→            plot_dose_accumulation(dose=100, tau=8, vd=40)
+   342→
+   343→    def test_dose_accumulation_validates_regimen_up_front(self, close_all):
+   344→        """Regression: a typo'd regimen (negative dose, impossible
+   345→        bioavailability) used to be caught deep inside accumulation_ratio
+   346→        or plotted silently as negative concentrations."""
+   347→        with pytest.raises(DataValidationError, match="dose"):
+   348→            plot_dose_accumulation(dose=-500, tau=8, t_half=6, vd=40)
+   349→        with pytest.raises(DataValidationError, match="tau"):
+   350→            plot_dose_accumulation(dose=500, tau=0, t_half=6, vd=40)
+   351→        with pytest.raises(DataValidationError, match="vd"):
+   352→            plot_dose_accumulation(dose=500, tau=8, t_half=6, vd=-40)
+   353→        with pytest.raises(DataValidationError, match="bioavailability"):
+   354→            plot_dose_accumulation(dose=500, tau=8, t_half=6, vd=40, f=1.5)
+   355→
+   356→    def test_concentration_profile_default_auc_uses_package_trapezoid(self, close_all):
+   357→        """The no-summary/no-auc path must go through pharmaml's own
+   358→        auc_trapezoid (numpy>=1.24 has no np.trapezoid)."""
+   359→        t = np.array([0.0, 2.0, 4.0])
+   360→        c = np.array([0.0, 6.0, 0.0])
+   361→        fig = plot_concentration_profile(t, c)
+   362→        legend_texts = [text.get_text() for text in fig.axes[0].get_legend().get_texts()]
+   363→        assert any(text.startswith("AUC = 12") for text in legend_texts)  # triangle: ½·4·6
+   364→
+   365→
+   366→# ---------------------------------------------------------------- chem
+   367→class TestChemPlots:
+   368→    def test_descriptor_distributions(self, regression_frame, close_all):
+   369→        fig = plot_descriptor_distributions(
+   370→            regression_frame.drop(columns=["pIC50"]), max_columns=4
+   371→        )
+   372→        assert len([ax for ax in fig.axes if ax.get_visible()]) == 4
+   373→
+   374→    def test_descriptor_distributions_column_subset(self, regression_frame, close_all):
+   375→        fig = plot_descriptor_distributions(
+   376→            regression_frame, columns=["descr_00", "descr_01", "pIC50"]
+   377→        )
+   378→        assert fig is not None
+   379→
+   380→    def test_descriptor_distributions_unknown_column(self, regression_frame, close_all):
+   381→        with pytest.raises(DataValidationError):
+   382→            plot_descriptor_distributions(regression_frame, columns=["nope"])
+   383→
+   384→    def test_descriptor_distributions_rejects_empty(self, close_all):
+   385→        with pytest.raises(DataValidationError):
+   386→            plot_descriptor_distributions(pd.DataFrame())
+   387→
+   388→    def test_similarity_heatmap_dataframe_labels(self, close_all):
+   389→        rng = np.random.default_rng(1)
+   390→        m = rng.random((4, 4))
+   391→        m = (m + m.T) / 2
+   392→        np.fill_diagonal(m, 1.0)
+   393→        frame = pd.DataFrame(m, index=list("wxyz"), columns=list("wxyz"))
+   394→        fig = plot_similarity_heatmap(frame)
+   395→        assert [t.get_text() for t in fig.axes[0].get_xticklabels()] == list("wxyz")
+   396→
+   397→    def test_similarity_heatmap_annotates_small(self, close_all):
+   398→        fig = plot_similarity_heatmap(np.eye(3))
+   399→        assert fig.axes[0].texts  # cell annotations present
+   400→
+   401→    def test_similarity_heatmap_non_square(self, close_all):
+   402→        with pytest.raises(DataValidationError):
+   403→            plot_similarity_heatmap(np.zeros((2, 3)))
+   404→
+   405→    def test_table_comparison_two_panels(self, close_all):
+   406→        from pharmaml.chem import compare_tables
+   407→
+   408→        a = pd.DataFrame({"Ligand": ["aspirin.pdbqt", "naproxen.pdbqt", "ibuprofen.pdbqt"]})
+   409→        b = pd.DataFrame({"Ligand": ["aspirin", "ketoprofen", "tolmetin"]})
+   410→        comparison = compare_tables(a, b, column="Ligand")
+   411→        fig = plot_table_comparison(
+   412→            comparison, labels=("docking_summary.csv", "library.csv")
+   413→        )
+   414→        assert len(fig.axes) == 2  # overlap bar + per-bucket counts
+   415→        # Bucket names carry the caller's table labels.
+   416→        ylabels = {t.get_text() for t in fig.axes[1].get_yticklabels()}
+   417→        assert "only in docking_summary.csv" in ylabels
+   418→        assert "only in library.csv" in ylabels
+   419→        # The top overlap bar exposes one legend entry per bucket.
+   420→        assert len(fig.axes[0].get_legend_handles_labels()[1]) == 3
+   421→
+   422→    def test_table_comparison_saves_png(self, close_all, tmp_path):
+   423→        from pharmaml.chem import compare_tables
+   424→
+   425→        a = pd.DataFrame({"Ligand": ["l1", "l2", "l3", "l4", "l5"]})
+   426→        b = pd.DataFrame({"Ligand": ["l1", "l2", "l3"]})
+   427→        comparison = compare_tables(a, b, column="Ligand")
+   428→        fig = plot_table_comparison(comparison)
+   429→        out = save_figure(fig, tmp_path / "reconciliation.png")
+   430→        assert out.exists() and out.stat().st_size > 1_000
+   431→
+   432→    def test_table_comparison_rejects_wrong_object(self, close_all):
+   433→        with pytest.raises(DataValidationError, match="TableComparison"):
+   434→            plot_table_comparison({"common": ["x"]})
+   435→
+   436→    def test_table_comparison_rejects_empty_reconciliation(self, close_all):
+   437→        from pharmaml.chem import compare_tables
+   438→
+   439→        empty = compare_tables(
+   440→            pd.DataFrame({"Ligand": []}), pd.DataFrame({"Ligand": []}), column="Ligand"
+   441→        )
+   442→        with pytest.raises(DataValidationError, match="nothing to compare"):
+   443→            plot_table_comparison(empty)
+   444→
+   445→
+   446→# ---------------------------------------------------------------- docking
+   447→class TestDockingPlots:
+   448→    def _summary(self) -> pd.DataFrame:
+   449→        rng = np.random.default_rng(7)
+   450→        return pd.DataFrame({
+   451→            "folder": [f"ligand_{i:02d}" for i in range(10)],
+   452→            "best_lowest_energy": -6.0 - rng.random(10) * 3.0,
+   453→            "best_num_in_cluster": rng.integers(1, 40, size=10),
+   454→        })
+   455→
+   456→    def test_energy_distribution(self, close_all):
+   457→        fig = plot_energy_distribution(self._summary())
+   458→        assert any("median" in t.get_text() for t in fig.axes[0].get_legend().get_texts())
+   459→
+   460→    def test_top_ligands_sorted(self, close_all):
+   461→        summary = self._summary()
+   462→        fig = plot_top_ligands(summary, top_n=5)
+   463→        assert len(fig.axes[0].patches) == 5
+   464→
+   465→    def test_top_ligands_annotate_outside_negative_bars(self, close_all):
+   466→        """Regression: value labels used to be drawn on top of the bar
+   467→        for the usual negative energies — they must sit outside the tip."""
+   468→        fig = plot_top_ligands(self._summary(), top_n=5)
+   469→        alignments = [text.get_ha() for text in fig.axes[0].texts]
+   470→        assert alignments and set(alignments) == {"right"}  # all energies < 0
+   471→
+   472→    def test_energy_fallback_column(self, close_all):
+   473→        summary = self._summary().rename(columns={"best_lowest_energy": "top_lowest_energy"})
+   474→        fig = plot_energy_distribution(summary)
+   475→        assert fig is not None
+   476→
+   477→    def test_missing_energy_column(self, close_all):
+   478→        with pytest.raises(DataValidationError):
+   479→            plot_energy_distribution(pd.DataFrame({"folder": ["a"]}))
+   480→
+   481→    def test_requires_dataframe(self, close_all):
+   482→        with pytest.raises(DataValidationError):
+   483→            plot_energy_distribution("not a frame")
+   484→
+   485→    def test_receptor_atom_types_from_dict(self, close_all):
+   486→        fig = plot_receptor_atom_types(
+   487→            {"A": 130, "C": 400, "HD": 190, "OA": 120, "NA": 30, "SA": 8}
+   488→        )
+   489→        ax = fig.axes[0]
+   490→        assert len(ax.patches) == 6
+   491→        # every bar carries its count annotation
+   492→        assert sum(1 for t in ax.texts if t.get_text().isdigit()) == 6
+   493→        # chemistry classes present in the legend
+   494→        legend_texts = " | ".join(t.get_text() for t in ax.get_legend().get_texts())
+   495→        assert "polar hydrogen" in legend_texts and "non-polar carbon" in legend_texts
+   496→
+   497→    def test_receptor_atom_types_sorted_desc(self, close_all):
+   498→        fig = plot_receptor_atom_types({"C": 10, "HD": 200, "OA": 50})
+   499→        heights = [p.get_height() for p in fig.axes[0].patches]
+   500→        assert heights == sorted(heights, reverse=True)
+   501→
+   502→    def test_receptor_atom_types_from_pdbqt_file(self, close_all, tmp_path):
+   503→        pdbqt = tmp_path / "receptor.pdbqt"
+   504→        pdbqt.write_text(
+   505→            "ATOM      1  C   LYS A   1     34.741  20.264 -10.844  1.00  0.00    +0.242 C\n"
+   506→            "ATOM      2  O   LYS A   1     33.945  20.813 -10.081  1.00  0.00    -0.273 OA\n"
+   507→            "ATOM      3 HD1  LYS A   1     35.900  20.900 -10.900  1.00  0.00    +0.100 HD\n",
+   508→            encoding="utf-8",
+   509→        )
+   510→        fig = plot_receptor_atom_types(pdbqt)
+   511→        assert len(fig.axes[0].patches) == 3
+   512→
+   513→    def test_receptor_atom_types_ignores_non_alpha_tail(self, close_all, tmp_path):
+   514→        pdbqt = tmp_path / "weird.pdbqt"
+   515→        pdbqt.write_text(
+   516→            "ATOM      1  C   LIG A   1      0.000   0.000   0.000  1.00  0.00    +0.20 C\n"
+   517→            "REMARK   something 123.45\n",
+   518→            encoding="utf-8",
+   519→        )
+   520→        fig = plot_receptor_atom_types(pdbqt)
+   521→        assert len(fig.axes[0].patches) == 1
+   522→
+   523→    def test_receptor_atom_types_empty_dict(self, close_all):
+   524→        with pytest.raises(DataValidationError):
+   525→            plot_receptor_atom_types({})
+   526→
+   527→    def test_receptor_atom_types_missing_file(self, close_all, tmp_path):
+   528→        with pytest.raises(DataValidationError):
+   529→            plot_receptor_atom_types(tmp_path / "nope.pdbqt")
+   530→
+   531→    def test_receptor_atom_types_accepts_report_like_object(self, close_all):
+   532→        class _FakeReport:
+   533→            atom_types: ClassVar[dict[str, int]] = {"C": 12, "OA": 3}
+   534→            output_pdbqt = "unused.pdbqt"
+   535→
+   536→        fig = plot_receptor_atom_types(_FakeReport())
+   537→        assert len(fig.axes[0].patches) == 2
+   538→
+   539→
+   540→# ---------------------------------------------------------------- reports
+   541→class TestTableExport:
+   542→    def _frame(self) -> pd.DataFrame:
+   543→        return pd.DataFrame({
+   544→            "model": ["rf", "ridge"],
+   545→            "score": [0.91, 0.84],
+   546→            "note": ["ok", "linear"],  # exercise the str() path
+   547→        })
+   548→
+   549→    def test_all_formats(self, tmp_path):
+   550→        frame = self._frame()
+   551→        for extension in ("csv", "tsv", "md", "json", "html"):
+   552→            out = export_table(frame, tmp_path / f"t.{extension}")
+   553→            assert out.exists() and out.stat().st_size > 0, extension
+   554→
+   555→    def test_csv_roundtrip(self, tmp_path):
+   556→        out = export_table(self._frame(), tmp_path / "t.csv")
+   557→        back = pd.read_csv(out)
+   558→        assert list(back["model"]) == ["rf", "ridge"]
+   559→
+   560→    def test_markdown_table_shape(self, tmp_path):
+   561→        out = export_table(self._frame(), tmp_path / "t.md")
+   562→        lines = out.read_text().strip().splitlines()
+   563→        assert lines[0].startswith("| model")
+   564→        assert set(lines[1].replace("|", "").split()) == {"---"}
+   565→
+   566→    def test_html_document(self, tmp_path):
+   567→        out = export_table(self._frame(), tmp_path / "t.html")
+   568→        text = out.read_text()
+   569→        assert text.startswith("<!DOCTYPE html>") and "<table>" in text
+   570→
+   571→    def test_json_records(self, tmp_path):
+   572→        out = export_table(self._frame(), tmp_path / "t.json")
+   573→        payload = json.loads(out.read_text())
+   574→        assert payload[0]["model"] == "rf"
+   575→
+   576→    def test_unknown_format(self, tmp_path):
+   577→        with pytest.raises(DataValidationError):
+   578→            export_table(self._frame(), tmp_path / "t.parquet")
+   579→
+   580→    def test_max_rows_truncation(self, tmp_path):
+   581→        frame = pd.DataFrame({"a": range(50)})
+   582→        export_table(frame, tmp_path / "t.md", max_rows=5)
+   583→        body = (tmp_path / "t.md").read_text().splitlines()
+   584→        assert len([ln for ln in body if ln.startswith("|")]) == 7  # header+rule+5
+   585→
+   586→    def test_max_rows_zero_is_not_falsy_shows_all(self, tmp_path):
+   587→        """Regression: ``if max_rows`` treated 0 as None and showed every
+   588→        row; ``max_rows=0`` is a valid show-nothing request."""
+   589→        frame = pd.DataFrame({"a": range(3)})
+   590→        export_table(frame, tmp_path / "t.html", max_rows=0)
+   591→        html_text = (tmp_path / "t.html").read_text()
+   592→        assert "<td>" not in html_text          # no data rows rendered
+   593→        assert "3 more row(s) truncated" in html_text
+   594→
+   595→
+   596→class TestHTMLReport:
+   597→    def test_full_report(self, trained_classifier, tmp_path):
+   598→        _result, report, _X_test, _y_test = trained_classifier
+   599→        page = (
+   600→            HTMLReport("Test report", subtitle="unit test")
+   601→            .add_metrics(report, heading="Metrics")
+   602→            .add_table(metrics_to_dataframe(report), heading="Metrics table")
+   603→            .add_text("Generated by pytest.", heading="Notes")
+   604→            .add_figure(plot_confusion_matrix(report), caption="Confusion")
+   605→        )
+   606→        out = page.save(tmp_path / "report.html")
+   607→        text = out.read_text()
+   608→        assert "<h1>Test report</h1>" in text
+   609→        assert "data:image/png;base64," in text
+   610→        assert "Confusion" in text
+   611→        assert text.count("<table>") == 1  # the add_table call
+   612→        assert text.count("<div class='metric'>") >= 8  # metric cards
+   613→
+   614→    def test_add_metrics_rejects_junk(self):
+   615→        with pytest.raises(DataValidationError):
+   616→            HTMLReport("t").add_metrics(42)
+   617→
+   618→    def test_svg_embed(self, trained_classifier, tmp_path):
+   619→        _, report, _, _ = trained_classifier
+   620→        page = HTMLReport("svg").add_figure(
+   621→            plot_confusion_matrix(report), fmt="svg"
+   622→        )
+   623→        text = page.render()
+   624→        assert "data:image/svg+xml;base64," in text
+   625→
+   626→    def test_pdf_embed_rejected(self, trained_classifier):
+   627→        _, report, _, _ = trained_classifier
+   628→        with pytest.raises(DataValidationError):
+   629→            HTMLReport("t").add_figure(plot_confusion_matrix(report), fmt="pdf")
+   630→
+   631→    def test_empty_report_renders(self):
+   632→        text = HTMLReport("empty").render()
+   633→        assert "<h1>empty</h1>" in text and "footer" in text
+   634→
+   635→
+   636→class TestMetricsToDataFrame:
+   637→    def test_classification_report(self, trained_classifier):
+   638→        _, report, _, _ = trained_classifier
+   639→        frame = metrics_to_dataframe(report)
+   640→        assert set(frame.columns) == {"metric", "value"}
+   641→        assert "accuracy" in set(frame["metric"])
+   642→
+   643→    def test_plain_dict(self):
+   644→        frame = metrics_to_dataframe({"a": 1})
+   645→        assert frame["value"].tolist() == [1]
+   646→
+   647→    def test_rejects_junk(self):
+   648→        with pytest.raises(DataValidationError):
+   649→            metrics_to_dataframe("nope")
+   650→
+   651→
+   652→class TestVisualBundle:
+   653→    def test_bundle_artifacts(self, trained_classifier, tmp_path):
+   654→        _, report, _, _ = trained_classifier
+   655→        figures = {
+   656→            "confusion": plot_confusion_matrix(report),
+   657→            "roc": plot_confusion_curves_safe(trained_classifier),
+   658→        }
+   659→        tables = {"metrics": metrics_to_dataframe(report)}
+   660→        written = save_visual_bundle(
+   661→            figures=figures,
+   662→            tables=tables,
+   663→            metrics=report,
+   664→            out_dir=tmp_path / "bundle",
+   665→            title="Bundle test",
+   666→            formats=("png", "svg"),
+   667→        )
+   668→        names = {p.name for p in written}
+   669→        assert "report.html" in names
+   670→        assert {"confusion.png", "confusion.svg", "roc.png", "roc.svg"} <= names
+   671→        assert {"metrics.csv", "metrics.md"} <= names
+   672→        html = (tmp_path / "bundle" / "report.html").read_text()
+   673→        assert html.count("data:image/png;base64,") == 2
+   674→
+   675→    def test_bundle_closes_figures(self, trained_classifier, tmp_path):
+   676→        _, report, _, _ = trained_classifier
+   677→        fig = plot_confusion_matrix(report)
+   678→        save_visual_bundle(figures={"f": fig}, out_dir=tmp_path / "b2", close=True)
+   679→        import matplotlib.pyplot as plt
+   680→
+   681→        assert fig not in [plt.figure(n) for n in plt.get_fignums()]
+   682→
+   683→
+   684→def plot_confusion_curves_safe(trained_classifier):
+   685→    """ROC figure helper (fixture unpacking without pytest warnings)."""
+   686→    result, _, X_test, y_test = trained_classifier
+   687→    return plot_roc_curves(result.model, X_test, y_test)
+   688→
+   689→
+   690→class TestSaveFigure:
+   691→    def test_formats_and_dirs(self, tmp_path, trained_classifier):
+   692→        _, report, _, _ = trained_classifier
+   693→        fig = plot_confusion_matrix(report)
+   694→        for extension in ("png", "svg", "pdf"):
+   695→            out = save_figure(fig, tmp_path / "nested" / f"fig.{extension}")
+   696→            assert out.exists() and out.stat().st_size > 0
+   697→
+   698→    def test_unknown_extension(self, tmp_path, trained_classifier):
+   699→        _, report, _, _ = trained_classifier
+   700→        with pytest.raises(DataValidationError):
+   701→            save_figure(plot_confusion_matrix(report), tmp_path / "f.gif")
+   702→
+   703→
+   704→class TestNotebookArtifacts:
+   705→    """The shipped notebooks must stay executed and error-free."""
+   706→
+   707→    @staticmethod
+   708→    def _read(example_name: str):
+   709→        import nbformat
+   710→
+   711→        path = Path(__file__).resolve().parents[1] / "examples" / example_name
+   712→        assert path.is_file(), f"examples/{example_name} missing from the ZIP"
+   713→        return nbformat.read(path, as_version=4)
+   714→
+   715→    @staticmethod
+   716→    def _stats(nb):
+   717→        code_cells = [c for c in nb.cells if c.cell_type == "code"]
+   718→        errors = [
+   719→            o for c in code_cells for o in c.get("outputs", [])
+   720→            if o.output_type == "error"
+   721→        ]
+   722→        figures = sum(
+   723→            1 for c in code_cells for o in c.get("outputs", [])
+   724→            if o.get("data", {}).get("image/png")
+   725→        )
+   726→        executed = sum(1 for c in code_cells if c.get("execution_count"))
+   727→        return code_cells, errors, figures, executed
+   728→
+   729→    def test_complete_ml_workflow_notebook(self):
+   730→        nb = self._read("complete_ml_workflow.ipynb")
+   731→        code_cells, errors, figures, executed = self._stats(nb)
+   732→        assert len(code_cells) >= 30
+   733→        assert executed == len(code_cells), "notebook has unexecuted code cells"
+   734→        assert not errors, f"notebook has {len(errors)} committed error output(s)"
+   735→        assert figures >= 14, "notebook lost its inline figures"
+   736→
+   737→        sources = "\n".join(c.source for c in code_cells)
+   738→        # The feature-calculation section must stay shipped (§2).
+   739→        for symbol in (
+   740→            "compute_descriptors",
+   741→            "compute_fingerprints",
+   742→            "compute_maccs",
+   743→            "tanimoto_matrix",
+   744→            "plot_similarity_heatmap",
+   745→        ):
+   746→            assert symbol in sources, f"notebook lost its {symbol} section"
+   747→        desc_cell = next(
+   748→            (c for c in code_cells if "compute_descriptors" in c.source), None
+   749→        )
+   750→        assert desc_cell is not None
+   751→        desc_text = "".join(
+   752→            o.get("text", "") for o in desc_cell.get("outputs", [])
+   753→            if o.get("output_type") == "stream"
+   754→        )
+   755→        assert "valid molecules" in desc_text, "descriptor cell lost its output"
+   756→
+   757→        # §7/§8 classification recipes: binary (2 classes) + multiclass
+   758→        # with a selectable class count (N_CLASSES).  The demo tables load
+   759→        # from examples/data/ (qsar_classification.csv / qsar_multiclass.csv)
+   760→        # — never fabricated inline (see test_notebook_variants.py).
+   761→        for symbol in (
+   762→            'DATA_DIR / "qsar_classification.csv"',
+   763→            'DATA_DIR / "qsar_multiclass.csv"',
+   764→            "N_CLASSES",
+   765→        ):
+   766→            assert symbol in sources, f"notebook lost its {symbol} section"
+   767→        recipe_cell = next(
+   768→            (c for c in code_cells if "N_CLASSES = " in c.source), None
+   769→        )
+   770→        assert recipe_cell is not None, "notebook lost its selectable-K cell"
+   771→        recipe_text = "".join(
+   772→            o.get("text", "") for o in recipe_cell.get("outputs", [])
+   773→            if o.get("output_type") == "stream"
+   774→        )
+   775→        assert "classes (4)" in recipe_text, "selectable-K cell lost its class census"
+   776→
+   777→    def test_complete_docking_workflow_notebook(self):
+   778→        nb = self._read("complete_docking_workflow.ipynb")
+   779→        code_cells, errors, figures, executed = self._stats(nb)
+   780→        assert len(code_cells) >= 30
+   781→        assert executed == len(code_cells), "notebook has unexecuted code cells"
+   782→        assert not errors, f"notebook has {len(errors)} committed error output(s)"
+   783→        assert figures >= 2, "docking notebook lost its figures"
+   784→
+   785→        sources = "\n".join(c.source for c in code_cells)
+   786→        for symbol in (
+   787→            # §1 CSV ligand import / §2 protein import & preparation
+   788→            "load_ligand_csv",
+   789→            "prepare_ligand_library",
+   790→            "distribute_receptor",
+   791→            "prepare_protein",
+   792→            # §3+ the original workflow
+   793→            "smiles_to_pdbqt",
+   794→            "compute_grid_box",
+   795→            "write_gpf",
+   796→            "run_vina",
+   797→            "batch_run_directories",
+   798→            "parse_dlg_summary",
+   799→            "check_docking_completion",
+   800→            "scan_docking_directory",
+   801→            "parse_vina_output",
+   802→            "ligand_efficiency_series",
+   803→            "consensus_rescore",
+   804→            "plot_energy_distribution",
+   805→            "plot_top_ligands",
+   806→            "save_visual_bundle",
+   807→        ):
+   808→            assert symbol in sources, f"docking notebook lost its {symbol} section"
+   809→
+   810→        # The protein-preparation audit output must stay committed
+   811→        # (1262-atom lysozyme receptor, 78 waters removed).
+   812→        prep_cell = next(
+   813→            (c for c in code_cells if "protein = prepare_protein" in c.source), None
+   814→        )
+   815→        assert prep_cell is not None, "notebook lost its prepare_protein cell"
+   816→        prep_text = "".join(
+   817→            o.get("text", "") for o in prep_cell.get("outputs", [])
+   818→            if o.get("output_type") == "stream"
+   819→        )
+   820→        assert "1262 atoms" in prep_text, "receptor audit output changed"
+   821→        assert "78 water" in prep_text, "water-removal accounting lost"
+   822→
+   823→        # The ligand-library audit must stay committed too.
+   824→        load_cell = next(
+   825→            (c for c in code_cells if "library = load_ligand_csv" in c.source), None
+   826→        )
+   827→        assert load_cell is not None, "notebook lost its load_ligand_csv cell"
+   828→        load_text = "".join(
+   829→            o.get("text", "") for o in load_cell.get("outputs", [])
+   830→            if o.get("output_type") == "stream"
+   831→        )
+   832→        assert "valid         : 8" in load_text, "ligand library audit changed"
+   833→
+   834→        # §4's grid box must carry the fencepost-corrected sizes:
+   835→        # npts - 1 grid intervals, not npts (size 22.1 A, Vina 22.125 A).
+   836→        box_cell = next(
+   837→            (c for c in code_cells if "box = compute_grid_box" in c.source), None
+   838→        )
+   839→        assert box_cell is not None, "notebook lost its grid-box cell"
+   840→        box_text = "".join(
+   841→            o.get("text", "") for o in box_cell.get("outputs", [])
+   842→            if o.get("output_type") == "stream"
+   843→        )
+   844→        assert "size   : (22.1, 22.1, 22.1) A" in box_text, (
+   845→            "grid-box size drifted from the fencepost-corrected 22.1 A"
+   846→        )
+   847→        assert "'size_x': 22.125" in box_text, "Vina grid size drifted from 22.125"
+   848→
+   849→        # §6's completion audit runs on a scratch copy of the shipped
+   850→        # campaign (examples/data/docking_campaign/): 12 OK, 1 missing
+   851→        # log, 1 interrupted — exactly the planted audit cases.
+   852→        audit_cell = next(
+   853→            (c for c in code_cells
+   854→             if "audit = check_docking_completion" in c.source), None
+   855→        )
+   856→        assert audit_cell is not None, "notebook lost its completion-audit cell"
+   857→        audit_text = "".join(
+   858→            o.get("text", "") for o in audit_cell.get("outputs", [])
+   859→            if o.get("output_type") == "stream"
+   860→        )
+   861→        assert "{'OK': 12, 'MISSING_LOG': 1, 'INCOMPLETE': 1}" in audit_text, (
+   862→            "campaign audit drifted from the planted 12/1/1 census"
+   863→        )
+   864→
+   865→    def test_complete_pk_workflow_notebook(self):
+   866→        nb = self._read("complete_pk_workflow.ipynb")
+   867→        code_cells, errors, figures, executed = self._stats(nb)
+   868→        assert len(code_cells) >= 25
+   869→        assert executed == len(code_cells), "notebook has unexecuted code cells"
+   870→        assert not errors, f"notebook has {len(errors)} committed error output(s)"
+   871→        assert figures >= 2, "PK notebook lost its figures"
+   872→
+   873→        sources = "\n".join(c.source for c in code_cells)
+   874→        for symbol in (
+   875→            # §1 data entry / validation
+   876→            "read_table",
+   877→            "require_columns",
+   878→            "validate_concentration_series",
+   879→            # §2–§7 the PK core
+   880→            "nca_summary",
+   881→            "auc_trapezoid",
+   882→            "aucm_trapezoid",
+   883→            "half_life",
+   884→            "elimination_rate_constant",
+   885→            "clearance",
+   886→            "volume_of_distribution",
+   887→            "oral_cmax",
+   888→            "iv_bolus_concentration",
+   889→            "iv_infusion_steady_state",
+   890→            "accumulation_ratio",
+   891→            "plot_dose_accumulation",
+   892→            # §8–§11 PD / dosage / patient / units
+   893→            "sigmoid_emax_effect",
+   894→            "ec50_for_target_effect",
+   895→            "maintenance_dose",
+   896→            "loading_dose",
+   897→            "creatinine_clearance",
+   898→            "renal_dose_adjustment",
+   899→            "tdm_trough_adjustment",
+   900→            "UnitConverter",
+   901→            "molar_mass",
+   902→            # §12 publish
+   903→            "plot_concentration_profile",
+   904→            "export_table",
+   905→            "save_visual_bundle",
+   906→        ):
+   907→            assert symbol in sources, f"PK notebook lost its {symbol} section"
+   908→
+   909→        # The NCA numbers must stay committed (fixed-seed demo profile:
+   910→        # AUC 17.961 ng·h/mL, terminal half-life 1.623 h).
+   911→        nca_cell = next(
+   912→            (c for c in code_cells if "summary = nca_summary" in c.source), None
+   913→        )
+   914→        assert nca_cell is not None, "notebook lost its nca_summary cell"
+   915→        nca_text = "".join(
+   916→            o.get("text", "") for o in nca_cell.get("outputs", [])
+   917→            if o.get("output_type") == "stream"
+   918→        )
+   919→        assert "AUC" in nca_text, "NCA cell lost its output"
+   920→        assert "17.961" in nca_text, "NCA AUC value changed"
+   921→        assert "1.623" in nca_text, "terminal half-life value changed"
+   922→
+   923→        # §3 exposes the AUC math: linear vs log trapezoid on the same
+   924→        # shipped profile.  The log value is the post-round-20a
+   925→        # log-trapezoid rule (17.2536) — the committed output predating
+   926→        # the fix (17.2347) is long gone.
+   927→        auc_cell = next(
+   928→            (c for c in code_cells if "auc_log = auc_trapezoid" in c.source), None
+   929→        )
+   930→        assert auc_cell is not None, "notebook lost its AUC-math cell"
+   931→        auc_text = "".join(
+   932→            o.get("text", "") for o in auc_cell.get("outputs", [])
+   933→            if o.get("output_type") == "stream"
+   934→        )
+   935→        assert "AUC linear         17.9607" in auc_text, "linear AUC pin drifted"
+   936→        assert "AUC log            17.2536" in auc_text, (
+   937→            "log AUC drifted from the log-trapezoid rule (17.2536)"
+   938→        )
+   939→
+   940→        # The validation guard (§1) and the recap (§13) must stay shipped.
+   941→        assert any(
+   942→            c.cell_type == "markdown" and c.source.startswith("## 13 · Recap")
+   943→            for c in nb.cells
+   944→        ), "notebook lost its recap section"
+   945→
+   946→    def test_complete_cellline_workflow_notebook(self):
+   947→        nb = self._read("complete_cellline_workflow.ipynb")
+   948→        code_cells, errors, figures, executed = self._stats(nb)
+   949→        assert len(code_cells) >= 15
+   950→        assert executed == len(code_cells), "notebook has unexecuted code cells"
+   951→        assert not errors, f"notebook has {len(errors)} committed error output(s)"
+   952→        assert figures >= 3, "cell-line notebook lost its figures"
+   953→
+   954→        sources = "\n".join(c.source for c in code_cells)
+   955→        for symbol in (
+   956→            # §1–§5 response-screen core
+   957→            "load_response_table",
+   958→            "audit_response_table",
+   959→            "collapse_replicates",
+   960→            "ln_ic50_to_pic50",
+   961→            "response_matrix",
+   962→            "summarize_compounds",
+   963→            "call_sensitive_resistant",
+   964→            # §6–§7 omics + biomarkers
+   965→            "normalize_expression",
+   966→            "most_variable_genes",
+   967→            "sensitivity_associations",
+   968→            "top_biomarkers",
+   969→            "direction_of_association",
+   970→            # §8–§9 modelling + deep learning
+   971→            "train_model",
+   972→            "compare_models",
+   973→            "dnn",
+   974→            "dnn_residual",
+   975→            "plot_predicted_vs_actual",
+   976→            "plot_model_comparison",
+   977→        ):
+   978→            assert symbol in sources, f"cell-line notebook lost its {symbol} section"
+   979→
+   980→        # The biomarker verdict must stay committed: the planted EGFR ->
+   981→        # erlotinib association is the notebook's headline result.
+   982→        verdict_cell = next(
+   983→            (c for c in code_cells if "EGFR vs erlotinib" in c.source), None
+   984→        )
+   985→        assert verdict_cell is not None, "notebook lost its biomarker verdict cell"
+   986→        verdict_text = "".join(
+   987→            o.get("text", "") for o in verdict_cell.get("outputs", [])
+   988→            if o.get("output_type") == "stream"
+   989→        )
+   990→        assert "rho=+0.978" in verdict_text, "EGFR/erlotinib rho changed"
+   991→        assert "significant=True" in verdict_text, "planted biomarker no longer significant"
+   992→
+   993→        # The §10 recap must stay shipped.
+   994→        assert any(
+   995→            c.cell_type == "markdown" and c.source.startswith("## 10 · Recap")
+   996→            for c in nb.cells
+   997→        ), "notebook lost its recap section"
+   998→
+   999→    def test_complete_generative_workflow_notebook(self):
+  1000→        nb = self._read("complete_generative_workflow.ipynb")
+  1001→        code_cells, errors, figures, executed = self._stats(nb)
+  1002→        assert len(code_cells) >= 18
+  1003→        assert executed == len(code_cells), "notebook has unexecuted code cells"
+  1004→        assert not errors, f"notebook has {len(errors)} committed error output(s)"
+  1005→        assert figures >= 4, "generative notebook lost its figures"
+  1006→
+  1007→        sources = "\n".join(c.source for c in code_cells)
+  1008→        for symbol in (
+  1009→            # §1 corpus + landscape
+  1010→            "DEFAULT_CORPUS",
+  1011→            "compute_descriptors",
+  1012→            "plot_descriptor_distributions",
+  1013→            # §2–§3 the objective library + the veto
+  1014→            "QedObjective",
+  1015→            "LogPBandObjective",
+  1016→            "TpsaBandObjective",
+  1017→            "MolecularWeightBandObjective",
+  1018→            "SimilarityObjective",
+  1019→            "SubstructureObjective",
+  1020→            "NoveltyObjective",
+  1021→            "MultiObjective",
+  1022→            "score_with_breakdown",
+  1023→            # §4–§6 the GA: de novo, seeded, scaffold-preserving
+  1024→            "GeneticOptimizer",
+  1025→            "seed_smiles",
+  1026→            '"scaffold"',
+  1027→            "MurckoScaffold",
+  1028→            # §7 RL: prior + fine-tuning
+  1029→            "SmilesRnn",
+  1030→            "train_prior",
+  1031→            "ReinventOptimizer",
+  1032→            # §9–§10 head-to-head + publish
+  1033→            "to_dataframe",
+  1034→            "save_visual_bundle",
+  1035→        ):
+  1036→            assert symbol in sources, f"generative notebook lost its {symbol} section"
+  1037→
+  1038→        # The corpus audit must stay committed: 244 SMILES, all unique.
+  1039→        corpus_cell = next(
+  1040→            (c for c in code_cells if "corpus size" in c.source), None
+  1041→        )
+  1042→        assert corpus_cell is not None, "notebook lost its corpus audit cell"
+  1043→        corpus_text = "".join(
+  1044→            o.get("text", "") for o in corpus_cell.get("outputs", [])
+  1045→            if o.get("output_type") == "stream"
+  1046→        )
+  1047→        assert "corpus size : 244 SMILES" in corpus_text, "corpus audit changed"
+  1048→        assert "unique      : 244" in corpus_text, "corpus uniqueness lost"
+  1049→
+  1050→        # The scaffold A/B verdict must stay committed: 12 seeds -> 7
+  1051→        # frameworks, scaffold mode 100% retention vs uniform 50.5%.
+  1052→        scaffold_cell = next(
+  1053→            (c for c in code_cells if "seed_frameworks" in c.source), None
+  1054→        )
+  1055→        assert scaffold_cell is not None, "notebook lost its scaffold A/B cell"
+  1056→        scaffold_text = "".join(
+  1057→            o.get("text", "") for o in scaffold_cell.get("outputs", [])
+  1058→            if o.get("output_type") == "stream"
+  1059→        )
+  1060→        assert "7 distinct Murcko frameworks" in scaffold_text, (
+  1061→            "seed framework census changed"
+  1062→        )
+  1063→        retention_text = "".join(
+  1064→            "".join(o.get("data", {}).get("text/plain", ""))
+  1065→            for o in scaffold_cell.get("outputs", [])
+  1066→            if o.get("output_type") == "execute_result"
+  1067→        )
+  1068→        assert "scaffold    1.000" in retention_text, "scaffold retention changed"
+  1069→        assert "uniform     0.505" in retention_text, "uniform retention changed"
+  1070→
+  1071→        # The RL summary must stay committed.  Round 26 moved the RL to a
+  1072→        # running-baseline advantage: on this seed the mean score keeps
+  1073→        # improving to the last iteration, so the plateau early-stop stays
+  1074→        # armed but never fires (early_stopped=False) and the run yields
+  1075→        # 107 unique molecules with best score 0.601.
+  1076→        rl_cell = next(
+  1077→            (c for c in code_cells if "early stopped" in c.source), None
+  1078→        )
+  1079→        assert rl_cell is not None, "notebook lost its RL summary cell"
+  1080→        rl_text = "".join(
+  1081→            o.get("text", "") for o in rl_cell.get("outputs", [])
+  1082→            if o.get("output_type") == "stream"
+  1083→        )
+  1084→        assert "early stopped   : False" in rl_text, "RL early-stop flag changed"
+  1085→        assert "107 unique molecule(s)" in rl_text, "RL unique-molecule count changed"
+  1086→        assert "(score 0.601)" in rl_text, "RL best-score headline changed"
+  1087→
+  1088→        # The §11 recap must stay shipped.
+  1089→        assert any(
+  1090→            c.cell_type == "markdown" and c.source.startswith("## 11 · Recap")
+  1091→            for c in nb.cells
+  1092→        ), "notebook lost its recap section"
+  1093→

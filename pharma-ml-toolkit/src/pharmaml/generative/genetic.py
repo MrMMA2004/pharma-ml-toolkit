@@ -55,9 +55,14 @@ CPU-friendly and deterministic given ``seed``:
   credit at ``aos_temperature`` with an exploration floor of
   ``1/(k*5)`` -- exactly one ``rng.random()`` per selection, so an
   adaptive run is just as deterministic as a uniform one.  Adaptive
-  runs gain ``"operator_selection"`` and the per-level
-  ``"operator_stats"`` tables in the result metadata; uniform runs'
-  metadata is unchanged.
+  runs gain ``"operator_selection"``, the per-level ``"operator_stats"``
+  tables and ``"operator_trajectory"`` -- one record per generation
+  (index-aligned with ``history``) holding the full-precision operator
+  mix in force at that generation's start, so record 0 is the fair prior
+  and the final record is the closing mix (``trajectory[-1][level][op]``
+  equals ``operator_stats[level][op]["final_probability"]`` up to that
+  stat's 4-decimal rounding, i.e. within 5e-5); uniform runs' metadata
+  is unchanged.
 
 Two initialisation modes:
 
@@ -89,6 +94,13 @@ True
 >>> sorted(stats["level1"])
 ['clone', 'crossover']
 >>> stats["level1"]["clone"]["draws"] > 0 and stats["mutation"]["character"]["draws"] > 0
+True
+>>> traj = adaptive.metadata["operator_trajectory"]
+>>> len(traj) == adaptive.metadata["iterations"] == len(adaptive.history)
+True
+>>> round(traj[0]["level1"]["crossover"], 1)   # record 0: the fair prior
+0.5
+>>> traj[0]["mutation"] == {"character": 1.0}   # default mutation: 1-operator family
 True
 """
 
@@ -512,7 +524,15 @@ class _OperatorBook:
                 self.best[op] = (child_score, child)
 
     def snapshot(self) -> dict[str, dict[str, Any]]:
-        """The metadata artifact: operator -> tallies / credit / probability."""
+        """The metadata artifact: operator -> tallies / credit / probability.
+
+        ``credit``, ``final_probability`` and ``best_offspring_score``
+        are rounded to 4 decimal places (a display artifact -- a
+        level's rounded probabilities can sum to 1 with an error of
+        up to ~5e-4; see :meth:`GeneticOptimizer.optimize`'s Returns
+        notes).  The live, unrounded probabilities are
+        :meth:`probabilities` -- the GA itself draws from those.
+        """
         probabilities = self.probabilities()
         table: dict[str, dict[str, Any]] = {}
         for op in self.operators:
@@ -651,7 +671,10 @@ class GeneticOptimizer:
         ``"operator_stats"`` (per level: ``{operator: {draws,
         successes, credit, final_probability, best_offspring,
         best_offspring_score}}``) to the result metadata; uniform runs'
-        metadata is unchanged.
+        metadata is unchanged.  See :meth:`optimize`'s Returns notes for
+        the 4-decimal-place rounding of the stat values, the
+        scaffold+splice level-1 bypass and the geometry-draw shortfall
+        on no-candidate pairs.
     aos_window:
         Adaptive mode: the sliding credit window per operator (default
         20 -- the last 20 attempts of each operator decide its credit).
@@ -1011,6 +1034,34 @@ class GeneticOptimizer:
             than ``population_size`` is tolerated: members are
             duplicated (with a warning) rather than hanging the run.
 
+        Returns
+        -------
+        GenerationResult
+            The ranked run.  On adaptive runs the ``metadata`` carries
+            ``"operator_selection": "adaptive"``, the per-level
+            ``"operator_stats"`` tables (see ``operator_selection``) and
+            ``"operator_trajectory"`` -- one full-precision record per
+            generation, index-aligned with ``history`` (record 0 is the
+            fair prior, the final record the closing mix).
+            Notes for ``operator_stats`` consumers:
+
+            * ``credit``, ``final_probability`` and
+              ``best_offspring_score`` are rounded to 4 decimal places
+              for display, so a level's rounded probabilities can sum
+              to 1 with an error of up to ~5e-4 (the seven-operator
+              geometry level; the unrounded selection probabilities sum
+              to 1 within 1e-12) -- renormalise loosely or not at all,
+              never at a tight tolerance;
+            * with ``mutation="scaffold"`` and ``crossover="splice"``
+              the character splice is bypassed, so the level-1 book is
+              never drawn yet still reported with draws 0/0 and the
+              neutral 0.5/0.5 probabilities (the geometry book
+              likewise reports zero draws);
+            * geometry-level draws can fall short of the level-1
+              crossover draws whenever a pair offers no viable cut
+              candidate at all (the pair falls back to ``parent_a``
+              without a geometry draw -- not an operator failure).
+
         Raises
         ------
         DataValidationError
@@ -1125,6 +1176,7 @@ class GeneticOptimizer:
 
         produced: dict[str, float] = {}
         history: list[dict[str, Any]] = []
+        operator_trajectory: list[dict[str, Any]] = []
         accepted_total = 0
         attempts_total = 0
         last_fraction = 1.0
@@ -1147,6 +1199,20 @@ class GeneticOptimizer:
                     "valid_offspring_fraction": last_fraction,
                 }
             )
+            if adaptive:
+                # the operator mix in force at the start of this generation
+                # (full precision; the final record doubles as the closing
+                # mix -- the last generation produces no offspring).
+                # probabilities() is pure and consumes no rng, so the
+                # molecule streams are bit-identical either way.
+                operator_trajectory.append(
+                    {
+                        "generation": generation,
+                        "level1": level1_book.probabilities(),
+                        "geometry": geometry_book.probabilities(),
+                        "mutation": mutation_book.probabilities(),
+                    }
+                )
             if generation == self.generations - 1:
                 break
 
@@ -1333,6 +1399,9 @@ class GeneticOptimizer:
                 "geometry": geometry_book.snapshot(),
                 "mutation": mutation_book.snapshot(),
             }
+            # a SEPARATE top-level key (never nested inside operator_stats:
+            # the per-operator stat tables keep their exact pinned shape)
+            metadata["operator_trajectory"] = operator_trajectory
         return GenerationResult(
             smiles=smiles_list,
             scores=score_list,

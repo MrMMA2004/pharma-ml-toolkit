@@ -220,7 +220,16 @@ def plot_dose_accumulation(
         t_i = index * tau
         total += np.where(grid >= t_i, c0 * np.exp(-ke * (grid - t_i)), 0.0)
 
-    c_max_ss = c0 / (1.0 - math.exp(-ke * tau))
+    # Guard the steady-state denominator: for a hugely long t_half (>= ~1e17
+    # with tau=1) ke*tau underflows and exp() returns exactly 1.0, turning
+    # c0 / (1 - exp(-ke*tau)) into a raw ZeroDivisionError.
+    denominator = 1.0 - math.exp(-ke * tau)
+    if denominator <= 0.0:
+        raise DataValidationError(
+            "steady state unreachable: 1 - exp(-ke*tau) underflowed to zero "
+            f"(ke*tau = {ke * tau:.3g}) — pass a smaller t_half or a larger tau"
+        )
+    c_max_ss = c0 / denominator
     c_min_ss = c_max_ss * math.exp(-ke * tau)
     ratio = accumulation_ratio(tau, math.log(2) / ke)
     t_ss = 5.0 * half_life(ke)

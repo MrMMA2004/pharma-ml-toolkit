@@ -1624,7 +1624,7 @@ class TestGenerativeCommands:
         for flag in (
             "--method", "--recipe", "--seeds", "--seed-smiles", "--iterations",
             "--population", "--batch-size", "--prior-epochs", "--seed",
-            "--top", "--out",
+            "--top", "--out", "--plot",
         ):
             assert flag in output, flag
 
@@ -3449,6 +3449,7 @@ class TestAdaptiveOperatorSelection:
         ).optimize(corpus=DEFAULT_CORPUS[:10])
         assert "operator_selection" not in run.metadata
         assert "operator_stats" not in run.metadata
+        assert "operator_trajectory" not in run.metadata
 
     # -- the adaptive mode itself -------------------------------------------
     def test_adaptive_is_deterministic(self) -> None:
@@ -3505,9 +3506,42 @@ class TestAdaptiveOperatorSelection:
         level1_total = sum(
             entry["final_probability"] for entry in stats["level1"].values()
         )
-        assert abs(level1_total - 1.0) < 1e-9  # floor + softmax renormalises
+        # the 2-op level hits 1e-9 by complementary 4dp rounding luck;
+        # the 7-op geometry level can sit at 1 +/- ~5e-4 (rounding-budget
+        # test below pins the documented deviation)
+        assert abs(level1_total - 1.0) < 1e-9
+
+    def test_final_probability_rounding_sum_budget(self) -> None:
+        # 100x-40-r1 contract gap: final_probability (and credit /
+        # best_offspring_score) are rounded to 4 decimal places for
+        # display, so a level's rounded probabilities can sum to 1 with
+        # an error of up to k * 5e-4 -- consumers must not renormalise
+        # at a tight tolerance (the unrounded selection probabilities
+        # are exact to 1e-12; documented in optimize's Returns notes).
+        run = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=3,
+            seed=0,
+            crossover="scaffold_hop",
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        stats = run.metadata["operator_stats"]
+        for operators in stats.values():
+            k = len(operators)
+            total = sum(entry["final_probability"] for entry in operators.values())
+            assert abs(total - 1.0) <= k * 5e-5 + 1e-12  # the rounding budget
+        # probed, deterministic: this run's 7-op geometry level rounds to
+        # 1.0001 -- the level1-only 1e-9 assertion does NOT generalise
+        geometry_total = sum(
+            entry["final_probability"] for entry in stats["geometry"].values()
+        )
+        assert geometry_total == pytest.approx(1.0001)
 
     def test_draw_counts_reconcile_with_attempts(self) -> None:
+        # Splice mode: the geometry trace is never None (the splice
+        # branch of the recombination always reports the "splice"
+        # operator), so geometry draws EQUAL the crossover draws here.
         run = GeneticOptimizer(
             QedObjective(),
             population_size=8,
@@ -3521,6 +3555,29 @@ class TestAdaptiveOperatorSelection:
         assert level1_draws == family_draws  # every attempt draws both levels
         geometry_draws = sum(entry["draws"] for entry in stats["geometry"].values())
         assert geometry_draws == stats["level1"]["crossover"]["draws"]
+
+        # Scaffold-hop mode: a pair with NO candidate cut traces a None
+        # geometry (the pair falls back to parent_a without a geometry
+        # draw), so geometry draws can LEGITIMATELY fall short of the
+        # crossover draws -- the equality above is splice-mode luck, not
+        # a general invariant.  Probed on DEFAULT_CORPUS[:12]: geometry
+        # 33 < crossover 35 (deterministic; 100x-40-r1 finding 5).
+        hopped = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=3,
+            seed=42,
+            crossover="scaffold_hop",
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:12])
+        hstats = hopped.metadata["operator_stats"]
+        hlevel1 = sum(entry["draws"] for entry in hstats["level1"].values())
+        hfamily = sum(entry["draws"] for entry in hstats["mutation"].values())
+        assert hlevel1 == hfamily  # every attempt draws both levels
+        hgeometry = sum(entry["draws"] for entry in hstats["geometry"].values())
+        hcrossover = hstats["level1"]["crossover"]["draws"]
+        assert hgeometry <= hcrossover  # the documented inequality
+        assert hgeometry < hcrossover  # this corpus hits the no-candidate trace
 
     def test_adaptive_splice_mode_degenerates_cleanly(self) -> None:
         run = GeneticOptimizer(
@@ -3549,6 +3606,35 @@ class TestAdaptiveOperatorSelection:
             "scaffold",
             "character",
         }
+
+    def test_scaffold_splice_bypass_level1_never_drawn(self) -> None:
+        # 100x-40-r1 contract gap: with mutation="scaffold" +
+        # crossover="splice" the character splice is bypassed, so the
+        # level-1 book is never drawn -- yet operator_stats still
+        # reports it with 0/0 draws and the neutral 0.5/0.5
+        # probabilities (documented in optimize's Returns notes; the
+        # mutation-family book keeps drawing, the geometry book does
+        # not -- probed draws: family 9, geometry 0).
+        run = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=3,
+            seed=42,
+            mutation="scaffold",
+            crossover="splice",
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        stats = run.metadata["operator_stats"]
+        level1 = stats["level1"]
+        assert set(level1) == {"clone", "crossover"}  # present but undrawn
+        for entry in level1.values():
+            assert entry["draws"] == 0
+            assert entry["successes"] == 0
+            assert entry["credit"] == 0.0
+            assert entry["final_probability"] == 0.5
+            assert entry["best_offspring"] is None
+        assert sum(e["draws"] for e in stats["mutation"].values()) > 0
+        assert sum(e["draws"] for e in stats["geometry"].values()) == 0
 
     # -- the flagship evidence: the ring-rich A/B ---------------------------
     def test_adaptive_improves_ring_objective_mean(self, ring_ab_runs) -> None:
@@ -3652,6 +3738,24 @@ class TestAdaptiveOperatorSelection:
             geometry_weights={"swap": 1.0, "fuse": 100.0},
         )
         assert geometry == "swap"
+
+    def test_geometry_weights_empty_mapping_raises_none_uniform(self) -> None:
+        # 100x-40-r1 contract gap: {} is a weights mapping that places
+        # no mass on anything (the no-mass ValueError), NOT "no weights"
+        # -- None / omitted keeps the historical uniform draw (the
+        # distinction is documented in the geometry_weights parameter
+        # description).
+        with pytest.raises(ValueError, match="place no mass"):
+            scaffold_hop_crossover(
+                ASPIRIN,
+                "CC(=O)Nc1ccccc1O",
+                random.Random(0),
+                geometry_weights={},
+            )
+        assert (
+            scaffold_hop_crossover(ASPIRIN, "CC(=O)Nc1ccccc1O", random.Random(0))
+            is not None
+        )
 
     def test_geometry_weights_validation(self) -> None:
         with pytest.raises(ValueError, match="finite non-negative"):
@@ -3779,3 +3883,123 @@ class TestAdaptiveOperatorSelection:
         assert code == 1  # the typed guard surfaces as a clean CLI error
         message = capsys.readouterr().err
         assert "--adaptive-operators selects the GA's adaptive operator" in message
+
+
+class TestOperatorTrajectory:
+    """The per-generation operator mix -- the "GA that learns" learning curve.
+
+    ``metadata["operator_trajectory"]`` (adaptive runs only): one record
+    per generation, index-aligned with ``history``, holding the
+    full-precision selection probabilities in force at that generation's
+    start -- record 0 is the fair prior, the final record the closing mix
+    (the last generation produces no offspring).
+    """
+
+    # -- pin safety: the uniform path never moves --------------------------
+    def test_uniform_metadata_has_no_trajectory_key(self) -> None:
+        run = GeneticOptimizer(
+            QedObjective(), population_size=8, generations=2, seed=42
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        assert "operator_trajectory" not in run.metadata
+
+    # -- the trajectory artifact itself -------------------------------------
+    def test_trajectory_is_aligned_with_history(self) -> None:
+        run = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=3,
+            seed=42,
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        trajectory = run.metadata["operator_trajectory"]
+        assert len(trajectory) == len(run.history)
+        assert len(trajectory) == run.metadata["iterations"]
+        assert [record["generation"] for record in trajectory] == [
+            entry["generation"] for entry in run.history
+        ]
+        for record in trajectory:
+            assert set(record) == {"generation", "level1", "geometry", "mutation"}
+            for level in ("level1", "geometry", "mutation"):
+                # unrounded probabilities: exact to 1e-9 (the 4dp rounding
+                # budget is an operator_stats-only display artifact)
+                assert abs(sum(record[level].values()) - 1.0) < 1e-9
+                assert all(
+                    math.isfinite(p) and 0.0 <= p <= 1.0
+                    for p in record[level].values()
+                )
+
+    def test_first_record_is_the_fair_prior_and_last_matches_stats(self) -> None:
+        run = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=3,
+            seed=42,
+            mutation="topology",
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        trajectory = run.metadata["operator_trajectory"]
+        # record 0: empty credit windows -- the exactly-fair prior (probed;
+        # probabilities() on an empty book is the flat 0.5/0.5 mix)
+        assert trajectory[0]["mutation"] == {"topology": 0.5, "character": 0.5}
+        # the final record IS the closing mix: the last generation performs
+        # no offspring production, so it equals the snapshot's rounded
+        # final_probability within the documented 4dp budget (<= 5e-5)
+        stats = run.metadata["operator_stats"]
+        for op in ("topology", "character"):
+            assert (
+                abs(trajectory[-1]["mutation"][op]
+                    - stats["mutation"][op]["final_probability"])
+                <= 5e-5
+            )
+
+    def test_trajectory_is_deterministic(self) -> None:
+        kwargs: dict[str, object] = {
+            "population_size": 8,
+            "generations": 3,
+            "seed": 42,
+            "operator_selection": "adaptive",
+        }
+        first = GeneticOptimizer(QedObjective(), **kwargs).optimize(
+            corpus=DEFAULT_CORPUS[:10]
+        )
+        second = GeneticOptimizer(QedObjective(), **kwargs).optimize(
+            corpus=DEFAULT_CORPUS[:10]
+        )
+        assert first.metadata["operator_trajectory"] == (
+            second.metadata["operator_trajectory"]
+        )
+
+    def test_generations_equals_one_yields_single_prior_record(self) -> None:
+        # the 100x-40-r1 corner: generations=1 scores the initial population
+        # and never produces offspring, so the trajectory is exactly ONE
+        # record -- the all-fair prior (probed verbatim; corpus/seed-free
+        # because every credit window is empty).  The default (uniform)
+        # mutation mode's single-operator family is also pinned here: every
+        # record of every such run is the constant {"character": 1.0}.
+        run = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=1,
+            seed=42,
+            mutation="topology",
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        trajectory = run.metadata["operator_trajectory"]
+        assert len(trajectory) == 1
+        assert len(run.history) == 1
+        assert trajectory[0] == {
+            "generation": 0,
+            "level1": {"crossover": 0.5, "clone": 0.5},
+            "geometry": {"splice": 1.0},
+            "mutation": {"topology": 0.5, "character": 0.5},
+        }
+        default_mutation = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=3,
+            seed=42,
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        records = default_mutation.metadata["operator_trajectory"]
+        assert records
+        assert all(record["mutation"] == {"character": 1.0} for record in records)

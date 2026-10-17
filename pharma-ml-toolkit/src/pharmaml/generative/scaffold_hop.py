@@ -808,7 +808,11 @@ def scaffold_hop_crossover(
         ``rng.randrange()``); keys naming absent geometries simply place
         no mass, and a geometry left at weight zero is never drawn.
         ``None`` (the default) keeps the historical uniform draw over
-        the flat candidate pool.  Raises ``ValueError`` on negative /
+        the flat candidate pool -- note the distinction: an empty
+        mapping ``{}`` is NOT "no weights" but a weights mapping that
+        places no mass on any geometry, so it raises the no-mass
+        ``ValueError`` (pass ``None``, or omit the keyword, for the
+        uniform draw).  Raises ``ValueError`` on negative /
         non-finite weights or when the weights place no mass on any
         geometry present in the pool.
 

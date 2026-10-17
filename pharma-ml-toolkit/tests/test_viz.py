@@ -42,6 +42,7 @@ from pharmaml.viz import (
     plot_feature_importance,
     plot_learning_curve,
     plot_model_comparison,
+    plot_operator_trajectory,
     plot_predicted_vs_actual,
     plot_receptor_atom_types,
     plot_residuals,
@@ -226,6 +227,20 @@ class TestRegressionPlots:
         with pytest.raises(DataValidationError):
             plot_predicted_vs_actual([1, 2, 3], [1, 2])
 
+    def test_parity_empty_raises_typed(self, close_all):
+        """Regression: empty y_true/y_pred used to crash with a raw
+        zero-size ``ValueError`` — now the plot_cv_scores-style typed
+        error instead."""
+        with pytest.raises(DataValidationError, match="empty y_true/y_pred"):
+            plot_predicted_vs_actual([], [])
+
+    def test_residuals_empty_raises_typed(self, close_all):
+        """Regression: ``plot_residuals([], [])`` used to render a silent
+        empty figure — now the same typed empty contract as the parity
+        plot."""
+        with pytest.raises(DataValidationError, match="empty y_true/y_pred"):
+            plot_residuals([], [])
+
     def test_residuals(self, close_all):
         rng = np.random.default_rng(0)
         y = rng.normal(size=60)
@@ -288,6 +303,15 @@ class TestLeaderboardAndDiagnostics:
     def test_feature_importance_top_n(self, close_all):
         fig = plot_feature_importance({f"f{i}": i / 10 for i in range(10)}, top_n=4)
         assert len(fig.axes[0].patches) == 4
+
+    def test_feature_importance_ties_first_declared(self, close_all):
+        """Regression: ``argsort(values)[::-1]`` flips tied groups, so ties
+        selected the LAST-declared features; ties now resolve
+        first-declared-wins (matching plot_top_ligands)."""
+        mapping = {f"feat{i:02d}": 0.5 for i in range(10)}  # all values tied
+        fig = plot_feature_importance(mapping, top_n=3)
+        ticks = [t.get_text() for t in fig.axes[0].get_yticklabels()]
+        assert set(ticks) == {"feat00", "feat01", "feat02"}
 
     def test_feature_importance_unsupported_model(self, close_all):
         with pytest.raises(DataValidationError):
@@ -352,6 +376,16 @@ class TestPharmaPlots:
             plot_dose_accumulation(dose=500, tau=8, t_half=6, vd=-40)
         with pytest.raises(DataValidationError, match="bioavailability"):
             plot_dose_accumulation(dose=500, tau=8, t_half=6, vd=40, f=1.5)
+
+    def test_dose_accumulation_extreme_half_life(self, close_all):
+        """Regression: t_half >= ~1e17 underflows ``1 - exp(-ke*tau)`` to
+        exactly zero and used to raise a raw ZeroDivisionError; t_half=1e16
+        stays finite (Cmax,ss envelope ~9e16)."""
+        with pytest.raises(DataValidationError, match="underflowed"):
+            plot_dose_accumulation(dose=100.0, tau=1.0, t_half=1e17, vd=10.0)
+        fig = plot_dose_accumulation(dose=100.0, tau=1.0, t_half=1e16, vd=10.0)
+        labels = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+        assert any(label.startswith("Cmax,ss") for label in labels)
 
     def test_concentration_profile_default_auc_uses_package_trapezoid(self, close_all):
         """The no-summary/no-auc path must go through pharmaml's own
@@ -469,6 +503,52 @@ class TestDockingPlots:
         alignments = [text.get_ha() for text in fig.axes[0].texts]
         assert alignments and set(alignments) == {"right"}  # all energies < 0
 
+    def _duplicated_index_summary(self) -> pd.DataFrame:
+        """The classic append-a-re-run pattern: a concat whose index labels
+        0..2 are duplicated."""
+        scan = pd.DataFrame({
+            "folder": ["01_aspirin", "02_ibuprofen", "03_naproxen", "06_theophylline"],
+            "best_lowest_energy": [-7.1, -8.5, -11.5, -11.51],
+        })
+        combined = pd.concat([scan, scan.head(3)])
+        assert combined.index.has_duplicates
+        return combined
+
+    def test_energy_distribution_duplicated_index_names_true_best(self, close_all):
+        """Regression: with duplicated index labels the label-based row
+        lookup expanded them, so the legend named the WRONG best ligand
+        (02_ibuprofen instead of 06_theophylline)."""
+        fig = plot_energy_distribution(self._duplicated_index_summary())
+        best = next(
+            t.get_text() for t in fig.axes[0].get_legend().get_texts()
+            if t.get_text().startswith("best =")
+        )
+        assert best == "best = -11.5 (06_theophylline)"
+
+    def test_top_ligands_duplicated_index(self, close_all):
+        """Regression: the same duplicated-index frame used to crash
+        plot_top_ligands with a raw ValueError (misaligned arrays)."""
+        fig = plot_top_ligands(self._duplicated_index_summary(), top_n=3)
+        ticks = [t.get_text() for t in fig.axes[0].get_yticklabels()]
+        # true top-3 energies: -11.51 (theophylline) + the two -11.5 rows
+        assert set(ticks) == {"03_naproxen", "06_theophylline"}
+        assert ticks[-1] == "06_theophylline"  # strongest binder on top
+
+    def test_top_ligands_tie_cut_is_first_declared(self, close_all):
+        """Regression: all-tied energies — the top_n cut must keep the
+        FIRST-declared ligands (kind="stable"), at any frame size (the
+        default quicksort cut is an arbitrary middle block at n=512)."""
+        expected = {f"L{i:04d}" for i in range(5)}
+        for n in (8, 512):
+            frame = pd.DataFrame({
+                "folder": [f"L{i:04d}" for i in range(n)],
+                "best_lowest_energy": [-5.0] * n,
+            })
+            fig = plot_top_ligands(frame, top_n=5)
+            ticks = [t.get_text() for t in fig.axes[0].get_yticklabels()]
+            assert set(ticks) == expected
+            assert ticks[-1] == "L0000"  # first-declared tie winner on top
+
     def test_energy_fallback_column(self, close_all):
         summary = self._summary().rename(columns={"best_lowest_energy": "top_lowest_energy"})
         fig = plot_energy_distribution(summary)
@@ -535,6 +615,55 @@ class TestDockingPlots:
 
         fig = plot_receptor_atom_types(_FakeReport())
         assert len(fig.axes[0].patches) == 2
+
+
+# ---------------------------------------------------------------- generative
+@pytest.fixture(scope="module")
+def adaptive_run():
+    """A cheap adaptive GA run (~0.1 s): pop 8 x gen 3, topology mode."""
+    from pharmaml.generative import DEFAULT_CORPUS, GeneticOptimizer, QedObjective
+
+    return GeneticOptimizer(
+        QedObjective(),
+        population_size=8,
+        generations=3,
+        seed=42,
+        mutation="topology",
+        operator_selection="adaptive",
+    ).optimize(corpus=DEFAULT_CORPUS[:10])
+
+
+class TestGenerativePlots:
+    def test_two_panels_and_legends(self, adaptive_run, close_all):
+        fig = plot_operator_trajectory(adaptive_run)
+        assert len(fig.axes) == 2  # score panel + the default mutation level
+        score_legend = {
+            text.get_text() for text in fig.axes[0].get_legend().get_texts()
+        }
+        assert score_legend == {"best score", "population mean"}
+        level_legend = {
+            text.get_text() for text in fig.axes[1].get_legend().get_texts()
+        }
+        assert level_legend == {"topology", "character"}
+
+    def test_all_three_levels_render_three_plus_one_axes(self, adaptive_run, close_all):
+        fig = plot_operator_trajectory(
+            adaptive_run, levels=("level1", "mutation", "geometry")
+        )
+        assert len(fig.axes) == 4
+
+    def test_uniform_run_and_unknown_level_raise_typed_errors(
+        self, adaptive_run, close_all
+    ):
+        from pharmaml.generative import GeneticOptimizer, QedObjective
+
+        uniform = GeneticOptimizer(
+            QedObjective(), population_size=8, generations=3, seed=42
+        ).optimize(corpus=["CCO", "c1ccccc1"])
+        with pytest.raises(DataValidationError, match="operator_trajectory"):
+            plot_operator_trajectory(uniform)
+        with pytest.raises(DataValidationError, match="not in this run's trajectory"):
+            plot_operator_trajectory(adaptive_run, levels=("nope",))
 
 
 # ---------------------------------------------------------------- reports
@@ -671,6 +800,25 @@ class TestVisualBundle:
         assert {"metrics.csv", "metrics.md"} <= names
         html = (tmp_path / "bundle" / "report.html").read_text()
         assert html.count("data:image/png;base64,") == 2
+
+    def test_bundle_rejects_path_escape(self, trained_classifier, tmp_path):
+        """Regression: a '../escape' stem key used to write OUTSIDE the
+        bundle directory (``out / "../escape.png"``)."""
+        _, report, _, _ = trained_classifier
+        out_dir = tmp_path / "bundle"
+        with pytest.raises(DataValidationError, match="plain file name"):
+            save_visual_bundle(
+                {"../escape": plot_confusion_matrix(report)}, out_dir=out_dir
+            )
+        with pytest.raises(DataValidationError, match="plain file name"):
+            save_visual_bundle(
+                {}, tables={"../escape": metrics_to_dataframe(report)},
+                out_dir=out_dir,
+            )
+        # nothing escaped, and the bundle dir was never even created
+        assert not (tmp_path / "escape.png").exists()
+        assert not (tmp_path / "escape.csv").exists()
+        assert not out_dir.exists()
 
     def test_bundle_closes_figures(self, trained_classifier, tmp_path):
         _, report, _, _ = trained_classifier
@@ -1032,6 +1180,8 @@ class TestNotebookArtifacts:
             # §9–§10 head-to-head + publish
             "to_dataframe",
             "save_visual_bundle",
+            # §6b adaptive operators — the learning-curve figure
+            "plot_operator_trajectory",
         ):
             assert symbol in sources, f"generative notebook lost its {symbol} section"
 

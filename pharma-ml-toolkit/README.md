@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1401 tests).
+exceptions, input validation, and pytest coverage** (1454 tests).
 
 ---
 
@@ -93,7 +93,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1401 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 1454 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -673,7 +673,12 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   executed notebook's A/B (7-membered-ring band × QED × lead-size MW,
   topology mode, seed 42): adaptive closes at population mean 0.808 vs
   uniform's 0.765 and *discovers* the topology family on its own (final
-  draw probability 0.896 vs 0.104 for character mutation).
+  draw probability 0.896 vs 0.104 for character mutation). The learning
+  curve itself is one call away: `plot_operator_trajectory(result)` (from
+  `pharmaml.viz`) stacks the run's score trajectory with one panel per
+  adaptive level, drawing `result.metadata["operator_trajectory"]` — one
+  full-precision record per generation (record 0 is the exactly-fair
+  prior, the final record the closing mix).
 * **Method trade-offs, honestly:** the GA explores wider (hundreds of unique molecules
   per run, no extra dependency, seeded *and* de novo modes) while RL fine-tunes a learned
   prior and needs fewer evaluations to focus on high-scoring neighbourhoods — but costs a
@@ -684,7 +689,9 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   `--scaffold-hop` to the BREED-style crossover and `--topology` to the
   ring-size mutation mode — e.g.
   `pharmaml generative run --method ga --recipe novel --scaffold --scaffold-hop --seed 42`
-  is the full structural mode) and `pharmaml generative corpus`.
+  is the full structural mode; with `--adaptive-operators`, `--plot <path>`
+  saves the run's operator-trajectory figure in png/svg/pdf) and
+  `pharmaml generative corpus`.
 * Requires `pip install "pharmaml[chem]"`; the RNN/RL half additionally needs
   `pip install "pharmaml[deep]"` (PyTorch is imported lazily — the package works without it).
 
@@ -866,6 +873,7 @@ pharmaml docking campaign reindex --data results.csv --column name --start 1 --s
 pharmaml biology response-audit --data screen.csv --tissue-column tissue --metric LN_IC50
 pharmaml biology top-biomarkers --expression expr.csv --response resp.csv --response-column pIC50 --compound erlotinib --top 15
 pharmaml generative run --method ga --recipe qed --iterations 20 --seed 42
+pharmaml generative run --method ga --recipe qed --adaptive-operators --plot operators.png
 pharmaml generative run --method rl --recipe druglike --iterations 15 --out molecules.csv
 pharmaml generative run --method ga --recipe similar --seeds examples/data/seed_molecules.csv
 pharmaml generative corpus --out corpus.csv
@@ -879,8 +887,9 @@ confusion matrix, ROC curves, class distribution, CV fold scores and
 feature-importance figures (parity + residual diagnostics for regression)
 — into `<out>/report/`, no Python required. `ml compare --plot` saves the
 leaderboard bar chart and `--out` exports the table in any of
-csv/tsv/md/json/html. All plotting flags require the `reports` extra
-(`pip install 'pharmaml[reports]'`).
+csv/tsv/md/json/html; `generative run --adaptive-operators --plot <path>`
+saves the adaptive GA's operator-trajectory figure. All plotting flags
+require the `reports` extra (`pip install 'pharmaml[reports]'`).
 
 ---
 
@@ -904,7 +913,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1461 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1515 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

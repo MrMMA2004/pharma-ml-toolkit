@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import io
 from pathlib import Path
+from typing import Any
 
 from pharmaml.exceptions import DataValidationError, DependencyError
 
@@ -46,6 +47,26 @@ PALETTE: tuple[str, ...] = (
 )
 
 _MIME = {"png": "image/png", "svg": "image/svg+xml", "pdf": "application/pdf"}
+
+#: Fixed salt for SVG element ids — replaces matplotlib's random-per-save
+#: uuid4 so two saves of the same figure produce byte-identical SVG files.
+_SVG_HASHSALT = "pharmaml"
+
+
+def _reproducible_kwargs(fmt: str) -> dict[str, Any]:
+    """Extra ``savefig`` kwargs that make svg/pdf output byte-reproducible.
+
+    PNG files are already timestamp-free; svg otherwise embeds a save-time
+    ``<dc:date>`` and random element ids, pdf a second-resolution
+    ``/CreationDate`` — both stripped here so hashing/pinning flows can
+    compare artifacts across processes. PNG takes no kwargs and therefore
+    keeps its exact historical bytes.
+    """
+    if fmt == "svg":
+        return {"metadata": {"Date": None}}
+    if fmt == "pdf":
+        return {"metadata": {"CreationDate": None}}
+    return {}
 
 
 def require_matplotlib():
@@ -113,7 +134,9 @@ def save_figure(fig, path: str | Path) -> Path:
     """Save a figure to ``png``/``svg``/``pdf`` (chosen by extension).
 
     Parent directories are created automatically; returns the resolved
-    path so CLI handlers can echo the artifact back to the user.
+    path so CLI handlers can echo the artifact back to the user. Output
+    is byte-reproducible: identical figures hash identically across
+    processes (svg/pdf timestamps and random ids are stripped).
     """
     file_path = Path(path)
     fmt = file_path.suffix.lower().lstrip(".")
@@ -123,7 +146,11 @@ def save_figure(fig, path: str | Path) -> Path:
             f"supported: {', '.join(PLOT_FORMATS)} (picked from the file extension)"
         )
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(file_path, dpi=150, bbox_inches="tight")
+    mpl = require_matplotlib()
+    with mpl.rc_context({"svg.hashsalt": _SVG_HASHSALT}):
+        fig.savefig(
+            file_path, dpi=150, bbox_inches="tight", **_reproducible_kwargs(fmt)
+        )
     return file_path
 
 
@@ -134,7 +161,12 @@ def figure_to_base64(fig, fmt: str = "png") -> str:
             f"Unsupported figure format {fmt!r}; supported: {', '.join(PLOT_FORMATS)}"
         )
     buffer = io.BytesIO()
-    fig.savefig(buffer, format=fmt, dpi=110, bbox_inches="tight")
+    mpl = require_matplotlib()
+    with mpl.rc_context({"svg.hashsalt": _SVG_HASHSALT}):
+        fig.savefig(
+            buffer, format=fmt, dpi=110, bbox_inches="tight",
+            **_reproducible_kwargs(fmt),
+        )
     encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
     return f"data:{_MIME[fmt]};base64,{encoded}"
 

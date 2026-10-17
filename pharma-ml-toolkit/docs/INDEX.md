@@ -255,6 +255,7 @@ after adding new public functions.
 | `plot_feature_importance` | function | Top-N feature importances as horizontal bars. |
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
+| `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
 | `plot_receptor_atom_types` | function | Bar chart of the AutoDock atom-type census of a receptor. |
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |

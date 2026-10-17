@@ -28,6 +28,7 @@ scans::
     pharmaml generative run --recipe similar --seeds examples/data/seed_molecules.csv
     pharmaml generative run --method ga --recipe novel --scaffold --seed 42
     pharmaml generative run --method ga --recipe qed --scaffold-hop --seed 42
+    pharmaml generative run --method ga --adaptive-operators --plot operators.png
     pharmaml generative corpus
     pharmaml models list
 
@@ -666,6 +667,13 @@ def _build_parser() -> argparse.ArgumentParser:
     gen_run.add_argument(
         "--out", default=None,
         help="write the full ranked leaderboard to this path (csv/tsv/xlsx)",
+    )
+    gen_run.add_argument(
+        "--plot", default=None, metavar="PATH",
+        help="GA + --adaptive-operators only: save the operator-trajectory "
+        "figure (the run's score curve plus the per-generation operator mix "
+        "learning its way, plot_operator_trajectory) to this path "
+        "(png/svg/pdf)",
     )
 
     gen_corpus = generative_sub.add_parser(
@@ -1594,7 +1602,12 @@ def _generative_objective(recipe: str, seeds: list[str] | None) -> tuple[Any, st
 
 
 def _cmd_generative_run(args: argparse.Namespace) -> int:
-    """``pharmaml generative run``: optimise molecules toward a recipe."""
+    """``pharmaml generative run``: optimise molecules toward a recipe.
+
+    With ``--method ga --adaptive-operators --plot PATH`` the run's
+    operator-trajectory figure (score curve + per-generation operator mix)
+    is saved alongside the leaderboard.
+    """
     from pharmaml.exceptions import DataValidationError
     from pharmaml.generative import DEFAULT_CORPUS, GeneticOptimizer, ReinventOptimizer
     from pharmaml.utils.io import write_table
@@ -1630,6 +1643,18 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             "--adaptive-operators selects the GA's adaptive operator "
             "selection and applies to --method ga only (got --method "
             f"{args.method!r})"
+        )
+    plot_path = getattr(args, "plot", None)
+    if plot_path and args.method != "ga":
+        raise DataValidationError(
+            "--plot saves the GA's adaptive operator-trajectory figure and "
+            f"applies to --method ga only (got --method {args.method!r})"
+        )
+    if plot_path and not adaptive_operators:
+        raise DataValidationError(
+            "--plot draws the operator trajectory an adaptive run collects "
+            "-- re-run with --adaptive-operators (a uniform run's operator "
+            "mix is fixed, so it has no trajectory to draw)"
         )
 
     seeds = _generative_seed_smiles(args)
@@ -1679,6 +1704,16 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
         f"{meta.get('unique_generated', 0)} unique, "
         f"{meta.get('elapsed_s', float('nan')):.1f}s"
     )
+    if plot_path:
+        # the adaptive run's learning curve (the chem compare --figure
+        # idiom: build, save via save_figure, close, echo the artifact)
+        from pharmaml.viz import close_figure, save_figure
+        from pharmaml.viz.generative_plots import plot_operator_trajectory
+
+        figure = plot_operator_trajectory(result)
+        written_figure = save_figure(figure, plot_path)
+        close_figure(figure)
+        print(f"plot     : {written_figure} (adaptive operator trajectory)")
     if result.is_empty():
         print("\nno valid molecule generated -- try more iterations "
               "or a higher --prior-epochs")
