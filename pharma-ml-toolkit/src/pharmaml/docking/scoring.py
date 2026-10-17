@@ -12,6 +12,50 @@ two standard analysis hooks:
 References
 ----------
 .. [1] Hopkins, A. L. et al., J. Med. Chem. 47 (2004): 3385-3387.
+
+Examples
+--------
+>>> from pharmaml.docking.scoring import ligand_efficiency
+>>> ligand_efficiency(-12.4, 31)          # |dG| / N_heavy
+0.4
+>>> ligand_efficiency(-9.0, 30)
+0.3
+>>> ligand_efficiency(-8.0, 0)            # non-positive atom count
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: num_heavy_atoms must be a positive integer, got 0
+
+>>> import pandas as pd
+>>> from pharmaml.docking.scoring import ligand_efficiency_series
+>>> docked = pd.DataFrame({"best_lowest_energy": [-11.0, -8.0],
+...                        "num_heavy_atoms": [22, 16]})
+>>> le = ligand_efficiency_series(docked)
+>>> le.tolist()
+[0.5, 0.5]
+>>> le.name                                # the affinity column, by default
+'best_lowest_energy'
+
+>>> from pharmaml.docking.scoring import consensus_rescore
+>>> summary = pd.DataFrame({"ligand": ["L1", "L2", "L3"],
+...                         "best_lowest_energy": [-10.0, -8.0, -6.0],
+...                         "cluster_size": [10, 30, 20]})
+>>> consensus_rescore(summary, ["best_lowest_energy", "cluster_size"]).tolist()
+[0.5, 0.75, 0.25]
+>>> consensus_rescore(summary, ["best_lowest_energy", "cluster_size"],
+...                   weights=[1.0, 3.0]).tolist()
+[0.25, 0.875, 0.375]
+>>> consensus_rescore(summary, ["best_lowest_energy", "cluster_size"],
+...                   higher_is_better={"best_lowest_energy": True}).tolist()
+[0.0, 0.75, 0.75]
+>>> consensus_rescore(summary, ["cluster"])       # unknown column
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: missing columns ['cluster'] for rescoring
+>>> consensus_rescore(summary, ["best_lowest_energy", "cluster_size"],
+...                   weights=[1.0])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: got 1 weights for 2 columns
 """
 
 from __future__ import annotations

@@ -5,10 +5,10 @@ The structural recombination operator for
 cut and recombined so an offspring is a hybrid that keeps parts of each
 parent (Nicolaou et al.'s BREED algorithm tradition, in the pragmatic
 spirit of this package: RDKit graph surgery + ``Chem.molzip``, no
-learned model).  Five cut geometries cover the three things a scaffold
+learned model).  Six cut geometries cover the four things a scaffold
 hop actually has to recombine -- fragment *arrangement*, ring
-*topology* and *ring-system* topology -- completing the {excised
-piece} x {cut type} matrix:
+*topology*, ring-*system* topology and *linker chemistry* -- completing
+the {excised piece} x {cut type} matrix:
 
 * **bridge** (the classic): both parents are cut at a pair of
   *homologous* single acyclic bonds and the fragments recombined
@@ -39,6 +39,17 @@ piece} x {cut type} matrix:
   *acyclic* bond of the other: both bridge fragments are re-joined
   *through* the ring, so the ring becomes the spacer -- the
   ring-as-linker move (decalin x hexane -> a dipropylcyclohexane).
+* **swap**: two-point segment-swap crossover, the graph analogue of
+  classic two-point GA recombination -- each parent's bounded acyclic
+  *middle* (a single atom or a contiguous path of up to four atoms)
+  can be excised from the flank parent and REPLACED by the other
+  parent's homologous middle: the only size-conserving geometry (insert
+  grows, swap exchanges) and the medchem linker / bioisostere exchange
+  move -- an ester O swapped for an amide N (aspirin x paracetamol ->
+  salicylamide), an ether O for a thioether S.  Across the shipped
+  244-molecule corpus the swap scan admits 7,328 candidates over 295
+  distinct linker chemistries, 1,738 of them heteroatom bioisostere
+  exchanges.
 
 All cuts are *single* bonds (aromatic ring bonds are never cut -- the
 re-zip would have to invent bond orders; the fuse geometry's two anchor
@@ -75,6 +86,11 @@ True
 >>> # bond -> a single dipropylcyclohexane spacer ring
 >>> scaffold_hop_crossover("C1CCC2CCCCC2C1", "CCCCCC", random.Random(5))
 'CCCC1CCCCC1CCC'
+>>> # two-point segment swap: aspirin x paracetamol -- the ester O
+>>> # exchanged for the amide N -> salicylamide (a bioisostere child)
+>>> scaffold_hop_crossover("CC(=O)Oc1ccccc1C(=O)O", "CC(=O)Nc1ccc(O)cc1",
+...                        random.Random(0))
+'CC(=O)Nc1ccccc1C(=O)O'
 >>> # benzene has no acyclic single bond to cut: no crossover possible
 >>> scaffold_hop_crossover("c1ccccc1", "c1ccncc1", random.Random(0)) is None
 True
@@ -388,6 +404,104 @@ def _linker_path_units(mol: object) -> list[tuple[tuple[int, ...], tuple]]:
     return units
 
 
+def _middle_units(mol: object) -> list[tuple[tuple[int, ...], tuple]]:
+    """Enumerate swap middles: ``[(path, host_sigs)]``.
+
+    The swap geometry's inventory of bounded acyclic middles -- the exact
+    transplant eligibility, reused: single eligible atoms first in
+    atom-index order (the transplant scan's convention), then the
+    multi-atom linker paths in :func:`_linker_path_units` order (two up
+    to ``_MAX_LINKER_PATH_ATOMS`` atoms).  Every unit is admitted only
+    when :func:`_excise_linker_path` validates it, so a middle is
+    simultaneously excisable from its flank (as the replaced segment)
+    and donatable as the piece (the segment moved in).  A pure function
+    of the molecule, so the candidate pool stays a pure function of the
+    parents.
+    """
+    units: list[tuple[tuple[int, ...], tuple]] = []
+    for atom in mol.GetAtoms():  # type: ignore[attr-defined]
+        if atom.GetDegree() != 2 or atom.IsInRing():  # type: ignore[attr-defined]
+            continue
+        excision = _excise_linker_path(mol, (atom.GetIdx(),))
+        if excision is None:
+            continue
+        units.append(((atom.GetIdx(),), excision[1]))
+    units.extend(_linker_path_units(mol))
+    return units
+
+
+def _excise_middle(
+    mol: object,
+    path: tuple[int, ...],
+) -> tuple[object, object] | None:
+    """Cut a bounded acyclic middle out of ``mol``; ``(flank_first, flank_second)``.
+
+    The swap geometry's flank step: ``path`` is excised and *discarded*
+    (the piece parent's middle replaces it at assembly time).  Both host
+    bonds -- single and acyclic by :func:`_excise_linker_path`
+    admission -- are cut, one dummy is attached to each former host
+    (``[*:1]`` on the path[0]-side flank, ``[*:2]`` on the other), and
+    the molecule splits into exactly three fragments: the two flanks
+    survive, the middle is dropped.  Admission guarantees the split --
+    any host-to-host detour around the middle would close a ring through
+    it, and every path atom is ring-free.  ``None`` on any RDKit
+    failure, the robustness-first contract of every helper here.
+    """
+    Chem = require_rdkit()
+    try:
+        if _excise_linker_path(mol, path) is None:
+            return None  # not a bounded acyclic middle
+        if len(path) == 1:
+            nbrs = list(mol.GetAtomWithIdx(path[0]).GetNeighbors())  # type: ignore[attr-defined]
+            host_first, host_second = nbrs[0].GetIdx(), nbrs[1].GetIdx()
+        else:
+            first_outside = [
+                nbr.GetIdx()
+                for nbr in mol.GetAtomWithIdx(path[0]).GetNeighbors()  # type: ignore[attr-defined]
+                if nbr.GetIdx() != path[1]
+            ]
+            last_outside = [
+                nbr.GetIdx()
+                for nbr in mol.GetAtomWithIdx(path[-1]).GetNeighbors()  # type: ignore[attr-defined]
+                if nbr.GetIdx() != path[-2]
+            ]
+            if len(first_outside) != 1 or len(last_outside) != 1:
+                return None
+            host_first, host_second = first_outside[0], last_outside[0]
+        rw = Chem.RWMol(mol)
+        rw.RemoveBond(path[0], host_first)
+        rw.RemoveBond(path[-1], host_second)
+        d_first = rw.AddAtom(Chem.Atom(0))
+        d_second = rw.AddAtom(Chem.Atom(0))
+        rw.AddBond(host_first, d_first, Chem.BondType.SINGLE)
+        rw.AddBond(host_second, d_second, Chem.BondType.SINGLE)
+        cut = rw.GetMol()
+        idx_frags = Chem.GetMolFrags(cut)
+        mol_frags = Chem.GetMolFrags(cut, asMols=True)
+        if len(idx_frags) != 3 or len(mol_frags) != 3:
+            return None  # a detour around the middle closed a ring: not excisable
+        flank_first = flank_second = None
+        for indices, fragment in zip(idx_frags, mol_frags):
+            if d_first in indices:
+                flank_first = fragment
+            if d_second in indices:
+                flank_second = fragment
+        if flank_first is None or flank_second is None:  # pragma: no cover
+            return None
+        for fragment, map_num in ((flank_first, 1), (flank_second, 2)):
+            Chem.SanitizeMol(fragment)
+            dummies = [
+                atom for atom in fragment.GetAtoms() if atom.GetAtomicNum() == 0
+            ]
+            if len(dummies) != 1:  # pragma: no cover
+                return None
+            dummies[0].SetAtomMapNum(map_num)
+            dummies[0].SetIsotope(0)
+        return flank_first, flank_second
+    except Exception:  # noqa: BLE001 - robustness-first fallback contract
+        return None
+
+
 def _excise_ring(
     mol: object,
     ring: tuple[int, ...],
@@ -614,7 +728,7 @@ def scaffold_hop_crossover(
 ) -> str | None:
     """BREED-style crossover: homologous cuts, hybrid child.
 
-    Five cut geometries compete for the rng draw -- a **bridge** cut
+    Six cut geometries compete for the rng draw -- a **bridge** cut
     per parent (fragment swap, the classic), a **ring merge** (one
     single ring bond cut per parent, the opened rings zipped into one
     combined ring), a **linker transplant** (a single ring bond cut
@@ -624,10 +738,15 @@ def scaffold_hop_crossover(
     chain), a **fused-ring splice** (a whole ring excised from one
     parent between its two single anchor bonds and spliced across an
     opened ring bond of the other: a fused / bridged bicyclic child,
-    the full Nicolaou move set) and a **ring insert** (a whole ring
+    the full Nicolaou move set), a **ring insert** (a whole ring
     excised from one parent and spliced INTO a cut acyclic bond of the
     other: both bridge halves re-joined through the ring -- the
-    ring-as-linker move).  Aromatic ring bonds are never cut
+    ring-as-linker move) and a **segment swap** (each parent's bounded
+    acyclic middle -- a single atom or a contiguous path of up to four
+    atoms -- excised from the flank parent and replaced by the other
+    parent's homologous middle: the only size-conserving geometry, the
+    linker / bioisostere exchange -- an ester O for an amide N, an
+    ether O for a thioether S).  Aromatic ring bonds are never cut
     (the re-zip would have to invent bond orders).
 
     Parameters
@@ -837,6 +956,41 @@ def scaffold_hop_crossover(
                         candidates.append(
                             ("insert", donor_side, bond.GetIdx(), ring, a1, a2, direct)
                         )
+
+        # swap (round 100x-35): the sixth geometry -- two-point
+        # segment-swap crossover, the graph analogue of classic
+        # two-point GA recombination.  Each parent's bounded acyclic
+        # MIDDLE (a single atom or a contiguous path of up to four, the
+        # transplant eligibility) is excised from the flank parent and
+        # REPLACED by the piece parent's homologous middle: the only
+        # size-conserving geometry (insert grows a recipient, swap
+        # exchanges in place) and the medchem linker / bioisostere
+        # exchange move (an ester O swapped for an amide N: aspirin x
+        # paracetamol -> a salicylamide child; an ether O for a
+        # thioether S).  Homology: the two middles' host signatures must
+        # match direct or flipped, so each assembly seam bonds a
+        # signature-matched host to the incoming middle's end atom --
+        # the same invariant every other geometry enforces.  Both
+        # argument orders are scanned; a flipped-only match excises the
+        # REVERSED piece path at execution time (the transplant_path
+        # trick; a single-atom middle is its own reversal).
+        middle_units_a = _middle_units(mol_a)
+        middle_units_b = _middle_units(mol_b)
+        for flank_side, flank_units, piece_units in (
+            ("a", middle_units_a, middle_units_b),
+            ("b", middle_units_b, middle_units_a),
+        ):
+            for flank_path, flank_sigs in flank_units:
+                for piece_path, piece_sigs in piece_units:
+                    direct = flank_sigs == piece_sigs
+                    flipped = (
+                        flank_sigs[0] == piece_sigs[1]
+                        and flank_sigs[1] == piece_sigs[0]
+                    )
+                    if direct or flipped:
+                        candidates.append(
+                            ("swap", flank_side, flank_path, piece_path, direct)
+                        )
         if not candidates:
             return None
 
@@ -942,6 +1096,33 @@ def scaffold_hop_crossover(
                     if dummy.GetAtomicNum() == 0:
                         dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
             return _zip_child(opened, donor, max_smiles_length)
+
+        # swap (two-point segment-swap: the flank's middle is excised and
+        # REPLACED by the piece's homologous middle -- the only
+        # size-conserving geometry, the linker / bioisostere exchange).
+        # _excise_middle already labels the flanks [*:1]/[*:2], so the
+        # reused _zip_spliced assembler chains them through the piece's
+        # two dummies with no relabelling (the insert geometry's end-frag
+        # relabel is a no-op on pre-labelled map-2 dummies).  A
+        # flipped-only match excises the REVERSED piece path so each seam
+        # bonds a signature-matched host to the middle's end atom -- the
+        # transplant_path trick; a single-atom middle is its own
+        # reversal.
+        if choice[0] == "swap":
+            _, flank_side, flank_path, piece_path, direct = choice
+            if flank_side == "a":
+                flank_mol, piece_mol = mol_a, mol_b
+            else:
+                flank_mol, piece_mol = mol_b, mol_a
+            flanks = _excise_middle(flank_mol, flank_path)
+            excision = _excise_linker_path(
+                piece_mol, piece_path if direct else tuple(reversed(piece_path))
+            )
+            if flanks is None or excision is None:
+                return None
+            flank_first, flank_second = flanks
+            piece, _ = excision
+            return _zip_spliced(flank_first, piece, flank_second, max_smiles_length)
 
         # insert (ring-as-linker: the recipient's bridge cut leaves two
         # [*:1]-dummied halves; the end half's dummy is relabelled to

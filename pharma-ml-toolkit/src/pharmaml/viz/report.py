@@ -17,6 +17,50 @@
 * :func:`save_visual_bundle` — one call that renders figures + tables +
   metrics into a directory and the companion ``report.html``; this is
   what the CLI ``--plots``/``data entry`` options use.
+
+Examples
+--------
+>>> import pandas as pd
+>>> from pharmaml.viz.report import export_table, metrics_to_dataframe
+>>> frame = metrics_to_dataframe({"roc_auc": 0.9, "n": 4})
+>>> (frame.columns.tolist(), frame["metric"].tolist(), frame["value"].tolist())
+(['metric', 'value'], ['roc_auc', 'n'], [0.9, 4.0])
+>>> board = pd.DataFrame({"model": ["rf", "svm"], "roc_auc_ovo_mean": [0.91, 0.87]})
+>>> out = "/tmp/pharmaml_doctest_leaderboard.md"
+>>> export_table(board, out).as_posix()
+'/tmp/pharmaml_doctest_leaderboard.md'
+>>> print(open(out).read())
+| model | roc_auc_ovo_mean |
+| --- | --- |
+| rf | 0.91 |
+| svm | 0.87 |
+<BLANKLINE>
+>>> out_csv = "/tmp/pharmaml_doctest_leaderboard.csv"
+>>> export_table(board, out_csv).as_posix()
+'/tmp/pharmaml_doctest_leaderboard.csv'
+>>> pd.read_csv(out_csv).values.tolist()
+[['rf', 0.91], ['svm', 0.87]]
+>>> from pathlib import Path
+>>> Path(out).unlink(); Path(out_csv).unlink()
+
+>>> from pharmaml.viz.report import HTMLReport
+>>> report = (HTMLReport("QSAR run", subtitle="random_forest | 3 classes")
+...           .add_metrics({"roc_auc": 0.91, "n_samples": 4})
+...           .add_table(board, "Model leaderboard")
+...           .add_text("Cross-validated on 5 folds.", heading="Notes"))
+>>> html = report.render()
+>>> "<h1>QSAR run</h1>" in html and "<td>rf</td>" in html
+True
+>>> html.startswith("<!DOCTYPE html>")
+True
+>>> saved = report.save("/tmp/pharmaml_doctest_report.html")
+>>> saved.as_posix()
+'/tmp/pharmaml_doctest_report.html'
+>>> Path("/tmp/pharmaml_doctest_report.html").unlink()
+>>> HTMLReport("t").add_metrics(42)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: add_metrics accepts report objects or dicts
 """
 
 from __future__ import annotations

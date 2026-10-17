@@ -25,7 +25,10 @@ CPU-friendly and deterministic given ``seed``:
   spliced across the other's opened ring bond (fused / bridged
   bicyclics -- ring-*system* topology recombines too), or a whole ring
   spliced INTO the other's cut acyclic bond (the ring becomes the
-  spacer -- ring-as-linker), so
+  spacer -- ring-as-linker), or each parent's bounded acyclic middle
+  exchanged for the other's homologous middle (two-point segment
+  swap -- the linker / bioisostere exchange: an ester O for an amide
+  N), so
   ring systems survive by construction and
   the offspring can hop scaffolds.  The character splice is not used in
   ``mutation="scaffold"`` mode (it routinely destroys ring systems,
@@ -427,7 +430,12 @@ class GeneticOptimizer:
         full Nicolaou move set -- or a whole ring spliced INTO the
         other's cut acyclic bond, so both bridge halves re-join
         *through* it: the ring becomes the spacer, the ring-as-linker
-        move).  Every
+        move -- or a two-point segment swap: each parent's bounded
+        acyclic middle (a single atom or a contiguous path of up to
+        four atoms) excised from the flank parent and replaced by the
+        other's homologous middle, the only size-conserving geometry
+        and the medchem linker / bioisostere exchange -- an ester O for
+        an amide N, an ether O for a thioether S).  Every
         fragment arrives intact, so ring systems
         survive by construction, and whenever the parents' frameworks
         span different fragments (biaryls, diaryl ethers, sulfonyl

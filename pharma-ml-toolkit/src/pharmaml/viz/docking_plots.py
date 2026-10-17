@@ -13,6 +13,55 @@ module visualises them:
 
 The first two accept the summary frame produced by
 :func:`~pharmaml.docking.parsing.scan_docking_directory` directly.
+
+Examples
+--------
+>>> from pathlib import Path
+>>> from pharmaml.viz import close_figure
+>>> from pharmaml.viz.docking_plots import plot_receptor_atom_types
+>>> fig = plot_receptor_atom_types({"HD": 190, "A": 130, "N": 40})  # plain dict
+>>> fig.axes[0].get_title()
+'Receptor AutoDock atom types — 360 atoms, 3 type(s)'
+>>> [t.get_text() for t in fig.axes[0].get_xticklabels()]          # sorted by count
+['HD', 'A', 'N']
+>>> close_figure(fig)
+>>> pdbqt = "/tmp/pharmaml_doctest_receptor.pdbqt"
+>>> _ = Path(pdbqt).write_text(
+...     "ATOM      1  N   MET A   1       1.000   2.000   3.000  1.00  0.00           N\\n"
+...     "ATOM      2  CA  MET A   1       2.000   2.000   3.000  1.00  0.00           C\\n"
+...     "ATOM      3  HA  MET A   1       2.500   1.500   3.000  1.00  0.00          HD\\n")
+>>> fig = plot_receptor_atom_types(pdbqt)          # ATOM/HETATM records counted
+>>> fig.axes[0].get_title()
+'Receptor AutoDock atom types — 3 atoms, 3 type(s)'
+>>> close_figure(fig)
+>>> Path(pdbqt).unlink()
+>>> plot_receptor_atom_types("nope.pdbqt")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: receptor PDBQT file not found: nope.pdbqt
+
+>>> import pandas as pd
+>>> from pharmaml.viz.docking_plots import plot_energy_distribution
+>>> summary = pd.DataFrame({"folder": ["lig1", "lig2", "lig3", "lig4"],
+...                         "best_lowest_energy": [-7.1, -8.5, -6.3, -9.2]})
+>>> fig = plot_energy_distribution(summary)
+>>> (len(fig.axes), fig.axes[0].get_title())
+(1, 'Docking energy distribution — 4 ligand(s)')
+>>> [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+['median = -7.8 kcal/mol', 'best = -9.2 (lig4)']
+>>> close_figure(fig)
+>>> plot_energy_distribution(pd.DataFrame({"x": [1]}))
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: summary frame needs a 'folder' column
+
+>>> from pharmaml.viz.docking_plots import plot_top_ligands
+>>> fig = plot_top_ligands(summary, top_n=3)
+>>> (fig.axes[0].get_title(), fig.axes[0].get_xlabel())
+('Top-ranked ligands by docking energy', 'best binding energy (kcal/mol) — lower is stronger')
+>>> [t.get_text() for t in fig.axes[0].get_yticklabels()]      # strongest on top
+['lig1', 'lig2', 'lig4']
+>>> close_figure(fig)
 """
 
 from __future__ import annotations

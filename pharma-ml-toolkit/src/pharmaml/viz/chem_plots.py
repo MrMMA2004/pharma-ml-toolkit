@@ -11,6 +11,55 @@ stopped there; this module turns them into figures:
 * :func:`plot_table_comparison` — the overlap breakdown of a
   :class:`~pharmaml.chem.tables.TableComparison` (the figure twin of
   the Explorer's "Ligand Sets" playground tab).
+
+Examples
+--------
+>>> import pandas as pd
+>>> from pharmaml.viz import close_figure
+>>> from pharmaml.viz.chem_plots import plot_descriptor_distributions
+>>> frame = pd.DataFrame({"mol_wt": [180.16, 300.2, 250.3, 400.4],
+...                       "logp": [1.3, 2.0, 3.1, 4.2],
+...                       "name": ["aspirin", "ibuprofen", "caffeine", "naproxen"]})
+>>> fig = plot_descriptor_distributions(frame)      # the 'name' column is skipped
+>>> [ax.get_title() for ax in fig.axes]
+['mol_wt', 'logp']
+>>> close_figure(fig)
+>>> plot_descriptor_distributions([1, 2])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: frame must be a pandas DataFrame
+
+>>> from pharmaml.viz.chem_plots import plot_similarity_heatmap
+>>> sim = pd.DataFrame([[1.0, 0.5, 0.0], [0.5, 1.0, 0.25], [0.0, 0.25, 1.0]],
+...                    index=["ethanol", "propanol", "phenol"])
+>>> fig = plot_similarity_heatmap(sim)              # labels come from the frame
+>>> (len(fig.axes), fig.axes[0].get_title())
+(2, 'Tanimoto similarity')
+>>> [t.get_text() for t in fig.axes[0].get_xticklabels()]
+['ethanol', 'propanol', 'phenol']
+>>> plot_similarity_heatmap([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: similarity matrix must be square, got shape (3, 2)
+>>> plot_similarity_heatmap([[1.0, 0.0], [0.0, 1.0]], labels=["a", "b", "c"])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: 3 labels for a 2x2 matrix
+>>> close_figure(fig)
+
+>>> from pharmaml.chem.tables import compare_tables
+>>> from pharmaml.viz.chem_plots import plot_table_comparison
+>>> comp = compare_tables(pd.DataFrame({"ligand": ["aspirin", "ibuprofen", "caffeine"]}),
+...                       pd.DataFrame({"ligand": ["Aspirin.pdbqt", "naproxen", "ibuprofen"]}),
+...                       "ligand")                 # names are normalised first
+>>> (comp.common, comp.only_in_a, comp.only_in_b)
+(['aspirin', 'ibuprofen'], ['caffeine'], ['naproxen'])
+>>> fig = plot_table_comparison(comp, labels=("set_A", "set_B"))
+>>> (len(fig.axes), fig.axes[0].get_title(loc="left"))
+(2, 'Ligand-set reconciliation')
+>>> [t.get_text() for t in fig.axes[1].get_yticklabels()]
+['common (both)', 'only in set_A', 'only in set_B']
+>>> close_figure(fig)
 """
 
 from __future__ import annotations

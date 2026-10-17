@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1359 tests).
+exceptions, input validation, and pytest coverage** (1378 tests).
 
 ---
 
@@ -93,7 +93,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1359 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 1378 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -596,7 +596,7 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
 * **Scaffold-hop crossover (`crossover="scaffold_hop"`):** BREED-style structural
   recombination — both parents are cut at a pair of *homologous* single bonds
   (join atoms match on element, degree, aromaticity, charge) and recombined
-  with `Chem.molzip`. Five geometries, completing the {excised piece} × {cut
+  with `Chem.molzip`. Six geometries, completing the {excised piece} × {cut
   type} matrix: classic **bridge cuts** swap fragments
   cross-wise (ring systems survive by construction; the offspring's framework
   differs from both parents whenever the parents' frameworks span different
@@ -621,7 +621,17 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   *acyclic* bond — both bridge halves re-join *through* the ring, so it
   becomes the spacer: ring-as-linker (decalin × hexane → `CCCC1CCCCC1CCC`,
   a dipropylcyclohexane; indane × heptane → `CCCCCc1ccccc1CC`, a
-  dialkylbenzene).
+  dialkylbenzene);
+  **segment swaps** (two-point crossover, the graph analogue of classic
+  two-point GA recombination) exchange one parent's bounded acyclic
+  *middle* — a single atom or a contiguous path of up to four atoms — for
+  the other parent's homologous middle: the only size-conserving geometry
+  and the medchem linker / bioisostere exchange — aspirin × paracetamol →
+  `CC(=O)Nc1ccccc1C(=O)O` (salicylamide: the ester O swapped for the
+  amide N), an ether O for a thioether S. Across the 244-molecule
+  corpus the swap scan admits 7,328 candidates over 295 distinct
+  linker chemistries — 1,738 of them heteroatom bioisostere exchanges
+  (O↔N the classic ester/amide class).
   Aromatic ring bonds are never cut (the
   re-zip would have to invent bond orders). Also usable standalone via
   `scaffold_hop_crossover(parent_a, parent_b, rng)`; deterministic; `None`
@@ -873,7 +883,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1404 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1431 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

@@ -18,6 +18,41 @@ The production version:
 * raises :class:`~pharmaml.exceptions.DataValidationError` naming the
   file/frame that lacks the required columns instead of printing a
   warning and silently skipping it.
+
+Examples
+--------
+>>> import pandas as pd
+>>> from pharmaml.pharma.approvals import filter_approved_drugs
+>>> frame = pd.DataFrame({
+...     "Drug": ["Aspirin", " ibuprofen ", "Aspirin", "metformin", None, "  "],
+...     "Regulatory Approval": ["Approved", "approved", "APPROVED", "Withdrawn",
+...                             "Approved", "Approved"]})
+>>> filter_approved_drugs(frame)          # sorted, deduplicated, stripped
+['Aspirin', 'ibuprofen']
+>>> frame.loc[1, "Drug"]                  # the caller's frame is never mutated
+' ibuprofen '
+>>> filter_approved_drugs([])             # empty path list fails up front
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: filter_approved_drugs got an empty list of paths
+>>> filter_approved_drugs("/tmp/pharmaml_doctest_missing.tsv")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Input file not found: /tmp/pharmaml_doctest_missing.tsv
+
+>>> tsv = "/tmp/pharmaml_doctest_approvals.tsv"
+>>> pd.DataFrame({" drug ": ["warfarin", "digoxin"],
+...               " Regulatory Approval ": ["Approved", "Not approved"]}
+...             ).to_csv(tsv, sep="\\t", index=False)
+>>> filter_approved_drugs(tsv)            # tab separator + messy headers
+['warfarin']
+>>> export = "/tmp/pharmaml_doctest_approvals.csv"
+>>> filter_approved_drugs(frame, out_path=export)
+['Aspirin', 'ibuprofen']
+>>> pd.read_csv(export)["drug"].tolist()  # single-column CSV with header 'drug'
+['Aspirin', 'ibuprofen']
+>>> from pathlib import Path
+>>> Path(tsv).unlink(); Path(export).unlink()
 """
 
 from __future__ import annotations

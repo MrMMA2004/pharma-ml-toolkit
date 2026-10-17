@@ -6,6 +6,59 @@ legacy model script (median imputation + standard scaling, the
 composable, reusable module.  The returned sklearn objects are fitted
 on training data only by convention of :func:`build_preprocessor` --
 the caller fits inside a Pipeline to avoid train/test leakage.
+
+Examples
+--------
+>>> import numpy as np
+>>> import pandas as pd
+>>> from pharmaml.ml.preprocessing import has_categorical_columns
+>>> has_categorical_columns(pd.DataFrame({"logp": [1.2, 2.4], "assay": ["A", "B"]}))
+True
+>>> has_categorical_columns(pd.DataFrame({"logp": [1.2, 2.4]}))
+False
+>>> has_categorical_columns(np.array([[1.0, 2.0]]))    # arrays are never categorical
+False
+
+>>> from pharmaml.ml.preprocessing import clean_numeric_frame, split_features_target
+>>> raw = pd.DataFrame({"SMILES": ["CCO", "CCC"], "logp": [1.2, 2.4],
+...                     "assay": ["A", "B"], "pIC50": [5.0, 4.0]})
+>>> clean_numeric_frame(raw, target_col="pIC50", keep_cols=["SMILES"]).columns.tolist()
+['SMILES', 'logp', 'pIC50']
+>>> X, y = split_features_target(raw, "pIC50", drop_cols=["SMILES"])
+>>> (X.columns.tolist(), y.tolist())
+(['logp', 'assay'], [5.0, 4.0])
+
+>>> from pharmaml.ml.preprocessing import build_preprocessor
+>>> [step[0] for step in build_preprocessor().steps]        # impute -> scale
+['impute', 'scale']
+>>> [step[0] for step in build_preprocessor(scale=False).steps]
+['impute']
+>>> X = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [2.0, 4.0, 6.0]})
+>>> [[round(v, 6) for v in row]
+...  for row in build_preprocessor().fit_transform(X).tolist()]   # median + z-score
+[[-1.224745, -1.224745], [0.0, 0.0], [1.224745, 1.224745]]
+
+>>> from pharmaml.ml.preprocessing import remove_outliers_iqr
+>>> vals = pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0, 100.0]})
+>>> remove_outliers_iqr(vals)["x"].tolist()                # 100 is beyond Q3 + 1.5*IQR
+[1.0, 2.0, 3.0, 4.0]
+>>> remove_outliers_iqr(vals, factor=0.1)["x"].tolist()    # tighter fence
+[2.0, 3.0, 4.0]
+>>> remove_outliers_iqr(vals, factor=0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: factor must be > 0, got 0
+
+>>> from pharmaml.ml.preprocessing import make_train_test_split
+>>> Xs = pd.DataFrame({"f": np.arange(10.0)})
+>>> ys = pd.Series([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+>>> X_train, X_test, y_train, y_test = make_train_test_split(Xs, ys, random_state=42)
+>>> (X_train.shape, X_test.shape, sorted(y_test.tolist()))  # stratified 8/2
+((8, 1), (2, 1), [0, 1])
+>>> make_train_test_split(Xs, ys, test_size=1.5)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: test_size must be in (0, 1), got 1.5
 """
 
 from __future__ import annotations

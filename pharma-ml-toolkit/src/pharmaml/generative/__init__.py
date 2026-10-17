@@ -20,8 +20,11 @@ runs in seconds on a laptop CPU:
    ring-bond cuts merge rings or transplant two-ended linkers (a single
    atom or a short acyclic path of up to four atoms), whole rings
    excised between their two anchor bonds splice across the cut into
-   fused bicyclics, and whole rings spliced INTO cut acyclic bonds
-   become the linker -- so ring *topology* and ring-*system* topology
+   fused bicyclics, whole rings spliced INTO cut acyclic bonds become
+   the linker, and two-point segment swaps exchange each parent's
+   bounded acyclic middle for the other's homologous middle (the
+   linker / bioisostere exchange: an ester O for an amide N) -- so ring
+   *topology*, ring-*system* topology and *linker chemistry*
    recombine too; tournament selection, elitism; CPU-strong,
    de novo *or* seeded from your own sample molecules -- the
    scaffold-hop crossover also works standalone via

@@ -5,6 +5,46 @@ leaderboard across the whole registry.  In the legacy codebase the
 same comparison was performed by running 30+ separate scripts and
 collating their console output by hand; now one call returns a tidy
 DataFrame ranked by the metric of choice.
+
+Examples
+--------
+>>> import pandas as pd
+>>> from pharmaml.ml.training import train_model
+>>> X = pd.DataFrame({"x": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]})
+>>> y = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+>>> result = train_model("ridge", "regression", X, y, tune=False)
+>>> (result.name, result.task, result.best_params)
+('ridge', 'regression', {})
+>>> result.cv_scores is None and result.cv_mean is None    # no search ran
+True
+>>> round(float(result.model.predict(pd.DataFrame({"x": [10.0]}))[0]), 6)
+9.928571
+>>> list(result.model.named_steps)      # impute+scale prep wraps the estimator
+['prep', 'reg']
+>>> train_model("ridge", "regression", X, y, tune=False, cv=1)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: cv must be >= 2 folds, got 1
+>>> train_model("ridge", "banana", X, y, tune=False)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: task must be 'classification' or 'regression', got 'banana'
+>>> train_model("ridge", "classification", X, y, tune=False)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.ModelError: Model 'ridge' supports 'regression', not 'classification'
+
+>>> from pharmaml.ml.training import compare_models
+>>> X = pd.DataFrame({"x": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]})
+>>> y = pd.Series([1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0])   # y = 2x + 1
+>>> board = compare_models(X, y, task="regression",
+...                        models=["ridge", "linear_regression"], cv=2)
+>>> board["model"].tolist()            # the exact fit outranks the shrunken ridge
+['linear_regression', 'ridge']
+>>> abs(float(board.iloc[0, 1])) < 1e-9      # ~zero RMSE for the exact fit
+True
+>>> round(float(board.iloc[1, 1]), 6)        # ridge's L2 shrinkage costs RMSE
+-1.661325
 """
 
 from __future__ import annotations

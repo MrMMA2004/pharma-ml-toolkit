@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.linear_model import HuberRegressor, LogisticRegression
+from sklearn.metrics import roc_auc_score
 
 import pharmaml.ml.models as models_module
 from pharmaml.exceptions import DataValidationError, ModelError, PersistenceError
@@ -482,6 +483,155 @@ class TestEvaluationEdgeCases:
         report = evaluate_model(IntPerfect(), X, y, "classification")
         assert report.labels == [0, 1]
         assert all(not isinstance(v, np.generic) for v in report.labels)
+
+    def test_roc_auc_multiclass_columns_permuted_via_classes(self) -> None:
+        # 100x-35 fail-first (probe /tmp/task35r1/probe1_multiclass_ovr.py):
+        # the multiclass OvR branch passed the FULL proba matrix with
+        # labels=sorted(union), so sklearn mapped column j onto labels[j]
+        # -- a perfect 3-class classifier whose proba columns follow a
+        # NON-sorted classes_=['c','a','b'] reported roc_auc = 0.25
+        # instead of 1.0.  The columns must be permuted into the labels
+        # order through the estimator's own classes_.
+        y = np.array(["c", "a", "b", "c", "a", "b", "c", "a", "b"])
+        X = [[c] for c in y]
+
+        class NonSortedPerfect:
+            classes_ = np.array(["c", "a", "b"])  # not alphabetical
+
+            def predict(self, X):
+                return np.asarray(X).ravel()
+
+            def predict_proba(self, X):
+                yv = np.asarray(X).ravel()
+                proba = np.zeros((len(yv), 3))
+                for col, cls in enumerate(self.classes_):
+                    proba[yv == cls, col] = 1.0
+                return proba
+
+        report = evaluate_model(NonSortedPerfect(), X, y, "classification")
+        assert report.roc_auc == 1.0  # was 0.25 before the fix
+
+    def test_roc_auc_multiclass_soft_scores_match_conformant_twin(self) -> None:
+        # Invariance with SOFT scores (not just the perfect=1.0
+        # endpoint): the non-sorted-classes_ estimator must report the
+        # same AUC as the column-permuted conformant twin, because the
+        # permutation makes the two score matrices label-equivalent.
+        # Rows are normalized to sum to 1.0 (sklearn's contract for
+        # multiclass OvR scores); column permutation commutes with row
+        # normalization, so both twins stay valid probability matrices.
+        y = np.array(["c", "a", "b", "c", "a", "b", "c", "a", "b"])
+        X = [[c] for c in y]
+        rng = np.random.default_rng(35)
+        # informative per-class score columns (true class scores high,
+        # but close enough to the others that noise creates genuine
+        # ranking inversions -- the pinned AUC lands at 0.9259, not a
+        # degenerate perfect 1.0 already covered by the test above)
+        col_of = {"c": 0, "a": 1, "b": 2}
+        raw = np.zeros((9, 3))
+        for i, cls in enumerate(y):
+            for j in range(3):
+                base = 0.45 if j == col_of[cls] else 0.30
+                raw[i, j] = base + rng.normal(0, 0.12)
+        raw = np.clip(raw, 0.01, 0.95)
+        non_sorted_scores = raw / raw.sum(axis=1, keepdims=True)
+        # columns [c, a, b] -> sorted [a, b, c]: pick a=1, b=2, c=0
+        conformant_scores = non_sorted_scores[:, [1, 2, 0]]
+
+        class NonSortedSoft:
+            classes_ = np.array(["c", "a", "b"])
+
+            def predict(self, X):
+                return np.asarray(X).ravel()
+
+            def predict_proba(self, X):
+                return non_sorted_scores
+
+        class ConformantSoft:
+            classes_ = np.array(["a", "b", "c"])
+
+            def predict(self, X):
+                return np.asarray(X).ravel()
+
+            def predict_proba(self, X):
+                return conformant_scores
+
+        labels = ["a", "b", "c"]
+        expected = roc_auc_score(
+            y, conformant_scores, multi_class="ovr", labels=labels
+        )
+        assert 0.5 < expected < 1.0  # informative but not perfect
+        non_sorted = evaluate_model(NonSortedSoft(), X, y, "classification")
+        conformant = evaluate_model(ConformantSoft(), X, y, "classification")
+        assert non_sorted.roc_auc == pytest.approx(expected)
+        assert conformant.roc_auc == pytest.approx(expected)
+
+    def test_roc_auc_multiclass_sklearn_estimator_unchanged(self) -> None:
+        # sklearn estimators lay proba columns out in sorted classes_
+        # order -- the permutation fix must be a no-op for them.
+        X = np.array([[0.0], [1.0], [2.0], [0.0], [1.0], [2.0], [0.0], [1.0], [2.0]])
+        y = np.array(["a", "b", "c", "a", "b", "c", "a", "b", "c"])
+        clf = LogisticRegression().fit(X[:6], y[:6])
+        report = evaluate_model(clf, X, y, "classification")
+        assert report.roc_auc == pytest.approx(
+            roc_auc_score(y, clf.predict_proba(X), multi_class="ovr", labels=["a", "b", "c"])
+        )
+
+    def test_mixed_label_types_raise_typed_error(self) -> None:
+        # 100x-36 fail-first (probe /tmp/task36/probe_mixed_labels.py):
+        # a custom estimator predicting STRING labels for a numeric
+        # y_test (or vice versa) used to surface as a RAW sklearn
+        # "Mix of label input types" ValueError from deep inside the
+        # metric calls -- the guard names the mismatch instead.
+        X = np.arange(6).reshape(-1, 1)
+        y_int = np.array([0, 1, 0, 1, 0, 1])
+
+        class StrPredicting:
+            classes_ = np.array([0, 1])
+
+            def predict(self, X):
+                return np.array(["low", "high"] * 3)
+
+            def predict_proba(self, X):
+                return np.array([[0.9, 0.1], [0.1, 0.9]] * 3)
+
+        with pytest.raises(
+            ModelError, match="different label types \\(int64 vs <U4\\)"
+        ):
+            evaluate_model(StrPredicting(), X, y_int, "classification")
+
+        # the reverse direction: string y_test, numeric predictions
+        class IntPredicting:
+            classes_ = np.array(["low", "high"])
+
+            def predict(self, X):
+                return np.array([0, 1, 0, 1, 0, 1])
+
+            def predict_proba(self, X):
+                return np.array([[0.9, 0.1], [0.1, 0.9]] * 3)
+
+        y_str = np.array(["low", "high", "low", "high", "low", "high"])
+        with pytest.raises(ModelError, match="different label types"):
+            evaluate_model(IntPredicting(), X, y_str, "classification")
+
+    def test_matching_label_types_still_evaluate(self) -> None:
+        # the guard must not fire on same-domain labels: bool y_test
+        # with bool predictions (both numeric kinds) and string/string
+        # pairs evaluate exactly as before.
+        X = np.array([[0.0], [1.0], [0.0], [1.0]])
+
+        class BoolModel:
+            classes_ = np.array([False, True])
+
+            def predict(self, X):
+                return np.array([False, True, False, True])
+
+            def predict_proba(self, X):
+                return np.array([[0.9, 0.1], [0.1, 0.9], [0.9, 0.1], [0.1, 0.9]])
+
+        report = evaluate_model(BoolModel(), X, np.array([False, True, False, True]),
+                                "classification")
+        assert report.accuracy == 1.0
+        assert report.labels == [False, True]
 
 
 class TestRegistryEdgeCases:

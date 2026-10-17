@@ -2926,6 +2926,285 @@ class TestScaffoldHopRingInserts:
 
 
 # ---------------------------------------------------------------------------
+# Segment-swap crossover (100x-35): the sixth geometry
+# ---------------------------------------------------------------------------
+class TestScaffoldHopSegmentSwaps:
+    """Two-point segment-swap crossover (round 100x-35): the sixth geometry.
+
+    The graph analogue of classic two-point GA recombination: each
+    parent's bounded acyclic MIDDLE (a single atom or a contiguous path
+    of up to four atoms, the transplant eligibility) can be excised from
+    the flank parent and REPLACED by the piece parent's homologous
+    middle -- the only size-conserving geometry (insert grows a
+    recipient, swap exchanges in place) and the medchem linker /
+    bioisostere exchange move: an ester O swapped for an amide N
+    (aspirin x paracetamol -> a salicylamide child), an ether O for a
+    thioether S.  Homology: the two middles' host signatures must match
+    direct or flipped; a flipped-only match excises the REVERSED piece
+    path (the transplant_path trick).
+    """
+
+    def test_swap_exchanges_linkers_between_parents(self) -> None:
+        # the killer demo probed in review: aspirin's ester O and
+        # paracetamol's amide N sit in homologous environments (both
+        # flanked by a carbonyl C and an aryl C), so the swap crosses
+        # them -- seed 0 lands the salicylamide child, seed 5 the
+        # O-for-N twin.  Probe on rdkit 2026.09.1.
+        child = scaffold_hop_crossover(ASPIRIN, "CC(=O)Nc1ccc(O)cc1", random.Random(0))
+        assert child == "CC(=O)Nc1ccccc1C(=O)O"  # salicylamide: neither parent
+        twin = scaffold_hop_crossover(ASPIRIN, "CC(=O)Nc1ccc(O)cc1", random.Random(5))
+        assert twin == "CC(=O)Oc1ccc(O)cc1"  # the O-for-N exchange
+
+    def test_swap_child_combines_flanks_and_middle_chemistry(self) -> None:
+        # the salicylamide child is a real molecule (CAS 87-17-2) that
+        # is neither parent, and its substructure inventory proves the
+        # exchange semantics: it carries the AMIDE linkage (aspirin has
+        # none -- its acetyl ester O was swapped out) while keeping
+        # aspirin's carboxylic-acid flank (paracetamol has none).  The
+        # piece's chemistry really landed inside the flank's arms.
+        child_mol = rdkit.Chem.MolFromSmiles("CC(=O)Nc1ccccc1C(=O)O")
+        aspirin_mol = rdkit.Chem.MolFromSmiles(ASPIRIN)
+        paracetamol_mol = rdkit.Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
+        amide = rdkit.Chem.MolFromSmarts("C(=O)N")
+        acid = rdkit.Chem.MolFromSmarts("C(=O)[OX2H1]")
+        assert "CC(=O)Nc1ccccc1C(=O)O" not in (ASPIRIN, "CC(=O)Nc1ccc(O)cc1")
+        # the amide arrived from the piece parent (paracetamol)
+        assert child_mol.HasSubstructMatch(amide)
+        assert not aspirin_mol.HasSubstructMatch(amide)
+        assert paracetamol_mol.HasSubstructMatch(amide)
+        # the carboxylic-acid flank survived from the flank parent (aspirin)
+        assert child_mol.HasSubstructMatch(acid)
+        assert aspirin_mol.HasSubstructMatch(acid)
+        assert not paracetamol_mol.HasSubstructMatch(acid)
+
+    def test_swap_conserves_the_flank_inventory(self) -> None:
+        # size conservation, the geometry's defining invariant: the
+        # child's heavy-atom count = flank parent's - flank middle's +
+        # piece middle's.  Aspirin (13) - ester O (1) + amide N (1) = 13.
+        child = scaffold_hop_crossover(ASPIRIN, "CC(=O)Nc1ccc(O)cc1", random.Random(0))
+        assert child == "CC(=O)Nc1ccccc1C(=O)O"
+        mol = rdkit.Chem.MolFromSmiles(child)
+        assert mol is not None
+        assert mol.GetNumAtoms() == 13
+
+    def test_swap_children_are_always_valid_connected_and_capped(self) -> None:
+        # 40-seed sweep: every child parses, sanitises, stays one
+        # connected fragment, leaks no dummy, and respects the length
+        # cap.  The bioisostere pair exercises single-atom middles; the
+        # linker pair exercises multi-atom path middles.
+        for parent_a, parent_b in (
+            (ASPIRIN, "CC(=O)Nc1ccc(O)cc1"),
+            ("CCOCCOCC", "CCSCCSCC"),  # oxyethylene vs thioethylene chains
+            ("c1ccccc1OCCc1ccccc1", "c1ccccc1SCCc1ccccc1"),
+        ):
+            for seed in range(40):
+                child = scaffold_hop_crossover(parent_a, parent_b, random.Random(seed))
+                assert child is None or canonical_smiles(child) is not None
+                if child is None:
+                    continue
+                mol = rdkit.Chem.MolFromSmiles(child)
+                assert mol is not None, (parent_a, parent_b, seed, child)
+                assert len(rdkit.Chem.GetMolFrags(mol)) == 1
+                assert not any(a.GetAtomicNum() == 0 for a in mol.GetAtoms())
+                assert len(child) <= 120
+
+    def test_swap_deterministic_given_the_rng_state(self) -> None:
+        for seed in (0, 3, 7):
+            first = scaffold_hop_crossover(ASPIRIN, "CC(=O)Nc1ccc(O)cc1", random.Random(seed))
+            second = scaffold_hop_crossover(ASPIRIN, "CC(=O)Nc1ccc(O)cc1", random.Random(seed))
+            assert first == second
+
+    def test_swap_single_atom_middles_exchange_bioisosteres(self) -> None:
+        # CCOCC x CCSCC: the parents are themselves O/S bioisosteres, so
+        # the single-atom swap children are the parents exchanged --
+        # some seed must reach the S-in-O-side child (and vice versa),
+        # proving the O <-> S middle exchange is reachable, not merely
+        # admitted by the scan.
+        children = {
+            scaffold_hop_crossover("CCOCC", "CCSCC", random.Random(seed))
+            for seed in range(24)
+        }
+        assert "CCSCC" in children  # O swapped out for S
+        assert "CCOCC" in children  # S swapped out for O
+
+    def test_swap_identical_parents_yield_the_parent(self) -> None:
+        # swapping a middle for its homologous twin in the SAME molecule
+        # rebuilds the parent -- tolerated exactly like the bridge
+        # geometry's parent-echo pairings (the GA's fitness handles it).
+        children = {
+            scaffold_hop_crossover("CCOCC", "CCOCC", random.Random(seed))
+            for seed in range(24)
+        }
+        assert "CCOCC" in children
+
+    def test_swap_ring_only_parents_have_no_middles(self) -> None:
+        # ring-only parents carry no bounded acyclic middle (and no
+        # acyclic bond for any other geometry): the established None.
+        assert scaffold_hop_crossover("c1ccccc1", "c1ccncc1", random.Random(0)) is None
+
+    def test_swap_flipped_candidate_assembles_homologously(self) -> None:
+        # white-box, the flipped assembly path exercised directly through
+        # the helpers (no rng): flank CCOCC's middle (C1, O2) against
+        # piece CCSCC's middle (S2, C3) is a FLIPPED-only match (the
+        # flanks' host signatures read (deg-1 C, deg-2 C) vs the piece's
+        # (deg-2 C, deg-1 C)).  The reversed excision assembles the
+        # signature-matched child CCSCC; the naive direct excision would
+        # bond the deg-1 host to the S side and yield the off-center
+        # CCCSC -- the flip is observable.  Probe on rdkit 2026.09.1.
+        from pharmaml.generative.scaffold_hop import (
+            _excise_linker_path,
+            _excise_middle,
+            _zip_spliced,
+        )
+
+        flank_mol = rdkit.Chem.MolFromSmiles("CCOCC")
+        piece_mol = rdkit.Chem.MolFromSmiles("CCSCC")
+        assert flank_mol is not None and piece_mol is not None
+        flanks = _excise_middle(flank_mol, (1, 2))  # the C1-O2 middle
+        assert flanks is not None
+        # flipped (correct): excise the REVERSED piece path (C3, S)
+        exc_flipped = _excise_linker_path(piece_mol, (3, 2))
+        # direct (the non-homologous assembly the flip guards against)
+        exc_direct = _excise_linker_path(piece_mol, (2, 3))
+        assert exc_flipped is not None and exc_direct is not None
+        child_flipped = _zip_spliced(flanks[0], exc_flipped[0], flanks[1], 120)
+        child_direct = _zip_spliced(flanks[0], exc_direct[0], flanks[1], 120)
+        assert child_flipped == "CCSCC"  # homologous: S centred, 2+2 carbons
+        assert child_direct == "CCCSC"  # off-center: the seam mismatch made real
+        assert child_flipped != child_direct
+
+    def test_excise_middle_builds_zippable_flanks(self) -> None:
+        # the helper contract: cutting aspirin's ester O out leaves
+        # exactly two single-dummy fragments, map-1 and map-2, whose
+        # dummy hosts are the former middle hosts (the acetyl carbon
+        # and the aryl carbon).
+        from pharmaml.generative.scaffold_hop import _excise_middle
+
+        mol = rdkit.Chem.MolFromSmiles(ASPIRIN)
+        assert mol is not None
+        # the ester O: degree 2, the only acyclic eligible single atom
+        units = [
+            (atom.GetIdx(), atom.GetSymbol())
+            for atom in mol.GetAtoms()
+            if atom.GetDegree() == 2
+            and not atom.IsInRing()
+            and atom.GetAtomicNum() != 0
+        ]
+        assert units == [(3, "O")]  # atom index 3: the ester oxygen
+        flanks = _excise_middle(mol, (3,))
+        assert flanks is not None
+        flank_first, flank_second = flanks
+        for fragment, map_num in ((flank_first, 1), (flank_second, 2)):
+            dummies = [a for a in fragment.GetAtoms() if a.GetAtomicNum() == 0]
+            assert len(dummies) == 1
+            assert dummies[0].GetAtomMapNum() == map_num
+            host = dummies[0].GetNeighbors()[0]
+            assert host.GetAtomicNum() == 6  # both hosts are carbons
+        # the discarded middle: exactly one heavy atom went missing
+        assert (
+            flank_first.GetNumAtoms() + flank_second.GetNumAtoms()
+            == mol.GetNumAtoms() - 1 + 2  # + 2 dummies
+        )
+        # a degree-3 "middle" (the carbonyl C) is rejected outright
+        assert _excise_middle(mol, (0, 1)) is None
+
+    def test_middle_units_enumeration_is_pinned(self) -> None:
+        # determinism contract: singles in atom-index order, then the
+        # _linker_path_units paths (2-4 atoms) -- a pure function of
+        # the molecule.  Diethylene glycol OCCOCCO: terminal O's are
+        # degree 1, the chain C-C-O-C-C contributes its sublists.
+        from pharmaml.generative.scaffold_hop import _middle_units
+
+        mol = rdkit.Chem.MolFromSmiles("OCCOCCO")
+        assert mol is not None
+        units = _middle_units(mol)
+        paths = [path for path, _ in units]
+        # atom order: O0 C1 C2 O3 C4 C5 O6 -> eligible chain C1-C2-O3-C4-C5
+        assert paths == [
+            (1,), (2,), (3,), (4,), (5,),
+            (1, 2), (1, 2, 3), (1, 2, 3, 4),
+            (2, 3), (2, 3, 4), (2, 3, 4, 5),
+            (3, 4), (3, 4, 5),
+            (4, 5),
+        ]
+
+    def test_ga_crossover_reaches_swap_children(self) -> None:
+        # the GA's _crossover wires the swap geometry through the merged
+        # pool (zero genetic.py code change): the aspirin x paracetamol
+        # pair, seed 0, draws the salicylamide swap child.
+        optimizer = GeneticOptimizer(QedObjective(), crossover="scaffold_hop")
+        child = optimizer._crossover(ASPIRIN, "CC(=O)Nc1ccc(O)cc1", random.Random(0))
+        assert child == "CC(=O)Nc1ccccc1C(=O)O"
+
+    def test_ga_hop_mode_absorbs_swap_donors_deterministically(self) -> None:
+        # corpus with the bioisostere pair: the structural GA runs (the
+        # swap geometry reachable) and stays a pure function of the seed
+        # -- the swap candidates join the pool AFTER the five
+        # established geometries', so every prior pinned GA trajectory
+        # survived byte-identical (the 202-test green run is the witness).
+        def run() -> GenerationResult:
+            return GeneticOptimizer(
+                QedObjective(), population_size=16, generations=3, seed=11,
+                crossover="scaffold_hop",
+            ).optimize(
+                seed_smiles=[ASPIRIN],
+                corpus=[ASPIRIN, "CC(=O)Nc1ccc(O)cc1", "NC(=O)c1ccccc1"],
+            )
+
+        first, second = run(), run()
+        assert first.smiles == second.smiles
+        assert all(canonical_smiles(smi) is not None for smi in first.smiles)
+
+    def test_corpus_swap_census_pinned(self) -> None:
+        # the 100x-35 census: 123 of the 244 corpus molecules carry a
+        # viable bounded acyclic middle; across all ordered parent
+        # pairs, 3,298 pairs admit 7,328 swap candidates in total
+        # (probed; matches the review agent's independent prototype).
+        # 100x-36 extends the pin to the chemistry census the docs now
+        # carry: 295 distinct linker chemistries exchange, 1,738 of the
+        # candidates are heteroatom bioisostere exchanges (the docs'
+        # README/module-docstring claims cannot drift silently).
+        from pharmaml.generative.scaffold_hop import _middle_units
+
+        mols = {}
+        for smi in DEFAULT_CORPUS:
+            mol = rdkit.Chem.MolFromSmiles(smi)
+            if mol is not None:
+                mols[smi] = (mol, _middle_units(mol))
+
+        def chem(mol: object, path: tuple[int, ...]) -> str:
+            return "".join(
+                mol.GetAtomWithIdx(i).GetSymbol() for i in path  # type: ignore[attr-defined]
+            )
+
+        exchanges: dict[tuple[str, str], int] = {}
+        for s_a, (m_a, units_a) in mols.items():
+            for s_b, (m_b, units_b) in mols.items():
+                if s_a == s_b:
+                    continue
+                for fp, fs in units_a:
+                    for pp, ps in units_b:
+                        direct = fs == ps
+                        flipped = fs[0] == ps[1] and fs[1] == ps[0]
+                        if direct or flipped:
+                            key = (chem(m_a, fp), chem(m_b, pp))
+                            exchanges[key] = exchanges.get(key, 0) + 1
+        assert sum(1 for u in mols.values() if u[1]) == 123
+        assert sum(exchanges.values()) == 7328
+        assert len(exchanges) == 295
+        het = {"O", "N", "S"}
+        bioisostere = sum(
+            n
+            for (flank_chem, piece_chem), n in exchanges.items()
+            if set(flank_chem) & het and set(piece_chem) & het and flank_chem != piece_chem
+        )
+        assert bioisostere == 1738
+        # the classic ester/amide class is present and symmetric
+        assert exchanges.get(("O", "N")) == 153
+        assert exchanges.get(("N", "O")) == 153
+
+
+# ---------------------------------------------------------------------------
 # Ring-topology mutations (100x-33)
 # ---------------------------------------------------------------------------
 class TestRingTopologyMutations:

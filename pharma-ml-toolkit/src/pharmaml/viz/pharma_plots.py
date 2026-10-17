@@ -13,6 +13,41 @@ visuals every PK report shows:
 
 Both functions return matplotlib figures (Agg backend); save them as
 png/svg/pdf via :func:`pharmaml.viz.save_figure`.
+
+Examples
+--------
+>>> from pharmaml.viz import close_figure
+>>> from pharmaml.viz.pharma_plots import plot_concentration_profile
+>>> fig = plot_concentration_profile([0.0, 1.0, 2.0, 4.0], [0.0, 4.0, 2.0, 1.0])
+>>> [ax.get_title() for ax in fig.axes]
+['linear scale', 'semi-log scale']
+>>> (fig.axes[0].get_xlabel(), fig.axes[0].get_ylabel())
+('time (h)', 'concentration')
+>>> [t.get_text() for t in fig.axes[0].get_legend().get_texts()]   # shaded AUC
+['AUC = 8']
+>>> close_figure(fig)
+>>> plot_concentration_profile([0.0], [1.0])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: At least two sample points are required for PK math
+
+>>> from pharmaml.viz.pharma_plots import plot_dose_accumulation
+>>> fig = plot_dose_accumulation(dose=100.0, tau=1.0, t_half=1.0, vd=10.0)
+>>> 'accumulation ratio R = 2' in fig.axes[0].get_title()          # tau == t_half
+True
+>>> (fig.axes[0].get_xlabel(), fig.axes[0].get_ylabel())
+('time (h) — 6 doses every 1 h', 'concentration')
+>>> [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+['C(t) — superposition', 'Cmax,ss = 20', 'Cmin,ss = 10', '≈ steady state (5·t½ = 5 h)']
+>>> close_figure(fig)
+>>> plot_dose_accumulation(100.0, 1.0, t_half=1.0, ke=0.7, vd=10.0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: pass exactly one of t_half or ke
+>>> plot_dose_accumulation(100.0, 1.0, t_half=1.0, vd=10.0, f=2.0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: bioavailability f must be <= 1, got 2.0
 """
 
 from __future__ import annotations

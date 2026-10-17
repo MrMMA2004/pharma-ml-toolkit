@@ -599,8 +599,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "(fragments swapped, rings merged, a two-ended linker -- a "
         "single atom or a short acyclic path -- transplanted into a cut "
         "ring bond, a whole ring excised between its two anchor bonds "
-        "and spliced across the cut into a fused bicyclic, or a whole "
-        "ring spliced INTO a cut acyclic bond as the linker), so ring "
+        "and spliced across the cut into a fused bicyclic, a whole "
+        "ring spliced INTO a cut acyclic bond as the linker, or a "
+        "two-point segment swap exchanging one parent's bounded "
+        "acyclic middle for the other's homologous middle -- the "
+        "linker / bioisostere exchange), so ring "
         "systems survive and the offspring's "
         "framework can differ from both parents",
     )

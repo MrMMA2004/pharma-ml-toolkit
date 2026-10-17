@@ -98,6 +98,13 @@ from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
 
+#: numpy dtype "kind" characters that count as numeric labels (signed /
+#: unsigned int, float, bool).  ``evaluate_model``'s label-type guard:
+#: a numeric y_test crossed with string predictions (or vice versa)
+#: would otherwise surface as a raw sklearn "Mix of label input types"
+#: ValueError from deep inside the metric calls (100x-36).
+_NUMERIC_KINDS = frozenset("iufb")
+
 __all__ = ["ClassificationReport", "RegressionReport", "evaluate_model"]
 
 
@@ -195,8 +202,9 @@ def evaluate_model(
     Raises
     ------
     ModelError
-        On invalid task, empty ``y_test``, or prediction-length
-        mismatch.
+        On invalid task, empty ``y_test``, prediction-length
+        mismatch, or classification label-type mismatch (a numeric
+        ``y_test`` with string predictions, or vice versa).
     """
     y_true = np.asarray(y_test)
     if y_true.size == 0:
@@ -213,6 +221,19 @@ def evaluate_model(
         )
 
     if task == "classification":
+        # 100x-36: a custom estimator that predicts string labels for a
+        # numeric y_test (or vice versa) used to surface as a RAW
+        # sklearn ``ValueError: Mix of label input types`` from deep
+        # inside the metric calls (fail-first /tmp/task36 probe) --
+        # name the mismatch instead, the house error contract.  The
+        # registry never hits this (its models are fitted on y itself);
+        # the guard is for direct evaluate_model callers.
+        if (y_true.dtype.kind in _NUMERIC_KINDS) != (y_pred.dtype.kind in _NUMERIC_KINDS):
+            raise ModelError(
+                "y_test labels and model predictions carry different label "
+                f"types ({y_true.dtype} vs {y_pred.dtype}): the estimator's "
+                "predict() must return the same label type it was fitted on"
+            )
         # .tolist() lives OUTSIDE np.unique so labels are plain python
         # scalars -- inside, np.unique re-wraps its input as an ndarray
         # and sorted() then yields np.int64/np.str_ entries (100x-34,
@@ -244,8 +265,34 @@ def evaluate_model(
                                 break
                     roc_auc = float(roc_auc_score(y_true, proba[:, pos_col]))
                 else:
+                    # 100x-35: the multiclass twin of the 100x-34 binary
+                    # fix.  roc_auc_score(labels=labels) maps y_score
+                    # column j onto labels[j] (sorted-union order).  A
+                    # conformant estimator lays proba columns out in its
+                    # own sorted classes_ order, so the mapping coincides
+                    # -- but a custom estimator is free to expose classes_
+                    # in any order, and then score columns get silently
+                    # attached to the wrong classes: a PERFECT 3-class
+                    # classifier with classes_=['c','a','b'] reported
+                    # roc_auc = 0.25 instead of 1.0 (the 100x-35
+                    # fail-first probe).  Permute the columns into the
+                    # labels order through the estimator's own classes_
+                    # when it exposes a matching set; without classes_ the
+                    # sklearn convention (sorted) is the only information
+                    # available.
+                    proba_ovr = proba
+                    model_classes = getattr(model, "classes_", None)
+                    if (
+                        model_classes is not None
+                        and len(model_classes) == proba.shape[1]
+                        and set(model_classes.tolist()) == set(labels)
+                    ):
+                        col_of = {cls: col for col, cls in enumerate(model_classes)}
+                        order = [col_of[cls] for cls in labels]
+                        if order != list(range(len(labels))):
+                            proba_ovr = proba[:, order]
                     roc_auc = float(
-                        roc_auc_score(y_true, proba, multi_class="ovr", labels=labels)
+                        roc_auc_score(y_true, proba_ovr, multi_class="ovr", labels=labels)
                     )
             else:
                 roc_auc = None
