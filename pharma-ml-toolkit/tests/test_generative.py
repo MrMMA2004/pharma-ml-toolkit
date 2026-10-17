@@ -24,6 +24,7 @@ import logging
 import math
 import random
 import sys
+from typing import ClassVar
 
 import pandas as pd
 import pytest
@@ -3202,6 +3203,12 @@ class TestScaffoldHopSegmentSwaps:
         # the classic ester/amide class is present and symmetric
         assert exchanges.get(("O", "N")) == 153
         assert exchanges.get(("N", "O")) == 153
+        # 100x-37: the notebook's census line now quotes the conservative
+        # C->C and the N<->C classes too -- pin them so the full line
+        # cannot drift silently
+        assert exchanges.get(("C", "C")) == 1438
+        assert exchanges.get(("N", "C")) == 368
+        assert exchanges.get(("C", "N")) == 368
 
 
 # ---------------------------------------------------------------------------
@@ -3333,3 +3340,442 @@ class TestRingTopologyMutations:
         total = sum(len(ring_topology_moves(s)) for s in DEFAULT_CORPUS)
         assert reachable == 30
         assert total == 133
+
+
+# ---------------------------------------------------------------------------
+# 100x-38: adaptive operator selection -- the seventh generative capability
+# ---------------------------------------------------------------------------
+def _sat_ring_sizes(mol) -> list[int]:
+    """Sizes of the fully-saturated single-bond rings (the movable ones)."""
+    sizes: list[int] = []
+    for ring in mol.GetRingInfo().AtomRings():
+        bonds = [
+            mol.GetBondBetweenAtoms(ring[i], ring[(i + 1) % len(ring)])
+            for i in range(len(ring))
+        ]
+        if all(
+            bond.GetBondType() == rdkit.Chem.BondType.SINGLE
+            and not bond.GetIsAromatic()
+            for bond in bonds
+        ):
+            sizes.append(len(ring))
+    return sizes
+
+
+class _RingSizeBandObjective(ScoringObjective):
+    """Gaussian band on the mean size of the saturated rings."""
+
+    name = "ring_size_band"
+
+    def __init__(self, lo: float, hi: float) -> None:
+        super().__init__()
+        self.centre = (lo + hi) / 2.0
+        self.sigma = max((hi - lo) / 2.0, 1e-6)
+
+    def score(self, smiles: str) -> float:
+        mol = self._parse(smiles)
+        if mol is None:
+            return 0.0
+        sizes = _sat_ring_sizes(mol)
+        if not sizes:
+            return 0.0  # nothing movable: a ring objective cannot be satisfied
+        z = (sum(sizes) / len(sizes) - self.centre) / self.sigma
+        return math.exp(-0.5 * z * z)
+
+
+@pytest.fixture(scope="class")
+def ring_ab_runs() -> dict[str, object]:
+    """The A/B on the ring-rich objective: topology mode, same seed + corpus.
+
+    Only the operator-selection mode differs.  Probed values (deterministic,
+    twice in fresh processes): adaptive final mean 0.807869 vs uniform
+    0.764867 -- adaptive also wins best (0.965583 vs 0.961310).
+    """
+    objective = MultiObjective(
+        [
+            _RingSizeBandObjective(6.0, 8.0),
+            QedObjective(),
+            MolecularWeightBandObjective(220.0, 380.0),
+        ]
+    )
+    parents = [s for s in DEFAULT_CORPUS if ring_topology_moves(s)]
+    runs: dict[str, object] = {}
+    for mode in ("adaptive", "uniform"):
+        runs[mode] = GeneticOptimizer(
+            objective,
+            population_size=16,
+            generations=16,
+            seed=42,
+            mutation="topology",
+            operator_selection=mode,
+        ).optimize(corpus=parents)
+    return runs
+
+
+class TestAdaptiveOperatorSelection:
+    """The credit-assignment + softmax-with-floor operator draws."""
+
+    STAT_KEYS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "best_offspring",
+            "best_offspring_score",
+            "credit",
+            "draws",
+            "final_probability",
+            "successes",
+        }
+    )
+
+    # -- pin safety: the default path never moves --------------------------
+    def test_default_path_is_bit_identical(self) -> None:
+        kwargs: dict[str, object] = {
+            "population_size": 8,
+            "generations": 3,
+            "seed": 42,
+            "mutation": "topology",
+        }
+        default = GeneticOptimizer(QedObjective(), **kwargs).optimize(
+            corpus=DEFAULT_CORPUS[:12]
+        )
+        explicit = GeneticOptimizer(
+            QedObjective(), operator_selection="uniform", **kwargs
+        ).optimize(corpus=DEFAULT_CORPUS[:12])
+        assert default.smiles == explicit.smiles
+        assert default.history == explicit.history
+
+    def test_default_metadata_untouched(self) -> None:
+        run = GeneticOptimizer(
+            QedObjective(), population_size=8, generations=2, seed=42
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        assert "operator_selection" not in run.metadata
+        assert "operator_stats" not in run.metadata
+
+    # -- the adaptive mode itself -------------------------------------------
+    def test_adaptive_is_deterministic(self) -> None:
+        kwargs: dict[str, object] = {
+            "population_size": 8,
+            "generations": 3,
+            "seed": 42,
+            "operator_selection": "adaptive",
+        }
+        first = GeneticOptimizer(QedObjective(), **kwargs).optimize(
+            corpus=DEFAULT_CORPUS[:10]
+        )
+        second = GeneticOptimizer(QedObjective(), **kwargs).optimize(
+            corpus=DEFAULT_CORPUS[:10]
+        )
+        assert first.smiles == second.smiles
+        assert first.history == second.history
+        assert first.metadata["operator_stats"] == second.metadata["operator_stats"]
+
+    def test_adaptive_changes_the_search(self) -> None:
+        kwargs: dict[str, object] = {
+            "population_size": 8,
+            "generations": 4,
+            "seed": 42,
+        }
+        adaptive = GeneticOptimizer(
+            QedObjective(), operator_selection="adaptive", **kwargs
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        uniform = GeneticOptimizer(QedObjective(), **kwargs).optimize(
+            corpus=DEFAULT_CORPUS[:10]
+        )
+        assert adaptive.smiles != uniform.smiles or adaptive.history != uniform.history
+
+    def test_adaptive_reports_stats_shape(self) -> None:
+        run = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=3,
+            seed=42,
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        assert run.metadata["operator_selection"] == "adaptive"
+        stats = run.metadata["operator_stats"]
+        assert set(stats) == {"level1", "geometry", "mutation"}
+        assert set(stats["level1"]) == {"clone", "crossover"}
+        assert set(stats["mutation"]) == {"character"}  # uniform mutation mode
+        for operators in stats.values():
+            for entry in operators.values():
+                assert set(entry) == self.STAT_KEYS
+                assert entry["draws"] >= entry["successes"] >= 0
+                assert math.isfinite(entry["credit"])
+                assert 0.0 <= entry["final_probability"] <= 1.0
+                assert math.isfinite(entry["best_offspring_score"])
+        level1_total = sum(
+            entry["final_probability"] for entry in stats["level1"].values()
+        )
+        assert abs(level1_total - 1.0) < 1e-9  # floor + softmax renormalises
+
+    def test_draw_counts_reconcile_with_attempts(self) -> None:
+        run = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=3,
+            seed=42,
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        stats = run.metadata["operator_stats"]
+        level1_draws = sum(entry["draws"] for entry in stats["level1"].values())
+        family_draws = sum(entry["draws"] for entry in stats["mutation"].values())
+        assert level1_draws == family_draws  # every attempt draws both levels
+        geometry_draws = sum(entry["draws"] for entry in stats["geometry"].values())
+        assert geometry_draws == stats["level1"]["crossover"]["draws"]
+
+    def test_adaptive_splice_mode_degenerates_cleanly(self) -> None:
+        run = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=3,
+            seed=42,
+            crossover="splice",
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        geometry = run.metadata["operator_stats"]["geometry"]
+        assert set(geometry) == {"splice"}  # one operator: bookkeeping only
+        assert geometry["splice"]["final_probability"] == 1.0
+
+    def test_adaptive_scaffold_mutation_mode(self) -> None:
+        run = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=3,
+            seed=42,
+            mutation="scaffold",
+            operator_selection="adaptive",
+        ).optimize(corpus=DEFAULT_CORPUS[:10])
+        assert run.metadata["mutation"] == "scaffold"
+        assert set(run.metadata["operator_stats"]["mutation"]) == {
+            "scaffold",
+            "character",
+        }
+
+    # -- the flagship evidence: the ring-rich A/B ---------------------------
+    def test_adaptive_improves_ring_objective_mean(self, ring_ab_runs) -> None:
+        adaptive = ring_ab_runs["adaptive"].history[-1]["mean_score"]
+        uniform = ring_ab_runs["uniform"].history[-1]["mean_score"]
+        assert round(adaptive, 3) == 0.808  # probed, deterministic
+        assert round(uniform, 3) == 0.765
+        assert adaptive > uniform
+
+    def test_adaptive_discovers_topology_family(self, ring_ab_runs) -> None:
+        family = ring_ab_runs["adaptive"].metadata["operator_stats"]["mutation"]
+        assert set(family) == {"topology", "character"}
+        # the GA learned in-run what the notebook A/B showed: topology moves
+        # pay off on a ring objective (final probability 0.896 when probed)
+        assert family["topology"]["final_probability"] > 0.5
+        assert family["topology"]["successes"] > family["character"]["successes"]
+
+    def test_adaptive_starves_failing_family(self) -> None:
+        acyclic = [
+            s for s in DEFAULT_CORPUS if not ring_topology_moves(s)
+        ][:16]
+        run = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=8,
+            seed=7,
+            mutation="topology",
+            operator_selection="adaptive",
+        ).optimize(corpus=acyclic)
+        family = run.metadata["operator_stats"]["mutation"]
+        topology, character = family["topology"], family["character"]
+        assert topology["successes"] <= 2  # ring moves almost always fail here
+        assert topology["final_probability"] < character["final_probability"]
+        assert math.isfinite(topology["credit"])  # starved, never NaN
+        assert math.isfinite(character["credit"])
+
+    # -- the credit book unit contract --------------------------------------
+    def test_credit_book_empty_window_is_neutral(self) -> None:
+        from pharmaml.generative.genetic import _OperatorBook
+
+        book = _OperatorBook(operators=("a", "b"), window=4, temperature=0.1)
+        assert book.credit("a") == 0.0  # empty window reads as neutral
+        probabilities = book.probabilities()
+        assert set(probabilities) == {"a", "b"}
+        assert abs(sum(probabilities.values()) - 1.0) < 1e-9
+        assert all(abs(p - 0.5) < 1e-9 for p in probabilities.values())
+        # exactly one rng.random() per draw (cumsum inversion)
+        rng = random.Random(0)
+        reference = random.Random(0)
+        book.draw(rng)
+        reference.random()
+        assert rng.getstate() == reference.getstate()
+
+    # -- the geometry_weights surface ----------------------------------------
+    def test_geometry_weights_biases_the_draw(self) -> None:
+        from collections import Counter
+
+        from pharmaml.generative.scaffold_hop import _scaffold_hop_core
+
+        parent_a, parent_b = ASPIRIN, "CC(=O)Nc1ccccc1O"  # aspirin x paracetamol
+        census: dict[str, Counter] = {}
+        for label, weights in (
+            ("none", None),
+            ("swap", {"swap": 100.0}),
+            ("bridge", {"bridge": 100.0}),
+        ):
+            counter: Counter[str] = Counter()
+            for seed in range(200):
+                _, geometry = _scaffold_hop_core(
+                    parent_a, parent_b, random.Random(seed), geometry_weights=weights
+                )
+                counter[geometry] += 1
+            census[label] = counter
+        assert set(census["none"]) == {"swap", "bridge"}  # mixed without weights
+        assert census["swap"] == Counter({"swap": 200})  # fully forced
+        assert census["bridge"] == Counter({"bridge": 200})
+        # None is byte-identical to omitting the kwarg (50 seeds)
+        for seed in range(50):
+            rng_plain = random.Random(seed)
+            rng_none = random.Random(seed)
+            assert _scaffold_hop_core(parent_a, parent_b, rng_plain) == (
+                _scaffold_hop_core(
+                    parent_a, parent_b, rng_none, geometry_weights=None
+                )
+            )
+
+    def test_geometry_weights_absent_geometry_renormalizes(self) -> None:
+        from pharmaml.generative.scaffold_hop import _scaffold_hop_core
+
+        parent_a, parent_b = ASPIRIN, "CC(=O)Nc1ccccc1O"
+        # mass on an ABSENT geometry only -> no mass on what is present
+        with pytest.raises(ValueError, match="place no mass on the geometries"):
+            _scaffold_hop_core(
+                parent_a, parent_b, random.Random(0), geometry_weights={"fuse": 100.0}
+            )
+        # absent geometries in a mixed dict simply renormalize away
+        _, geometry = _scaffold_hop_core(
+            parent_a,
+            parent_b,
+            random.Random(0),
+            geometry_weights={"swap": 1.0, "fuse": 100.0},
+        )
+        assert geometry == "swap"
+
+    def test_geometry_weights_validation(self) -> None:
+        with pytest.raises(ValueError, match="finite non-negative"):
+            scaffold_hop_crossover(
+                ASPIRIN,
+                "CC(=O)Nc1ccccc1O",
+                random.Random(0),
+                geometry_weights={"swap": -1.0},
+            )
+        with pytest.raises(ValueError, match="finite non-negative"):
+            scaffold_hop_crossover(
+                ASPIRIN,
+                "CC(=O)Nc1ccccc1O",
+                random.Random(0),
+                geometry_weights={"swap": float("nan")},
+            )
+
+    def test_geometry_weights_huge_int_keeps_the_valueerror_contract(self) -> None:
+        # 100x-40-r1 finding 2: math.isfinite(2**1024) raises OverflowError
+        # itself -- the coercion keeps the documented ValueError contract.
+        with pytest.raises(ValueError, match="finite non-negative"):
+            scaffold_hop_crossover(
+                ASPIRIN,
+                "CC(=O)Nc1ccccc1O",
+                random.Random(0),
+                geometry_weights={"swap": 2**1024},
+            )
+
+    def test_draw_rejects_empty_present_with_valueerror(self) -> None:
+        # 100x-40-r1 finding 1: an empty `present` hit the float-tail guard
+        # (IndexError on operators[-1]) -- now a typed caller-bug error.
+        from pharmaml.generative.genetic import _OperatorBook
+
+        book = _OperatorBook(operators=("a", "b"), window=4, temperature=0.1)
+        with pytest.raises(ValueError, match="no operator of this book"):
+            book.draw(random.Random(0), present=["foreign"])
+        with pytest.raises(ValueError, match="no operator of this book"):
+            book.draw(random.Random(0), present=[])
+
+    # -- constructor validation + the wrapper + the CLI ---------------------
+    def test_operator_selection_validation(self) -> None:
+        with pytest.raises(DataValidationError, match="operator_selection must be"):
+            GeneticOptimizer(
+                QedObjective(),
+                population_size=8,
+                generations=2,
+                operator_selection="nope",
+            )
+        with pytest.raises(DataValidationError, match="aos_window must be"):
+            GeneticOptimizer(
+                QedObjective(), population_size=8, generations=2, aos_window=0
+            )
+        with pytest.raises(DataValidationError, match="aos_temperature must be"):
+            GeneticOptimizer(
+                QedObjective(),
+                population_size=8,
+                generations=2,
+                aos_temperature=0.0,
+            )
+        with pytest.raises(DataValidationError, match="aos_temperature must be"):
+            GeneticOptimizer(
+                QedObjective(),
+                population_size=8,
+                generations=2,
+                aos_temperature=float("nan"),
+            )
+        optimizer = GeneticOptimizer(QedObjective(), population_size=8, generations=2)
+        assert optimizer.operator_selection == "uniform"
+        assert optimizer.aos_window == 20
+        assert optimizer.aos_temperature == pytest.approx(0.1)
+
+    def test_run_genetic_optimization_passes_operator_selection_through(self) -> None:
+        run = run_genetic_optimization(
+            QedObjective(),
+            population_size=8,
+            generations=2,
+            seed=42,
+            operator_selection="adaptive",
+            corpus=list(DEFAULT_CORPUS[:10]),
+        )
+        assert run.metadata["operator_selection"] == "adaptive"
+        assert "operator_stats" in run.metadata
+
+    def test_cli_adaptive_flag(self, capsys) -> None:
+        from pharmaml.cli import main
+
+        code = main(
+            [
+                "generative",
+                "run",
+                "--method",
+                "ga",
+                "--recipe",
+                "qed",
+                "--iterations",
+                "3",
+                "--population",
+                "8",
+                "--seed",
+                "42",
+                "--adaptive-operators",
+            ]
+        )
+        assert code == 0
+        output = capsys.readouterr().out
+        assert "adaptive : on" in output
+        assert "genetic_algorithm" in output
+
+    def test_cli_adaptive_flag_rejects_rl(self, capsys) -> None:
+        from pharmaml.cli import main
+
+        code = main(
+            [
+                "generative",
+                "run",
+                "--method",
+                "rl",
+                "--recipe",
+                "qed",
+                "--iterations",
+                "2",
+                "--adaptive-operators",
+            ]
+        )
+        assert code == 1  # the typed guard surfaces as a clean CLI error
+        message = capsys.readouterr().err
+        assert "--adaptive-operators selects the GA's adaptive operator" in message

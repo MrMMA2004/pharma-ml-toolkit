@@ -29,6 +29,67 @@ Key safety improvements over the originals:
 * reports are pandas DataFrames instead of print statements, and
 * collected/derived filenames are sanitised with
   :func:`pharmaml.utils.io.safe_filename`.
+
+Examples
+--------
+>>> import shutil
+>>> from pathlib import Path
+>>> from pharmaml.docking.campaign import collect_files
+>>> root = Path("/tmp/pharmaml_doctest_campaign")
+>>> shutil.rmtree(root, ignore_errors=True)               # deterministic start
+>>> for folder in ("ligand_01", "ligand_02"):
+...     (root / folder).mkdir(parents=True)
+...     _ = (root / folder / "r.dlg").write_text("dlg")
+...     _ = (root / folder / "1.pdbqt").write_text("pdbqt")
+>>> plan = collect_files(root, filename="r.dlg", dry_run=True)
+>>> (plan["folder"].tolist(), plan["copied"].tolist())
+(['ligand_01', 'ligand_02'], [False, False])
+>>> numbered = collect_files(root, filename=None, pattern=r"^\\d+\\.pdbqt$")
+>>> sorted(Path(p).name for p in numbered["destination"])
+['ligand_01.pdbqt', 'ligand_02.pdbqt']
+>>> _ = collect_files(root, filename="r.dlg")        # the classic r.dlg extractor
+>>> sorted(p.name for p in (root / "collected").iterdir())
+['ligand_01.dlg', 'ligand_01.pdbqt', 'ligand_02.dlg', 'ligand_02.pdbqt']
+>>> collect_files(root, filename=None)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingError: collect_files needs a filename or a pattern to match
+>>> shutil.rmtree(root)
+
+>>> import pandas as pd
+>>> from pharmaml.docking.campaign import reindex_by_number
+>>> dlg = pd.DataFrame({"ligand": ["5_result.dlg", "6_result.dlg", "8_result.dlg"],
+...                     "energy": [-7.1, -8.2, -6.0]})
+>>> wide = reindex_by_number(dlg, "ligand", start=5, stop=7)
+>>> (wide.index.tolist(), wide["energy"].tolist())
+([5, 6, 7], [-7.1, -8.2, nan])
+>>> reindex_by_number(pd.DataFrame({"ligand": ["5_result.dlg"]}), "nope")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: column 'nope' not found -- available columns: ['ligand']
+
+>>> from pharmaml.docking.campaign import (
+...     cleanup_tree, delete_named_files, distribute_files, scan_gpf_ligand_types)
+>>> root = Path("/tmp/pharmaml_doctest_campaign")
+>>> shutil.rmtree(root, ignore_errors=True)
+>>> root.mkdir()
+>>> for sub in ("lig1", "lig2"):
+...     (root / sub).mkdir()
+>>> _ = (root / "r.pdbqt").write_text("receptor")
+>>> _ = (root / "lig1" / "r.gpf").write_text("ligand_types C HD OA   # comment\\n")
+>>> sorted(str(p.relative_to(root)) for p in distribute_files([root / "r.pdbqt"], root))
+['lig1/r.pdbqt', 'lig2/r.pdbqt']
+>>> scan_gpf_ligand_types(root)["ligand_types"].tolist()
+['C HD OA', 'not found']
+>>> delete_named_files(root, "r.pdbqt")             # the root copy plus two ligand copies
+3
+>>> plan = cleanup_tree(root, keep_pattern=r"^\\d+\\.pdbqt$", remove_empty=True, dry_run=True)
+>>> sorted(plan["action"].tolist())                 # preview only: nothing is deleted yet
+['deleted', 'removed_dir', 'removed_dir']
+>>> _ = cleanup_tree(root, keep_pattern=r"^\\d+\\.pdbqt$", remove_empty=True)
+>>> sorted(str(p.relative_to(root)) for p in root.rglob("*"))
+[]
+>>> shutil.rmtree(root)
 """
 
 from __future__ import annotations
@@ -84,6 +145,10 @@ def collect_files(
     (sanitised) parent folder -- ``ligand_07/r.dlg`` becomes
     ``ligand_07.dlg`` -- so results from different folders never
     overwrite each other; duplicate names get ``_1``, ``_2`` ... suffixes.
+
+    The two filters combine with OR: a call carrying both ``filename``
+    and ``pattern`` collects the union of both match sets, so a pure
+    pattern collect requires ``filename=None``.
 
     Parameters
     ----------
@@ -546,7 +611,10 @@ def scan_gpf_ligand_types(directory: str | Path) -> pd.DataFrame:
     Upgrades ``others/Docking/gpfreader.py``: one row per immediate
     sub-directory, with the ``"not found"`` sentinel for folders without
     a GPF (the original printed a blocked-sign emoji; pharmaml keeps
-    reports ASCII).  Inline ``#`` comments are stripped from the value.
+    reports ASCII).  Inline ``#`` comments are stripped from the value,
+    and so is an optional ``=`` separator after the keyword -- foreign
+    GPF writers emit ``ligand_types = C HD`` while pharmaml's own
+    :func:`write_gpf` uses ``ligand_types C HD``.
 
     Returns
     -------
@@ -571,7 +639,9 @@ def scan_gpf_ligand_types(directory: str | Path) -> pd.DataFrame:
             ).splitlines():
                 stripped = line.split("#", 1)[0].strip()
                 if stripped.startswith("ligand_types"):
-                    ligand_types = stripped.replace("ligand_types", "", 1).strip()
+                    ligand_types = (
+                        stripped.replace("ligand_types", "", 1).strip().removeprefix("=").strip()
+                    )
                     break
         rows.append({"folder": sub.name, "ligand_types": ligand_types})
     _LOG.info("Scanned %d sub-directory(ies) of %s for r.gpf files", len(rows), base)

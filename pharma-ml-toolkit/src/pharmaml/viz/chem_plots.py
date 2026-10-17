@@ -263,6 +263,13 @@ def plot_table_comparison(
     DataValidationError
         If ``comparison`` lacks the comparison attributes, or both
         tables turned out empty (nothing to draw).
+
+    Notes
+    -----
+    The ``title`` is drawn left-anchored above the top panel
+    (``set_title(..., loc="left")``); retrieve it with
+    ``fig.axes[0].get_title(loc="left")`` — a plain ``get_title()``
+    reads the centre slot and returns ``''``.
     """
     for attr in ("common", "only_in_a", "only_in_b"):
         if not hasattr(comparison, attr):

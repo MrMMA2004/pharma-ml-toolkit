@@ -500,6 +500,27 @@ class TestScanGPFLigandTypes:
         with pytest.raises(DockingError, match="not found"):
             scan_gpf_ligand_types(tmp_path / "nowhere")
 
+    def test_foreign_equals_separator_is_stripped(self, tmp_path) -> None:
+        # Foreign GPF writers emit "ligand_types = ..." (pharmaml's own
+        # write_gpf never does); the '=' must not leak into the value.
+        for folder, line in (
+            ("ligand_01", "ligand_types = C HD OA   # comment\n"),
+            ("ligand_02", "ligand_types=C HD\n"),
+        ):
+            sub = tmp_path / folder
+            sub.mkdir()
+            (sub / "r.gpf").write_text(line, encoding="utf-8")
+        report = scan_gpf_ligand_types(tmp_path)
+        assert report["ligand_types"].tolist() == ["C HD OA", "C HD"]
+
+    def test_pharmaml_equals_free_line_parses_unchanged(self, tmp_path) -> None:
+        # No-regression pin: write_gpf's own '='-free format is byte-identical.
+        sub = tmp_path / "ligand_01"
+        sub.mkdir()
+        (sub / "r.gpf").write_text("ligand_types C HD OA   # comment\n", encoding="utf-8")
+        report = scan_gpf_ligand_types(tmp_path)
+        assert report["ligand_types"].tolist() == ["C HD OA"]
+
 
 class TestTorsionConsistency:
     def _pdbqt(self, torsdof: int, remarks: int, branches: int) -> str:

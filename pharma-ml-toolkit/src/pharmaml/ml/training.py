@@ -313,6 +313,11 @@ def compare_models(
         sorted by the primary metric (descending).  A model that fails
         to cross-validate keeps its row with a NaN score and sinks to
         the bottom instead of killing the leaderboard.
+        The board carries ``model``, ``<metric>_mean``,
+        ``<metric>_std``, ``fit_time_s`` and ``folds`` columns;
+        ``fit_time_s`` is a wall-clock mean that varies between runs
+        and machines, so only the metric columns (and the ranking they
+        induce) are reproducible.
 
     Raises
     ------

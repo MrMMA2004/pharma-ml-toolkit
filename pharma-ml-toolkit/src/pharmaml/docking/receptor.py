@@ -25,6 +25,72 @@ This module closes that gap:
 The Meeko step is a lazy optional dependency (``pharmaml[docking]``):
 importing this module needs nothing beyond the standard library, and
 the PDBQT passthrough mode works without Meeko entirely.
+
+Examples
+--------
+>>> from pathlib import Path
+>>> from pharmaml.docking.receptor import (
+...     MODIFIED_PROTEIN_RESIDUES, WATER_RESIDUES, prepare_protein)
+>>> sorted(WATER_RESIDUES)
+['DOD', 'H2O', 'HOH', 'SOL', 'SPC', 'TIP', 'TIP3', 'WAT']
+>>> ("MSE" in MODIFIED_PROTEIN_RESIDUES, "SO4" in MODIFIED_PROTEIN_RESIDUES)
+(True, False)
+>>> src = Path("/tmp/pharmaml_doctest_rec.pdbqt")
+>>> _ = src.write_text(
+...     "ATOM      1  N   ALA A   1       1.000   2.000   3.000  1.00  0.00    -0.300 N\\n"
+...     "ATOM      2  CA AALA A   1       2.000   2.000   3.000  1.00  0.00     0.100 A\\n"
+...     "ATOM      3  CA BALA A   1       2.100   2.100   3.100  1.00  0.00     0.200 A\\n"
+...     "ATOM      4  HA  ALA A   1       2.500   1.900   3.000  1.00  0.00     0.100 HD\\n"
+...     "HETATM    5  SE  MSE A   2       3.000   2.000   3.000  1.00  0.00     0.200 C\\n"
+...     "HETATM    6  O   HOH A   3       4.000   2.000   3.000  1.00  0.00     0.100 OA\\n"
+...     "HETATM    7  S   SO4 A   4       5.000   2.000   3.000  1.00  0.00     0.100 SA\\n")
+>>> report = prepare_protein(src)
+>>> (report.mode, report.input_atoms, report.input_hetatms)
+('pdbqt', 4, 3)
+>>> (report.waters_removed, report.hetatm_removed, report.altloc_removed)
+(1, 1, 1)
+>>> report.atom_types              # MSE kept; water, sulfate and the B-conformer dropped
+{'N': 1, 'A': 1, 'HD': 1, 'C': 1}
+>>> (report.chains, report.residues, report.output_atoms)
+(['A'], 2, 4)
+>>> (report.charge_min, report.charge_max, round(report.charge_mean, 6))
+(-0.3, 0.2, 0.025)
+>>> report.output_pdbqt.name       # in-place default: <stem>_clean.pdbqt
+'pharmaml_doctest_rec_clean.pdbqt'
+>>> src.unlink(); report.output_pdbqt.unlink()
+
+>>> src = Path("/tmp/pharmaml_doctest_rec.pdbqt")
+>>> _ = src.write_text(
+...     "ATOM      1  N   ALA A   1       1.000   2.000   3.000  1.00  0.00    -0.300 N\\n"
+...     "ATOM      2  N   ALA B   2       4.000   2.000   3.000  1.00  0.00     0.100 N\\n")
+>>> report = prepare_protein(src, chain="B")
+>>> (report.chains, report.output_atoms)
+(['B'], 1)
+>>> prepare_protein("/tmp/pharmaml_doctest_none.pdbqt")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: protein file not found: /tmp/pharmaml_doctest_none.pdbqt
+>>> src.unlink(); report.output_pdbqt.unlink()
+
+>>> import shutil
+>>> from pharmaml.docking.receptor import distribute_receptor
+>>> root = Path("/tmp/pharmaml_doctest_rcp")
+>>> shutil.rmtree(root, ignore_errors=True)
+>>> root.mkdir()
+>>> for name in ("lig1", "lig2"):
+...     (root / name).mkdir()
+>>> _ = (root / "r.pdbqt").write_text("receptor")
+>>> sorted(str(p.relative_to(root)) for p in distribute_receptor(root / "r.pdbqt", root))
+['lig1/r.pdbqt', 'lig2/r.pdbqt']
+>>> distribute_receptor(root / "r.pdbqt", "/tmp/pharmaml_doctest_nodir")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: campaign directory not found: /tmp/pharmaml_doctest_nodir
+>>> shutil.rmtree(root)
+>>> distribute_receptor(root / "r.pdbqt", root)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: receptor file not found: /tmp/pharmaml_doctest_rcp/r.pdbqt
 """
 
 from __future__ import annotations

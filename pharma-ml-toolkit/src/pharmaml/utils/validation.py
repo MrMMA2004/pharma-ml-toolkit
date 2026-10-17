@@ -4,6 +4,51 @@ The legacy scripts sprinkled ad-hoc checks (``if col not in df.columns:
 raise ValueError``) across every file with mixed-language messages.
 These helpers centralise that logic behind typed, English-language,
 testable functions.
+
+Examples
+--------
+>>> from pharmaml.utils.validation import (
+...     coerce_frame, looks_continuous, require_columns, validate_concentration_series,
+...     validate_positive, validate_smiles_syntax)
+>>> validate_positive(0, "noise", allow_zero=True)
+0.0
+>>> validate_positive(-1.5, "box_size")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: box_size must be > 0 (or >= 0 if allow_zero), got -1.5
+>>> [validate_smiles_syntax(s) for s in ("CCO", "c1ccccc1", "CCO(", "")]
+[True, True, False, False]
+
+>>> import pandas as pd
+>>> frame = pd.DataFrame({"x": [1.0, 2.0]})
+>>> require_columns(frame, ["x"])
+>>> require_columns(frame, ["x", "y"])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Missing required column(s) ['y']. Available columns: ['x']
+>>> coerce_frame({"a": [1, 2], "b": [3, 4]}).columns.tolist()
+['a', 'b']
+>>> coerce_frame("nope")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Cannot coerce str to DataFrame
+>>> looks_continuous([0.5 * i for i in range(21)])
+True
+>>> looks_continuous([0, 1, 0, 1, 0, 1])
+False
+
+>>> [a.tolist() for a in validate_concentration_series([0, 1, 2], [0.5, 0.2, 0.1])]
+[[0.0, 1.0, 2.0], [0.5, 0.2, 0.1]]
+>>> validate_concentration_series([0, 1], [0.5, 0.0], require_positive_conc=False)[1].tolist()
+[0.5, 0.0]
+>>> validate_concentration_series([0], [1.0])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: At least two sample points are required for PK math
+>>> validate_concentration_series([0, -1], [1.0, 1.0])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: time points must be non-negative
 """
 
 from __future__ import annotations

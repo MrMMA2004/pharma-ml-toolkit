@@ -25,7 +25,12 @@ runs in seconds on a laptop CPU:
    bounded acyclic middle for the other's homologous middle (the
    linker / bioisostere exchange: an ester O for an amide N) -- so ring
    *topology*, ring-*system* topology and *linker chemistry*
-   recombine too; tournament selection, elitism; CPU-strong,
+   recombine too; tournament selection, elitism; **adaptive operator
+   selection** -- ``operator_selection="adaptive"`` makes the GA learn
+   in-run which operators pay off (credit-assigned softmax-with-floor
+   draws over crossover-vs-clone, the crossover geometries and the
+   mutation families, with per-operator statistics in the result
+   metadata; CLI ``--adaptive-operators``); CPU-strong,
    de novo *or* seeded from your own sample molecules -- the
    scaffold-hop crossover also works standalone via
    :func:`~pharmaml.generative.scaffold_hop_crossover`, and the

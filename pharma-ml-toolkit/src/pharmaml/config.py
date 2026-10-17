@@ -1,4 +1,35 @@
-"""Typed runtime configuration shared across pipeline components."""
+"""Typed runtime configuration shared across pipeline components.
+
+Examples
+--------
+>>> from pathlib import Path
+>>> from pharmaml.config import PipelineConfig
+>>> config = PipelineConfig()
+>>> (config.random_state, config.test_size, config.cv_folds, config.n_jobs)
+(42, 0.2, 5, -1)
+>>> str(config.output_dir)
+'artifacts'
+>>> tuned = PipelineConfig(output_dir=Path("/tmp/pharmaml_doctest_config"))
+>>> tuned.output_path("model.joblib")          # creates the directory lazily
+PosixPath('/tmp/pharmaml_doctest_config/model.joblib')
+>>> Path("/tmp/pharmaml_doctest_config").is_dir()
+True
+>>> import shutil
+>>> shutil.rmtree("/tmp/pharmaml_doctest_config")
+>>> PipelineConfig(test_size=1.0)
+Traceback (most recent call last):
+...
+ValueError: test_size must be strictly between 0 and 1, got 1.0
+>>> PipelineConfig(cv_folds=1)
+Traceback (most recent call last):
+...
+ValueError: cv_folds must be >= 2, got 1
+>>> frozen = PipelineConfig()
+>>> frozen.random_state = 7                   # the dataclass is immutable
+Traceback (most recent call last):
+...
+dataclasses.FrozenInstanceError: cannot assign to field 'random_state'
+"""
 
 from __future__ import annotations
 

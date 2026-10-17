@@ -14,6 +14,55 @@ control the multiple-testing burden.
   an English sentence, honouring the response metric's direction
   (LN_IC50-style: lower = more sensitive; pIC50-style: higher = more
   sensitive).
+
+Examples
+--------
+>>> import pandas as pd
+>>> from pharmaml.biology.biomarkers import (
+...     direction_of_association, sensitivity_associations, top_biomarkers)
+>>> expression = pd.DataFrame(
+...     {"ABCB1": [1.0, 2.0, 3.0, 4.0, 5.0],
+...      "CYP3A4": [2.0, 1.0, 3.0, 5.0, 4.0],
+...      "GAPDH": [3.0, 3.0, 3.0, 3.0, 3.0],
+...      "SRC": [5.0, 4.0, 3.0, 2.0, 1.0]},
+...     index=["cell_a", "cell_b", "cell_c", "cell_d", "cell_e"],
+... )
+>>> response = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], index=expression.index, name="LN_IC50")
+>>> associations = sensitivity_associations(expression, response)
+>>> associations.columns.tolist()
+['gene', 'rho', 'p_value', 'fdr', 'significant']
+>>> associations["gene"].tolist()                 # ranked by |rho|, ties by gene name
+['ABCB1', 'SRC', 'CYP3A4', 'GAPDH']
+>>> associations.set_index("gene")["rho"].round(3).to_dict()
+{'ABCB1': 1.0, 'SRC': -1.0, 'CYP3A4': 0.8, 'GAPDH': nan}
+>>> associations.set_index("gene")["fdr"].round(4).to_dict()
+{'ABCB1': 0.0, 'SRC': 0.0, 'CYP3A4': 0.1041, 'GAPDH': nan}
+>>> associations["significant"].tolist()          # BH-controlled at the default alpha
+[True, True, False, False]
+>>> sensitivity_associations(expression, response, fdr_alpha=1.0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: fdr_alpha must lie strictly between 0 and 1, got 1.0
+
+>>> top_biomarkers(associations, n=1)["gene"].tolist()
+['ABCB1']
+>>> top_biomarkers(associations, n=5)["gene"].tolist()   # only 2 significant: all rows
+['ABCB1', 'SRC', 'CYP3A4', 'GAPDH']
+>>> top_biomarkers(associations, n=0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: n must be >= 1, got 0
+>>> sensitivity_associations(expression, response, method="pearson")["rho"].round(3).tolist()
+[1.0, -1.0, 0.8, nan]
+
+>>> direction_of_association(-0.9)               # LN_IC50-style: negative rho
+'expression high -> more sensitive'
+>>> direction_of_association(0.9)                # LN_IC50-style: positive rho
+'expression high -> more resistant'
+>>> direction_of_association(0.9, lower_is_sensitive=False)   # pIC50-style response
+'expression high -> more sensitive'
+>>> direction_of_association(float("nan"))
+'no association'
 """
 
 from __future__ import annotations
@@ -142,6 +191,9 @@ def top_biomarkers(
         ``n`` significant rows exist the full table is returned instead
         (still ranked by ``|rho|``) with a warning -- an empty or
         truncated result would silently hide the runner-up genes.
+        This flag only matters for hand-crafted tables where significance
+        and ``|rho|`` rankings disagree; :func:`sensitivity_associations`
+        output already ranks its significant rows first.
 
     Returns
     -------

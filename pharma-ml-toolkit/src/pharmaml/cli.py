@@ -619,6 +619,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "structural move set",
     )
     gen_run.add_argument(
+        "--adaptive-operators", action="store_true", default=False,
+        help="GA only: adaptive operator selection -- the crossover-vs-clone "
+        "choice, every scaffold-hop recombination geometry and the "
+        "mutation family draw themselves by per-operator credit (a "
+        "sliding-window reward against the parents' mean score, softmax "
+        "selection with an exploration floor) instead of staying at fixed "
+        "rates; the run reports per-operator statistics in its metadata",
+    )
+    gen_run.add_argument(
         "--seeds", default=None,
         help="seeded mode: CSV/TSV/Excel table with a SMILES column (a "
         "smiles/smile/canonical_smiles-style header is auto-detected; other "
@@ -1615,6 +1624,13 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             "-- pick one (topology: ring-size moves; scaffold: Murcko "
             "decoration resampling)"
         )
+    adaptive_operators = bool(getattr(args, "adaptive_operators", False))
+    if adaptive_operators and args.method != "ga":
+        raise DataValidationError(
+            "--adaptive-operators selects the GA's adaptive operator "
+            "selection and applies to --method ga only (got --method "
+            f"{args.method!r})"
+        )
 
     seeds = _generative_seed_smiles(args)
     objective, description = _generative_objective(args.recipe, seeds)
@@ -1627,6 +1643,8 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
         print("hop      : on (BREED-style homologous-cut recombination)")
     if topology:
         print("topology : on (ring contraction/expansion mutations)")
+    if adaptive_operators:
+        print("adaptive : on (operator draws follow per-operator credit)")
     if seeds:
         print(f"seeds    : {len(seeds)} molecule(s) anchor the search")
 
@@ -1637,6 +1655,7 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             generations=args.iterations,
             mutation="topology" if topology else ("scaffold" if scaffold else "uniform"),
             crossover="scaffold_hop" if scaffold_hop else "splice",
+            operator_selection="adaptive" if adaptive_operators else "uniform",
             seed=args.seed,
         ).optimize(seed_smiles=seeds)
     else:

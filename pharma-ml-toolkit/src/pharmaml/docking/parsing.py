@@ -8,6 +8,93 @@ Upgrades ``readerwithdetails.py`` (cluster-table regex parser with
 
 All parsers accept *text or paths* and return typed dataclasses or
 DataFrames, so they are unit-testable without a docking engine.
+
+Examples
+--------
+>>> from pathlib import Path
+>>> from pharmaml.docking.parsing import (
+...     check_docking_completion, parse_dlg_cluster_table, parse_dlg_summary,
+...     parse_vina_output, scan_docking_directory, scan_vina_directory)
+>>> dlg_text = (
+...     "CLUSTERING HISTOGRAM\\n"
+...     "______________________________________________________________________\\n"
+...     "Cluster Rank | Lowest Energy | Run | Mean Energy | # in Cluster\\n"
+...     "     1       |       -9.65    |   41 |      -9.58    |     6 |\\n"
+...     "     2       |       -8.20    |   12 |      -7.90    |    15 |\\n"
+...     "     3       |       -4.91    |   38 |      -4.74    |     8 |\\n"
+...     "Successful Completion\\n"
+... )
+>>> clusters = parse_dlg_cluster_table(dlg_text)          # text or path accepted
+>>> clusters[0]
+DockingCluster(rank=1, lowest_energy=-9.65, mean_energy=-9.58, num_in_cluster=6)
+>>> [(c.rank, c.lowest_energy, c.mean_energy, c.num_in_cluster) for c in clusters]
+[(1, -9.65, -9.58, 6), (2, -8.2, -7.9, 15), (3, -4.91, -4.74, 8)]
+>>> summary = parse_dlg_summary(dlg_text)
+>>> (summary["n_clusters"], summary["top_lowest_energy"], summary["top_mean_energy"])
+(3, -9.65, -9.58)
+>>> (summary["best_rank"], summary["best_num_in_cluster"])   # most populated cluster
+(2, 15)
+>>> parse_dlg_cluster_table("AutoDock4 log...\\n... run interrupted before clustering")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingParseError: no cluster table found in the provided DLG source
+>>> parse_dlg_cluster_table(Path("/tmp/pharmaml_doctest_missing.dlg"))
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingParseError: file not found: /tmp/pharmaml_doctest_missing.dlg
+
+>>> vina_log = (
+...     "mode | affinity | dist from best mode\\n"
+...     "     | (kcal/mol) | rmsd l.b. | rmsd u.b.\\n"
+...     "-----+------------+----------+----------\\n"
+...     "    1       -11.5          0          0\\n"
+...     "    2       -10.3       1.825      2.941\\n"
+... )
+>>> poses = parse_vina_output(vina_log)
+>>> [(p.mode, p.affinity, p.rmsd_lb, p.rmsd_ub) for p in poses]
+[(1, -11.5, 0.0, 0.0), (2, -10.3, 1.825, 2.941)]
+>>> pdbqt_text = (
+...     "REMARK VINA RESULT:    -7.3      0.000      0.000\\n"
+...     "REMARK VINA RESULT:    -6.1      1.923      2.941\\n"
+...     "REMARK VINA RESULT:    truncated\\n"
+... )
+>>> [p.affinity for p in parse_vina_output(pdbqt_text)]   # truncated line: poses survive
+[-7.3, -6.1]
+>>> parse_vina_output("Vina crashed before scoring")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingParseError: no Vina pose rows found in the provided source
+
+>>> import shutil
+>>> root = Path("/tmp/pharmaml_doctest_dlg_scan")
+>>> shutil.rmtree(root, ignore_errors=True)               # deterministic start
+>>> for folder in ("lig1", "lig2", "lig3"):
+...     (root / folder).mkdir(parents=True)
+>>> _ = (root / "lig1" / "r.dlg").write_text(dlg_text)     # a completed run
+>>> _ = (root / "lig2" / "r.dlg").write_text("interrupted before clustering")
+>>> audit = check_docking_completion(root)                # lig3 has no r.dlg at all
+>>> (audit["folder"].tolist(), audit["status"].tolist())
+(['lig1', 'lig2', 'lig3'], ['OK', 'INCOMPLETE', 'MISSING_LOG'])
+>>> scan = scan_docking_directory(root)
+>>> [status.split(":")[0] for status in scan["status"]]   # lig2's log has no table
+['OK', 'PARSE_ERROR', 'MISSING_LOG']
+>>> float(scan.loc[0, "top_lowest_energy"])               # lig1's best cluster energy
+-9.65
+>>> check_docking_completion("/tmp/pharmaml_doctest_nodir")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DockingParseError: docking directory not found: /tmp/pharmaml_doctest_nodir
+>>> shutil.rmtree(root)
+>>> vroot = Path("/tmp/pharmaml_doctest_vina_scan")
+>>> shutil.rmtree(vroot, ignore_errors=True)
+>>> (vroot / "good").mkdir(parents=True)
+>>> _ = (vroot / "good" / "good.log").write_text(vina_log)
+>>> (vroot / "bad").mkdir(parents=True)
+>>> _ = (vroot / "bad" / "bad.log").write_text("no table here")
+>>> vscan = scan_vina_directory(vroot)                    # best affinity first, NaN last
+>>> list(vscan.itertuples(index=False, name=None))
+[('good', 'good/good.log', -11.5, 2), ('bad', 'bad/bad.log', nan, 0)]
+>>> shutil.rmtree(vroot)
 """
 
 from __future__ import annotations

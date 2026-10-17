@@ -36,7 +36,28 @@ CPU-friendly and deterministic given ``seed``:
   crossover IS available there;
 * **selection** = tournament of ``tournament_k`` molecules;
 * **elitism** = the top ``elitism`` molecules survive a generation
-  verbatim, so the best score is monotone across generations.
+  verbatim, so the best score is monotone across generations;
+* **operator selection** = fixed-rate by default
+  (``operator_selection="uniform"``: the ``crossover_rate`` Bernoulli,
+  the flat candidate-pool draw inside the scaffold-hop crossover, the
+  mutation mode's structural if-chain -- bit-identical to the
+  historical optimizer) **or adaptive** (``operator_selection=
+  "adaptive"``): three levels of operator choice bias themselves by
+  per-operator credit instead of staying fixed -- level 1 (crossover vs
+  clone), the scaffold-hop geometry (the seven buckets, renormalised
+  over the geometries present in each pair's candidate pool; the splice
+  crossover degenerates to the single "splice" operator) and the
+  mutation family (the mode's primary mutation vs the character
+  mutation).  A drawn operator earns ``(valid offspring ? score : 0.0)
+  - mid-parent`` on a sliding ``aos_window``-attempt window (a drawn
+  operator whose own product was discarded earns the null reward
+  ``0.0 - mid-parent``); selection is a softmax over the windowed
+  credit at ``aos_temperature`` with an exploration floor of
+  ``1/(k*5)`` -- exactly one ``rng.random()`` per selection, so an
+  adaptive run is just as deterministic as a uniform one.  Adaptive
+  runs gain ``"operator_selection"`` and the per-level
+  ``"operator_stats"`` tables in the result metadata; uniform runs'
+  metadata is unchanged.
 
 Two initialisation modes:
 
@@ -56,6 +77,19 @@ Example
 ...                           generations=5, seed=42).optimize()
 >>> result.best_score >= 0.5
 True
+>>> # adaptive operator selection: the GA learns which operators pay off
+>>> adaptive = GeneticOptimizer(QedObjective(), population_size=16,
+...                             generations=4, seed=42,
+...                             operator_selection="adaptive").optimize()
+>>> adaptive.metadata["operator_selection"]
+'adaptive'
+>>> stats = adaptive.metadata["operator_stats"]
+>>> sorted(stats)
+['geometry', 'level1', 'mutation']
+>>> sorted(stats["level1"])
+['clone', 'crossover']
+>>> stats["level1"]["clone"]["draws"] > 0 and stats["mutation"]["character"]["draws"] > 0
+True
 """
 
 from __future__ import annotations
@@ -63,7 +97,8 @@ from __future__ import annotations
 import math
 import random
 import time
-from collections.abc import Sequence
+from collections import deque
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from typing import Any
 
@@ -73,7 +108,7 @@ from pharmaml.logger import get_logger
 from ._utils import canonical_smiles, require_rdkit, smiles_alphabet
 from .corpus import DEFAULT_CORPUS
 from .result import GenerationResult
-from .scaffold_hop import scaffold_hop_crossover
+from .scaffold_hop import GEOMETRY_ORDER, _scaffold_hop_core, scaffold_hop_crossover
 from .topology import ring_topology_mutate
 
 __all__ = ["GeneticOptimizer", "run_genetic_optimization"]
@@ -83,6 +118,14 @@ _LOG = get_logger(__name__)
 #: Probability that a resampled decoration slot is dropped entirely (rather
 #: than replaced with a corpus decoration) by the scaffold mutation.
 _DROP_PROBABILITY = 0.25
+
+#: Exploration-floor margin for the adaptive operator selection: every
+#: operator keeps at least ``1 / (k * margin)`` of its level's draw
+#: probability (``k`` = operators at the level), so a consistently failing
+#: operator starves towards the floor but can never be fully abandoned --
+#: the starvation pathology guard (credits stay finite, selection never
+#: degenerates into a NaN or a division by zero).
+_AOS_FLOOR_MARGIN = 5.0
 
 
 def _validated_score(objective: Any, smiles: str) -> float:
@@ -357,6 +400,134 @@ def _scaffold_mutate(
         EnableLog("rdApp.error")
 
 
+class _OperatorBook:
+    """Sliding-window credit book + softmax-with-floor selection (one level).
+
+    The adaptive operator selection's bookkeeping for ONE biasable level
+    of the GA loop: level 1 (crossover vs clone), the recombination
+    geometry (the seven scaffold-hop buckets, or the single ``"splice"``
+    bucket in splice mode) or the mutation family (the mode's primary
+    mutation vs the character mutation).  Each drawn operator earns one
+    reward per attempt,
+
+    ``reward = (valid offspring ? score(offspring) : 0.0) - mid_parent``,
+
+    pushed into a sliding window of the last ``window`` attempts.  The
+    null-reward convention: a drawn operator whose own product was
+    discarded (its call returned ``None`` / fell back) takes ``0.0 -
+    mid_parent`` -- failed operators are charged, not forgiven.  Credit
+    is the window mean (an empty window reads as the neutral ``0.0``,
+    never NaN); selection is
+
+    ``p_i = floor + (1 - k * floor) * softmax(credit_i / temperature)``
+
+    with ``floor = 1 / (k * _AOS_FLOOR_MARGIN)`` -- exactly one
+    ``rng.random()`` per selection, resolved by cumulative-sum inversion
+    over the book's fixed operator order.
+    """
+
+    def __init__(
+        self, operators: Sequence[str], window: int, temperature: float
+    ) -> None:
+        self.operators: list[str] = list(operators)
+        self.window = window
+        self.temperature = temperature
+        self.rewards: dict[str, deque[float]] = {
+            op: deque(maxlen=window) for op in self.operators
+        }
+        self.draws: dict[str, int] = {op: 0 for op in self.operators}
+        self.successes: dict[str, int] = {op: 0 for op in self.operators}
+        self.best: dict[str, tuple[float, str]] = {}
+
+    def credit(self, op: str) -> float:
+        """Mean of ``op``'s reward window (0.0 when the window is empty)."""
+        window = self.rewards[op]
+        if not window:
+            return 0.0  # empty window -> neutral prior, never NaN
+        return sum(window) / len(window)
+
+    def probabilities(
+        self, present: Sequence[str] | None = None
+    ) -> dict[str, float]:
+        """Selection probabilities over ``present`` (default: all operators).
+
+        The floor keeps every operator a minimum ``1 / (k * margin)``
+        share of the draws, so a starving operator is demoted, never
+        abandoned; the softmax rest carries the credit signal.
+        """
+        ops = [op for op in self.operators if present is None or op in present]
+        if not ops:
+            return {}
+        if len(ops) == 1:
+            return {ops[0]: 1.0}
+        k = len(ops)
+        floor = 1.0 / (k * _AOS_FLOOR_MARGIN)
+        credits = [self.credit(op) for op in ops]
+        top = max(credits)
+        exps = [math.exp((value - top) / self.temperature) for value in credits]
+        total = sum(exps)
+        return {
+            op: floor + (1.0 - k * floor) * (weight / total)
+            for op, weight in zip(ops, exps)
+        }
+
+    def draw(self, rng: random.Random, present: Sequence[str] | None = None) -> str:
+        """Draw one operator: a single ``rng.random()`` via cumsum inversion.
+
+        Raises ``ValueError`` when ``present`` names no operator of this
+        book (an empty draw is a caller bug, not a float-tail case).
+        """
+        probabilities = self.probabilities(present)
+        operators = list(probabilities)
+        if not operators:
+            raise ValueError(
+                f"no operator of this book is present in {present!r}"
+            )
+        pick = rng.random()
+        cumulative = 0.0
+        for op in operators:
+            cumulative += probabilities[op]
+            if pick < cumulative:
+                return op
+        return operators[-1]  # float-tail guard (deterministic)
+
+    def push(
+        self,
+        op: str,
+        reward: float,
+        success: bool,
+        child: str | None,
+        child_score: float | None,
+    ) -> None:
+        """Record one attempt: reward into the window, tallies, best offspring."""
+        self.rewards[op].append(reward)
+        self.draws[op] += 1
+        if success:
+            self.successes[op] += 1
+            if (
+                child is not None
+                and child_score is not None
+                and (op not in self.best or child_score > self.best[op][0])
+            ):
+                self.best[op] = (child_score, child)
+
+    def snapshot(self) -> dict[str, dict[str, Any]]:
+        """The metadata artifact: operator -> tallies / credit / probability."""
+        probabilities = self.probabilities()
+        table: dict[str, dict[str, Any]] = {}
+        for op in self.operators:
+            best_score, best_child = self.best.get(op, (0.0, None))
+            table[op] = {
+                "draws": self.draws[op],
+                "successes": self.successes[op],
+                "credit": round(self.credit(op), 4),
+                "final_probability": round(probabilities.get(op, 0.0), 4),
+                "best_offspring": best_child,
+                "best_offspring_score": round(best_score, 4),
+            }
+        return table
+
+
 class GeneticOptimizer:
     """Tournament-selection genetic algorithm over canonical SMILES.
 
@@ -375,7 +546,9 @@ class GeneticOptimizer:
     crossover_rate:
         Probability an offspring is a splice of two parents instead of a
         clone of the first (default 0.7).  Ignored in ``scaffold`` mutation
-        mode (see ``mutation``).
+        mode (see ``mutation``) and in adaptive operator selection (the
+        crossover-vs-clone choice becomes a credit-driven draw -- see
+        ``operator_selection``).
     elitism:
         Top molecules copied verbatim into the next generation (default
         4; guarantees a monotone best score).
@@ -449,7 +622,44 @@ class GeneticOptimizer:
         resampling).
     seed:
         Seed for the dedicated ``random.Random`` instance (default 42).
-        Two runs with the same seed produce identical results.
+        Two runs with the same seed produce identical results -- in
+        uniform AND adaptive operator-selection mode.
+    operator_selection:
+        ``"uniform"`` (default) -- the historical fixed-rate operator
+        draws: the ``crossover_rate`` Bernoulli, the flat candidate-pool
+        draw inside the scaffold-hop crossover, the mutation mode's
+        structural if-chain.  The run is bit-identical to the optimizer
+        without this parameter.  ``"adaptive"`` -- **adaptive operator
+        selection**: three levels of operator choice bias themselves by
+        per-operator credit -- level 1 (crossover vs clone per
+        offspring), the recombination geometry (per scaffold-hop
+        crossover: the seven buckets of
+        :data:`~pharmaml.generative.scaffold_hop.GEOMETRY_ORDER`,
+        renormalised over the geometries present in the pair's candidate
+        pool; the splice crossover degenerates to the single
+        ``"splice"`` operator) and the mutation family (per offspring:
+        the mode's primary mutation -- topology moves or scaffold
+        decoration resampling -- vs the character mutation; uniform
+        mutation mode has no family choice, so no draw is spent).  A
+        drawn operator earns ``(valid offspring ? score : 0.0) -
+        mid-parent`` on a sliding ``aos_window``-attempt window (its
+        product discarded -- ``None`` return / fallback -- the null
+        reward ``0.0 - mid_parent``); selection is a softmax over the
+        windowed credit at ``aos_temperature`` with an exploration
+        floor of ``1 / (k * 5)``, one ``rng.random()`` per selection.
+        Adaptive runs add ``"operator_selection": "adaptive"`` and
+        ``"operator_stats"`` (per level: ``{operator: {draws,
+        successes, credit, final_probability, best_offspring,
+        best_offspring_score}}``) to the result metadata; uniform runs'
+        metadata is unchanged.
+    aos_window:
+        Adaptive mode: the sliding credit window per operator (default
+        20 -- the last 20 attempts of each operator decide its credit).
+    aos_temperature:
+        Adaptive mode: the softmax temperature over credits (default
+        0.1 -- credit differences of about 0.1 already swing the draw
+        probabilities decisively; higher flattens the selection, lower
+        hardens it).
 
     Raises
     ------
@@ -474,6 +684,15 @@ class GeneticOptimizer:
     ... ).optimize()
     >>> hopped.metadata["crossover"]
     'scaffold_hop'
+    >>> # adaptive mode: operator draws follow per-operator credit
+    >>> tuned = GeneticOptimizer(
+    ...     QedObjective(), population_size=16, generations=3, seed=42,
+    ...     crossover="scaffold_hop", operator_selection="adaptive",
+    ... ).optimize()
+    >>> tuned.metadata["operator_selection"]
+    'adaptive'
+    >>> "geometry" in tuned.metadata["operator_stats"]
+    True
     """
 
     def __init__(
@@ -489,6 +708,9 @@ class GeneticOptimizer:
         max_smiles_length: int = 120,
         mutation: str = "uniform",
         crossover: str = "splice",
+        operator_selection: str = "uniform",
+        aos_window: int = 20,
+        aos_temperature: float = 0.1,
         seed: int = 42,
     ) -> None:
         if not callable(getattr(objective, "score", None)):
@@ -529,6 +751,18 @@ class GeneticOptimizer:
             raise DataValidationError(
                 f"crossover must be 'splice' or 'scaffold_hop', got {crossover!r}"
             )
+        if operator_selection not in ("uniform", "adaptive"):
+            raise DataValidationError(
+                f"operator_selection must be 'uniform' or 'adaptive', "
+                f"got {operator_selection!r}"
+            )
+        if aos_window < 1:
+            raise DataValidationError(f"aos_window must be >= 1, got {aos_window}")
+        if not math.isfinite(aos_temperature) or aos_temperature <= 0.0:
+            raise DataValidationError(
+                f"aos_temperature must be a finite positive number, "
+                f"got {aos_temperature}"
+            )
         self.objective = objective
         self.population_size = population_size
         self.generations = generations
@@ -539,6 +773,9 @@ class GeneticOptimizer:
         self.max_smiles_length = max_smiles_length
         self.mutation = mutation
         self.crossover = crossover
+        self.operator_selection = operator_selection
+        self.aos_window = aos_window
+        self.aos_temperature = aos_temperature
         self.seed = seed
 
     # -- internals -------------------------------------------------------
@@ -574,6 +811,19 @@ class GeneticOptimizer:
             mutant = _scaffold_mutate(smiles, decoration_pool, rng, self.max_smiles_length)
             if mutant is not None:
                 return mutant
+        return self._character_mutate(smiles, alphabet, rng)
+
+    def _character_mutate(
+        self, smiles: str, alphabet: list[str], rng: random.Random
+    ) -> str:
+        """Character-level substitution / insertion / deletion mutation.
+
+        The classic uniform mutation and the universal fallback: at
+        least one character is substituted, inserted or deleted, drawn
+        from the corpus alphabet.  Extracted verbatim from ``_mutate``
+        (round 100x-38) so the adaptive mutation-family stage can draw
+        it directly with identical rng behaviour.
+        """
         chars = list(smiles)
         n_mutations = max(1, round(len(chars) * self.mutation_rate))
         for _ in range(n_mutations):
@@ -610,6 +860,50 @@ class GeneticOptimizer:
         if len(child) > self.max_smiles_length:
             return parent_a
         return child
+
+    def _recombine(
+        self,
+        parent_a: str,
+        parent_b: str,
+        rng: random.Random,
+        geometry_weights: Mapping[str, float],
+    ) -> tuple[str, bool, str | None]:
+        """Adaptive-mode recombination with an operator trace.
+
+        Returns ``(child, recombined, geometry)``: ``child`` is the
+        product (``parent_a`` whenever the crossover operator fell
+        back), ``recombined`` tells whether the drawn crossover
+        operator's own product survived into the child (``False`` on
+        every fallback -- the null-reward case), and ``geometry`` is the
+        drawn geometry for the level-2 credit (``None`` only when the
+        scaffold-hop scan found no candidate at all).  The level-2
+        weights flow into :func:`_scaffold_hop_core`, which renormalises
+        them over the geometries present in the pair's pool.  The splice
+        branch mirrors :meth:`_crossover` line for line -- deliberately
+        not shared with it, so the uniform-mode path stays
+        byte-identical.
+        """
+        if self.crossover == "scaffold_hop":
+            child, geometry = _scaffold_hop_core(
+                parent_a,
+                parent_b,
+                rng,
+                max_smiles_length=self.max_smiles_length,
+                geometry_weights=geometry_weights,
+            )
+            if child is not None:
+                return child, True, geometry
+            return parent_a, False, geometry
+        # splice crossover: the geometry level degenerates to the single
+        # "splice" operator -- no draw, no rng consumption
+        if len(parent_a) < 2 or len(parent_b) < 2:
+            return parent_a, False, "splice"
+        cut_a = rng.randrange(1, len(parent_a))
+        cut_b = rng.randrange(1, len(parent_b))
+        child = parent_a[:cut_a] + parent_b[cut_b:]
+        if len(child) > self.max_smiles_length:
+            return parent_a, False, "splice"
+        return child, True, "splice"
 
     def _tournament(
         self, population: list[str], fitness: dict[str, float], rng: random.Random
@@ -802,6 +1096,33 @@ class GeneticOptimizer:
                     "mutations fall back to character mutation"
                 )
 
+        # Adaptive operator selection: one credit book per biasable level
+        # (level 1 crossover-vs-clone; the recombination geometry -- the
+        # seven scaffold-hop buckets, or the single "splice" bucket in
+        # splice mode; the mutation family -- the mode's primary operator
+        # vs the character mutation, character alone when the mode has no
+        # second operator).  Constructing the books is side-effect-free,
+        # so the uniform path is untouched.
+        adaptive = self.operator_selection == "adaptive"
+        level1_book = _OperatorBook(
+            ("crossover", "clone"), self.aos_window, self.aos_temperature
+        )
+        geometry_operators: tuple[str, ...] = (
+            ("splice",) if self.crossover == "splice" else GEOMETRY_ORDER
+        )
+        geometry_book = _OperatorBook(
+            geometry_operators, self.aos_window, self.aos_temperature
+        )
+        if self.mutation == "topology":
+            family_operators: tuple[str, ...] = ("topology", "character")
+        elif self.mutation == "scaffold" and decoration_pool:
+            family_operators = ("scaffold", "character")
+        else:
+            family_operators = ("character",)
+        mutation_book = _OperatorBook(
+            family_operators, self.aos_window, self.aos_temperature
+        )
+
         produced: dict[str, float] = {}
         history: list[dict[str, Any]] = []
         accepted_total = 0
@@ -845,6 +1166,12 @@ class GeneticOptimizer:
                         )
                     break
                 parent_a = self._tournament(population, fitness, rng)
+                drawn_l1: str | None = None
+                drawn_geometry: str | None = None
+                drawn_family: str | None = None
+                recombined = False
+                family_survived = False
+                mid_parent = 0.0
                 if self.mutation == "scaffold" and self.crossover == "splice":
                     # The character-level splice destroys ring systems and
                     # would defeat scaffold preservation, so it is bypassed
@@ -854,18 +1181,118 @@ class GeneticOptimizer:
                     child = parent_a
                 else:
                     parent_b = self._tournament(population, fitness, rng)
-                    if rng.random() < self.crossover_rate:
-                        child = self._crossover(parent_a, parent_b, rng)
+                    mid_parent = (fitness[parent_a] + fitness[parent_b]) / 2.0
+                    if adaptive:
+                        # level 1: the crossover-vs-clone Bernoulli becomes a
+                        # credit-driven draw (uniform mode: the exact
+                        # historical rng.random() comparison, unchanged)
+                        drawn_l1 = level1_book.draw(rng)
+                        use_cross = drawn_l1 == "crossover"
+                    else:
+                        use_cross = rng.random() < self.crossover_rate
+                    if use_cross:
+                        if adaptive:
+                            (
+                                child,
+                                recombined,
+                                drawn_geometry,
+                            ) = self._recombine(
+                                parent_a,
+                                parent_b,
+                                rng,
+                                geometry_book.probabilities(),
+                            )
+                        else:
+                            child = self._crossover(parent_a, parent_b, rng)
                     else:
                         child = parent_a
-                child = self._mutate(child, alphabet, rng, decoration_pool)
-                if not child or len(child) > self.max_smiles_length:
-                    continue
-                canonical = canonical_smiles(child)
-                if canonical is None or len(canonical) > self.max_smiles_length:
-                    continue
-                if canonical not in next_population:
-                    next_population.append(canonical)
+                if not adaptive:
+                    child = self._mutate(child, alphabet, rng, decoration_pool)
+                elif len(family_operators) == 2:
+                    # level 3: the mutation family's structural if-chain
+                    # becomes a weighted draw with identical fallback
+                    # semantics (a failed primary mutation falls back to
+                    # the character mutation -- the surviving operator
+                    # earns the reward, the failed one the null reward)
+                    drawn_family = mutation_book.draw(rng)
+                    if drawn_family == family_operators[0]:
+                        if self.mutation == "topology":
+                            mutant = ring_topology_mutate(
+                                child, rng, max_smiles_length=self.max_smiles_length
+                            )
+                        else:
+                            mutant = _scaffold_mutate(
+                                child, decoration_pool, rng, self.max_smiles_length
+                            )
+                        if mutant is not None:
+                            child = mutant
+                            family_survived = True
+                        else:
+                            child = self._character_mutate(child, alphabet, rng)
+                    else:
+                        child = self._character_mutate(child, alphabet, rng)
+                        family_survived = True
+                else:
+                    # single-operator family (uniform mutation, or a scaffold
+                    # corpus without decorations): no draw, no rng spent --
+                    # the character mutation is the only operator
+                    child = self._character_mutate(child, alphabet, rng)
+                    drawn_family = family_operators[0]
+                    family_survived = True
+                # validity gates -- the uniform path's two `continue`s,
+                # restructured so the adaptive credit assignment also sees
+                # the failed attempts (identical call order and appends)
+                valid = False
+                child_canonical: str | None = None
+                score_child: float | None = None
+                if child and len(child) <= self.max_smiles_length:
+                    child_canonical = canonical_smiles(child)
+                    if (
+                        child_canonical is not None
+                        and len(child_canonical) <= self.max_smiles_length
+                    ):
+                        valid = True
+                        if adaptive:
+                            score_child = _validated_score(
+                                self.objective, child_canonical
+                            )
+                        if child_canonical not in next_population:
+                            next_population.append(child_canonical)
+                if adaptive:
+                    # credit assignment: the end-to-end reward vs the null
+                    # reward for a drawn operator whose product was
+                    # discarded (mid_parent = 0.0 in the scaffold+splice
+                    # bypass, where no second parent exists)
+                    end_to_end = (score_child if score_child is not None else 0.0) - (
+                        mid_parent
+                    )
+                    null_reward = -mid_parent
+                    if drawn_l1 is not None:
+                        level1_book.push(
+                            drawn_l1,
+                            end_to_end
+                            if (drawn_l1 == "clone" or recombined)
+                            else null_reward,
+                            valid,
+                            child_canonical if valid else None,
+                            score_child,
+                        )
+                    if drawn_geometry is not None:
+                        geometry_book.push(
+                            drawn_geometry,
+                            end_to_end if recombined else null_reward,
+                            valid and recombined,
+                            child_canonical if valid else None,
+                            score_child,
+                        )
+                    if drawn_family is not None:
+                        mutation_book.push(
+                            drawn_family,
+                            end_to_end if family_survived else null_reward,
+                            valid and family_survived,
+                            child_canonical if valid else None,
+                            score_child,
+                        )
             accepted = self.population_size - self.elitism
             attempts_total += attempts
             accepted_total += accepted
@@ -885,6 +1312,27 @@ class GeneticOptimizer:
             else:
                 breakdown.append({})
         elapsed = time.perf_counter() - started
+        metadata: dict[str, Any] = {
+            "method": "genetic_algorithm",
+            "seed": self.seed,
+            "iterations": self.generations,
+            "elapsed_s": elapsed,
+            "valid_generated": accepted_total + len(population),
+            "unique_generated": len(smiles_list),
+            "population_size": self.population_size,
+            "mutation": self.mutation,
+            "crossover": self.crossover,
+            "seed_molecules": kept_seeds,
+        }
+        if adaptive:
+            # adaptive runs ONLY -- uniform-run metadata stays byte-
+            # identical (no new keys, no reordered values)
+            metadata["operator_selection"] = "adaptive"
+            metadata["operator_stats"] = {
+                "level1": level1_book.snapshot(),
+                "geometry": geometry_book.snapshot(),
+                "mutation": mutation_book.snapshot(),
+            }
         return GenerationResult(
             smiles=smiles_list,
             scores=score_list,
@@ -892,18 +1340,7 @@ class GeneticOptimizer:
             best=smiles_list[0] if smiles_list else "",
             best_score=score_list[0] if score_list else 0.0,
             history=history,
-            metadata={
-                "method": "genetic_algorithm",
-                "seed": self.seed,
-                "iterations": self.generations,
-                "elapsed_s": elapsed,
-                "valid_generated": accepted_total + len(population),
-                "unique_generated": len(smiles_list),
-                "population_size": self.population_size,
-                "mutation": self.mutation,
-                "crossover": self.crossover,
-                "seed_molecules": kept_seeds,
-            },
+            metadata=metadata,
         )
 
 

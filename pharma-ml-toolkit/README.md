@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1378 tests).
+exceptions, input validation, and pytest coverage** (1401 tests).
 
 ---
 
@@ -93,7 +93,7 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1378 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── tests/                   # 1401 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -652,7 +652,28 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   error. Pinned: piperidine's full move set is exactly
   `{cyclopentane, pyrrolidine, azepane}` (contract the N, contract a
   CH2, expand); 30 of the 244 corpus molecules carry viable moves (133
-  distinct one-step mutants).
+  distinct one-step mutants). The executed notebook runs the
+  head-to-head on a ring-rich objective (7-membered-ring band × QED ×
+  lead-size MW band): the topology arm reaches best 0.928 in generation
+  2 while uniform mutation needs seven generations for 0.872, with the
+  population mean ahead in every generation and ~4× the offspring
+  survival.
+* **Adaptive operator selection** (`GeneticOptimizer(..., operator_selection="adaptive")`,
+  CLI `--adaptive-operators`): the GA learns *in-run* which operators pay
+  off. Three biasable levels — crossover-vs-clone, the seven scaffold-hop
+  crossover geometries (via `scaffold_hop_crossover(..., geometry_weights=...)`
+  for manual biasing), and the mutation family — each keep a sliding-window
+  credit book (`reward = (valid offspring ? score : 0) − mid-parent`, failed
+  operators are charged, not forgiven) and draw through a softmax-with-floor
+  rule (window 20, temperature 0.1, floor 1/(k·5): operators are demoted,
+  never abandoned). Fully seeded-deterministic; the default
+  `"uniform"` path is bit-identical to before; per-operator statistics
+  (draws, successes, credit, final probability, best offspring) land in
+  `result.metadata["operator_stats"]`. On the ring-rich objective from the
+  executed notebook's A/B (7-membered-ring band × QED × lead-size MW,
+  topology mode, seed 42): adaptive closes at population mean 0.808 vs
+  uniform's 0.765 and *discovers* the topology family on its own (final
+  draw probability 0.896 vs 0.104 for character mutation).
 * **Method trade-offs, honestly:** the GA explores wider (hundreds of unique molecules
   per run, no extra dependency, seeded *and* de novo modes) while RL fine-tunes a learned
   prior and needs fewer evaluations to focus on high-scoring neighbourhoods — but costs a
@@ -883,7 +904,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1431 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1461 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

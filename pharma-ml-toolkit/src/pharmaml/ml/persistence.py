@@ -16,6 +16,63 @@ A saved artifact is a joblib dump of a *bundle* dict::
 so a model loaded two years later still knows what it is, which
 feature order it expects, and how well it scored.  The legacy code
 saved bare ``.joblib``/``.pkl`` blobs with zero provenance.
+
+Examples
+--------
+>>> from pharmaml.ml.persistence import bundle_metadata, load_model, save_model
+>>> metadata = bundle_metadata("y=2x", "regression", features=["x"], metrics={"rmse": 0.0})
+>>> sorted(metadata)[:4]
+['best_params', 'features', 'metrics', 'name']
+>>> "sklearn_version" in metadata        # provenance pins the training stack
+True
+>>> (metadata["name"], metadata["task"], metadata["features"], metadata["metrics"])
+('y=2x', 'regression', ['x'], {'rmse': 0.0})
+>>> metadata["trained_at"].endswith("+00:00")     # UTC ISO timestamp
+True
+>>> bundle_metadata("demo", "classification")["features"] is None
+True
+
+>>> from sklearn.linear_model import LinearRegression
+>>> model = LinearRegression().fit([[0.0], [1.0], [2.0]], [0.0, 2.0, 4.0])
+>>> path = save_model(model, "/tmp/pharmaml_doctest_model/lin.joblib",
+...                   name="y=2x", task="regression", features=["x"],
+...                   metrics={"rmse": 0.0})
+>>> path.name
+'lin.joblib'
+>>> restored, metadata = load_model(path)
+>>> [round(float(v), 6) for v in restored.predict([[3.0], [4.0]])]
+[6.0, 8.0]
+>>> restored.predict([[3.0]]).tolist() == model.predict([[3.0]]).tolist()
+True
+>>> (metadata["name"], metadata["task"], metadata["features"], metadata["metrics"])
+('y=2x', 'regression', ['x'], {'rmse': 0.0})
+>>> metadata["trained_at"].endswith("+00:00")
+True
+
+>>> from pharmaml.ml.persistence import write_metadata_sidecar
+>>> coerced = save_model(model, "/tmp/pharmaml_doctest_model/legacy.txt",
+...                      name="y=2x", task="regression")   # unknown suffix -> .joblib
+>>> coerced.name
+'legacy.joblib'
+>>> pkl = save_model(model, "/tmp/pharmaml_doctest_model/legacy.pkl",
+...                 name="y=2x", task="regression")        # .pkl passes through
+>>> pkl.name
+'legacy.pkl'
+>>> sidecar = write_metadata_sidecar(path)
+>>> sidecar.name
+'lin.json'
+>>> import json
+>>> payload = json.loads(sidecar.read_text())
+>>> (payload["name"], payload["task"], payload["features"], payload["metrics"])
+('y=2x', 'regression', ['x'], {'rmse': 0.0})
+>>> load_model("/tmp/pharmaml_doctest_missing.joblib")
+Traceback (most recent call last):
+...
+pharmaml.exceptions.PersistenceError: Model file not found: /tmp/pharmaml_doctest_missing.joblib
+>>> for artifact in (path, coerced, pkl, sidecar):
+...     artifact.unlink()
+>>> import shutil
+>>> shutil.rmtree("/tmp/pharmaml_doctest_model")
 """
 
 from __future__ import annotations

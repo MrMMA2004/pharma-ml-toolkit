@@ -60,6 +60,14 @@ on (atomic number, degree, aromaticity, formal charge), so
 recombination happens at chemically analogous positions (an aryl-CH2
 bond crosses with another aryl-CH2 bond, not with a sulfonamide S-N).
 
+The geometry of the drawn cut can be biased: pass ``geometry_weights``
+(a mapping ``{geometry name: non-negative weight}``; :data:`GEOMETRY_ORDER`
+lists the seven names in scan order) and the geometry is picked with
+probability proportional to its weight, renormalised over the
+geometries **present** in the pair's candidate pool -- keys naming
+geometries absent from the pool simply place no mass, and a geometry
+left at weight zero is never drawn.
+
 Deterministic given the caller's ``random.Random``; ``None`` whenever no
 viable cut exists (aromatic-only parents, no homologous pair, children
 unsanitisable or over the length cap) -- the caller falls back, never
@@ -91,6 +99,12 @@ True
 >>> scaffold_hop_crossover("CC(=O)Oc1ccccc1C(=O)O", "CC(=O)Nc1ccc(O)cc1",
 ...                        random.Random(0))
 'CC(=O)Nc1ccccc1C(=O)O'
+>>> # forcing a geometry: transplant-only weights never draw a path
+>>> # candidate -- piperidine x diethylene glycol keeps homologating the
+>>> # ring one atom at a time (the single-atom linker transplants)
+>>> scaffold_hop_crossover("C1CCNCC1", "OCCOCCO", random.Random(1),
+...                        geometry_weights={"transplant": 1.0})
+'C1CNCCOC1'
 >>> # benzene has no acyclic single bond to cut: no crossover possible
 >>> scaffold_hop_crossover("c1ccccc1", "c1ccncc1", random.Random(0)) is None
 True
@@ -99,7 +113,9 @@ True
 from __future__ import annotations
 
 import itertools
+import math
 import random
+from collections.abc import Mapping
 
 from ._utils import require_rdkit
 
@@ -114,6 +130,22 @@ _MIN_LENGTH_CAP = 20
 #: past drug-like size -- the ``max_smiles_length`` cap polices the
 #: output, this cap keeps the search honest.
 _MAX_LINKER_PATH_ATOMS = 4
+
+#: The seven recombination-geometry operator names, in the fixed scan /
+#: selection order (the names accepted by ``scaffold_hop_crossover``'s
+#: ``geometry_weights`` -- the transplant family's single-atom and
+#: multi-atom buckets count as two operators).  The scan builds the
+#: candidate pool in this order, so a weighted draw that iterates it is
+#: deterministic and pool-order-consistent.
+GEOMETRY_ORDER: tuple[str, ...] = (
+    "bridge",
+    "merge",
+    "transplant",
+    "transplant_path",
+    "fuse",
+    "insert",
+    "swap",
+)
 
 
 def _atom_signature(atom: object) -> tuple[int, int, bool, int]:
@@ -725,6 +757,7 @@ def scaffold_hop_crossover(
     rng: random.Random,
     *,
     max_smiles_length: int = 120,
+    geometry_weights: Mapping[str, float] | None = None,
 ) -> str | None:
     """BREED-style crossover: homologous cuts, hybrid child.
 
@@ -765,6 +798,19 @@ def scaffold_hop_crossover(
         :class:`~pharmaml.generative.GeneticOptimizer` default).  All
         viable pairings of a drawn bridge candidate are tried before
         giving up.
+    geometry_weights:
+        Optional per-geometry draw bias: a mapping
+        ``{geometry name: non-negative weight}`` over the seven names in
+        :data:`GEOMETRY_ORDER`.  The geometry is picked with probability
+        proportional to its weight renormalised over the geometries
+        present in this pair's candidate pool, then the candidate
+        uniformly within the geometry (one ``rng.random()`` plus one
+        ``rng.randrange()``); keys naming absent geometries simply place
+        no mass, and a geometry left at weight zero is never drawn.
+        ``None`` (the default) keeps the historical uniform draw over
+        the flat candidate pool.  Raises ``ValueError`` on negative /
+        non-finite weights or when the weights place no mass on any
+        geometry present in the pool.
 
     Returns
     -------
@@ -792,6 +838,49 @@ def scaffold_hop_crossover(
     >>> scaffold_hop_crossover("c1ccccc1", "c1ccncc1", random.Random(0)) is None
     True
     """
+    child, _geometry = _scaffold_hop_core(
+        parent_a,
+        parent_b,
+        rng,
+        max_smiles_length=max_smiles_length,
+        geometry_weights=geometry_weights,
+    )
+    return child
+
+
+def _scaffold_hop_core(
+    parent_a: str,
+    parent_b: str,
+    rng: random.Random,
+    *,
+    max_smiles_length: int = 120,
+    geometry_weights: Mapping[str, float] | None = None,
+) -> tuple[str | None, str | None]:
+    """BREED-style crossover core, traced for adaptive operator selection.
+
+    Same cuts, robustness contract and rng discipline as
+    :func:`scaffold_hop_crossover` (whose docstring carries the full
+    geometry narrative), with two additions the GA's adaptive mode
+    needs:
+
+    * the return carries the **drawn geometry** next to the child, so a
+      credit-assignment loop can reward the operator that actually
+      fired -- ``(None, geometry)`` when the drawn candidate produced no
+      viable child (the product was discarded, not the operator) and
+      ``(None, None)`` when no candidate existed at all;
+    * ``geometry_weights`` selects the geometry to draw: one
+      ``rng.random()`` over the renormalised weights in
+      :data:`GEOMETRY_ORDER` order, then one ``rng.randrange()`` for the
+      uniform within-geometry candidate pick.  ``None`` keeps the
+      historical single uniform draw over the flat candidate pool
+      (byte-identical line -- the default GA path must never move).
+
+    The weights are validated eagerly (negative / non-finite values
+    raise ``ValueError`` before any RDKit work); the no-mass-on-present
+    check raises from the draw, between the scan and the execution, so
+    neither robustness ``except`` can swallow a caller's configuration
+    error.
+    """
     Chem = require_rdkit()
     from rdkit.rdBase import DisableLog, EnableLog
 
@@ -800,6 +889,20 @@ def scaffold_hop_crossover(
             f"max_smiles_length must be >= {_MIN_LENGTH_CAP}, "
             f"got {max_smiles_length}"
         )
+    if geometry_weights is not None:
+        for geometry, weight in geometry_weights.items():
+            try:
+                value = float(weight)  # huge ints overflow isfinite itself
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError(
+                    "geometry_weights values must be finite non-negative "
+                    f"numbers, got {weight!r} for geometry {geometry!r}"
+                ) from None
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(
+                    "geometry_weights values must be finite non-negative "
+                    f"numbers, got {weight!r} for geometry {geometry!r}"
+                )
 
     # Unsanitisable recombinations are EXPECTED (the caller falls back);
     # RDKit logs every sanitisation failure to stderr -- keep the GA loop
@@ -809,9 +912,9 @@ def scaffold_hop_crossover(
         mol_a = Chem.MolFromSmiles(parent_a)
         mol_b = Chem.MolFromSmiles(parent_b)
         if mol_a is None or mol_b is None:
-            return None
+            return None, None
         if len(Chem.GetMolFrags(mol_a)) != 1 or len(Chem.GetMolFrags(mol_b)) != 1:
-            return None  # dot-disconnected parent: no recombination semantics
+            return None, None  # dot-disconnected parent: no recombination
 
         sig_a = {atom.GetIdx(): _atom_signature(atom) for atom in mol_a.GetAtoms()}
         sig_b = {atom.GetIdx(): _atom_signature(atom) for atom in mol_b.GetAtoms()}
@@ -992,16 +1095,58 @@ def scaffold_hop_crossover(
                             ("swap", flank_side, flank_path, piece_path, direct)
                         )
         if not candidates:
-            return None
+            return None, None
+    except Exception:  # noqa: BLE001 - robustness-first fallback contract
+        return None, None
+    finally:
+        EnableLog("rdApp.error")
 
+    if geometry_weights is None:
+        # uniform mode: the historical flat-pool draw, byte-identical --
+        # the default GA path must never move.
         choice = candidates[rng.randrange(len(candidates))]
+    else:
+        # weighted mode (the adaptive GA passes its live selection
+        # probabilities): one rng.random() picks the geometry -- weights
+        # renormalised over the geometries PRESENT in this pair's pool,
+        # GEOMETRY_ORDER iteration -- and one rng.randrange() picks the
+        # candidate uniformly within the drawn geometry's bucket.
+        buckets: dict[str, list[int]] = {}
+        for index, candidate in enumerate(candidates):
+            buckets.setdefault(candidate[0], []).append(index)
+        present = [name for name in GEOMETRY_ORDER if name in buckets]
+        weights = [float(geometry_weights.get(name, 0.0)) for name in present]
+        total = sum(weights)
+        if total <= 0.0:
+            raise ValueError(
+                "geometry_weights place no mass on the geometries present "
+                f"in the candidate pool (present: {present}, weights: "
+                f"{dict(geometry_weights)})"
+            )
+        pick = rng.random() * total
+        cumulative = 0.0
+        drawn = present[0]
+        for name, weight in zip(present, weights):
+            if weight > 0.0:
+                drawn = name  # float-tail guard: last positive-weight geometry
+            cumulative += weight
+            if pick < cumulative:
+                break
+        bucket = buckets[drawn]
+        choice = candidates[bucket[rng.randrange(len(bucket))]]
+    drawn_geometry = choice[0]
 
+    # Unsanitisable recombinations are EXPECTED (the caller falls back);
+    # RDKit logs every sanitisation failure to stderr -- keep the GA loop
+    # quiet (the canonical_smiles / _scaffold_mutate precedent).
+    DisableLog("rdApp.error")
+    try:
         if choice[0] == "bridge":
             _, bond_a_idx, bond_b_idx, direct, flipped = choice
             cut_a = _cut_into_two(mol_a, bond_a_idx)
             cut_b = _cut_into_two(mol_b, bond_b_idx)
             if cut_a is None or cut_b is None:
-                return None
+                return None, drawn_geometry
             frag_a_begin, frag_a_end = cut_a
             frag_b_begin, frag_b_end = cut_b
             # Eligible pairings join signature-matched atoms: begin-begin
@@ -1019,15 +1164,15 @@ def scaffold_hop_crossover(
             for frag_x, frag_y in pairings:
                 child = _zip_child(frag_x, frag_y, max_smiles_length)
                 if child is not None:
-                    return child
-            return None
+                    return child, drawn_geometry
+            return None, drawn_geometry
 
         if choice[0] == "merge":
             _, bond_a_idx, bond_b_idx, direct = choice
             open_a = _open_ring(mol_a, bond_a_idx)
             open_b = _open_ring(mol_b, bond_b_idx)
             if open_a is None or open_b is None:
-                return None
+                return None, drawn_geometry
             if not direct:
                 # flipped-only match: swap open_b's dummy labels so the
                 # seams join begin_a-end_b / end_a-begin_b -- the
@@ -1035,7 +1180,7 @@ def scaffold_hop_crossover(
                 for dummy in open_b.GetAtoms():  # type: ignore[attr-defined]
                     if dummy.GetAtomicNum() == 0:
                         dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
-            return _zip_child(open_a, open_b, max_smiles_length)
+            return _zip_child(open_a, open_b, max_smiles_length), drawn_geometry
 
         # transplant (single-atom linker: orientation-independent)
         if choice[0] == "transplant":
@@ -1047,9 +1192,9 @@ def scaffold_hop_crossover(
             opened = _open_ring(ring_mol, ring_bond_idx)
             excision = _excise_linker_path(donor_mol, (donor_atom_idx,))
             if opened is None or excision is None:
-                return None
+                return None, drawn_geometry
             donor, _ = excision
-            return _zip_child(opened, donor, max_smiles_length)
+            return _zip_child(opened, donor, max_smiles_length), drawn_geometry
 
         # transplant_path (multi-atom linker: orientation-aware)
         if choice[0] == "transplant_path":
@@ -1068,9 +1213,9 @@ def scaffold_hop_crossover(
                 donor_mol, path if direct else tuple(reversed(path))
             )
             if opened is None or excision is None:
-                return None
+                return None, drawn_geometry
             donor, _ = excision
-            return _zip_child(opened, donor, max_smiles_length)
+            return _zip_child(opened, donor, max_smiles_length), drawn_geometry
 
         # fuse (whole-ring splice: orientation-aware like the merge -- a
         # flipped-only match swaps the piece's dummy labels so each seam
@@ -1086,7 +1231,7 @@ def scaffold_hop_crossover(
             opened = _open_ring(ring_mol, ring_bond_idx)
             excision = _excise_ring(donor_mol, ring, a1, a2)
             if opened is None or excision is None:
-                return None
+                return None, drawn_geometry
             donor, _ = excision
             if not direct:
                 # flipped-only match: swap the piece's dummy labels so the
@@ -1095,7 +1240,7 @@ def scaffold_hop_crossover(
                 for dummy in donor.GetAtoms():  # type: ignore[attr-defined]
                     if dummy.GetAtomicNum() == 0:
                         dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
-            return _zip_child(opened, donor, max_smiles_length)
+            return _zip_child(opened, donor, max_smiles_length), drawn_geometry
 
         # swap (two-point segment-swap: the flank's middle is excised and
         # REPLACED by the piece's homologous middle -- the only
@@ -1119,10 +1264,12 @@ def scaffold_hop_crossover(
                 piece_mol, piece_path if direct else tuple(reversed(piece_path))
             )
             if flanks is None or excision is None:
-                return None
+                return None, drawn_geometry
             flank_first, flank_second = flanks
             piece, _ = excision
-            return _zip_spliced(flank_first, piece, flank_second, max_smiles_length)
+            return _zip_spliced(
+                flank_first, piece, flank_second, max_smiles_length
+            ), drawn_geometry
 
         # insert (ring-as-linker: the recipient's bridge cut leaves two
         # [*:1]-dummied halves; the end half's dummy is relabelled to
@@ -1138,7 +1285,7 @@ def scaffold_hop_crossover(
         cut = _cut_into_two(recipient_mol, bond_idx)
         excision = _excise_ring(donor_mol, ring, a1, a2)
         if cut is None or excision is None:
-            return None
+            return None, drawn_geometry
         begin_frag, end_frag = cut
         piece, _ = excision
         for atom in end_frag.GetAtoms():  # type: ignore[attr-defined]
@@ -1148,8 +1295,10 @@ def scaffold_hop_crossover(
             for dummy in piece.GetAtoms():  # type: ignore[attr-defined]
                 if dummy.GetAtomicNum() == 0:
                     dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
-        return _zip_spliced(begin_frag, piece, end_frag, max_smiles_length)
+        return _zip_spliced(
+            begin_frag, piece, end_frag, max_smiles_length
+        ), drawn_geometry
     except Exception:  # noqa: BLE001 - robustness-first fallback contract
-        return None
+        return None, drawn_geometry
     finally:
         EnableLog("rdApp.error")
