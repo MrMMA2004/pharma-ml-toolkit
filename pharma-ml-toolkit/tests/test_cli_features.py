@@ -809,6 +809,62 @@ class TestBiologyCommands:
         assert "error:" in err
         assert "bogus" in err
 
+    def test_response_audit_replicate_cv_flag_prints_variability(
+        self, tmp_path, capsys
+    ):
+        screen_csv = self._screen_csv(tmp_path)
+        code = main(
+            ["biology", "response-audit", "--data", str(screen_csv),
+             "--replicate-cv"]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "replicate variability of duplicated pairs" in out
+        assert "cv_pct = std / |mean| * 100" in out
+        # the planted duplicate pair gets one row per metric
+        assert "erlotinib" in out
+        assert out.count("A549 erlotinib") == 2  # LN_IC50 row + AUC row
+        assert "n_replicates" in out
+        assert "LN_IC50" in out and "AUC" in out
+        # the AUC replicates are byte-identical copies -> cv 0.0
+        assert "0.000000" in out
+
+    def test_response_audit_without_flag_omits_variability(
+        self, tmp_path, capsys
+    ):
+        screen_csv = self._screen_csv(tmp_path)
+        code = main(
+            ["biology", "response-audit", "--data", str(screen_csv)]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "replicate variability" not in out
+        assert "cv_pct" not in out
+
+    def test_response_audit_replicate_cv_clean_screen_says_nothing_to_collapse(
+        self, tmp_path, capsys
+    ):
+        import pandas as pd
+
+        clean = pd.DataFrame(
+            {
+                "cell_line": ["A549", "HCT116"],
+                "compound": ["cisplatin", "cisplatin"],
+                "LN_IC50": [1.0, 2.0],
+                "AUC": [0.5, 0.6],
+            }
+        )
+        path = tmp_path / "clean.csv"
+        clean.to_csv(path, index=False)
+        code = main(
+            ["biology", "response-audit", "--data", str(path),
+             "--replicate-cv"]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "replicate variability: no duplicated" in out
+        assert "nothing to collapse" in out
+
     def test_top_biomarkers_end_to_end_with_planted_gene(
         self, tmp_path, capsys
     ):

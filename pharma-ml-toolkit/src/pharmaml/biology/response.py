@@ -19,7 +19,13 @@ reshapes such tables:
   lines claimed by two tissues, under-tested compounds),
 * :func:`collapse_replicates` resolves duplicated pairs by the median
   per metric (rows with a missing identifier are kept as their own
-  NaN-keyed group, never silently dropped),
+  NaN-keyed group, never silently dropped), optionally carrying each
+  metric's replicate CV alongside the collapsed median
+  (``add_cv=True``),
+* :func:`replicate_variability` reports the pre-collapse spread of
+  every duplicated (cell line, compound) pair -- replicate count,
+  median, mean, std, spread and the coefficient of variation -- so
+  the noise the median collapse discards stays visible,
 * :func:`ln_ic50_to_pic50` / :func:`pic50_to_ln_ic50` convert between
   GDSC's ``LN_IC50`` (natural log of the IC50 in micromolar) and the
   chemist's pIC50 scale,
@@ -71,6 +77,7 @@ __all__ = [
     "ln_ic50_to_pic50",
     "load_response_table",
     "pic50_to_ln_ic50",
+    "replicate_variability",
     "response_matrix",
     "summarize_compounds",
 ]
@@ -473,7 +480,134 @@ def audit_response_table(screen: ResponseScreen, n_min: int = 3) -> pd.DataFrame
     return report
 
 
-def collapse_replicates(screen: ResponseScreen) -> ResponseScreen:
+def _replicate_cv(values: pd.Series) -> float:
+    """Coefficient of variation (percent) of one group's replicates.
+
+    NaN when fewer than two valid values exist (a single observation
+    has no spread) or when the mean is exactly zero (the ratio is
+    undefined -- reported as NaN, never as a fabricated ``inf``).
+    """
+    numeric = pd.to_numeric(values, errors="coerce")
+    valid = numeric.dropna()
+    if len(valid) < 2:
+        return math.nan
+    mean = float(valid.mean())
+    if mean == 0.0:
+        return math.nan
+    return abs(float(valid.std(ddof=1)) / mean) * 100.0
+
+
+def replicate_variability(screen: ResponseScreen) -> pd.DataFrame:
+    """Report the replicate spread of every duplicated pair.
+
+    The median collapse in :func:`collapse_replicates` discards the
+    noise information by construction: two replicates ``[1.0, 3.0]``
+    and ``[1.9, 2.1]`` both collapse to the *same* median ``2.0``.
+    This function keeps that noise visible *before* the collapse --
+    one row per duplicated (cell line, compound) pair **per metric**,
+    with columns ``metric``, ``n_replicates`` (valid values only; NaN
+    entries never inflate the count), ``median``, ``mean``, ``std``
+    (sample standard deviation, ``ddof=1``), ``spread`` (``max - min``)
+    and ``cv_pct`` -- the coefficient of variation
+    ``std / |mean| * 100``.
+
+    ``cv_pct`` is NaN when fewer than two valid replicates exist or
+    when the mean is exactly zero (the ratio is undefined).  Pairs
+    keyed by a missing identifier are included as (NaN-keyed)
+    duplicates, mirroring :func:`audit_response_table`.  A screen
+    without duplicated pairs returns an *empty frame with the full
+    column set* (never ``None``).
+
+    Parameters
+    ----------
+    screen:
+        The screen to inspect (typically the raw, pre-collapse one).
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per (duplicate pair, metric), sorted by pair then
+        metric.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from pharmaml.biology.response import (
+    ...     load_response_table, replicate_variability,
+    ... )
+    >>> frame = pd.DataFrame({
+    ...     "cell_line": ["A", "A", "B"],
+    ...     "compound": ["d", "d", "d"],
+    ...     "v": [1.0, 3.0, 10.0],
+    ... })
+    >>> screen = load_response_table(frame, metrics=["v"])
+    >>> report = replicate_variability(screen)
+    >>> report["n_replicates"].tolist()
+    [2]
+    >>> round(float(report["cv_pct"].iloc[0]), 1)
+    70.7
+    """
+    columns = [
+        screen.cell_col,
+        screen.compound_col,
+        "metric",
+        "n_replicates",
+        "median",
+        "mean",
+        "std",
+        "spread",
+        "cv_pct",
+    ]
+    rows: list[dict[str, object]] = []
+    grouped = screen.frame.groupby(
+        [screen.cell_col, screen.compound_col], sort=True, dropna=False
+    )
+    for (cell, compound), group in grouped:
+        if len(group) < 2:
+            continue  # not a duplicated pair
+        for metric in screen.metrics:
+            valid = pd.to_numeric(group[metric], errors="coerce").dropna()
+            n = len(valid)
+            if n == 0:
+                median = mean = std = spread = math.nan
+            else:
+                median = float(valid.median())
+                mean = float(valid.mean())
+                std = float(valid.std(ddof=1)) if n >= 2 else math.nan
+                spread = float(valid.max() - valid.min())
+            cv = _replicate_cv(group[metric])
+            rows.append(
+                {
+                    screen.cell_col: cell,
+                    screen.compound_col: compound,
+                    "metric": metric,
+                    "n_replicates": n,
+                    "median": median,
+                    "mean": mean,
+                    "std": std,
+                    "spread": spread,
+                    "cv_pct": cv,
+                }
+            )
+    report = pd.DataFrame(rows, columns=columns)
+    if report.empty:
+        _LOG.debug(
+            "replicate_variability: no duplicated (cell, compound) pairs"
+        )
+    else:
+        _LOG.info(
+            "replicate_variability: %d duplicated pair(s) x %d metric(s)",
+            report.groupby(
+                [screen.cell_col, screen.compound_col], dropna=False
+            ).ngroups,
+            len(screen.metrics),
+        )
+    return report
+
+
+def collapse_replicates(
+    screen: ResponseScreen, add_cv: bool = False
+) -> ResponseScreen:
     """Collapse duplicated (cell line, compound) pairs by the median.
 
     Every pair is reduced to a single row: metric columns take the
@@ -484,6 +618,26 @@ def collapse_replicates(screen: ResponseScreen) -> ResponseScreen:
     (pandas' ``groupby`` default would silently discard them); a
     warning names the count of such rows.  The collapsed pairs are
     logged at DEBUG level.
+
+    With ``add_cv=True`` each metric column gains a companion
+    ``{metric}_replicate_cv_pct`` column (placed immediately to its
+    right) holding the pre-collapse coefficient of variation of that
+    pair's replicates -- NaN for singleton pairs, pairs with fewer
+    than two valid metric values, or a zero mean (undefined ratio),
+    mirroring :func:`replicate_variability`.  The extra columns are
+    annotations, *not* metrics: the returned screen's ``metrics``
+    list is unchanged, so downstream pivoting and summaries keep
+    working.  A pre-existing column with a CV column's name raises
+    :class:`DataValidationError` instead of silently overwriting it.
+
+    Parameters
+    ----------
+    screen:
+        The screen to collapse.
+    add_cv:
+        Append a ``{metric}_replicate_cv_pct`` column next to every
+        metric column (default ``False`` -- byte-identical behaviour
+        to previous releases).
 
     Returns
     -------
@@ -500,12 +654,32 @@ def collapse_replicates(screen: ResponseScreen) -> ResponseScreen:
             "(audit_response_table reports them)",
             int(missing_ids.sum()),
         )
+    work = frame
+    if add_cv:
+        work = frame.copy()
+        keys = [screen.cell_col, screen.compound_col]
+        for metric in screen.metrics:
+            cv_name = f"{metric}_replicate_cv_pct"
+            if cv_name in work.columns:
+                raise DataValidationError(
+                    f"column {cv_name!r} already exists -- collapse_replicates "
+                    "cannot attach the replicate CV column (drop or rename "
+                    "the existing column first)"
+                )
+            cv_series = frame.groupby(keys, sort=False, dropna=False)[
+                metric
+            ].transform(_replicate_cv)
+            # position against the *current* work columns: earlier CV
+            # inserts have shifted the later metrics right already
+            work.insert(
+                work.columns.get_loc(metric) + 1, cv_name, cv_series
+            )
     aggregations: dict[str, str] = {}
-    for column in frame.columns:
+    for column in work.columns:
         aggregations[column] = (
             "median" if column in screen.metrics else "first"
         )
-    collapsed = frame.groupby(
+    collapsed = work.groupby(
         [screen.cell_col, screen.compound_col],
         sort=False,
         as_index=False,
@@ -522,6 +696,15 @@ def collapse_replicates(screen: ResponseScreen) -> ResponseScreen:
             len(duplicate_pairs),
             shown,
             more,
+        )
+    if add_cv:
+        n_cv = sum(
+            1
+            for column in collapsed.columns
+            if column.endswith("_replicate_cv_pct")
+        )
+        _LOG.debug(
+            "collapse_replicates: attached %d replicate CV column(s)", n_cv
         )
     _LOG.info(
         "collapse_replicates: %d row(s) -> %d row(s)", len(frame), len(collapsed)

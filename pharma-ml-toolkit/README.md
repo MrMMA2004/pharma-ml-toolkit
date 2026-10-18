@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1773 tests).
+exceptions, input validation, and pytest coverage** (1784 tests).
 
 ---
 
@@ -218,7 +218,7 @@ pharma-ml-toolkit/
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1773 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1784 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -909,8 +909,9 @@ EGFR → erlotinib biomarker recovered with rho=+0.978, FDR≈2.4e-13).
 
 ```python
 from pharmaml.biology import (
-    load_response_table, audit_response_table, collapse_replicates,
-    ln_ic50_to_pic50, response_matrix, summarize_compounds,
+    load_response_table, audit_response_table, replicate_variability,
+    collapse_replicates, ln_ic50_to_pic50, response_matrix,
+    summarize_compounds,
     call_sensitive_resistant, normalize_expression, most_variable_genes,
     sensitivity_associations, top_biomarkers, direction_of_association,
 )
@@ -919,7 +920,10 @@ from pharmaml.biology import (
 screen = load_response_table("screen.csv", tissue_column="tissue")
 print(screen.summary())
 audit_response_table(screen)          # missing values, duplicate pairs, ...
+print(replicate_variability(screen))  # pre-collapse spread of the duplicates (CV!)
 clean = collapse_replicates(screen)   # median per (cell line, compound)
+#    or keep the noise visible: collapse_replicates(screen, add_cv=True)
+#    appends a {metric}_replicate_cv_pct column next to every median.
 
 # 2) Normalize: GDSC LN_IC50 (ln of µM) -> pIC50 (bigger = more potent).
 clean.frame["pIC50"] = ln_ic50_to_pic50(clean.frame["LN_IC50"])
@@ -944,12 +948,21 @@ print(direction_of_association(top.iloc[0]["rho"], lower_is_sensitive=True))
 
 * `ResponseScreen` carries the screen (cell lines, compounds, metrics, tissue);
   `response_matrix` pivots it for heat-map-style analyses.
+* **Replicate noise stays visible**: `replicate_variability()` reports every
+  duplicated (cell line, compound) pair's pre-collapse spread (n, median, mean,
+  std, spread, CV% = std/|mean| — NaN for single observations or zero means,
+  never a fabricated inf), and `collapse_replicates(..., add_cv=True)` keeps a
+  `{metric}_replicate_cv_pct` companion column next to each collapsed median
+  (annotations, not metrics — pivoting and summaries are unaffected). Two
+  replicates `[1.0, 3.0]` and `[1.9, 2.1]` collapse to the *same* median 2.0;
+  the CV tells you which one to trust.
 * Sensitive/resistant calling is **direction-aware** (LN_IC50: lower = sensitive;
   pIC50: higher = sensitive) and documented per function.
 * `sensitivity_associations` is the omics → biomarker step: per-gene Spearman/Pearson
   correlation against one drug's response vector, Benjamini–Hochberg FDR, sorted by
   effect size — the notebook's planted EGFR biomarker survives FDR≈2.4e-13.
-* CLI twins: `pharmaml biology response-audit` and `pharmaml biology top-biomarkers`.
+* CLI twins: `pharmaml biology response-audit` (add `--replicate-cv` for the
+  pre-collapse variability table) and `pharmaml biology top-biomarkers`.
 * The notebook closes by predicting erlotinib response from expression with
   classical ML **and the `dnn` / `dnn_residual` deep-learning models in one
   `compare_models` leaderboard** — cell line data is where deep learning earns its

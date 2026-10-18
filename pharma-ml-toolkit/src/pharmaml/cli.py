@@ -512,6 +512,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--metric", default=None,
         help="metric for the per-compound summary (default: first metric)",
     )
+    bio_audit.add_argument(
+        "--replicate-cv", action="store_true",
+        help="also report the pre-collapse spread of duplicated "
+        "(cell line, compound) pairs: replicate count, median, mean, "
+        "std, spread and CV%% (std / |mean|)",
+    )
 
     bio_top = biology_sub.add_parser(
         "top-biomarkers",
@@ -1411,6 +1417,7 @@ def _cmd_biology_response_audit(args: argparse.Namespace) -> int:
     from pharmaml.biology import (
         audit_response_table,
         load_response_table,
+        replicate_variability,
         summarize_compounds,
     )
 
@@ -1423,6 +1430,19 @@ def _cmd_biology_response_audit(args: argparse.Namespace) -> int:
     print(screen.summary())
     print("\naudit:")
     print(audit_response_table(screen).to_string(index=False))
+    if args.replicate_cv:
+        variability = replicate_variability(screen)
+        if variability.empty:
+            print(
+                "\nreplicate variability: no duplicated "
+                "(cell line, compound) pairs -- nothing to collapse"
+            )
+        else:
+            print(
+                "\nreplicate variability of duplicated pairs "
+                "(pre-collapse; cv_pct = std / |mean| * 100):"
+            )
+            print(variability.to_string(index=False))
     metric = args.metric if args.metric is not None else screen.metrics[0]
     print(f"\nper-compound summary (metric {metric!r}):")
     print(summarize_compounds(screen, metric).to_string())

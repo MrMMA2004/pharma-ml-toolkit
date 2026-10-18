@@ -30,6 +30,7 @@ from pharmaml.biology import (
     most_variable_genes,
     normalize_expression,
     pic50_to_ln_ic50,
+    replicate_variability,
     response_matrix,
     sensitivity_associations,
     summarize_compounds,
@@ -229,6 +230,163 @@ class TestCollapseReplicates:
         assert collapsed.metrics == ["v"]
         # the original screen is not mutated
         assert len(screen.frame) == 3
+
+    def test_add_cv_places_companion_column_next_to_each_metric(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "A", "A", "B"],
+                "compound": ["d", "d", "d", "d"],
+                "v": [1.0, 3.0, 5.0, 10.0],
+                "w": [2.0, 2.0, 8.0, 0.5],
+            }
+        )
+        screen = load_response_table(frame, metrics=["v", "w"])
+        collapsed = collapse_replicates(screen, add_cv=True)
+        # each CV column sits immediately right of its metric
+        assert list(collapsed.frame.columns) == [
+            "cell_line",
+            "compound",
+            "v",
+            "v_replicate_cv_pct",
+            "w",
+            "w_replicate_cv_pct",
+        ]
+        pair = collapsed.frame[collapsed.frame["cell_line"] == "A"].iloc[0]
+        # replicates [1, 3, 5]: std(ddof=1) = 2, mean = 3 -> CV 66.667 %
+        assert pair["v"] == 3.0  # the collapsed median
+        assert pair["v_replicate_cv_pct"] == pytest.approx(66.666667, rel=1e-4)
+        # replicates [2, 2, 8]: std = 3.4641, mean = 4 -> CV 86.603 %
+        assert pair["w_replicate_cv_pct"] == pytest.approx(86.602540, rel=1e-4)
+        # singleton pair (B, d): variability is undefined -> NaN
+        singleton = collapsed.frame[collapsed.frame["cell_line"] == "B"].iloc[0]
+        assert pd.isna(singleton["v_replicate_cv_pct"])
+        assert pd.isna(singleton["w_replicate_cv_pct"])
+        # the companions are annotations, not metrics
+        assert collapsed.metrics == ["v", "w"]
+        # and the input screen is untouched (no cv columns sneak in)
+        assert "v_replicate_cv_pct" not in screen.frame.columns
+
+    def test_default_adds_no_cv_columns(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "A", "B"],
+                "compound": ["d", "d", "d"],
+                "v": [1.0, 3.0, 10.0],
+            }
+        )
+        screen = load_response_table(frame, metrics=["v"])
+        collapsed = collapse_replicates(screen)
+        assert list(collapsed.frame.columns) == ["cell_line", "compound", "v"]
+
+    def test_add_cv_name_collision_raises(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "A"],
+                "compound": ["d", "d"],
+                "v": [1.0, 3.0],
+                "v_replicate_cv_pct": [1.0, 2.0],  # user column, must survive
+            }
+        )
+        screen = load_response_table(frame, metrics=["v"])
+        with pytest.raises(
+            DataValidationError, match="v_replicate_cv_pct.*already exists"
+        ):
+            collapse_replicates(screen, add_cv=True)
+
+
+class TestReplicateVariability:
+    def _duplicated_screen(self) -> ResponseScreen:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "A", "A", "B", "B"],
+                "compound": ["d", "d", "d", "e", "e"],
+                "v": [1.0, 3.0, 5.0, 10.0, 14.0],
+                "w": [2.0, 2.0, 8.0, 0.5, math.nan],
+            }
+        )
+        return load_response_table(frame, metrics=["v", "w"])
+
+    def test_duplicated_pairs_report_pinned_stats(self) -> None:
+        report = replicate_variability(self._duplicated_screen())
+        # rows sorted by pair then metric
+        assert report["metric"].tolist() == ["v", "w", "v", "w"]
+        assert report["n_replicates"].tolist() == [3, 3, 2, 1]
+        row = report.iloc[0]  # (A, d) metric v: [1, 3, 5]
+        assert row["median"] == 3.0
+        assert row["mean"] == 3.0
+        assert row["std"] == pytest.approx(2.0)
+        assert row["spread"] == 4.0
+        assert row["cv_pct"] == pytest.approx(66.666667, rel=1e-4)
+        third = report.iloc[2]  # (B, e) metric v: [10, 14]
+        assert third["std"] == pytest.approx(2.828427, rel=1e-5)
+        assert third["cv_pct"] == pytest.approx(23.570226, rel=1e-4)
+
+    def test_nan_replicates_do_not_inflate_counts(self) -> None:
+        # (B, e) metric w holds [0.5, NaN]: one valid value only
+        report = replicate_variability(self._duplicated_screen())
+        row = report.iloc[3]
+        assert row["n_replicates"] == 1
+        assert row["median"] == 0.5
+        assert row["spread"] == 0.0
+        assert pd.isna(row["std"])  # a single observation has no spread
+        assert pd.isna(row["cv_pct"])
+
+    def test_clean_screen_returns_empty_frame_with_columns(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "B"],
+                "compound": ["d", "d"],
+                "v": [1.0, 2.0],
+            }
+        )
+        screen = load_response_table(frame, metrics=["v"])
+        report = replicate_variability(screen)
+        assert report.empty
+        assert list(report.columns) == [
+            "cell_line",
+            "compound",
+            "metric",
+            "n_replicates",
+            "median",
+            "mean",
+            "std",
+            "spread",
+            "cv_pct",
+        ]
+
+    def test_zero_mean_gives_nan_cv_not_inf(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", "A"],
+                "compound": ["d", "d"],
+                "v": [-1.0, 1.0],
+            }
+        )
+        screen = load_response_table(frame, metrics=["v"])
+        report = replicate_variability(screen)
+        row = report.iloc[0]
+        assert row["mean"] == 0.0
+        assert row["std"] == pytest.approx(1.4142136, rel=1e-5)
+        assert row["spread"] == 2.0
+        assert pd.isna(row["cv_pct"])  # undefined ratio, never a fake inf
+
+    def test_missing_identifier_pairs_are_counted(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "cell_line": ["A", math.nan, math.nan],
+                "compound": ["other", "d", "d"],
+                "v": [7.0, 1.0, 3.0],
+            }
+        )
+        screen = load_response_table(frame, metrics=["v"])
+        report = replicate_variability(screen)
+        # the two NaN-keyed rows form one (NaN, 'd') duplicated pair --
+        # audit_response_table counts it, so the variability report
+        # must too (a singleton like ("A", "other") never appears)
+        assert len(report) == 1
+        assert pd.isna(report.iloc[0]["cell_line"])
+        assert report.iloc[0]["compound"] == "d"
+        assert report.iloc[0]["n_replicates"] == 2
 
 
 class TestLnIc50Conversion:

@@ -57,6 +57,7 @@ from pharmaml.biology.response import (
     ln_ic50_to_pic50,
     load_response_table,
     pic50_to_ln_ic50,
+    replicate_variability,
     response_matrix,
     summarize_compounds,
 )
@@ -76,6 +77,7 @@ __all__ = [
     # omics.py
     "normalize_expression",
     "pic50_to_ln_ic50",
+    "replicate_variability",
     "response_matrix",
     # biomarkers.py
     "sensitivity_associations",

@@ -150,6 +150,7 @@ after adding new public functions.
 | `most_variable_genes` | function | Return the ``n`` most variable genes by MAD. |
 | `normalize_expression` | function | Normalise an expression table: ``log2(x + 1)`` then per-gene z-score. |
 | `pic50_to_ln_ic50` | function | Convert pIC50 values back to GDSC ``LN_IC50`` (the exact inverse). |
+| `replicate_variability` | function | Report the replicate spread of every duplicated pair. |
 | `response_matrix` | function | Pivot one metric into a cell-line x compound sensitivity matrix. |
 | `sensitivity_associations` | function | Correlate every gene with one drug's response, FDR-controlled. |
 | `summarize_compounds` | function | Per-compound potency statistics across the cell-line panel. |

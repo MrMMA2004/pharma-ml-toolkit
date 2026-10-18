@@ -10,6 +10,46 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.22] — 2026-10-19
+
+### Added — replicate variability surfaces the noise the median collapse discards (100x-71)
+
+- **`replicate_variability(screen)`** (biology/response): one row per
+  duplicated (cell line, compound) pair *per metric* — replicate count
+  (valid values only; NaN entries never inflate it), median, mean, std
+  (ddof=1), spread and `cv_pct` (std/|mean| × 100). The motivating
+  defect: `[1.0, 3.0]` and `[1.9, 2.1]` both collapse to the *same*
+  median `2.0` — until now the difference was invisible. `cv_pct` is
+  NaN (never a fabricated `inf`) for single observations and zero
+  means; NaN-keyed duplicate pairs are counted, mirroring the audit.
+  A screen without duplicates returns an empty frame with the full
+  column set.
+- **`collapse_replicates(screen, add_cv=True)`** keeps the noise next
+  to the answer: each metric column gains a
+  `{metric}_replicate_cv_pct` companion (placed immediately to its
+  right — the column-order bug caught during bring-up: positions must
+  be recomputed against the *current* frame as earlier inserts shift
+  later metrics). The companions are annotations, *not* metrics, so
+  `response_matrix` / `summarize_compounds` consumers are unaffected;
+  a pre-existing column with the CV name raises `DataValidationError`
+  instead of silently overwriting. Default `False` — byte-identical
+  behaviour to 1.2.21.
+- **CLI**: `pharmaml biology response-audit --replicate-cv` prints the
+  pre-collapse variability table between the audit and the
+  per-compound summary (and a one-liner when the screen holds no
+  duplicates). The planted demo pair is a good advertisement:
+  LN_IC50 replicates 0.39/2.61 → CV ≈ 396 %, byte-identical AUC
+  replicates → CV 0.0.
+- Tests +11 (3 `TestCollapseReplicates` additions incl. the collision
+  guard, 5 `TestReplicateVariability`, 3 CLI); a doctest pins the
+  `[1.0, 3.0]` → 70.7 % CV example.
+- Environment note (sandbox repair, no shipped-tree change): the venv
+  had been partially reset — torch/rdkit/meeko/gemmi/mordred and the
+  editable install were restored, numpy pinned back to 2.1.3 after
+  mordred's resolver downgraded it, and mordred's numpy-2 incompatibilities
+  (`from numpy import product`, `np.float`) were patched in
+  site-packages to resurrect the six full-deps descriptor tests.
+
 ## [1.2.21] — 2026-10-19
 
 ### Added — the prune story closes in the flagship notebook (100x-70)
