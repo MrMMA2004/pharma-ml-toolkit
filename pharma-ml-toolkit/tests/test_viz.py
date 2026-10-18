@@ -43,6 +43,7 @@ from pharmaml.viz import (
     plot_learning_curve,
     plot_model_comparison,
     plot_operator_trajectory,
+    plot_pareto_front,
     plot_predicted_vs_actual,
     plot_receptor_atom_types,
     plot_residuals,
@@ -1566,3 +1567,102 @@ class TestNotebookArtifacts:
             c.cell_type == "markdown" and c.source.startswith("## 11 · Recap")
             for c in nb.cells
         ), "notebook lost its recap section"
+
+
+@pytest.fixture()
+def pareto_result():
+    """The hand-derived 5-member front + 2 dominated molecules (no RDKit).
+
+    Front crowdings over (qed, nov): M1/M2 +inf corners, M3 1.1, M4 0.9,
+    M5 1.2 -- the pinned values TestParetoCrowding derives by hand.
+    """
+    from pharmaml.generative import GenerationResult
+
+    return GenerationResult(
+        smiles=["M1", "M2", "M3", "M4", "M5", "M6", "M7"],
+        scores=[0.9, 0.8, 0.7, 0.65, 0.6, 0.55, 0.5],
+        breakdown=[{"qed": 0.9, "nov": 0.2},
+                   {"qed": 0.4, "nov": 0.9},
+                   {"qed": 0.85, "nov": 0.25},
+                   {"qed": 0.5, "nov": 0.6},
+                   {"qed": 0.6, "nov": 0.55},
+                   {"qed": 0.45, "nov": 0.5},
+                   {"qed": 0.8, "nov": 0.1}],
+    )
+
+
+class TestParetoFrontPlot:
+    """plot_pareto_front's crowding encoding (the 100x-69 viz axis).
+
+    Fail-first context: the front was a single marker-style line -- the
+    crowding ranking (100x-67) had no visual surface, so a reader could
+    not see WHICH front members were isolated trade-off anchors vs
+    crowded middles. Now the line is the curve, interiors are sized by
+    isolation, and the +inf corners are amber diamonds.
+    """
+
+    def test_legend_and_trace_structure(self, pareto_result, close_all):
+        fig = plot_pareto_front(pareto_result, x="qed", y="nov")
+        ax = fig.axes[0]
+        legend = [t.get_text() for t in ax.get_legend().get_texts()]
+        assert legend == [
+            "dominated", "Pareto front (5)",
+            "interior — size = crowding", "corner — +inf crowding",
+        ]
+        # the trade-off curve is connective tissue -- markers moved to the
+        # crowding-encoded traces
+        line = ax.lines[0]
+        assert line.get_marker() == "None"
+        labels = {c.get_label(): c for c in ax.collections}
+        assert len(labels["dominated"].get_offsets()) == 2  # M6, M7
+        assert len(labels["interior — size = crowding"].get_offsets()) == 3
+        assert len(labels["corner — +inf crowding"].get_offsets()) == 2
+
+    def test_interior_marker_sizes_follow_crowding(self, pareto_result, close_all):
+        # interiors in x order: M4 (0.9), M5 (1.2), M3 (1.1) -> sizes
+        # 34 + 140 x crowding: 160, 202, 188 -- the most isolated member
+        # stands largest, the most crowded smallest
+        fig = plot_pareto_front(pareto_result, x="qed", y="nov")
+        interior = next(
+            c for c in fig.axes[0].collections
+            if c.get_label() == "interior — size = crowding"
+        )
+        assert interior.get_sizes().tolist() == [160.0, 202.0, 188.0]
+
+    def test_corners_are_diamonds_in_amber(self, pareto_result, close_all):
+        fig = plot_pareto_front(pareto_result, x="qed", y="nov")
+        corner = next(
+            c for c in fig.axes[0].collections
+            if c.get_label() == "corner — +inf crowding"
+        )
+        # the diamond marker path has 4 outer vertices (vs the circle's
+        # 25-point approximation)
+        vertices = corner.get_paths()[0].vertices
+        assert len(vertices) == 5  # 4 corners + closing point
+        assert tuple(corner.get_facecolor()[0][:3]) != (0.0, 0.0, 0.0)
+
+    def test_two_member_front_renders_corners_only(self, close_all):
+        from pharmaml.generative import GenerationResult
+
+        result = GenerationResult(
+            smiles=["P", "Q"], scores=[0.9, 0.5],
+            breakdown=[{"a": 0.9, "b": 0.1}, {"a": 0.1, "b": 0.9}],
+        )
+        fig = plot_pareto_front(result, x="a", y="b")
+        labels = {c.get_label() for c in fig.axes[0].collections}
+        assert "interior — size = crowding" not in labels  # both are corners
+        corner = next(
+            c for c in fig.axes[0].collections
+            if c.get_label() == "corner — +inf crowding"
+        )
+        assert len(corner.get_offsets()) == 2
+
+    def test_title_and_axes_carry_the_objective_pair(
+        self, pareto_result, close_all
+    ) -> None:
+        fig = plot_pareto_front(pareto_result, x="qed", y="nov", title="Trade")
+        ax = fig.axes[0]
+        assert ax.get_xlabel() == "qed"
+        assert ax.get_ylabel() == "nov"
+        # the title is left-anchored (the house style for audit lines)
+        assert ax.get_title(loc="left").startswith("Trade — 5 of 7 molecules")

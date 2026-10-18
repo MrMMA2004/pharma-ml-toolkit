@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1768 tests).
+exceptions, input validation, and pytest coverage** (1773 tests).
 
 ---
 
@@ -218,7 +218,7 @@ pharma-ml-toolkit/
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1768 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1773 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -852,7 +852,9 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   crowded middle), `front.prune(8)` keeps the most isolated members with
   the corners guaranteed to survive (the selection is monotonic in `keep`
   and deterministic), and `to_dataframe()` carries the `crowding` column
-  so the reader sees who earned their seat. The CLI twin is
+  so the reader sees who earned their seat. `plot_pareto_front` encodes
+  the same ranking visually: interior markers scale with isolation and
+  the +inf corners are amber diamonds. The CLI twin is
   `--pareto-keep N` (e.g. `pharmaml generative run --recipe druglike
   --pareto --pareto-keep 8`): the summary honestly reports the original
   front size plus the cut — `pruned to the 8 most isolated of 46 by

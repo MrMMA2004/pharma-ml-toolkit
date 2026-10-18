@@ -10,6 +10,32 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.20] — 2026-10-19
+
+### Added — the crowding distance reaches the Pareto figure (100x-69)
+
+- **`plot_pareto_front` encodes the NSGA-II crowding distance visually**
+  (the viz axis 100x-67 shipped without): the trade-off curve is now
+  pure connective tissue (no markers), interior front members render
+  with marker size proportional to their isolation over the plotted
+  pair (`34 + 140 x crowding` — a sparse-region anchor stands large, a
+  crowded middle small), and the `+inf` boundary corners are amber
+  diamonds that a `prune` selection always keeps. The legend names all
+  four traces (`dominated` / `Pareto front (N)` / `interior — size =
+  crowding` / `corner — +inf crowding`); degenerate pairs (no spread
+  on either objective) fall to the floor size by construction. The
+  CLI `--pareto-plot` artifact and the playground's Pareto card figure
+  pick the encoding up unchanged (both call the same function).
+- **Direct viz tests for `plot_pareto_front`** — the function was only
+  exercised through the CLI's PNG-magic check before this round.
+  `TestParetoFrontPlot` (5 tests, synthetic breakdown — no RDKit):
+  the four-entry legend + trace structure (dominated 2 / interior 3 /
+  corners 2 over the hand-derived fixture), the exact interior sizes
+  ([160, 202, 188] — the pinned crowdings in x order), the diamond
+  path + non-black facecolor of the corner trace, the two-member
+  front (corners only, no interior trace), and the left-anchored
+  title + objective-pair axes.
+
 ## [1.2.19] — 2026-10-19
 
 ### Added — the RL optimiser reaches the playground GUI (100x-68)

@@ -55,7 +55,7 @@ pharmaml.exceptions.DataValidationError: metadata carries no operator_trajectory
 >>> (len(fig.axes), fig.axes[0].get_xlabel(), fig.axes[0].get_ylabel())
 (1, 'qed', 'novelty')
 >>> [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
-['dominated', 'Pareto front (3)']
+['dominated', 'Pareto front (3)', 'interior — size = crowding', 'corner — +inf crowding']
 >>> fig.axes[0].get_title(loc="left")
 'Pareto front — 3 of 4 molecules non-dominated'
 >>> close_figure(fig)
@@ -243,6 +243,15 @@ def plot_pareto_front(
     scatter (the extraction's own exclusion rule; NaN would also break axis
     autoscaling).  The title reports front size over examined molecules.
 
+    The front markers encode the NSGA-II **crowding distance** (computed
+    over the plotted pair -- the honest reading of a 2D view): interior
+    members are drawn with marker size proportional to their isolation
+    (a sparse-region member stands large, a crowded one small), and the
+    boundary corners (``+inf`` -- best or worst on a plotted objective)
+    are amber diamonds that always survive a :meth:`ParetoFront.prune`
+    selection.  A fully degenerate pair (no spread on either objective)
+    renders every member at the floor size -- crowding measures spread.
+
     Parameters
     ----------
     result:
@@ -312,12 +321,37 @@ def plot_pareto_front(
         label="dominated", zorder=2,
     )
     order = sorted(range(len(front.smiles)), key=lambda i: front.values[i][x])
+    # the trade-off curve itself -- connective tissue, no markers (the
+    # members carry their own crowding-encoded traces below)
     ax.plot(
         [front.values[i][x] for i in order],
         [front.values[i][y] for i in order],
-        color=PALETTE[0], marker="o", markersize=6, linewidth=1.6,
+        color=PALETTE[0], linewidth=1.6,
         label=f"Pareto front ({len(front)})", zorder=3,
     )
+    # the crowding encoding (100x-69): size = isolation over the plotted
+    # pair; the +inf corners are amber diamonds a prune always keeps
+    distances = front.crowding_distance()
+    interiors = [i for i in order if math.isfinite(distances[i])]
+    corners = [i for i in order if math.isinf(distances[i])]
+    if interiors:
+        # 34 + 140 x crowding: a degenerate pair (all zeros) falls to the
+        # 34-point floor by itself -- no special case needed
+        sizes = [34.0 + 140.0 * distances[i] for i in interiors]
+        ax.scatter(
+            [front.values[i][x] for i in interiors],
+            [front.values[i][y] for i in interiors],
+            s=sizes, color=PALETTE[0], alpha=0.9, zorder=4,
+            label="interior — size = crowding",
+        )
+    if corners:
+        ax.scatter(
+            [front.values[i][x] for i in corners],
+            [front.values[i][y] for i in corners],
+            s=120, marker="D", color=PALETTE[1], edgecolor="white",
+            linewidth=0.8, zorder=5,
+            label="corner — +inf crowding",
+        )
     ax.set_xlabel(x, fontsize=10)
     ax.set_ylabel(y, fontsize=10)
     ax.set_title(
