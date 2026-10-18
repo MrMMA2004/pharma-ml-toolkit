@@ -10,6 +10,34 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.0] — 2026-10-18
+
+### Added — the feature factory and the Docking tab
+
+- **`pharmaml.chem.features`** (new module): the seven-family feature
+  factory from the user's own ML pipeline, now a public tested API —
+  RDKit property descriptors, hashed atom-pair counts, ECFP bits,
+  Avalon counts, RDKit fingerprint bits, Morgan-full bits and
+  Morgan-on-Murcko-scaffold bits: **10,800+ columns per molecule**.
+  `compute_feature_frame` builds the matrix (dropping and reporting
+  unparseable SMILES), `rank_features` scores every column (Random
+  Forest / LightGBM-if-installed / variance when no target), and
+  `select_top_features` applies the two-layer selection — per-family
+  median-importance prefilter, then the top-K you ask for — with
+  `selection_metadata` emitting the companion JSON.
+- **Playground Chemistry tab — Feature factory card**: load a CSV (or
+  paste SMILES, or use an example), choose the families, the ranker
+  and **how many features to keep**, then export the selected-feature
+  CSV (SMILES + target + features) and the metadata JSON — the exact
+  artefacts the standalone scripts produced.
+- **Playground Docking tab**: ligand-library → PDBQT batch preparation
+  with a per-ligand audit tree; receptor preparation (PDB/CIF/PDBQT →
+  cleaned receptor PDBQT) plus one-click distribution into every
+  campaign folder; grid-box computation with GPF/DPF writing for a
+  reference ligand; DLG / Vina / whole-campaign result parsing with
+  ligand-efficiency columns; and an AutoDock4/Vina campaign runner
+  that checks for the external binaries before spending a second.
+
 ## [1.1.0] — 2026-10-18
 
 ### Added — the graphical playground

@@ -1,0 +1,969 @@
+     1→"""Multi-family molecular feature factory: compute, rank, select.
+     2→
+     3→Upgrades the uploaded ``Descriptor classification.py`` /
+     4→``Descriptor regression.py`` scripts into a tested library module.  The
+     5→originals computed 7 feature families side by side (~10,800 columns per
+     6→molecule), ranked them with a fitted model, then kept the top-K features
+     7→through a two-layer selection; this module keeps that pipeline but replaces
+     8→the notebook glue with explicit contracts:
+     9→
+    10→* **One vocabulary.**  :data:`FEATURE_FAMILIES` fixes the canonical family
+    11→  order and :data:`FAMILY_PREFIXES` the column naming, so a feature frame
+    12→  is always ``desc_*`` + ``apc_bit_*`` + ``ecfp_bit_*`` +
+    13→  ``avalon_count_*`` + ``rdkit_bit_*`` + ``morgan_full_bit_*`` +
+    14→  ``morgan_scaffold_bit_*`` (5 x 2048 + 512 + the current RDKit property
+    15→  list -- more than 10,000 columns in total).
+    16→* **Failure accounting instead of silent drops.**  Molecules that fail to
+    17→  parse or compute are dropped from the frame and recorded with their
+    18→  original row index in :class:`FeatureReport`; only the Murcko-scaffold
+    19→  family deliberately keeps zero rows (an acyclic molecule has an *empty*
+    20→  scaffold, which is a zero fingerprint, not a failure).
+    21→* **Modern RDKit calls.**  The atom-pair count fingerprint comes from
+    22→  ``rdFingerprintGenerator`` sparse counts folded modulo 2048 (the
+    23→  deprecated ``GetAtomPairFingerprint`` and the rar's datamol dependency
+    24→  are both gone); the Murcko scaffold uses
+    25→  ``MurckoScaffold.GetScaffoldForMol`` (the rar's ``GetMurckoScaffold``
+    26→  no longer exists in RDKit 2026.09).
+    27→* **Strictly optional LightGBM.**  :func:`rank_features` imports lightgbm
+    28→  lazily and falls back to random forests when it is not installed, so
+    29→  this module's import path needs only rdkit + numpy + pandas
+    30→  (scikit-learn is imported inside the ranking functions as well).
+    31→* **Two-layer selection with stable ties.**  Layer 1 keeps the columns at
+    32→  or above their family's median importance (the rar's per-family
+    33→  ``SelectFromModel(threshold='median')``); layer 2 takes the top-K by
+    34→  score, ties broken by frame column order for reproducibility.
+    35→
+    36→Examples
+    37→--------
+    38→>>> from pharmaml.chem.features import (
+    39→...     compute_feature_frame, family_of_column, rank_features,
+    40→...     select_top_features, selection_metadata)
+    41→
+    42→>>> frame, report = compute_feature_frame(["CCO"], families=("descriptors",))
+    43→>>> (frame.shape[0], round(float(frame["desc_amw"].iloc[0]), 2))  # RDKit amw
+    44→(1, 46.07)
+    45→>>> report.smiles, report.dropped, report.n_valid
+    46→(['CCO'], [], 1)
+    47→
+    48→>>> frame, report = compute_feature_frame(["CCO"], families=("ecfp", "avalon_count"))
+    49→>>> frame.shape, report.total_columns
+    50→((1, 2560), 2560)
+    51→>>> (frame.columns[0], frame.columns[2048], frame.columns[-1])
+    52→('ecfp_bit_0', 'avalon_count_0', 'avalon_count_511')
+    53→
+    54→>>> frame, report = compute_feature_frame(
+    55→...     ["CCO", "not_a_smiles", "CCC"], families=("ecfp",))
+    56→>>> list(frame.index), report.smiles      # invalid row dropped + recorded
+    57→([0, 2], ['CCO', 'CCC'])
+    58→>>> report.dropped
+    59→[(1, 'not_a_smiles')]
+    60→
+    61→>>> compute_feature_frame([], families=("ecfp",))
+    62→Traceback (most recent call last):
+    63→...
+    64→ValueError: smiles is empty -- pass at least one SMILES string
+    65→>>> compute_feature_frame(["CCO"], families=("ecfp", "typo"))
+    66→Traceback (most recent call last):
+    67→...
+    68→ValueError: unknown feature family 'typo'; valid families are: descriptors, atompair_count, ecfp, avalon_count, rdkit_fingerprint, morgan_full, morgan_scaffold
+    69→>>> compute_feature_frame(["CCO"], families=())
+    70→Traceback (most recent call last):
+    71→...
+    72→ValueError: families is empty -- pass at least one family name
+    73→
+    74→>>> (family_of_column("desc_exactmw"), family_of_column("ecfp_bit_17"))
+    75→('descriptors', 'ecfp')
+    76→>>> family_of_column("SMILES")
+    77→Traceback (most recent call last):
+    78→...
+    79→ValueError: unknown feature-column prefix in 'SMILES'; columns must start with one of: desc_, apc_bit_, ecfp_bit_, avalon_count_, rdkit_bit_, morgan_full_bit_, morgan_scaffold_bit_
+    80→
+    81→>>> frame, report = compute_feature_frame(["CCCCCCCC"], families=("morgan_scaffold",))
+    82→>>> (frame.shape, float(frame.iloc[0].sum()), report.n_valid)   # acyclic: kept
+    83→((1, 2048), 0.0, 1)
+    84→
+    85→>>> import numpy as np, pandas as pd
+    86→>>> variance_frame = pd.DataFrame({
+    87→...     "f_informative": [0, 1, 2, 3, 4],
+    88→...     "f_noise": [1, -1, 1, -1, 1],
+    89→...     "f_constant": [5, 5, 5, 5, 5]})
+    90→>>> scores = rank_features(variance_frame)
+    91→>>> (scores.index.tolist(), float(scores["f_informative"]), float(scores["f_constant"]))
+    92→(['f_informative', 'f_noise', 'f_constant'], 2.5, 0.0)
+    93→
+    94→>>> x = np.arange(20, dtype=float)
+    95→>>> model_frame = pd.DataFrame({
+    96→...     "f_informative": x,
+    97→...     "f_noise": np.tile([1.0, -1.0], 10),
+    98→...     "f_constant": np.full(20, 7.0)})
+    99→>>> scores = rank_features(model_frame, 3.0 * x, method="random_forest")
+   100→>>> (scores.index[0], float(scores["f_constant"]))
+   101→('f_informative', 0.0)
+   102→
+   103→>>> selection_frame = pd.DataFrame(np.zeros((3, 6)), columns=[
+   104→...     "desc_a", "desc_b", "desc_c", "ecfp_bit_0", "ecfp_bit_1",
+   105→...     "morgan_full_bit_0"])
+   106→>>> scores = pd.Series({"desc_a": 0.10, "desc_b": 0.50, "desc_c": 0.30,
+   107→...                     "ecfp_bit_0": 0.40, "ecfp_bit_1": 0.20,
+   108→...                     "morgan_full_bit_0": 0.35})
+   109→>>> selection = select_top_features(selection_frame, scores, k=3, method="demo")
+   110→>>> selection.selected
+   111→['desc_b', 'ecfp_bit_0', 'morgan_full_bit_0']
+   112→>>> selection.family_counts
+   113→{'descriptors': 1, 'ecfp': 1, 'morgan_full': 1}
+   114→
+   115→>>> frame, report = compute_feature_frame(
+   116→...     ["CCO", "not_a_smiles"], families=("ecfp",))
+   117→>>> scores = pd.Series(1.0, index=frame.columns)
+   118→>>> selection = select_top_features(frame, scores, k=2)
+   119→>>> meta = selection_metadata(selection, report, k=2)
+   120→>>> sorted(meta)
+   121→['descriptor_names', 'dropped', 'families_computed', 'family_counts', 'fingerprint_sizes', 'k_requested', 'method', 'n_molecules', 'selected_features', 'total_features']
+   122→>>> (meta["dropped"], meta["n_molecules"], meta["fingerprint_sizes"])
+   123→([[1, 'not_a_smiles']], 1, {'ecfp': 2048})
+   124→"""
+   125→
+   126→from __future__ import annotations
+   127→
+   128→from collections.abc import Callable, Iterable, Sequence
+   129→from dataclasses import dataclass
+   130→from typing import Any
+   131→
+   132→import numpy as np
+   133→import pandas as pd
+   134→
+   135→from pharmaml.chem.descriptors import require_rdkit
+   136→from pharmaml.logger import get_logger
+   137→
+   138→_LOG = get_logger(__name__)
+   139→
+   140→__all__ = [
+   141→    "ATOMPAIR_BITS",
+   142→    "AVALON_BITS",
+   143→    "ECFP_BITS",
+   144→    "FAMILY_PREFIXES",
+   145→    "FEATURE_FAMILIES",
+   146→    "MORGAN_BITS",
+   147→    "MORGAN_RADIUS",
+   148→    "RDKIT_FP_BITS",
+   149→    "FeatureReport",
+   150→    "FeatureSelection",
+   151→    "compute_feature_frame",
+   152→    "family_of_column",
+   153→    "rank_features",
+   154→    "select_top_features",
+   155→    "selection_metadata",
+   156→]
+   157→
+   158→#: The seven feature families, in canonical output order.
+   159→FEATURE_FAMILIES: tuple[str, ...] = (
+   160→    "descriptors",
+   161→    "atompair_count",
+   162→    "ecfp",
+   163→    "avalon_count",
+   164→    "rdkit_fingerprint",
+   165→    "morgan_full",
+   166→    "morgan_scaffold",
+   167→)
+   168→
+   169→#: Column-name prefix of every family (unique, no prefix is a prefix of
+   170→#: another, so ``family_of_column`` is an exact inverse).
+   171→FAMILY_PREFIXES: dict[str, str] = {
+   172→    "descriptors": "desc_",
+   173→    "atompair_count": "apc_bit_",
+   174→    "ecfp": "ecfp_bit_",
+   175→    "avalon_count": "avalon_count_",
+   176→    "rdkit_fingerprint": "rdkit_bit_",
+   177→    "morgan_full": "morgan_full_bit_",
+   178→    "morgan_scaffold": "morgan_scaffold_bit_",
+   179→}
+   180→
+   181→#: Fold length of the sparse atom-pair count fingerprint.
+   182→ATOMPAIR_BITS = 2048
+   183→#: Bit length of the ECFP (Morgan, radius 2) binary fingerprint.
+   184→ECFP_BITS = 2048
+   185→#: Bit length of the Avalon count fingerprint (the rar's 512-bit choice).
+   186→AVALON_BITS = 512
+   187→#: Bit length of the path-based RDKit fingerprint.
+   188→RDKIT_FP_BITS = 2048
+   189→#: Bit length of both Morgan bit fingerprints (full molecule and scaffold).
+   190→MORGAN_BITS = 2048
+   191→#: Morgan fingerprint radius (ECFP-style).
+   192→MORGAN_RADIUS = 2
+   193→
+   194→#: Bit length of each fingerprint family, keyed by family name.
+   195→_FAMILY_BITS: dict[str, int] = {
+   196→    "atompair_count": ATOMPAIR_BITS,
+   197→    "ecfp": ECFP_BITS,
+   198→    "avalon_count": AVALON_BITS,
+   199→    "rdkit_fingerprint": RDKIT_FP_BITS,
+   200→    "morgan_full": MORGAN_BITS,
+   201→    "morgan_scaffold": MORGAN_BITS,
+   202→}
+   203→
+   204→#: Reference bit lengths recorded by :func:`selection_metadata` (the six
+   205→#: fingerprint families; ``descriptors`` is not a fingerprint and is
+   206→#: covered by ``families_computed`` instead).
+   207→_FINGERPRINT_SIZES: dict[str, int] = {
+   208→    "ecfp": ECFP_BITS,
+   209→    "rdkit_fingerprint": RDKIT_FP_BITS,
+   210→    "morgan_full": MORGAN_BITS,
+   211→    "morgan_scaffold": MORGAN_BITS,
+   212→    "avalon_count": AVALON_BITS,
+   213→    "atompair_count": ATOMPAIR_BITS,
+   214→}
+   215→
+   216→_RANK_METHODS: tuple[str, ...] = ("auto", "random_forest", "lightgbm", "variance")
+   217→_RANK_TASKS: tuple[str, ...] = ("auto", "classification", "regression")
+   218→
+   219→
+   220→@dataclass(frozen=True, slots=True)
+   221→class FeatureReport:
+   222→    """Audit record for one :func:`compute_feature_frame` run.
+   223→
+   224→    Attributes
+   225→    ----------
+   226→    smiles:
+   227→        SMILES of every molecule that produced a feature row, in row order
+   228→        (matches the frame's ``original_index`` order).
+   229→    dropped:
+   230→        ``(row, smiles)`` pairs for molecules that failed to parse or
+   231→        compute, with the ORIGINAL input row index -- align a target
+   232→        column against the frame index plus these rows.
+   233→    families:
+   234→        Mapping family name -> number of columns produced, in canonical
+   235→        :data:`FEATURE_FAMILIES` order (only the requested families
+   236→        appear).
+   237→    """
+   238→
+   239→    smiles: list[str]
+   240→    dropped: list[tuple[int, str]]
+   241→    families: dict[str, int]
+   242→
+   243→    @property
+   244→    def total_columns(self) -> int:
+   245→        """Total number of feature columns across all computed families."""
+   246→        return sum(self.families.values())
+   247→
+   248→    @property
+   249→    def n_valid(self) -> int:
+   250→        """Number of molecules that produced a feature row."""
+   251→        return len(self.smiles)
+   252→
+   253→
+   254→@dataclass(frozen=True, slots=True)
+   255→class FeatureSelection:
+   256→    """Result of :func:`select_top_features`.
+   257→
+   258→    Attributes
+   259→    ----------
+   260→    scores:
+   261→        The importance scores the selection was based on (as passed in).
+   262→    selected:
+   263→        Selected column names in rank order -- highest score first, ties
+   264→        broken by frame column order.
+   265→    family_counts:
+   266→        How many selected columns come from each family, in canonical
+   267→        :data:`FEATURE_FAMILIES` order (families with no selected column
+   268→        are omitted).
+   269→    method:
+   270→        Label for the ranking method that produced ``scores`` (recorded
+   271→        as given, e.g. ``"random_forest"`` or a caller-combined label).
+   272→    """
+   273→
+   274→    scores: pd.Series
+   275→    selected: list[str]
+   276→    family_counts: dict[str, int]
+   277→    method: str
+   278→
+   279→
+   280→def family_of_column(column: str) -> str:
+   281→    """Return the feature family a frame column belongs to.
+   282→
+   283→    The inverse of :data:`FAMILY_PREFIXES`: ``"desc_exactmw"`` ->
+   284→    ``"descriptors"``, ``"ecfp_bit_17"`` -> ``"ecfp"``.
+   285→
+   286→    Parameters
+   287→    ----------
+   288→    column:
+   289→        Column name of a :func:`compute_feature_frame` frame.
+   290→
+   291→    Returns
+   292→    -------
+   293→    str
+   294→        The family name (one of :data:`FEATURE_FAMILIES`).
+   295→
+   296→    Raises
+   297→    ------
+   298→    ValueError
+   299→        If the column does not start with any known family prefix (a
+   300→        ``SMILES`` or ``Target`` column, a typo, an empty string).
+   301→
+   302→    Examples
+   303→    --------
+   304→    >>> family_of_column("apc_bit_2047")
+   305→    'atompair_count'
+   306→    """
+   307→    for family in FEATURE_FAMILIES:
+   308→        if column.startswith(FAMILY_PREFIXES[family]):
+   309→            return family
+   310→    raise ValueError(
+   311→        f"unknown feature-column prefix in {column!r}; columns must start with "
+   312→        "one of: "
+   313→        + ", ".join(FAMILY_PREFIXES[family] for family in FEATURE_FAMILIES)
+   314→    )
+   315→
+   316→
+   317→def _as_smiles_list(smiles: Iterable[str] | pd.Series, arg_name: str) -> list[str]:
+   318→    """Materialise a SMILES sequence once; reject a bare string.
+   319→
+   320→    ``compute_feature_frame("CCO")`` would otherwise iterate the string
+   321→    character-by-character into three single-atom "molecules" (the same
+   322→    trap :mod:`pharmaml.chem.descriptors` guards against).
+   323→    """
+   324→    if isinstance(smiles, str):
+   325→        preview = smiles if len(smiles) <= 40 else smiles[:40] + "..."
+   326→        # ValueError (not TypeError) by contract: the API's error currency.
+   327→        raise ValueError(  # noqa: TRY004 — the contract pins ValueError
+   328→            f"{arg_name} must be a list or pandas.Series of SMILES strings, not a "
+   329→            f"single string (got {preview!r}); wrap it in a list to compute "
+   330→            "one molecule"
+   331→        )
+   332→    return list(smiles)
+   333→
+   334→
+   335→def _descriptor_computer() -> tuple[list[str], Callable[[Any], np.ndarray]]:
+   336→    """Descriptor family: every RDKit available property, ``desc_``-prefixed."""
+   337→    from rdkit.Chem import rdMolDescriptors
+   338→
+   339→    property_names = list(rdMolDescriptors.Properties.GetAvailableProperties())
+   340→    property_getter = rdMolDescriptors.Properties(property_names)
+   341→
+   342→    def descriptor_vector(mol: Any) -> np.ndarray:
+   343→        # NaN property values (if RDKit ever emits them) are preserved --
+   344→        # filling happens only inside rank_features, by contract.
+   345→        return np.asarray(property_getter.ComputeProperties(mol), dtype=float)
+   346→
+   347→    return property_names, descriptor_vector
+   348→
+   349→
+   350→def _atompair_computer() -> Callable[[Any], np.ndarray]:
+   351→    """Atom-pair family: sparse counts folded modulo 2048 (count semantics)."""
+   352→    from rdkit.Chem import rdFingerprintGenerator
+   353→
+   354→    atompair_generator = rdFingerprintGenerator.GetAtomPairGenerator()
+   355→
+   356→    def atompair_vector(mol: Any) -> np.ndarray:
+   357→        vector = np.zeros(ATOMPAIR_BITS, dtype=float)
+   358→        sparse = atompair_generator.GetSparseCountFingerprint(mol)
+   359→        for index, count in sparse.GetNonzeroElements().items():
+   360→            vector[index % ATOMPAIR_BITS] += count
+   361→        return vector
+   362→
+   363→    return atompair_vector
+   364→
+   365→
+   366→def _avalon_computer() -> Callable[[Any], np.ndarray]:
+   367→    """Avalon family: the 512-bit Avalon count fingerprint."""
+   368→    from rdkit.Avalon import pyAvalonTools
+   369→
+   370→    def avalon_vector(mol: Any) -> np.ndarray:
+   371→        vector = np.zeros(AVALON_BITS, dtype=float)
+   372→        counts = pyAvalonTools.GetAvalonCountFP(mol, nBits=AVALON_BITS)
+   373→        for index, count in counts.GetNonzeroElements().items():
+   374→            vector[index % AVALON_BITS] += count
+   375→        return vector
+   376→
+   377→    return avalon_vector
+   378→
+   379→
+   380→def _onbits_vector(fingerprint: Any, n_bits: int) -> np.ndarray:
+   381→    """Dense float vector of an ``ExplicitBitVect`` (1.0 on set positions)."""
+   382→    vector = np.zeros(n_bits, dtype=float)
+   383→    for index in fingerprint.GetOnBits():
+   384→        vector[index] = 1.0
+   385→    return vector
+   386→
+   387→
+   388→def _morgan_computer() -> Callable[[Any], np.ndarray]:
+   389→    """Morgan family: radius-2 2048-bit bit vector (chem/descriptors style)."""
+   390→    from rdkit.Chem import rdMolDescriptors
+   391→
+   392→    def morgan_vector(mol: Any) -> np.ndarray:
+   393→        # The legacy GetMorganFingerprintAsBitVect call is deliberate: it
+   394→        # matches pharmaml.chem.descriptors.compute_fingerprints.  Spelled
+   395→        # through rdMolDescriptors (the defining module) instead of AllChem's
+   396→        # re-export so mypy resolves the attribute the same way.
+   397→        fingerprint = rdMolDescriptors.GetMorganFingerprintAsBitVect(
+   398→            mol, radius=MORGAN_RADIUS, nBits=MORGAN_BITS
+   399→        )
+   400→        return _onbits_vector(fingerprint, MORGAN_BITS)
+   401→
+   402→    return morgan_vector
+   403→
+   404→
+   405→def _morgan_scaffold_computer(
+   406→    morgan_vector: Callable[[Any], np.ndarray],
+   407→) -> Callable[[Any], np.ndarray]:
+   408→    """Scaffold family: Morgan bits of the Murcko scaffold (zero row if empty)."""
+   409→    from rdkit.Chem.Scaffolds import MurckoScaffold
+   410→
+   411→    def scaffold_vector(mol: Any) -> np.ndarray:
+   412→        scaffold = MurckoScaffold.GetScaffoldForMol(mol)
+   413→        if scaffold.GetNumAtoms() == 0:
+   414→            # Acyclic molecule: the empty scaffold is NOT a failure -- the
+   415→            # contract keeps a zero row instead of dropping the molecule.
+   416→            return np.zeros(MORGAN_BITS, dtype=float)
+   417→        return morgan_vector(scaffold)
+   418→
+   419→    return scaffold_vector
+   420→
+   421→
+   422→def compute_feature_frame(
+   423→    smiles: Sequence[str],
+   424→    families: Iterable[str] = FEATURE_FAMILIES,
+   425→) -> tuple[pd.DataFrame, FeatureReport]:
+   426→    """Compute a multi-family feature matrix for a batch of SMILES.
+   427→
+   428→    Parameters
+   429→    ----------
+   430→    smiles:
+   431→        SMILES strings, one per molecule (a DataFrame column works
+   432→        directly).  A bare string is rejected -- wrap it in a list.
+   433→    families:
+   434→        Iterable of family names (default: all of
+   435→        :data:`FEATURE_FAMILIES`).  Unknown names raise; duplicates are
+   436→        ignored.  The output column order is the CANONICAL
+   437→        :data:`FEATURE_FAMILIES` order regardless of the request order.
+   438→
+   439→    Returns
+   440→    -------
+   441→    tuple
+   442→        ``(frame, report)``.  ``frame`` is a float :class:`pandas.DataFrame`
+   443→        with one row per molecule that parsed AND computed cleanly --
+   444→        indexed by the original input row position under the index name
+   445→        ``"original_index"`` -- and one column per requested feature,
+   446→        named with the family prefix (``desc_amw``, ``ecfp_bit_17``,
+   447→        ``avalon_count_511``, ...).  NaN values are preserved (no filling
+   448→        here; :func:`rank_features` fills with 0).  ``report`` is a
+   449→        :class:`FeatureReport` with the kept SMILES, the dropped
+   450→        ``(row, smiles)`` pairs and the per-family column counts.  When
+   451→        every molecule fails, a 0-row frame (with all columns) plus the
+   452→        fully-populated report is returned -- check ``report.n_valid``.
+   453→
+   454→    Raises
+   455→    ------
+   456→    ValueError
+   457→        If ``smiles`` is a bare string or empty, ``families`` is a bare
+   458→        string, ``None`` or empty, or contains a name outside
+   459→        :data:`FEATURE_FAMILIES`.
+   460→    DependencyError
+   461→        If RDKit is not installed (raised by the shared
+   462→        :func:`pharmaml.chem.descriptors.require_rdkit` guard).
+   463→
+   464→    Notes
+   465→    -----
+   466→    Per-family computation (the RDKit 2026.09 spellings):
+   467→
+   468→    * ``descriptors``: ``rdMolDescriptors.Properties`` over
+   469→      ``GetAvailableProperties()`` (43 columns on this build), named
+   470→      ``desc_<property>``.
+   471→    * ``atompair_count``:
+   472→      ``rdFingerprintGenerator.GetAtomPairGenerator().GetSparseCountFingerprint``
+   473→      folded by ``index % 2048`` with count semantics (collisions and
+   474→      repeated environments SUM; the deprecated ``GetAtomPairFingerprint``
+   475→      and the rar's datamol shortcut are both avoided).
+   476→    * ``ecfp`` / ``morgan_full``: ``GetMorganFingerprintAsBitVect`` at
+   477→      radius 2, 2048 bits.
+   478→    * ``avalon_count``: ``pyAvalonTools.GetAvalonCountFP(mol, nBits=512)``.
+   479→    * ``rdkit_fingerprint``: ``Chem.RDKFingerprint(mol, fpSize=2048)``.
+   480→    * ``morgan_scaffold``: Murcko scaffold via
+   481→      ``MurckoScaffold.GetScaffoldForMol`` (NOT the rar's
+   482→      ``GetMurckoScaffold``, which no longer exists), then Morgan bits;
+   483→      an empty (acyclic) scaffold yields a zero row, never a drop.
+   484→    """
+   485→    smiles_list = _as_smiles_list(smiles, "smiles")
+   486→    # Cheap validation BEFORE any parsing: caller bugs must not wait for a
+   487→    # full RDKit pass to surface (the chem/descriptors.py ordering lesson).
+   488→    if not smiles_list:
+   489→        raise ValueError("smiles is empty -- pass at least one SMILES string")
+   490→    if families is None or isinstance(families, str):
+   491→        raise ValueError(
+   492→            "families must be an iterable of family names (e.g. "
+   493→            "families=('descriptors', 'ecfp')), not a single string or None; "
+   494→            f"got {families!r}"
+   495→        )
+   496→    family_list = list(families)
+   497→    if not family_list:
+   498→        raise ValueError("families is empty -- pass at least one family name")
+   499→    unknown = sorted(set(family_list) - set(FEATURE_FAMILIES))
+   500→    if unknown:
+   501→        raise ValueError(
+   502→            f"unknown feature family {unknown[0]!r}; valid families are: "
+   503→            + ", ".join(FEATURE_FAMILIES)
+   504→        )
+   505→    requested_set = set(family_list)
+   506→    requested = [family for family in FEATURE_FAMILIES if family in requested_set]
+   507→
+   508→    Chem = require_rdkit()
+   509→    computers, columns, family_widths = _family_plan(requested)
+   510→
+   511→    rows: list[np.ndarray] = []
+   512→    valid_smiles: list[str] = []
+   513→    valid_positions: list[int] = []
+   514→    dropped: list[tuple[int, str]] = []
+   515→    for row, smi in enumerate(smiles_list):
+   516→        text = smi if isinstance(smi, str) else str(smi)
+   517→        try:
+   518→            # Blank cells parse as valid 0-atom molecules in RDKit; they are
+   519→            # failures here (the chem/descriptors.py convention).
+   520→            mol = (
+   521→                Chem.MolFromSmiles(text)
+   522→                if isinstance(smi, str) and smi.strip()
+   523→                else None
+   524→            )
+   525→            if mol is None:
+   526→                raise ValueError("SMILES did not parse to a valid molecule")
+   527→            rows.append(np.concatenate([computers[family](mol) for family in requested]))
+   528→            valid_smiles.append(text)
+   529→            valid_positions.append(row)
+   530→        except Exception as exc:  # noqa: BLE001 — RDKit raises a zoo per molecule
+   531→            _LOG.warning(
+   532→                "Dropping molecule at row %d (%r): feature computation failed "
+   533→                "(%s: %s)",
+   534→                row,
+   535→                text,
+   536→                type(exc).__name__,
+   537→                exc,
+   538→            )
+   539→            dropped.append((row, text))
+   540→
+   541→    if rows:
+   542→        matrix = np.vstack(rows)
+   543→    else:
+   544→        matrix = np.zeros((0, len(columns)), dtype=float)
+   545→    frame = pd.DataFrame(matrix, columns=columns, dtype=float)
+   546→    frame.index = pd.Index(valid_positions, name="original_index")
+   547→    report = FeatureReport(smiles=valid_smiles, dropped=dropped, families=family_widths)
+   548→    _LOG.info(
+   549→        "Computed %d feature columns for %d molecules (%d dropped)",
+   550→        frame.shape[1],
+   551→        len(valid_smiles),
+   552→        len(dropped),
+   553→    )
+   554→    return frame, report
+   555→
+   556→
+   557→def _family_plan(
+   558→    requested: list[str],
+   559→) -> tuple[dict[str, Callable[[Any], np.ndarray]], list[str], dict[str, int]]:
+   560→    """Build per-family computers, column names and widths for the request."""
+   561→    computers: dict[str, Callable[[Any], np.ndarray]] = {}
+   562→    property_names: list[str] = []
+   563→    if "descriptors" in requested:
+   564→        property_names, computers["descriptors"] = _descriptor_computer()
+   565→    if "atompair_count" in requested:
+   566→        computers["atompair_count"] = _atompair_computer()
+   567→    if "avalon_count" in requested:
+   568→        computers["avalon_count"] = _avalon_computer()
+   569→    if "ecfp" in requested or "morgan_full" in requested or "morgan_scaffold" in requested:
+   570→        morgan_vector = _morgan_computer()
+   571→        if "ecfp" in requested:
+   572→            computers["ecfp"] = morgan_vector
+   573→        if "morgan_full" in requested:
+   574→            computers["morgan_full"] = morgan_vector
+   575→        if "morgan_scaffold" in requested:
+   576→            computers["morgan_scaffold"] = _morgan_scaffold_computer(morgan_vector)
+   577→
+   578→    if "rdkit_fingerprint" in requested:
+   579→        from rdkit import Chem
+   580→
+   581→        def rdkit_vector(mol: Any) -> np.ndarray:
+   582→            bits = Chem.RDKFingerprint(mol, fpSize=RDKIT_FP_BITS)
+   583→            return _onbits_vector(bits, RDKIT_FP_BITS)
+   584→
+   585→        computers["rdkit_fingerprint"] = rdkit_vector
+   586→
+   587→    columns: list[str] = []
+   588→    family_widths: dict[str, int] = {}
+   589→    for family in requested:
+   590→        if family == "descriptors":
+   591→            width = len(property_names)
+   592→            columns.extend(f"desc_{name}" for name in property_names)
+   593→        else:
+   594→            width = _FAMILY_BITS[family]
+   595→            prefix = FAMILY_PREFIXES[family]
+   596→            columns.extend(f"{prefix}{index}" for index in range(width))
+   597→        family_widths[family] = width
+   598→    return computers, columns, family_widths
+   599→
+   600→
+   601→def _lightgbm_estimators() -> tuple[Any, Any] | None:
+   602→    """Return ``(LGBMClassifier, LGBMRegressor)`` or None when lightgbm is absent.
+   603→
+   604→    Imported lazily on every call: lightgbm is an OPTIONAL dependency and
+   605→    must never appear on this module's import path (a ``None`` in
+   606→    ``sys.modules`` from a test monkeypatch also lands here).
+   607→    """
+   608→    try:
+   609→        from lightgbm import LGBMClassifier, LGBMRegressor
+   610→    except ImportError:
+   611→        return None
+   612→    return LGBMClassifier, LGBMRegressor
+   613→
+   614→
+   615→def _random_forest_model(task: str, random_state: int) -> Any:
+   616→    """Instantiate the random-forest estimator for ``task`` (lazy sklearn)."""
+   617→    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+   618→
+   619→    estimator_class = (
+   620→        RandomForestClassifier if task == "classification" else RandomForestRegressor
+   621→    )
+   622→    return estimator_class(n_estimators=200, random_state=random_state)
+   623→
+   624→
+   625→def _lightgbm_model(task: str, random_state: int) -> Any | None:
+   626→    """Instantiate the LightGBM estimator for ``task`` or None if missing."""
+   627→    estimators = _lightgbm_estimators()
+   628→    if estimators is None:
+   629→        return None
+   630→    classifier, regressor = estimators
+   631→    estimator_class = classifier if task == "classification" else regressor
+   632→    return estimator_class(n_estimators=200, random_state=random_state, verbosity=-1)
+   633→
+   634→
+   635→def _validated_target(
+   636→    frame: pd.DataFrame, target: Sequence[float] | None
+   637→) -> pd.Series | None:
+   638→    """Materialise ``target`` and guard length/NaN/inf BEFORE any model fit."""
+   639→    if target is None:
+   640→        return None
+   641→    y_series = pd.Series(list(target))
+   642→    if len(y_series) != len(frame):
+   643→        raise ValueError(
+   644→            f"target length {len(y_series)} does not match frame length {len(frame)}"
+   645→        )
+   646→    if bool(y_series.isna().any()):
+   647→        raise ValueError(
+   648→            "target contains NaN/None values -- clean or drop them before ranking"
+   649→        )
+   650→    numeric = pd.to_numeric(y_series, errors="coerce")
+   651→    if bool(np.isinf(numeric.to_numpy(dtype=float)).any()):
+   652→        raise ValueError("target contains non-finite values (+/-inf)")
+   653→    return y_series
+   654→
+   655→
+   656→def _infer_task(y_series: pd.Series) -> str:
+   657→    """classification iff the target is non-numeric or has <= 2 unique values."""
+   658→    numeric = pd.to_numeric(y_series, errors="coerce")
+   659→    non_numeric = bool((numeric.isna() & y_series.notna()).any())
+   660→    if non_numeric or int(y_series.nunique()) <= 2:
+   661→        return "classification"
+   662→    return "regression"
+   663→
+   664→
+   665→def _model_importances(
+   666→    frame: pd.DataFrame,
+   667→    y_series: pd.Series,
+   668→    *,
+   669→    method: str,
+   670→    task: str,
+   671→    random_state: int,
+   672→) -> pd.Series:
+   673→    """Fit the chosen estimator and return its per-column importances."""
+   674→    x_matrix = frame.fillna(0).astype(float).to_numpy()
+   675→    y_values = y_series.to_numpy()
+   676→    model: Any
+   677→    if method == "lightgbm":
+   678→        model = _lightgbm_model(task, random_state)
+   679→        if model is None:
+   680→            _LOG.info(
+   681→                "lightgbm is not installed -- falling back to random_forest ranking"
+   682→            )
+   683→            model = _random_forest_model(task, random_state)
+   684→    else:
+   685→        model = _random_forest_model(task, random_state)
+   686→    model.fit(x_matrix, y_values)
+   687→    importances = np.asarray(model.feature_importances_, dtype=float)
+   688→    return pd.Series(importances, index=frame.columns)
+   689→
+   690→
+   691→def _descending(scores: pd.Series) -> pd.Series:
+   692→    """Order a score series descending; ties keep their original position."""
+   693→    order = sorted(
+   694→        range(len(scores)),
+   695→        key=lambda position: (-float(scores.iloc[position]), position),
+   696→    )
+   697→    return scores.iloc[order]
+   698→
+   699→
+   700→def rank_features(
+   701→    frame: pd.DataFrame,
+   702→    target: Sequence[float] | None = None,
+   703→    *,
+   704→    method: str = "auto",
+   705→    task: str = "auto",
+   706→    random_state: int = 42,
+   707→) -> pd.Series:
+   708→    """Rank feature columns by importance, descending.
+   709→
+   710→    Parameters
+   711→    ----------
+   712→    frame:
+   713→        Feature matrix (e.g. from :func:`compute_feature_frame`, but any
+   714→        numeric frame works).  NaNs are filled with 0 before ranking.
+   715→    target:
+   716→        Optional target values, one per frame row.  String labels (a
+   717→        ``Sequence[str]`` at runtime) select the classification task.
+   718→        ``None`` selects the variance method.
+   719→    method:
+   720→        ``'auto'`` (variance when ``target`` is None, lightgbm when
+   721→        importable, random forest otherwise), ``'variance'``,
+   722→        ``'random_forest'`` or ``'lightgbm'``.
+   723→    task:
+   724→        ``'auto'`` (classification iff the target is non-numeric or has
+   725→        <= 2 unique values), ``'classification'`` or ``'regression'``.
+   726→        Only used by the model-based methods.
+   727→    random_state:
+   728→        Seed for the model-based methods (deterministic rankings).
+   729→
+   730→    Returns
+   731→    -------
+   732→    pandas.Series
+   733→        One importance per column of ``frame``, sorted descending, index
+   734→        = ``frame.columns`` (ties keep frame column order).  Variance
+   735→        scores are ``X.var(axis=0)`` over ``frame.fillna(0)`` (constant
+   736→        columns score exactly 0.0); model scores are the fitted
+   737→        estimator's ``feature_importances_``.
+   738→
+   739→    Raises
+   740→    ------
+   741→    ValueError
+   742→        If ``method``/``task`` is unknown; if ``target`` is given but its
+   743→        length differs from ``frame``; or if ``target`` contains NaN,
+   744→        None or +/-inf (guarded BEFORE any model is fitted).  A
+   745→        model-based ``method`` with ``target=None`` also raises.
+   746→
+   747→    Notes
+   748→    -----
+   749→    LightGBM is strictly optional: ``method='lightgbm'`` (explicitly or
+   750→    via ``'auto'``) falls back to ``'random_forest'`` -- with an info log
+   751→    line -- whenever ``import lightgbm`` fails, so the function never
+   752→    raises over a missing optional dependency.  scikit-learn is imported
+   753→    inside this call chain, keeping the module import path at
+   754→    rdkit + numpy + pandas.
+   755→    """
+   756→    if method not in _RANK_METHODS:
+   757→        raise ValueError(
+   758→            f"unknown ranking method {method!r}; valid methods: "
+   759→            + ", ".join(_RANK_METHODS)
+   760→        )
+   761→    if task not in _RANK_TASKS:
+   762→        raise ValueError(
+   763→            f"unknown task {task!r}; valid tasks: " + ", ".join(_RANK_TASKS)
+   764→        )
+   765→
+   766→    y_series = _validated_target(frame, target)
+   767→
+   768→    if method == "auto":
+   769→        if target is None:
+   770→            method = "variance"
+   771→        elif _lightgbm_estimators() is not None:
+   772→            method = "lightgbm"
+   773→        else:
+   774→            method = "random_forest"
+   775→
+   776→    if method == "variance":
+   777→        scores = frame.fillna(0).astype(float).var(axis=0)
+   778→    else:
+   779→        if y_series is None:
+   780→            raise ValueError(
+   781→                f"method={method!r} requires a target -- pass target=... or use "
+   782→                "method='variance'"
+   783→            )
+   784→        resolved_task = task if task != "auto" else _infer_task(y_series)
+   785→        scores = _model_importances(
+   786→            frame, y_series, method=method, task=resolved_task, random_state=random_state
+   787→        )
+   788→    return _descending(scores)
+   789→
+   790→
+   791→def select_top_features(
+   792→    frame: pd.DataFrame,
+   793→    scores: pd.Series,
+   794→    k: int,
+   795→    *,
+   796→    median_prefilter: bool = True,
+   797→    method: str = "",
+   798→) -> FeatureSelection:
+   799→    """Select the top-K features with the rar's two-layer strategy.
+   800→
+   801→    Parameters
+   802→    ----------
+   803→    frame:
+   804→        Feature matrix whose columns carry family prefixes (columns from
+   805→        :func:`compute_feature_frame`; every column must map through
+   806→        :func:`family_of_column`).
+   807→    scores:
+   808→        Importance scores, e.g. the output of :func:`rank_features`.  Its
+   809→        index must equal ``frame.columns`` exactly.
+   810→    k:
+   811→        Number of features to keep.  Must be a positive integer; ``k``
+   812→        greater than or equal to the candidate count returns ALL
+   813→        candidates in score order.
+   814→    median_prefilter:
+   815→        Layer 1 (on by default): within EACH family present in the frame,
+   816→        keep only the columns scoring >= that family's median -- the
+   817→        rar's per-family ``SelectFromModel(threshold='median')``.  With
+   818→        ``False``, every column is a candidate for layer 2.
+   819→    method:
+   820→        Label recorded verbatim on the returned :class:`FeatureSelection`
+   821→        (e.g. the ranking method name); not used for computation.
+   822→
+   823→    Returns
+   824→    -------
+   825→    FeatureSelection
+   826→        The scores as passed in, the selected columns in rank order
+   827→        (layer-2 top-K with stable tie-break on frame column order), the
+   828→        per-family counts of the selected columns (canonical family
+   829→        order), and the ``method`` label.
+   830→
+   831→    Raises
+   832→    ------
+   833→    ValueError
+   834→        If ``scores.index`` differs from ``frame.columns`` (set OR
+   835→        order), ``k`` is not an integer (bools rejected) or is <= 0, or a
+   836→        column does not carry a known family prefix.
+   837→
+   838→    Notes
+   839→    -----
+   840→    Both layers are score-order driven and deterministic: given the same
+   841→    ``scores`` and column order, the same features are selected.  A
+   842→    single-column family always survives layer 1 (its median is its own
+   843→    score).
+   844→    """
+   845→    columns = list(frame.columns)
+   846→    score_index = list(scores.index)
+   847→    if score_index != columns:
+   848→        for position, (label, column) in enumerate(zip(score_index, columns)):
+   849→            if label != column:
+   850→                raise ValueError(
+   851→                    "scores.index must equal frame.columns exactly; mismatch at "
+   852→                    f"position {position}: {label!r} != {column!r}"
+   853→                )
+   854→        raise ValueError(
+   855→            "scores.index must equal frame.columns exactly; got "
+   856→            f"{len(score_index)} scores for {len(columns)} columns"
+   857→        )
+   858→    if isinstance(k, bool) or not isinstance(k, (int, np.integer)):
+   859→        # ValueError (not TypeError) by contract: k edges must raise ValueError.
+   860→        raise ValueError(f"k must be an integer, got {k!r}")  # noqa: TRY004
+   861→    k = int(k)
+   862→    if k <= 0:
+   863→        raise ValueError(f"k must be > 0, got {k}")
+   864→
+   865→    column_families = [family_of_column(column) for column in columns]
+   866→    position_of = {column: position for position, column in enumerate(columns)}
+   867→
+   868→    candidates = columns
+   869→    if median_prefilter:
+   870→        family_positions: dict[str, list[int]] = {}
+   871→        for position, family in enumerate(column_families):
+   872→            family_positions.setdefault(family, []).append(position)
+   873→        kept: list[int] = []
+   874→        for positions in family_positions.values():
+   875→            median = float(np.median([float(scores.iloc[p]) for p in positions]))
+   876→            kept.extend(p for p in positions if float(scores.iloc[p]) >= median)
+   877→        candidates = [columns[position] for position in sorted(kept)]
+   878→
+   879→    ordered = sorted(
+   880→        candidates,
+   881→        key=lambda column: (-float(scores.iloc[position_of[column]]), position_of[column]),
+   882→    )
+   883→    selected = ordered[: min(k, len(ordered))]
+   884→
+   885→    tallies: dict[str, int] = {}
+   886→    for family in (family_of_column(column) for column in selected):
+   887→        tallies[family] = tallies.get(family, 0) + 1
+   888→    family_counts = {
+   889→        family: tallies[family] for family in FEATURE_FAMILIES if family in tallies
+   890→    }
+   891→    return FeatureSelection(
+   892→        scores=scores.copy(),
+   893→        selected=selected,
+   894→        family_counts=family_counts,
+   895→        method=method,
+   896→    )
+   897→
+   898→
+   899→def selection_metadata(
+   900→    selection: FeatureSelection,
+   901→    report: FeatureReport,
+   902→    *,
+   903→    k: int,
+   904→    families: Iterable[str] | None = None,
+   905→) -> dict[str, Any]:
+   906→    """Build the JSON-ready metadata dict for a feature-selection run.
+   907→
+   908→    Parameters
+   909→    ----------
+   910→    selection:
+   911→        The :class:`FeatureSelection` produced by
+   912→        :func:`select_top_features`.
+   913→    report:
+   914→        The :class:`FeatureReport` produced alongside the feature frame.
+   915→    k:
+   916→        The K that was requested (recorded verbatim as ``k_requested``).
+   917→    families:
+   918→        Optional iterable restricting the ``fingerprint_sizes`` entry to
+   919→        the named families (e.g. the families a GUI user ticked).  When
+   920→        ``None``, the families recorded in ``report.families`` are used.
+   921→        ``families_computed`` always mirrors ``report.families``.
+   922→
+   923→    Returns
+   924→    -------
+   925→    dict
+   926→        Keys: ``selected_features`` (rank order), ``descriptor_names``
+   927→        (selected ``desc_`` columns with the prefix stripped),
+   928→        ``fingerprint_sizes`` (family -> bit length for the six
+   929→        fingerprint families in scope), ``family_counts``,
+   930→        ``families_computed``, ``k_requested``, ``method``,
+   931→        ``n_molecules``, ``dropped`` (``[row, smiles]`` lists) and
+   932→        ``total_features``.  Every value is a plain Python type, so
+   933→        ``json.dumps`` works without a ``default=`` hook.
+   934→
+   935→    Raises
+   936→    ------
+   937→    ValueError
+   938→        If ``families`` is a bare string (a common call-site typo that
+   939→        would otherwise silently filter by single letters).
+   940→    """
+   941→    if isinstance(families, str):
+   942→        # ValueError (not TypeError): consistent with compute_feature_frame.
+   943→        raise ValueError(  # noqa: TRY004 — consistent module error currency
+   944→            "families must be an iterable of family names, not a single string; "
+   945→            f"got {families!r}"
+   946→        )
+   947→    computed = set(families) if families is not None else set(report.families)
+   948→    descriptor_prefix = FAMILY_PREFIXES["descriptors"]
+   949→    return {
+   950→        "selected_features": list(selection.selected),
+   951→        "descriptor_names": [
+   952→            column[len(descriptor_prefix):]
+   953→            for column in selection.selected
+   954→            if column.startswith(descriptor_prefix)
+   955→        ],
+   956→        "fingerprint_sizes": {
+   957→            family: bits
+   958→            for family, bits in _FINGERPRINT_SIZES.items()
+   959→            if family in computed
+   960→        },
+   961→        "family_counts": dict(selection.family_counts),
+   962→        "families_computed": dict(report.families),
+   963→        "k_requested": int(k),
+   964→        "method": selection.method,
+   965→        "n_molecules": int(report.n_valid),
+   966→        "dropped": [[int(row), str(smi)] for row, smi in report.dropped],
+   967→        "total_features": int(report.total_columns),
+   968→    }
+   969→

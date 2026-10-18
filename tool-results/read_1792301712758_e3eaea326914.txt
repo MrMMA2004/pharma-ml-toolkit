@@ -1,0 +1,502 @@
+  1101→                "pandas + sklearn",
+  1102→            ),
+  1103→            (
+  1104→                "Generative",
+  1105→                ("Evolve molecules against QED / LogP objectives; adaptive runs show "
+  1106→                 "the operator-mix learning curve."),
+  1107→                "RDKit",
+  1108→            ),
+  1109→        ]
+  1110→        for name, blurb, needs in entries:
+  1111→            row = ttk.Frame(guide, style="Card.TFrame")
+  1112→            grid_append(guide, row, sticky="ew", pady=2)
+  1113→            ttk.Label(row, text=name, style="Field.TLabel",
+  1114→                      font=("TkDefaultFont", 10, "bold")).pack(side="left")
+  1115→            ttk.Label(row, text=f" — {blurb}", style="CardMuted.TLabel",
+  1116→                      wraplength=560, justify="left").pack(side="left", padx=(8, 0))
+  1117→            ttk.Label(row, text=f"[{needs}]", style="CardMuted.TLabel").pack(
+  1118→                side="right")
+  1119→
+  1120→        if self.pharmaml is None:
+  1121→            broken = make_card(page.grid, "pharmaml could not be imported",
+  1122→                               span=2, row=3, column=0)
+  1123→            grid_append(broken, ttk.Label(broken, text=self.pharmaml_error,
+  1124→                                           style="CardMuted.TLabel",
+  1125→                                           wraplength=620))
+  1126→            grid_append(broken, ttk.Label(broken, text=_PHARMAML_HINT,
+  1127→                                          style="CardMuted.TLabel",
+  1128→                                          justify="left"), pady=(6, 0))
+  1129→
+  1130→    # ------------------------------------------------------------------ #
+  1131→    # Chemistry tab
+  1132→    # ------------------------------------------------------------------ #
+  1133→    def _build_chemistry_tab(self) -> None:
+  1134→        page = self._new_page("Chemistry")
+  1135→
+  1136→        conv = make_card(
+  1137→            page.grid, "Affinity conversion", row=0, column=0,
+  1138→            subtitle="IC50/Ki → pIC50/pKi. Censored entries like '<100' are handled.",
+  1139→        )
+  1140→        self._aff_mode = ttk.Combobox(conv, state="readonly", width=22,
+  1141→                                      values=("IC50 → pIC50", "Ki → pKi"))
+  1142→        self._aff_mode.set("IC50 → pIC50")
+  1143→        form_row(conv, "Endpoint", self._aff_mode)
+  1144→        self._aff_value = ttk.Entry(conv, width=22)
+  1145→        self._aff_value.insert(0, "100")
+  1146→        form_row(conv, "Value", self._aff_value)
+  1147→        self._aff_unit = ttk.Combobox(conv, state="readonly", width=22,
+  1148→                                      values=("nM", "uM", "µM", "mM", "M", "pM"))
+  1149→        self._aff_unit.set("nM")
+  1150→        form_row(conv, "Unit", self._aff_unit)
+  1151→        button = self._action_button(conv, "Convert", self._convert_affinity,
+  1152→                                     tooltip="-log10 of the value converted to molar units.")
+  1153→        button.grid(row=conv.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1154→        self._aff_result = ttk.Label(conv, text="—", style="Result.TLabel",
+  1155→                                     font=self._mono_result)
+  1156→        self._aff_result.grid(row=button.grid_info()["row"], column=1,
+  1157→                              sticky="w", padx=(10, 0))
+  1158→        bind_enter(self._aff_value, button)
+  1159→        copy_btn = self._action_button(conv, "Copy", lambda: self._copy(
+  1160→            self._aff_result.cget("text")))
+  1161→        copy_btn.grid(row=conv.grid_size()[1], column=0, sticky="w")
+  1162→
+  1163→        mass = make_card(page.grid, "Molar mass", row=0, column=1,
+  1164→                         subtitle="Formula → g/mol (works with no heavy dependencies installed).")
+  1165→        self._formula = ttk.Entry(mass, width=22)
+  1166→        self._formula.insert(0, "C8H10N4O2")
+  1167→        form_row(mass, "Formula", self._formula)
+  1168→        button = self._action_button(mass, "Weigh", self._molar_mass,
+  1169→                                     tooltip="Supports hydrates (MgSO4.7H2O) and groups like Ca(OH)2.")
+  1170→        button.grid(row=mass.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1171→        self._mass_result = ttk.Label(mass, text="—", style="Result.TLabel",
+  1172→                                      font=self._mono_result)
+  1173→        self._mass_result.grid(row=button.grid_info()["row"], column=1,
+  1174→                               sticky="w", padx=(10, 0))
+  1175→        bind_enter(self._formula, button)
+  1176→
+  1177→        desc = make_card(page.grid, "SMILES inspector", row=1, column=0,
+  1178→                         subtitle="Every RDKit 2D descriptor for one molecule (type to filter).")
+  1179→        self._smiles_entry = ttk.Entry(desc, width=34)
+  1180→        self._smiles_entry.insert(0, "CC(=O)Oc1ccccc1C(=O)O")
+  1181→        form_row(desc, "SMILES", self._smiles_entry)
+  1182→        button = self._action_button(desc, "Analyse", self._analyse_smiles, primary=True,
+  1183→                                     tooltip="Computes the ~200 RDKit descriptors in a worker thread.")
+  1184→        button.grid(row=desc.grid_size()[1], column=0, sticky="w", pady=(4, 0))
+  1185→        self._smiles_summary = ttk.Label(desc, text="—", style="CardMuted.TLabel",
+  1186→                                         wraplength=420, justify="left")
+  1187→        self._smiles_summary.grid(row=button.grid_info()["row"], column=1,
+  1188→                                  sticky="w", padx=(10, 0))
+  1189→        bind_enter(self._smiles_entry, button)
+  1190→        self._desc_search = ttk.Entry(desc, width=24)
+  1191→        self._desc_search.insert(0, "")
+  1192→        self._desc_search.bind("<KeyRelease>", self._filter_descriptors)
+  1193→        form_row(desc, "Filter", self._desc_search)
+  1194→        tree_frame = ttk.Frame(desc, style="Card.TFrame")
+  1195→        tree_frame.grid(row=desc.grid_size()[1], column=0, columnspan=2,
+  1196→                        sticky="nsew", pady=(4, 0))
+  1197→        desc.rowconfigure(tree_frame.grid_info()["row"], weight=1)
+  1198→        self._desc_tree = ttk.Treeview(tree_frame, columns=("descriptor", "value"),
+  1199→                                       show="headings", height=9)
+  1200→        self._desc_tree.heading("descriptor", text="descriptor")
+  1201→        self._desc_tree.heading("value", text="value")
+  1202→        self._desc_tree.column("descriptor", width=200, stretch=True)
+  1203→        self._desc_tree.column("value", width=130, stretch=False)
+  1204→        desc_bar = ttk.Scrollbar(tree_frame, orient="vertical",
+  1205→                                 command=self._desc_tree.yview)
+  1206→        self._desc_tree.configure(yscrollcommand=desc_bar.set)
+  1207→        self._desc_tree.pack(side="left", fill="both", expand=True)
+  1208→        desc_bar.pack(side="right", fill="y")
+  1209→        save_btn = self._action_button(desc, "Save descriptors as CSV…",
+  1210→                                       self._save_descriptors)
+  1211→        save_btn.grid(row=desc.grid_size()[1], column=0, columnspan=2, sticky="w",
+  1212→                      pady=(6, 0))
+  1213→
+  1214→        tani = make_card(page.grid, "Tanimoto similarity", row=1, column=1,
+  1215→                         subtitle="Morgan fingerprint overlap between two molecules.")
+  1216→        self._tani_a = ttk.Entry(tani, width=34)
+  1217→        self._tani_a.insert(0, "CC(=O)Oc1ccccc1C(=O)O")
+  1218→        form_row(tani, "SMILES A", self._tani_a)
+  1219→        self._tani_b = ttk.Entry(tani, width=34)
+  1220→        self._tani_b.insert(0, "CC(=O)Nc1ccc(O)cc1")
+  1221→        form_row(tani, "SMILES B", self._tani_b)
+  1222→        button = self._action_button(tani, "Compare", self._compare_similarity,
+  1223→                                     tooltip="1.0 = identical fingerprint, 0.0 = nothing shared.")
+  1224→        button.grid(row=tani.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1225→        self._tani_result = ttk.Label(tani, text="—", style="Result.TLabel",
+  1226→                                      font=self._mono_result)
+  1227→        self._tani_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
+  1228→                               padx=(10, 0))
+  1229→        self._tani_verdict = ttk.Label(tani, text="", style="CardMuted.TLabel",
+  1230→                                       wraplength=300, justify="left")
+  1231→        self._tani_verdict.grid(row=tani.grid_size()[1], column=0, columnspan=2,
+  1232→                                sticky="w", pady=(6, 0))
+  1233→        bind_enter(self._tani_b, button)
+  1234→
+  1235→    def _convert_affinity(self) -> None:
+  1236→        if not self._require_pharmaml() or not self._require("pandas", "conversion"):
+  1237→            return
+  1238→        from pharmaml.chem import ic50_to_pic50, ki_to_pki
+  1239→
+  1240→        mode = self._aff_mode.get()
+  1241→        func = ic50_to_pic50 if mode.startswith("IC50") else ki_to_pki
+  1242→        try:
+  1243→            value = func(self._aff_value.get().strip(), unit=self._aff_unit.get())
+  1244→        except Exception as exc:  # noqa: BLE001
+  1245→            self._show_error("Conversion failed", exc)
+  1246→            return
+  1247→        if value is None:
+  1248→            self._aff_result.configure(text="n/a (unparseable entry)")
+  1249→            return
+  1250→        self._aff_result.configure(text=f"{value:.3f}")
+  1251→
+  1252→    def _molar_mass(self) -> None:
+  1253→        if not self._require_pharmaml():
+  1254→            return
+  1255→        from pharmaml.pharma.units import molar_mass
+  1256→
+  1257→        try:
+  1258→            value = molar_mass(self._formula.get().strip())
+  1259→        except Exception as exc:  # noqa: BLE001
+  1260→            self._show_error("Could not parse the formula", exc)
+  1261→            return
+  1262→        self._mass_result.configure(text=f"{value:,.3f} g/mol")
+  1263→
+  1264→    def _analyse_smiles(self) -> None:
+  1265→        if not self._require_pharmaml() or not self._require("rdkit", "descriptors"):
+  1266→            return
+  1267→        smiles = self._smiles_entry.get().strip()
+  1268→        if not smiles:
+  1269→            messagebox.showwarning("Empty SMILES", "Type a SMILES string first.")
+  1270→            return
+  1271→
+  1272→        def work() -> Any:
+  1273→            from pharmaml.chem import compute_descriptors
+  1274→
+  1275→            return compute_descriptors([smiles], progress=False)
+  1276→
+  1277→        self._start_job(f"descriptors for {smiles[:28]}…", work,
+  1278→                        self._render_descriptors)
+  1279→
+  1280→    def _render_descriptors(self, frame: Any) -> None:
+  1281→        self._desc_frame = frame
+  1282→        self._desc_rows = []
+  1283→        self._desc_tree.delete(*self._desc_tree.get_children())
+  1284→        items = sorted(zip(frame.columns, frame.iloc[0].tolist()))
+  1285→        for name, value in items:
+  1286→            text = _cell_text(value, limit=40)
+  1287→            item = self._desc_tree.insert("", "end", values=(name, text))
+  1288→            self._desc_rows.append((item, str(name), text))
+  1289→        highlights = {
+  1290→            "MolWt": "MW", "MolLogP": "LogP", "TPSA": "TPSA",
+  1291→            "NumHBD": "H-bond donors", "NumHBA": "H-bond acceptors",
+  1292→            "NumRotatableBonds": "rotatable bonds", "RingCount": "rings",
+  1293→        }
+  1294→        found = [f"{short} {format_number(frame.iloc[0][key])}"
+  1295→                 for key, short in highlights.items() if key in frame.columns]
+  1296→        self._smiles_summary.configure(
+  1297→            text=("  ·  ".join(found) if found else f"{len(items)} descriptors")
+  1298→        )
+  1299→        self._filter_descriptors()
+  1300→
+  1301→    def _filter_descriptors(self, _event: Any = None) -> None:
+  1302→        query = self._desc_search.get().strip().lower()
+  1303→        for item, name, _value in self._desc_rows:
+  1304→            if query and query not in name.lower():
+  1305→                self._desc_tree.detach(item)
+  1306→            else:
+  1307→                self._desc_tree.move(item, "", "end")
+  1308→
+  1309→    def _save_descriptors(self) -> None:
+  1310→        if self._desc_frame is None:
+  1311→            messagebox.showinfo("Nothing to save", "Analyse a SMILES string first.")
+  1312→            return
+  1313→        if not self._require_pharmaml():
+  1314→            return
+  1315→        path = filedialog.asksaveasfilename(
+  1316→            title="Save descriptors", defaultextension=".csv",
+  1317→            filetypes=[("CSV table", "*.csv")],
+  1318→        )
+  1319→        if not path:
+  1320→            return
+  1321→        try:
+  1322→            from pharmaml.utils.io import write_table
+  1323→
+  1324→            written = write_table(self._desc_frame, path)
+  1325→            messagebox.showinfo("Saved", f"Descriptor table written to\n{written}")
+  1326→        except Exception as exc:  # noqa: BLE001
+  1327→            self._show_error("Could not save", exc)
+  1328→
+  1329→    def _compare_similarity(self) -> None:
+  1330→        if not self._require_pharmaml() or not self._require("rdkit", "fingerprints"):
+  1331→            return
+  1332→        from pharmaml.chem import compute_fingerprints, tanimoto_from_bitarrays
+  1333→
+  1334→        first = self._tani_a.get().strip()
+  1335→        second = self._tani_b.get().strip()
+  1336→        if not first or not second:
+  1337→            messagebox.showwarning("Missing SMILES", "Both molecules are needed.")
+  1338→            return
+  1339→        try:
+  1340→            prints, valid = compute_fingerprints([first, second])
+  1341→        except Exception as exc:  # noqa: BLE001
+  1342→            self._show_error("Fingerprint failed", exc)
+  1343→            return
+  1344→        if len(valid) < 2:
+  1345→            self._tani_result.configure(text="invalid SMILES")
+  1346→            self._tani_verdict.configure(
+  1347→                text="One of the two strings is not valid RDKit input."
+  1348→            )
+  1349→            return
+  1350→        score = float(tanimoto_from_bitarrays(prints[0], prints[1]))
+  1351→        if score >= 0.85:
+  1352→            verdict = "near-identical fingerprints"
+  1353→        elif score >= 0.6:
+  1354→            verdict = "clearly related scaffolds"
+  1355→        elif score >= 0.35:
+  1356→            verdict = "loosely related"
+  1357→        else:
+  1358→            verdict = "essentially unrelated"
+  1359→        self._tani_result.configure(text=f"{score:.3f}")
+  1360→        self._tani_verdict.configure(text=f"{verdict} (1.0 = identical, 0.0 = nothing shared)")
+  1361→
+  1362→    # ------------------------------------------------------------------ #
+  1363→    # PK / PD tab
+  1364→    # ------------------------------------------------------------------ #
+  1365→    def _build_pk_tab(self) -> None:
+  1366→        page = self._new_page("PK / PD")
+  1367→
+  1368→        half = make_card(page.grid, "Half-life ↔ elimination", row=0, column=0,
+  1369→                         subtitle="k(e) = ln2 / t½  ·  accumulation over a dosing interval.")
+  1370→        self._thalf_a = ttk.Entry(half, width=14); self._thalf_a.insert(0, "4")
+  1371→        form_row(half, "t½ (h)", self._thalf_a)
+  1372→        self._ke_a = ttk.Entry(half, width=14)
+  1373→        form_row(half, "k(e) (1/h)", self._ke_a)
+  1374→        self._tau_a = ttk.Entry(half, width=14); self._tau_a.insert(0, "6")
+  1375→        form_row(half, "dosing interval τ (h)", self._tau_a)
+  1376→        button = self._action_button(half, "Compute", self._halflife_math,
+  1377→                                     tooltip="Derives k(e), accumulation ratio and time to steady state.")
+  1378→        button.grid(row=half.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1379→        self._half_result = ttk.Label(half, text="—", style="Result.TLabel",
+  1380→                                      font=self._mono_result, wraplength=330, justify="left")
+  1381→        self._half_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
+  1382→                               padx=(10, 0))
+  1383→        bind_enter(self._tau_a, button)
+  1384→
+  1385→        ivp = make_card(page.grid, "IV bolus concentration profile", row=0, column=1,
+  1386→                        subtitle="C(t) = C0·e^(−k(e)·t) with half-life reference lines.")
+  1387→        self._iv_c0 = ttk.Entry(ivp, width=14); self._iv_c0.insert(0, "10")
+  1388→        form_row(ivp, "C0 (mg/L)", self._iv_c0)
+  1389→        self._iv_thalf = ttk.Entry(ivp, width=14); self._iv_thalf.insert(0, "4")
+  1390→        form_row(ivp, "t½ (h)", self._iv_thalf)
+  1391→        self._iv_hours = ttk.Entry(ivp, width=14); self._iv_hours.insert(0, "24")
+  1392→        form_row(ivp, "horizon (h)", self._iv_hours)
+  1393→        button = self._action_button(ivp, "Plot profile", self._plot_iv_bolus, primary=True,
+  1394→                                     tooltip="Draws the decay curve with 1·t½, 2·t½, 3·t½ markers.")
+  1395→        button.grid(row=ivp.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1396→        self._iv_host = self._figure_host(ivp)
+  1397→
+  1398→        oral = make_card(page.grid, "Oral absorption PK", row=1, column=0,
+  1399→                         subtitle="One-compartment first-order absorption.")
+  1400→        self._po_dose = ttk.Entry(oral, width=14); self._po_dose.insert(0, "250")
+  1401→        form_row(oral, "dose (mg)", self._po_dose)
+  1402→        self._po_ka = ttk.Entry(oral, width=14); self._po_ka.insert(0, "1.2")
+  1403→        form_row(oral, "k(a) (1/h)", self._po_ka)
+  1404→        self._po_ke = ttk.Entry(oral, width=14); self._po_ke.insert(0, "0.173")
+  1405→        form_row(oral, "k(e) (1/h)", self._po_ke)
+  1406→        self._po_vd = ttk.Entry(oral, width=14); self._po_vd.insert(0, "40")
+  1407→        form_row(oral, "Vd (L)", self._po_vd)
+  1408→        self._po_f = ttk.Entry(oral, width=14); self._po_f.insert(0, "90")
+  1409→        form_row(oral, "bioavailability F (%)", self._po_f)
+  1410→        button = self._action_button(oral, "Compute", self._oral_pk)
+  1411→        button.grid(row=oral.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1412→        self._oral_result = ttk.Label(oral, text="—", style="Result.TLabel",
+  1413→                                      font=self._mono_result, wraplength=320, justify="left")
+  1414→        self._oral_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
+  1415→                               padx=(10, 0))
+  1416→        bind_enter(self._po_f, button)
+  1417→
+  1418→        crcl = make_card(page.grid, "Cockcroft–Gault creatinine clearance", row=1,
+  1419→                         column=1, subtitle="Plus the renal dose adjustment for a normal regimen.")
+  1420→        self._cg_age = ttk.Entry(crcl, width=14); self._cg_age.insert(0, "55")
+  1421→        form_row(crcl, "age (years)", self._cg_age)
+  1422→        self._cg_weight = ttk.Entry(crcl, width=14); self._cg_weight.insert(0, "70")
+  1423→        form_row(crcl, "weight (kg)", self._cg_weight)
+  1424→        self._cg_scr = ttk.Entry(crcl, width=14); self._cg_scr.insert(0, "1.0")
+  1425→        form_row(crcl, "serum creatinine (mg/dL)", self._cg_scr)
+  1426→        self._cg_sex = ttk.Combobox(crcl, state="readonly", width=12,
+  1427→                                    values=("male", "female"))
+  1428→        self._cg_sex.set("male")
+  1429→        form_row(crcl, "sex", self._cg_sex)
+  1430→        self._cg_dose = ttk.Entry(crcl, width=14); self._cg_dose.insert(0, "500")
+  1431→        form_row(crcl, "normal dose (mg)", self._cg_dose)
+  1432→        button = self._action_button(crcl, "Compute", self._creatinine_math)
+  1433→        button.grid(row=crcl.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1434→        self._cg_result = ttk.Label(crcl, text="—", style="Result.TLabel",
+  1435→                                    font=self._mono_result, wraplength=300, justify="left")
+  1436→        self._cg_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
+  1437→                             padx=(10, 0))
+  1438→        bind_enter(self._cg_dose, button)
+  1439→
+  1440→        doses = make_card(page.grid, "Loading & maintenance dosing", row=2, column=0)
+  1441→        self._md_cl = ttk.Entry(doses, width=14); self._md_cl.insert(0, "5")
+  1442→        form_row(doses, "clearance CL (L/h)", self._md_cl)
+  1443→        self._md_css = ttk.Entry(doses, width=14); self._md_css.insert(0, "8")
+  1444→        form_row(doses, "target Css (mg/L)", self._md_css)
+  1445→        self._md_tau = ttk.Entry(doses, width=14); self._md_tau.insert(0, "8")
+  1446→        form_row(doses, "interval τ (h)", self._md_tau)
+  1447→        self._md_f = ttk.Entry(doses, width=14); self._md_f.insert(0, "90")
+  1448→        form_row(doses, "bioavailability F (%)", self._md_f)
+  1449→        self._ld_vd = ttk.Entry(doses, width=14); self._ld_vd.insert(0, "40")
+  1450→        form_row(doses, "Vd (L) — loading", self._ld_vd)
+  1451→        self._ld_target = ttk.Entry(doses, width=14); self._ld_target.insert(0, "2")
+  1452→        form_row(doses, "target C (mg/L)", self._ld_target)
+  1453→        button = self._action_button(doses, "Compute both", self._dose_design)
+  1454→        button.grid(row=doses.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1455→        self._dose_result = ttk.Label(doses, text="—", style="Result.TLabel",
+  1456→                                      font=self._mono_result, wraplength=320, justify="left")
+  1457→        self._dose_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
+  1458→                               padx=(10, 0))
+  1459→        bind_enter(self._ld_target, button)
+  1460→
+  1461→        bsa = make_card(page.grid, "BSA & weight-based dosing", row=2, column=1,
+  1462→                        subtitle="Mosteller BSA; optional maximum doses cap the result.")
+  1463→        self._bsa_height = ttk.Entry(bsa, width=14); self._bsa_height.insert(0, "175")
+  1464→        form_row(bsa, "height (cm)", self._bsa_height)
+  1465→        self._bsa_weight = ttk.Entry(bsa, width=14); self._bsa_weight.insert(0, "70")
+  1466→        form_row(bsa, "weight (kg)", self._bsa_weight)
+  1467→        self._bsa_per_m2 = ttk.Entry(bsa, width=14); self._bsa_per_m2.insert(0, "100")
+  1468→        form_row(bsa, "dose per m²", self._bsa_per_m2)
+  1469→        self._bsa_max = ttk.Entry(bsa, width=14)
+  1470→        form_row(bsa, "max dose (optional)", self._bsa_max)
+  1471→        self._wt_per_kg = ttk.Entry(bsa, width=14); self._wt_per_kg.insert(0, "15")
+  1472→        form_row(bsa, "dose per kg", self._wt_per_kg)
+  1473→        button = self._action_button(bsa, "Compute", self._bsa_math)
+  1474→        button.grid(row=bsa.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1475→        self._bsa_result = ttk.Label(bsa, text="—", style="Result.TLabel",
+  1476→                                     font=self._mono_result, wraplength=300, justify="left")
+  1477→        self._bsa_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
+  1478→                              padx=(10, 0))
+  1479→        bind_enter(self._wt_per_kg, button)
+  1480→
+  1481→        peds = make_card(page.grid, "Pediatric dose rules", row=3, column=0,
+  1482→                         subtitle="Young's rule (age) and Clark's rule (weight in lb).")
+  1483→        self._young_age = ttk.Entry(peds, width=14); self._young_age.insert(0, "6")
+  1484→        form_row(peds, "child age (years)", self._young_age)
+  1485→        self._clark_lb = ttk.Entry(peds, width=14); self._clark_lb.insert(0, "40")
+  1486→        form_row(peds, "child weight (lb)", self._clark_lb)
+  1487→        self._adult_dose = ttk.Entry(peds, width=14); self._adult_dose.insert(0, "500")
+  1488→        form_row(peds, "adult dose (mg)", self._adult_dose)
+  1489→        button = self._action_button(peds, "Compute both", self._pediatric_math)
+  1490→        button.grid(row=peds.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1491→        self._ped_result = ttk.Label(peds, text="—", style="Result.TLabel",
+  1492→                                     font=self._mono_result, wraplength=320, justify="left")
+  1493→        self._ped_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
+  1494→                              padx=(10, 0))
+  1495→        bind_enter(self._adult_dose, button)
+  1496→
+  1497→        emax = make_card(page.grid, "Emax pharmacodynamics", row=3, column=1,
+  1498→                         subtitle="E = E0 + Emax·C/(EC50 + C) — table plus the full curve.")
+  1499→        self._pd_e0 = ttk.Entry(emax, width=14); self._pd_e0.insert(0, "5")
+  1500→        form_row(emax, "baseline E0", self._pd_e0)
+  1501→        self._pd_emax = ttk.Entry(emax, width=14); self._pd_emax.insert(0, "60")
+  1502→        form_row(emax, "Emax", self._pd_emax)
+  1503→        self._pd_ec50 = ttk.Entry(emax, width=14); self._pd_ec50.insert(0, "2.5")
+  1504→        form_row(emax, "EC50", self._pd_ec50)
+  1505→        self._pd_concs = ttk.Entry(emax, width=24)
+  1506→        self._pd_concs.insert(0, "0.5, 1, 2.5, 5, 10, 25")
+  1507→        form_row(emax, "concentrations (comma list)", self._pd_concs)
+  1508→        button = self._action_button(emax, "Compute & plot", self._emax_math, primary=True)
+  1509→        button.grid(row=emax.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+  1510→        self._pd_result = ttk.Label(emax, text="—", style="CardMuted.TLabel",
+  1511→                                    wraplength=300, justify="left")
+  1512→        self._pd_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
+  1513→                             padx=(10, 0))
+  1514→        self._pd_host = self._figure_host(emax, height=300)
+  1515→        bind_enter(self._pd_concs, button)
+  1516→
+  1517→    def _halflife_math(self) -> None:
+  1518→        if not self._require_pharmaml() or not self._require("numpy", "PK math"):
+  1519→            return
+  1520→        from pharmaml.pharma.pk import (
+  1521→            accumulation_ratio,
+  1522→            elimination_rate_constant,
+  1523→            half_life,
+  1524→        )
+  1525→
+  1526→        try:
+  1527→            t_half = parse_float(self._thalf_a.get(), "t½", minimum=1e-9)
+  1528→            tau = parse_float(self._tau_a.get(), "τ", minimum=1e-9)
+  1529→            ke = elimination_rate_constant(t_half)
+  1530→            acc = accumulation_ratio(tau, t_half)
+  1531→            t95 = math.log(20.0) / ke
+  1532→            lines = [
+  1533→                f"k(e) = {ke:.4f} 1/h",
+  1534→                f"accumulation over τ = {acc:.2f}×",
+  1535→                f"95% of steady state after {t95:.1f} h",
+  1536→            ]
+  1537→            raw_ke = self._ke_a.get().strip()
+  1538→            if raw_ke:
+  1539→                lines.append(f"t½ from k(e) = {half_life(parse_float(raw_ke, 'k(e)', minimum=1e-12)):.2f} h")
+  1540→            self._half_result.configure(text="\n".join(lines))
+  1541→        except Exception as exc:  # noqa: BLE001
+  1542→            self._show_error("Calculation failed", exc)
+  1543→
+  1544→    def _plot_iv_bolus(self) -> None:
+  1545→        if not self._require_pharmaml() or not self._require("numpy", "PK math"):
+  1546→            return
+  1547→        if not self._require("matplotlib", "the decay curve"):
+  1548→            return
+  1549→        try:
+  1550→            c0 = parse_float(self._iv_c0.get(), "C0", minimum=0.0)
+  1551→            t_half = parse_float(self._iv_thalf.get(), "t½", minimum=1e-9)
+  1552→            hours = parse_float(self._iv_hours.get(), "horizon", minimum=0.1)
+  1553→        except ValueError as exc:
+  1554→            messagebox.showerror("Input", str(exc))
+  1555→            return
+  1556→
+  1557→        def work() -> Any:
+  1558→            import numpy as np
+  1559→
+  1560→            from pharmaml.pharma.pk import (
+  1561→                elimination_rate_constant,
+  1562→                iv_bolus_concentration,
+  1563→            )
+  1564→
+  1565→            ke = elimination_rate_constant(t_half)
+  1566→            times = np.linspace(0.0, hours, 260)
+  1567→            conc = np.asarray(iv_bolus_concentration(c0, ke, times), dtype=float)
+  1568→            return ke, times, conc
+  1569→
+  1570→        def render(payload: Any) -> None:
+  1571→            ke, times, conc = payload
+  1572→            from pharmaml.viz import PALETTE, new_figure
+  1573→
+  1574→            fig, ax = new_figure(figsize=(5.2, 3.0))
+  1575→            ax.plot(times, conc, color=PALETTE[0], lw=2.2, label="C(t)")
+  1576→            for multiple in (1, 2, 3):
+  1577→                mark = multiple * t_half
+  1578→                if mark <= hours:
+  1579→                    ax.axvline(mark, color=PALETTE[1], ls="--", lw=0.9, alpha=0.8)
+  1580→                    ax.annotate(
+  1581→                        f"{multiple}·t½",
+  1582→                        xy=(mark, float(c0) * math.exp(-ke * mark)),
+  1583→                        xytext=(4, 6),
+  1584→                        textcoords="offset points",
+  1585→                        fontsize=8,
+  1586→                        color=MUTED,
+  1587→                    )
+  1588→            ax.set_xlabel("time (h)")
+  1589→            ax.set_ylabel("concentration (mg/L)")
+  1590→            ax.set_title(f"IV bolus decay — t½ {t_half:g} h, k(e) {ke:.3f} 1/h",
+  1591→                         loc="left")
+  1592→            ax.legend(frameon=False, fontsize=8)
+  1593→            self._render_figure(self._iv_host, fig)
+  1594→
+  1595→        self._start_job("IV bolus profile", work, render)
+  1596→
+  1597→    def _oral_pk(self) -> None:
+  1598→        if not self._require_pharmaml() or not self._require("numpy", "PK math"):
+  1599→            return
+  1600→        from pharmaml.pharma.pk import oral_cmax, oral_tmax
+
+[showing lines 1101-1600 of 3977; use offset=1601 with limit to continue reading]

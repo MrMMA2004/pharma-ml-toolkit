@@ -1,10 +1,16 @@
 """End-to-end headless probe: exercise every playground calculation path."""
+import json
+import shutil
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+import tkinter.filedialog as fd
 import tkinter.messagebox as mb
+
+import pandas as pd
 
 import playground
 
@@ -134,6 +140,106 @@ values = app._bio_marker_tree.item(first, "values")
 assert values[0] == "EGFR" and values[1] == "-0.9783", values
 assert values[4] == "Yes" and "more sensitive" in values[5], values
 print("bio top hit:", values[0], values[1], values[3], values[4], "|", values[5])
+
+# -- docking ------------------------------------------------------------------
+dock_out = Path(tempfile.mkdtemp(prefix="probe_dock_"))
+
+app._dock_load_example()
+dock_info = app._dock_lib_info.cget("text")
+print("dock library:", dock_info)
+assert "10 rows" in dock_info and "8 valid" in dock_info
+
+app._dock_out_dir = dock_out
+app._dock_prepare_ligands()
+assert pump_until_idle(timeout=120), "ligand prep job hung"
+prep_rows = app._dock_lib_tree.get_children()
+assert len(prep_rows) == 10, f"ligand prep rows: {len(prep_rows)}"
+prep_summary = app._dock_prep_summary.cget("text")
+print("dock prep:", prep_summary)
+assert "8/10" in prep_summary
+
+app._dock_load_receptor_example()
+orig_saveas = fd.asksaveasfilename
+fd.asksaveasfilename = lambda **_k: str(dock_out / "receptor.pdbqt")
+app._dock_prepare_receptor()
+assert pump_until_idle(timeout=180), "receptor prep job hung"
+fd.asksaveasfilename = orig_saveas
+assert app._dock_protein_report.output_atoms > 1000
+protein_text = app._dock_protein_text.get("1.0", "end")
+print("dock receptor:", " | ".join(protein_text.splitlines()[:6]))
+assert "1,262" in protein_text
+
+aspirin = Path(app._dock_report.frame[app._dock_report.frame["ok"]].iloc[0]["pdbqt"])
+app._dock_ligand_path = aspirin
+app._dock_compute_grid()
+assert pump_until_idle(), "grid box job hung"
+assert app._dock_box.size == (22.125, 22.125, 22.125)
+assert aspirin.with_name("r.gpf").is_file() and aspirin.with_name("r.dpf").is_file()
+print("dock grid:", " | ".join(app._dock_grid_text.get("1.0", "end").splitlines()[:2]))
+
+app._dock_load_example_campaign()
+assert pump_until_idle(), "campaign scan job hung"
+scan_rows = app._dock_results_tree.get_children()
+assert len(scan_rows) == 14, f"campaign scan rows: {len(scan_rows)}"
+scan_info = app._dock_results_info.cget("text")
+print("dock campaign:", scan_info)
+assert "14" in scan_info and "12 OK" in scan_info
+
+app._dock_heavyatoms_entry.insert(0, "13")
+app._dock_open_example_dlg()
+assert pump_until_idle(), "DLG parse job hung"
+dlg_rows = app._dock_results_tree.get_children()
+assert len(dlg_rows) == 5, f"DLG clusters: {len(dlg_rows)}"
+dlg_values = app._dock_results_tree.item(dlg_rows[0], "values")
+assert dlg_values[0] == "1" and dlg_values[1] == "-4.9100", dlg_values
+assert "LE (kcal/mol/atom)" in app._dock_results_tree["columns"]
+assert app._dock_results_tree.item(dlg_rows[0], "values")[-1] == "0.3777"
+print("dock dlg:", app._dock_results_info.cget("text"))
+
+engines = {name: shutil.which(name) is not None
+           for name in ("autogrid4", "autodock4", "vina")}
+print("dock engines on PATH:", engines)
+
+# -- feature factory (Chemistry tab) ---------------------------------------
+app._feat_k_entry.delete(0, "end")
+app._feat_k_entry.insert(0, "50")
+app._feat_ranker_combo.set("Variance (no target needed)")
+app._feat_compute()
+assert pump_until_idle(timeout=120), "feature factory job hung"
+feat_rows = app._feat_tree.get_children()
+assert len(feat_rows) == 50, f"feature factory rows: {len(feat_rows)}"
+feat_summary = app._feat_summary.cget("text")
+print("feature factory:", feat_summary)
+assert " features" in feat_summary and "3 molecules" in feat_summary
+assert "variance" in feat_summary and "median-survivors" in feat_summary
+
+feat_out = Path(tempfile.mkdtemp(prefix="probe_feat_"))
+feat_csv = feat_out / "selected_features.csv"
+fd.asksaveasfilename = lambda **_k: str(feat_csv)
+app._feat_save_csv()
+fd.asksaveasfilename = orig_saveas
+assert feat_csv.is_file()
+exported = pd.read_csv(feat_csv)
+assert exported.shape == (3, 51), f"exported shape: {exported.shape}"
+assert exported.columns[0] == "SMILES"
+assert list(exported.columns[1:]) == list(app._feat_selection.selected)
+print("feature factory csv:", exported.shape, "| first column", exported.columns[0])
+
+feat_json = feat_out / "selection_metadata.json"
+fd.asksaveasfilename = lambda **_k: str(feat_json)
+app._feat_save_json()
+fd.asksaveasfilename = orig_saveas
+meta = json.loads(feat_json.read_text(encoding="utf-8"))
+assert len(meta["selected_features"]) == 50
+assert meta["total_features"] > 10_000
+assert meta["k_requested"] == 50
+print("feature factory json:", len(meta["selected_features"]), "selected |",
+      meta["total_features"], "total features")
+# the two export confirmations are the only dialogs so far; clear them so
+# the final no-unexpected-dialogs assert stays meaningful
+assert [dialog[0] for dialog in DIALOGS] == ["info", "info"]
+assert all("written to" in " ".join(map(str, dialog[1])) for dialog in DIALOGS)
+DIALOGS.clear()
 
 app._operator_combo.set("adaptive")
 app._run_evolution()

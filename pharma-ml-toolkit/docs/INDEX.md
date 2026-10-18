@@ -34,11 +34,21 @@ after adding new public functions.
 
 ## `pharmaml.chem`
 
-*Cheminformatics helpers: conversion, descriptors, similarity, tables, standardization.*
+*Cheminformatics helpers: conversion, descriptors, the multi-family*
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `ATOMPAIR_BITS` | constant |  |
+| `AVALON_BITS` | constant |  |
+| `ECFP_BITS` | constant |  |
+| `FAMILY_PREFIXES` | constant |  |
+| `FEATURE_FAMILIES` | constant |  |
+| `MORGAN_BITS` | constant |  |
+| `MORGAN_RADIUS` | constant |  |
+| `RDKIT_FP_BITS` | constant |  |
 | `UNSUPPORTED_METALS` | constant |  |
+| `FeatureReport` | class | Audit record for one :func:`compute_feature_frame` run. |
+| `FeatureSelection` | class | Result of :func:`select_top_features`. |
 | `PdbLigandReport` | class | Audit record for one :func:`smiles_to_pdb` conversion. |
 | `SdfWriteReport` | class | Audit of one :func:`table_to_sdf` conversion. |
 | `TableComparison` | class | Set reconciliation of one ligand column across two tables. |
@@ -47,13 +57,18 @@ after adding new public functions.
 | `canonicalize_tautomer` | function | Return the canonical-tautomer SMILES of ``smiles``. |
 | `compare_tables` | function | Compare one ligand-name column across two tables. |
 | `compute_descriptors` | function | Compute molecular descriptors for a list of SMILES. |
+| `compute_feature_frame` | function | Compute a multi-family feature matrix for a batch of SMILES. |
 | `compute_fingerprints` | function | Compute fingerprints for a list of SMILES. |
 | `compute_maccs` | function | Compute the 167-bit MACCS key fingerprints. |
+| `family_of_column` | function | Return the feature family a frame column belongs to. |
 | `ic50_to_pic50` | function | Convert an IC50 measurement to pIC50 = -log10(IC50 [M]). |
 | `ki_to_pki` | function | Convert an inhibition constant to pKi = -log10(Ki [M]). |
 | `merge_table_folder` | function | Merge every table of one extension directly inside ``directory``. |
 | `merge_tables` | function | Row-wise merge of several tables, ignoring the index. |
+| `rank_features` | function | Rank feature columns by importance, descending. |
 | `sdf_to_table` | function | Read an SD file back into a table (SMILES, tags and titles). |
+| `select_top_features` | function | Select the top-K features with the rar's two-layer strategy. |
+| `selection_metadata` | function | Build the JSON-ready metadata dict for a feature-selection run. |
 | `smi_to_csv` | function | Stream a ``.smi`` file to CSV one line at a time. |
 | `smiles_to_pdb` | function | Generate an optimised 3D PDB ligand from a SMILES string. |
 | `split_table_into_chunks` | function | Stream a large CSV into fixed-size part files. |

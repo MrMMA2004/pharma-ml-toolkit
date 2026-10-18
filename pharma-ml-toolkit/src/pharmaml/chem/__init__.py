@@ -1,4 +1,5 @@
-"""Cheminformatics helpers: conversion, descriptors, similarity, tables, standardization."""
+"""Cheminformatics helpers: conversion, descriptors, the multi-family
+feature factory, similarity, tables, standardization."""
 
 from pharmaml.chem.converters import (
     SdfWriteReport,
@@ -15,6 +16,23 @@ from pharmaml.chem.descriptors import (
     compute_descriptors,
     compute_fingerprints,
     compute_maccs,
+)
+from pharmaml.chem.features import (
+    ATOMPAIR_BITS,
+    AVALON_BITS,
+    ECFP_BITS,
+    FAMILY_PREFIXES,
+    FEATURE_FAMILIES,
+    MORGAN_BITS,
+    MORGAN_RADIUS,
+    RDKIT_FP_BITS,
+    FeatureReport,
+    FeatureSelection,
+    compute_feature_frame,
+    family_of_column,
+    rank_features,
+    select_top_features,
+    selection_metadata,
 )
 from pharmaml.chem.similarity import (
     tanimoto_from_bitarrays,
@@ -36,7 +54,17 @@ from pharmaml.chem.tables import (
 )
 
 __all__ = [
+    "ATOMPAIR_BITS",
+    "AVALON_BITS",
+    "ECFP_BITS",
+    "FAMILY_PREFIXES",
+    "FEATURE_FAMILIES",
+    "MORGAN_BITS",
+    "MORGAN_RADIUS",
+    "RDKIT_FP_BITS",
     "UNSUPPORTED_METALS",
+    "FeatureReport",
+    "FeatureSelection",
     "PdbLigandReport",
     "SdfWriteReport",
     "TableComparison",
@@ -45,13 +73,18 @@ __all__ = [
     "canonicalize_tautomer",
     "compare_tables",
     "compute_descriptors",
+    "compute_feature_frame",
     "compute_fingerprints",
     "compute_maccs",
+    "family_of_column",
     "ic50_to_pic50",
     "ki_to_pki",
     "merge_table_folder",
     "merge_tables",
+    "rank_features",
     "sdf_to_table",
+    "select_top_features",
+    "selection_metadata",
     "smi_to_csv",
     "smiles_to_pdb",
     "split_table_into_chunks",

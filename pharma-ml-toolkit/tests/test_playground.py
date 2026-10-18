@@ -1,10 +1,13 @@
 """Tests for playground.py -- the toolkit's single-file graphical front end.
 
 The pure helpers (parsing, formatting, dependency probing, objective
-factory, operator-stats rendering) are tested directly; the window
-itself is exercised headlessly under Xvfb via ``--self-test`` and a
-small GUI-fixture class that drives real callbacks (including the
-Cell Lines tab's screen loader, converter and biomarker discovery).
+factory, operator-stats rendering, docking tuple/engine helpers, the
+feature factory's width/SMILES-column helpers) are tested directly; the
+window itself is exercised headlessly under Xvfb via ``--self-test`` and
+small GUI-fixture classes that drive real callbacks (including the Cell
+Lines tab's screen loader, converter and biomarker discovery, the
+Docking tab's ligand/receptor preparation and result parsing, and the
+Chemistry tab's feature factory compute/export runs).
 """
 
 from __future__ import annotations
@@ -135,6 +138,21 @@ class TestCellLineSurface:
 
 
 # --------------------------------------------------------------------- #
+# the Docking tab surface
+# --------------------------------------------------------------------- #
+class TestDockingTab:
+    def test_docking_tab_builder_exists(self, playground: Any) -> None:
+        assert hasattr(playground.PlaygroundApp, "_build_docking_tab")
+
+    def test_docstring_mentions_the_docking_tab(self, playground: Any) -> None:
+        assert "Docking" in playground.__doc__
+
+    def test_stdlib_shutil_is_imported_for_binary_probes(self, playground: Any) -> None:
+        # the campaign runner gates on shutil.which before starting a job
+        assert playground.shutil.which is not None
+
+
+# --------------------------------------------------------------------- #
 # pure helpers
 # --------------------------------------------------------------------- #
 class TestPureHelpers:
@@ -185,6 +203,43 @@ class TestPureHelpers:
         assert playground._cell_text(0.123456) == "0.1235"
         assert playground._cell_text("CC(=O)Oc1ccccc1C(=O)O", limit=10) == "CC(=O)Oc1…"
         assert playground._cell_text(None) == ""
+
+
+# --------------------------------------------------------------------- #
+# the Docking tab's pure helpers (npts / centre / size tuples, engines)
+# --------------------------------------------------------------------- #
+class TestDockingHelpers:
+    def test_parse_int_triple_accepts_spaces_and_commas(self, playground: Any) -> None:
+        assert playground.parse_int_triple("60 60 60", "npts") == (60, 60, 60)
+        assert playground.parse_int_triple("60,60,60", "npts") == (60, 60, 60)
+        assert playground.parse_int_triple(" 60,  60 ,60 ", "npts") == (60, 60, 60)
+
+    def test_parse_int_triple_rejects_rubbish(self, playground: Any) -> None:
+        with pytest.raises(ValueError, match="npts"):
+            playground.parse_int_triple("60 60", "npts")
+        with pytest.raises(ValueError, match="three"):
+            playground.parse_int_triple("", "npts")
+        with pytest.raises(ValueError, match="whole number"):
+            playground.parse_int_triple("60 60 sixty", "npts")
+        with pytest.raises(ValueError, match="below the minimum"):
+            playground.parse_int_triple("0 60 60", "npts", minimum=1)
+
+    def test_parse_float_triple_accepts_negatives_and_commas(self, playground: Any) -> None:
+        assert playground.parse_float_triple("0 0 0", "centre") == (0.0, 0.0, 0.0)
+        assert playground.parse_float_triple("20 20 20", "size") == (20.0, 20.0, 20.0)
+        assert playground.parse_float_triple("-1.5, 2, 2.5", "centre") == (-1.5, 2.0, 2.5)
+
+    def test_parse_float_triple_rejects_rubbish(self, playground: Any) -> None:
+        with pytest.raises(ValueError, match="centre"):
+            playground.parse_float_triple("1 2", "centre")
+        with pytest.raises(ValueError, match="not a number"):
+            playground.parse_float_triple("1 2 x", "centre")
+
+    def test_docking_engine_binaries(self, playground: Any) -> None:
+        assert playground.docking_engine_binaries("AutoDock4 campaign") == (
+            "autogrid4", "autodock4",
+        )
+        assert playground.docking_engine_binaries("Vina single ligand") == ("vina",)
 
 
 # --------------------------------------------------------------------- #
@@ -336,6 +391,90 @@ class TestCellLinePipeline:
         assert round(float(hit["rho"]), 4) == -0.7589
         assert round(float(hit["fdr"]), 6) == 0.008087
         assert bool(hit["significant"]) is True
+
+
+# --------------------------------------------------------------------- #
+# the docking pipeline the Docking tab drives (same pharmaml calls, no
+# Tk -- pins the shipped example library / receptor / campaign facts)
+# --------------------------------------------------------------------- #
+class TestDockingPipeline:
+    @pytest.mark.skipif(
+        importlib.util.find_spec("rdkit") is None, reason="needs RDKit"
+    )
+    def test_example_ligand_library_prep_and_grid_configs(self, tmp_path: Any) -> None:
+        from pharmaml.docking import (
+            compute_grid_box,
+            extract_pdbqt_atom_types,
+            load_ligand_csv,
+            prepare_ligand_library,
+            write_dpf,
+            write_gpf,
+        )
+
+        library_path = TOOLKIT_ROOT / "examples" / "data" / "ligand_library.csv"
+        library = load_ligand_csv(library_path)
+        assert len(library.frame) == 10
+        assert int((library.frame["status"] == "valid").sum()) == 8
+
+        report = prepare_ligand_library(library, tmp_path)
+        assert int(report.frame["ok"].sum()) == 8
+        assert report.root == tmp_path
+        first = report.frame[report.frame["ok"]].iloc[0]
+        assert first["folder"] == "01_aspirin"
+        ligand = Path(first["pdbqt"])
+        assert ligand.is_file()
+
+        box = compute_grid_box(ligand, padding=4.0, npts=(60, 60, 60), spacing=0.375)
+        assert box.size == (22.125, 22.125, 22.125)  # (npts - 1) * spacing
+        assert extract_pdbqt_atom_types(ligand) == ["A", "C", "HD", "OA"]
+        gpf = write_gpf(ligand, receptor_file="r.pdbqt", box=box,
+                        output_path=ligand.parent / "r.gpf")
+        dpf = write_dpf(ligand, receptor_file="r.pdbqt",
+                        output_path=ligand.parent / "r.dpf",
+                        ga_run=100, ga_pop_size=150)
+        assert gpf.is_file() and dpf.is_file()
+
+    @pytest.mark.skipif(
+        importlib.util.find_spec("pandas") is None, reason="needs pandas"
+    )
+    def test_example_campaign_scan_and_dlg_facts(self) -> None:
+        import pandas as pd
+
+        from pharmaml.docking import (
+            ligand_efficiency,
+            ligand_efficiency_series,
+            parse_dlg_cluster_table,
+            parse_dlg_summary,
+            scan_docking_directory,
+        )
+
+        campaign = TOOLKIT_ROOT / "examples" / "data" / "docking_campaign"
+        frame = scan_docking_directory(campaign)
+        assert len(frame) == 14
+        assert int((frame["status"] == "OK").sum()) == 12
+        assert frame.iloc[0]["folder"] == "01_aspirin"
+
+        dlg = campaign / "01_aspirin" / "r.dlg"
+        clusters = parse_dlg_cluster_table(dlg)
+        assert len(clusters) == 5
+        assert clusters[0].rank == 1
+        assert clusters[0].lowest_energy == pytest.approx(-4.91)
+        assert clusters[0].num_in_cluster == 15
+        summary = parse_dlg_summary(dlg)
+        assert summary["n_clusters"] == 5
+        assert summary["top_lowest_energy"] == pytest.approx(-4.91)
+
+        cluster_frame = pd.DataFrame(
+            [{"rank": c.rank, "lowest_energy": c.lowest_energy,
+              "mean_energy": c.mean_energy, "num_in_cluster": c.num_in_cluster,
+              "n_heavy": 13} for c in clusters]
+        )
+        efficiency = ligand_efficiency_series(
+            cluster_frame, affinity_col="lowest_energy", atoms_col="n_heavy"
+        )
+        # the library reports |dG| / N_heavy -- aspirin: 4.91 / 13
+        assert efficiency.iloc[0] == pytest.approx(abs(-4.91) / 13)
+        assert ligand_efficiency(-4.91, 13) == pytest.approx(0.3776923)
 
 
 # --------------------------------------------------------------------- #
@@ -571,3 +710,524 @@ class TestGuiUnderXvfb:
         assert values[4] == "Yes"
         assert "more sensitive" in values[5]  # negative rho, LN_IC50 direction
         assert quiet_dialogs == []
+
+
+# --------------------------------------------------------------------- #
+# the Docking tab under Xvfb -- real callbacks, real worker jobs against
+# the shipped example data, dialogs recorded instead of blocking
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestDockingGuiUnderXvfb:
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp()
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def test_tab_order_places_docking_after_cell_lines(self, app: Any) -> None:
+        titles = [app._book.tab(tab, "text").strip() for tab in app._book.tabs()]
+        assert titles == [
+            "Home", "Chemistry", "PK / PD", "Cell Lines", "Docking",
+            "Data & ML", "Generative",
+        ]
+
+    def test_docking_example_library_loads(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_load_example()
+        info = app._dock_lib_info.cget("text")
+        assert "10 rows" in info
+        assert "8 valid" in info
+        assert quiet_dialogs == []
+
+    def test_docking_prepare_ligands_job_fills_the_tree(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Any
+    ) -> None:
+        app._dock_load_example()
+        app._dock_out_dir = tmp_path
+        app._dock_prepare_ligands()
+        assert self._drain_jobs(app), "ligand prep job hung"
+        rows = app._dock_lib_tree.get_children()
+        assert len(rows) == 10
+        ok_flags = [app._dock_lib_tree.item(row, "values")[2] for row in rows]
+        assert ok_flags.count("Yes") == 8
+        assert "8/10" in app._dock_prep_summary.cget("text")
+        assert quiet_dialogs == []
+
+    def test_docking_receptor_prepare_job_renders_the_report(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any],
+        monkeypatch: Any, tmp_path: Any,
+    ) -> None:
+        app._dock_load_receptor_example()
+        target = tmp_path / "receptor.pdbqt"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        app._dock_prepare_receptor()
+        assert self._drain_jobs(app, timeout=180.0), "receptor prep job hung"
+        report = app._dock_protein_report
+        assert report is not None
+        assert report.output_atoms > 1000  # the example lysozyme receptor
+        text = app._dock_protein_text.get("1.0", "end")
+        assert "1,262" in text  # thousands-separated atom count
+        assert app._dock_receptor_path == target
+        assert target.is_file()
+        assert quiet_dialogs == []
+
+    def test_docking_grid_box_job_writes_gpf_and_dpf(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Any
+    ) -> None:
+        app._dock_load_example()
+        app._dock_out_dir = tmp_path
+        app._dock_prepare_ligands()
+        assert self._drain_jobs(app), "ligand prep job hung"
+        first_ok = app._dock_report.frame[app._dock_report.frame["ok"]].iloc[0]
+        app._dock_ligand_path = Path(first_ok["pdbqt"])
+        app._dock_compute_grid()
+        assert self._drain_jobs(app), "grid box job hung"
+        box = app._dock_box
+        assert box is not None
+        assert box.size == (22.125, 22.125, 22.125)  # (60 - 1) * 0.375
+        assert app._dock_ligand_path.with_name("r.gpf").is_file()
+        assert app._dock_ligand_path.with_name("r.dpf").is_file()
+        assert "22.125" in app._dock_grid_text.get("1.0", "end")
+        assert quiet_dialogs == []
+
+    def test_docking_example_campaign_scan(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_load_example_campaign()
+        assert self._drain_jobs(app), "campaign scan job hung"
+        rows = app._dock_results_tree.get_children()
+        assert len(rows) == 14
+        info = app._dock_results_info.cget("text")
+        assert "14" in info and "12 OK" in info
+        assert quiet_dialogs == []
+
+    def test_docking_example_dlg_parse_and_ligand_efficiency(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_open_example_dlg()
+        assert self._drain_jobs(app), "DLG parse job hung"
+        rows = app._dock_results_tree.get_children()
+        assert len(rows) == 5  # aspirin's five clusters
+        values = app._dock_results_tree.item(rows[0], "values")
+        assert values[0] == "1"  # rank
+        assert values[1] == "-4.9100"  # lowest energy, 4 dp
+        assert "5 clusters" in app._dock_results_info.cget("text")
+        assert quiet_dialogs == []
+
+        # ligand efficiency needs the heavy-atom count: aspirin has 13
+        app._dock_heavyatoms_entry.delete(0, "end")
+        app._dock_heavyatoms_entry.insert(0, "13")
+        app._dock_open_example_dlg()
+        assert self._drain_jobs(app), "DLG + LE job hung"
+        assert "LE (kcal/mol/atom)" in app._dock_results_tree["columns"]
+        first = app._dock_results_tree.get_children()[0]
+        le_value = app._dock_results_tree.item(first, "values")[-1]
+        assert le_value == "0.3777"  # |−4.91| / 13 heavy atoms
+        assert quiet_dialogs == []
+
+    def test_docking_vina_output_parse(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any],
+        monkeypatch: Any, tmp_path: Any,
+    ) -> None:
+        sample = (
+            "Modes | Affinity | dist from best mode\n"
+            "      |          | rmsd l.b. | rmsd u.b.\n"
+            "-------+----------+----------+----------\n"
+            "   1      -10.3          0          0\n"
+            "   2       -9.6      1.842      2.301\n"
+            "   3       -9.4      2.105      2.777\n"
+            "   4       -8.9      2.733      3.418\n"
+        )
+        vina_log = tmp_path / "vina_out.txt"
+        vina_log.write_text(sample, encoding="utf-8")
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(vina_log)
+        )
+        app._dock_open_vina()
+        assert self._drain_jobs(app), "vina parse job hung"
+        rows = app._dock_results_tree.get_children()
+        assert len(rows) == 4
+        values = app._dock_results_tree.item(rows[0], "values")
+        assert values[0] == "1"  # mode number
+        assert "4 modes" in app._dock_results_info.cget("text")
+        assert quiet_dialogs == []
+
+    def test_docking_run_gate_reports_missing_binary(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any],
+        monkeypatch: Any, tmp_path: Any,
+    ) -> None:
+        app._dock_campaign_root = tmp_path
+        monkeypatch.setattr(playground.shutil, "which", lambda _name: None)
+        app._dock_run()
+        assert not app._busy  # the gate stopped before any job started
+        assert len(quiet_dialogs) == 1
+        kind, args = quiet_dialogs[0]
+        assert kind == "showinfo"
+        message = " ".join(str(part) for part in args).lower()
+        assert "autodock4" in message
+        assert "install" in message  # actionable hint, not a bare refusal
+
+    @pytest.mark.filterwarnings(
+        "ignore:This process.*multi-threaded.*fork:DeprecationWarning"
+    )
+    def test_docking_run_starts_job_with_fake_binary(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any],
+        monkeypatch: Any, tmp_path: Any,
+    ) -> None:
+        root = tmp_path / "campaign"
+        ligand_dir = root / "01_lig"
+        ligand_dir.mkdir(parents=True)
+        (ligand_dir / "r.gpf").write_text("# stub\n", encoding="utf-8")
+        (ligand_dir / "r.dpf").write_text("# stub\n", encoding="utf-8")
+        app._dock_campaign_root = root
+        monkeypatch.setattr(
+            playground.shutil, "which",
+            lambda name: "/usr/bin/true" if name in ("autogrid4", "autodock4") else None,
+        )
+        app._dock_run()
+        assert app._busy  # the gate passed and the job started
+        assert self._drain_jobs(app), "fake-binary run job hung"
+        summary = app._dock_run_summary.cget("text")
+        assert "1 folders docked" in summary  # one stub ligand directory
+        assert "1 failed" in summary  # /usr/bin/true produces no .dlg
+        assert quiet_dialogs == []
+
+
+# --------------------------------------------------------------------- #
+# the Chemistry tab's feature factory -- surface + pure helpers
+# --------------------------------------------------------------------- #
+class TestFeatureFactorySurface:
+    def test_chemistry_tab_builder_exists(self, playground: Any) -> None:
+        assert hasattr(playground.PlaygroundApp, "_build_chemistry_tab")
+
+    def test_docstring_mentions_the_feature_factory(self, playground: Any) -> None:
+        assert "feature factory" in (playground.__doc__ or "").lower()
+
+    def test_chemistry_tab_source_references_the_feature_factory(
+        self, playground: Any
+    ) -> None:
+        import inspect
+
+        source = inspect.getsource(playground.PlaygroundApp._build_chemistry_tab)
+        assert "Feature factory" in source
+        assert "_feat_compute" in source
+
+    def test_feature_factory_width_sums_family_bits(self, playground: Any) -> None:
+        width = playground.feature_factory_width(
+            (
+                "descriptors", "atompair_count", "ecfp", "avalon_count",
+                "rdkit_fingerprint", "morgan_full", "morgan_scaffold",
+            ),
+            43,
+        )
+        assert width == 10_752 + 43  # 5 x 2048 + 512 + the descriptor count
+        assert playground.feature_factory_width(("descriptors",), 50) == 50
+        assert playground.feature_factory_width(("avalon_count",), 43) == 512
+        assert playground.feature_factory_width((), 43) == 0
+        with pytest.raises(ValueError, match="unknown feature family"):
+            playground.feature_factory_width(("typo",), 43)
+
+    def test_detect_smiles_column_prefers_named_columns(self, playground: Any) -> None:
+        class _Frame:
+            def __init__(self, columns: list[str]) -> None:
+                self.columns = columns
+
+        assert playground.detect_smiles_column(_Frame(["name", "SMILES"])) == "SMILES"
+        assert (
+            playground.detect_smiles_column(_Frame(["Canonical_Smiles"]))
+            == "Canonical_Smiles"
+        )
+        assert playground.detect_smiles_column(_Frame(["molecule", "activity"])) is None
+
+    def test_ranker_and_task_label_maps_cover_every_combobox_value(
+        self, playground: Any
+    ) -> None:
+        assert set(playground._FEAT_RANKER_METHODS) == set(playground._FEAT_RANKERS)
+        assert (
+            playground._FEAT_RANKER_METHODS["Variance (no target needed)"]
+            == "variance"
+        )
+        assert playground._FEAT_RANKER_METHODS["Random forest"] == "random_forest"
+        assert (
+            playground._FEAT_RANKER_METHODS["Auto (RandomForest or LightGBM)"]
+            == "auto"
+        )
+        assert playground._FEAT_RANKER_METHODS["LightGBM (if installed)"] == "lightgbm"
+        assert set(playground._FEAT_TASK_METHODS) == set(playground._FEAT_TASKS)
+        assert playground._FEAT_TASK_METHODS["Auto detect"] == "auto"
+        assert playground._FEAT_TASK_METHODS["Classification"] == "classification"
+        assert playground._FEAT_TASK_METHODS["Regression"] == "regression"
+
+
+# --------------------------------------------------------------------- #
+# the feature factory under Xvfb -- real callbacks, real worker jobs
+# against the public pharmaml.chem.features API, dialogs recorded
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestFeatureFactoryGuiUnderXvfb:
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp()
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _descriptor_count() -> int:
+        from rdkit.Chem import rdMolDescriptors
+
+        return len(rdMolDescriptors.Properties.GetAvailableProperties())
+
+    def test_default_pasted_variance_run(self, app: Any,
+                                         quiet_dialogs: list[Any]) -> None:
+        # the shipped defaults: pasted drug SMILES, all 7 families ticked
+        assert app._feat_source_var.get() == "Pasted SMILES"
+        assert "7 families selected" in app._feat_width_label.cget("text")
+        assert (
+            f"~{10_752 + self._descriptor_count():,} columns" in
+            app._feat_width_label.cget("text")
+        )
+        app._feat_k_entry.delete(0, "end")
+        app._feat_k_entry.insert(0, "50")
+        app._feat_ranker_combo.set("Variance (no target needed)")
+        app._feat_compute()
+        assert self._drain_jobs(app), "feature factory job hung"
+        summary = app._feat_summary.cget("text")
+        assert f"{10_752 + self._descriptor_count():,} features" in summary
+        assert "3 molecules" in summary
+        assert "median-survivors" in summary
+        assert "variance" in summary
+        assert "selected per family" in app._feat_family_label.cget("text")
+        assert tuple(app._feat_tree["columns"]) == (
+            "rank", "feature", "family", "importance",
+        )
+        rows = app._feat_tree.get_children()
+        assert len(rows) == 50
+        first = app._feat_tree.item(rows[0], "values")
+        assert first[0] == "1"  # rank column counts from 1
+        families_seen = {app._feat_tree.item(row, "values")[2] for row in rows}
+        assert families_seen <= {
+            "descriptors", "atompair_count", "ecfp", "avalon_count",
+            "rdkit_fingerprint", "morgan_full", "morgan_scaffold",
+        }
+        assert quiet_dialogs == []
+
+    def test_exports_rar_style_csv_and_metadata_json(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any],
+        monkeypatch: Any, tmp_path: Any,
+    ) -> None:
+        import json
+
+        import pandas as pd
+
+        app._feat_k_entry.delete(0, "end")
+        app._feat_k_entry.insert(0, "50")
+        app._feat_ranker_combo.set("Variance (no target needed)")
+        app._feat_compute()
+        assert self._drain_jobs(app), "feature factory job hung"
+
+        csv_target = tmp_path / "selected_features.csv"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(csv_target)
+        )
+        app._feat_save_csv()
+        assert csv_target.is_file()
+        exported = pd.read_csv(csv_target)
+        assert exported.columns[0] == "SMILES"
+        assert exported.shape == (3, 51)  # SMILES + 50 features, no target
+        assert exported["SMILES"].tolist() == [
+            "CC(=O)Oc1ccccc1C(=O)O",
+            "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",
+            "CC(=O)Nc1ccc(O)cc1",
+        ]
+        # the feature columns follow the selection's rank order verbatim
+        assert list(exported.columns[1:]) == list(app._feat_selection.selected)
+
+        json_target = tmp_path / "selection_metadata.json"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(json_target)
+        )
+        app._feat_save_json()
+        meta = json.loads(json_target.read_text(encoding="utf-8"))
+        assert len(meta["selected_features"]) == 50
+        assert meta["total_features"] > 10_000
+        assert meta["k_requested"] == 50
+        assert meta["method"] == "variance"
+        assert meta["n_molecules"] == 3
+        assert "target_column" not in meta  # a variance run has no target
+        # the only dialogs are the two Saved confirmations
+        assert [kind for kind, _args in quiet_dialogs] == ["showinfo", "showinfo"]
+        assert all(
+            "written to" in " ".join(str(part) for part in args)
+            for _kind, args in quiet_dialogs
+        )
+
+    def test_tree_truncates_at_300_rows_and_reruns_at_new_k(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._feat_k_entry.delete(0, "end")
+        app._feat_k_entry.insert(0, "400")
+        app._feat_ranker_combo.set("Variance (no target needed)")
+        app._feat_compute()
+        assert self._drain_jobs(app), "feature factory job hung"
+        assert len(app._feat_tree.get_children()) == 300
+        assert "+100 more rows" in app._feat_more_label.cget("text")
+
+        # job reuse: the buttons re-enabled, a second run re-pins the tree
+        app._feat_k_entry.delete(0, "end")
+        app._feat_k_entry.insert(0, "10")
+        app._feat_compute()
+        assert self._drain_jobs(app), "feature factory re-run job hung"
+        assert len(app._feat_tree.get_children()) == 10
+        assert app._feat_more_label.cget("text") == ""
+        assert "kept top 10" in app._feat_summary.cget("text")
+        assert quiet_dialogs == []
+
+    def test_example_csv_load_pins_rows_and_target_candidates(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._feat_source_var.set("CSV file")
+        app._feat_refresh_source()
+        app._feat_load_example()
+        info = app._feat_source_info.cget("text")
+        # the shipped 77-row library: SMILES + 8 numeric descriptor columns
+        assert "77 rows" in info
+        assert "numeric target candidates" in info
+        values = list(app._feat_target_combo["values"])
+        assert values[0] == playground._FEAT_NO_TARGET  # the default entry
+        assert "MolWt" in values and "RingCount" in values
+        assert quiet_dialogs == []
+
+    def test_unchecked_families_narrow_the_run(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        keep = {"descriptors", "avalon_count"}
+        for family, var in app._feat_family_vars.items():
+            var.set(family in keep)
+        app._feat_update_width()
+        width_label = app._feat_width_label.cget("text")
+        assert "2 families selected" in width_label
+        assert f"~{self._descriptor_count() + 512:,} columns" in width_label
+        app._feat_k_entry.delete(0, "end")
+        app._feat_k_entry.insert(0, "25")
+        app._feat_ranker_combo.set("Variance (no target needed)")
+        app._feat_compute()
+        assert self._drain_jobs(app), "narrow feature factory job hung"
+        summary = app._feat_summary.cget("text")
+        assert f"{self._descriptor_count() + 512:,} features" in summary
+        rows = app._feat_tree.get_children()
+        assert len(rows) == 25
+        families_seen = {app._feat_tree.item(row, "values")[2] for row in rows}
+        assert families_seen <= {"descriptors", "avalon_count"}
+        assert quiet_dialogs == []
+
+    def test_target_driven_random_forest_run_exports_target_column(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any],
+        monkeypatch: Any, tmp_path: Any,
+    ) -> None:
+        import pandas as pd
+
+        csv_path = tmp_path / "tiny_screen.csv"
+        csv_path.write_text(
+            "SMILES,activity\n"
+            "C,0\nCC,0\nCCC,0\nCCCC,1\nCCCCC,1\nCCCCCC,1\n",
+            encoding="utf-8",
+        )
+        app._feat_source_var.set("CSV file")
+        app._feat_refresh_source()
+        app._feat_load_path(csv_path)
+        assert "6 rows" in app._feat_source_info.cget("text")
+        app._feat_target_combo.set("activity")
+        app._feat_ranker_combo.set("Random forest")
+        app._feat_k_entry.delete(0, "end")
+        app._feat_k_entry.insert(0, "5")
+        app._feat_compute()
+        assert self._drain_jobs(app, timeout=180.0), "random forest job hung"
+        summary = app._feat_summary.cget("text")
+        assert "6 molecules" in summary
+        assert "random forest" in summary
+        assert quiet_dialogs == []
+
+        target = tmp_path / "selected_with_target.csv"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        app._feat_save_csv()
+        assert target.is_file()
+        exported = pd.read_csv(target)
+        # structure only (RF importances over 6 rows are not pin-stable):
+        # SMILES first, then the target under its original name, 5 features
+        assert exported.columns[0] == "SMILES"
+        assert exported.columns[1] == "activity"
+        assert exported.shape == (6, 7)
+        assert exported["activity"].tolist() == [0, 0, 0, 1, 1, 1]
+        assert [kind for kind, _args in quiet_dialogs] == ["showinfo"]
+        assert "written to" in " ".join(str(part) for part in quiet_dialogs[0][1])
+
+    def test_k_zero_records_the_input_error_dialog(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._feat_k_entry.delete(0, "end")
+        app._feat_k_entry.insert(0, "0")
+        app._feat_compute()
+        assert not app._busy  # no job was started
+        assert len(quiet_dialogs) == 1
+        kind, args = quiet_dialogs[0]
+        assert kind == "showerror"
+        message = " ".join(str(part) for part in args)
+        assert "features to keep (K)" in message
+        assert "below the minimum" in message

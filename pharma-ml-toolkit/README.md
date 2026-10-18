@@ -10,11 +10,11 @@ domains into one coherent package:
 | **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
 | **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management |
-| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, SMI/CSV/SDF format conversion, tautomer standardization + 3D ligand generation (SMILES→PDB), ligand-table reconciliation & merging |
+| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, the seven-family **feature factory** (`compute_feature_frame` → 10,000+ columns per molecule, `rank_features`, `select_top_features` two-layer top-K selection), SMI/CSV/SDF format conversion, tautomer standardization + 3D ligand generation (SMILES→PDB), ligand-table reconciliation & merging |
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1490 tests).
+exceptions, input validation, and pytest coverage** (1599 tests).
 
 ---
 
@@ -85,14 +85,23 @@ python playground.py
 
 A tabbed window opens with every calculation domain: **Chemistry** (IC50/Ki →
 pIC50/pKi, molar mass, the ~200-descriptor table for any SMILES, Tanimoto
-similarity), **PK/PD** (half-life/accumulation, plotted IV bolus decay and Emax
+similarity, and the **feature factory** — compute the full 10,000+-column
+seven-family feature matrix for a CSV or pasted SMILES set, rank every
+column and keep the top K you choose, exporting the selected-features CSV
+and its metadata JSON), **PK/PD** (half-life/accumulation, plotted IV bolus decay and Emax
 curves, oral Cmax, Cockcroft–Gault with renal adjustment, loading/maintenance
 and pediatric dosing), **Cell Lines** (GDSC/CCLE-style drug-response screens:
 load and audit a (cell line, compound, metric) table, collapse replicates,
 pivot the sensitivity matrix, call sensitive/resistant lines, and run the full
 biomarker-discovery pipeline with Benjamini-Hochberg FDR control — the bundled
 example recovers the planted EGFR biomarker for erlotinib in two clicks, plus
-the LN_IC50 ↔ pIC50 converter), **Data & ML** (open any CSV or a bundled example, train a
+the LN_IC50 ↔ pIC50 converter), **Docking** (prepare a whole ligand library
+as PDBQT with a per-ligand audit, turn a PDB/CIF receptor into a clean
+receptor PDBQT and distribute it into every campaign folder, compute the
+grid box and write the matching GPF/DPF pair for a reference ligand, parse
+DLG/Vina results — or scan an entire campaign — with ligand-efficiency
+columns, and run AutoDock4/Vina when the binaries are on your PATH),
+**Data & ML** (open any CSV or a bundled example, train a
 registry model, read the metrics, browse a cross-validated leaderboard) and
 **Generative** (evolve molecules against QED/LogP objectives; adaptive runs
 render the operator-mix learning curve).
@@ -118,7 +127,7 @@ Engineering notes:
 ## Versioned downloads & updating
 
 The downloadable archive is version-stamped: it downloads as
-`pharma-ml-toolkit-v1.1.0.zip`, carries its version in the `VERSION` file
+`pharma-ml-toolkit-v1.2.0.zip`, carries its version in the `VERSION` file
 (and in `pyproject.toml` → `[project] version`), and the web explorer's
 Download tab shows the live version next to the size. `CHANGELOG.md` at the
 archive root documents every release; versions follow semver — minor bumps
@@ -128,7 +137,7 @@ add features, patch bumps ship fixes.
 your current folder — `-o` overwrites without prompting:
 
 ```bash
-unzip -o pharma-ml-toolkit-v1.1.0.zip -d pharmaml   # your existing folder
+unzip -o pharma-ml-toolkit-v1.2.0.zip -d pharmaml   # your existing folder
 cat VERSION                                         # what you have now
 ```
 
@@ -164,9 +173,9 @@ pharma-ml-toolkit/
 │                            # Tkinter window over every domain (chemistry · PK/PD · cell lines · QSAR · generative);
 │                            # probes its dependencies at launch, degrades gracefully, headlessly
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
-├── VERSION                 # the release version (1.1.0) — `cat VERSION` after extracting
+├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1490 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1599 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);

@@ -9,7 +9,9 @@ A tabbed graphical interface opens with every calculation domain of the
 :mod:`pharmaml` package, no command-line knowledge required:
 
 * **Chemistry**     -- IC50/Ki -> pIC50/pKi conversion, molar mass, the
-  full RDKit descriptor table for any SMILES, Tanimoto similarity.
+  full RDKit descriptor table for any SMILES, Tanimoto similarity, and
+  the feature factory: the rar's own 7-family, 10,000+-column
+  descriptor + fingerprint matrix, ranked and cut to a top-K selection.
 * **PK / PD**       -- half-life <-> k(e), accumulation, IV bolus decay
   and Emax curves (plotted), oral Cmax/tmax, Cockcroft-Gault creatinine
   clearance with renal dose adjustment, loading/maintenance dosing,
@@ -18,6 +20,10 @@ A tabbed graphical interface opens with every calculation domain of the
   a screen, pivot the sensitivity matrix, call sensitive vs resistant
   lines, convert ``LN_IC50`` <-> pIC50, and discover expression
   biomarkers for any compound (the EGFR / erlotinib story).
+* **Docking**       -- molecular docking end to end: prepare a ligand
+  library and a receptor into PDBQT files, compute the grid box and
+  write the GPF/DPF configs, parse DLG / Vina results or scan a whole
+  campaign, and launch batch AutoDock4 or single Vina runs.
 * **Data & ML**     -- open any CSV (or one of the bundled example
   datasets), pick a target column, train a registry model with the
   toolkit's own preprocessing pipeline, inspect the metrics and the
@@ -38,8 +44,9 @@ Design notes
   ``pyproject.toml`` / ``VERSION`` at import), so the two can never
   silently drift apart.
 * Long calculations (descriptor batches, model training, evolution,
-  biomarker discovery) run in a worker thread; the window never freezes
-  and shows a progress bar plus a live status line.
+  biomarker discovery, docking preparation runs, feature-factory
+  selection) run in a worker thread; the window never freezes and shows
+  a progress bar plus a live status line.
 * Embedded figures reuse the toolkit's own plotting helpers, so the
   playground looks exactly like the package's published figures.
 
@@ -55,12 +62,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import csv
+import json
 import math
 import queue
+import shutil
 import sys
 import threading
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -260,6 +269,62 @@ def parse_int(
     return value
 
 
+def _split_triple(raw: str) -> list[str]:
+    """Split an ``"x y z"`` / ``"x,y,z"`` widget string into three parts."""
+    return str(raw).strip().replace(",", " ").split()
+
+
+def parse_int_triple(
+    raw: str,
+    field: str,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> tuple[int, int, int]:
+    """Parse an ``"n n n"`` grid-points string into a tuple of three ints.
+
+    Accepts spaces or commas (``"60 60 60"`` and ``"60,60,60"`` are
+    the same input); anything that is not exactly three whole numbers
+    raises :class:`ValueError` with the field name in the message.
+    """
+    parts = _split_triple(raw)
+    if len(parts) != 3:
+        raise ValueError(
+            f"{field}: {raw!r} must be three whole numbers, e.g. '60 60 60'"
+        )
+    first, second, third = (
+        parse_int(part, field, minimum=minimum, maximum=maximum)
+        for part in parts
+    )
+    return (first, second, third)
+
+
+def parse_float_triple(raw: str, field: str) -> tuple[float, float, float]:
+    """Parse an ``"x y z"`` centre/size string into three finite floats."""
+    parts = _split_triple(raw)
+    if len(parts) != 3:
+        raise ValueError(f"{field}: {raw!r} must be three numbers, e.g. '20 20 20'")
+    first, second, third = (parse_float(part, field) for part in parts)
+    return (first, second, third)
+
+
+#: The Docking tab's campaign-runner engines (combobox values).
+_DOCK_ENGINES = ("AutoDock4 campaign", "Vina single ligand")
+
+
+def docking_engine_binaries(engine: str) -> tuple[str, ...]:
+    """The external binaries an engine needs on ``PATH``.
+
+    The AutoDock4 campaign runner drives ``autogrid4`` + ``autodock4``
+    over every ligand folder; the Vina engine needs the single ``vina``
+    binary.  Used to pre-empt the workflow module's own RuntimeError
+    with a friendly install hint before any job is started.
+    """
+    if engine == "AutoDock4 campaign":
+        return ("autogrid4", "autodock4")
+    return ("vina",)
+
+
 def parse_smiles_lines(text: str) -> list[str]:
     """Extract non-empty SMILES lines from a corpus text widget.
 
@@ -272,6 +337,128 @@ def parse_smiles_lines(text: str) -> list[str]:
         if line and not line.startswith("#"):
             lines.append(line)
     return lines
+
+
+# --------------------------------------------------------------------------- #
+# the Chemistry tab's feature factory (the rar's 7-family ML pipeline)
+# --------------------------------------------------------------------------- #
+#: Feature-factory families in canonical (frame column) order:
+#: ``(pharmaml family name, checkbox label)``.  The bit widths mirror
+#: ``pharmaml.chem.features``; the descriptor family's width depends on
+#: the installed RDKit and is resolved at build time instead.
+_FEATURE_FAMILY_LABELS: tuple[tuple[str, str], ...] = (
+    ("descriptors", "RDKit descriptors"),
+    ("atompair_count", "Atom-pair counts (2048)"),
+    ("ecfp", "ECFP bits (2048)"),
+    ("avalon_count", "Avalon counts (512)"),
+    ("rdkit_fingerprint", "RDKit fingerprint (2048)"),
+    ("morgan_full", "Morgan full (2048)"),
+    ("morgan_scaffold", "Morgan scaffold (2048)"),
+)
+
+#: Column count of each fingerprint family.
+_FEATURE_FAMILY_BITS: dict[str, int] = {
+    "atompair_count": 2048,
+    "ecfp": 2048,
+    "avalon_count": 512,
+    "rdkit_fingerprint": 2048,
+    "morgan_full": 2048,
+    "morgan_scaffold": 2048,
+}
+
+#: Descriptor-family width when RDKit cannot be probed (estimate only).
+_FEATURE_DESCRIPTORS_FALLBACK = 50
+
+#: Column names auto-detected for the SMILES column (case-insensitive;
+#: mirrors the docking module's convention, the rar hard-coded "SMILES").
+_SMILES_COLUMN_CANDIDATES = (
+    "smiles",
+    "smile",
+    "canonical_smiles",
+    "smiles_nostereo",
+    "smiles_no_stereo",
+    "smiles_string",
+    "canonical",
+)
+
+#: Target-combobox entry meaning "no target -- rank by variance instead".
+_FEAT_NO_TARGET = "(none — variance ranking)"
+
+#: The ranker combobox values, in display order.
+_FEAT_RANKERS = (
+    "Auto (RandomForest or LightGBM)",
+    "Random forest",
+    "LightGBM (if installed)",
+    "Variance (no target needed)",
+)
+
+#: Ranker combobox label -> ``rank_features`` ``method`` argument.
+_FEAT_RANKER_METHODS: dict[str, str] = {
+    "Auto (RandomForest or LightGBM)": "auto",
+    "Random forest": "random_forest",
+    "LightGBM (if installed)": "lightgbm",
+    "Variance (no target needed)": "variance",
+}
+
+#: The task combobox values, in display order.
+_FEAT_TASKS = ("Auto detect", "Classification", "Regression")
+
+#: Task combobox label -> ``rank_features`` ``task`` argument.
+_FEAT_TASK_METHODS: dict[str, str] = {
+    "Auto detect": "auto",
+    "Classification": "classification",
+    "Regression": "regression",
+}
+
+#: The card's default pasted corpus: three well-known drugs.
+_FEAT_DEFAULT_SMILES = (
+    "CC(=O)Oc1ccccc1C(=O)O",          # aspirin
+    "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",   # caffeine
+    "CC(=O)Nc1ccc(O)cc1",             # paracetamol
+)
+
+#: Tooltip on the K entry: the rar pipeline's own top-K presets.
+_FEAT_K_PRESETS = "200 / 500 / 1000 / 1500 are the pipeline's presets"
+
+
+def feature_factory_width(families: Iterable[str], descriptor_count: int) -> int:
+    """Estimated column count of a feature-factory run, before it happens.
+
+    Sums the fingerprint bit widths of the requested families plus
+    ``descriptor_count`` for the descriptor family, so the Chemistry tab
+    can preview the matrix width as the family checkboxes toggle.
+
+    Raises
+    ------
+    ValueError
+        When a name is not a feature-factory family.
+    """
+    total = 0
+    for family in families:
+        if family == "descriptors":
+            total += descriptor_count
+        elif family in _FEATURE_FAMILY_BITS:
+            total += _FEATURE_FAMILY_BITS[family]
+        else:
+            raise ValueError(
+                f"unknown feature family {family!r}; valid families are: "
+                + ", ".join(name for name, _label in _FEATURE_FAMILY_LABELS)
+            )
+    return total
+
+
+def detect_smiles_column(frame: Any) -> str | None:
+    """Find the SMILES column of a loaded table, or None when absent.
+
+    Name-based and case-insensitive over the same candidate list the
+    docking module uses (``smiles``, ``smile``, ``canonical_smiles``,
+    ...); any object with a ``.columns`` attribute works.
+    """
+    lowered = {str(column).strip().lower(): str(column) for column in frame.columns}
+    for candidate in _SMILES_COLUMN_CANDIDATES:
+        if candidate in lowered:
+            return lowered[candidate]
+    return None
 
 
 def format_number(value: float, digits: int = 4) -> str:
@@ -513,7 +700,7 @@ else:  # allow `import playground` on tkinter-less builds (probe path)
 
 
 class PlaygroundApp(_TkBase):  # type: ignore[misc]
-    """The playground window: one notebook, six domain tabs, one worker."""
+    """The playground window: one notebook, seven tabs, one worker."""
 
     def __init__(self, dependencies: dict[str, bool] | None = None) -> None:
         if tk is None:  # pragma: no cover - guarded by main()
@@ -548,6 +735,33 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._bio_matrix_metric: str | None = None
         self._bio_expr: Any = None             # raw expression frame
         self._bio_expr_norm: Any = None        # normalize + impute cache
+        # -- Docking tab state --------------------------------------- #
+        self._dock_library: Any = None         # LigandLibrary from the CSV
+        self._dock_lib_path: Path | None = None
+        self._dock_out_dir: Path | None = None  # ligand campaign output root
+        self._dock_report: Any = None          # LigandPreparationReport
+        self._dock_receptor_source: Path | None = None  # PDB / CIF / PDBQT in
+        self._dock_protein_report: Any = None  # ProteinReport
+        self._dock_receptor_path: Path | None = None    # prepared receptor out
+        self._dock_ligand_path: Path | None = None      # reference ligand PDBQT
+        self._dock_box: Any = None             # GridBox
+        self._dock_results_frame: Any = None   # current results table
+        self._dock_results_source: str | None = None    # campaign / dlg / vina
+        self._dock_campaign_root: Path | None = None    # AutoDock4 batch root
+        self._dock_vina_receptor: Path | None = None
+        self._dock_vina_ligand: Path | None = None
+        # -- Feature factory state (Chemistry tab) ------------------- #
+        self._feat_frame: Any = None            # full computed feature frame
+        self._feat_report: Any = None           # FeatureReport of the last run
+        self._feat_selection: Any = None        # FeatureSelection of the last run
+        self._feat_smiles: list[str] = []       # valid SMILES, frame row order
+        self._feat_target_series: list[float] | None = None  # aligned target
+        self._feat_target_name: str | None = None  # target column name (or None)
+        self._feat_k: int = 0                   # K requested by the last run
+        self._feat_csv_frame: Any = None        # the loaded source CSV frame
+        self._feat_csv_path: Path | None = None
+        self._feat_smiles_column: str | None = None
+        self._feat_descriptor_count: int = _FEATURE_DESCRIPTORS_FALLBACK
 
         self.title("PharmaML Playground")
         self.configure(background=BG)
@@ -702,6 +916,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_chemistry_tab()
         self._build_pk_tab()
         self._build_cellline_tab()
+        self._build_docking_tab()
         self._build_ml_tab()
         self._build_generative_tab()
 
@@ -917,8 +1132,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "About PharmaML Playground",
             f"PharmaML Playground {__version__}\n{pharmaml_line}\n\n"
             "A single-file graphical front end for the pharmaml toolkit:\n"
-            "chemistry · PK/PD · cell lines · QSAR machine learning · generative "
-            "design.\n\n"
+            "chemistry · PK/PD · cell lines · docking · QSAR machine learning · "
+            "generative design.\n\n"
             "Calculations run in pharmaml itself -- the playground only\n"
             "collects your inputs and renders the results.",
         )
@@ -940,8 +1155,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         hero = make_card(
             page.grid, "PharmaML Playground", span=2, row=0, column=0,
             subtitle="One window for the whole toolkit -- chemistry, PK/PD dosing, "
-                     "cell-line biology, QSAR modelling and the generative GA, "
-                     "without touching a terminal.",
+                     "cell-line biology, molecular docking, QSAR modelling and "
+                     "the generative GA, without touching a terminal.",
         )
         version_line = (
             f"playground {__version__} · pharmaml {self.pharmaml.__version__}"
@@ -993,9 +1208,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         entries = [
             (
                 "Chemistry",
-                ("IC50/Ki → pIC50/pKi, molar mass, the 200+ descriptor table for any "
-                 "SMILES, Tanimoto similarity."),
-                "RDKit",
+                ("IC50/Ki → pIC50/pKi, molar mass, the 200+ descriptor table for "
+                 "any SMILES, Tanimoto similarity, and the feature factory: "
+                 "10,000+ descriptor/fingerprint columns ranked to a top-K."),
+                "RDKit + pandas",
             ),
             (
                 "PK / PD",
@@ -1008,6 +1224,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 ("Drug-response screens: audit, the sensitivity matrix, sensitive "
                  "vs resistant calls and expression biomarker discovery."),
                 "pandas + scipy",
+            ),
+            (
+                "Docking",
+                ("Ligand library and receptor preparation into PDBQT, the grid "
+                 "box with GPF/DPF configs, DLG / Vina result parsing and "
+                 "batch campaign runs."),
+                "RDKit + pandas",
             ),
             (
                 "Data & ML",
@@ -1147,6 +1370,157 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                                 sticky="w", pady=(6, 0))
         bind_enter(self._tani_b, button)
 
+        # -- feature factory: the rar's own ML pipeline ------------------ #
+        factory = make_card(
+            page.grid, "Feature factory", row=2, column=0, span=2,
+            subtitle="The rar's own ML pipeline as a card: 7 descriptor / "
+                     "fingerprint families (~10,800 columns per molecule), "
+                     "ranked and cut to the top K you keep.",
+        )
+        source_row = ttk.Frame(factory, style="Card.TFrame")
+        grid_append(factory, source_row, sticky="w")
+        ttk.Label(source_row, text="Source", style="Field.TLabel").pack(side="left")
+        self._feat_source_var = tk.StringVar(value="Pasted SMILES")
+        csv_radio = ttk.Radiobutton(
+            source_row, text="CSV file", value="CSV file",
+            variable=self._feat_source_var, command=self._feat_refresh_source,
+        )
+        csv_radio.pack(side="left", padx=(12, 0))
+        pasted_radio = ttk.Radiobutton(
+            source_row, text="Pasted SMILES", value="Pasted SMILES",
+            variable=self._feat_source_var, command=self._feat_refresh_source,
+        )
+        pasted_radio.pack(side="left", padx=(8, 0))
+
+        self._feat_csv_box = ttk.Frame(factory, style="Card.TFrame")
+        grid_append(factory, self._feat_csv_box, sticky="ew", pady=(6, 0))
+        csv_buttons = ttk.Frame(self._feat_csv_box, style="Card.TFrame")
+        csv_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
+        csv_open_btn = self._action_button(csv_buttons, "Open CSV…",
+                                           self._feat_open_csv)
+        csv_open_btn.pack(side="left")
+        csv_example_btn = self._action_button(
+            csv_buttons, "Load example", self._feat_load_example,
+            tooltip="examples/data/library_with_descriptors.csv -- 77 drugs "
+                    "with SMILES, 8 numeric descriptor columns and an activity "
+                    "label.",
+        )
+        csv_example_btn.pack(side="left", padx=(10, 0))
+        self._feat_source_info = ttk.Label(
+            self._feat_csv_box, text="no CSV loaded", style="CardMuted.TLabel",
+            wraplength=520, justify="left",
+        )
+        self._feat_source_info.grid(row=1, column=0, columnspan=2, sticky="w",
+                                    pady=(4, 0))
+        self._feat_target_combo = ttk.Combobox(
+            self._feat_csv_box, state="readonly", width=30,
+            values=(_FEAT_NO_TARGET,),
+        )
+        self._feat_target_combo.set(_FEAT_NO_TARGET)
+        form_row(self._feat_csv_box, "Target column", self._feat_target_combo)
+
+        self._feat_pasted_box = ttk.Frame(factory, style="Card.TFrame")
+        grid_append(factory, self._feat_pasted_box, sticky="ew", pady=(6, 0))
+        self._feat_pasted_text = _grid_text(self._feat_pasted_box, height=4,
+                                            mono=self._mono)
+        self._feat_pasted_text.insert("1.0", "\n".join(_FEAT_DEFAULT_SMILES))
+        grid_append(self._feat_pasted_box, self._feat_pasted_text, sticky="ew")
+        grid_append(self._feat_pasted_box, ttk.Label(
+            self._feat_pasted_box, style="CardMuted.TLabel",
+            text="one SMILES per line; comments with # are ignored",
+        ), pady=(2, 0))
+
+        families_box = ttk.Frame(factory, style="Card.TFrame")
+        grid_append(factory, families_box, sticky="ew", pady=(6, 0))
+        self._feat_family_vars: dict[str, Any] = {}
+        for index, (family, label) in enumerate(_FEATURE_FAMILY_LABELS):
+            family_var = tk.BooleanVar(value=True)
+            self._feat_family_vars[family] = family_var
+            family_check = ttk.Checkbutton(
+                families_box, text=label, variable=family_var,
+                command=self._feat_update_width,
+            )
+            family_check.grid(row=index // 2, column=index % 2, sticky="w",
+                              padx=(0, 24), pady=2)
+
+        self._feat_k_entry = ttk.Entry(factory, width=10)
+        self._feat_k_entry.insert(0, "1000")  # the rar pipeline's own default
+        Tooltip(self._feat_k_entry, _FEAT_K_PRESETS)
+        form_row(factory, "Features to keep (K)", self._feat_k_entry)
+        self._feat_ranker_combo = ttk.Combobox(factory, state="readonly", width=28,
+                                               values=_FEAT_RANKERS)
+        self._feat_ranker_combo.set(_FEAT_RANKERS[0])
+        form_row(factory, "Ranker", self._feat_ranker_combo)
+        self._feat_task_combo = ttk.Combobox(factory, state="readonly", width=28,
+                                             values=_FEAT_TASKS)
+        self._feat_task_combo.set(_FEAT_TASKS[0])
+        form_row(factory, "Task", self._feat_task_combo)
+        self._feat_descriptor_count = _FEATURE_DESCRIPTORS_FALLBACK
+        try:
+            from rdkit.Chem import rdMolDescriptors
+
+            self._feat_descriptor_count = len(
+                rdMolDescriptors.Properties.GetAvailableProperties()
+            )
+        except Exception:  # noqa: BLE001 - estimate only; the run gates RDKit
+            self._feat_descriptor_count = _FEATURE_DESCRIPTORS_FALLBACK
+        self._feat_width_label = ttk.Label(factory, text="", style="CardMuted.TLabel")
+        grid_append(factory, self._feat_width_label, sticky="w")
+
+        feat_btn = self._action_button(
+            factory, "Compute & select features", self._feat_compute, primary=True,
+            tooltip="Computes the ticked families in a worker thread, ranks "
+                    "every column, keeps the per-family median survivors, "
+                    "then the top K.",
+        )
+        feat_btn.grid(row=factory.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._feat_summary = ttk.Label(
+            factory, text="—", style="CardMuted.TLabel", wraplength=560,
+            justify="left",
+        )
+        self._feat_summary.grid(row=feat_btn.grid_info()["row"], column=1,
+                                sticky="w", padx=(10, 0))
+        self._feat_family_label = ttk.Label(factory, text="",
+                                            style="CardMuted.TLabel",
+                                            wraplength=620, justify="left")
+        grid_append(factory, self._feat_family_label, sticky="w")
+        feat_tree_frame = ttk.Frame(factory, style="Card.TFrame")
+        grid_append(factory, feat_tree_frame, sticky="nsew", pady=(6, 0),
+                    weight=True)
+        self._feat_tree = ttk.Treeview(
+            feat_tree_frame, columns=("rank", "feature", "family", "importance"),
+            show="headings", height=10,
+        )
+        for column, width in (
+            ("rank", 56), ("feature", 210), ("family", 140), ("importance", 120),
+        ):
+            self._feat_tree.heading(column, text=column)
+            self._feat_tree.column(column, width=width, minwidth=48,
+                                   stretch=(column == "feature"))
+        feat_bar = ttk.Scrollbar(feat_tree_frame, orient="vertical",
+                                 command=self._feat_tree.yview)
+        self._feat_tree.configure(yscrollcommand=feat_bar.set)
+        self._feat_tree.pack(side="left", fill="both", expand=True)
+        feat_bar.pack(side="right", fill="y")
+        self._feat_more_label = ttk.Label(factory, text="", style="CardMuted.TLabel")
+        grid_append(factory, self._feat_more_label, sticky="w")
+        feat_export_buttons = ttk.Frame(factory, style="Card.TFrame")
+        grid_append(factory, feat_export_buttons, sticky="w", pady=(2, 0))
+        feat_csv_btn = self._action_button(
+            feat_export_buttons, "Save selected features CSV…", self._feat_save_csv,
+            tooltip="The rar-style output: SMILES, the target column (if any) "
+                    "and the K selected features in rank order.",
+        )
+        feat_csv_btn.pack(side="left")
+        feat_json_btn = self._action_button(
+            feat_export_buttons, "Save metadata JSON…", self._feat_save_json,
+            tooltip="selection_metadata: selected features, family counts, "
+                    "fingerprint sizes, K and method.",
+        )
+        feat_json_btn.pack(side="left", padx=(10, 0))
+        self._feat_update_width()
+        self._feat_refresh_source()
+
     def _convert_affinity(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "conversion"):
             return
@@ -1273,6 +1647,299 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             verdict = "essentially unrelated"
         self._tani_result.configure(text=f"{score:.3f}")
         self._tani_verdict.configure(text=f"{verdict} (1.0 = identical, 0.0 = nothing shared)")
+
+    # -- feature factory card -------------------------------------------- #
+    def _feat_refresh_source(self) -> None:
+        """Show the CSV row or the pasted-SMILES box per the source radios."""
+        if self._feat_source_var.get() == "CSV file":
+            self._feat_csv_box.grid()
+            self._feat_pasted_box.grid_remove()
+        else:
+            self._feat_csv_box.grid_remove()
+            self._feat_pasted_box.grid()
+
+    def _feat_update_width(self) -> None:
+        """Re-pin the estimated column count from the ticked families."""
+        selected = [
+            family for family, _label in _FEATURE_FAMILY_LABELS
+            if self._feat_family_vars[family].get()
+        ]
+        if not selected:
+            self._feat_width_label.configure(
+                text="no families selected — tick at least one"
+            )
+            return
+        width = feature_factory_width(selected, self._feat_descriptor_count)
+        self._feat_width_label.configure(
+            text=(f"{len(selected)} families selected · ~{width:,} columns "
+                  "will be computed")
+        )
+
+    def _feat_open_csv(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                             "CSV loading"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open a SMILES CSV",
+            filetypes=[("SMILES table", "*.csv *.tsv"), ("All files", "*.*")],
+        )
+        if path:
+            self._feat_load_path(Path(path))
+
+    def _feat_load_example(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                             "CSV loading"):
+            return
+        path = EXAMPLES_DIR / "library_with_descriptors.csv"
+        if not path.is_file():
+            messagebox.showwarning(
+                "Missing example",
+                "examples/data/library_with_descriptors.csv was not found.",
+            )
+            return
+        self._feat_load_path(path)
+
+    def _feat_load_path(self, path: Path) -> None:
+        try:
+            from pharmaml.utils.io import read_table
+
+            frame = read_table(path)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not read the CSV", exc)
+            return
+        if frame.empty:
+            messagebox.showwarning("Empty CSV", f"{path.name} has no rows.")
+            return
+        smiles_column = detect_smiles_column(frame)
+        if smiles_column is None:
+            messagebox.showwarning(
+                "No SMILES column",
+                f"{path.name} has no SMILES column (looked for smiles / smile / "
+                "canonical_smiles / ...).",
+            )
+            return
+        import pandas as pd
+
+        candidates = [
+            str(column) for column in frame.columns
+            if str(column) != smiles_column
+            and pd.api.types.is_numeric_dtype(frame[column])
+        ]
+        self._feat_csv_frame = frame
+        self._feat_csv_path = path
+        self._feat_smiles_column = smiles_column
+        self._feat_target_combo["values"] = (_FEAT_NO_TARGET, *candidates)
+        self._feat_target_combo.set(_FEAT_NO_TARGET)
+        self._feat_source_info.configure(
+            text=(f"{len(frame):,} rows · SMILES column '{smiles_column}' · "
+                  f"{len(candidates)} numeric target candidates — {path.name}")
+        )
+
+    def _feat_compute(self) -> None:
+        if not self._require_pharmaml():
+            return
+        if not self._require("rdkit", "the feature factory") or not self._require(
+                "pandas", "the feature factory"):
+            return
+        source = self._feat_source_var.get()
+        target_frame: Any = None
+        target_name: str | None = None
+        if source == "CSV file":
+            if self._feat_csv_frame is None or self._feat_smiles_column is None:
+                messagebox.showwarning(
+                    "No CSV loaded",
+                    "Open a SMILES CSV first (or switch the source to Pasted "
+                    "SMILES).",
+                )
+                return
+            smiles = [
+                str(value)
+                for value in self._feat_csv_frame[self._feat_smiles_column].tolist()
+            ]
+            picked = self._feat_target_combo.get()
+            if picked and picked != _FEAT_NO_TARGET:
+                target_name = picked
+                target_frame = self._feat_csv_frame[picked]
+        else:
+            smiles = parse_smiles_lines(self._feat_pasted_text.get("1.0", "end"))
+        if not smiles:
+            messagebox.showwarning(
+                "No SMILES", "The selected source holds no SMILES to compute."
+            )
+            return
+        families = [
+            family for family, _label in _FEATURE_FAMILY_LABELS
+            if self._feat_family_vars[family].get()
+        ]
+        if not families:
+            messagebox.showwarning(
+                "No families", "Tick at least one feature family."
+            )
+            return
+        try:
+            k = parse_int(self._feat_k_entry.get(), "features to keep (K)",
+                          minimum=1, maximum=100000)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        method = _FEAT_RANKER_METHODS.get(self._feat_ranker_combo.get(), "auto")
+        task = _FEAT_TASK_METHODS.get(self._feat_task_combo.get(), "auto")
+        # variance ranking needs numpy only; every model ranker needs sklearn
+        if method != "variance" and not self._require("sklearn", "feature ranking"):
+            return
+        if method in ("random_forest", "lightgbm") and target_frame is None:
+            messagebox.showwarning(
+                "Ranker needs a target",
+                f"{self._feat_ranker_combo.get()} ranking needs a target column "
+                "-- pick one from the loaded CSV, or switch the ranker to "
+                "Variance (no target needed).",
+            )
+            return
+
+        def work() -> Any:
+            from pharmaml.chem.features import (
+                compute_feature_frame,
+                rank_features,
+                select_top_features,
+            )
+
+            frame, report = compute_feature_frame(smiles, families=families)
+            target_values: list[float] | None = None
+            if target_frame is not None:
+                # align against the frame's original-row index (dropped
+                # molecules take their target row with them)
+                target_values = [
+                    float(value) for value in target_frame.iloc[list(frame.index)]
+                ]
+            ranked = rank_features(frame, target_values, method=method, task=task)
+            # select_top_features demands the scores in frame column order
+            scores = ranked.reindex(frame.columns)
+            selection = select_top_features(frame, scores, k,
+                                            median_prefilter=True, method=method)
+            # k >= the candidate count returns every median survivor, so the
+            # survivor count for the summary comes from the same public call
+            survivors = len(
+                select_top_features(frame, scores, len(frame.columns)).selected
+            )
+            return frame, report, selection, survivors, target_values
+
+        def render(payload: Any) -> None:
+            self._feat_render(payload, k, target_name)
+
+        label = f"computing {len(families)} families over {len(smiles)} molecules"
+        self._start_job(label, work, render)
+
+    def _feat_render(self, payload: Any, k: int,
+                     target_name: str | None) -> None:
+        frame, report, selection, survivors, target_values = payload
+        self._feat_frame = frame
+        self._feat_report = report
+        self._feat_selection = selection
+        self._feat_smiles = list(report.smiles)
+        self._feat_target_series = target_values
+        self._feat_target_name = target_name
+        self._feat_k = k
+        tree = self._feat_tree
+        tree.delete(*tree.get_children())
+        if report.n_valid == 0:
+            self._feat_summary.configure(
+                text=(f"{report.total_columns:,} features · 0 valid molecules "
+                      f"({len(report.dropped)} dropped) — check the SMILES source"),
+                style="Field.TLabel",
+            )
+            self._feat_family_label.configure(text="selected per family: (none)")
+            self._feat_more_label.configure(text="")
+            return
+        from pharmaml.chem.features import family_of_column
+
+        dropped_note = f" ({len(report.dropped)} dropped)" if report.dropped else ""
+        method_label = str(selection.method).replace("_", " ")
+        self._feat_summary.configure(
+            text=(f"{report.total_columns:,} features · {report.n_valid} "
+                  f"molecules{dropped_note} · kept top "
+                  f"{len(selection.selected):,} of {survivors:,} "
+                  f"median-survivors · {method_label}"),
+            style="Field.TLabel",
+        )
+        family_line = " · ".join(
+            f"{family} {count}"
+            for family, count in selection.family_counts.items()
+        )
+        self._feat_family_label.configure(
+            text=(f"selected per family: {family_line}" if family_line
+                  else "selected per family: (none)")
+        )
+        shown = list(selection.selected[:300])
+        for rank, column in enumerate(shown, start=1):
+            tree.insert(
+                "", "end",
+                values=(rank, column, family_of_column(column),
+                        format_number(float(selection.scores[column]))),
+            )
+        hidden = len(selection.selected) - len(shown)
+        self._feat_more_label.configure(
+            text=(f"+{hidden:,} more rows — save the CSV for the full list"
+                  if hidden > 0 else "")
+        )
+
+    def _feat_save_csv(self) -> None:
+        if self._feat_selection is None:
+            messagebox.showinfo("Nothing to save",
+                                "Compute a feature selection first.")
+            return
+        if not self._require_pharmaml():
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save the selected features", defaultextension=".csv",
+            initialfile="selected_features.csv",
+            filetypes=[("CSV table", "*.csv")],
+        )
+        if not path:
+            return
+        try:
+            import pandas as pd
+
+            from pharmaml.utils.io import write_table
+
+            out = pd.DataFrame({"SMILES": list(self._feat_smiles)})
+            if (self._feat_target_name is not None
+                    and self._feat_target_series is not None):
+                out[self._feat_target_name] = list(self._feat_target_series)
+            for column in self._feat_selection.selected:
+                out[column] = self._feat_frame[column].tolist()
+            written = write_table(out, path)
+            messagebox.showinfo(
+                "Saved", f"Selected-feature table written to\n{written}"
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not save", exc)
+
+    def _feat_save_json(self) -> None:
+        if self._feat_selection is None:
+            messagebox.showinfo("Nothing to save",
+                                "Compute a feature selection first.")
+            return
+        if not self._require_pharmaml():
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save the selection metadata", defaultextension=".json",
+            initialfile="selection_metadata.json",
+            filetypes=[("JSON metadata", "*.json")],
+        )
+        if not path:
+            return
+        try:
+            from pharmaml.chem.features import selection_metadata
+
+            meta = selection_metadata(self._feat_selection, self._feat_report,
+                                      k=self._feat_k)
+            if self._feat_target_name is not None:
+                meta["target_column"] = self._feat_target_name
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(meta, handle, indent=2, ensure_ascii=False)
+            messagebox.showinfo("Saved", f"Metadata written to\n{path}")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not save", exc)
 
     # ------------------------------------------------------------------ #
     # PK / PD tab
@@ -2219,6 +2886,988 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 )
 
         self._start_job(f"biomarkers for {compound}", work, render)
+
+    # ------------------------------------------------------------------ #
+    # Docking tab
+    # ------------------------------------------------------------------ #
+    def _build_docking_tab(self) -> None:
+        page = self._new_page("Docking")
+
+        # -- card 1: ligand library -> PDBQT campaign -------------------- #
+        ligands = make_card(
+            page.grid, "Ligand library → PDBQT", row=0, column=0,
+            subtitle="A SMILES CSV becomes one folder per ligand, each with a "
+                     "3D l.pdbqt (Meeko + RDKit).",
+        )
+        lib_buttons = ttk.Frame(ligands, style="Card.TFrame")
+        lib_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
+        lib_open_btn = self._action_button(lib_buttons, "Open CSV…",
+                                           self._dock_open_csv)
+        lib_open_btn.pack(side="left")
+        lib_example_btn = self._action_button(
+            lib_buttons, "Load example", self._dock_load_example,
+            tooltip="The bundled 10-row library (8 valid SMILES, 2 broken "
+                    "rows on purpose) -- examples/data/ligand_library.csv.",
+        )
+        lib_example_btn.pack(side="left", padx=(10, 0))
+        self._dock_lib_info = ttk.Label(ligands, text="no library loaded",
+                                        style="CardMuted.TLabel")
+        self._dock_lib_info.grid(row=1, column=0, columnspan=2, sticky="w",
+                                 pady=(6, 0))
+        out_buttons = ttk.Frame(ligands, style="Card.TFrame")
+        out_buttons.grid(row=2, column=0, columnspan=2, sticky="w")
+        out_btn = self._action_button(out_buttons, "Choose output folder…",
+                                      self._dock_choose_out_dir)
+        out_btn.pack(side="left")
+        self._dock_out_info = ttk.Label(out_buttons, text="no output folder chosen",
+                                        style="CardMuted.TLabel", wraplength=280,
+                                        justify="left")
+        self._dock_out_info.pack(side="left", padx=(10, 0))
+        prep_btn = self._action_button(
+            ligands, "Prepare ligands", self._dock_prepare_ligands, primary=True,
+            tooltip="Embeds and atom-types every valid SMILES in a worker "
+                    "thread; one sub-folder per ligand under the output root.",
+        )
+        prep_btn.grid(row=ligands.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._dock_prep_summary = ttk.Label(
+            ligands, text="—", style="CardMuted.TLabel", wraplength=300,
+            justify="left",
+        )
+        self._dock_prep_summary.grid(row=prep_btn.grid_info()["row"], column=1,
+                                     sticky="w", padx=(10, 0))
+        lib_tree_frame = ttk.Frame(ligands, style="Card.TFrame")
+        grid_append(ligands, lib_tree_frame, sticky="nsew", weight=True)
+        self._dock_lib_tree = ttk.Treeview(
+            lib_tree_frame,
+            columns=("folder", "name", "ok", "atoms", "torsdof", "error"),
+            show="headings", height=8,
+        )
+        for column, width in (
+            ("folder", 120), ("name", 100), ("ok", 44), ("atoms", 60),
+            ("torsdof", 66), ("error", 170),
+        ):
+            self._dock_lib_tree.heading(column, text=column)
+            self._dock_lib_tree.column(column, width=width, minwidth=44,
+                                       stretch=(column == "error"))
+        lib_bar = ttk.Scrollbar(lib_tree_frame, orient="vertical",
+                                command=self._dock_lib_tree.yview)
+        self._dock_lib_tree.configure(yscrollcommand=lib_bar.set)
+        self._dock_lib_tree.pack(side="left", fill="both", expand=True)
+        lib_bar.pack(side="right", fill="y")
+        lib_save_btn = self._action_button(ligands, "Save report CSV…",
+                                           self._dock_save_ligand_report)
+        lib_save_btn.grid(row=ligands.grid_size()[1], column=0, columnspan=2,
+                          sticky="w", pady=(6, 0))
+
+        # -- card 2: receptor preparation -------------------------------- #
+        receptor = make_card(
+            page.grid, "Receptor preparation", row=0, column=1,
+            subtitle="PDB / CIF / PDBQT → a docking-ready receptor PDBQT "
+                     "(waters out, atom types in).",
+        )
+        rec_buttons = ttk.Frame(receptor, style="Card.TFrame")
+        rec_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
+        rec_open_btn = self._action_button(rec_buttons,
+                                           "Open PDB / CIF / PDBQT…",
+                                           self._dock_open_receptor)
+        rec_open_btn.pack(side="left")
+        rec_example_btn = self._action_button(
+            rec_buttons, "Load example", self._dock_load_receptor_example,
+            tooltip="The bundled hen egg-white lysozyme "
+                    "(examples/data/lysozyme_1aki.pdb).",
+        )
+        rec_example_btn.pack(side="left", padx=(10, 0))
+        self._dock_receptor_info = ttk.Label(
+            receptor, text="no receptor source selected",
+            style="CardMuted.TLabel", wraplength=300, justify="left",
+        )
+        self._dock_receptor_info.grid(row=1, column=0, columnspan=2, sticky="w",
+                                      pady=(6, 0))
+        self._dock_remove_waters_var = tk.BooleanVar(value=True)
+        waters_check = ttk.Checkbutton(receptor, text="remove waters",
+                                       variable=self._dock_remove_waters_var)
+        form_row(receptor, "waters", waters_check)
+        self._dock_keep_hetatm_var = tk.BooleanVar(value=False)
+        hetatm_check = ttk.Checkbutton(receptor, text="keep HETATM ligands/ions",
+                                       variable=self._dock_keep_hetatm_var)
+        form_row(receptor, "HETATM", hetatm_check)
+        self._dock_strip_h_var = tk.BooleanVar(value=True)
+        strip_check = ttk.Checkbutton(receptor, text="strip hydrogens",
+                                      variable=self._dock_strip_h_var)
+        form_row(receptor, "hydrogens", strip_check)
+        self._dock_chain_entry = ttk.Entry(receptor, width=10)
+        form_row(receptor, "chain (blank = all)", self._dock_chain_entry)
+        rec_btn = self._action_button(
+            receptor, "Prepare receptor", self._dock_prepare_receptor, primary=True,
+            tooltip="Asks where to save the PDBQT, then prepares it in a "
+                    "worker thread.",
+        )
+        rec_btn.grid(row=receptor.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._dock_protein_text = _grid_text(receptor, height=10, mono=self._mono)
+        self._dock_protein_text.insert(
+            "1.0", "the receptor report appears here (mode, atoms, chains, ...)"
+        )
+        grid_append(receptor, self._dock_protein_text, sticky="ew", pady=(6, 0))
+        dist_buttons = ttk.Frame(receptor, style="Card.TFrame")
+        grid_append(receptor, dist_buttons, sticky="w", pady=(6, 0))
+        dist_btn = self._action_button(
+            dist_buttons, "Distribute into campaign…",
+            self._dock_distribute_receptor,
+            tooltip="Copies the prepared receptor into every ligand folder "
+                    "of a campaign root.",
+        )
+        dist_btn.pack(side="left")
+        self._dock_distribute_info = ttk.Label(
+            dist_buttons, text="", style="CardMuted.TLabel", wraplength=260,
+            justify="left",
+        )
+        self._dock_distribute_info.pack(side="left", padx=(10, 0))
+
+        # -- card 3: grid box & docking configs -------------------------- #
+        grid_card = make_card(
+            page.grid, "Grid box & docking configs", row=1, column=0,
+            subtitle="Enclose a reference ligand, then write the AutoDock4 "
+                     "r.gpf / r.dpf pair next to it.",
+        )
+        lig_buttons = ttk.Frame(grid_card, style="Card.TFrame")
+        lig_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
+        lig_open_btn = self._action_button(lig_buttons, "Open reference ligand PDBQT…",
+                                           self._dock_open_ligand)
+        lig_open_btn.pack(side="left")
+        self._dock_ligand_info = ttk.Label(
+            lig_buttons, text="no ligand selected", style="CardMuted.TLabel",
+            wraplength=220, justify="left",
+        )
+        self._dock_ligand_info.pack(side="left", padx=(10, 0))
+        self._dock_padding_entry = ttk.Entry(grid_card, width=10)
+        self._dock_padding_entry.insert(0, "4.0")
+        form_row(grid_card, "padding (Å)", self._dock_padding_entry)
+        self._dock_npts_entry = ttk.Entry(grid_card, width=12)
+        self._dock_npts_entry.insert(0, "60 60 60")
+        form_row(grid_card, "npts (x y z)", self._dock_npts_entry)
+        self._dock_spacing_entry = ttk.Entry(grid_card, width=10)
+        self._dock_spacing_entry.insert(0, "0.375")
+        form_row(grid_card, "spacing (Å)", self._dock_spacing_entry)
+        self._dock_receptor_name_entry = ttk.Entry(grid_card, width=14)
+        self._dock_receptor_name_entry.insert(0, "r.pdbqt")
+        form_row(grid_card, "receptor file", self._dock_receptor_name_entry)
+        self._dock_ga_run_entry = ttk.Entry(grid_card, width=10)
+        self._dock_ga_run_entry.insert(0, "100")
+        form_row(grid_card, "ga_run", self._dock_ga_run_entry)
+        self._dock_ga_pop_entry = ttk.Entry(grid_card, width=10)
+        self._dock_ga_pop_entry.insert(0, "150")
+        form_row(grid_card, "ga population", self._dock_ga_pop_entry)
+        grid_btn = self._action_button(
+            grid_card, "Compute box & write GPF/DPF", self._dock_compute_grid,
+            primary=True,
+            tooltip="Grid box from the ligand plus padding; GPF and DPF land "
+                    "in the ligand's own folder.",
+        )
+        grid_btn.grid(row=grid_card.grid_size()[1], column=0, columnspan=2,
+                      sticky="w", pady=(6, 0))
+        self._dock_grid_text = _grid_text(grid_card, height=7, mono=self._mono)
+        self._dock_grid_text.insert(
+            "1.0", "box centre / size, ligand atom types and the written "
+                   "paths appear here"
+        )
+        grid_append(grid_card, self._dock_grid_text, sticky="ew", pady=(6, 0))
+
+        # -- card 4: docking results (one tree, three sources) ----------- #
+        results = make_card(
+            page.grid, "Docking results", row=1, column=1,
+            subtitle="One tree, three sources: a campaign scan, an AutoDock4 "
+                     "DLG cluster table, or a Vina mode table.",
+        )
+        scan_buttons = ttk.Frame(results, style="Card.TFrame")
+        scan_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
+        scan_btn = self._action_button(scan_buttons, "Scan campaign folder…",
+                                       self._dock_scan_campaign)
+        scan_btn.pack(side="left")
+        scan_example_btn = self._action_button(
+            scan_buttons, "Load example campaign", self._dock_load_example_campaign,
+            tooltip="The bundled 14-folder campaign "
+                    "(examples/data/docking_campaign).",
+        )
+        scan_example_btn.pack(side="left", padx=(10, 0))
+        dlg_buttons = ttk.Frame(results, style="Card.TFrame")
+        dlg_buttons.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        dlg_btn = self._action_button(dlg_buttons, "Open DLG…", self._dock_open_dlg)
+        dlg_btn.pack(side="left")
+        dlg_example_btn = self._action_button(
+            dlg_buttons, "Open example DLG", self._dock_open_example_dlg,
+            tooltip="The aspirin run of the example campaign "
+                    "(01_aspirin/r.dlg): five clusters.",
+        )
+        dlg_example_btn.pack(side="left", padx=(10, 0))
+        self._dock_heavyatoms_entry = ttk.Entry(dlg_buttons, width=6)
+        self._dock_heavyatoms_entry.pack(side="left", padx=(10, 0))
+        ttk.Label(dlg_buttons, text="heavy atoms (adds ligand efficiency)",
+                  style="CardMuted.TLabel").pack(side="left", padx=(4, 0))
+        vina_row = ttk.Frame(results, style="Card.TFrame")
+        vina_row.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        vina_btn = self._action_button(vina_row, "Open Vina output…",
+                                       self._dock_open_vina)
+        vina_btn.pack(side="left")
+        self._dock_results_info = ttk.Label(
+            results, text="no results yet — scan a campaign or open a log",
+            style="CardMuted.TLabel", wraplength=320, justify="left",
+        )
+        self._dock_results_info.grid(row=3, column=0, columnspan=2, sticky="w",
+                                     pady=(6, 0))
+        results_tree_frame = ttk.Frame(results, style="Card.TFrame")
+        grid_append(results, results_tree_frame, sticky="nsew", weight=True)
+        self._dock_results_tree = ttk.Treeview(results_tree_frame, show="headings",
+                                               height=8)
+        results_bar = ttk.Scrollbar(results_tree_frame, orient="vertical",
+                                    command=self._dock_results_tree.yview)
+        self._dock_results_tree.configure(yscrollcommand=results_bar.set)
+        self._dock_results_tree.pack(side="left", fill="both", expand=True)
+        results_bar.pack(side="right", fill="y")
+        results_save_btn = self._action_button(results, "Save results CSV…",
+                                               self._dock_save_results)
+        results_save_btn.grid(row=results.grid_size()[1], column=0, columnspan=2,
+                              sticky="w", pady=(6, 0))
+
+        # -- card 5: campaign runner ------------------------------------- #
+        runner = make_card(
+            page.grid, "Campaign runner", row=2, column=0,
+            subtitle="autogrid4 + autodock4 over every prepared ligand folder, "
+                     "or one AutoDock Vina run.",
+        )
+        self._dock_engine_combo = ttk.Combobox(runner, state="readonly", width=22,
+                                               values=_DOCK_ENGINES)
+        self._dock_engine_combo.set(_DOCK_ENGINES[0])
+        form_row(runner, "engine", self._dock_engine_combo)
+        root_buttons = ttk.Frame(runner, style="Card.TFrame")
+        root_buttons.grid(row=runner.grid_size()[1], column=0, columnspan=2,
+                          sticky="w")
+        root_btn = self._action_button(root_buttons, "Choose campaign root…",
+                                       self._dock_choose_campaign_root)
+        root_btn.pack(side="left")
+        self._dock_campaign_info = ttk.Label(
+            root_buttons, text="no campaign root chosen", style="CardMuted.TLabel",
+            wraplength=240, justify="left",
+        )
+        self._dock_campaign_info.pack(side="left", padx=(10, 0))
+        vina_in_buttons = ttk.Frame(runner, style="Card.TFrame")
+        vina_in_buttons.grid(row=runner.grid_size()[1], column=0, columnspan=2,
+                             sticky="w", pady=(4, 0))
+        vina_rec_btn = self._action_button(vina_in_buttons, "Receptor PDBQT…",
+                                           self._dock_open_vina_receptor)
+        vina_rec_btn.pack(side="left")
+        vina_lig_btn = self._action_button(vina_in_buttons, "Ligand PDBQT…",
+                                           self._dock_open_vina_ligand)
+        vina_lig_btn.pack(side="left", padx=(10, 0))
+        self._dock_vina_info = ttk.Label(
+            vina_in_buttons, text="no receptor / ligand chosen",
+            style="CardMuted.TLabel", wraplength=240, justify="left",
+        )
+        self._dock_vina_info.pack(side="left", padx=(10, 0))
+        self._dock_center_entry = ttk.Entry(runner, width=12)
+        self._dock_center_entry.insert(0, "0 0 0")
+        form_row(runner, "centre (x y z, Vina)", self._dock_center_entry)
+        self._dock_size_entry = ttk.Entry(runner, width=12)
+        self._dock_size_entry.insert(0, "20 20 20")
+        form_row(runner, "size (x y z, Vina)", self._dock_size_entry)
+        self._dock_exhaust_entry = ttk.Entry(runner, width=10)
+        self._dock_exhaust_entry.insert(0, "8")
+        form_row(runner, "exhaustiveness (Vina)", self._dock_exhaust_entry)
+        self._dock_workers_entry = ttk.Entry(runner, width=10)
+        self._dock_workers_entry.insert(0, "4")
+        form_row(runner, "workers (AutoDock4)", self._dock_workers_entry)
+        run_btn = self._action_button(
+            runner, "Run docking", self._dock_run, primary=True,
+            tooltip="Real docking takes minutes to hours per ligand -- the "
+                    "window stays responsive and the run lands in the logs.",
+        )
+        run_btn.grid(row=runner.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._dock_run_summary = ttk.Label(
+            runner, text="—", style="CardMuted.TLabel", wraplength=320,
+            justify="left",
+        )
+        self._dock_run_summary.grid(row=run_btn.grid_info()["row"], column=1,
+                                    sticky="w", padx=(10, 0))
+
+    # -- ligand library card ------------------------------------------- #
+    def _dock_open_csv(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "library loading"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open a ligand library",
+            filetypes=[("SMILES library", "*.csv *.tsv"), ("All files", "*.*")],
+        )
+        if path:
+            self._dock_load_lib_path(Path(path))
+
+    def _dock_load_example(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "library loading"):
+            return
+        path = EXAMPLES_DIR / "ligand_library.csv"
+        if not path.is_file():
+            messagebox.showwarning(
+                "Missing example", "examples/data/ligand_library.csv was not found."
+            )
+            return
+        self._dock_load_lib_path(path)
+
+    def _dock_load_lib_path(self, path: Path) -> None:
+        try:
+            from pharmaml.docking import load_ligand_csv
+
+            library = load_ligand_csv(path)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not read the ligand library", exc)
+            return
+        if library.frame.empty:
+            messagebox.showwarning("Empty library", f"{path.name} has no rows.")
+            return
+        self._dock_library = library
+        self._dock_lib_path = path
+        valid = int((library.frame["status"] == "valid").sum())
+        self._dock_lib_info.configure(
+            text=(f"{path.name} — {len(library.frame)} rows · {valid} valid "
+                  f"SMILES · {len(library.frame) - valid} invalid")
+        )
+
+    def _dock_choose_out_dir(self) -> None:
+        path = filedialog.askdirectory(title="Choose the ligand output folder")
+        if path:
+            self._dock_out_dir = Path(path)
+            self._dock_out_info.configure(text=f"campaign output: {path}")
+
+    def _dock_prepare_ligands(self) -> None:
+        if not self._require_pharmaml():
+            return
+        if not self._require("pandas", "ligand preparation") or not self._require(
+                "rdkit", "ligand preparation"):
+            return
+        if self._dock_library is None:
+            messagebox.showwarning("No library", "Load a ligand library first.")
+            return
+        if self._dock_out_dir is None:
+            messagebox.showwarning(
+                "No output folder",
+                "Choose the campaign output folder first (the tab creates one "
+                "sub-folder per ligand inside it).",
+            )
+            return
+        library, output_root = self._dock_library, self._dock_out_dir
+
+        def work() -> Any:
+            from pharmaml.docking import prepare_ligand_library
+
+            return prepare_ligand_library(library, output_root)
+
+        def render(report: Any) -> None:
+            self._dock_render_ligand_report(report)
+
+        self._start_job("preparing ligands", work, render)
+
+    def _dock_render_ligand_report(self, report: Any) -> None:
+        self._dock_report = report
+        frame = report.frame
+        ok_count = int(frame["ok"].sum())
+        failed = len(frame) - ok_count
+        self._dock_prep_summary.configure(
+            text=(f"{ok_count}/{len(frame)} prepared · {failed} failed · "
+                  f"campaign at {report.root}"),
+            style="Field.TLabel",
+        )
+        tree = self._dock_lib_tree
+        tree.delete(*tree.get_children())
+        for row in frame.to_dict("records"):
+            tree.insert(
+                "", "end",
+                values=(
+                    _cell_text(row["folder"], limit=22),
+                    _cell_text(row["name"], limit=16),
+                    "Yes" if bool(row["ok"]) else "No",
+                    _cell_text(row["atoms"]),
+                    _cell_text(row["torsdof"]),
+                    _cell_text(row["error"], limit=60),
+                ),
+            )
+
+    def _dock_save_ligand_report(self) -> None:
+        if self._dock_report is None:
+            messagebox.showinfo("Nothing to save", "Prepare a ligand library first.")
+            return
+        if not self._require_pharmaml():
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save the ligand preparation report", defaultextension=".csv",
+            filetypes=[("CSV table", "*.csv")],
+        )
+        if not path:
+            return
+        try:
+            from pharmaml.utils.io import write_table
+
+            written = write_table(self._dock_report.frame, path)
+            messagebox.showinfo("Saved", f"Preparation report written to\n{written}")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not save", exc)
+
+    # -- receptor card -------------------------------------------------- #
+    def _dock_open_receptor(self) -> None:
+        if not self._require_pharmaml() or not self._require("rdkit",
+                                                            "receptor preparation"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open a receptor structure",
+            filetypes=[("Structure files", "*.pdb *.cif *.pdbqt"),
+                       ("All files", "*.*")],
+        )
+        if path:
+            self._dock_set_receptor_source(Path(path))
+
+    def _dock_load_receptor_example(self) -> None:
+        if not self._require_pharmaml() or not self._require("rdkit",
+                                                            "receptor preparation"):
+            return
+        path = EXAMPLES_DIR / "lysozyme_1aki.pdb"
+        if not path.is_file():
+            messagebox.showwarning(
+                "Missing example", "examples/data/lysozyme_1aki.pdb was not found."
+            )
+            return
+        self._dock_set_receptor_source(path)
+
+    def _dock_set_receptor_source(self, path: Path) -> None:
+        self._dock_receptor_source = path
+        self._dock_receptor_info.configure(text=f"{path.name}")
+
+    def _dock_prepare_receptor(self) -> None:
+        if not self._require_pharmaml() or not self._require("rdkit",
+                                                            "receptor preparation"):
+            return
+        if self._dock_receptor_source is None:
+            messagebox.showwarning(
+                "No receptor", "Open a PDB / CIF / PDBQT structure first."
+            )
+            return
+        source = self._dock_receptor_source
+        output_pdbqt = filedialog.asksaveasfilename(
+            title="Save the prepared receptor", defaultextension=".pdbqt",
+            initialfile="receptor.pdbqt",
+            filetypes=[("PDBQT receptor", "*.pdbqt")],
+        )
+        if not output_pdbqt:
+            return
+        remove_waters = bool(self._dock_remove_waters_var.get())
+        keep_hetatm = bool(self._dock_keep_hetatm_var.get())
+        strip_hydrogens = bool(self._dock_strip_h_var.get())
+        chain = self._dock_chain_entry.get().strip() or None
+        target = Path(output_pdbqt)
+
+        def work() -> Any:
+            from pharmaml.docking import prepare_protein
+
+            return prepare_protein(
+                source, output_pdbqt=target,
+                remove_waters=remove_waters, keep_hetatm=keep_hetatm,
+                chain=chain, strip_hydrogens=strip_hydrogens,
+            )
+
+        def render(report: Any) -> None:
+            self._dock_render_protein_report(report)
+
+        self._start_job(f"preparing {source.name}", work, render)
+
+    def _dock_render_protein_report(self, report: Any) -> None:
+        self._dock_protein_report = report
+        self._dock_receptor_path = Path(report.output_pdbqt)
+        chains = ", ".join(report.chains) if report.chains else "—"
+        types = " · ".join(
+            f"{name} {count:,}" for name, count in
+            sorted(report.atom_types.items(), key=lambda item: -item[1])
+        )
+        lines = [
+            f"mode            {report.mode} ({report.source.suffix or 'input'})",
+            (f"input           {report.input_atoms:,} atoms · "
+             f"{report.input_hetatms:,} HETATM"),
+            (f"removed         {report.waters_removed:,} waters · "
+             f"{report.hetatm_removed:,} HETATM · "
+             f"{report.altloc_removed:,} altloc · "
+             f"{report.hydrogens_removed:,} hydrogens"),
+            f"chains          {chains}",
+            f"residues        {report.residues:,}",
+            f"output          {report.output_atoms:,} atoms ({types})",
+            (f"charges         {report.charge_min:+.3f} … {report.charge_max:+.3f} "
+             f"(mean {report.charge_mean:+.4f})"),
+            f"written to      {report.output_pdbqt}",
+        ]
+        if report.notes:
+            lines.append("notes           " + " · ".join(str(note) for note in
+                                                         report.notes))
+        else:
+            lines.append("notes           (none)")
+        self._dock_protein_text.delete("1.0", "end")
+        self._dock_protein_text.insert("1.0", "\n".join(lines))
+
+    def _dock_distribute_receptor(self) -> None:
+        if not self._require_pharmaml():
+            return
+        receptor = self._dock_receptor_path
+        if receptor is None:
+            messagebox.showinfo(
+                "No receptor yet",
+                "Prepare a receptor above first -- or pick an already-prepared "
+                "PDBQT in the next dialog.",
+            )
+            path = filedialog.askopenfilename(
+                title="Open the prepared receptor PDBQT",
+                filetypes=[("PDBQT receptor", "*.pdbqt"), ("All files", "*.*")],
+            )
+            if not path:
+                return
+            receptor = self._dock_receptor_path = Path(path)
+        root = filedialog.askdirectory(title="Choose the campaign root")
+        if not root:
+            return
+        campaign_root = Path(root)
+
+        def work() -> Any:
+            from pharmaml.docking import distribute_receptor
+
+            return distribute_receptor(receptor, campaign_root)
+
+        def render(copies: Any) -> None:
+            self._dock_distribute_info.configure(
+                text=f"receptor copied into {len(copies)} folders "
+                     f"({receptor.name} → {campaign_root})",
+                style="Field.TLabel",
+            )
+
+        self._start_job("distributing receptor", work, render)
+
+    # -- grid box card --------------------------------------------------- #
+    def _dock_open_ligand(self) -> None:
+        if not self._require_pharmaml():
+            return
+        path = filedialog.askopenfilename(
+            title="Open a reference ligand PDBQT",
+            filetypes=[("PDBQT ligand", "*.pdbqt"), ("All files", "*.*")],
+        )
+        if path:
+            self._dock_set_ligand_path(Path(path))
+
+    def _dock_set_ligand_path(self, path: Path) -> None:
+        self._dock_ligand_path = path
+        self._dock_ligand_info.configure(text=path.name)
+
+    def _dock_compute_grid(self) -> None:
+        if not self._require_pharmaml():
+            return
+        if self._dock_ligand_path is None:
+            messagebox.showwarning(
+                "No ligand", "Open a reference ligand PDBQT first."
+            )
+            return
+        ligand = self._dock_ligand_path
+        try:
+            padding = parse_float(self._dock_padding_entry.get(), "padding",
+                                  minimum=0.0)
+            npts = parse_int_triple(self._dock_npts_entry.get(), "npts", minimum=1)
+            spacing = parse_float(self._dock_spacing_entry.get(), "spacing",
+                                  minimum=0.01)
+            receptor_file = self._dock_receptor_name_entry.get().strip()
+            if not receptor_file:
+                raise ValueError("receptor file: pick a file name (e.g. r.pdbqt)")
+            ga_run = parse_int(self._dock_ga_run_entry.get(), "ga_run", minimum=1)
+            ga_pop = parse_int(self._dock_ga_pop_entry.get(), "ga population",
+                               minimum=1)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.docking import (
+                compute_grid_box,
+                extract_pdbqt_atom_types,
+                write_dpf,
+                write_gpf,
+            )
+
+            box = compute_grid_box(ligand, padding=padding, npts=npts,
+                                   spacing=spacing)
+            atom_types = extract_pdbqt_atom_types(ligand)
+            gpf = write_gpf(ligand, receptor_file=receptor_file, box=box,
+                            output_path=ligand.parent / "r.gpf")
+            dpf = write_dpf(ligand, receptor_file=receptor_file,
+                            output_path=ligand.parent / "r.dpf",
+                            ga_run=ga_run, ga_pop_size=ga_pop)
+            return box, atom_types, gpf, dpf, ga_run, ga_pop
+
+        def render(payload: Any) -> None:
+            box, atom_types, gpf, dpf, used_run, used_pop = payload
+            self._dock_box = box
+            centre = (box.center_x, box.center_y, box.center_z)
+            size = box.size
+            self._dock_grid_text.delete("1.0", "end")
+            self._dock_grid_text.insert("1.0", "\n".join([
+                (f"box centre     ({centre[0]:.3f}, {centre[1]:.3f}, "
+                 f"{centre[2]:.3f}) Å"),
+                (f"box size       ({size[0]:.3f}, {size[1]:.3f}, {size[2]:.3f}) Å "
+                 f"· npts {box.npts} at {box.spacing:g} Å"),
+                f"ligand types   {' '.join(atom_types)}",
+                f"r.gpf          {gpf}",
+                f"r.dpf          {dpf}   (ga_run {used_run} · pop {used_pop})",
+            ]))
+
+        self._start_job(f"grid box for {ligand.name}", work, render)
+
+    # -- docking results card -------------------------------------------- #
+    def _dock_scan_campaign(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "the campaign scan"):
+            return
+        path = filedialog.askdirectory(title="Choose the campaign root to scan")
+        if path:
+            self._dock_scan_campaign_path(Path(path))
+
+    def _dock_load_example_campaign(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "the campaign scan"):
+            return
+        path = EXAMPLES_DIR / "docking_campaign"
+        if not path.is_dir():
+            messagebox.showwarning(
+                "Missing example", "examples/data/docking_campaign was not found."
+            )
+            return
+        self._dock_scan_campaign_path(path)
+
+    def _dock_scan_campaign_path(self, root: Path) -> None:
+        def work() -> Any:
+            from pharmaml.docking import scan_docking_directory
+
+            return scan_docking_directory(root)
+
+        def render(frame: Any) -> None:
+            self._dock_results_frame = frame
+            self._dock_results_source = "campaign"
+            tree = self._dock_results_tree
+            tree.delete(*tree.get_children())
+            columns = ["folder", "n_clusters", "top_lowest_energy",
+                       "best_lowest_energy", "status"]
+            tree["columns"] = columns
+            for column in columns:
+                tree.heading(column, text=column)
+                tree.column(column, width=150 if column == "folder" else 130,
+                            minwidth=80, stretch=(column == "folder"))
+            for _, row in frame.iterrows():
+                values = [
+                    _cell_text(None if (isinstance(row[column], float)
+                                        and math.isnan(row[column]))
+                               else row[column], limit=48)
+                    for column in columns
+                ]
+                tree.insert("", "end", values=values)
+            ok = int((frame["status"] == "OK").sum())
+            self._dock_results_info.configure(
+                text=(f"{len(frame)} folders scanned · {ok} OK · "
+                      f"{len(frame) - ok} incomplete — {root.name}"),
+                style="Field.TLabel",
+            )
+
+        self._start_job(f"scanning {root.name}", work, render)
+
+    def _dock_open_dlg(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "DLG parsing"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open an AutoDock4 DLG log",
+            filetypes=[("AutoDock DLG log", "*.dlg"), ("All files", "*.*")],
+        )
+        if path:
+            self._dock_parse_dlg_path(Path(path))
+
+    def _dock_open_example_dlg(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "DLG parsing"):
+            return
+        path = EXAMPLES_DIR / "docking_campaign" / "01_aspirin" / "r.dlg"
+        if not path.is_file():
+            messagebox.showwarning(
+                "Missing example",
+                "examples/data/docking_campaign/01_aspirin/r.dlg was not found.",
+            )
+            return
+        self._dock_parse_dlg_path(path)
+
+    def _dock_parse_dlg_path(self, path: Path) -> None:
+        heavy_raw = self._dock_heavyatoms_entry.get().strip()
+        heavy_atoms: int | None = None
+        if heavy_raw:
+            try:
+                heavy_atoms = parse_int(heavy_raw, "heavy atoms", minimum=1,
+                                        maximum=500)
+            except ValueError as exc:
+                messagebox.showerror("Input", str(exc))
+                return
+
+        def work() -> Any:
+            import pandas as pd
+
+            from pharmaml.docking import (
+                ligand_efficiency_series,
+                parse_dlg_cluster_table,
+                parse_dlg_summary,
+            )
+
+            clusters = parse_dlg_cluster_table(path)
+            summary = parse_dlg_summary(path)
+            frame = pd.DataFrame([
+                {"rank": cluster.rank, "lowest_energy": cluster.lowest_energy,
+                 "mean_energy": cluster.mean_energy,
+                 "num_in_cluster": cluster.num_in_cluster}
+                for cluster in clusters
+            ])
+            if heavy_atoms is not None:
+                frame["n_heavy"] = heavy_atoms
+                frame["LE (kcal/mol/atom)"] = ligand_efficiency_series(
+                    frame, affinity_col="lowest_energy", atoms_col="n_heavy"
+                )
+            return frame, summary, heavy_atoms
+
+        def render(payload: Any) -> None:
+            frame, summary, used_atoms = payload
+            self._dock_results_frame = frame
+            self._dock_results_source = "dlg"
+            tree = self._dock_results_tree
+            tree.delete(*tree.get_children())
+            columns = [str(column) for column in frame.columns
+                       if column != "n_heavy"]
+            tree["columns"] = columns
+            for column in columns:
+                tree.heading(column, text=column)
+                tree.column(column, width=170 if column.startswith("LE") else 120,
+                            minwidth=80, stretch=False)
+            for row in frame.to_dict("records"):
+                values = [
+                    _cell_text(None if (isinstance(row[column], float)
+                                        and math.isnan(row[column]))
+                               else row[column], limit=40)
+                    for column in columns
+                ]
+                tree.insert("", "end", values=values)
+            info = (f"{summary['n_clusters']} clusters · top cluster rank "
+                    f"{summary['top_rank']} at "
+                    f"{summary['top_lowest_energy']:.2f} kcal/mol "
+                    f"({summary['top_num_in_cluster']} poses) · largest cluster "
+                    f"rank {summary['best_rank']} "
+                    f"({summary['best_num_in_cluster']} poses)")
+            if used_atoms is not None:
+                info += f" · LE over {used_atoms} heavy atoms"
+            self._dock_results_info.configure(text=info, style="Field.TLabel")
+
+        self._start_job(f"parsing {path.name}", work, render)
+
+    def _dock_open_vina(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "Vina parsing"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open a Vina output",
+            filetypes=[("Vina output", "*.pdbqt *.log *.txt"),
+                       ("All files", "*.*")],
+        )
+        if path:
+            self._dock_parse_vina_path(Path(path))
+
+    def _dock_parse_vina_path(self, path: Path) -> None:
+        def work() -> Any:
+            import pandas as pd
+
+            from pharmaml.docking import parse_vina_output
+
+            poses = parse_vina_output(path)
+            frame = pd.DataFrame([
+                {"mode": pose.mode, "affinity": pose.affinity,
+                 "rmsd_ub": pose.rmsd_ub, "rmsd_lb": pose.rmsd_lb}
+                for pose in poses
+            ])
+            return frame
+
+        def render(frame: Any) -> None:
+            self._dock_results_frame = frame
+            self._dock_results_source = "vina"
+            tree = self._dock_results_tree
+            tree.delete(*tree.get_children())
+            columns = [str(column) for column in frame.columns]
+            tree["columns"] = columns
+            for column in columns:
+                tree.heading(column, text=column)
+                tree.column(column, width=120, minwidth=80, stretch=False)
+            for row in frame.to_dict("records"):
+                tree.insert(
+                    "", "end",
+                    values=[_cell_text(row[column]) for column in columns],
+                )
+            best = float(frame["affinity"].min()) if len(frame) else float("nan")
+            self._dock_results_info.configure(
+                text=f"{len(frame)} modes · best affinity {best:.2f} kcal/mol "
+                     f"— {path.name}",
+                style="Field.TLabel",
+            )
+
+        self._start_job(f"parsing {path.name}", work, render)
+
+    def _dock_save_results(self) -> None:
+        if self._dock_results_frame is None:
+            messagebox.showinfo("Nothing to save",
+                                "Scan a campaign or parse a log first.")
+            return
+        if not self._require_pharmaml():
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save the docking results", defaultextension=".csv",
+            filetypes=[("CSV table", "*.csv")],
+        )
+        if not path:
+            return
+        try:
+            from pharmaml.utils.io import write_table
+
+            written = write_table(self._dock_results_frame, path)
+            messagebox.showinfo("Saved", f"Results written to\n{written}")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not save", exc)
+
+    # -- campaign runner card -------------------------------------------- #
+    def _dock_choose_campaign_root(self) -> None:
+        path = filedialog.askdirectory(title="Choose the AutoDock4 campaign root")
+        if path:
+            self._dock_campaign_root = Path(path)
+            self._dock_campaign_info.configure(text=f"campaign root: {path}")
+
+    def _dock_open_vina_receptor(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open the receptor PDBQT",
+            filetypes=[("PDBQT receptor", "*.pdbqt"), ("All files", "*.*")],
+        )
+        if path:
+            self._dock_vina_receptor = Path(path)
+            self._dock_refresh_vina_info()
+
+    def _dock_open_vina_ligand(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open the ligand PDBQT",
+            filetypes=[("PDBQT ligand", "*.pdbqt"), ("All files", "*.*")],
+        )
+        if path:
+            self._dock_vina_ligand = Path(path)
+            self._dock_refresh_vina_info()
+
+    def _dock_refresh_vina_info(self) -> None:
+        receptor = (self._dock_vina_receptor.name
+                    if self._dock_vina_receptor else "—")
+        ligand = (self._dock_vina_ligand.name
+                  if self._dock_vina_ligand else "—")
+        self._dock_vina_info.configure(
+            text=f"receptor {receptor} · ligand {ligand}"
+        )
+
+    def _dock_missing_engine_dialog(self, engine: str) -> None:
+        binaries = ", ".join(docking_engine_binaries(engine))
+        if engine == "AutoDock4 campaign":
+            hint = (
+                f"AutoDock4 campaign docking needs the {binaries} binaries on "
+                "PATH (Scripps AutoDock Tools, or conda-forge):\n\n"
+                "    conda install -c conda-forge autodock\n\n"
+                "Install them, reopen this terminal, then run again."
+            )
+        else:
+            hint = (
+                f"Vina docking needs the {binaries} binary on PATH (Scripps "
+                "AutoDock Vina, or conda-forge):\n\n"
+                "    conda install -c conda-forge vina\n\n"
+                "Install it, reopen this terminal, then run again."
+            )
+        messagebox.showinfo("Docking engine not installed", hint)
+
+    def _dock_run(self) -> None:
+        if not self._require_pharmaml():
+            return
+        engine = self._dock_engine_combo.get()
+        binaries = docking_engine_binaries(engine)
+        missing = [name for name in binaries if shutil.which(name) is None]
+        if missing:
+            # pre-empt pharmaml's own RuntimeError with a friendly hint
+            self._dock_missing_engine_dialog(engine)
+            return
+
+        if engine == "AutoDock4 campaign":
+            if self._dock_campaign_root is None:
+                messagebox.showwarning(
+                    "No campaign root",
+                    "Choose the campaign root (the folder of prepared ligand "
+                    "sub-directories) first.",
+                )
+                return
+            try:
+                workers = parse_int(self._dock_workers_entry.get(), "workers",
+                                    minimum=1, maximum=64)
+            except ValueError as exc:
+                messagebox.showerror("Input", str(exc))
+                return
+            root = self._dock_campaign_root
+
+            def work() -> Any:
+                from pharmaml.docking import batch_run_directories
+
+                return batch_run_directories(root, workers=workers)
+
+            def render(results: Any) -> None:
+                ok_runs = sum(1 for result in results if result.ok)
+                failed_runs = len(results) - ok_runs
+                total_seconds = sum(result.seconds for result in results)
+                self._dock_run_summary.configure(
+                    text=(f"{len(results)} folders docked · {ok_runs} ok · "
+                          f"{failed_runs} failed · {total_seconds:.0f} s total "
+                          f"— {root.name}"),
+                    style="Field.TLabel",
+                )
+
+            self._start_job(f"AutoDock4 campaign ({root.name})", work, render)
+            return
+
+        # -- Vina single ligand ------------------------------------------ #
+        if self._dock_vina_receptor is None or self._dock_vina_ligand is None:
+            messagebox.showwarning(
+                "Missing inputs", "Open both the receptor and ligand PDBQT first."
+            )
+            return
+        try:
+            center = parse_float_triple(self._dock_center_entry.get(), "centre")
+            size = parse_float_triple(self._dock_size_entry.get(), "size")
+            exhaustiveness = parse_int(self._dock_exhaust_entry.get(),
+                                       "exhaustiveness", minimum=1, maximum=256)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        receptor, ligand = self._dock_vina_receptor, self._dock_vina_ligand
+        out = ligand.parent / "out.pdbqt"
+
+        def work() -> Any:
+            from pharmaml.docking import run_vina
+
+            return run_vina(receptor, ligand, out=out, center=center, size=size,
+                            exhaustiveness=exhaustiveness)
+
+        def render(result: Any) -> None:
+            state = "ok" if result.ok else f"FAILED — {result.error}"
+            self._dock_run_summary.configure(
+                text=(f"Vina run {state} · {result.seconds:.1f} s · "
+                      f"output {out}"),
+                style="Field.TLabel",
+            )
+
+        self._start_job(f"Vina run ({ligand.name})", work, render)
 
     # ------------------------------------------------------------------ #
     # Data & ML tab
