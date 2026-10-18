@@ -10,6 +10,39 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.19] — 2026-10-19
+
+### Added — the RL optimiser reaches the playground GUI (100x-68)
+
+- **The Generative tab gains an optimiser selector** — "genetic
+  algorithm" or "reinforcement learning (RL)". The GA parameter rows
+  (population / generations / mutation / crossover / operator
+  selection) and the RL rows (iterations / batch size / prior epochs /
+  anchor weight) live in their own frames and swap via
+  `grid_remove`/`grid` (the remembered grid position returns; the card
+  never reshuffles). The random seed, objective and corpus controls are
+  shared.
+- **RL runs fill the same leaderboard card** — the ranked molecules,
+  the `best … — SMILES` summary (tagged `RL · built-in corpus` / `RL ·
+  seeded` / `RL · custom corpus`), and the Pareto front card on
+  multi-objective recipes (RL fills the same per-objective breakdown —
+  the CLI parity). Seeded mode anchors the on-the-fly prior's corpus
+  with the user's molecules ahead of `DEFAULT_CORPUS` (the CLI idiom).
+- **The four-panel prior-drift introspection figure** (100x-66's
+  `plot_rl_introspection`) renders in the results card after every RL
+  run — the GUI axis the round shipped without — plus a first→last
+  history table (`_format_rl_history`: best/mean score, valid
+  fraction, the drift with the teaching note, entropy, both sequence
+  log-probs) replacing the GA operator statistics.
+- **Dependency gating follows the card idiom**: RL requires torch (the
+  install-hint dialog names it), validated inputs raise the standard
+  Input dialog (negative anchor weight, non-integer iterations).
+- Tests +6: the method-combo block swap (grid_info pinning), the
+  negative-anchor input error, the pinned RL run (summary, leaderboard,
+  history table with the exact iteration-0 zero, the 4-axis
+  introspection figure, no dialogs), the RL multi-objective Pareto
+  parity, and two `_format_rl_history` unit tests.
+
 ## [1.2.18] — 2026-10-19
 
 ### Added — Pareto pruning, NSGA-II crowding distance (100x-67)

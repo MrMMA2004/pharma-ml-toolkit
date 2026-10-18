@@ -36,11 +36,15 @@ A tabbed graphical interface opens with every calculation domain of the
   epoch-by-epoch loss curves (``plot_training_history`` -- the
   early-stopping verdict rides on the title, the per-epoch records
   export as CSV).
-* **Generative**    -- run the genetic algorithm on a SMILES corpus with
-  any bundled objective (QED, LogP window, ...); adaptive runs render
-  the operator-mix learning curve (``plot_operator_trajectory``), and
-  multi-objective runs fill the Pareto front card: the audit line, the
-  non-dominated table (with the deepest hidden trade-off rank), the
+* **Generative**    -- run the genetic algorithm OR the reinforcement
+  learning optimiser on a SMILES corpus with any bundled objective (QED,
+  LogP window, ...); adaptive GA runs render the operator-mix learning
+  curve (``plot_operator_trajectory``), RL runs render the four-panel
+  prior-drift introspection (``plot_rl_introspection``: score trajectory,
+  agent-vs-prior log-probs, the anchored drift, the exploration entropy)
+  plus a first→last history table; and multi-objective runs fill the
+  Pareto front card: the audit line, the non-dominated table (with the
+  crowding-distance column and the deepest hidden trade-off rank), the
   objective-pair scatter and a CSV export of the front.
 
 Design notes
@@ -5632,27 +5636,61 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._objective_hint_label.grid(row=controls.grid_size()[1], column=0,
                                         columnspan=2, sticky="w", pady=(2, 4))
         self._objective_hint()
-        self._pop_size = ttk.Spinbox(controls, from_=8, to=96, increment=4, width=10)
+        # the optimiser itself: the GA (structure-space search) or the RL
+        # policy-gradient fine-tuning of an on-the-fly SMILES RNN prior
+        self._method_combo = ttk.Combobox(
+            controls, state="readonly", width=26,
+            values=("genetic algorithm", "reinforcement learning (RL)"),
+        )
+        self._method_combo.set("genetic algorithm")
+        self._method_combo.bind("<<ComboboxSelected>>", self._on_method_change)
+        form_row(controls, "optimiser", self._method_combo)
+        # GA-specific rows live in their own frame so the RL selection can
+        # swap the whole block out (grid_remove collapses the row; re-grid
+        # restores the remembered position -- the card never reshuffles)
+        ga_frame = ttk.Frame(controls, style="Card.TFrame")
+        grid_append(controls, ga_frame, sticky="ew")
+        ga_frame.columnconfigure(1, weight=1)
+        self._pop_size = ttk.Spinbox(ga_frame, from_=8, to=96, increment=4, width=10)
         self._pop_size.set("24")
-        form_row(controls, "population", self._pop_size)
-        self._generations = ttk.Spinbox(controls, from_=4, to=48, increment=4, width=10)
+        form_row(ga_frame, "population", self._pop_size)
+        self._generations = ttk.Spinbox(ga_frame, from_=4, to=48, increment=4, width=10)
         self._generations.set("16")
-        form_row(controls, "generations", self._generations)
+        form_row(ga_frame, "generations", self._generations)
+        self._mutation_combo = ttk.Combobox(ga_frame, state="readonly", width=18,
+                                            values=("uniform", "scaffold", "topology"))
+        self._mutation_combo.set("topology")
+        form_row(ga_frame, "mutation", self._mutation_combo)
+        self._crossover_combo = ttk.Combobox(ga_frame, state="readonly", width=18,
+                                             values=("splice", "scaffold_hop"))
+        self._crossover_combo.set("splice")
+        form_row(ga_frame, "crossover", self._crossover_combo)
+        self._operator_combo = ttk.Combobox(ga_frame, state="readonly", width=18,
+                                            values=("uniform", "adaptive"))
+        self._operator_combo.set("uniform")
+        form_row(ga_frame, "operator selection", self._operator_combo)
+        # RL-specific rows: swapped in when the optimiser combo says RL
+        rl_frame = ttk.Frame(controls, style="Card.TFrame")
+        grid_append(controls, rl_frame, sticky="ew")
+        rl_frame.columnconfigure(1, weight=1)
+        self._rl_iterations = ttk.Spinbox(rl_frame, from_=2, to=60, increment=2, width=10)
+        self._rl_iterations.set("12")
+        form_row(rl_frame, "iterations", self._rl_iterations)
+        self._rl_batch = ttk.Spinbox(rl_frame, from_=8, to=64, increment=8, width=10)
+        self._rl_batch.set("16")
+        form_row(rl_frame, "batch size", self._rl_batch)
+        self._rl_prior_epochs = ttk.Spinbox(rl_frame, from_=1, to=16, increment=1, width=10)
+        self._rl_prior_epochs.set("4")
+        form_row(rl_frame, "prior epochs", self._rl_prior_epochs)
+        self._rl_anchor = ttk.Entry(rl_frame, width=12)
+        self._rl_anchor.insert(0, "0.1")
+        form_row(rl_frame, "anchor weight", self._rl_anchor)
+        rl_frame.grid_remove()  # the GA rows are the default
+        self._rl_frame = rl_frame
+        self._ga_frame = ga_frame
         self._ga_seed = ttk.Entry(controls, width=12)
         self._ga_seed.insert(0, "42")
         form_row(controls, "random seed", self._ga_seed)
-        self._mutation_combo = ttk.Combobox(controls, state="readonly", width=18,
-                                            values=("uniform", "scaffold", "topology"))
-        self._mutation_combo.set("topology")
-        form_row(controls, "mutation", self._mutation_combo)
-        self._crossover_combo = ttk.Combobox(controls, state="readonly", width=18,
-                                             values=("splice", "scaffold_hop"))
-        self._crossover_combo.set("splice")
-        form_row(controls, "crossover", self._crossover_combo)
-        self._operator_combo = ttk.Combobox(controls, state="readonly", width=18,
-                                            values=("uniform", "adaptive"))
-        self._operator_combo.set("uniform")
-        form_row(controls, "operator selection", self._operator_combo)
         run_btn = self._action_button(controls, "Run evolution", self._run_evolution,
                                       primary=True,
                                       tooltip="Runs in a worker thread; results appear below "
@@ -5755,8 +5793,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._corpus_text.delete("1.0", "end")
         self._corpus_text.insert("1.0", "\n".join(smiles))
 
+    def _on_method_change(self, _event: Any = None) -> None:
+        """Swap the GA / RL parameter blocks (grid_remove collapses the row)."""
+        if self._method_combo.get() == "reinforcement learning (RL)":
+            self._ga_frame.grid_remove()
+            self._rl_frame.grid()
+        else:
+            self._rl_frame.grid_remove()
+            self._ga_frame.grid()
+
     def _run_evolution(self) -> None:
-        if not self._require_pharmaml() or not self._require("rdkit", "the GA"):
+        method = self._method_combo.get()
+        if method == "reinforcement learning (RL)":
+            if not self._require_pharmaml() or not self._require(
+                "torch", "the RL optimiser"
+            ):
+                return
+        elif not self._require_pharmaml() or not self._require("rdkit", "the GA"):
             return
         try:
             kind = self._objective_combo.get()
@@ -5764,37 +5817,82 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             hi = parse_float(self._obj_hi.get(), "window high")
             if lo > hi:
                 raise ValueError("window low exceeds window high")
-            population = parse_int(self._pop_size.get(), "population", minimum=4)
-            generations = parse_int(self._generations.get(), "generations", minimum=1)
             seed = parse_int(self._ga_seed.get(), "seed", minimum=0)
-            mutation = self._mutation_combo.get()
-            crossover = self._crossover_combo.get()
-            operator_selection = self._operator_combo.get()
+            if method == "reinforcement learning (RL)":
+                iterations = parse_int(
+                    self._rl_iterations.get(), "iterations", minimum=1
+                )
+                batch_size = parse_int(
+                    self._rl_batch.get(), "batch size", minimum=1
+                )
+                prior_epochs = parse_int(
+                    self._rl_prior_epochs.get(), "prior epochs", minimum=1
+                )
+                anchor_weight = parse_float(
+                    self._rl_anchor.get(), "anchor weight"
+                )
+                if anchor_weight < 0:
+                    raise ValueError("anchor weight cannot be negative")
+                population = generations = 0
+                mutation = crossover = operator_selection = ""
+            else:
+                iterations = batch_size = prior_epochs = 0
+                anchor_weight = 0.0
+                population = parse_int(self._pop_size.get(), "population", minimum=4)
+                generations = parse_int(self._generations.get(), "generations", minimum=1)
+                mutation = self._mutation_combo.get()
+                crossover = self._crossover_combo.get()
+                operator_selection = self._operator_combo.get()
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
         lines = parse_smiles_lines(self._corpus_text.get("1.0", "end"))
         seed_mode = bool(self._seed_mode_var.get())
-        want_plot = operator_selection == "adaptive" and self.deps.get("matplotlib")
+        if method == "reinforcement learning (RL)":
+            want_plot = bool(self.deps.get("matplotlib"))
+        else:
+            want_plot = operator_selection == "adaptive" and self.deps.get("matplotlib")
 
         def work() -> Any:
-            from pharmaml.generative import GeneticOptimizer
-
             objective = build_objective(kind, lo, hi)
-            optimizer = GeneticOptimizer(
-                objective,
-                population_size=population,
-                generations=generations,
-                mutation=mutation,
-                crossover=crossover,
-                operator_selection=operator_selection,
-                seed=seed,
-            )
-            if not lines:
-                return optimizer.optimize()
-            if seed_mode:
-                return optimizer.optimize(seed_smiles=lines)
-            return optimizer.optimize(corpus=lines)
+            if method == "reinforcement learning (RL)":
+                from pharmaml.generative import DEFAULT_CORPUS, ReinventOptimizer
+
+                # the CLI idiom: seeded mode anchors the on-the-fly prior's
+                # corpus with the user's molecules ahead of the bundle
+                if not lines:
+                    corpus_arg: Any = None
+                elif seed_mode:
+                    corpus_arg = list(dict.fromkeys([*lines, *DEFAULT_CORPUS]))
+                else:
+                    corpus_arg = lines
+                optimizer: Any = ReinventOptimizer(
+                    objective,
+                    corpus=corpus_arg,
+                    iterations=iterations,
+                    batch_size=batch_size,
+                    prior_epochs=prior_epochs,
+                    anchor_weight=anchor_weight,
+                    seed=seed,
+                )
+            else:
+                from pharmaml.generative import GeneticOptimizer
+
+                optimizer = GeneticOptimizer(
+                    objective,
+                    population_size=population,
+                    generations=generations,
+                    mutation=mutation,
+                    crossover=crossover,
+                    operator_selection=operator_selection,
+                    seed=seed,
+                )
+                if not lines:
+                    return optimizer.optimize()
+                if seed_mode:
+                    return optimizer.optimize(seed_smiles=lines)
+                return optimizer.optimize(corpus=lines)
+            return optimizer.optimize()
 
         def render(result: Any) -> None:
             self._ga_result = result
@@ -5803,6 +5901,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             mode = "seeded" if seed_mode and lines else (
                 "custom corpus" if lines else "built-in corpus"
             )
+            if method == "reinforcement learning (RL)":
+                mode = f"RL · {mode}"
             self._ga_summary.configure(
                 text=(f"best {result.best_score:.3f} — {result.best}   "
                       f"({len(result.smiles)} unique molecules, {mode}{timing})"),
@@ -5821,24 +5921,35 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "", "end",
                     values=[_cell_text(value, limit=60) for value in row.tolist()],
                 )
-            stats = _format_operator_stats(result.metadata)
+            if method == "reinforcement learning (RL)":
+                stats = _format_rl_history(result)
+            else:
+                stats = _format_operator_stats(result.metadata)
             self._ga_stats_text.delete("1.0", "end")
             self._ga_stats_text.insert("1.0", stats)
             if want_plot:
                 try:
-                    from pharmaml.viz import plot_operator_trajectory
+                    if method == "reinforcement learning (RL)":
+                        from pharmaml.viz import plot_rl_introspection
 
-                    figure = plot_operator_trajectory(result)
+                        figure = plot_rl_introspection(result)
+                    else:
+                        from pharmaml.viz import plot_operator_trajectory
+
+                        figure = plot_operator_trajectory(result)
                     self._render_figure(self._ga_host, figure)
                 except Exception as exc:  # noqa: BLE001
-                    self._show_error("Trajectory plot failed", exc)
+                    self._show_error("Introspection plot failed", exc)
             else:
                 self._close_embedded(self._ga_host)
                 for child in self._ga_host.winfo_children():
                     child.destroy()
             self._render_pareto(result)
 
-        label = f"evolving {generations} generations ({operator_selection})"
+        if method == "reinforcement learning (RL)":
+            label = f"RL optimising {iterations} iterations (anchor {anchor_weight:g})"
+        else:
+            label = f"evolving {generations} generations ({operator_selection})"
         self._start_job(label, work, render)
 
     def _save_ga_leaderboard(self) -> None:
@@ -5989,6 +6100,41 @@ def _format_operator_stats(metadata: dict[str, Any]) -> str:
     if not lines:
         return "operator statistics appear here on adaptive runs"
     lines.insert(0, "operator statistics (adaptive run)")
+    return "\n".join(lines)
+
+
+def _format_rl_history(result: Any) -> str:
+    """Render an RL run's ``history`` first→last as a compact learning table.
+
+    The 100x-66 introspection made the drift measurable; this is its GUI
+    twin -- the numbers the figure plots, in text form.
+    """
+    history = list(getattr(result, "history", []) or [])
+    if not history:
+        return "RL history appears here after a run"
+    first, last = history[0], history[-1]
+
+    def _fmt(key: str) -> str:
+        a, b = first.get(key), last.get(key)
+        if a is None or b is None:
+            return f"  {key:<16} (missing)"
+        return f"  {key:<16} {a:>9.3f} → {b:>9.3f}"
+
+    lines = ["RL run — history (first → last iteration)"]
+    lines.append(_fmt("best_score"))
+    lines.append(_fmt("mean_score"))
+    lines.append(_fmt("valid_fraction"))
+    # the prior-drift diagnostics (the anchor penalty's own quantities)
+    drift_a, drift_b = first.get("drift"), last.get("drift")
+    if drift_a is not None and drift_b is not None:
+        lines.append(
+            f"  {'drift':<16} {drift_a:>9.3f} → {drift_b:>9.3f}   "
+            "(the squared agent-vs-prior gap the anchor penalises; "
+            "iteration 0 is exactly 0.0)"
+        )
+    lines.append(_fmt("entropy"))
+    lines.append(_fmt("agent_logprob"))
+    lines.append(_fmt("prior_logprob"))
     return "\n".join(lines)
 
 

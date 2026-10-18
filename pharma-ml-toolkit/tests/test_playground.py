@@ -2424,3 +2424,164 @@ class TestNumericFeatureGuard:
         assert not app._busy
         titles = [call[1][0] for call in quiet_dialogs]
         assert "No numeric features" in titles
+
+
+class TestGenerativeRLCard:
+    """The Generative tab's RL optimiser: the 100x-66 introspection, GUI axis.
+
+    Fail-first (100x-68): the tab only ever ran the GA -- the RL axis the
+    CLI/notebooks/viz had since 100x-63/66 (ReinventOptimizer +
+    plot_rl_introspection) had no GUI surface at all.  Now the optimiser
+    combo swaps the GA parameter block for the RL one (iterations / batch
+    size / prior epochs / anchor weight), the run fills the same
+    leaderboard card, and the figure host shows the four-panel
+    prior-drift introspection.
+    """
+
+    RL = "reinforcement learning (RL)"
+    GA = "genetic algorithm"
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 180.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def _run_rl(self, app: Any, *, iterations: str = "6", batch: str = "16",
+                prior_epochs: str = "2", anchor: str = "0.1") -> None:
+        app._method_combo.set(self.RL)
+        app._rl_iterations.set(iterations)
+        app._rl_batch.set(batch)
+        app._rl_prior_epochs.set(prior_epochs)
+        app._rl_anchor.delete(0, "end")
+        app._rl_anchor.insert(0, anchor)
+        app._run_evolution()
+        assert self._drain_jobs(app), "RL job hung"
+
+    # -- the optimiser swap ----------------------------------------------- #
+
+    def test_method_combo_swaps_the_parameter_blocks(self, app: Any) -> None:
+        # default: the GA rows are live, the RL block is gridded out
+        assert app._method_combo.get() == self.GA
+        assert app._ga_frame.grid_info() != {}
+        assert app._rl_frame.grid_info() == {}
+        # switching to RL collapses the GA block and restores the RL one
+        app._method_combo.set(self.RL)
+        app._on_method_change()
+        assert app._ga_frame.grid_info() == {}
+        assert app._rl_frame.grid_info() != {}
+        # and back: the remembered GA position returns, RL collapses
+        app._method_combo.set(self.GA)
+        app._on_method_change()
+        assert app._ga_frame.grid_info() != {}
+        assert app._rl_frame.grid_info() == {}
+
+    def test_rl_negative_anchor_is_an_input_error(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._method_combo.set(self.RL)
+        app._rl_anchor.delete(0, "end")
+        app._rl_anchor.insert(0, "-0.5")
+        app._run_evolution()
+        assert not app._busy  # rejected before any job started
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "Input" in titles
+        assert app._ga_result is None
+
+    # -- the RL run itself (needs torch + rdkit) --------------------------- #
+
+    @pytest.mark.skipif(
+        importlib.util.find_spec("torch") is None, reason="needs PyTorch"
+    )
+    def test_rl_run_fills_the_card_with_introspection(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._run_rl(app)
+        assert app._ga_result is not None
+        # the summary keeps the card's contract and names the RL mode
+        summary = app._ga_summary.cget("text")
+        assert summary.startswith("best ")
+        assert "RL · built-in corpus" in summary
+        assert len(app._ga_tree.get_children()) > 0  # a real leaderboard
+        # the text panel is the RL history, not the GA operator stats
+        stats = app._ga_stats_text.get("1.0", "end")
+        assert "RL run — history (first → last iteration)" in stats
+        assert "drift" in stats
+        assert "0.000 →" in stats  # iteration 0's drift is the exact zero
+        assert "entropy" in stats
+        # the figure host carries the four-panel introspection figure
+        figure = getattr(app._ga_host, "_pg_figure", None)
+        assert figure is not None
+        assert len(figure.get_axes()) == 4
+        assert quiet_dialogs == []
+
+    @pytest.mark.skipif(
+        importlib.util.find_spec("torch") is None, reason="needs PyTorch"
+    )
+    def test_rl_multiobjective_run_fills_the_pareto_card(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # RL fills the same per-objective breakdown (the CLI parity): the
+        # Pareto card lights up after an RL run on the druglike triple too
+        app._objective_combo.set("Multi-objective (QED \u00d7 MW \u00d7 TPSA)")
+        self._run_rl(app)
+        summary = app._pareto_summary.cget("text")
+        assert "Pareto front over 3 objectives [qed, mw_band, tpsa_band]" in summary
+        assert "molecules non-dominated" in summary
+        assert app._pareto_tree.get_children() != ()
+        assert quiet_dialogs == []
+
+    # -- the text formatter ------------------------------------------------ #
+
+    def test_format_rl_history_placeholder_without_history(
+        self, playground: Any
+    ) -> None:
+        class _Empty:
+            history = None
+
+        assert "after a run" in playground._format_rl_history(_Empty())
+
+    def test_format_rl_history_first_and_last_rows(
+        self, playground: Any
+    ) -> None:
+        class _Two:
+            history: ClassVar[list[dict[str, float]]] = [
+                {"best_score": 0.2, "mean_score": 0.1, "valid_fraction": 0.5,
+                 "drift": 0.0, "entropy": 2.5, "agent_logprob": -20.0,
+                 "prior_logprob": -20.0},
+                {"best_score": 0.8, "mean_score": 0.5, "valid_fraction": 0.9,
+                 "drift": 4.0, "entropy": 2.0, "agent_logprob": -15.0,
+                 "prior_logprob": -20.0},
+            ]
+
+        text = playground._format_rl_history(_Two())
+        assert "RL run — history" in text
+        assert "0.200 →     0.800" in text  # best_score first → last
+        assert "0.000 →     4.000" in text  # the drift
+        assert "the anchor penalises" in text  # the teaching note
