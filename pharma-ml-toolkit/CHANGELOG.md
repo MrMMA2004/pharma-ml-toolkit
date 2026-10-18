@@ -10,6 +10,27 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.2] — 2026-10-18
+
+### Added — playground session persistence + dark theme (100x-51)
+
+- **Every playground input now survives a restart**: on close the
+  window writes `~/.pharmaml/playground-session.json` (all entries,
+  toggles, feature-family checkboxes, pasted SMILES corpora, the
+  active tab, the window geometry and the theme) and restores it on
+  the next launch. `File ▸ Save session now` (Ctrl+Shift+S) and
+  `File ▸ Clear saved session` control it manually; a "session
+  restored" note appears in the status bar.
+- **`View ▸ Follow system / Light / Dark`** recolours the whole
+  window: two named palettes drive every shade, the choice persists
+  with the session, and clam's light state maps (readonly combobox
+  fields, focus borders, scrollbar troughs) are pinned to the active
+  palette so dark mode has no bright stragglers. Embedded figures
+  keep the toolkit's white published-figure background on purpose.
+- Sessions recorded on a different screen restore their size but drop
+  an off-screen position; `--self-test` never reads or writes the
+  session file (deterministic CI runs).
+
 ## [1.2.1] — 2026-10-18
 
 ### Fixed — viz contract guards and ML contracts (100x-49)

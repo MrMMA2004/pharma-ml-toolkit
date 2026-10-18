@@ -30,6 +30,7 @@ import { useToolkitStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { copyToClipboard, fmtBytes, fmtInt } from "@/lib/format";
 import type { FileContentResponse, TreeNode } from "@/lib/toolkit-types";
+import { SHIPPED_TOOLKIT_VERSION } from "@/lib/toolkit-version";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 
@@ -48,9 +49,9 @@ interface InstallStep {
 const ZIP_NAME_TOKEN = "{ZIP_NAME}";
 
 /** Version this panel shipped with — the fallback when live tree stats have
- *  not loaded yet (or the tree API is unreachable). Keep in sync with the
- *  toolkit's pyproject.toml [project] version. */
-const SHIPPED_VERSION = "1.2.1";
+ *  not loaded yet (or the tree API is unreachable); re-exported from
+ *  @/lib/toolkit-version so the header badge and this panel agree. */
+const SHIPPED_VERSION = SHIPPED_TOOLKIT_VERSION as string;
 
 const INSTALL_STEPS: InstallStep[] = [
   {
@@ -76,7 +77,7 @@ const INSTALL_STEPS: InstallStep[] = [
   },
   {
     title: "Verify the install",
-    description: "1617 tests should pass and the CLI answers with its version.",
+    description: "1630 tests should pass and the CLI answers with its version.",
     commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
   },
 ];
@@ -273,7 +274,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "1617 pytest cases across all domains",
+    tests: "1630 pytest cases across all domains",
     examples: "six executed notebooks + five no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -476,7 +477,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="1617" label="passing tests" />
+          <StatChip icon={CircleCheck} value="1630" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}

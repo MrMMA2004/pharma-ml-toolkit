@@ -27,6 +27,7 @@ import {
 import { TABS, useToolkitStore } from "@/lib/store";
 import type { TabId } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { SHIPPED_TOOLKIT_VERSION } from "@/lib/toolkit-version"
 
 const TAB_ICONS: Record<TabId, typeof LayoutDashboard> = {
   overview: LayoutDashboard,
@@ -55,7 +56,7 @@ function ThemeToggle() {
   );
 }
 
-const FALLBACK_STATS = { files: 246, lines: "89,782" };
+const FALLBACK_STATS = { files: 246, lines: "90,501" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
@@ -86,7 +87,7 @@ export default function Home() {
                   variant="outline"
                   className="hidden shrink-0 border-primary/30 bg-primary/5 font-mono text-[10px] font-normal text-primary sm:inline-flex"
                 >
-                  v1.0.0
+                  v{stats?.version ?? SHIPPED_TOOLKIT_VERSION}
                 </Badge>
               </div>
             </div>
@@ -197,7 +198,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">1617 tests</span>
+            <span className="text-primary">1630 tests</span>
           </p>
         </div>
       </footer>

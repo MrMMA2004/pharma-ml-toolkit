@@ -47,6 +47,15 @@ Design notes
   biomarker discovery, docking preparation runs, feature-factory
   selection) run in a worker thread; the window never freezes and shows
   a progress bar plus a live status line.
+* Every input survives a restart: on close the window writes a session
+  file (``~/.pharmaml/playground-session.json``) with all entries,
+  toggles, pasted corpora, the active tab, the window geometry and the
+  theme, and restores it on the next launch (``File ▸ Save session
+  now`` / ``Clear saved session`` control it manually).
+* ``View ▸ Follow system / Light / Dark`` recolours the whole window
+  (two named palettes drive every shade); the choice is part of the
+  saved session.  Embedded figures keep the toolkit's white
+  published-figure background on purpose -- plot legibility first.
 * Embedded figures reuse the toolkit's own plotting helpers, so the
   playground looks exactly like the package's published figures.
 
@@ -65,6 +74,7 @@ import csv
 import json
 import math
 import queue
+import re
 import shutil
 import sys
 import threading
@@ -134,16 +144,201 @@ def toolkit_version() -> str:
 __version__ = toolkit_version()
 
 # -- visual language (a calm pharma green, no framework required) ------------
-BG = "#eef1ee"
-CARD = "#ffffff"
-BORDER = "#d9ded7"
-INK = "#1c2321"
-MUTED = "#5f6b64"
-ACCENT = "#0e7c66"
-ACCENT_DARK = "#0a5c4b"
-ACCENT_SOFT = "#dcEee8".lower()
-GOOD = "#157f3d"
-BAD = "#b3261e"
+#
+# Two named palettes drive every colour in the window.  The module-level
+# names below (``BG``, ``CARD``, ...) are *rebound in place* by
+# :func:`apply_theme`, so all widget code keeps reading plain module
+# globals while the View menu flips the whole window between light and
+# dark.  Keys beyond the original ten exist only for the inline shades
+# ``_build_style`` used to hardcode (tabs, headings, status bar, button
+# faces) so the dark theme can recolour them too.
+_LIGHT_PALETTE: dict[str, str] = {
+    "BG": "#eef1ee",
+    "CARD": "#ffffff",
+    "BORDER": "#d9ded7",
+    "INK": "#1c2321",
+    "MUTED": "#5f6b64",
+    "ACCENT": "#0e7c66",
+    "ACCENT_DARK": "#0a5c4b",
+    "ACCENT_SOFT": "#dceee8",
+    "GOOD": "#157f3d",
+    "BAD": "#b3261e",
+    "TAB": "#dde3de",
+    "HEADING": "#edf1ee",
+    "STATUS": "#e3e7e2",
+    "BUTTON_FACE": "#ffffff",
+    "BUTTON_DISABLED": "#9fbcb4",
+    "BUTTON_DISABLED_INK": "#e8f0ee",
+}
+_DARK_PALETTE: dict[str, str] = {
+    "BG": "#151a18",
+    "CARD": "#202724",
+    "BORDER": "#39423e",
+    "INK": "#e7ece9",
+    "MUTED": "#9daba4",
+    "ACCENT": "#16a98a",
+    "ACCENT_DARK": "#0f8a70",
+    "ACCENT_SOFT": "#2c4139",
+    "GOOD": "#37c46f",
+    "BAD": "#e5766b",
+    "TAB": "#242c29",
+    "HEADING": "#2b3531",
+    "STATUS": "#111514",
+    "BUTTON_FACE": "#2b3531",
+    "BUTTON_DISABLED": "#3a4642",
+    "BUTTON_DISABLED_INK": "#8d9b95",
+}
+_PALETTES: dict[str, dict[str, str]] = {"light": _LIGHT_PALETTE, "dark": _DARK_PALETTE}
+
+#: The palette currently bound to the module-level colour names.
+_ACTIVE_THEME = "light"
+
+BG = _LIGHT_PALETTE["BG"]
+CARD = _LIGHT_PALETTE["CARD"]
+BORDER = _LIGHT_PALETTE["BORDER"]
+INK = _LIGHT_PALETTE["INK"]
+MUTED = _LIGHT_PALETTE["MUTED"]
+ACCENT = _LIGHT_PALETTE["ACCENT"]
+ACCENT_DARK = _LIGHT_PALETTE["ACCENT_DARK"]
+ACCENT_SOFT = _LIGHT_PALETTE["ACCENT_SOFT"]
+GOOD = _LIGHT_PALETTE["GOOD"]
+BAD = _LIGHT_PALETTE["BAD"]
+TAB = _LIGHT_PALETTE["TAB"]
+HEADING = _LIGHT_PALETTE["HEADING"]
+STATUS = _LIGHT_PALETTE["STATUS"]
+BUTTON_FACE = _LIGHT_PALETTE["BUTTON_FACE"]
+BUTTON_DISABLED = _LIGHT_PALETTE["BUTTON_DISABLED"]
+BUTTON_DISABLED_INK = _LIGHT_PALETTE["BUTTON_DISABLED_INK"]
+
+
+def apply_theme(name: str) -> str:
+    """Rebind the module-level colour names to the named palette.
+
+    ``"light"`` and ``"dark"`` are the two shipped palettes; anything
+    else falls back to light.  Returns the palette actually applied (the
+    caller resolves ``"auto"`` itself -- detecting the OS preference
+    needs a live Tk interpreter, which this pure helper must not).
+
+    Widget code reads ``BG`` / ``CARD`` / ... at call time, so a live
+    window only needs :meth:`PlaygroundApp._build_style` re-run plus a
+    walk over the plain ``tk`` widgets (see ``_retint_plain_widgets``)
+    after calling this.
+    """
+    global _ACTIVE_THEME, BG, CARD, BORDER, INK, MUTED, ACCENT, ACCENT_DARK
+    global ACCENT_SOFT, GOOD, BAD, TAB, HEADING, STATUS
+    global BUTTON_FACE, BUTTON_DISABLED, BUTTON_DISABLED_INK
+    _ACTIVE_THEME = name if name in _PALETTES else "light"
+    palette = _PALETTES[_ACTIVE_THEME]
+    BG = palette["BG"]
+    CARD = palette["CARD"]
+    BORDER = palette["BORDER"]
+    INK = palette["INK"]
+    MUTED = palette["MUTED"]
+    ACCENT = palette["ACCENT"]
+    ACCENT_DARK = palette["ACCENT_DARK"]
+    ACCENT_SOFT = palette["ACCENT_SOFT"]
+    GOOD = palette["GOOD"]
+    BAD = palette["BAD"]
+    TAB = palette["TAB"]
+    HEADING = palette["HEADING"]
+    STATUS = palette["STATUS"]
+    BUTTON_FACE = palette["BUTTON_FACE"]
+    BUTTON_DISABLED = palette["BUTTON_DISABLED"]
+    BUTTON_DISABLED_INK = palette["BUTTON_DISABLED_INK"]
+    return _ACTIVE_THEME
+
+
+# -- session persistence (inputs survive restarts) --------------------------- #
+
+#: Bumped whenever the on-disk session layout changes in a way old
+#: playgrounds must not silently mis-read.
+SESSION_FORMAT = 1
+
+_THEMES = ("light", "dark", "auto")
+
+
+def session_path() -> Path:
+    """Where the playground keeps its session file (``~/.pharmaml``)."""
+    return Path.home() / ".pharmaml" / "playground-session.json"
+
+
+def parse_geometry(text: str) -> tuple[int, int, int, int] | None:
+    """Split a Tk geometry string into ``(w, h, x, y)`` (or ``None``).
+
+    Only the full ``WxH+X+Y`` form is accepted -- a bare size or a bare
+    position is not enough to restore a window deterministically.
+    """
+    match = re.match(r"^(\d+)x(\d+)([+-]\d+)([+-]\d+)$", str(text).strip())
+    if match is None:
+        return None
+    return int(match.group(1)), int(match.group(2)), int(match.group(3)), int(match.group(4))
+
+
+def dump_session(
+    *,
+    theme: str,
+    geometry: str,
+    tab: int,
+    variables: dict[str, Any],
+    families: dict[str, bool],
+    texts: dict[str, str],
+) -> dict[str, Any]:
+    """Assemble the JSON-serialisable session payload (pure normaliser).
+
+    Values are coerced to their session types here so the file can never
+    carry a half-typed payload, whatever the caller collected.
+    """
+    return {
+        "format": SESSION_FORMAT,
+        "theme": theme if theme in _THEMES else "light",
+        "geometry": str(geometry),
+        "tab": int(tab),
+        "variables": {str(name): value for name, value in variables.items()},
+        "families": {str(name): bool(checked) for name, checked in families.items()},
+        "texts": {str(name): str(content) for name, content in texts.items()},
+    }
+
+
+def load_session(raw: Any) -> dict[str, Any] | None:
+    """Validate a parsed session file into a trusted dict (or ``None``).
+
+    Malformed files are rejected wholesale (``None``); structurally fine
+    files get every field sanitised back to its session type, so the
+    restore path never has to defend itself twice.
+    """
+    if not isinstance(raw, dict) or raw.get("format") != SESSION_FORMAT:
+        return None
+    theme = raw.get("theme")
+    if theme not in _THEMES:
+        theme = "light"
+    geometry = raw.get("geometry")
+    geometry = geometry if isinstance(geometry, str) else ""
+    tab = raw.get("tab")
+    if isinstance(tab, bool) or not isinstance(tab, int) or tab < 0:
+        tab = 0
+    variables = raw.get("variables")
+    if not isinstance(variables, dict):
+        variables = {}
+    variables = {str(name): value for name, value in variables.items()}
+    families = raw.get("families")
+    if not isinstance(families, dict):
+        families = {}
+    families = {str(name): checked for name, checked in families.items()
+                if isinstance(checked, bool)}
+    texts = raw.get("texts")
+    if not isinstance(texts, dict):
+        texts = {}
+    texts = {str(name): content for name, content in texts.items()
+             if isinstance(content, str)}
+    return {
+        "format": SESSION_FORMAT,
+        "theme": theme,
+        "geometry": geometry,
+        "tab": tab,
+        "variables": variables,
+        "families": families,
+        "texts": texts,
+    }
 
 #: (import name, display label, why it matters, pip hint)
 _DEPENDENCIES: tuple[tuple[str, str, str, str], ...] = (
@@ -702,7 +897,17 @@ else:  # allow `import playground` on tkinter-less builds (probe path)
 class PlaygroundApp(_TkBase):  # type: ignore[misc]
     """The playground window: one notebook, seven tabs, one worker."""
 
-    def __init__(self, dependencies: dict[str, bool] | None = None) -> None:
+    def __init__(self, dependencies: dict[str, bool] | None = None,
+                 persist_session: bool = True) -> None:
+        """Build the window.
+
+        ``persist_session`` switches the whole session machinery on or
+        off: the real app reads ``~/.pharmaml/playground-session.json``
+        at startup (restoring inputs, geometry, active tab and theme)
+        and writes it back on close, while ``--self-test`` passes
+        ``False`` so CI-style runs stay deterministic and never touch
+        (let alone overwrite) a developer's saved session.
+        """
         if tk is None:  # pragma: no cover - guarded by main()
             raise RuntimeError(
                 "tkinter is not available in this Python build -- install the "
@@ -763,6 +968,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._feat_smiles_column: str | None = None
         self._feat_descriptor_count: int = _FEATURE_DESCRIPTORS_FALLBACK
 
+        # -- session + theme state ------------------------------------- #
+        self._persist_session = persist_session
+        self._session: dict[str, Any] | None = None
+        if persist_session:
+            self._session = load_session(self._read_session_file())
+        self._theme = self._session["theme"] if self._session else "light"
+        self._theme_var: Any = None          # built by _build_menu (View menu)
+        self._menu_tints: list[Any] = []     # menus to recolour on theme flip
+        apply_theme(self._resolve_auto_theme() if self._theme == "auto"
+                    else self._theme)
+
         self.title("PharmaML Playground")
         self.configure(background=BG)
         self._setup_dpi()
@@ -775,11 +991,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_menu()
         self._build_statusbar()
         self._build_tabs()
-        self._center_on_screen(width, height)
+        restored_geometry = self._restore_session()
+        if not restored_geometry:
+            self._center_on_screen(width, height)
         self.lift()
         self.attributes("-topmost", True)
         self.after(250, lambda: self.attributes("-topmost", False))
         self.after(80, self._poll_jobs)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # -- plumbing -------------------------------------------------------- #
     def _setup_dpi(self) -> None:
@@ -830,16 +1049,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         borderwidth=0, focusthickness=1, focuscolor="#ffffff",
                         padding=(16, 7), font=("TkDefaultFont", 10, "bold"))
         style.map("Primary.TButton",
-                  background=[("active", ACCENT_DARK), ("disabled", "#9fbcb4")],
-                  foreground=[("disabled", "#e8f0ee")])
-        style.configure("TButton", padding=(10, 5), background="#ffffff",
+                  background=[("active", ACCENT_DARK), ("disabled", BUTTON_DISABLED)],
+                  foreground=[("disabled", BUTTON_DISABLED_INK)])
+        style.configure("TButton", padding=(10, 5), background=BUTTON_FACE,
                         foreground=INK)
         style.map("TButton",
                   background=[("active", ACCENT_SOFT), ("disabled", BG)],
                   foreground=[("disabled", MUTED)])
         style.configure("TNotebook", background=BG, borderwidth=0,
                         tabmargins=(10, 6, 12, 0))
-        style.configure("TNotebook.Tab", background="#dde3de", foreground=MUTED,
+        style.configure("TNotebook.Tab", background=TAB, foreground=MUTED,
                         padding=(16, 8), font=("TkDefaultFont", 10, "bold"))
         style.map("TNotebook.Tab",
                   background=[("selected", CARD)],
@@ -849,7 +1068,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         style.map("Treeview",
                   background=[("selected", ACCENT_SOFT)],
                   foreground=[("selected", INK)])
-        style.configure("Treeview.Heading", background="#edf1ee", foreground=INK,
+        style.configure("Treeview.Heading", background=HEADING, foreground=INK,
                         font=("TkDefaultFont", 9, "bold"), relief="flat")
         style.configure("TEntry", fieldbackground=CARD, bordercolor=BORDER,
                         lightcolor=BORDER, darkcolor=BORDER, padding=4)
@@ -861,10 +1080,42 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         focuscolor=ACCENT)
         style.map("TCheckbutton", background=[("active", CARD)])
         style.configure("Horizontal.TProgressbar", background=ACCENT,
-                        troughcolor="#dde3de", borderwidth=0, thickness=8)
-        style.configure("Status.TFrame", background="#e3e7e2")
-        style.configure("Status.TLabel", background="#e3e7e2", foreground=MUTED,
+                        troughcolor=TAB, borderwidth=0, thickness=8)
+        style.configure("TProgressbar", background=ACCENT, troughcolor=TAB)
+        style.configure("Status.TFrame", background=STATUS)
+        style.configure("Status.TLabel", background=STATUS, foreground=MUTED,
                         font=("TkDefaultFont", 9))
+        # clam's state maps and trough colours ship full of light defaults
+        # (readonly combobox fields, focus borders, pressed buttons,
+        # scrollbar troughs).  ``style.map`` REPLACES the whole map for
+        # each option, so this block pins every reachable state to the
+        # active palette -- without it dark mode keeps bright stragglers.
+        style.configure("TScrollbar", troughcolor=TAB, background=BUTTON_FACE,
+                        arrowcolor=MUTED, lightcolor=BORDER, darkcolor=BORDER,
+                        bordercolor=BORDER)
+        style.map("TScrollbar",
+                  background=[("active", ACCENT_SOFT),
+                              ("pressed", ACCENT_SOFT)])
+        style.configure("TEntry", insertcolor=INK)
+        style.map("TEntry",
+                  background=[("readonly", BG)],
+                  fieldbackground=[("readonly", CARD)],
+                  bordercolor=[("focus", ACCENT)])
+        style.map("TCombobox",
+                  fieldbackground=[("readonly", CARD)],
+                  foreground=[("readonly", INK)],
+                  bordercolor=[("focus", ACCENT)])
+        style.map("TSpinbox",
+                  background=[("readonly", BG)],
+                  fieldbackground=[("readonly", CARD)],
+                  bordercolor=[("focus", ACCENT)])
+        style.map("TButton",
+                  darkcolor=[("pressed", BORDER)],
+                  lightcolor=[("pressed", BORDER)])
+        style.map("Treeview", bordercolor=[("focus", BORDER)])
+        for name in ("TEntry", "TCombobox", "TSpinbox"):
+            style.configure(name, selectbackground=ACCENT_SOFT,
+                            selectforeground=INK)
         for key, value in (
             ("*TCombobox*Listbox.background", CARD),
             ("*TCombobox*Listbox.foreground", INK),
@@ -881,9 +1132,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         file_menu.add_command(label="Save last figure…", accelerator="Ctrl+S",
                               command=self._menu_save_figure)
         file_menu.add_separator()
+        file_menu.add_command(label="Save session now", accelerator="Ctrl+Shift+S",
+                              command=self._save_session_now)
+        file_menu.add_command(label="Clear saved session…",
+                              command=self._clear_saved_session)
+        file_menu.add_separator()
         file_menu.add_command(label="Exit", accelerator="Ctrl+Q",
-                              command=self.destroy)
+                              command=self._on_close)
         bar.add_cascade(label="File", menu=file_menu)
+
+        view_menu = tk.Menu(bar, tearoff=0)
+        self._theme_var = tk.StringVar(value=self._theme)
+        for label, value in (("Follow system", "auto"), ("Light", "light"),
+                             ("Dark", "dark")):
+            view_menu.add_radiobutton(label=label, value=value,
+                                       variable=self._theme_var,
+                                       command=self._on_theme_change)
+        bar.add_cascade(label="View", menu=view_menu)
+
         help_menu = tk.Menu(bar, tearoff=0)
         help_menu.add_command(label="About PharmaML Playground",
                               command=self._show_about)
@@ -891,9 +1157,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                               command=self._show_dependency_report)
         bar.add_cascade(label="Help", menu=help_menu)
         self.configure(menu=bar)
+        self._menu_tints = [bar, file_menu, view_menu, help_menu]
+        self._tint_menus()
         self.bind_all("<Control-o>", lambda _e: self._menu_open_csv())
         self.bind_all("<Control-s>", lambda _e: self._menu_save_figure())
-        self.bind_all("<Control-q>", lambda _e: self.destroy())
+        self.bind_all("<Control-Shift-S>", lambda _e: self._save_session_now())
+        self.bind_all("<Control-q>", lambda _e: self._on_close())
 
     def _build_statusbar(self) -> None:
         bar = ttk.Frame(self, style="Status.TFrame", padding=(12, 5))
@@ -1092,6 +1361,207 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         grid_append(parent, host, sticky="nsew", pady=(6, 0), weight=True)
         host.pack_propagate(False)
         return host
+
+    # -- session + theme ------------------------------------------------- #
+    def _read_session_file(self) -> Any:
+        """Parse the session file, or ``None`` when absent/corrupt."""
+        try:
+            with session_path().open("r", encoding="utf-8") as handle:
+                return json.load(handle)
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError):
+            return None
+
+    def _resolve_auto_theme(self) -> str:
+        """Map ``"auto"`` onto light/dark using the OS preference (Tk 8.6.13+).
+
+        Anything the interpreter cannot answer (older Tk, Linux) falls
+        back to light -- the palette the window was designed around.
+        """
+        with contextlib.suppress(Exception):
+            if bool(self.tk.call("tk", "dark")):
+                return "dark"
+        return "light"
+
+    def _on_theme_change(self) -> None:
+        """View-menu callback: flip the palette across the live window."""
+        choice = self._theme_var.get()
+        self._theme = choice if choice in _THEMES else "light"
+        self._set_theme(self._resolve_auto_theme() if self._theme == "auto"
+                        else self._theme)
+
+    def _set_theme(self, resolved: str) -> None:
+        """Apply a resolved palette and recolour every live widget."""
+        previous = _PALETTES[_ACTIVE_THEME]
+        apply_theme(resolved)
+        self.configure(background=BG)
+        self._build_style()
+        self._tint_menus()
+        self._retint_plain_widgets(previous)
+
+    def _tint_menus(self) -> None:
+        """Recolour the menu bar for the active palette."""
+        for menu in self._menu_tints:
+            with contextlib.suppress(tk.TclError):
+                menu.configure(
+                    background=HEADING if _ACTIVE_THEME == "dark" else CARD,
+                    foreground=INK,
+                    activebackground=ACCENT_SOFT,
+                    activeforeground=INK,
+                )
+
+    def _retint_plain_widgets(self, previous: dict[str, str]) -> None:
+        """Walk the widget tree recolouring plain ``tk`` widgets.
+
+        Only widgets still carrying a colour from the *previous* palette
+        are touched, which is what keeps matplotlib's white figure
+        canvases (also ``Canvas``/white in light mode) safely alone: the
+        scroll canvases use ``BG``, never ``CARD``.
+        """
+        def walk(widget: Any) -> None:
+            for child in widget.winfo_children():
+                klass = child.winfo_class()
+                try:
+                    if klass == "Frame":
+                        if str(child.cget("background")) == previous["CARD"]:
+                            child.configure(background=CARD)
+                        if str(child.cget("highlightbackground")) == previous["BORDER"]:
+                            child.configure(highlightbackground=BORDER)
+                    elif klass == "Canvas":
+                        if str(child.cget("background")) == previous["BG"]:
+                            child.configure(background=BG)
+                    elif klass == "Text":
+                        if str(child.cget("background")) == previous["CARD"]:
+                            child.configure(background=CARD, foreground=INK)
+                except tk.TclError:  # pragma: no cover - exotic widgets
+                    pass
+                walk(child)
+
+        walk(self)
+
+    def _collect_session(self) -> dict[str, Any]:
+        """Snapshot every input on every tab into a session payload."""
+        variables: dict[str, Any] = {}
+        for name, value in sorted(vars(self).items()):
+            if name.startswith("_book") or name == "_theme_var":
+                continue  # transient bookkeeping, not user input
+            if isinstance(value, tk.Variable):
+                with contextlib.suppress(tk.TclError):
+                    variables[name] = value.get()
+            elif isinstance(value, ttk.Entry):  # covers Spinbox/Combobox
+                variables[name] = value.get()
+        families = {family: bool(var.get())
+                    for family, var in self._feat_family_vars.items()}
+        texts = {
+            "pasted": self._feat_pasted_text.get("1.0", "end-1c"),
+            "corpus": self._corpus_text.get("1.0", "end-1c"),
+        }
+        try:
+            tab = self._book.index(self._book.select())
+        except tk.TclError:  # pragma: no cover - no tab selected yet
+            tab = 0
+        return dump_session(theme=self._theme, geometry=self.geometry(),
+                            tab=tab, variables=variables, families=families,
+                            texts=texts)
+
+    def _write_session_file(self) -> bool:
+        """Persist the current session; ``True`` when the file landed."""
+        try:
+            path = session_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w", encoding="utf-8") as handle:
+                json.dump(self._collect_session(), handle, indent=2)
+            return True
+        except (OSError, TypeError, ValueError):
+            return False
+
+    def _save_session_now(self) -> None:
+        """File ▸ Save session now -- write immediately and report."""
+        if not self._persist_session:
+            return
+        if self._write_session_file():
+            self._job_label.configure(
+                text=f"session saved · {session_path()}")
+        else:
+            self._job_label.configure(text="session NOT saved (path unwritable)")
+
+    def _clear_saved_session(self) -> None:
+        """File ▸ Clear saved session -- forget the stored inputs."""
+        if not self._persist_session:
+            return
+        removed = False
+        with contextlib.suppress(OSError):
+            session_path().unlink()
+            removed = True
+        self._session = None
+        if messagebox is not None:
+            messagebox.showinfo(
+                "Session cleared",
+                "The saved session was removed.\n"
+                "Fresh defaults return on the next launch." if removed else
+                "No saved session file existed.")
+
+    def _restore_session(self) -> bool:
+        """Re-apply the saved session onto the freshly built tabs.
+
+        Returns ``True`` when a geometry was restored (so ``__init__``
+        can skip re-centering the window).  Restore never raises: a
+        payload naming a widget that no longer exists (older session,
+        renamed attribute) is simply skipped.
+        """
+        if not self._session:
+            return False
+        session = self._session
+        for name, value in session["variables"].items():
+            widget = getattr(self, name, None)
+            if isinstance(widget, tk.Variable):
+                with contextlib.suppress(tk.TclError):
+                    widget.set(value)
+            elif isinstance(widget, ttk.Entry):
+                setter = getattr(widget, "set", None)
+                if callable(setter):  # Spinbox / Combobox
+                    setter(str(value))
+                else:
+                    widget.delete(0, "end")
+                    widget.insert(0, str(value))
+        for family, checked in session["families"].items():
+            var = self._feat_family_vars.get(family)
+            if var is not None:
+                with contextlib.suppress(tk.TclError):
+                    var.set(bool(checked))
+        text_widgets = {"pasted": self._feat_pasted_text,
+                        "corpus": self._corpus_text}
+        for key, content in session["texts"].items():
+            widget = text_widgets.get(key)
+            if widget is not None:
+                widget.delete("1.0", "end")
+                widget.insert("1.0", content)
+        tab = session["tab"]
+        if 0 <= tab < self._book.index("end"):
+            self._book.select(tab)
+        restored_geometry = False
+        parsed = parse_geometry(session["geometry"])
+        if parsed is not None:
+            width, height, x, y = parsed
+            width = min(width, self.winfo_screenwidth())
+            height = min(height, self.winfo_screenheight())
+            on_screen = (0 <= x < self.winfo_screenwidth()
+                         and 0 <= y < self.winfo_screenheight())
+            spec = f"{width}x{height}" + (f"+{x}+{y}" if on_screen else "")
+            with contextlib.suppress(tk.TclError):
+                self.geometry(spec)
+                restored_geometry = True
+        if session["variables"] or session["texts"]:
+            self._job_label.configure(
+                text="session restored · File ▸ Clear saved session resets")
+        return restored_geometry
+
+    def _on_close(self) -> None:
+        """Window close: save the session (unless disabled), then exit."""
+        if self._persist_session:
+            self._write_session_file()
+        self.destroy()
 
     # -- menu actions ---------------------------------------------------- #
     def _menu_open_csv(self) -> None:
@@ -4477,8 +4947,12 @@ def self_test() -> int:
     Runs headlessly under ``xvfb-run``; used by CI-style checks::
 
         xvfb-run -a python playground.py --self-test
+
+    The build is fully deterministic: ``persist_session=False`` keeps
+    the run from reading -- and, worse, re-writing -- the developer's
+    real ``~/.pharmaml/playground-session.json``.
     """
-    app = PlaygroundApp()
+    app = PlaygroundApp(persist_session=False)
     for _ in range(4):
         app.update_idletasks()
         app.update()

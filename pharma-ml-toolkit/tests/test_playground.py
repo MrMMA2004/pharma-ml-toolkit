@@ -55,9 +55,16 @@ class TestModuleSurface:
             "probe_dependencies", "load_pharmaml", "parse_float", "parse_int",
             "parse_smiles_lines", "format_number", "build_objective",
             "toolkit_version", "PlaygroundApp", "main", "self_test",
-            "print_banner",
+            "print_banner", "apply_theme", "session_path", "dump_session",
+            "load_session", "parse_geometry",
         ):
             assert hasattr(playground, name), name
+
+    def test_docstring_documents_session_and_theme(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "playground-session.json" in doc
+        assert "View \u25b8 Follow system / Light / Dark" in doc
+        assert "Save session" in doc
 
 
 # --------------------------------------------------------------------- #
@@ -240,6 +247,92 @@ class TestDockingHelpers:
             "autogrid4", "autodock4",
         )
         assert playground.docking_engine_binaries("Vina single ligand") == ("vina",)
+
+
+# --------------------------------------------------------------------- #
+# session persistence + themes (pure helpers -- no Tk required)
+# --------------------------------------------------------------------- #
+class TestSessionHelpers:
+    def test_session_path_lives_under_home_dot_pharmaml(
+        self, playground: Any
+    ) -> None:
+        path = playground.session_path()
+        assert path.name == "playground-session.json"
+        assert path.parent == Path.home() / ".pharmaml"
+
+    def test_parse_geometry_accepts_only_full_specs(self, playground: Any) -> None:
+        assert playground.parse_geometry("1180x780+100+50") == (1180, 780, 100, 50)
+        assert playground.parse_geometry(" 900x600-20+0 ") == (900, 600, -20, 0)
+        for broken in ("", "1180x780", "+100+50", "1180x780+100", "junk",
+                       "0x0+0+0extra", "1180xx780+1+1"):
+            assert playground.parse_geometry(broken) is None, broken
+
+    def test_dump_session_normalises_every_field(self, playground: Any) -> None:
+        payload = playground.dump_session(
+            theme="neon", geometry=1180, tab=True,
+            variables={"_a": "x", 5: "y"},
+            families={"descriptors": 1, "ecfp": None},
+            texts={"pasted": "CCO", "corpus": 42},
+        )
+        assert payload["format"] == playground.SESSION_FORMAT
+        assert payload["theme"] == "light"          # unknown theme -> light
+        assert payload["geometry"] == "1180"          # coerced to str
+        assert payload["tab"] == 1                    # bool -> int
+        assert payload["variables"] == {"_a": "x", "5": "y"}
+        assert payload["families"] == {"descriptors": True, "ecfp": False}
+        assert payload["texts"] == {"pasted": "CCO", "corpus": "42"}
+
+    def test_load_session_rejects_malformed_payloads(self, playground: Any) -> None:
+        for raw in (None, [], "session", {}, {"format": 0},
+                    {"format": "1"}, {"format": 2, "theme": "dark"}):
+            assert playground.load_session(raw) is None, raw
+
+    def test_load_session_sanitises_half_formed_payloads(
+        self, playground: Any
+    ) -> None:
+        loaded = playground.load_session({
+            "format": playground.SESSION_FORMAT,
+            "theme": "solarized", "geometry": None, "tab": -4,
+            "variables": "not a dict", "families": {"descriptors": "yes"},
+            "texts": {"pasted": "ok", "corpus": 7},
+        })
+        assert loaded == {
+            "format": playground.SESSION_FORMAT,
+            "theme": "light", "geometry": "", "tab": 0,
+            "variables": {}, "families": {}, "texts": {"pasted": "ok"},
+        }
+
+    def test_dump_load_round_trip_is_lossless(self, playground: Any) -> None:
+        payload = playground.dump_session(
+            theme="dark", geometry="1180x780+10+20", tab=4,
+            variables={"_aff_value": "3.14", "_tune_var": True,
+                       "_feat_k_entry": "777"},
+            families={"descriptors": True, "morgan_scaffold": False},
+            texts={"pasted": "CCO\nCCN", "corpus": ""},
+        )
+        assert playground.load_session(payload) == payload
+
+    def test_apply_theme_rebinds_and_restores_module_colours(
+        self, playground: Any
+    ) -> None:
+        light_bg = playground.BG
+        try:
+            assert playground.apply_theme("dark") == "dark"
+            assert playground.BG == playground._DARK_PALETTE["BG"]
+            assert playground.CARD == playground._DARK_PALETTE["CARD"]
+            assert playground._ACTIVE_THEME == "dark"
+            assert playground.apply_theme("light") == "light"
+            assert playground.BG == light_bg
+            assert playground.apply_theme("bogus") == "light"  # unknown -> light
+        finally:
+            playground.apply_theme("light")  # never leak dark into other tests
+
+    def test_palettes_agree_on_keys(self, playground: Any) -> None:
+        # every palette must define the same key set or apply_theme would
+        # silently leave stale globals behind
+        assert set(playground._LIGHT_PALETTE) == set(playground._DARK_PALETTE)
+        for key, value in playground._LIGHT_PALETTE.items():
+            assert value != playground._DARK_PALETTE[key], key
 
 
 # --------------------------------------------------------------------- #
@@ -566,7 +659,9 @@ def xvfb_display() -> str:
 class TestGuiUnderXvfb:
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp()
+        # persist_session=False keeps the suite deterministic: it must
+        # neither read nor write the developer's real session file.
+        application = playground.PlaygroundApp(persist_session=False)
         yield application
         application.destroy()
         # collect the (destroyed) widget/Variable cycles NOW, in the main
@@ -920,6 +1015,127 @@ class TestDockingGuiUnderXvfb:
         assert "1 folders docked" in summary  # one stub ligand directory
         assert "1 failed" in summary  # /usr/bin/true produces no .dlg
         assert quiet_dialogs == []
+
+
+# --------------------------------------------------------------------- #
+# session persistence + theme switching, live under Xvfb
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestSessionGuiUnderXvfb:
+    @pytest.fixture()
+    def isolated_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        """Point HOME at a scratch dir so tests never touch a real session."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        return tmp_path
+
+    @staticmethod
+    def _drain(app: Any) -> None:
+        for _ in range(4):
+            app.update_idletasks()
+            app.update()
+
+    def test_inputs_survive_close_and_reopen(
+        self, playground: Any, xvfb_display: str, isolated_home: Path
+    ) -> None:
+        import gc
+
+        first = playground.PlaygroundApp()  # persist_session=True (default)
+        self._drain(first)
+        first._aff_value.delete(0, "end")
+        first._aff_value.insert(0, "3.14")
+        first._tune_var.set(True)
+        first._feat_family_vars["morgan_scaffold"].set(False)
+        first._feat_pasted_text.delete("1.0", "end")
+        first._feat_pasted_text.insert("1.0", "CCO\n# note")
+        first._book.select(4)
+        first._on_close()  # close -> must save the session
+        del first
+        gc.collect()
+
+        assert (isolated_home / ".pharmaml" / "playground-session.json").is_file()
+        second = playground.PlaygroundApp()
+        self._drain(second)
+        assert second._aff_value.get() == "3.14"
+        assert bool(second._tune_var.get()) is True
+        assert bool(second._feat_family_vars["morgan_scaffold"].get()) is False
+        assert bool(second._feat_family_vars["descriptors"].get()) is True
+        assert second._feat_pasted_text.get("1.0", "end-1c") == "CCO\n# note"
+        assert second._book.index(second._book.select()) == 4
+        assert "session restored" in str(second._job_label.cget("text"))
+        second.destroy()
+        del second
+        gc.collect()
+
+    def test_persist_session_false_never_writes(
+        self, playground: Any, xvfb_display: str, isolated_home: Path
+    ) -> None:
+        app = playground.PlaygroundApp(persist_session=False)
+        self._drain(app)
+        app._aff_value.delete(0, "end")
+        app._aff_value.insert(0, "9.99")
+        app._on_close()
+        assert not (isolated_home / ".pharmaml").exists()
+
+    def test_theme_flip_recolours_live_widgets_and_collects(
+        self, playground: Any, xvfb_display: str, isolated_home: Path
+    ) -> None:
+        import gc
+
+        app = playground.PlaygroundApp()
+        self._drain(app)
+        assert str(app.cget("background")) == playground._LIGHT_PALETTE["BG"]
+        app._theme_var.set("dark")
+        app._on_theme_change()
+        self._drain(app)
+        assert playground._ACTIVE_THEME == "dark"
+        assert str(app.cget("background")) == playground._DARK_PALETTE["BG"]
+        assert str(app._corpus_text.cget("background")) == playground._DARK_PALETTE["CARD"]
+        assert str(app._corpus_text.cget("foreground")) == playground._DARK_PALETTE["INK"]
+        session = app._collect_session()
+        assert session["theme"] == "dark"
+        app._theme_var.set("light")
+        app._on_theme_change()
+        self._drain(app)
+        assert playground._ACTIVE_THEME == "light"
+        assert str(app.cget("background")) == playground._LIGHT_PALETTE["BG"]
+        assert str(app._corpus_text.cget("background")) == playground._LIGHT_PALETTE["CARD"]
+        # _restore_session must also boot straight into the saved theme
+        app._write_session_file()
+        app.destroy()
+        del app
+        gc.collect()
+        reopened = playground.PlaygroundApp()
+        self._drain(reopened)
+        assert reopened._theme == "light"  # the last flip was persisted
+        reopened.destroy()
+        del reopened
+        gc.collect()
+        playground.apply_theme("light")  # never leak into other tests
+
+    def test_off_screen_geometry_restores_size_only(
+        self, playground: Any, xvfb_display: str, isolated_home: Path
+    ) -> None:
+        import gc
+
+        # a session recorded on a much bigger screen: keep the size,
+        # drop the off-screen position
+        payload = playground.dump_session(
+            theme="light", geometry="1000x700+40000+50000", tab=0,
+            variables={"_aff_value": "1.5"}, families={}, texts={},
+        )
+        (isolated_home / ".pharmaml").mkdir(parents=True)
+        (isolated_home / ".pharmaml" / "playground-session.json").write_text(
+            __import__("json").dumps(payload), encoding="utf-8")
+        app = playground.PlaygroundApp()
+        self._drain(app)
+        assert app._aff_value.get() == "1.5"      # inputs restored
+        assert app.winfo_width() <= 1000           # size honoured (Xvfb 1280x800)
+        # no window manager under Xvfb pins the window at +0+0; what
+        # matters is that the OFF-SCREEN +40000+50000 was dropped
+        assert "+40000" not in app.geometry()      # position dropped
+        app.destroy()
+        del app
+        gc.collect()
 
 
 # --------------------------------------------------------------------- #
