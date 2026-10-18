@@ -83,6 +83,7 @@ from pharmaml.viz.ml_plots import (
     plot_predicted_vs_actual,
     plot_residuals,
     plot_roc_curves,
+    plot_training_history,
 )
 from pharmaml.viz.pharma_plots import (
     plot_concentration_profile,
@@ -134,6 +135,7 @@ __all__ = [
     "plot_similarity_heatmap",
     "plot_table_comparison",
     "plot_top_ligands",
+    "plot_training_history",
     "require_matplotlib",
     "save_figure",
     "save_visual_bundle",

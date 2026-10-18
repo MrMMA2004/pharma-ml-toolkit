@@ -10,6 +10,66 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.13] — 2026-10-19
+
+### Fixed — the numeric-feature pre-flight + the session round-trip pin (100x-62)
+
+- **Zero-numeric-feature datasets now fail BEFORE a job starts.**  A
+  CSV with only string columns (molecule, series, label) used to run
+  the progress bar briefly and die mid-job with the estimator's
+  ``X has 0 feature columns``; all three train flows (Data & ML train,
+  the CV compare, Deep Learning) now pre-flight the dataset and warn
+  up front — naming the dropped non-numeric columns and pointing at
+  the Chemistry tab's feature factory as the remedy.  New shared pure
+  helper ``numeric_feature_columns`` (the numeric/dropped split rule
+  the work closures also use, so pre-flight and training can never
+  drift apart).
+- **The Deep Learning tab's inputs are pinned through a session
+  round-trip**: all 14 ``_dl_*`` inputs save, and 12 mutated values
+  restore verbatim onto a freshly built window — the generic
+  save/restore machinery covers the tab for free, now provably.
+- Probed and cleared: ``plot_roc_curves`` with a 420-class (ID-column)
+  target renders in 1.3 s / +23 MB — no resource guard needed, unlike
+  the confusion-matrix case fixed in 1.2.12.
+- 5 new tests (``TestNumericFeatureGuard`` + the session round-trip).
+
+## [1.2.12] — 2026-10-19
+
+### Added — the Deep Learning tab: the PyTorch estimators in the playground (100x-61)
+
+- **A new "Deep Learning" tab** (between Data & ML and Generative) puts
+  the four `pharmaml.ml.neural` estimators behind one card of inputs:
+  architecture (feed-forward `DeepMLP` / residual `ResidualMLP`),
+  comma-separated hidden widths, activation, dropout, Adam's learning
+  rate and weight decay, early-stopping patience, validation fraction
+  and seed.  The worker thread trains on an 80/20 split and fills three
+  cards: the metrics grid (R²/RMSE/MAE or accuracy/balanced-accuracy/
+  MCC, epochs run, best validation loss, fit time), the parity/confusion
+  figure, and the epoch-by-epoch loss curves with the early-stopping
+  verdict on the title — plus "Save history as CSV…" exporting the exact
+  per-epoch records.  15 new tests (`TestDeepLearningTab` +
+  `TestDefaultTargetColumn`).
+- **`plot_training_history`** (`pharmaml.viz`): the library figure
+  behind the tab — training/validation loss curves, a dashed marker at
+  the best-validation epoch (the weights actually restored) and the
+  verdict line ("early stopped N epoch(s) after the best" / "still
+  improving — more epochs may pay off" / "no validation split").
+  Accepts the estimator's `history_` record list or an equivalent
+  DataFrame; `None` validation losses plot as gaps.  5 tests +
+  doctests.
+- **Smart target-column default** (`default_target_column`): both the
+  Data & ML and Deep Learning dataset cards now preselect the most
+  likely target by walking from the right and skipping the SMILES
+  column and unique-per-row string ID columns — loading
+  `qsar_classification.csv` used to preselect `compound_id` (420 unique
+  row IDs), silently training a 420-class classifier on row IDs.
+- **`plot_confusion_matrix` large-matrix guard**: the figure size no
+  longer grows linearly with the class count (a 420-class matrix once
+  requested a 464-inch canvas) and per-cell annotations stop at 50
+  classes — beyond that the matrix renders as a plain heat-map with a
+  title note, instead of allocating 176k text artists and OOM-killing
+  the process.  Regression test with a 120-class matrix.
+
 ## [1.2.11] — 2026-10-19
 
 ### Added — "Copy inputs as JSON", the footer's second affordance (100x-60)

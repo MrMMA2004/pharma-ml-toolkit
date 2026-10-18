@@ -850,7 +850,7 @@ class TestDockingGuiUnderXvfb:
         titles = [app._book.tab(tab, "text").strip() for tab in app._book.tabs()]
         assert titles == [
             "Home", "Chemistry", "PK / PD", "Cell Lines", "Docking",
-            "Data & ML", "Generative",
+            "Data & ML", "Deep Learning", "Generative",
         ]
 
     def test_docking_example_library_loads(
@@ -1635,7 +1635,7 @@ class TestPerTabResetButtons:
     ) -> None:
         app = playground.PlaygroundApp()
         app.update_idletasks()
-        for index in range(7):
+        for index in range(len(app._book.tabs())):
             page = app._book.nametowidget(app._book.tabs()[index])
             assert hasattr(page, "footer")
             # pinned OUTSIDE the scroll body: always visible, never scrolled
@@ -1920,7 +1920,7 @@ class TestCopyTabInputs:
     ) -> None:
         # copy CHEMISTRY while a DIFFERENT tab is selected: the payload
         # must carry Chemistry's inputs only -- no cross-tab leakage.
-        app._book.select(6)  # Generative visible
+        app._book.select(7)  # Generative visible
         chemistry = self._tab_index(app, "_aff_value")
         payload = self._copy_tab(app, chemistry)
         assert "_aff_value" in payload["variables"]
@@ -1942,3 +1942,387 @@ class TestCopyTabInputs:
             assert isinstance(checked, bool)
         for content in payload["texts"].values():
             assert isinstance(content, str)
+
+
+# --------------------------------------------------------------------- #
+# the Deep Learning tab (100x-61) -- the pharmaml.ml.neural estimators
+# --------------------------------------------------------------------- #
+class TestDeepLearningTab:
+    """The PyTorch estimators behind one card of inputs: the dataset
+    loader, the architecture/task mapping, the training job's three
+    result cards (metrics grid, parity/confusion figure, loss curves)
+    and the per-epoch history CSV export."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        # persist_session=False: the suite must not leak the mutated
+        # Deep Learning inputs into the developer's real session file.
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 180.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def _configure_tiny(self, app: Any, hidden: str = "8",
+                        epochs: str = "30", patience: str = "5") -> None:
+        """Shrink the network so the suite trains in seconds, not minutes."""
+        app._dl_hidden_entry.delete(0, "end")
+        app._dl_hidden_entry.insert(0, hidden)
+        app._dl_epochs.set(epochs)
+        app._dl_patience.set(patience)
+
+    def _metric_texts(self, app: Any) -> str:
+        return " | ".join(
+            str(child.cget("text")) for child in app._dl_metrics.winfo_children()
+        )
+
+    # -- pure helpers (no Tk, no pharmaml import needed) ------------------ #
+    def test_parse_hidden_layers_variants(self, playground: Any) -> None:
+        assert playground.parse_hidden_layers("64, 32") == (64, 32)
+        assert playground.parse_hidden_layers(" 8 ") == (8,)
+        assert playground.parse_hidden_layers("") == ()  # linear baseline
+        assert playground.parse_hidden_layers("64.0, 16") == (64, 16)
+        for junk in ("64, x", "0, 8", "-1"):
+            with pytest.raises(ValueError, match="widths"):
+                playground.parse_hidden_layers(junk)
+
+    def test_estimator_name_covers_all_four_combinations(
+        self, playground: Any
+    ) -> None:
+        deep, residual = playground._DL_ARCHITECTURES
+        assert playground.deep_estimator_name(deep, "regression") == "DeepMLPRegressor"
+        assert playground.deep_estimator_name(
+            deep, "classification") == "DeepMLPClassifier"
+        assert playground.deep_estimator_name(
+            residual, "regression") == "ResidualMLPRegressor"
+        assert playground.deep_estimator_name(
+            residual, "classification") == "ResidualMLPClassifier"
+        with pytest.raises(ValueError, match="architecture"):
+            playground.deep_estimator_name("CNN", "regression")
+        with pytest.raises(ValueError, match="task"):
+            playground.deep_estimator_name(deep, "auto")
+
+    def test_activation_tokens_mirror_the_library(self, playground: Any) -> None:
+        # the combobox values are the estimator's own accepted tokens --
+        # pinned together so the two can never drift apart.
+        from pharmaml.ml.neural import _ACTIVATIONS
+
+        assert playground._DL_ACTIVATIONS == _ACTIVATIONS
+
+    # -- the dataset loader ------------------------------------------------ #
+    def test_example_dataset_loads_into_preview(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_load_example()
+        assert quiet_dialogs == []
+        info = app._dl_info.cget("text")
+        assert info.startswith("qsar_regression.csv — 260 rows × ")
+        assert len(app._dl_preview_tree.get_children()) == 12  # first 12 rows
+        columns = list(app._dl_preview_tree["columns"])
+        assert columns
+        # the smart default: pIC50 (numeric, last), never an ID column
+        assert app._dl_target_combo.get() == "pIC50"
+        assert list(app._dl_target_combo["values"]) == columns
+
+    # -- the training runs -------------------------------------------------- #
+    def test_small_regression_run_fills_all_three_cards(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._configure_tiny(app)
+        app._dl_load_example()
+        app._dl_train()
+        assert self._drain_jobs(app), "network training hung"
+        assert quiet_dialogs == []
+        texts = self._metric_texts(app)
+        assert "DeepMLPRegressor (regression)" in texts
+        assert "R²" in texts and "RMSE" in texts
+        assert "epochs run" in texts and "best val loss" in texts
+        assert "hidden layers" in texts and "8" in texts
+        assert app._dl_host._pg_figure is not None       # parity figure
+        assert app._dl_hist_host._pg_figure is not None  # loss curves
+        summary = app._dl_hist_summary.cget("text")
+        assert "DeepMLPRegressor ·" in summary
+        assert "epochs run" in summary and "best val loss" in summary
+        assert app._dl_history  # the export payload is live
+        assert app._dl_history[0]["epoch"] == 1
+        assert set(app._dl_history[0]) == {"epoch", "train_loss", "val_loss"}
+        assert any(entry["val_loss"] is not None for entry in app._dl_history)
+
+    def test_residual_classifier_run_uses_the_right_estimator(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._configure_tiny(app)
+        app._dl_example_combo.set("qsar_classification.csv")
+        app._dl_load_example()
+        # the smart target default: activity (binary), NOT compound_id
+        # (420 unique row IDs -- the trap the walker exists to avoid)
+        assert app._dl_target_combo.get() == "activity"
+        app._dl_arch_combo.set("Residual MLP (skip connections)")
+        app._dl_train()
+        assert self._drain_jobs(app), "network training hung"
+        assert quiet_dialogs == []
+        texts = self._metric_texts(app)
+        assert "ResidualMLPClassifier (classification)" in texts
+        assert "accuracy" in texts and "MCC" in texts
+        # SMILES + compound_id are not numeric -> reported as dropped
+        assert "dropped non-numeric" in texts
+        assert "SMILES" in texts and "compound_id" in texts
+        assert app._dl_host._pg_figure is not None       # confusion matrix
+        assert app._dl_hist_host._pg_figure is not None  # loss curves
+
+    # -- the history CSV export ---------------------------------------------- #
+    def test_save_history_writes_the_exact_csv(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any],
+        monkeypatch: Any, tmp_path: Path,
+    ) -> None:
+        self._configure_tiny(app)
+        app._dl_load_example()
+        app._dl_train()
+        assert self._drain_jobs(app), "network training hung"
+        out = tmp_path / "history.csv"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename",
+            lambda **kwargs: str(out),
+        )
+        app._dl_save_history()
+        lines = out.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "epoch,train_loss,val_loss"
+        assert len(lines) == 1 + len(app._dl_history)  # one row per epoch
+        assert lines[1].startswith("1,")  # the first epoch
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "Saved" in titles
+
+    # -- guards ---------------------------------------------------------------- #
+    def test_train_without_a_dataset_warns_and_starts_no_job(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_train()
+        assert not app._busy  # the gate stopped before any job started
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No dataset" in titles
+
+    def test_save_history_before_any_run_guards(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_save_history()
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "Nothing to save" in titles
+
+    def test_bad_hidden_layers_warns_not_crashes(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._configure_tiny(app, hidden="64, zero")
+        app._dl_load_example()
+        app._dl_train()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "Check the network settings" in titles
+
+    def test_deep_learning_inputs_survive_a_session_round_trip(
+        self, playground: Any, xvfb_display: str
+    ) -> None:
+        # the generic save/restore machinery walks vars(self) for
+        # Variable/Entry widgets -- every _dl_* input rides it for free.
+        # This pins the whole tab: 14 saved keys, 12 mutated values
+        # restored verbatim onto a freshly built window.
+        first = playground.PlaygroundApp(persist_session=False)
+        second = playground.PlaygroundApp(persist_session=False)
+        try:
+            first._dl_arch_combo.set("Residual MLP (skip connections)")
+            first._dl_hidden_entry.delete(0, "end")
+            first._dl_hidden_entry.insert(0, "128, 64, 32")
+            first._dl_activation_combo.set("gelu")
+            first._dl_dropout.set("0.25")
+            first._dl_epochs.set("300")
+            first._dl_batch.set("64")
+            first._dl_lr_entry.delete(0, "end")
+            first._dl_lr_entry.insert(0, "0.0005")
+            first._dl_wd_entry.delete(0, "end")
+            first._dl_wd_entry.insert(0, "0.01")
+            first._dl_patience.set("25")
+            first._dl_valsplit.set("0.2")
+            first._dl_seed_entry.delete(0, "end")
+            first._dl_seed_entry.insert(0, "7")
+            first._dl_task_combo.set("regression")
+            payload = first._collect_session()
+            saved = [key for key in payload["variables"] if key.startswith("_dl_")]
+            assert len(saved) == 14  # every input on the tab
+
+            second._session = payload
+            second._restore_session()
+            assert second._dl_arch_combo.get() == "Residual MLP (skip connections)"
+            assert second._dl_hidden_entry.get() == "128, 64, 32"
+            assert second._dl_activation_combo.get() == "gelu"
+            assert second._dl_dropout.get() == "0.25"
+            assert second._dl_epochs.get() == "300"
+            assert second._dl_batch.get() == "64"
+            assert second._dl_lr_entry.get() == "0.0005"
+            assert second._dl_wd_entry.get() == "0.01"
+            assert second._dl_patience.get() == "25"
+            assert second._dl_valsplit.get() == "0.2"
+            assert second._dl_seed_entry.get() == "7"
+            assert second._dl_task_combo.get() == "regression"
+        finally:
+            first.destroy()
+            second.destroy()
+
+
+# --------------------------------------------------------------------- #
+# the smart target-column default (100x-61) -- never train on row IDs
+# --------------------------------------------------------------------- #
+class TestDefaultTargetColumn:
+    def test_bundled_examples_pick_their_real_targets(self, playground: Any) -> None:
+        import pandas as pd
+
+        # the last-column default trained a 420-class classifier on
+        # compound_id; the walker must land on the real label instead.
+        cases = {
+            "qsar_regression.csv": "pIC50",          # numeric, last column
+            "qsar_classification.csv": "activity",   # behind SMILES + ID
+            "qsar_multiclass.csv": "Target",
+        }
+        for name, expected in cases.items():
+            frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data" / name)
+            assert playground.default_target_column(frame) == expected, name
+
+    def test_unique_numeric_column_stays_a_target(self, playground: Any) -> None:
+        # a regression target legitimately has all-unique values -- only
+        # unique STRING columns are treated as IDs.
+        import pandas as pd
+
+        frame = pd.DataFrame({
+            "descr": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+            "pIC50": [5.1, 6.2, 7.3, 8.4, 5.5, 6.6, 7.7, 8.8],
+        })
+        assert playground.default_target_column(frame) == "pIC50"
+
+    def test_all_id_columns_fall_back_to_the_last_column(
+        self, playground: Any
+    ) -> None:
+        import pandas as pd
+
+        frame = pd.DataFrame({
+            "lot_id": [f"L{i}" for i in range(8)],
+            "compound_id": [f"C{i}" for i in range(8)],
+        })
+        assert playground.default_target_column(frame) == "compound_id"
+
+    def test_empty_frame_returns_none(self, playground: Any) -> None:
+        import pandas as pd
+
+        assert playground.default_target_column(pd.DataFrame()) is None
+
+    def test_ml_and_dl_loaders_preselect_the_smart_target(
+        self, playground: Any, xvfb_display: str
+    ) -> None:
+        # end to end on the classification example: BOTH dataset cards
+        # must preselect activity, not compound_id (the 420-class trap).
+        app = playground.PlaygroundApp(persist_session=False)
+        try:
+            path = TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv"
+            app._ml_load_path(path)
+            app._dl_load_path(path)
+            assert app._target_combo.get() == "activity"
+            assert app._dl_target_combo.get() == "activity"
+            assert app._infer_task("activity", app._ml_frame) == "classification"
+        finally:
+            app.destroy()
+
+
+# --------------------------------------------------------------------- #
+# the numeric-feature pre-flight (100x-62) -- zero numeric columns fail
+# BEFORE any job starts, with the remedy named
+# --------------------------------------------------------------------- #
+class TestNumericFeatureGuard:
+    ALL_OBJECT_CSV = "molecule,series,label\nCCO,series_a,active\nCCN,series_b,inactive\n"
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    def test_numeric_feature_columns_splits_the_right_way(
+        self, playground: Any
+    ) -> None:
+        import pandas as pd
+
+        frame = pd.read_csv(
+            TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv")
+        numeric, dropped = playground.numeric_feature_columns(frame, "activity")
+        assert numeric == [f"descr_{i:02d}" for i in range(8)]
+        assert dropped == ["SMILES", "compound_id"]
+
+    def _load_all_object_csv(self, app: Any, tmp_path: Path) -> None:
+        path = tmp_path / "all_object.csv"
+        path.write_text(self.ALL_OBJECT_CSV, encoding="utf-8")
+        app._dl_load_path(path)
+        app._ml_load_path(path)
+
+    def test_dl_train_guards_zero_numeric_features(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        self._load_all_object_csv(app, tmp_path)
+        app._dl_train()
+        assert not app._busy  # the guard fired before any job started
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No numeric features" in titles
+        message = quiet_dialogs[0][1][1]
+        assert "molecule, series" in message  # the dropped columns, named
+        assert "feature factory" in message   # the remedy, pointed at
+
+    def test_ml_train_guards_zero_numeric_features(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        self._load_all_object_csv(app, tmp_path)
+        app._ml_train()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No numeric features" in titles
+
+    def test_ml_compare_guards_zero_numeric_features(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        self._load_all_object_csv(app, tmp_path)
+        app._ml_compare()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No numeric features" in titles

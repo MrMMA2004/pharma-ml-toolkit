@@ -28,6 +28,14 @@ A tabbed graphical interface opens with every calculation domain of the
   datasets), pick a target column, train a registry model with the
   toolkit's own preprocessing pipeline, inspect the metrics and the
   parity/confusion figure, cross-validate a model leaderboard.
+* **Deep Learning** -- the toolkit's PyTorch estimators behind one card
+  of inputs: pick the architecture (feed-forward or residual MLP), the
+  hidden widths, dropout, activation, Adam's learning rate and weight
+  decay, the early-stopping patience and validation fraction, then
+  watch the held-out metrics, the parity/confusion figure and the
+  epoch-by-epoch loss curves (``plot_training_history`` -- the
+  early-stopping verdict rides on the title, the per-epoch records
+  export as CSV).
 * **Generative**    -- run the genetic algorithm on a SMILES corpus with
   any bundled objective (QED, LogP window, ...); adaptive runs render
   the operator-mix learning curve (``plot_operator_trajectory``), and
@@ -390,7 +398,7 @@ _DEPENDENCIES: tuple[tuple[str, str, str, str], ...] = (
     ("scipy", "SciPy", "statistics behind biomarker discovery", "scipy"),
     ("matplotlib", "matplotlib", "embedded figures (parity, profiles, curves)", "matplotlib"),
     ("rdkit", "RDKit", "chemistry: descriptors, fingerprints, QED, the GA", "rdkit"),
-    ("torch", "PyTorch", "optional: the REINVENT-style RL optimiser", "torch"),
+    ("torch", "PyTorch", "deep-learning estimators + the RL optimiser", "torch"),
 )
 
 _OBJECTIVE_KINDS = (
@@ -699,6 +707,58 @@ def detect_smiles_column(frame: Any) -> str | None:
     return None
 
 
+def default_target_column(frame: Any) -> str | None:
+    """Pick the most likely target column of a loaded dataset.
+
+    Walks from the RIGHT, skipping the SMILES column and string columns
+    whose every value is unique -- an ID column (``compound_id`` with
+    420 distinct values), never a prediction target.  The bundled
+    examples all cooperate: ``qsar_regression.csv`` ends in ``pIC50``
+    and ``qsar_multiclass.csv`` in ``Target``, but
+    ``qsar_classification.csv`` ends in ``compound_id`` with the real
+    ``activity`` label one step left -- the naive last-column default
+    trained a 420-class classifier on row IDs.
+    """
+    columns = [str(column) for column in frame.columns]
+    if not columns:
+        return None
+    smiles = detect_smiles_column(frame)
+    rows = len(frame)
+    for column in reversed(columns):
+        if smiles is not None and column == smiles:
+            continue
+        series = frame[column]
+        if (
+            rows > 6
+            and str(series.dtype) == "object"
+            and series.nunique() == rows
+        ):
+            continue  # unique-per-row strings: an ID, not a label
+        return column
+    return columns[-1]
+
+
+def numeric_feature_columns(frame: Any, target: str) -> tuple[list[str], list[str]]:
+    """Split a dataset's non-target columns into ``(numeric, dropped)``.
+
+    The train flows' shared rule (Data & ML, Deep Learning): numeric
+    columns become features; everything else -- SMILES, IDs, free text
+    -- is reported as dropped so the user sees WHY those columns never
+    reached the model.
+    """
+    import pandas as pd
+
+    numeric = [
+        column for column in frame.columns
+        if column != target and pd.api.types.is_numeric_dtype(frame[column])
+    ]
+    dropped = [
+        str(column) for column in frame.columns
+        if column != target and column not in numeric
+    ]
+    return numeric, dropped
+
+
 def format_number(value: float, digits: int = 4) -> str:
     """Human-friendly number rendering for result labels and tables."""
     if isinstance(value, bool) or value is None:
@@ -744,6 +804,67 @@ def build_objective(kind: str, lo: float, hi: float) -> Any:
     return MultiObjective(
         [QedObjective(), LogPBandObjective(lo, hi)], weights=[0.7, 0.3]
     )
+
+
+#: Deep-learning tab (100x-61): architecture labels the combobox offers.
+_DL_ARCHITECTURES: tuple[str, ...] = (
+    "Deep MLP (feed-forward)",
+    "Residual MLP (skip connections)",
+)
+
+#: Hidden-activation tokens -- mirrors ``pharmaml.ml.neural._ACTIVATIONS``
+#: (the test suite pins the two together, so they cannot drift).
+_DL_ACTIVATIONS: tuple[str, ...] = ("relu", "tanh", "gelu", "sigmoid")
+
+
+def parse_hidden_layers(raw: str) -> tuple[int, ...]:
+    """Parse the hidden-layers entry (``"64, 32"``) into a width tuple.
+
+    An empty entry is the empty tuple -- a single linear layer, the
+    regularised multinomial/linear baseline the estimators themselves
+    build for ``hidden_layers=()``.
+
+    Raises
+    ------
+    ValueError
+        When a token is not a number or a width below 1.
+    """
+    widths: list[int] = []
+    for token in str(raw).split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            width = int(float(token))  # "64" and "64.0" both parse
+        except ValueError as exc:
+            raise ValueError(
+                f"hidden layer widths must be numbers, got {token!r}"
+            ) from exc
+        if width < 1:
+            raise ValueError(f"hidden layer widths must be >= 1, got {token!r}")
+        widths.append(width)
+    return tuple(widths)
+
+
+def deep_estimator_name(architecture: str, task: str) -> str:
+    """Map the GUI's architecture/task pair onto an estimator class name.
+
+    Pure on purpose: the playground never imports ``pharmaml.ml.neural``
+    at module scope -- the worker thread resolves the returned name at
+    fit time, so the mapping stays testable (and typo-checkable) without
+    pharmaml or torch installed.
+
+    Raises
+    ------
+    ValueError
+        On an unknown architecture label or task token.
+    """
+    if architecture not in _DL_ARCHITECTURES:
+        raise ValueError(f"unknown architecture {architecture!r}")
+    if task not in ("classification", "regression"):
+        raise ValueError(f"unknown task {task!r}")
+    family = "ResidualMLP" if architecture.startswith("Residual") else "DeepMLP"
+    return family + ("Classifier" if task == "classification" else "Regressor")
 
 
 def _cell_text(value: Any, limit: int = 26) -> str:
@@ -1271,6 +1392,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_cellline_tab()
         self._build_docking_tab()
         self._build_ml_tab()
+        self._build_dl_tab()
         self._build_generative_tab()
 
     def _new_page(self, title: str, reset: bool = True) -> Any:
@@ -1922,7 +2044,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             f"PharmaML Playground {__version__}\n{pharmaml_line}\n\n"
             "A single-file graphical front end for the pharmaml toolkit:\n"
             "chemistry · PK/PD · cell lines · docking · QSAR machine learning · "
-            "generative design.\n\n"
+            "deep learning · generative design.\n\n"
             "Calculations run in pharmaml itself -- the playground only\n"
             "collects your inputs and renders the results.",
         )
@@ -1944,8 +2066,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         hero = make_card(
             page.grid, "PharmaML Playground", span=2, row=0, column=0,
             subtitle="One window for the whole toolkit -- chemistry, PK/PD dosing, "
-                     "cell-line biology, molecular docking, QSAR modelling and "
-                     "the generative GA, without touching a terminal.",
+                     "cell-line biology, molecular docking, QSAR modelling, "
+                     "deep learning and the generative GA, without touching "
+                     "a terminal.",
         )
         version_line = (
             f"playground {__version__} · pharmaml {self.pharmaml.__version__}"
@@ -4793,17 +4916,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "", "end", values=[_cell_text(value) for value in row.tolist()]
             )
         self._target_combo["values"] = columns
-        self._target_combo.set(columns[-1])
+        chosen = default_target_column(frame) or columns[-1]
+        self._target_combo.set(chosen)
         self._ml_info.configure(
             text=f"{path.name} — {len(frame):,} rows × {len(columns)} columns"
         )
-        self._refresh_model_choices(self._infer_task(columns[-1]))
+        self._refresh_model_choices(self._infer_task(chosen, frame))
 
-    def _infer_task(self, target: str) -> str:
-        """Classify the target column as a regression or a classification label."""
-        if self._ml_frame is None:
+    def _infer_task(self, target: str, frame: Any = None) -> str:
+        """Classify a target column as a regression or a classification label.
+
+        ``frame`` defaults to the Data & ML tab's dataset; the Deep
+        Learning tab passes its own so both loaders share one rule.
+        """
+        if frame is None:
+            frame = self._ml_frame
+        if frame is None:
             return "regression"
-        column = self._ml_frame[target]
+        column = frame[target]
         if str(column.dtype) == "object":
             return "classification"
         if column.nunique() <= 6:
@@ -4836,6 +4966,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not target:
             messagebox.showwarning("No target", "Pick the column to predict.")
             return
+        # pre-flight (100x-62): same rule as the Deep Learning tab -- a
+        # zero-numeric-feature dataset fails BEFORE the job starts.
+        numeric, dropped = numeric_feature_columns(self._ml_frame, target)
+        if not numeric:
+            messagebox.showwarning(
+                "No numeric features",
+                "Every non-target column is non-numeric"
+                + (f" ({', '.join(dropped)})" if dropped else "")
+                + ".  The models need numeric feature columns -- compute "
+                "descriptors first (the Chemistry tab's feature factory).",
+            )
+            return
         task = self._task_combo.get()
         if task == "auto":
             task = self._infer_task(target)
@@ -4845,19 +4987,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         tune = bool(self._tune_var.get())
 
         def work() -> Any:
-            import pandas as pd
-
             from pharmaml.ml import evaluate_model, train_model
             from pharmaml.ml.preprocessing import make_train_test_split
 
             frame = self._ml_frame
             y = frame[target]
-            numeric = [
-                column for column in frame.columns
-                if column != target and pd.api.types.is_numeric_dtype(frame[column])
-            ]
-            dropped = [column for column in frame.columns
-                       if column != target and column not in numeric]
+            numeric, dropped = numeric_feature_columns(frame, target)
             x_train, x_test, y_train, y_test = make_train_test_split(
                 frame[numeric], y, random_state=42
             )
@@ -4950,21 +5085,31 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showwarning("No dataset", "Open a CSV or load an example first.")
             return
         target = self._target_combo.get()
+        if not target:
+            messagebox.showwarning("No target", "Pick the column to predict.")
+            return
+        # pre-flight (100x-62): the compare flow shares the rule -- a
+        # zero-numeric-feature dataset fails before any CV job starts.
+        numeric, dropped = numeric_feature_columns(self._ml_frame, target)
+        if not numeric:
+            messagebox.showwarning(
+                "No numeric features",
+                "Every non-target column is non-numeric"
+                + (f" ({', '.join(dropped)})" if dropped else "")
+                + ".  The models need numeric feature columns -- compute "
+                "descriptors first (the Chemistry tab's feature factory).",
+            )
+            return
         task = self._task_combo.get()
         if task == "auto":
             task = self._infer_task(target)
 
         def work() -> Any:
-            import pandas as pd
-
             from pharmaml.ml import compare_models
 
             frame = self._ml_frame
             y = frame[target]
-            numeric = [
-                column for column in frame.columns
-                if column != target and pd.api.types.is_numeric_dtype(frame[column])
-            ]
+            numeric, _dropped = numeric_feature_columns(frame, target)
             return compare_models(frame[numeric], y, task, cv=3, n_jobs=1)
 
         def render(board: Any) -> None:
@@ -4980,6 +5125,383 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 )
 
         self._start_job(f"comparing models ({task})", work, render)
+
+    # ------------------------------------------------------------------ #
+    # Deep Learning tab (100x-61) -- the pharmaml.ml.neural estimators
+    # ------------------------------------------------------------------ #
+    def _build_dl_tab(self) -> None:
+        page = self._new_page("Deep Learning")
+        self._dl_page = page
+        self._dl_frame = None
+        self._dl_path = None
+        self._dl_history: list[dict[str, Any]] = []
+
+        data = make_card(page.grid, "Dataset", span=2, row=0, column=0,
+                         subtitle="Any CSV the toolkit's read_table can sniff, or a "
+                                  "bundled example. Features = the numeric columns "
+                                  "except the target (same rule as the Data & ML tab).")
+        open_btn = self._action_button(data, "Open CSV…", self._dl_open_csv)
+        open_btn.grid(row=0, column=0, sticky="w")
+        example_files = [
+            name for name in (
+                "qsar_regression.csv", "qsar_classification.csv", "qsar_multiclass.csv",
+            ) if (EXAMPLES_DIR / name).is_file()
+        ]
+        self._dl_example_combo = ttk.Combobox(data, state="readonly", width=26,
+                                              values=example_files)
+        if example_files:
+            self._dl_example_combo.set(example_files[0])
+        self._dl_example_combo.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        load_btn = self._action_button(data, "Load example", self._dl_load_example)
+        load_btn.grid(row=0, column=2, sticky="w", padx=(12, 0))
+        self._dl_target_combo = ttk.Combobox(data, state="readonly", width=26)
+        form_row(data, "target column", self._dl_target_combo)
+        self._dl_task_combo = ttk.Combobox(data, state="readonly", width=26,
+                                           values=("auto", "regression", "classification"))
+        self._dl_task_combo.set("auto")
+        form_row(data, "task", self._dl_task_combo)
+        self._dl_info = ttk.Label(data, text="no dataset loaded", style="CardMuted.TLabel")
+        self._dl_info.grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
+
+        preview = make_card(page.grid, "Preview (first 12 rows)", span=2, row=1,
+                            column=0)
+        tree_frame = ttk.Frame(preview, style="Card.TFrame")
+        grid_append(preview, tree_frame, sticky="nsew", weight=True)
+        self._dl_preview_tree = ttk.Treeview(tree_frame, show="headings", height=8)
+        preview_bar_x = ttk.Scrollbar(tree_frame, orient="horizontal",
+                                      command=self._dl_preview_tree.xview)
+        preview_bar_y = ttk.Scrollbar(tree_frame, orient="vertical",
+                                      command=self._dl_preview_tree.yview)
+        self._dl_preview_tree.configure(xscrollcommand=preview_bar_x.set,
+                                        yscrollcommand=preview_bar_y.set)
+        self._dl_preview_tree.pack(side="left", fill="both", expand=True)
+        preview_bar_y.pack(side="right", fill="y")
+        preview_bar_x.pack(side="bottom", fill="x")
+
+        net = make_card(page.grid, "Network & training", span=2, row=2, column=0,
+                        subtitle="The pharmaml.ml.neural estimators: Adam with weight "
+                                 "decay, per-feature standardisation and early stopping "
+                                 "on a held-out validation fraction. Hidden layers are "
+                                 "comma-separated widths -- empty = a single linear "
+                                 "layer, the regularised baseline.")
+        self._dl_arch_combo = ttk.Combobox(net, state="readonly", width=26,
+                                           values=_DL_ARCHITECTURES)
+        self._dl_arch_combo.set(_DL_ARCHITECTURES[0])
+        form_row(net, "architecture", self._dl_arch_combo)
+        self._dl_hidden_entry = ttk.Entry(net, width=16)
+        self._dl_hidden_entry.insert(0, "64, 32")
+        form_row(net, "hidden layers", self._dl_hidden_entry)
+        self._dl_activation_combo = ttk.Combobox(net, state="readonly", width=16,
+                                                 values=_DL_ACTIVATIONS)
+        self._dl_activation_combo.set("relu")
+        form_row(net, "activation", self._dl_activation_combo)
+        self._dl_dropout = ttk.Spinbox(net, from_=0.0, to=0.9, increment=0.05, width=10)
+        self._dl_dropout.set("0.1")
+        form_row(net, "dropout", self._dl_dropout)
+        self._dl_epochs = ttk.Spinbox(net, from_=10, to=2000, increment=10, width=10)
+        self._dl_epochs.set("150")
+        form_row(net, "epochs (max)", self._dl_epochs)
+        self._dl_batch = ttk.Spinbox(net, from_=1, to=512, increment=8, width=10)
+        self._dl_batch.set("32")
+        form_row(net, "batch size", self._dl_batch)
+        self._dl_lr_entry = ttk.Entry(net, width=12)
+        self._dl_lr_entry.insert(0, "0.001")
+        form_row(net, "learning rate", self._dl_lr_entry)
+        self._dl_wd_entry = ttk.Entry(net, width=12)
+        self._dl_wd_entry.insert(0, "0.0")
+        form_row(net, "weight decay", self._dl_wd_entry)
+        self._dl_patience = ttk.Spinbox(net, from_=1, to=100, increment=1, width=10)
+        self._dl_patience.set("15")
+        form_row(net, "patience", self._dl_patience)
+        self._dl_valsplit = ttk.Spinbox(net, from_=0.0, to=0.5, increment=0.05, width=10)
+        self._dl_valsplit.set("0.15")
+        form_row(net, "val split", self._dl_valsplit)
+        self._dl_seed_entry = ttk.Entry(net, width=12)
+        self._dl_seed_entry.insert(0, "42")
+        form_row(net, "random seed", self._dl_seed_entry)
+        buttons = ttk.Frame(net, style="Card.TFrame")
+        buttons.grid(row=net.grid_size()[1], column=0, columnspan=2, sticky="w",
+                     pady=(8, 0))
+        train_btn = self._action_button(
+            buttons, "Train & evaluate", self._dl_train, primary=True,
+            tooltip="80/20 split, the estimator's own standardisation and "
+                    "stratified early stopping, then held-out metrics, the "
+                    "parity/confusion figure and the loss curves.")
+        train_btn.pack(side="left")
+
+        results = make_card(page.grid, "Results", span=2, row=3, column=0)
+        self._dl_metrics = ttk.Frame(results, style="Card.TFrame")
+        grid_append(results, self._dl_metrics, sticky="ew")
+        ttk.Label(self._dl_metrics, text="train a network to see metrics",
+                  style="CardMuted.TLabel").pack(anchor="w")
+        self._dl_host = self._figure_host(results, height=330)
+
+        hist = make_card(page.grid, "Training history", span=2, row=4, column=0,
+                         subtitle="Per-epoch training/validation loss -- the "
+                                  "early-stopping verdict rides on the figure title.")
+        self._dl_hist_summary = ttk.Label(
+            hist, text="train a network to see the loss curves",
+            style="CardMuted.TLabel")
+        grid_append(hist, self._dl_hist_summary, sticky="w")
+        self._dl_hist_host = self._figure_host(hist, height=300)
+        hist_buttons = ttk.Frame(hist, style="Card.TFrame")
+        grid_append(hist, hist_buttons, sticky="w", pady=(6, 0))
+        save_btn = self._action_button(
+            hist_buttons, "Save history as CSV…", self._dl_save_history,
+            tooltip="The exact per-epoch records the estimator kept -- "
+                    "epoch, train_loss, val_loss.")
+        save_btn.pack(side="left")
+
+    def _dl_open_csv(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open a dataset",
+            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+        )
+        if path:
+            self._dl_load_path(Path(path))
+
+    def _dl_load_example(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
+            return
+        name = self._dl_example_combo.get()
+        path = EXAMPLES_DIR / name
+        if not path.is_file():
+            messagebox.showwarning("Missing example", f"{name} was not found.")
+            return
+        self._dl_load_path(path)
+
+    def _dl_load_path(self, path: Path) -> None:
+        try:
+            from pharmaml.utils.io import read_table
+
+            frame = read_table(path)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not read the dataset", exc)
+            return
+        if frame.empty:
+            messagebox.showwarning("Empty dataset", f"{path.name} has no rows.")
+            return
+        self._dl_frame = frame
+        self._dl_path = path
+        columns = [str(column) for column in frame.columns]
+        self._dl_preview_tree.delete(*self._dl_preview_tree.get_children())
+        self._dl_preview_tree["columns"] = columns
+        for column in columns:
+            self._dl_preview_tree.heading(column, text=column)
+            self._dl_preview_tree.column(column, width=96, minwidth=64, stretch=True)
+        for _, row in frame.head(12).iterrows():
+            self._dl_preview_tree.insert(
+                "", "end", values=[_cell_text(value) for value in row.tolist()]
+            )
+        self._dl_target_combo["values"] = columns
+        self._dl_target_combo.set(default_target_column(frame) or columns[-1])
+        self._dl_info.configure(
+            text=f"{path.name} — {len(frame):,} rows × {len(columns)} columns"
+        )
+
+    def _dl_train(self) -> None:
+        if not self._require_pharmaml():
+            return
+        for module in ("pandas", "sklearn", "torch"):
+            if not self._require(module, "network training"):
+                return
+        if self._dl_frame is None:
+            messagebox.showwarning("No dataset", "Open a CSV or load an example first.")
+            return
+        target = self._dl_target_combo.get()
+        if not target:
+            messagebox.showwarning("No target", "Pick the column to predict.")
+            return
+        # pre-flight (100x-62): a dataset with zero numeric feature
+        # columns used to surface as a mid-job DataValidationError --
+        # catch it BEFORE the job starts, naming the dropped columns and
+        # the remedy (the feature factory computes descriptors).
+        numeric, dropped = numeric_feature_columns(self._dl_frame, target)
+        if not numeric:
+            messagebox.showwarning(
+                "No numeric features",
+                "Every non-target column is non-numeric"
+                + (f" ({', '.join(dropped)})" if dropped else "")
+                + ".  The estimators need numeric feature columns -- compute "
+                "descriptors first (the Chemistry tab's feature factory).",
+            )
+            return
+        try:
+            hidden = parse_hidden_layers(self._dl_hidden_entry.get())
+            learning_rate = parse_float(self._dl_lr_entry.get(), "learning rate",
+                                        minimum=1e-8)
+            weight_decay = parse_float(self._dl_wd_entry.get(), "weight decay",
+                                       minimum=0.0)
+            dropout = parse_float(self._dl_dropout.get(), "dropout",
+                                  minimum=0.0, maximum=0.9)
+            val_split = parse_float(self._dl_valsplit.get(), "val split",
+                                    minimum=0.0, maximum=0.5)
+            epochs = parse_int(self._dl_epochs.get(), "epochs", minimum=1)
+            batch_size = parse_int(self._dl_batch.get(), "batch size", minimum=1)
+            patience = parse_int(self._dl_patience.get(), "patience", minimum=1)
+            seed = parse_int(self._dl_seed_entry.get(), "random seed", minimum=0)
+        except ValueError as exc:
+            messagebox.showwarning("Check the network settings", str(exc))
+            return
+        task = self._dl_task_combo.get()
+        if task == "auto":
+            task = self._infer_task(target, self._dl_frame)
+        architecture = self._dl_arch_combo.get()
+        activation = self._dl_activation_combo.get()
+        estimator_name = deep_estimator_name(architecture, task)
+
+        def work() -> Any:
+            import time as _time
+
+            from pharmaml.ml import evaluate_model, neural
+            from pharmaml.ml.preprocessing import make_train_test_split
+
+            frame = self._dl_frame
+            y = frame[target]
+            numeric, dropped = numeric_feature_columns(frame, target)
+            x_train, x_test, y_train, y_test = make_train_test_split(
+                frame[numeric], y, random_state=seed
+            )
+            estimator_cls = getattr(neural, estimator_name)
+            network = estimator_cls(
+                hidden_layers=hidden, dropout=dropout, activation=activation,
+                epochs=epochs, batch_size=batch_size, learning_rate=learning_rate,
+                weight_decay=weight_decay, patience=patience, val_split=val_split,
+                random_state=seed,
+            )
+            started = _time.perf_counter()
+            network.fit(x_train, y_train)
+            seconds = _time.perf_counter() - started
+            report = evaluate_model(
+                network, x_test, y_test, task,
+                keep_predictions=(task == "regression"),
+            )
+            return network, report, task, dropped, y_test, seconds
+
+        def render(payload: Any) -> None:
+            network, report, task, dropped, y_test, seconds = payload
+            self._dl_history = list(network.history_)
+            self._fill_dl_metrics(network, report, task, dropped, seconds)
+            self._fill_dl_history_summary(network)
+            if not self.deps.get("matplotlib"):
+                return
+            try:
+                from pharmaml.viz import (
+                    plot_confusion_matrix,
+                    plot_predicted_vs_actual,
+                    plot_training_history,
+                )
+
+                if task == "regression":
+                    figure = plot_predicted_vs_actual(
+                        y_test,
+                        report.predictions,
+                        metrics={
+                            "R²": report.r2,
+                            "RMSE": report.rmse,
+                            "MAE": report.mae,
+                        },
+                    )
+                else:
+                    figure = plot_confusion_matrix(
+                        report.confusion, labels=report.labels
+                    )
+                self._render_figure(self._dl_host, figure)
+                history_figure = plot_training_history(
+                    network.history_,
+                    title=f"{type(network).__name__} · {target}",
+                )
+                self._render_figure(self._dl_hist_host, history_figure)
+            except Exception as exc:  # noqa: BLE001
+                self._show_error("Plot failed", exc)
+
+        self._start_job(f"training {estimator_name} ({task})", work, render)
+
+    def _fill_dl_metrics(self, network: Any, report: Any, task: str,
+                         dropped: list[str], seconds: float) -> None:
+        """Fill the Results card's metric grid for a finished deep run."""
+        for child in self._dl_metrics.winfo_children():
+            child.destroy()
+        hidden = network.get_params()["hidden_layers"]  # the sklearn contract
+        pairs = [
+            ("network", f"{type(network).__name__} ({task})"),
+            ("hidden layers", " × ".join(str(width) for width in hidden)
+             or "linear (none)"),
+            ("features", str(network.n_features_in_)),
+        ]
+        if task == "regression":
+            pairs += [
+                ("R²", format_number(getattr(report, "r2", float("nan")))),
+                ("RMSE", format_number(report.rmse)),
+                ("MAE", format_number(report.mae)),
+            ]
+        else:
+            pairs += [
+                ("accuracy", format_number(report.accuracy)),
+                ("balanced accuracy", format_number(report.balanced_accuracy)),
+                ("MCC", format_number(report.mcc)),
+            ]
+        best_val: float | None = None
+        for entry in network.history_:
+            value = entry.get("val_loss")
+            if value is not None and (best_val is None or value < best_val):
+                best_val = float(value)
+        pairs += [
+            ("epochs run", str(network.n_iter_)),
+            ("best val loss", "n/a" if best_val is None
+             else format_number(best_val)),
+            ("fit time", f"{seconds:.2f} s"),
+        ]
+        if dropped:
+            pairs.append(("dropped non-numeric", ", ".join(dropped)))
+        for index, (name, value) in enumerate(pairs):
+            ttk.Label(self._dl_metrics, text=name, style="CardMuted.TLabel").grid(
+                row=index // 4, column=(index % 4) * 2, sticky="w", padx=(0, 6)
+            )
+            ttk.Label(self._dl_metrics, text=str(value), style="Field.TLabel",
+                      font=self._mono).grid(
+                row=index // 4, column=(index % 4) * 2 + 1, sticky="w", padx=(0, 18)
+            )
+
+    def _fill_dl_history_summary(self, network: Any) -> None:
+        """One muted line above the loss curves: what actually happened."""
+        val_losses = [entry.get("val_loss") for entry in network.history_
+                      if entry.get("val_loss") is not None]
+        if val_losses:
+            self._dl_hist_summary.configure(
+                text=f"{type(network).__name__} · {network.n_iter_} epochs run · "
+                     f"best val loss {format_number(min(val_losses))}"
+            )
+        else:
+            self._dl_hist_summary.configure(
+                text=f"{type(network).__name__} · {network.n_iter_} epochs run · "
+                     "no validation split (val split = 0)"
+            )
+
+    def _dl_save_history(self) -> None:
+        if not self._dl_history:
+            messagebox.showinfo("Nothing to save", "Train a network first.")
+            return
+        if not self._require_pharmaml():
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save training history", defaultextension=".csv",
+            filetypes=[("CSV table", "*.csv")],
+        )
+        if not path:
+            return
+        try:
+            import pandas as pd
+
+            from pharmaml.utils.io import write_table
+
+            frame = pd.DataFrame(self._dl_history)
+            written = write_table(frame, Path(path))
+            messagebox.showinfo("Saved", f"Training history written to\n{written}")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not save", exc)
 
     # ------------------------------------------------------------------ #
     # Generative tab

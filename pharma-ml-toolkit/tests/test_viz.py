@@ -50,6 +50,7 @@ from pharmaml.viz import (
     plot_similarity_heatmap,
     plot_table_comparison,
     plot_top_ligands,
+    plot_training_history,
     save_figure,
     save_visual_bundle,
 )
@@ -130,6 +131,24 @@ class TestConfusionMatrix:
         fig = plot_confusion_matrix(np.array([[4.0, 1.0], [0.0, 5.0]]))
         annotations = [t.get_text() for t in fig.axes[0].texts]
         assert any("4" in text for text in annotations)
+
+    def test_large_class_count_renders_as_a_plain_heatmap(self, close_all):
+        """Regression (100x-61): an ID-column-as-target run once fed a
+        420-class matrix here -- the figure tried a 464-inch canvas with
+        176k per-cell text artists and OOM-killed the process.  Beyond
+        the annotation limit the matrix must render as a plain heat-map
+        with a capped figure size and zero text artists."""
+        rng = np.random.default_rng(0)
+        n = 120
+        matrix = np.zeros((n, n), dtype=int)
+        for i in range(n):  # a plausible sparse prediction pattern
+            matrix[i, rng.integers(0, n)] += 1
+        fig = plot_confusion_matrix(matrix, title="ID target")
+        ax = fig.axes[0]
+        assert len(ax.texts) == 0  # no per-cell annotations
+        assert fig.get_size_inches()[0] <= 16.0  # capped, not 1.1 * n
+        assert "120 classes, cells unannotated" in ax.get_title()
+        assert len(ax.images) == 1  # the heat-map itself still renders
 
 
 class TestRocCurves:
@@ -235,6 +254,64 @@ class TestLearningCurve:
         X, y = mk(n_samples=40, n_features=4, random_state=1)
         with pytest.raises(DataValidationError, match="cv"):
             plot_learning_curve("not a model", X, y, cv=1)  # type: ignore[arg-type]
+
+
+class TestTrainingHistory:
+    HISTORY: ClassVar[list[dict[str, float | None]]] = [
+        {"epoch": 1, "train_loss": 0.9, "val_loss": 1.0},
+        {"epoch": 2, "train_loss": 0.6, "val_loss": 0.8},
+        {"epoch": 3, "train_loss": 0.5, "val_loss": 0.85},
+        {"epoch": 4, "train_loss": 0.45, "val_loss": 0.9},
+    ]
+
+    def test_two_curves_with_the_early_stop_verdict(self, close_all):
+        fig = plot_training_history(self.HISTORY)
+        ax = fig.axes[0]
+        labels = [t.get_text() for t in ax.get_legend().get_texts()]
+        assert any(label.startswith("training loss (final") for label in labels)
+        assert any(label.startswith("validation loss (best") for label in labels)
+        assert "@ epoch 2" in labels[1]  # the restored-weights epoch
+        title = ax.get_title(loc="left")
+        assert "early stopped 2 epoch(s) after the best (epoch 2)" in title
+        assert (ax.get_xlabel(), ax.get_ylabel()) == ("epoch", "loss")
+        assert len(ax.lines) == 3  # train + val + the best-epoch marker line
+
+    def test_dataframe_history_and_still_improving_verdict(self, close_all):
+        import pandas as pd
+
+        frame = pd.DataFrame(self.HISTORY)
+        # best val at the LAST epoch -> the patience window never ran out
+        frame.loc[3, "val_loss"] = 0.4
+        fig = plot_training_history(frame, title="Denoised history")
+        title = fig.axes[0].get_title(loc="left")
+        assert "still improving" in title
+        assert title.startswith("Denoised history")
+
+    def test_valless_history_plots_one_curve_and_says_so(self, close_all):
+        history = [{"epoch": e, "train_loss": 1.0 / e} for e in range(1, 5)]
+        fig = plot_training_history(history)
+        ax = fig.axes[0]
+        assert len(ax.get_legend().get_texts()) == 1
+        assert "no validation split" in ax.get_title(loc="left")
+
+    def test_none_val_losses_plot_as_gaps(self, close_all):
+        history = [
+            {"epoch": 1, "train_loss": 0.9, "val_loss": None},
+            {"epoch": 2, "train_loss": 0.7, "val_loss": 0.8},
+            {"epoch": 3, "train_loss": 0.5, "val_loss": None},
+        ]
+        fig = plot_training_history(history)
+        assert len(fig.axes[0].get_legend().get_texts()) == 2  # gaps, not absent
+
+    def test_empty_and_malformed_histories_raise_typed_errors(self, close_all):
+        with pytest.raises(DataValidationError, match="history is empty"):
+            plot_training_history([])
+        with pytest.raises(DataValidationError, match="missing column"):
+            plot_training_history([{"epoch": 1}])
+        with pytest.raises(DataValidationError, match="non-numeric"):
+            plot_training_history([{"epoch": 1, "train_loss": "lots"}])
+        with pytest.raises(DataValidationError, match="list of per-epoch records"):
+            plot_training_history(42)  # type: ignore[arg-type]
 
 
 class TestRegressionPlots:

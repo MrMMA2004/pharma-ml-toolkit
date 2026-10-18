@@ -281,6 +281,7 @@ after adding new public functions.
 | `plot_similarity_heatmap` | function | Heat-map of a pairwise similarity matrix. |
 | `plot_table_comparison` | function | Overlap breakdown of a ligand-table :class:`TableComparison`. |
 | `plot_top_ligands` | function | Horizontal bars of the strongest-binding ligands. |
+| `plot_training_history` | function | Epoch-by-epoch loss curves with the early-stopping verdict. |
 | `require_matplotlib` | function | Import matplotlib lazily and pick the right backend. |
 | `save_figure` | function | Save a figure to ``png``/``svg``/``pdf`` (chosen by extension). |
 | `save_visual_bundle` | function | Render figures + tables + metrics into one directory + HTML report. |

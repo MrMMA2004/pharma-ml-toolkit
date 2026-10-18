@@ -68,6 +68,33 @@ pharmaml.exceptions.DataValidationError: Unsupported figure format 'gif'; suppor
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: top_n must be a positive integer or None, got 0
+
+>>> from pharmaml.viz.ml_plots import plot_training_history
+>>> history = [
+...     {"epoch": 1, "train_loss": 0.9, "val_loss": 1.0},
+...     {"epoch": 2, "train_loss": 0.6, "val_loss": 0.8},
+...     {"epoch": 3, "train_loss": 0.5, "val_loss": 0.85},
+...     {"epoch": 4, "train_loss": 0.45, "val_loss": 0.9},
+... ]
+>>> fig = plot_training_history(history)
+>>> ax = fig.axes[0]
+>>> ax.get_xlabel(), ax.get_ylabel()
+('epoch', 'loss')
+>>> len(ax.get_legend().get_texts())       # training + validation curves
+2
+>>> close_figure(fig)
+>>> fig = plot_training_history([{"epoch": 1, "train_loss": 0.9}])
+>>> len(fig.axes[0].get_legend().get_texts())   # no val column -> one curve
+1
+>>> close_figure(fig)
+>>> plot_training_history([])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: history is empty -- pass the fitted estimator's history_ (any DeepMLP*/ResidualMLP* fit leaves it on the estimator)
+>>> plot_training_history([{"epoch": 1}])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: history is missing column(s) ['train_loss'] -- expected records with epoch, train_loss and optionally val_loss
 """
 
 from __future__ import annotations
@@ -93,6 +120,7 @@ __all__ = [
     "plot_predicted_vs_actual",
     "plot_residuals",
     "plot_roc_curves",
+    "plot_training_history",
 ]
 
 _LOG = get_logger(__name__)
@@ -167,27 +195,41 @@ def plot_confusion_matrix(
     n = matrix.shape[0]
     display = matrix / matrix.sum(axis=1, keepdims=True) if normalize else matrix
 
-    fig, ax = new_figure(figsize=(2.2 + 1.1 * n, 2.2 + 1.0 * n))
+    # Per-cell annotations are only readable while cells stay inch-sized,
+    # and the canvas must not grow with the class count: an
+    # ID-column-as-target run (420 classes) once tried a 464-inch canvas
+    # plus 176k text artists (GBs of artists) before this guard.  Beyond
+    # the limit the matrix renders as a plain heat-map with small ticks.
+    annotated = n <= 50
+    side = 2.2 + 1.1 * min(n, 12)
+    fig, ax = new_figure(figsize=(side, 2.2 + 1.0 * min(n, 12)))
     image = ax.imshow(display, cmap="YlGnBu", vmin=0)
     fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
 
-    threshold = display.max() / 2.0 if display.max() else 0.0
-    for i in range(n):
-        for j in range(n):
-            share = matrix[i, j] / matrix[i].sum() if matrix[i].sum() else 0.0
-            # a float-dtype matrix (e.g. re-plotted normalized counts) must
-            # not hit the ":d" format code — cast integer annotations
-            cell = f"{display[i, j]:.2f}" if normalize else f"{round(float(display[i, j])):d}"
-            annotation = cell + f"\n({share:.0%})"
-            ax.text(
-                j, i, annotation, ha="center", va="center", fontsize=9,
-                color="white" if display[i, j] > threshold else "#1F2937",
-            )
-    ax.set_xticks(range(n), [str(label) for label in labels], rotation=45, ha="right")
-    ax.set_yticks(range(n), [str(label) for label in labels])
+    if annotated:
+        threshold = display.max() / 2.0 if display.max() else 0.0
+        for i in range(n):
+            for j in range(n):
+                share = matrix[i, j] / matrix[i].sum() if matrix[i].sum() else 0.0
+                # a float-dtype matrix (e.g. re-plotted normalized counts) must
+                # not hit the ":d" format code — cast integer annotations
+                cell = f"{display[i, j]:.2f}" if normalize else f"{round(float(display[i, j])):d}"
+                annotation = cell + f"\n({share:.0%})"
+                ax.text(
+                    j, i, annotation, ha="center", va="center", fontsize=9,
+                    color="white" if display[i, j] > threshold else "#1F2937",
+                )
+    tick_labels = [str(label) for label in labels]
+    tick_size = 9 if annotated else max(4, 9 - n // 40)
+    ax.set_xticks(range(n), tick_labels, rotation=45, ha="right",
+                  fontsize=tick_size)
+    ax.set_yticks(range(n), tick_labels, fontsize=tick_size)
     ax.set_xlabel("Predicted label")
     ax.set_ylabel("True label")
-    ax.set_title(title + (" (row-normalized)" if normalize else ""))
+    suffix = " (row-normalized)" if normalize else ""
+    if not annotated:
+        suffix += f" — {n} classes, cells unannotated"
+    ax.set_title(title + suffix)
     ax.grid(False)
     return fig
 
@@ -438,6 +480,130 @@ def plot_learning_curve(
     ax.set_ylabel(scoring or "score")
     ax.set_title(f"{title}\n{verdict}")
     ax.legend(loc="lower right", fontsize=9)
+    return fig
+
+
+def _normalise_history(history: Any) -> pd.DataFrame:
+    """Coerce a training ``history`` into a DataFrame (typed errors).
+
+    Accepts the per-epoch record list any :mod:`pharmaml.ml.neural`
+    estimator leaves on ``history_`` (``{'epoch', 'train_loss',
+    'val_loss'}`` dicts -- ``val_loss`` may be ``None``), or an
+    equivalent pandas DataFrame; a missing ``val_loss`` column is added
+    as all-``NaN`` so downstream code has one shape to handle.
+    """
+    if isinstance(history, pd.DataFrame):
+        frame = history
+    else:
+        try:
+            # dict(record) also raises ValueError on plain strings ("ab"),
+            # which are iterable but not per-epoch records -- catch both.
+            records = [dict(record) for record in history]
+        except (TypeError, ValueError) as exc:
+            raise DataValidationError(
+                f"history must be a list of per-epoch records or a DataFrame, "
+                f"got {type(history).__name__}"
+            ) from exc
+        frame = pd.DataFrame.from_records(records)
+    if frame.empty:
+        raise DataValidationError(
+            "history is empty -- pass the fitted estimator's history_ "
+            "(any DeepMLP*/ResidualMLP* fit leaves it on the estimator)"
+        )
+    missing = [
+        column for column in ("epoch", "train_loss") if column not in frame.columns
+    ]
+    if missing:
+        raise DataValidationError(
+            f"history is missing column(s) {missing} -- expected records with "
+            "epoch, train_loss and optionally val_loss"
+        )
+    if "val_loss" not in frame.columns:
+        frame = frame.assign(val_loss=np.nan)
+    return frame
+
+
+def plot_training_history(
+    history: Any,
+    title: str = "Training history",
+) -> Any:
+    """Epoch-by-epoch loss curves with the early-stopping verdict.
+
+    The deep estimators of :mod:`pharmaml.ml.neural` record their whole
+    optimisation in ``history_`` (one ``{'epoch', 'train_loss',
+    'val_loss'}`` record per epoch); this figure turns it into the two
+    curves a deep-learning run deserves -- training and validation loss
+    on one axis -- plus the verdict a bare number cannot give:
+
+    * a dashed line marks the best-validation epoch (the weights that
+      were actually restored);
+    * training that ended *on* the best epoch reports "still improving
+      -- more epochs may pay off";
+    * anything else reports how many patience-window epochs ran after
+      the best;
+    * a run without a validation split (``val_split=0``) says so
+      instead of silently showing one curve.
+
+    Parameters
+    ----------
+    history:
+        The ``history_`` of a fitted deep estimator -- a list of
+        per-epoch dicts or an equivalent DataFrame (duck-typed like the
+        other viz helpers).  ``val_loss`` records may be ``None``
+        (plotted as gaps) or absent entirely.
+    title:
+        Figure title (left-anchored; the verdict rides on the second
+        line).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        When ``history`` is empty, holds records without the
+        ``epoch``/``train_loss`` keys, or carries non-numeric losses.
+    """
+    frame = _normalise_history(history)
+    try:
+        epochs = pd.to_numeric(frame["epoch"], errors="raise").to_numpy(dtype=float)
+        train = pd.to_numeric(frame["train_loss"], errors="raise").to_numpy(dtype=float)
+        # val_loss legally holds None (no validation split / gap epochs):
+        # coerce, so missing epochs plot as gaps instead of raising.
+        val = pd.to_numeric(frame["val_loss"], errors="coerce").to_numpy(dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise DataValidationError(
+            f"history holds non-numeric values -- conversion failed: {exc}"
+        ) from exc
+
+    fig, ax = new_figure(figsize=(8.4, 5.0))
+    ax.plot(
+        epochs, train, color=PALETTE[0], lw=1.9, marker="o", ms=3.5,
+        label=f"training loss (final {train[-1]:.3g})",
+    )
+    has_val = bool(np.isfinite(val).any())
+    if has_val:
+        mask = np.isfinite(val)
+        best_index = int(np.nanargmin(val))
+        best_epoch = int(epochs[best_index])
+        ax.plot(
+            epochs[mask], val[mask], color=PALETTE[1], lw=1.9, marker="s", ms=3.5,
+            label=f"validation loss (best {val[best_index]:.3g} @ epoch {best_epoch})",
+        )
+        ax.axvline(epochs[best_index], color=PALETTE[1], lw=1.0, ls="--", alpha=0.6)
+        stale = len(epochs) - 1 - best_index
+        verdict = (
+            "validation still improving at the final epoch — more epochs may pay off"
+            if stale == 0
+            else f"early stopped {stale} epoch(s) after the best (epoch {best_epoch})"
+        )
+    else:
+        verdict = "no validation split — early stopping was disabled (val_split = 0)"
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("loss")
+    ax.set_title(f"{title}\n{verdict}", fontsize=11, loc="left", pad=10)
+    ax.legend(fontsize=9, frameon=False)
     return fig
 
 
