@@ -1447,3 +1447,157 @@ class TestFeatureFactoryGuiUnderXvfb:
         message = " ".join(str(part) for part in args)
         assert "features to keep (K)" in message
         assert "below the minimum" in message
+
+
+# --------------------------------------------------------------------- #
+# session export / import + per-tab reset (100x-54)
+# --------------------------------------------------------------------- #
+class TestSessionShareAndReset:
+    """Shareable session files and the per-tab reset-to-defaults gate.
+
+    Fail-first (100x-54): ``export_session`` / ``read_json_file`` and the
+    ``_export_session`` / ``_import_session`` / ``_reset_current_tab``
+    app methods did not exist before this round; the tests were run red
+    against the pristine (staged) playground.py via a file-copy
+    round-trip before the fix was restored.
+    """
+
+    @pytest.fixture()
+    def isolated_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        """Point HOME at a scratch dir so tests never touch a real session."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        return tmp_path
+
+    # -- pure helpers (no Tk needed) ----------------------------------- #
+
+    def test_export_session_round_trip(self, playground: Any, tmp_path: Path) -> None:
+        payload = playground.dump_session(
+            theme="dark", geometry="1200x800+10+20", tab=3,
+            variables={"_aff_value": "42"}, families={"ecfp": False},
+            texts={"pasted": "CCO\n# note"})
+        target = tmp_path / "shared-session.json"
+        assert playground.export_session(payload, target) is True
+        revived = playground.load_session(playground.read_json_file(target))
+        assert revived == payload  # identical after the file round-trip
+
+    def test_export_session_unwritable_path(
+        self, playground: Any, tmp_path: Path
+    ) -> None:
+        payload = playground.dump_session(
+            theme="light", geometry="", tab=0, variables={}, families={},
+            texts={})
+        assert playground.export_session(
+            payload, tmp_path / "no" / "such" / "dir" / "s.json") is False
+
+    def test_read_json_file_missing_and_invalid(
+        self, playground: Any, tmp_path: Path
+    ) -> None:
+        assert playground.read_json_file(tmp_path / "absent.json") is None
+        junk = tmp_path / "junk.json"
+        junk.write_text("{not json at all", encoding="utf-8")
+        assert playground.read_json_file(junk) is None
+
+    # -- live GUI under Xvfb -------------------------------------------- #
+
+    def test_export_writes_shareable_file(
+        self, playground: Any, xvfb_display: str, isolated_home: Path,
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        app = playground.PlaygroundApp()
+        app.update_idletasks()
+        app._aff_value.delete(0, "end")
+        app._aff_value.insert(0, "9.9")
+        target = isolated_home / "colleague-session.json"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
+        app._export_session()
+        assert target.is_file()
+        payload = playground.load_session(playground.read_json_file(target))
+        assert payload is not None
+        assert payload["variables"]["_aff_value"] == "9.9"
+        assert payload["theme"] in ("light", "dark", "auto")
+        assert "session exported" in str(app._job_label.cget("text"))
+        app.destroy()
+
+    def test_import_applies_shareable_file(
+        self, playground: Any, xvfb_display: str, isolated_home: Path,
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        app = playground.PlaygroundApp()
+        app.update_idletasks()
+        app._aff_value.delete(0, "end")
+        app._aff_value.insert(0, "9.9")
+        source = tmp_path / "arriving-session.json"
+        assert playground.export_session(app._collect_session(), source)
+        # the user then changes the live input -- import must win
+        app._aff_value.delete(0, "end")
+        app._aff_value.insert(0, "1.1")
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source))
+        app._import_session()
+        assert app._aff_value.get() == "9.9"
+        assert "session imported" in str(app._job_label.cget("text"))
+        app.destroy()
+
+    def test_import_invalid_file_shows_error_and_keeps_state(
+        self, playground: Any, xvfb_display: str, isolated_home: Path,
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        app = playground.PlaygroundApp()
+        app.update_idletasks()
+        app._aff_value.delete(0, "end")
+        app._aff_value.insert(0, "7.7")
+        junk = tmp_path / "not-a-session.json"
+        junk.write_text('{"hello": "world"}', encoding="utf-8")
+        seen: list[Any] = []
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(junk))
+        monkeypatch.setattr(
+            playground.messagebox, "showerror",
+            lambda *args, **_k: seen.append(args))
+        app._import_session()
+        assert app._aff_value.get() == "7.7"  # untouched
+        assert seen and "Invalid session file" in str(seen[0][0])
+        assert "imported" not in str(app._job_label.cget("text"))
+        app.destroy()
+
+    def test_reset_current_tab_restores_only_that_tab(
+        self, playground: Any, xvfb_display: str, isolated_home: Path,
+    ) -> None:
+        app = playground.PlaygroundApp()
+        app.update_idletasks()
+        default_aff = app._aff_value.get()
+        default_tune = bool(app._tune_var.get())
+        # mutate one input on the Chemistry tab and one on the Data & ML tab
+        app._aff_value.delete(0, "end")
+        app._aff_value.insert(0, "9.9")
+        app._tune_var.set(not default_tune)
+        chemistry_tab = next(
+            index for index, names in app._tab_input_owners.items()
+            if "_aff_value" in names)
+        app._book.select(chemistry_tab)
+        app._reset_current_tab()
+        assert app._aff_value.get() == default_aff  # reset to default
+        assert bool(app._tune_var.get()) is (not default_tune)  # other tab kept
+        assert "tab reset" in str(app._job_label.cget("text"))
+        app.destroy()
+
+    def test_tab_ownership_map_excludes_theme_and_covers_families(
+        self, playground: Any, xvfb_display: str, isolated_home: Path,
+    ) -> None:
+        app = playground.PlaygroundApp()
+        app.update_idletasks()
+        owners = app._tab_input_owners
+        every_name = {name for names in owners.values() for name in names}
+        assert "_theme_var" not in every_name  # not a user input
+        assert not any(
+            name.startswith("_book") for name in every_name)
+        family_tabs = [
+            index for index, names in owners.items()
+            if any(name.startswith("family:") for name in names)]
+        assert family_tabs == [1]  # the Chemistry tab owns the checkboxes
+        text_tabs = [
+            index for index, names in owners.items()
+            if any(name.startswith("text:") for name in names)]
+        assert 1 in text_tabs  # pasted SMILES corpus lives on Chemistry
+        app.destroy()

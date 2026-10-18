@@ -8,6 +8,7 @@ guard behaviour that was already correct but non-obvious.
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 
 import numpy as np
@@ -26,6 +27,8 @@ from pharmaml.exceptions import DataValidationError
 ETHANOL = "CCO"
 BENZENE = "c1ccccc1"
 INVALID = "not_a_smiles"
+
+MORDED_INSTALLED = importlib.util.find_spec("mordred") is not None
 
 
 class TestDescriptorSetValidation:
@@ -397,3 +400,99 @@ class TestComputeFingerprintsPins:
         matrix, valid = compute_fingerprints([INVALID, "also bad"])
         assert matrix.shape == (0, 2048)
         assert valid == []
+
+
+@pytest.mark.skipif(not MORDED_INSTALLED, reason="mordred is optional (requirements.txt)")
+class TestMordredDescriptorSet:
+    """Fail-first (100x-52): the mordred frame was unusable.
+
+    Two defects, both live on this full-deps venv: (1) the frame's
+    column names were mordred *Descriptor instances*, not strings --
+    ``frame["MW"]`` raised ``KeyError`` and even iterating
+    ``frame.columns`` exploded inside pandas' ``apply_if_callable``
+    (Descriptor instances are callable, so pandas called them *on the
+    frame*); (2) failed cells were raw mordred ``Error``/``Missing``
+    objects rather than NaN, leaving object-dtype columns that no
+    downstream ML path can consume.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _visible_logs(self):
+        """Lift the two log silencers so ``caplog`` sees the module."""
+        prev_disable = logging.root.manager.disable
+        pharma_root = logging.getLogger("pharmaml")
+        prev_propagate = pharma_root.propagate
+        logging.disable(logging.NOTSET)
+        pharma_root.propagate = True
+        yield
+        pharma_root.propagate = prev_propagate
+        logging.disable(prev_disable)
+
+    def test_column_names_are_strings(self) -> None:
+        frame = compute_descriptors([BENZENE], descriptor_set="mordred", progress=False)
+        assert frame.shape[0] == 1
+        assert frame.shape[1] > 1500  # the full 2D suite, not a subset
+        assert all(isinstance(col, str) for col in frame.columns)
+
+    def test_columns_indexable_by_name_with_pinned_values(self) -> None:
+        # The money probe: name-based access must simply work.  Values
+        # pinned against a direct mordred census (RDKit 2026.09.1 /
+        # mordred 1.2.0): benzene MW ~78.047, nH 6, nRing 1.
+        frame = compute_descriptors([BENZENE], descriptor_set="mordred", progress=False)
+        assert frame["MW"].iloc[0] == pytest.approx(78.046950192)
+        assert int(frame["nH"].iloc[0]) == 6
+        assert int(frame["nRing"].iloc[0]) == 1
+
+    def test_failed_cells_become_nan_not_error_objects(self) -> None:
+        # A sodium ion makes mordred return hundreds of Missing/Error
+        # cells; every one must arrive as float NaN, and no non-SMILES
+        # column may be object dtype (the old frame was full of them).
+        frame = compute_descriptors(["[Na+]"], descriptor_set="mordred", progress=False)
+        numeric = frame.drop(columns=["SMILES"])
+        assert not any(numeric.dtypes == object)
+        nan_cells = int(numeric.isna().to_numpy().sum())
+        assert nan_cells > 100  # the failure verdicts really are NaN now
+        assert np.isfinite(numeric["MW"].iloc[0])  # MW itself survives
+
+    def test_mixed_batch_frame_is_ml_ready(self) -> None:
+        frame = compute_descriptors(
+            [ETHANOL, BENZENE, "[Na+].[Cl-]"], descriptor_set="mordred", progress=False
+        )
+        assert frame.shape[0] == 3
+        assert frame["SMILES"].tolist() == [ETHANOL, BENZENE, "[Na+].[Cl-]"]
+        assert frame.index.tolist() == [0, 1, 2]
+        numeric = frame.drop(columns=["SMILES"])
+        coerced = numeric.astype(float)  # the ML-readiness contract
+        means = coerced.mean(axis=0)
+        assert np.isfinite(means["MW"])
+
+    def test_aggregate_warning_names_cell_counts(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger="pharmaml.chem.descriptors"):
+            compute_descriptors([ETHANOL, "[Na+]"], descriptor_set="mordred", progress=False)
+        text = caplog.text
+        assert "descriptor cells" in text
+        assert "Error" in text and "Missing" in text
+        # The aggregate count must reflect BOTH molecules (2 x 1613 cells
+        # with hundreds of failures each), not just the first.
+        import re
+
+        counts = re.findall(r"(\d+) of (\d+) descriptor cells", text)
+        assert counts, text
+        failed, total = (int(value) for value in counts[0])
+        assert failed > 600
+        assert total == 2 * 1613
+
+    def test_warning_fires_once_per_call_not_per_molecule(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # The aggregate contract: ONE warning for the whole batch, no
+        # matter how many molecules carry failure verdicts (a per-
+        # molecule warning would spam 10k lines on a real library).
+        with caplog.at_level(logging.WARNING, logger="pharmaml.chem.descriptors"):
+            compute_descriptors(
+                [ETHANOL, BENZENE, "[Na+]"], descriptor_set="mordred", progress=False
+            )
+        records = [r for r in caplog.records if "descriptor cells" in r.getMessage()]
+        assert len(records) == 1, caplog.text

@@ -10,6 +10,84 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.5] — 2026-10-19
+
+### Added — shareable playground sessions + per-tab reset (100x-54)
+
+- **`File ▸ Export session`** writes the exact session payload (the
+  same format as the auto-saved file) to any path — mail it to a
+  colleague; **`File ▸ Import session`** applies such a file onto the
+  live window, including a theme switch when the imported session
+  carries a different one.  Invalid files are rejected with a clear
+  error dialog and never touch the live state; the two pure helpers
+  (`export_session` / `read_json_file`) never raise.
+- **`File ▸ Reset current tab to defaults`** (Ctrl+Shift+R) restores
+  just the ACTIVE tab's inputs to their freshly-launched values,
+  leaving every other tab untouched.  Ownership is decided by the
+  widget tree (entries/spinboxes/comboboxes/checkbuttons/radiobuttons
+  mapped to their linked variables; the feature-family checkboxes and
+  the two pasted corpora included, the theme radio excluded), and the
+  defaults are snapshotted right after the tabs are built — before any
+  session restore can overwrite either side of the mapping.
+- Eight new tests: the file round-trip, unwritable-path and
+  junk-file contracts, export/import/reset live under Xvfb, and the
+  ownership-map invariants.  Fail-first demonstrated via a file-copy
+  round-trip (8/8 red on the pristine source).
+
+## [1.2.4] — 2026-10-19
+
+### Added — opt-in minimum-heavy-atom sanity gate for the BREED crossover (100x-53)
+
+- **`scaffold_hop_crossover(..., min_heavy_atoms=3)`** rejects the
+  chemically comic child class: at certain draw states aspirin x
+  naproxen breeds `'OO'` (hydrogen peroxide) or `'CC'` (ethane) as
+  bridge children — single-fragment, sanitisable, under the length
+  cap, i.e. contract-conformant but with no medchem meaning (98 of
+  the first 400 seeds, ~24%).  The gate counts heavy atoms (atomic
+  number > 1) after sanitisation in both child assemblers, so every
+  one of the seven recombination geometries is covered; a gated-out
+  child is not an error — the bridge pairing loop tries the next
+  pairing (seed 25: `'OO'` becomes a real 33-atom hybrid) and the
+  operator returns `None` when nothing survives.
+- **Default 1 = gate off**: every historical GA trajectory stays
+  byte-identical (the full determinism suite re-baselined green).
+  `GeneticOptimizer(min_heavy_atoms=...)` threads the gate into both
+  crossover call sites (uniform and adaptive modes); the documented
+  scope is the crossover offspring — the character-mutation fallback
+  can still mint short strings by deletion, and selection pressure
+  handles those.
+- Plain and numpy integers are accepted; bools and values below 1
+  raise (`ValueError` at the operator level, `DataValidationError`
+  at the optimizer level).  Nine new regression tests pin the comic,
+  the no-op default, both assembler gates, the validation surface and
+  the end-to-end optimizer plumbing (a length-minimising objective
+  converges to 22 tiny members by default, far fewer with the gate).
+
+## [1.2.3] — 2026-10-19
+
+### Fixed — the mordred descriptor frame was unusable (100x-52)
+
+- **`compute_descriptors(descriptor_set="mordred")` now returns a
+  frame you can actually use**: column names are mordred's own string
+  descriptor names (`"MW"`, `"nH"`, ...) instead of mordred
+  `Descriptor` *instances*. The old frame's column labels were
+  callable objects, so `frame["MW"]` raised `KeyError` and even
+  iterating `frame.columns` crashed inside pandas (pandas calls
+  callable column labels *on the frame*).
+- **Failed cells arrive as NaN**: mordred reports per-molecule
+  failures as `Missing`/`Error` sentinel objects; they are now
+  converted to NaN (mordred's own `fill_missing` convention) with one
+  aggregate warning naming the cell counts, the Error/Missing split
+  and a few example descriptor names — instead of object-dtype
+  columns full of `Error` objects that no downstream ML path could
+  consume.
+- All-NaN descriptor columns stay that way on purpose (a real
+  mordred verdict; the ML pipeline's SimpleImputer drops them), and
+  the docstring contract was rewritten accordingly. Six new
+  regression tests pin string column names, name-based access with
+  pinned benzene values, the NaN conversion, ML-readiness of a mixed
+  batch, and the once-per-call aggregate warning.
+
 ## [1.2.2] — 2026-10-18
 
 ### Added — playground session persistence + dark theme (100x-51)

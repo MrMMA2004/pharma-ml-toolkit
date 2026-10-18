@@ -153,17 +153,18 @@ def compute_descriptors(
         fixed-radius Morgan count fingerprint, ``'mordred'`` for the
         Mordred descriptor suite (needs ``pip install mordred``).
         Any other value raises instead of silently falling back.
-        Known limitation of the Mordred path (documented, deliberately
-        not transformed): descriptors that fail for a given molecule
-        come back as Mordred ``Error`` objects rather than numbers and
-        are kept as-is in the frame -- mordred is exercised only by the
-        full-deps CI job, never in the default environment.
-        Mordred's BCUT2D family can also legitimately evaluate to NaN
-        for some molecules (e.g. degenerate single-atom species): those
-        cells are PRESERVED as NaN in the returned frame -- no fillna
-        or imputation happens here, so an all-NaN descriptor column is
-        a real mordred verdict, not a bug (downstream, the ML
-        pipeline's SimpleImputer drops all-NaN columns silently).
+        For ``'mordred'``, failed descriptor cells are part of the
+        answer, not exceptions: mordred reports them as ``Missing``
+        (known-uncomputable for this molecule, e.g. ring descriptors
+        on an acyclic input) or ``Error`` (unexpected failure) value
+        objects, which are converted to NaN here -- one aggregate
+        warning names the cell counts and a few example descriptor
+        names.  Column names are mordred's own string descriptor
+        names (``'MW'``, ``'nH'``, ...).  An all-NaN descriptor column
+        is a real mordred verdict, not a bug (downstream, the ML
+        pipeline's SimpleImputer drops all-NaN columns silently) --
+        no fillna or imputation happens beyond the
+        Error/Missing-to-NaN conversion.
     progress:
         Show a tqdm progress bar for large batches.
 
@@ -177,10 +178,10 @@ def compute_descriptors(
         computation raises is dropped the same way, with a warning naming
         its original index -- e.g. zero-heavy-atom species such as ``[H]``
         (RDKit's SPS descriptor divides by the heavy-atom count).  For
-        ``'mordred'``, NaN cells (BCUT2D on degenerate molecules) and
-        ``Error`` objects are preserved verbatim -- the NaN-preservation
-        contract above.  Use :func:`compute_fingerprints` for bit/count
-        fingerprints instead.
+        ``'mordred'``, the column names are mordred's string descriptor
+        names and failed cells (``Error``/``Missing`` value objects)
+        arrive as NaN -- the aggregate-warning contract above.  Use
+        :func:`compute_fingerprints` for bit/count fingerprints instead.
 
     Raises
     ------
@@ -223,14 +224,45 @@ def compute_descriptors(
     if descriptor_set == "mordred":
         try:
             from mordred import Calculator, descriptors
+            from mordred.error import Error, Missing
         except ImportError as exc:
             raise DependencyError(
                 "Mordred is not installed. Install with: pip install mordred"
             ) from exc
         calc = Calculator(descriptors, ignore_3D=True)
+        # mordred's Result object is NOT a dict: keys() yields Descriptor
+        # *instances* and failed cells are Error/Missing sentinel objects
+        # (both convert to NaN via __float__).  Building the frame from
+        # dict(calc(mol)) therefore produced callable object column names
+        # AND object-dtype cells -- unusable downstream (100x-52).  The
+        # official asdict()/fill_missing() pair gives string keys and NaN
+        # cells; the counting pass below feeds the aggregate warning.
+        error_cells = 0
+        missing_cells = 0
+        example_names: list[str] = []
         for mol in iterator:
-            rows.append(dict(calc(mol)))
+            result = calc(mol)
+            for desc, value in result.items():
+                if isinstance(value, (Error, Missing)):
+                    if isinstance(value, Error):
+                        error_cells += 1
+                    else:
+                        missing_cells += 1
+                    if len(example_names) < 3:
+                        example_names.append(str(desc))
+            rows.append(result.fill_missing().asdict())
         frame = pd.DataFrame(rows)
+        if error_cells or missing_cells:
+            total_cells = len(rows) * len(calc.descriptors)
+            _LOG.warning(
+                "Mordred could not compute %d of %d descriptor cells "
+                "(%d Error, %d Missing; e.g. %s) -- kept as NaN in the frame",
+                error_cells + missing_cells,
+                total_cells,
+                error_cells,
+                missing_cells,
+                ", ".join(example_names),
+            )
     elif descriptor_set == "morgan":
         require_rdkit()
         from rdkit.Chem import rdMolDescriptors

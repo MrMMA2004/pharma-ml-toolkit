@@ -4003,3 +4003,135 @@ class TestOperatorTrajectory:
         records = default_mutation.metadata["operator_trajectory"]
         assert records
         assert all(record["mutation"] == {"character": 1.0} for record in records)
+
+
+# ---------------------------------------------------------------------------
+# Minimum-heavy-atom sanity gate (100x-53)
+# ---------------------------------------------------------------------------
+class TestMinimumHeavyAtomGate:
+    """The 'OO' comic and its opt-in gate (round 100x-53).
+
+    Fail-first evidence: aspirin x naproxen at certain draw states breeds
+    ``'OO'`` (hydrogen peroxide) / ``'CC'`` (ethane) as bridge children --
+    single-fragment, sanitisable, under the cap, i.e. contract-conformant
+    but chemically comic (98 of the first 400 seeds).  The gate is
+    OPT-IN (``min_heavy_atoms``, default 1 = off) so every historical
+    GA trajectory stays byte-identical; the default path must never move.
+    """
+
+    PARENT_A = "CC(=O)Oc1ccccc1C(=O)O"  # aspirin
+    PARENT_B = "COc1ccc2cc(ccc2c1)C(C)C(=O)O"  # naproxen
+
+    @staticmethod
+    def _heavy(smiles: str) -> int:
+        return sum(1 for ch in smiles if ch.isalpha())
+
+    def test_oo_comic_reproduced_then_gated(self) -> None:
+        # seed 25 breeds the hydrogen-peroxide child verbatim (the comic)
+        assert (
+            scaffold_hop_crossover(self.PARENT_A, self.PARENT_B, random.Random(25))
+            == "OO"
+        )
+        # the gate rejects it: None (no other viable pairing) or a real
+        # child with at least the requested heavy atoms
+        gated = scaffold_hop_crossover(
+            self.PARENT_A, self.PARENT_B, random.Random(25), min_heavy_atoms=3
+        )
+        assert gated is None or self._heavy(gated) >= 3
+
+    def test_default_gate_is_a_noop(self) -> None:
+        # min_heavy_atoms=1 is the historical off state: identical output
+        # on every seed (the GA determinism pins depend on this)
+        for seed in range(30):
+            default = scaffold_hop_crossover(
+                self.PARENT_A, self.PARENT_B, random.Random(seed)
+            )
+            explicit = scaffold_hop_crossover(
+                self.PARENT_A, self.PARENT_B, random.Random(seed), min_heavy_atoms=1
+            )
+            assert default == explicit
+
+    def test_gate_rejects_the_tiny_class_over_a_seed_range(self) -> None:
+        gated_tiny = 0
+        for seed in range(60):
+            child = scaffold_hop_crossover(
+                self.PARENT_A, self.PARENT_B, random.Random(seed), min_heavy_atoms=3
+            )
+            assert child is None or self._heavy(child) >= 3
+            if child is not None and self._heavy(child) < 3:
+                gated_tiny += 1
+        assert gated_tiny == 0
+
+    def test_zip_child_unit_gate(self) -> None:
+        from pharmaml.generative.scaffold_hop import _zip_child
+
+        rdkit = pytest.importorskip("rdkit")
+        frag_x = rdkit.Chem.MolFromSmiles("[*:1]O")
+        frag_y = rdkit.Chem.MolFromSmiles("O[*:1]")
+        assert _zip_child(frag_x, frag_y, 120) == "OO"
+        assert _zip_child(frag_x, frag_y, 120, min_heavy_atoms=3) is None
+
+    def test_zip_spliced_unit_gate(self) -> None:
+        from pharmaml.generative.scaffold_hop import _zip_spliced
+
+        rdkit = pytest.importorskip("rdkit")
+        frag_begin = rdkit.Chem.MolFromSmiles("[*:1]C")
+        piece = rdkit.Chem.MolFromSmiles("[*:1]O[*:2]")
+        frag_end = rdkit.Chem.MolFromSmiles("C[*:2]")
+        assert _zip_spliced(frag_begin, piece, frag_end, 120) == "COC"
+        assert _zip_spliced(frag_begin, piece, frag_end, 120, min_heavy_atoms=4) is None
+
+    def test_min_heavy_atoms_validation(self) -> None:
+        for bad in (0, -3, True, "3", 2.5):
+            with pytest.raises(ValueError, match="min_heavy_atoms"):
+                scaffold_hop_crossover(
+                    self.PARENT_A,
+                    self.PARENT_B,
+                    random.Random(0),
+                    min_heavy_atoms=bad,
+                )
+
+    def test_numpy_integer_accepted(self) -> None:
+        np = pytest.importorskip("numpy")
+        child = scaffold_hop_crossover(
+            self.PARENT_A, self.PARENT_B, random.Random(25), min_heavy_atoms=np.int64(3)
+        )
+        assert child is None or self._heavy(child) >= 3
+
+    def test_optimizer_min_heavy_atoms_validation(self) -> None:
+        for bad in (0, -1, True, "3"):
+            with pytest.raises(DataValidationError, match="min_heavy_atoms"):
+                GeneticOptimizer(QedObjective(), min_heavy_atoms=bad)
+
+    def test_optimizer_threads_gate_end_to_end(self) -> None:
+        # A length-minimising objective makes the GA keep the tiniest
+        # breedable children; the gate must starve the <=2-heavy class
+        # out of the crossover supply (mutation-deletion cascades can
+        # still mint singles -- documented scope: the gate polices the
+        # crossover, not the character-mutation fallback).
+        class _TinyReward:
+            def score(self, smiles: str) -> float:
+                return -float(len(smiles))
+
+        config = {
+            "population_size": 32,
+            "generations": 15,
+            "crossover": "scaffold_hop",
+            "mutation": "uniform",
+            "mutation_rate": 0.01,
+            "crossover_rate": 0.99,
+            "seed": 7,
+        }
+        default = GeneticOptimizer(_TinyReward(), **config).optimize()
+        gated = GeneticOptimizer(_TinyReward(), min_heavy_atoms=3, **config).optimize()
+        default_tiny = sum(
+            1 for s in default.to_dataframe()["smiles"] if self._heavy(s) <= 2
+        )
+        gated_tiny = sum(
+            1 for s in gated.to_dataframe()["smiles"] if self._heavy(s) <= 2
+        )
+        # default run DOES converge to the comic class (seed-pinned)
+        assert default_tiny >= 5
+        # the gated run starves it (mutation cascades may leave a residue,
+        # but far below the un-gated ecosystem)
+        assert gated_tiny < default_tiny / 2

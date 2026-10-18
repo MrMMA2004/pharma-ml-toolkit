@@ -120,7 +120,12 @@ from pharmaml.logger import get_logger
 from ._utils import canonical_smiles, require_rdkit, smiles_alphabet
 from .corpus import DEFAULT_CORPUS
 from .result import GenerationResult
-from .scaffold_hop import GEOMETRY_ORDER, _scaffold_hop_core, scaffold_hop_crossover
+from .scaffold_hop import (
+    GEOMETRY_ORDER,
+    _checked_min_heavy_atoms,
+    _scaffold_hop_core,
+    scaffold_hop_crossover,
+)
 from .topology import ring_topology_mutate
 
 __all__ = ["GeneticOptimizer", "run_genetic_optimization"]
@@ -577,6 +582,18 @@ class GeneticOptimizer:
     max_smiles_length:
         Hard length cap on every genome -- offspring that exceed it are
         rejected (default 120).
+    min_heavy_atoms:
+        Opt-in minimum heavy-atom sanity gate threaded into the
+        ``"scaffold_hop"`` crossover (default 1 = gate off, every
+        historical trajectory byte-identical).  Motivating comic: at
+        certain draw states the BREED cut breeds ``'OO'`` (hydrogen
+        peroxide) or ``'CC'`` (ethane) children -- contract-conformant
+        but with no medchem meaning; ``min_heavy_atoms=3`` rejects
+        exactly that class.  Scope: the gate polices the *crossover*
+        offspring; the character-mutation fallback can still mint short
+        strings by deletion (selection pressure handles those).  Plain
+        and numpy integers are accepted; bools and values below 1 raise
+        :class:`~pharmaml.exceptions.DataValidationError`.
     mutation:
         ``"uniform"`` (default) -- the classic character-level
         substitution / insertion / deletion.  ``"scaffold"`` --
@@ -735,6 +752,7 @@ class GeneticOptimizer:
         aos_window: int = 20,
         aos_temperature: float = 0.1,
         seed: int = 42,
+        min_heavy_atoms: int = 1,
     ) -> None:
         if not callable(getattr(objective, "score", None)):
             raise DataValidationError(
@@ -786,6 +804,10 @@ class GeneticOptimizer:
                 f"aos_temperature must be a finite positive number, "
                 f"got {aos_temperature}"
             )
+        try:
+            self.min_heavy_atoms = _checked_min_heavy_atoms(min_heavy_atoms)
+        except ValueError as exc:
+            raise DataValidationError(str(exc)) from exc
         self.objective = objective
         self.population_size = population_size
         self.generations = generations
@@ -872,7 +894,11 @@ class GeneticOptimizer:
         """
         if self.crossover == "scaffold_hop":
             child = scaffold_hop_crossover(
-                parent_a, parent_b, rng, max_smiles_length=self.max_smiles_length
+                parent_a,
+                parent_b,
+                rng,
+                max_smiles_length=self.max_smiles_length,
+                min_heavy_atoms=self.min_heavy_atoms,
             )
             return child if child is not None else parent_a
         if len(parent_a) < 2 or len(parent_b) < 2:
@@ -913,6 +939,7 @@ class GeneticOptimizer:
                 rng,
                 max_smiles_length=self.max_smiles_length,
                 geometry_weights=geometry_weights,
+                min_heavy_atoms=self.min_heavy_atoms,
             )
             if child is not None:
                 return child, True, geometry

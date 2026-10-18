@@ -52,6 +52,12 @@ Design notes
   toggles, pasted corpora, the active tab, the window geometry and the
   theme, and restores it on the next launch (``File ▸ Save session
   now`` / ``Clear saved session`` control it manually).
+* Sessions are shareable: ``File ▸ Export session`` writes the exact
+  same payload to any path (mail it to a colleague) and ``File ▸
+  Import session`` applies such a file onto the live window --
+  including the theme.  ``File ▸ Reset current tab to defaults``
+  (Ctrl+Shift+R) restores just the active tab's inputs to their
+  freshly-launched values, leaving every other tab untouched.
 * ``View ▸ Follow system / Light / Dark`` recolours the whole window
   (two named palettes drive every shade); the choice is part of the
   saved session.  Embedded figures keep the toolkit's white
@@ -79,7 +85,7 @@ import shutil
 import sys
 import threading
 import traceback
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -339,6 +345,32 @@ def load_session(raw: Any) -> dict[str, Any] | None:
         "families": families,
         "texts": texts,
     }
+
+
+def export_session(payload: dict[str, Any], path: str | Path) -> bool:
+    """Write a session payload to ``path`` as shareable JSON.
+
+    The file uses the exact same format as the auto-saved session
+    (``format`` marker included), so an exported session can be mailed
+    to a colleague and imported on their machine.  ``False`` on any
+    write failure (unwritable directory, non-serialisable payload) --
+    never an exception.
+    """
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def read_json_file(path: str | Path) -> Any | None:
+    """Read parsed JSON from ``path`` (``None`` on any failure)."""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
 
 #: (import name, display label, why it matters, pip hint)
 _DEPENDENCIES: tuple[tuple[str, str, str, str], ...] = (
@@ -991,6 +1023,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_menu()
         self._build_statusbar()
         self._build_tabs()
+        # Per-tab reset support (100x-54): snapshot the freshly built
+        # (default) inputs and which tab owns which input BEFORE the
+        # session restore overwrites either of them.
+        self._tab_input_owners = self._tab_input_names()
+        self._session_defaults = self._collect_session()
         restored_geometry = self._restore_session()
         if not restored_geometry:
             self._center_on_screen(width, height)
@@ -1136,6 +1173,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                               command=self._save_session_now)
         file_menu.add_command(label="Clear saved session…",
                               command=self._clear_saved_session)
+        file_menu.add_command(label="Export session…",
+                              command=self._export_session)
+        file_menu.add_command(label="Import session…",
+                              command=self._import_session)
+        file_menu.add_command(label="Reset current tab to defaults",
+                              accelerator="Ctrl+Shift+R",
+                              command=self._reset_current_tab)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", accelerator="Ctrl+Q",
                               command=self._on_close)
@@ -1501,6 +1545,163 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "The saved session was removed.\n"
                 "Fresh defaults return on the next launch." if removed else
                 "No saved session file existed.")
+
+    def _export_session(self) -> None:
+        """File ▸ Export session -- write a shareable session file."""
+        if filedialog is None:
+            return
+        target = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            initialfile="pharmaml-playground-session.json",
+            filetypes=[("Playground session", "*.json"), ("All files", "*.*")],
+            title="Export playground session",
+        )
+        if not target:
+            return
+        if export_session(self._collect_session(), target):
+            self._job_label.configure(text=f"session exported · {target}")
+        else:
+            self._job_label.configure(
+                text="session NOT exported (path unwritable)")
+
+    def _import_session(self) -> None:
+        """File ▸ Import session -- apply a shareable session file."""
+        if filedialog is None:
+            return
+        source = filedialog.askopenfilename(
+            filetypes=[("Playground session", "*.json"), ("All files", "*.*")],
+            title="Import playground session",
+        )
+        if not source:
+            return
+        session = load_session(read_json_file(source))
+        if session is None:
+            if messagebox is not None:
+                messagebox.showerror(
+                    "Invalid session file",
+                    "That file is not a playground session (format marker "
+                    "missing or unreadable).")
+            return
+        self._session = session
+        self._restore_session()
+        if session["theme"] in _THEMES and session["theme"] != self._theme:
+            self._theme = session["theme"]
+            if self._theme_var is not None:
+                with contextlib.suppress(tk.TclError):
+                    self._theme_var.set(self._theme)
+            self._set_theme(self._resolve_auto_theme()
+                            if self._theme == "auto" else self._theme)
+        self._job_label.configure(text=f"session imported · {source}")
+
+    def _reset_current_tab(self) -> None:
+        """File ▸ Reset current tab to defaults (100x-54).
+
+        Only the CURRENT tab's inputs are reset -- every other tab keeps
+        its live values -- using the defaults snapshot taken right after
+        the tabs were built (before any session restore).
+        """
+        try:
+            index = self._book.index(self._book.select())
+        except tk.TclError:  # pragma: no cover - no tab selected
+            return
+        names = self._tab_input_owners.get(index, set())
+        defaults = self._session_defaults
+        text_widgets = {"pasted": self._feat_pasted_text,
+                        "corpus": self._corpus_text}
+        applied = 0
+        for name in sorted(names):
+            if name.startswith("family:"):
+                family = name[len("family:"):]
+                var = self._feat_family_vars.get(family)
+                if family in defaults["families"] and var is not None:
+                    with contextlib.suppress(tk.TclError):
+                        var.set(bool(defaults["families"][family]))
+                        applied += 1
+                continue
+            if name.startswith("text:"):
+                key = name[len("text:"):]
+                widget = text_widgets.get(key)
+                if key in defaults["texts"] and widget is not None:
+                    widget.delete("1.0", "end")
+                    content = str(defaults["texts"][key])
+                    if content:
+                        widget.insert("1.0", content)
+                    applied += 1
+                continue
+            if name not in defaults["variables"]:
+                continue
+            widget = getattr(self, name, None)
+            value = defaults["variables"][name]
+            if isinstance(widget, tk.Variable):
+                with contextlib.suppress(tk.TclError):
+                    widget.set(value)
+                    applied += 1
+            elif isinstance(widget, ttk.Entry):
+                setter = getattr(widget, "set", None)
+                if callable(setter):  # Spinbox / Combobox
+                    setter(str(value))
+                else:
+                    widget.delete(0, "end")
+                    if str(value):
+                        widget.insert(0, str(value))
+                applied += 1
+        label = self._book.tab(index, "text")
+        self._job_label.configure(
+            text=f"{label.lower()} tab reset · {applied} inputs back to defaults")
+
+    def _walk_widgets(self, widget: Any) -> Iterator[Any]:
+        """Yield ``widget`` and every descendant (the GUI-tree walk)."""
+        yield widget
+        for child in widget.winfo_children():
+            yield from self._walk_widgets(child)
+
+    def _tab_input_names(self) -> dict[int, set[str]]:
+        """Map each notebook tab to the session-input names it owns.
+
+        Ownership is decided by the widget tree: every entry / spinbox /
+        combobox / checkbutton / radiobutton living inside a tab's frame
+        contributes its linked variable (Tcl name -> app attribute), an
+        entry stored directly as an attribute contributes that name, the
+        feature-family checkboxes contribute ``family:<name>`` keys and
+        the two pasted corpora contribute ``text:<key>`` keys.  The theme
+        radio and notebook bookkeeping are excluded (not user inputs).
+        """
+        var_by_tcl_name: dict[str, str] = {}
+        entry_by_id: dict[int, str] = {}
+        for name, value in vars(self).items():
+            if name.startswith("_book") or name == "_theme_var":
+                continue
+            if isinstance(value, tk.Variable):
+                var_by_tcl_name[str(value)] = name
+            elif isinstance(value, ttk.Entry):
+                entry_by_id[id(value)] = name
+        family_by_tcl_name = {str(var): f"family:{family}"
+                               for family, var in self._feat_family_vars.items()}
+        text_by_id = {id(self._feat_pasted_text): "text:pasted",
+                      id(self._corpus_text): "text:corpus"}
+        owners: dict[int, set[str]] = {}
+        with contextlib.suppress(tk.TclError):
+            for index, tab_id in enumerate(self._book.tabs()):
+                names: set[str] = set()
+                for widget in self._walk_widgets(self._book.nametowidget(tab_id)):
+                    if id(widget) in text_by_id:
+                        names.add(text_by_id[id(widget)])
+                        continue
+                    if isinstance(widget, ttk.Entry):
+                        linked = str(widget.cget("textvariable"))
+                        if linked and linked in var_by_tcl_name:
+                            names.add(var_by_tcl_name[linked])
+                        elif id(widget) in entry_by_id:
+                            names.add(entry_by_id[id(widget)])
+                    elif isinstance(widget, (ttk.Checkbutton, ttk.Radiobutton,
+                                             tk.Checkbutton, tk.Radiobutton)):
+                        linked = str(widget.cget("variable"))
+                        if linked in var_by_tcl_name:
+                            names.add(var_by_tcl_name[linked])
+                        elif linked in family_by_tcl_name:
+                            names.add(family_by_tcl_name[linked])
+                owners[index] = names
+        return owners
 
     def _restore_session(self) -> bool:
         """Re-apply the saved session onto the freshly built tabs.

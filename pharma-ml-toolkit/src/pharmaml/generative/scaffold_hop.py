@@ -108,6 +108,17 @@ True
 >>> # benzene has no acyclic single bond to cut: no crossover possible
 >>> scaffold_hop_crossover("c1ccccc1", "c1ccncc1", random.Random(0)) is None
 True
+>>> # the sanity gate (100x-53): aspirin x naproxen at this draw state
+>>> # breeds 'OO' (hydrogen peroxide) -- contract-conformant but
+>>> # chemically comic; the opt-in min_heavy_atoms gate rejects it and
+>>> # the bridge pairing loop falls through to a REAL hybrid child
+>>> scaffold_hop_crossover("CC(=O)Oc1ccccc1C(=O)O",
+...                        "COc1ccc2cc(ccc2c1)C(C)C(=O)O", random.Random(25))
+'OO'
+>>> scaffold_hop_crossover("CC(=O)Oc1ccccc1C(=O)O",
+...                        "COc1ccc2cc(ccc2c1)C(C)C(=O)O", random.Random(25),
+...                        min_heavy_atoms=3)
+'COc1ccc2cc(C(C)C(=O)C(=O)c3ccccc3OC(C)=O)ccc2c1'
 """
 
 from __future__ import annotations
@@ -116,6 +127,8 @@ import itertools
 import math
 import random
 from collections.abc import Mapping
+
+import numpy as np
 
 from ._utils import require_rdkit
 
@@ -146,6 +159,23 @@ GEOMETRY_ORDER: tuple[str, ...] = (
     "insert",
     "swap",
 )
+
+
+def _checked_min_heavy_atoms(value: object) -> int:
+    """Validate a ``min_heavy_atoms`` gate value (the house int rule).
+
+    Plain and numpy integers are accepted (a numpy integer is normalised
+    to ``int``); bools are rejected explicitly -- they are ``int``
+    subclasses but ``True`` is not a meaningful atom count (the 100x-41-G
+    descriptors convention).  Anything below 1 would gate nothing.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise ValueError(  # noqa: TRY004 — consistent module error currency
+            f"min_heavy_atoms must be an integer >= 1, got {value!r}"
+        )
+    if int(value) < 1:
+        raise ValueError(f"min_heavy_atoms must be an integer >= 1, got {value!r}")
+    return int(value)
 
 
 def _atom_signature(atom: object) -> tuple[int, int, bool, int]:
@@ -698,18 +728,26 @@ def _zip_child(
     frag_x: object,
     frag_y: object,
     max_smiles_length: int,
+    min_heavy_atoms: int = 1,
 ) -> str | None:
     """Zip two prepared fragments into one child SMILES, or ``None``.
 
     Belt-and-braces: a child that still carries an attachment dummy
     (atomic number 0) is rejected -- no operator of this module may
-    ever leak a ``*`` into an offspring (round 100x-28 review finding 1).
+    ever leak a ``*`` into an offspring (round 100x-28 review finding
+    1) -- and a child below ``min_heavy_atoms`` heavy atoms (atomic
+    number > 1) is rejected by the sanity gate (round 100x-53; the
+    default of 1 keeps the gate off and the historical behaviour
+    byte-identical).
     """
     Chem = require_rdkit()
     try:
         child = Chem.molzip(frag_x, frag_y)
         Chem.SanitizeMol(child)
         if any(atom.GetAtomicNum() == 0 for atom in child.GetAtoms()):
+            return None
+        heavy = sum(1 for atom in child.GetAtoms() if atom.GetAtomicNum() > 1)
+        if heavy < min_heavy_atoms:
             return None
         smiles = Chem.MolToSmiles(child)
     except Exception:  # noqa: BLE001 - no viable child
@@ -724,6 +762,7 @@ def _zip_spliced(
     piece: object,
     frag_end: object,
     max_smiles_length: int,
+    min_heavy_atoms: int = 1,
 ) -> str | None:
     """Splice ``piece`` between two bridge fragments; child SMILES/``None``.
 
@@ -734,7 +773,8 @@ def _zip_spliced(
     ``[*:2]`` at the other).  Two ``Chem.molzip`` calls chain them --
     begin to the piece's map-1 side, then the composite to the end
     fragment -- so both seams bond signature-matched atoms and no dummy
-    survives.  Same belt-and-braces contract as :func:`_zip_child`.
+    survives.  Same belt-and-braces contract as :func:`_zip_child`,
+    including the ``min_heavy_atoms`` sanity gate.
     """
     Chem = require_rdkit()
     try:
@@ -742,6 +782,9 @@ def _zip_spliced(
         child = Chem.molzip(half, frag_end)
         Chem.SanitizeMol(child)
         if any(atom.GetAtomicNum() == 0 for atom in child.GetAtoms()):
+            return None
+        heavy = sum(1 for atom in child.GetAtoms() if atom.GetAtomicNum() > 1)
+        if heavy < min_heavy_atoms:
             return None
         smiles = Chem.MolToSmiles(child)
     except Exception:  # noqa: BLE001 - no viable child
@@ -758,6 +801,7 @@ def scaffold_hop_crossover(
     *,
     max_smiles_length: int = 120,
     geometry_weights: Mapping[str, float] | None = None,
+    min_heavy_atoms: int = 1,
 ) -> str | None:
     """BREED-style crossover: homologous cuts, hybrid child.
 
@@ -798,6 +842,19 @@ def scaffold_hop_crossover(
         :class:`~pharmaml.generative.GeneticOptimizer` default).  All
         viable pairings of a drawn bridge candidate are tried before
         giving up.
+    min_heavy_atoms:
+        Minimum heavy-atom (atomic number > 1) sanity gate on the child,
+        opt-in (default 1 = gate off, the historical behaviour
+        byte-identical).  Motivating comic: aspirin x naproxen breeds
+        ``'OO'`` (hydrogen peroxide) or ``'CC'`` (ethane) as bridge
+        children on roughly a quarter of draw states -- single-fragment,
+        sanitisable, under the cap, i.e. contract-conformant but with no
+        medchem meaning.  ``min_heavy_atoms=3`` rejects exactly that
+        <=2-atom class while keeping every remotely drug-like child;
+        a gated-out child is not an error -- the bridge loop tries the
+        next pairing, and the operator returns ``None`` when nothing
+        survives.  Plain and numpy integers are accepted; bools and
+        values below 1 raise ``ValueError``.
     geometry_weights:
         Optional per-geometry draw bias: a mapping
         ``{geometry name: non-negative weight}`` over the seven names in
@@ -848,6 +905,7 @@ def scaffold_hop_crossover(
         rng,
         max_smiles_length=max_smiles_length,
         geometry_weights=geometry_weights,
+        min_heavy_atoms=min_heavy_atoms,
     )
     return child
 
@@ -859,6 +917,7 @@ def _scaffold_hop_core(
     *,
     max_smiles_length: int = 120,
     geometry_weights: Mapping[str, float] | None = None,
+    min_heavy_atoms: int = 1,
 ) -> tuple[str | None, str | None]:
     """BREED-style crossover core, traced for adaptive operator selection.
 
@@ -893,6 +952,7 @@ def _scaffold_hop_core(
             f"max_smiles_length must be >= {_MIN_LENGTH_CAP}, "
             f"got {max_smiles_length}"
         )
+    min_heavy_atoms = _checked_min_heavy_atoms(min_heavy_atoms)
     if geometry_weights is not None:
         for geometry, weight in geometry_weights.items():
             try:
@@ -1166,7 +1226,7 @@ def _scaffold_hop_core(
                 pairings.append((frag_a_end, frag_b_begin))
             rng.shuffle(pairings)
             for frag_x, frag_y in pairings:
-                child = _zip_child(frag_x, frag_y, max_smiles_length)
+                child = _zip_child(frag_x, frag_y, max_smiles_length, min_heavy_atoms)
                 if child is not None:
                     return child, drawn_geometry
             return None, drawn_geometry
@@ -1184,7 +1244,7 @@ def _scaffold_hop_core(
                 for dummy in open_b.GetAtoms():  # type: ignore[attr-defined]
                     if dummy.GetAtomicNum() == 0:
                         dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
-            return _zip_child(open_a, open_b, max_smiles_length), drawn_geometry
+            return _zip_child(open_a, open_b, max_smiles_length, min_heavy_atoms), drawn_geometry
 
         # transplant (single-atom linker: orientation-independent)
         if choice[0] == "transplant":
@@ -1198,7 +1258,7 @@ def _scaffold_hop_core(
             if opened is None or excision is None:
                 return None, drawn_geometry
             donor, _ = excision
-            return _zip_child(opened, donor, max_smiles_length), drawn_geometry
+            return _zip_child(opened, donor, max_smiles_length, min_heavy_atoms), drawn_geometry
 
         # transplant_path (multi-atom linker: orientation-aware)
         if choice[0] == "transplant_path":
@@ -1219,7 +1279,7 @@ def _scaffold_hop_core(
             if opened is None or excision is None:
                 return None, drawn_geometry
             donor, _ = excision
-            return _zip_child(opened, donor, max_smiles_length), drawn_geometry
+            return _zip_child(opened, donor, max_smiles_length, min_heavy_atoms), drawn_geometry
 
         # fuse (whole-ring splice: orientation-aware like the merge -- a
         # flipped-only match swaps the piece's dummy labels so each seam
@@ -1272,7 +1332,7 @@ def _scaffold_hop_core(
             flank_first, flank_second = flanks
             piece, _ = excision
             return _zip_spliced(
-                flank_first, piece, flank_second, max_smiles_length
+                flank_first, piece, flank_second, max_smiles_length, min_heavy_atoms
             ), drawn_geometry
 
         # insert (ring-as-linker: the recipient's bridge cut leaves two
@@ -1300,7 +1360,7 @@ def _scaffold_hop_core(
                 if dummy.GetAtomicNum() == 0:
                     dummy.SetAtomMapNum(3 - dummy.GetAtomMapNum())
         return _zip_spliced(
-            begin_frag, piece, end_frag, max_smiles_length
+            begin_frag, piece, end_frag, max_smiles_length, min_heavy_atoms
         ), drawn_geometry
     except Exception:  # noqa: BLE001 - robustness-first fallback contract
         return None, drawn_geometry
