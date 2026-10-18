@@ -58,8 +58,14 @@ const INSTALL_STEPS: InstallStep[] = [
     ],
   },
   {
+    title: "Open the playground",
+    description:
+      "A tabbed Tkinter GUI over every domain — chemistry, PK/PD dosing, ML on your CSVs, and the generative GA. No terminal needed; works straight after unzipping.",
+    commands: ["python playground.py"],
+  },
+  {
     title: "Verify the install",
-    description: "1454 tests should pass and the CLI answers with its version.",
+    description: "1478 tests should pass and the CLI answers with its version.",
     commands: ["python -m pytest", "pharmaml --version"],
   },
 ];
@@ -256,7 +262,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "1454 pytest cases across all domains",
+    tests: "1478 pytest cases across all domains",
     examples: "six executed notebooks + five no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -448,7 +454,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="1454" label="passing tests" />
+          <StatChip icon={CircleCheck} value="1478" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}

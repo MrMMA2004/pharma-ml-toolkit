@@ -34,3 +34,6 @@ data/
 artifacts/
 *.joblib
 *.xlsx
+
+# CatBoost training logs (created by compare_models runs)
+catboost_info/

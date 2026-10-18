@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1454 tests).
+exceptions, input validation, and pytest coverage** (1478 tests).
 
 ---
 
@@ -74,6 +74,42 @@ python -m pytest
 
 ---
 
+## Graphical playground
+
+The toolkit ships a single-file graphical front end — open it instead of a terminal
+whenever you prefer pointing and clicking:
+
+```bash
+python playground.py
+```
+
+A tabbed window opens with every calculation domain: **Chemistry** (IC50/Ki →
+pIC50/pKi, molar mass, the ~200-descriptor table for any SMILES, Tanimoto
+similarity), **PK/PD** (half-life/accumulation, plotted IV bolus decay and Emax
+curves, oral Cmax, Cockcroft–Gault with renal adjustment, loading/maintenance
+and pediatric dosing), **Data & ML** (open any CSV or a bundled example, train a
+registry model, read the metrics, browse a cross-validated leaderboard) and
+**Generative** (evolve molecules against QED/LogP objectives; adaptive runs
+render the operator-mix learning curve).
+
+Engineering notes:
+
+* **No installation required** — like `pytest` above, the playground falls back
+  to the bundled `src/` tree, so it runs straight after unzipping the archive.
+* **Nothing is mandatory** — heavy dependencies are probed at launch and each
+  feature names the exact `pip install` line it wants when missing; missing
+  pieces never crash the window.
+* **Responsive by design** — long calculations (descriptor batches, model
+  training, evolution) run in a worker thread with a live progress bar; the
+  figures reuse the package's own plotting helpers, so the window matches the
+  published figure style (with an automatic PNG fallback for exotic Tcl/Tk
+  builds).
+* **Scriptable** — `python playground.py --probe` prints a dependency report,
+  `--self-test` builds the whole UI headlessly (used by the test suite under
+  Xvfb), `--version` prints versions.
+
+---
+
 ## Package layout
 
 ```
@@ -93,7 +129,11 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── tests/                   # 1454 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py + data/ fixtures)
+├── playground.py           # NEW: the graphical front end — `python playground.py` opens a tabbed
+│                            # Tkinter window over every domain (chemistry · PK/PD · QSAR · generative);
+│                            # probes its dependencies at launch, degrades gracefully, headlessly
+│                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
+├── tests/                   # 1478 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -913,7 +953,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1515 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (1539 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```
