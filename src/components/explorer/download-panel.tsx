@@ -255,7 +255,7 @@ const FEATURED_FILES: Array<{
     path: "examples/complete_generative_workflow.ipynb",
     title: "Complete molecule generation workflow (zero → one hundred)",
     description:
-      "Executed Jupyter notebook — the generative chemistry tour: corpus → objective library → multi-objective blend → GA de novo + Pareto front → seeded generation → lead optimisation → scaffold hopping (ring / linker / fused-ring / topology cuts) → adaptive operators → RL with a prior SMILES policy → novelty → GA-vs-RL head-to-head. 6 figures committed inline.",
+      "Executed Jupyter notebook — the generative chemistry tour: corpus → objective library → multi-objective blend → GA de novo + Pareto front + crowding shortlist → seeded generation → lead optimisation → scaffold hopping (ring / linker / fused-ring / topology cuts) → adaptive operators → RL with a prior SMILES policy → novelty → GA-vs-RL head-to-head. 7 figures committed inline.",
     icon: NotebookText,
     badgeClass: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   },
