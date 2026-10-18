@@ -277,6 +277,7 @@ after adding new public functions.
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
 | `plot_receptor_atom_types` | function | Bar chart of the AutoDock atom-type census of a receptor. |
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |
+| `plot_rl_introspection` | function | One figure per RL run: the score story + the prior-drift diagnostics. |
 | `plot_roc_curves` | function | Receiver-operating curves — binary or one-vs-rest multiclass. |
 | `plot_similarity_heatmap` | function | Heat-map of a pairwise similarity matrix. |
 | `plot_table_comparison` | function | Overlap breakdown of a ligand-table :class:`TableComparison`. |

@@ -10,6 +10,39 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.17] — 2026-10-19
+
+### Added — RL prior introspection (100x-66)
+
+- **`result.history` records the prior-drift diagnostics** every RL
+  iteration: `drift` (the squared agent-vs-prior sequence
+  log-probability gap — the exact term the anchor penalty is built
+  from), `entropy` (the mean per-step sampling entropy), and both mean
+  sequence log-probabilities (`agent_logprob`, `prior_logprob`).
+  Iteration 0's drift is the float-exact `0.0` — the agent starts as a
+  bit-exact copy of the frozen prior and takes its first gradient step
+  only after the diagnostics are computed (pinned by test).
+  The diagnostic is independent of the penalty: `anchor_weight=0`
+  (vanilla REINFORCE) still records the drift it no longer pays for.
+- **`plot_rl_introspection(result)`** (from `pharmaml.viz`) — the RL
+  history figure API twin of `plot_operator_trajectory`: four panels
+  over the shared iteration axis (score trajectory, agent-vs-prior
+  log-probs, the drift with the anchor weight annotated in the
+  y-label, the exploration entropy).  A `GeneticOptimizer` history
+  (no drift fields) raises the actionable typed error.
+- **CLI: `--plot` on `--method rl`** now saves the introspection
+  figure — the flag's GA-only restriction is retired the same round
+  the diagnostics land (`pharmaml generative run --method rl --recipe
+  qed --plot drift.png`).  The GA path is unchanged.
+- The mode-collapse brake is now measurable: probed at seed 7 over 8
+  iterations, final drift 38.8 unanchored vs 0.74 with
+  `anchor_weight=1.0` — the `test_heavy_anchor_brakes_the_drift`
+  regression pins the ordering.
+- Tests +8 (4 introspection invariants, 4 figure/CLI checks — one of
+  them replacing the retired GA-only `--plot` error pin — plus the
+  updated history-shape field pin); README bullet + generative/viz
+  package docstrings; INDEX regenerated (+1 symbol).
+
 ## [1.2.16] — 2026-10-19
 
 ### Added / Fixed — the keyboard-shortcut hint row + a dead accelerator (100x-65)

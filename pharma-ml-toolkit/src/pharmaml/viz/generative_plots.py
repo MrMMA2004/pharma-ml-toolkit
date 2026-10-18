@@ -9,6 +9,11 @@ The generative flagship's introspection artifacts, drawn as figures:
   every molecule muted, the non-dominated front
   (:func:`pharmaml.generative.pareto_front` over the plotted pair)
   highlighted and connected.
+* :func:`plot_rl_introspection` — an RL run's prior-drift story: the
+  score trajectory, the agent-vs-prior sequence log-probabilities, the
+  squared drift the anchor penalises, and the exploration entropy — the
+  four diagnostics every :func:`pharmaml.generative.run_rl_optimization`
+  run records in ``history``.
 
 Examples
 --------
@@ -58,6 +63,35 @@ pharmaml.exceptions.DataValidationError: metadata carries no operator_trajectory
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: x and y must name DIFFERENT objectives, both 'qed'
+
+>>> from pharmaml.viz.generative_plots import plot_rl_introspection
+>>> rl = GenerationResult(
+...     smiles=["CCO"], scores=[0.7],
+...     history=[
+...         {"iteration": 0, "best_score": 0.4, "mean_score": 0.2,
+...          "drift": 0.0, "entropy": 3.1,
+...          "agent_logprob": -8.2, "prior_logprob": -8.2},
+...         {"iteration": 1, "best_score": 0.6, "mean_score": 0.3,
+...          "drift": 1.4, "entropy": 2.8,
+...          "agent_logprob": -6.9, "prior_logprob": -8.2},
+...     ],
+...     metadata={"method": "reinforce_rl", "anchor_weight": 0.1})
+>>> fig = plot_rl_introspection(rl)
+>>> (len(fig.axes), fig.axes[0].get_title(loc="left"))
+(4, 'RL introspection — policy drift from the prior')
+>>> [t.get_text() for t in fig.axes[1].get_legend().get_texts()]
+['agent', 'prior (frozen)']
+>>> fig.axes[2].get_ylabel()
+'drift (mean (ΔlogP)²), anchor_weight=0.1'
+>>> fig.axes[3].get_xlabel()
+'iteration'
+>>> close_figure(fig)
+>>> ga = GenerationResult(smiles=["CCO"], scores=[0.5],
+...     history=[{"iteration": 0, "best_score": 0.5, "mean_score": 0.3}])
+>>> plot_rl_introspection(ga)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: history rows carry no ['drift', 'entropy'] diagnostics — only run_rl_optimization() results record them
 """
 
 from __future__ import annotations
@@ -72,7 +106,7 @@ from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
 from pharmaml.viz._compat import PALETTE, new_figure
 
-__all__ = ["plot_operator_trajectory", "plot_pareto_front"]
+__all__ = ["plot_operator_trajectory", "plot_pareto_front", "plot_rl_introspection"]
 
 _LOG = get_logger(__name__)
 
@@ -291,4 +325,136 @@ def plot_pareto_front(
         fontsize=11, loc="left", pad=10,
     )
     ax.legend(fontsize=8, frameon=False)
+    return fig
+
+
+def plot_rl_introspection(
+    result: Any,
+    title: str = "RL introspection — policy drift from the prior",
+) -> Any:
+    """One figure per RL run: the score story + the prior-drift diagnostics.
+
+    Stacks four panels sharing the iteration x-axis:
+
+    1. the score trajectory every run already carries (best / batch mean);
+    2. the agent's vs the frozen prior's mean sequence log-probability —
+       the two curves whose gap is the fine-tuning itself;
+    3. the squared log-probability drift ``history[...]["drift"]`` — the
+       exact quantity the prior anchor penalises (the anchor weight is
+       annotated in the panel's y-label when the run reports it); the
+       curve starts at exactly ``0.0`` because the agent begins as a
+       bit-exact copy of the prior;
+    4. the mean per-step sampling entropy — the exploration meter (a
+       collapsing run shows entropy diving toward 0 while the drift
+       climbs: mode collapse, the brake's raison d'être).
+
+    Parameters
+    ----------
+    result:
+        A :class:`~pharmaml.generative.GenerationResult` from
+        :func:`pharmaml.generative.run_rl_optimization` (duck-typed like
+        ``plot_operator_trajectory``'s ``result``).
+    title:
+        Figure title (left-anchored; retrieve with
+        ``fig.axes[0].get_title(loc="left")``).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``result`` carries no history, or its rows lack the
+        prior-drift fields (a ``GeneticOptimizer`` history does not
+        record them — the message says so).
+    """
+    history = getattr(result, "history", []) or []
+    if not history:
+        raise DataValidationError(
+            "result carries no history -- pass the GenerationResult of a "
+            "run_rl_optimization() run"
+        )
+    missing = [key for key in ("drift", "entropy") if key not in history[0]]
+    if missing:
+        raise DataValidationError(
+            f"history rows carry no {missing!r} diagnostics — only "
+            "run_rl_optimization() results record them"
+        )
+
+    iterations = [entry["iteration"] for entry in history]
+    anchor_weight = (getattr(result, "metadata", None) or {}).get("anchor_weight")
+
+    fig, raw_axes = new_figure(
+        nrows=4,
+        ncols=1,
+        figsize=(8.4, 7.6),
+        sharex=True,
+        gridspec_kw={"hspace": 0.42},
+    )
+    axes = list(np.atleast_1d(raw_axes))
+
+    # -- panel 1: the score story every run already carries -------------
+    ax_score = axes[0]
+    ax_score.plot(
+        iterations,
+        [entry["best_score"] for entry in history],
+        color=PALETTE[0],
+        marker="o",
+        label="best score",
+    )
+    ax_score.plot(
+        iterations,
+        [entry["mean_score"] for entry in history],
+        color=PALETTE[1],
+        marker=".",
+        label="batch mean",
+    )
+    ax_score.set_title(title, fontsize=11, loc="left", pad=10)
+    ax_score.legend(fontsize=8, frameon=False)
+
+    # -- panel 2: agent vs frozen prior, the two curves whose gap IS ---
+    #    the fine-tuning
+    ax_lp = axes[1]
+    ax_lp.plot(
+        iterations,
+        [entry["agent_logprob"] for entry in history],
+        color=PALETTE[0],
+        marker="o",
+        label="agent",
+    )
+    ax_lp.plot(
+        iterations,
+        [entry["prior_logprob"] for entry in history],
+        color=PALETTE[3],
+        marker=".",
+        linestyle="--",
+        label="prior (frozen)",
+    )
+    ax_lp.set_ylabel("mean sequence log-prob", fontsize=9)
+    ax_lp.legend(fontsize=8, frameon=False)
+
+    # -- panel 3: the drift the anchor penalises (starts at exact 0) ---
+    ax_drift = axes[2]
+    ax_drift.plot(
+        iterations,
+        [entry["drift"] for entry in history],
+        color=PALETTE[4],
+        marker="o",
+    )
+    ylabel = "drift (mean (ΔlogP)²)"
+    if anchor_weight is not None:
+        ylabel += f", anchor_weight={anchor_weight}"
+    ax_drift.set_ylabel(ylabel, fontsize=9)
+
+    # -- panel 4: the exploration meter ---------------------------------
+    ax_entropy = axes[3]
+    ax_entropy.plot(
+        iterations,
+        [entry["entropy"] for entry in history],
+        color=PALETTE[5],
+        marker="o",
+    )
+    ax_entropy.set_ylabel("mean step entropy", fontsize=9)
+    ax_entropy.set_xlabel("iteration", fontsize=9)
     return fig

@@ -29,6 +29,7 @@ scans::
     pharmaml generative run --method ga --recipe novel --scaffold --seed 42
     pharmaml generative run --method ga --recipe qed --scaffold-hop --seed 42
     pharmaml generative run --method ga --adaptive-operators --plot operators.png
+    pharmaml generative run --method rl --recipe qed --plot drift.png
     pharmaml generative run --recipe druglike --pareto --pareto-plot front.png
     pharmaml generative corpus
     pharmaml models list
@@ -671,10 +672,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     gen_run.add_argument(
         "--plot", default=None, metavar="PATH",
-        help="GA + --adaptive-operators only: save the operator-trajectory "
+        help="save the run's own learning-curve figure to this path "
+        "(png/svg/pdf): GA + --adaptive-operators -> the operator-trajectory "
         "figure (the run's score curve plus the per-generation operator mix "
-        "learning its way, plot_operator_trajectory) to this path "
-        "(png/svg/pdf)",
+        "learning its way, plot_operator_trajectory); RL -> the prior-drift "
+        "introspection (agent-vs-prior log-probabilities, the squared drift "
+        "the anchor penalises, the exploration entropy — "
+        "plot_rl_introspection)",
     )
     gen_run.add_argument(
         "--pareto", action="store_true", default=False,
@@ -1619,12 +1623,14 @@ def _generative_objective(recipe: str, seeds: list[str] | None) -> tuple[Any, st
 def _cmd_generative_run(args: argparse.Namespace) -> int:
     """``pharmaml generative run``: optimise molecules toward a recipe.
 
-    With ``--method ga --adaptive-operators --plot PATH`` the run's
-    operator-trajectory figure (score curve + per-generation operator mix)
-    is saved alongside the leaderboard; with ``--pareto`` (multi-objective
-    recipes) the Pareto front -- the non-dominated trade-off molecules --
-    is extracted and printed after it, and ``--pareto-plot PATH`` saves
-    the trade-off scatter.
+    With ``--plot PATH`` the run's own learning-curve figure is saved
+    alongside the leaderboard: the GA's operator trajectory (needs
+    ``--adaptive-operators``) or the RL run's prior-drift introspection
+    (agent-vs-prior log-probabilities, the squared drift the anchor
+    penalises, the exploration entropy).  With ``--pareto``
+    (multi-objective recipes) the Pareto front -- the non-dominated
+    trade-off molecules -- is extracted and printed after it, and
+    ``--pareto-plot PATH`` saves the trade-off scatter.
     """
     from pharmaml.exceptions import DataValidationError
     from pharmaml.generative import DEFAULT_CORPUS, GeneticOptimizer, ReinventOptimizer
@@ -1663,16 +1669,12 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             f"{args.method!r})"
         )
     plot_path = getattr(args, "plot", None)
-    if plot_path and args.method != "ga":
-        raise DataValidationError(
-            "--plot saves the GA's adaptive operator-trajectory figure and "
-            f"applies to --method ga only (got --method {args.method!r})"
-        )
-    if plot_path and not adaptive_operators:
+    if plot_path and args.method == "ga" and not adaptive_operators:
         raise DataValidationError(
             "--plot draws the operator trajectory an adaptive run collects "
             "-- re-run with --adaptive-operators (a uniform run's operator "
-            "mix is fixed, so it has no trajectory to draw)"
+            "mix is fixed, so it has no trajectory to draw; an RL run's "
+            "--plot draws its prior-drift introspection instead)"
         )
     pareto = bool(getattr(args, "pareto", False))
     pareto_plot_path = getattr(args, "pareto_plot", None)
@@ -1737,15 +1739,24 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
         f"{meta.get('elapsed_s', float('nan')):.1f}s"
     )
     if plot_path:
-        # the adaptive run's learning curve (the chem compare --figure
-        # idiom: build, save via save_figure, close, echo the artifact)
+        # the run's own learning curve (the chem compare --figure idiom:
+        # build, save via save_figure, close, echo the artifact) -- the
+        # GA's operator trajectory, or the RL run's prior-drift story
         from pharmaml.viz import close_figure, save_figure
-        from pharmaml.viz.generative_plots import plot_operator_trajectory
+        from pharmaml.viz.generative_plots import (
+            plot_operator_trajectory,
+            plot_rl_introspection,
+        )
 
-        figure = plot_operator_trajectory(result)
+        if args.method == "ga":
+            figure = plot_operator_trajectory(result)
+            caption = "adaptive operator trajectory"
+        else:
+            figure = plot_rl_introspection(result)
+            caption = "RL prior-drift introspection"
         written_figure = save_figure(figure, plot_path)
         close_figure(figure)
-        print(f"plot     : {written_figure} (adaptive operator trajectory)")
+        print(f"plot     : {written_figure} ({caption})")
     if result.is_empty():
         print("\nno valid molecule generated -- try more iterations "
               "or a higher --prior-epochs")

@@ -1134,20 +1134,28 @@ class TestGenerativeRunPlotFlag:
         head = figure.read_bytes()[:512]
         assert head.lstrip().startswith(b"<?xml") and b"<svg" in head
 
-    def test_plot_on_rl_method_is_a_typed_error(self, tmp_path, capsys):
-        # --plot is the GA's adaptive introspection artifact: asking an RL
-        # run for it must be an actionable typed error (the --scaffold /
-        # --adaptive-operators convention), not a silently ignored flag.
-        figure = tmp_path / "never.png"
+    def test_plot_on_rl_method_writes_introspection_png(self, tmp_path, capsys):
+        # 100x-66: --plot on an RL run saves the prior-drift introspection
+        # figure (plot_rl_introspection) -- the GA-only restriction is
+        # lifted the same round the diagnostics landed in history. The
+        # old "ga only" typed error is retired with it.
+        figure = tmp_path / "drift.png"
         code = main([
             "generative", "run",
             "--method", "rl", "--recipe", "qed", "--plot", str(figure),
-            "--iterations", "1",
+            "--iterations", "2", "--batch-size", "8",
+            "--prior-epochs", "2", "--seed", "42", "--top", "3",
         ])
-        assert code == 1
-        error = capsys.readouterr().err
-        assert "--plot" in error and "ga only" in error
-        assert not figure.exists()
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "drift.png" in out  # the artifact path is echoed back
+        assert "prior-drift introspection" in out
+        assert figure.is_file() and figure.stat().st_size > 1_000
+        assert figure.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"  # PNG magic
+        # matplotlib figures must not leak between CLI invocations
+        import matplotlib.pyplot as plt
+
+        assert plt.get_fignums() == []
 
 
 class TestGenerativeRunParetoFlag:

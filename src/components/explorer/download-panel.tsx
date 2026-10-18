@@ -77,7 +77,7 @@ const INSTALL_STEPS: InstallStep[] = [
   },
   {
     title: "Verify the install",
-    description: "1737 tests should pass and the CLI answers with its version.",
+    description: "1745 tests should pass and the CLI answers with its version.",
     commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
   },
 ];
@@ -244,10 +244,18 @@ const FEATURED_FILES: Array<{
     badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
   {
+    path: "examples/complete_deep_learning_workflow.ipynb",
+    title: "Complete deep learning workflow (zero → one hundred)",
+    description:
+      "Executed Jupyter notebook — the PyTorch path end to end: DeepMLPRegressor with early stopping on a held-out validation fraction, the training-history verdict, parity + residual diagnostics, the plain-vs-residual architecture A/B, and the registry route train_model('dnn', …). 6 figures committed inline.",
+    icon: NotebookText,
+    badgeClass: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  },
+  {
     path: "examples/complete_ml_workflow_no_output.ipynb",
     title: "No-output notebook twins (lightweight)",
     description:
-      "Bandwidth-friendly twins of the three workflows — identical cells, every output stripped: ML 44 KB (4% of the executed original), docking 80 KB, PK 42 KB. Open the full twin to read results, run this one to produce them yourself.",
+      "Bandwidth-friendly twins of every executed notebook — identical cells, every output stripped: ML 42 KB (4% of the executed original), docking 56 KB, PK/PD 41 KB, cell line 23 KB, generative 78 KB, deep learning 23 KB. Open the full notebook to read results, run the twin to produce them yourself.",
     icon: NotebookText,
     badgeClass: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
   },
@@ -274,8 +282,8 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "1737 pytest cases across all domains",
-    examples: "six executed notebooks + five no-output twins + runnable demos",
+    tests: "1745 pytest cases across all domains",
+    examples: "seven executed notebooks + six no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
     scratch: "idempotent build & patch scripts (notebooks, docs index)",
@@ -477,7 +485,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="1737" label="passing tests" />
+          <StatChip icon={CircleCheck} value="1745" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}

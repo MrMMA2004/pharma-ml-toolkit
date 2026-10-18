@@ -53,7 +53,13 @@ runs in seconds on a laptop CPU:
    extracts the non-dominated set from the breakdown (the molecules where
    improving one objective necessarily sacrifices another; front members
    can sit arbitrarily deep in the leaderboard), rendered by
-   :func:`pharmaml.viz.plot_pareto_front`.
+   :func:`pharmaml.viz.plot_pareto_front`; an RL run's ``history``
+   additionally records the **prior-drift introspection** (the squared
+   agent-vs-prior log-probability gap the anchor penalises, the
+   exploration entropy, and both mean sequence log-probabilities --
+   iteration 0's drift is exactly ``0.0`` because the agent starts as a
+   bit-exact copy of the frozen prior), rendered by
+   :func:`pharmaml.viz.plot_rl_introspection`.
 
 Example
 -------

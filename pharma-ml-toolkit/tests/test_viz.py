@@ -46,6 +46,7 @@ from pharmaml.viz import (
     plot_predicted_vs_actual,
     plot_receptor_atom_types,
     plot_residuals,
+    plot_rl_introspection,
     plot_roc_curves,
     plot_similarity_heatmap,
     plot_table_comparison,
@@ -929,6 +930,66 @@ class TestGenerativePlots:
             plot_operator_trajectory(uniform)
         with pytest.raises(DataValidationError, match="not in this run's trajectory"):
             plot_operator_trajectory(adaptive_run, levels=("nope",))
+
+
+@pytest.fixture(scope="module")
+def rl_run():
+    """A cheap RL run (~2 s): QED over a tiny corpus, 5 iterations."""
+    from pharmaml.generative import DEFAULT_CORPUS, QedObjective, run_rl_optimization
+
+    return run_rl_optimization(
+        QedObjective(),
+        corpus=list(DEFAULT_CORPUS[:24]),
+        prior_epochs=6,
+        iterations=5,
+        batch_size=16,
+        seed=7,
+    )
+
+
+class TestRlIntrospectionPlot:
+    def test_four_panels_and_legends(self, rl_run, close_all):
+        fig = plot_rl_introspection(rl_run)
+        assert len(fig.axes) == 4
+        score_legend = {
+            text.get_text() for text in fig.axes[0].get_legend().get_texts()
+        }
+        assert score_legend == {"best score", "batch mean"}
+        logprob_legend = {
+            text.get_text() for text in fig.axes[1].get_legend().get_texts()
+        }
+        assert logprob_legend == {"agent", "prior (frozen)"}
+        assert fig.axes[3].get_xlabel() == "iteration"
+        assert fig.axes[1].get_ylabel() == "mean sequence log-prob"
+
+    def test_anchor_weight_annotated_in_drift_ylabel(self, rl_run, close_all):
+        # the run reports metadata["anchor_weight"] -> the drift panel's
+        # y-label carries it (the brake's strength, right where its
+        # penalty term is plotted)
+        fig = plot_rl_introspection(rl_run)
+        assert f"anchor_weight={rl_run.metadata['anchor_weight']}" in (
+            fig.axes[2].get_ylabel()
+        )
+        assert "drift" in fig.axes[2].get_ylabel()
+
+    def test_drift_panel_starts_at_exact_zero(self, rl_run, close_all):
+        # panel 3's first y value is the float-exact 0.0: the agent begins
+        # as a bit-exact copy of the frozen prior
+        fig = plot_rl_introspection(rl_run)
+        line = fig.axes[2].lines[0]
+        assert next(iter(line.get_ydata())) == 0.0
+
+    def test_ga_history_and_empty_history_raise_typed_errors(
+        self, adaptive_run, close_all
+    ):
+        from pharmaml.generative import GenerationResult
+
+        # a GA history records scores but no prior-drift fields
+        with pytest.raises(DataValidationError, match="diagnostics"):
+            plot_rl_introspection(adaptive_run)
+        empty = GenerationResult(smiles=["CCO"], scores=[0.5])
+        with pytest.raises(DataValidationError, match="no history"):
+            plot_rl_introspection(empty)
 
 
 # ---------------------------------------------------------------- reports

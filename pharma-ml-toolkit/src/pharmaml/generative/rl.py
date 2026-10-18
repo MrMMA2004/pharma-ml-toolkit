@@ -28,7 +28,15 @@ running baseline*, not the original augmented-likelihood formulation:
 * an **experience replay buffer** keeps the best-scoring unique samples
   and mixes them into every training batch (REINVENT-style replay);
 * gradients are clipped and the run stops early when the mean score
-  plateaus.
+  plateaus;
+* **introspection**: every iteration records the prior-drift diagnostics
+  the loss already computes -- ``drift`` (the squared agent-vs-prior
+  log-probability gap the anchor penalises), ``entropy`` (the exploration
+  meter), and the two mean sequence log-probabilities -- in
+  ``result.history``, rendered by
+  :func:`pharmaml.viz.plot_rl_introspection`.  Iteration 0's drift is
+  exactly ``0.0`` (the agent starts as a bit-exact copy of the frozen
+  prior); the drift's growth curve *is* the mode-collapse brake's story.
 
 Torch is optional at package level (the :mod:`pharmaml.ml.neural`
 contract): importing this module never requires it; running
@@ -258,6 +266,16 @@ class ReinventOptimizer:
     def optimize(self) -> GenerationResult:
         """Run the fine-tuning loop; returns the ranked molecules.
 
+        Returns
+        -------
+        GenerationResult
+            The ranked molecules; ``result.history`` carries one record per
+            iteration with the progress statistics (``best_score`` /
+            ``mean_score`` / ``valid_fraction`` / ``loss``) **and** the
+            prior-drift diagnostics (``drift``, ``entropy``,
+            ``agent_logprob``, ``prior_logprob``) -- see the module
+            docstring's introspection bullet.
+
         Raises
         ------
         DataValidationError
@@ -360,6 +378,13 @@ class ReinventOptimizer:
             train_batch += list(replay.items())[: self.batch_size // 2]
 
             loss_value = float("nan")
+            # prior-drift diagnostics (100x-66): the loss already computes
+            # these -- record them instead of discarding, so the run's
+            # history tells the anchor's story (see plot_rl_introspection).
+            drift_value = float("nan")
+            agent_lp_value = float("nan")
+            prior_lp_value = float("nan")
+            entropy_value = float("nan")
             if train_batch:
                 sequences = [agent._encoded(smiles) for smiles, _ in train_batch]
                 returns = torch.tensor([score for _, score in train_batch])
@@ -387,6 +412,10 @@ class ReinventOptimizer:
                     loss = loss + self.anchor_weight * anchor_loss
                 agent._apply_sgd_step(torch, optimizer, loss, self.grad_clip)
                 loss_value = float(loss.detach())
+                drift_value = float(anchor_loss.detach())
+                agent_lp_value = float(agent_lp.mean().detach())
+                prior_lp_value = float(prior_lp.mean().detach())
+                entropy_value = float(entropy.detach())
                 # Fold the current batch into the running statistics only
                 # AFTER the gradient: this iteration's advantage saw
                 # previous batches, the next one's sees this one too.
@@ -408,6 +437,10 @@ class ReinventOptimizer:
                     / len(canonical),
                     "replay_size": len(replay),
                     "loss": loss_value,
+                    "drift": drift_value,
+                    "entropy": entropy_value,
+                    "agent_logprob": agent_lp_value,
+                    "prior_logprob": prior_lp_value,
                 }
             )
             _LOG.debug(

@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1737 tests).
+exceptions, input validation, and pytest coverage** (1745 tests).
 
 ---
 
@@ -213,7 +213,7 @@ pharma-ml-toolkit/
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1737 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1745 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -838,6 +838,25 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   the trade-off scatter with the front highlighted, and the returned
   `ParetoFront` carries domination counts, a `to_dataframe()` table and
   a one-line audit `__str__`.
+* **RL prior introspection** — the RL loop always *computed* the prior-drift
+  diagnostics for its anchor loss; now it records them instead of discarding
+  them. Every `result.history` row carries `drift` (the squared
+  agent-vs-prior sequence log-probability gap — the exact quantity the
+  `anchor_weight * mean((logP_agent - logP_prior)²)` penalty is built from),
+  `entropy` (the mean per-step sampling entropy — the exploration meter), and
+  both mean sequence log-probabilities. Two invariants make the story
+  self-explaining: **iteration 0's drift is exactly `0.0`** (the agent starts
+  as a bit-exact copy of the frozen prior, taking its first gradient step only
+  after the diagnostics are computed — pinned by test), and the drift curve is
+  the mode-collapse brake made measurable — probed at seed 7 over 8
+  iterations, the final drift is 38.8 unanchored vs **0.74 with
+  `anchor_weight=1.0`**. `plot_rl_introspection(result)` (from `pharmaml.viz`)
+  stacks the four panels — score trajectory, agent-vs-prior log-probs (the two
+  curves whose gap *is* the fine-tuning), the drift with the anchor weight
+  annotated, and the entropy — and the CLI twin is
+  `pharmaml generative run --method rl --recipe qed --plot drift.png` (the
+  `--plot` flag, previously GA-only, now saves each method's own learning
+  curve).
 * **Method trade-offs, honestly:** the GA explores wider (hundreds of unique molecules
   per run, no extra dependency, seeded *and* de novo modes) while RL fine-tunes a learned
   prior and needs fewer evaluations to focus on high-scoring neighbourhoods — but costs a

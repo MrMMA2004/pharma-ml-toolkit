@@ -1164,6 +1164,11 @@ class TestReinventOptimizer:
                 "valid_fraction",
                 "replay_size",
                 "loss",
+                # prior-drift diagnostics (100x-66)
+                "drift",
+                "entropy",
+                "agent_logprob",
+                "prior_logprob",
             }
             assert 0.0 <= entry["valid_fraction"] <= 1.0
             assert 0.0 <= entry["best_score"] <= 1.0
@@ -1287,6 +1292,74 @@ class TestReinventOptimizer:
         assert "corpus prior" in result.metadata["prior"]
         assert len(result) > 0
         assert result.metadata["iterations"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Prior-drift introspection (100x-66): the diagnostics the loop always
+# computed for the anchor loss, now recorded in history instead of
+# discarded -- the data behind plot_rl_introspection.
+# ---------------------------------------------------------------------------
+class TestRlIntrospection:
+    def test_history_records_drift_entropy_and_logprobs(
+        self, trained_prior
+    ) -> None:
+        result = ReinventOptimizer(
+            QedObjective(), prior=trained_prior, iterations=4, batch_size=16, seed=7
+        ).optimize()
+        for entry in result.history:
+            assert math.isfinite(entry["drift"])
+            assert entry["drift"] >= 0.0  # a squared quantity
+            assert math.isfinite(entry["entropy"])
+            assert entry["entropy"] >= 0.0
+            assert math.isfinite(entry["agent_logprob"])
+            assert math.isfinite(entry["prior_logprob"])
+
+    def test_iteration_zero_drift_is_exactly_zero(self, trained_prior) -> None:
+        # The agent starts as a bit-exact copy of the frozen prior and
+        # takes its first gradient step only AFTER the diagnostics are
+        # computed: iteration 0's drift is the float-exact 0.0 (the
+        # figure's anchor point -- plot_rl_introspection's panel 3).
+        result = ReinventOptimizer(
+            QedObjective(), prior=trained_prior, iterations=1, batch_size=16, seed=7
+        ).optimize()
+        assert result.history[0]["drift"] == 0.0
+        assert (
+            result.history[0]["agent_logprob"]
+            == result.history[0]["prior_logprob"]
+        )
+
+    def test_anchor_weight_zero_still_records_drift(self, trained_prior) -> None:
+        # The diagnostic is independent of the penalty: anchor_weight=0
+        # (vanilla REINFORCE-with-baseline) still records the drift it is
+        # no longer paying for -- introspection, not just accounting.
+        result = ReinventOptimizer(
+            QedObjective(),
+            prior=trained_prior,
+            iterations=2,
+            batch_size=16,
+            seed=7,
+            anchor_weight=0.0,
+        ).optimize()
+        assert result.metadata["anchor_weight"] == 0.0
+        assert result.history[0]["drift"] == 0.0
+        assert result.history[-1]["drift"] > 0.0  # the policy HAS moved
+
+    def test_heavy_anchor_brakes_the_drift(self, trained_prior) -> None:
+        # The mode-collapse brake, made measurable: with the same seed and
+        # iterations, a heavy anchor (1.0) leaves the policy orders of
+        # magnitude closer to the prior than vanilla REINFORCE (probed:
+        # 0.737 vs 38.800 at seed 7 -- the inversion seen at anchor=0.3
+        # disappears once the brake dominates the objective).
+        config = {"prior": trained_prior, "iterations": 8, "batch_size": 16, "seed": 7}
+        unanchored = ReinventOptimizer(
+            QedObjective(), anchor_weight=0.0, **config
+        ).optimize()
+        anchored = ReinventOptimizer(
+            QedObjective(), anchor_weight=1.0, **config
+        ).optimize()
+        assert (
+            anchored.history[-1]["drift"] < unanchored.history[-1]["drift"]
+        )
 
 
 # ---------------------------------------------------------------------------
