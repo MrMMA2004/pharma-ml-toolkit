@@ -28,6 +28,14 @@ Examples
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: frame must be a pandas DataFrame
+>>> plot_descriptor_distributions(pd.DataFrame([[1.0, 2.0]], columns=["v", "v"]))
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: duplicate column names: ['v'] — rename or drop the duplicates before plotting
+>>> plot_descriptor_distributions(frame, bins=0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: bins must be a positive integer, got 0
 
 >>> from pharmaml.viz.chem_plots import plot_similarity_heatmap
 >>> sim = pd.DataFrame([[1.0, 0.5, 0.0], [0.5, 1.0, 0.25], [0.0, 0.25, 1.0]],
@@ -83,6 +91,20 @@ __all__ = [
 _LOG = get_logger(__name__)
 
 
+def _check_bins_scalar(bins) -> None:
+    """Typed guard for histogram ``bins`` scalars (0/-3/2.5 leak raw).
+
+    Mirrors ``docking_plots._check_bins_scalar``: matplotlib accepts
+    positive-int bins, bin-edge sequences and named strategies
+    ("auto", "fd", ...); any OTHER scalar leaks a raw ValueError /
+    TypeError from inside ``ax.hist`` — name it typed instead.
+    """
+    if isinstance(bins, (int, float, np.integer, np.floating)) and not (
+        isinstance(bins, (int, np.integer)) and bins >= 1
+    ):
+        raise DataValidationError(f"bins must be a positive integer, got {bins!r}")
+
+
 def plot_descriptor_distributions(
     frame: pd.DataFrame,
     columns: list[str] | None = None,
@@ -96,23 +118,44 @@ def plot_descriptor_distributions(
     ----------
     frame:
         Any numeric table — descriptor frames, pIC50 conversions, or
-        prediction outputs.
+        prediction outputs.  Column names must be unique.
     columns:
         Subset of columns to show (default: every numeric column,
         capped at ``max_columns`` by column order).
     max_columns:
         Safety cap so a 200-descriptor frame renders as a readable grid.
     bins:
-        Histogram bin count.
+        Histogram bins — any :meth:`matplotlib.axes.Axes.hist` spec:
+        a positive integer, a bin-edge sequence, or a named strategy
+        such as ``"auto"``.  A non-positive integer scalar raises the
+        typed error below instead of matplotlib's raw ``ValueError``.
 
     Returns
     -------
     matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``frame`` is not a DataFrame, is empty, carries duplicated
+        column names, the requested ``columns`` are missing or none of
+        them is numeric, or ``bins`` is a non-positive integer.
     """
     if not isinstance(frame, pd.DataFrame):
         raise DataValidationError("frame must be a pandas DataFrame")
+    duplicated = frame.columns[frame.columns.duplicated()]
+    if len(duplicated):
+        # A duplicated column name turns frame[name] into a multi-column
+        # DataFrame whose is_numeric_dtype check is False, so the grid
+        # reported the MISLEADING "no numeric columns to plot" even when
+        # every duplicate was numeric (100x-41-B corner).
+        raise DataValidationError(
+            f"duplicate column names: {list(duplicated)} — rename or drop "
+            "the duplicates before plotting"
+        )
     if frame.empty:
         raise DataValidationError("frame is empty — nothing to plot")
+    _check_bins_scalar(bins)
 
     if columns is not None:
         missing = [name for name in columns if name not in frame.columns]
@@ -189,13 +232,31 @@ def plot_similarity_heatmap(
     Returns
     -------
     matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If the matrix is not square, the label count does not match
+        the matrix, or the values cannot be converted to floats (a
+        string frame used to leak numpy's raw ``could not convert
+        string to float``).
     """
     if isinstance(similarity, pd.DataFrame):
-        matrix = similarity.to_numpy(dtype=float)
+        try:
+            matrix = similarity.to_numpy(dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise DataValidationError(
+                f"similarity matrix values must be numeric ({exc})"
+            ) from exc
         if labels is None:
             labels = [str(name) for name in similarity.index]
     else:
-        matrix = np.asarray(similarity, dtype=float)
+        try:
+            matrix = np.asarray(similarity, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise DataValidationError(
+                f"similarity matrix values must be numeric ({exc})"
+            ) from exc
 
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
         raise DataValidationError(
@@ -250,7 +311,9 @@ def plot_table_comparison(
         ``summary()`` mapping works).
     labels:
         Optional ``(table_a_name, table_b_name)`` pair used in the
-        bucket names; defaults to ``("A", "B")``.
+        bucket names; defaults to ``("A", "B")``.  A pair of exactly
+        two strings — any other arity raises the typed error below
+        instead of an unpacking ``ValueError``.
     title:
         Figure title.
 
@@ -261,8 +324,9 @@ def plot_table_comparison(
     Raises
     ------
     DataValidationError
-        If ``comparison`` lacks the comparison attributes, or both
-        tables turned out empty (nothing to draw).
+        If ``comparison`` lacks the comparison attributes, both
+        tables turned out empty (nothing to draw), or ``labels`` is not
+        a two-item ``(table_a_name, table_b_name)`` pair.
 
     Notes
     -----
@@ -285,6 +349,14 @@ def plot_table_comparison(
     if total == 0:
         raise DataValidationError(
             "both tables are empty after normalisation — nothing to compare"
+        )
+    if labels is not None and len(labels) != 2:
+        # A 1- or 3-tuple used to die on the tuple unpacking below with
+        # a raw ``ValueError: (not enough|too many) values to unpack``
+        # (100x-41-B corner).
+        raise DataValidationError(
+            f"labels must be a (table_a_name, table_b_name) pair of two "
+            f"strings, got {len(labels)} item(s): {list(labels)}"
         )
 
     name_a, name_b = labels if labels is not None else ("A", "B")

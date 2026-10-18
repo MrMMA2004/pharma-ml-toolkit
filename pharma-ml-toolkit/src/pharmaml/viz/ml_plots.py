@@ -58,6 +58,16 @@ Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: Unsupported figure format 'gif'; supported: png, svg, pdf
 >>> close_figure(fig); out.unlink()
+
+>>> from pharmaml.viz.ml_plots import plot_feature_importance
+>>> fig = plot_feature_importance({"logp": 0.8, "mw": 0.4, "tpsa": 0.1})
+>>> len(fig.axes[0].patches)                 # every feature by default
+3
+>>> close_figure(fig)
+>>> plot_feature_importance({"logp": 0.8, "mw": 0.4}, top_n=0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: top_n must be a positive integer or None, got 0
 """
 
 from __future__ import annotations
@@ -86,6 +96,23 @@ __all__ = [
 ]
 
 _LOG = get_logger(__name__)
+
+
+def _check_top_n(top_n: int | None) -> None:
+    """Typed guard for the shared ``top_n`` contract.
+
+    Mirrors ``docking_plots._check_top_n``: ``None`` -> all rows, a
+    positive integer -> that many rows, anything else (``0``/negative/
+    non-int/bool) raises.  Pre-fix ``plot_feature_importance`` read
+    ``top_n=0`` as "empty figure" and ``-1`` as "all but one" while
+    ``plot_top_ligands`` read both as "all rows" (100x-41-B).
+    """
+    if top_n is not None and (
+        isinstance(top_n, bool) or not isinstance(top_n, (int, np.integer)) or top_n < 1
+    ):
+        raise DataValidationError(
+            f"top_n must be a positive integer or None, got {top_n!r}"
+        )
 
 
 def _unwrap_confusion(confusion, labels: list[Any] | None):
@@ -194,7 +221,9 @@ def plot_roc_curves(
     Raises
     ------
     ModelError
-        If the model lacks ``predict_proba``.
+        If the model lacks ``predict_proba`` or the fitted ``classes_``
+        attribute (``classes_`` is set during ``fit`` — a stub exposing
+        only ``predict_proba`` used to die with a raw ``AttributeError``).
     """
     from sklearn.metrics import auc as sk_auc
     from sklearn.metrics import roc_curve
@@ -203,6 +232,11 @@ def plot_roc_curves(
         raise ModelError(
             "plot_roc_curves needs a model with predict_proba; "
             "fit a probabilistic classifier (logistic_regression, random_forest, ...)"
+        )
+    if not hasattr(model, "classes_"):
+        raise ModelError(
+            "plot_roc_curves needs a FITTED model: predict_proba is present "
+            "but classes_ is not (classes_ is set during fit)"
         )
 
     proba = np.asarray(model.predict_proba(X_test))
@@ -275,7 +309,11 @@ def plot_calibration_curve(
     Raises
     ------
     ModelError
-        If the model lacks ``predict_proba``.
+        If the model lacks ``predict_proba`` or the fitted ``classes_``
+        attribute (``classes_`` is set during ``fit`` — a stub exposing
+        only ``predict_proba`` used to die with a raw ``AttributeError``).
+    DataValidationError
+        If ``n_bins < 2``.
     """
     from sklearn.calibration import calibration_curve
     from sklearn.metrics import brier_score_loss
@@ -284,6 +322,11 @@ def plot_calibration_curve(
         raise ModelError(
             "plot_calibration_curve needs a model with predict_proba; "
             "fit a probabilistic classifier (logistic_regression, random_forest, ...)"
+        )
+    if not hasattr(model, "classes_"):
+        raise ModelError(
+            "plot_calibration_curve needs a FITTED model: predict_proba is "
+            "present but classes_ is not (classes_ is set during fit)"
         )
     if n_bins < 2:
         raise DataValidationError(f"n_bins must be >= 2, got {n_bins}")
@@ -492,11 +535,35 @@ def plot_model_comparison(
     ----------
     leaderboard:
         DataFrame from ``compare_models`` — a ``model`` column plus
-        ``<metric>_mean`` / ``<metric>_std`` columns.
+        ``<metric>_mean`` / ``<metric>_std`` columns.  NaN metric cells
+        stay legal (they model failed CV runs); duplicated column
+        names and non-numeric metric cells do not.
     metric:
         Metric name when the frame contains several; defaults to the
         first ``*_mean`` column found.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If the frame lacks a ``model`` or ``<metric>_mean`` column,
+        carries duplicated column names (a duplicated ``model`` column
+        used to render every y-tick as "model"), or holds non-numeric
+        cells in the metric columns.
     """
+    duplicated = leaderboard.columns[leaderboard.columns.duplicated()]
+    if len(duplicated):
+        # A duplicated 'model' column turns frame["model"] into a
+        # multi-column DataFrame whose iteration yields COLUMN names, so
+        # every y-tick silently read "model"; duplicated metric columns
+        # break the Series selection outright.
+        raise DataValidationError(
+            f"duplicate column names: {list(duplicated)} — rename or drop "
+            "the duplicates before plotting"
+        )
     if "model" not in leaderboard.columns:
         raise DataValidationError("leaderboard needs a 'model' column (compare_models output)")
     if metric is None:
@@ -511,6 +578,9 @@ def plot_model_comparison(
     std_col = f"{metric}_std"
     if mean_col not in leaderboard.columns:
         raise DataValidationError(f"column {mean_col!r} not found in the leaderboard")
+    _require_numeric_metric(leaderboard, mean_col)
+    if std_col in leaderboard.columns:
+        _require_numeric_metric(leaderboard, std_col)
 
     frame = leaderboard.sort_values(mean_col, ascending=True)
     values = frame[mean_col].to_numpy(dtype=float)
@@ -528,6 +598,28 @@ def plot_model_comparison(
                   else f"mean CV {metric}")
     ax.set_title(title)
     return fig
+
+
+def _require_numeric_metric(frame: pd.DataFrame, column: str) -> None:
+    """Reject non-numeric cells in a leaderboard metric column, typed.
+
+    NaN cells stay legal — ``compare_models`` keeps failed models as
+    NaN rows.  A string cell used to leak a raw ``TypeError`` from
+    ``sort_values`` (mixed '<' comparison) or a raw ``ValueError`` from
+    ``to_numpy(dtype=float)`` (100x-41-B corner).
+    """
+    values = frame[column]
+    numeric = pd.to_numeric(values, errors="coerce")
+    bad = values.notna() & numeric.isna()
+    if bad.any():
+        offenders = ", ".join(
+            f"{frame.loc[idx, 'model']}: {values.loc[idx]!r}"
+            for idx in frame.index[bad][:5]
+        )
+        raise DataValidationError(
+            f"column {column!r} contains non-numeric value(s) ({offenders}); "
+            "model-comparison metrics must be numeric"
+        )
 
 
 def plot_class_distribution(
@@ -609,7 +701,7 @@ def _extract_importances(model_or_mapping, feature_names: list[str] | None):
 def plot_feature_importance(
     model_or_mapping: Any,
     feature_names: list[str] | None = None,
-    top_n: int = 15,
+    top_n: int | None = 15,
     title: str = "Feature importance",
 ) -> Any:
     """Top-N feature importances as horizontal bars.
@@ -618,13 +710,42 @@ def plot_feature_importance(
     (``|coef_|``), wrapped :class:`~sklearn.pipeline.Pipeline` models,
     or a plain ``{feature: importance}`` mapping when you computed the
     scores yourself.
+
+    Parameters
+    ----------
+    model_or_mapping:
+        Fitted estimator, sklearn Pipeline, or ``{feature: importance}``
+        mapping.
+    feature_names:
+        Feature labels (default: ``x0, x1, ...``).
+    top_n:
+        How many features to show; ``None`` shows every feature.
+        Values below 1 and non-integers raise
+        :class:`~pharmaml.exceptions.DataValidationError` — the old
+        ``0``/``-1`` silently meant "empty figure"/"all but one" here
+        while meaning "all rows" in
+        :func:`~pharmaml.viz.docking_plots.plot_top_ligands`.
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If importances cannot be extracted from ``model_or_mapping`` or
+        ``top_n`` is not a positive integer or ``None``.
     """
+    _check_top_n(top_n)
     names, values = _extract_importances(model_or_mapping, feature_names)
     # Stable argsort on the NEGATED values: descending by importance with
     # ties resolving first-declared-wins (matches plot_top_ligands); the
     # trailing reversal only flips display order so the top feature sits
     # highest on the axis. argsort(values)[::-1] would flip tied groups.
-    order = np.argsort(-values, kind="stable")[: min(top_n, len(values))][::-1]
+    keep = len(values) if top_n is None else min(int(top_n), len(values))
+    order = np.argsort(-values, kind="stable")[:keep][::-1]
 
     fig, ax = new_figure(figsize=(8.4, 0.42 * len(order) + 1.7))
     positions = np.arange(len(order))

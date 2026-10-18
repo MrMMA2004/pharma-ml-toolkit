@@ -62,6 +62,14 @@ pharmaml.exceptions.DataValidationError: summary frame needs a 'folder' column
 >>> [t.get_text() for t in fig.axes[0].get_yticklabels()]      # strongest on top
 ['lig1', 'lig2', 'lig4']
 >>> close_figure(fig)
+>>> plot_top_ligands(summary, top_n=0)   # 0/-1 no longer mean "all rows"
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: top_n must be a positive integer or None, got 0
+>>> plot_energy_distribution(summary, energy_column="binding")   # explicit column
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: energy_column 'binding' not found in the summary frame; available: ['folder', 'best_lowest_energy']
 """
 
 from __future__ import annotations
@@ -83,6 +91,35 @@ _ENERGY_COLUMN = "best_lowest_energy"
 _TOP_ENERGY_COLUMN = "top_lowest_energy"
 
 
+def _check_top_n(top_n: int | None) -> None:
+    """Typed guard for the shared ``top_n`` contract.
+
+    ``None`` -> all rows; a positive integer -> that many rows;
+    ``0``/negative/non-int values (bools included — they are truth
+       values, not counts) raise the typed error.  Pre-fix the two
+       plotters disagreed: ``plot_top_ligands`` read 0/-1 as "all rows"
+       while ``plot_feature_importance`` read them as "empty"/"all but
+       one" (100x-41-B).
+    """
+    if top_n is not None and (
+        isinstance(top_n, bool) or not isinstance(top_n, (int, np.integer)) or top_n < 1
+    ):
+        raise DataValidationError(
+            f"top_n must be a positive integer or None, got {top_n!r}"
+        )
+
+
+def _check_bins_scalar(bins) -> None:
+    """Typed guard for histogram ``bins`` scalars (0/-3/2.5 leak raw)."""
+    # matplotlib accepts positive-int bins, bin-edge sequences and named
+    # strategies ("auto", "fd", ...); any OTHER scalar leaks a raw
+    # ValueError/TypeError from inside ax.hist — name it typed instead.
+    if isinstance(bins, (int, float, np.integer, np.floating)) and not (
+        isinstance(bins, (int, np.integer)) and bins >= 1
+    ):
+        raise DataValidationError(f"bins must be a positive integer, got {bins!r}")
+
+
 def _classify_atom_type(atom_type: str) -> str:
     """Group an AutoDock atom type into a legend-friendly chemistry class."""
     if atom_type.startswith("H"):
@@ -100,11 +137,9 @@ def _receptor_type_counts(receptor) -> dict[str, int]:
 
     if hasattr(receptor, "atom_types") and hasattr(receptor, "output_pdbqt"):
         # ProteinReport from pharmaml.docking.prepare_protein
-        counts = dict(receptor.atom_types or {})
+        raw = dict(receptor.atom_types or {})
     elif isinstance(receptor, dict):
-        counts = {
-            str(k): int(v) for k, v in receptor.items() if int(v) > 0
-        }
+        raw = dict(receptor)
     else:
         path = Path(str(receptor))
         if not path.is_file():
@@ -117,7 +152,20 @@ def _receptor_type_counts(receptor) -> dict[str, int]:
                 parts = line.split()
                 if parts and parts[-1].isalpha():
                     census[parts[-1]] += 1
-        counts = dict(census)
+        raw = dict(census)
+    # One typed conversion for every input path: a junk dict value used
+    # to leak the raw ``int() argument must be ...`` / ``invalid literal
+    # for int()`` from the old inline comprehension (100x-41-B corner).
+    counts: dict[str, int] = {}
+    for key, value in raw.items():
+        try:
+            count = int(value)
+        except (TypeError, ValueError) as exc:
+            raise DataValidationError(
+                f"receptor atom-type counts must be integers, got {key!r}: {value!r}"
+            ) from exc
+        if count > 0:
+            counts[str(key)] = count
     if not counts:
         raise DataValidationError(
             "no AutoDock atom types found in the receptor "
@@ -204,6 +252,15 @@ def _energy_series(summary: pd.DataFrame, energy_column: str | None) -> tuple[pd
     if "folder" not in summary.columns:
         raise DataValidationError("summary frame needs a 'folder' column")
 
+    # An EXPLICITLY requested column must exist: silently falling back to
+    # the default hid the typo whenever top_lowest_energy happened to be
+    # present (100x-41-B corner).  The None path keeps the documented
+    # best_lowest_energy -> top_lowest_energy fallback below.
+    if energy_column is not None and energy_column not in summary.columns:
+        raise DataValidationError(
+            f"energy_column {energy_column!r} not found in the summary frame; "
+            f"available: {list(summary.columns)}"
+        )
     column = energy_column or _ENERGY_COLUMN
     if column not in summary.columns and _TOP_ENERGY_COLUMN in summary.columns:
         column = _TOP_ENERGY_COLUMN
@@ -239,13 +296,33 @@ def plot_energy_distribution(
     summary:
         Frame from :func:`~pharmaml.docking.parsing.scan_docking_directory`.
     energy_column:
-        Override the affinity column (default: ``best_lowest_energy``,
-        falling back to ``top_lowest_energy``).
+        Override the affinity column.  The default (``None``) uses
+        ``best_lowest_energy``, falling back to ``top_lowest_energy``
+        when only the fallback exists; an explicitly passed column must
+        be present in the frame — a missing one raises
+        :class:`~pharmaml.exceptions.DataValidationError` naming it
+        instead of silently falling back.
+    bins:
+        Histogram bins — any :meth:`matplotlib.axes.Axes.hist` spec:
+        a positive integer, a bin-edge sequence, or a named strategy
+        such as ``"auto"``.  A non-positive integer scalar raises the
+        typed error below instead of matplotlib's raw ``ValueError``.
+    title:
+        Chart title.
 
     Returns
     -------
     matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``summary`` is not a DataFrame, lacks the ``folder`` column
+        or any energy column, the energy column holds no numeric
+        values, an explicit ``energy_column`` is missing from the
+        frame, or ``bins`` is a non-positive integer.
     """
+    _check_bins_scalar(bins)
     folders, energies = _energy_series(summary, energy_column)
     values = energies.to_numpy(dtype=float)
 
@@ -267,7 +344,7 @@ def plot_energy_distribution(
 
 def plot_top_ligands(
     summary: pd.DataFrame,
-    top_n: int = 15,
+    top_n: int | None = 15,
     energy_column: str | None = None,
     title: str = "Top-ranked ligands by docking energy",
 ) -> Any:
@@ -276,14 +353,47 @@ def plot_top_ligands(
     Bars are sorted so the strongest binder sits on top; values are
     annotated and the colour encodes energy (darker = stronger), which
     reads well both on screen and in exported png/svg/pdf files.
+
+    Parameters
+    ----------
+    summary:
+        Frame from :func:`~pharmaml.docking.parsing.scan_docking_directory`.
+    top_n:
+        How many ligands to show; ``None`` shows every ligand in the
+        frame.  Values below 1 and non-integers raise
+        :class:`~pharmaml.exceptions.DataValidationError` — the old
+        ``0``/``-1`` silently meant "all rows" here while meaning
+        "empty"/"all but one" in
+        :func:`~pharmaml.viz.ml_plots.plot_feature_importance`.
+    energy_column:
+        Override the affinity column.  The default (``None``) uses
+        ``best_lowest_energy``, falling back to ``top_lowest_energy``
+        when only the fallback exists; an explicitly passed column must
+        be present in the frame — a missing one raises
+        :class:`~pharmaml.exceptions.DataValidationError` naming it
+        instead of silently falling back.
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``top_n`` is not a positive integer or ``None``, the summary
+        frame fails the energy-column contract above, or an explicit
+        ``energy_column`` is missing from the frame.
     """
+    _check_top_n(top_n)
     folders, energies = _energy_series(summary, energy_column)
     frame = pd.DataFrame({"ligand": [str(name) for name in folders],
                           "energy": energies.to_numpy(dtype=float)})
     # kind="stable": ties resolve first-declared-wins — the default
     # quicksort cut is an arbitrary block from the middle of the frame at scale
     frame = frame.sort_values("energy", ascending=True, kind="stable").head(
-        top_n if top_n and top_n > 0 else len(frame)
+        len(frame) if top_n is None else int(top_n)
     )
     frame = frame.iloc[::-1]  # strongest binder at the top of the axis
 

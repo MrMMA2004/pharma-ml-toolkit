@@ -373,6 +373,41 @@ class TestTrainingEdgeCases:
         assert board["roc_auc_ovo_mean"].isna().all()
         assert "NaN CV scores" in caplog.text
 
+    def test_train_all_nan_cv_scores_warns_and_keeps_result(self, caplog) -> None:
+        """Tuned path with all-NaN folds: still returns, but says it loud.
+
+        A class rarer than the cv folds makes every roc_auc_ovo fold fail
+        inside GridSearchCV; its default ``error_score=NaN`` swallows the
+        failures into silent NaN fold scores, which used to leave NaN
+        cv_mean/cv_std with NO pharmaml log line (100x-41-C G1).  The
+        contract: keep returning (non-breaking) + a module-logger
+        warning naming the fold scores.
+        """
+        X = pd.DataFrame({"x": np.arange(10, dtype=float)})
+        y = pd.Series([0, 0, 0, 0, 0, 0, 0, 0, 0, 1])  # class rarer than cv
+        pharma_root = logging.getLogger("pharmaml")
+        prev_propagate = pharma_root.propagate
+        pharma_root.propagate = True
+        try:
+            with caplog.at_level(logging.WARNING, logger="pharmaml.ml.training"):
+                result = train_model(
+                    "logistic_regression",
+                    "classification",
+                    X,
+                    y,
+                    tune=True,
+                    cv=5,
+                    n_jobs=1,
+                    param_grid={"C": [1.0]},
+                )
+        finally:
+            pharma_root.propagate = prev_propagate
+        assert np.isnan(result.cv_scores).all()
+        assert result.cv_mean is not None and np.isnan(result.cv_mean)
+        assert result.cv_std is not None and np.isnan(result.cv_std)
+        assert "all NaN" in caplog.text
+        assert "nan, nan" in caplog.text  # the fold scores are named
+
 
 class TestEvaluationEdgeCases:
     """Regression tests from the ml/evaluation.py deep review (100x-11)."""

@@ -83,9 +83,13 @@ class TrainingResult:
     best_params:
         Hyperparameters chosen by the search (empty when ``tune=False``).
     cv_scores:
-        Per-fold scores of the primary metric.
+        Per-fold scores of the primary metric.  When EVERY fold is
+        NaN (degenerate folds, e.g. a class rarer than ``cv``), the
+        scores are still returned and ``cv_mean``/``cv_std`` stay NaN —
+        a warning naming the fold scores is logged (100x-49-A).
     cv_mean / cv_std:
-        Mean/std of ``cv_scores``.
+        Mean/std of ``cv_scores`` — NaN when every fold is NaN (see
+        ``cv_scores``; the run is kept, not failed).
     fit_seconds:
         Wall-clock training time.
     """
@@ -175,6 +179,14 @@ def train_model(
     Returns
     -------
     TrainingResult
+        ``cv_scores`` carries the per-fold scores of the winning
+        parameter combination.  When every fold is NaN (degenerate
+        folds — e.g. a class rarer than ``cv``, where GridSearchCV's
+        default ``error_score=NaN`` swallows the per-fold failures),
+        the result is STILL returned with ``cv_mean``/``cv_std`` NaN
+        and a module-logger warning naming the fold scores — matching
+        the contract ``compare_models`` already documents for its NaN
+        rows.
 
     Raises
     ------
@@ -188,6 +200,16 @@ def train_model(
         instead of letting sklearn's splitter ``ValueError`` penetrate
         raw (27-A).  With ``tune=False`` no cross-validation runs, so a
         dataset smaller than ``cv`` stays usable.
+
+    Notes
+    -----
+    ``y_train`` is NOT validated for NaN or ±inf here (nothing in
+    this module ever guarded it — the historical contract): the
+    underlying sklearn fit rejects such targets with its own raw
+    ``Input y contains NaN`` / ``Input y contains infinity`` errors.
+    :func:`~pharmaml.ml.preprocessing.make_train_test_split` rejects
+    NaN targets up front (typed) but lets ±inf through, so clean the
+    target before training.
     """
     import time
 
@@ -254,6 +276,19 @@ def train_model(
     cv_mean: float | None
     cv_std: float | None
     if cv_scores is not None:
+        if np.isnan(cv_scores).all():
+            # GridSearchCV's default error_score=NaN swallows per-fold
+            # failures (a class rarer than the cv folds is the classic)
+            # into silent NaN fold scores; compare_models warns for the
+            # same condition -- keep returning (non-breaking) but make
+            # the NaN cv_mean/cv_std visible in the log (100x-41-C G1).
+            _LOG.warning(
+                "cv_scores for %s are all NaN (fold scores: %s) — degenerate "
+                "folds (e.g. a class rarer than cv=%d); cv_mean/cv_std stay NaN",
+                name,
+                cv_scores.tolist(),
+                cv,
+            )
         cv_mean, cv_std = float(cv_scores.mean()), float(cv_scores.std())
     else:
         cv_mean = cv_std = None
@@ -304,7 +339,10 @@ def compare_models(
         falls back to balanced accuracy so every row stays comparable
         — both metrics support binary **and multiclass** targets.
         A string must be a scikit-learn scorer name (see
-        :func:`sklearn.metrics.get_scorer_names`).
+        :func:`sklearn.metrics.get_scorer_names`).  Note that scorers
+        undefined on single-sample folds (``r2`` under leave-one-out
+        ``cv == n_samples``) yield NaN rows — sklearn's own
+        ``UndefinedMetricWarning`` contract, kept as-is.
 
     Returns
     -------

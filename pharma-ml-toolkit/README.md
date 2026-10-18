@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1599 tests).
+exceptions, input validation, and pytest coverage** (1617 tests).
 
 ---
 
@@ -175,7 +175,7 @@ pharma-ml-toolkit/
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1599 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1617 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);

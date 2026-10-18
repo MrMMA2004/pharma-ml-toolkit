@@ -156,6 +156,19 @@ class TestRocCurves:
         with pytest.raises(ModelError):
             plot_roc_curves(model, [[0], [1]], [0, 1])
 
+    def test_stub_without_classes_rejected(self, close_all):
+        """Regression (100x-41-B): a stub exposing predict_proba but not
+        the fitted classes_ attribute used to die with a raw
+        ``AttributeError`` — the ModelError guard checked only
+        predict_proba."""
+
+        class Stub:
+            def predict_proba(self, X):
+                return np.array([[0.5, 0.5]] * len(X))
+
+        with pytest.raises(ModelError, match="classes_"):
+            plot_roc_curves(Stub(), [[0.0], [1.0]], [0, 1])
+
 
 class TestCalibrationCurve:
     def test_binary_with_brier(self, trained_classifier, close_all):
@@ -187,6 +200,17 @@ class TestCalibrationCurve:
         result, _, X_test, y_test = trained_classifier
         with pytest.raises(DataValidationError, match="n_bins"):
             plot_calibration_curve(result.model, X_test, y_test, n_bins=1)
+
+    def test_stub_without_classes_rejected(self, close_all):
+        """Regression (100x-41-B): the calibration twin of the ROC guard —
+        predict_proba present, classes_ missing, raw AttributeError."""
+
+        class Stub:
+            def predict_proba(self, X):
+                return np.array([[0.5, 0.5]] * len(X))
+
+        with pytest.raises(ModelError, match="classes_"):
+            plot_calibration_curve(Stub(), [[0.0], [1.0]], [0, 1])
 
 
 class TestLearningCurve:
@@ -278,6 +302,44 @@ class TestLeaderboardAndDiagnostics:
         fig = plot_model_comparison(board)
         assert "r2" in fig.axes[0].get_xlabel()
 
+    def test_model_comparison_rejects_non_numeric_metric_cells(self, close_all):
+        """Regression (100x-41-B): a string cell for the requested metric
+        leaked a raw TypeError from sort_values (mixed '<' comparison) or
+        a raw ValueError from to_numpy(dtype=float)."""
+        board_mean = pd.DataFrame({
+            "model": ["rf", "ridge"], "r2_mean": [0.5, "n/a"], "r2_std": [0.1, 0.2],
+        })
+        with pytest.raises(DataValidationError, match="r2_mean.*non-numeric"):
+            plot_model_comparison(board_mean, metric="r2")
+        board_std = pd.DataFrame({
+            "model": ["rf", "ridge"], "r2_mean": [0.5, 0.4], "r2_std": ["??", 0.2],
+        })
+        with pytest.raises(DataValidationError, match="r2_std.*non-numeric"):
+            plot_model_comparison(board_std, metric="r2")
+
+    def test_model_comparison_nan_metric_cells_still_allowed(self, close_all):
+        """NaN cells model failed CV runs (compare_models keeps those rows)
+        — they must keep rendering; only non-numeric cells are rejected."""
+        board = pd.DataFrame({
+            "model": ["rf", "dead"], "r2_mean": [0.5, np.nan], "r2_std": [0.1, np.nan],
+        })
+        fig = plot_model_comparison(board, metric="r2")
+        assert len(fig.axes[0].patches) == 2
+
+    def test_model_comparison_rejects_duplicated_columns(self, close_all):
+        """Regression (100x-41-B): a duplicated 'model' column made every
+        y-tick read "model" (iterating a multi-column selection yields
+        COLUMN names); duplicated metric columns break selection outright."""
+        board = pd.concat(
+            [
+                pd.DataFrame({"model": ["rf", "ridge"], "r2_mean": [0.5, 0.4]}),
+                pd.DataFrame({"model": ["lgbm", "svr"]}),
+            ],
+            axis=1,
+        )
+        with pytest.raises(DataValidationError, match="duplicate column names.*model"):
+            plot_model_comparison(board, metric="r2")
+
     def test_class_distribution_mapping(self, close_all):
         fig = plot_class_distribution({"active": 30, "inactive": 70})
         assert len(fig.axes[0].patches) == 2
@@ -303,6 +365,20 @@ class TestLeaderboardAndDiagnostics:
     def test_feature_importance_top_n(self, close_all):
         fig = plot_feature_importance({f"f{i}": i / 10 for i in range(10)}, top_n=4)
         assert len(fig.axes[0].patches) == 4
+
+    def test_feature_importance_top_n_contract(self, close_all):
+        """top_n: None -> every feature; 0/-1/non-int -> typed error.
+
+        Regression (100x-41-B): ``0``/``-1`` meant "empty figure"/"all
+        but one" here while ``plot_top_ligands`` read both as "all rows",
+        and ``None`` raised a RAW TypeError from ``min(top_n, len(values))``."""
+        mapping = {f"f{i}": i / 10 for i in range(10)}
+        assert len(plot_feature_importance(mapping, top_n=None).axes[0].patches) == 10
+        for bad in (0, -1, 2.5):
+            with pytest.raises(
+                DataValidationError, match="top_n must be a positive integer or None"
+            ):
+                plot_feature_importance(mapping, top_n=bad)
 
     def test_feature_importance_ties_first_declared(self, close_all):
         """Regression: ``argsort(values)[::-1]`` flips tied groups, so ties
@@ -419,6 +495,34 @@ class TestChemPlots:
         with pytest.raises(DataValidationError):
             plot_descriptor_distributions(pd.DataFrame())
 
+    def test_descriptor_distributions_rejects_non_positive_bins(self, close_all):
+        """Regression (100x-41-B): bins <= 0 leaked matplotlib's raw
+        ``ValueError: `bins` must be positive, when an integer``."""
+        frame = pd.DataFrame({"v": [1.0, 2.0, 3.0]})
+        for bad in (0, -1):
+            with pytest.raises(DataValidationError, match="bins must be a positive integer"):
+                plot_descriptor_distributions(frame, bins=bad)
+
+    def test_descriptor_distributions_accepts_named_bin_strategy(self, close_all):
+        """matplotlib bin specs (named strategies, edge sequences) must
+        keep passing through the new typed guard."""
+        frame = pd.DataFrame({"v": [1.0, 2.0, 3.0]})
+        assert plot_descriptor_distributions(frame, bins="auto") is not None
+
+    def test_descriptor_distributions_rejects_duplicated_columns(self, close_all):
+        """Regression (100x-41-B): a duplicated column name turns
+        frame[name] into a multi-column DataFrame whose is_numeric_dtype
+        check is False, so the grid reported the MISLEADING "no numeric
+        columns to plot" even when every duplicate was numeric."""
+        dup_numeric = pd.DataFrame([[1.0, 2.0], [3.0, 4.0]], columns=["v", "v"])
+        with pytest.raises(DataValidationError, match=r"duplicate column names: \['v'\]"):
+            plot_descriptor_distributions(dup_numeric)
+        dup_mixed = pd.concat(
+            [pd.DataFrame({"a": [1.0, 2.0]}), pd.DataFrame({"a": ["x", "y"]})], axis=1
+        )
+        with pytest.raises(DataValidationError, match=r"duplicate column names: \['a'\]"):
+            plot_descriptor_distributions(dup_mixed)
+
     def test_similarity_heatmap_dataframe_labels(self, close_all):
         rng = np.random.default_rng(1)
         m = rng.random((4, 4))
@@ -435,6 +539,16 @@ class TestChemPlots:
     def test_similarity_heatmap_non_square(self, close_all):
         with pytest.raises(DataValidationError):
             plot_similarity_heatmap(np.zeros((2, 3)))
+
+    def test_similarity_heatmap_rejects_non_numeric_frame(self, close_all):
+        """Regression (100x-41-B): a string (non-numeric) frame/array
+        leaked numpy's raw ``could not convert string to float``."""
+        with pytest.raises(DataValidationError, match="must be numeric"):
+            plot_similarity_heatmap(pd.DataFrame([[
+                "high", "low"], ["low", "high"
+            ]], index=["e", "p"], columns=["e", "p"]))
+        with pytest.raises(DataValidationError, match="must be numeric"):
+            plot_similarity_heatmap([["high", "low"], ["low", "high"]])
 
     def test_table_comparison_two_panels(self, close_all):
         from pharmaml.chem import compare_tables
@@ -475,6 +589,20 @@ class TestChemPlots:
         )
         with pytest.raises(DataValidationError, match="nothing to compare"):
             plot_table_comparison(empty)
+
+    def test_table_comparison_rejects_wrong_labels_arity(self, close_all):
+        """Regression (100x-41-B): a 1- or 3-item labels tuple died on
+        the tuple unpacking with a raw ``ValueError``."""
+        from pharmaml.chem import compare_tables
+
+        comparison = compare_tables(
+            pd.DataFrame({"Ligand": ["a", "b"]}),
+            pd.DataFrame({"Ligand": ["a"]}),
+            column="Ligand",
+        )
+        for bad in (("only_a",), ("a", "b", "c")):
+            with pytest.raises(DataValidationError, match="labels must be a .* pair"):
+                plot_table_comparison(comparison, labels=bad)
 
 
 # ---------------------------------------------------------------- docking
@@ -549,6 +677,50 @@ class TestDockingPlots:
             assert set(ticks) == expected
             assert ticks[-1] == "L0000"  # first-declared tie winner on top
 
+    def test_top_ligands_top_n_contract(self, close_all):
+        """top_n: None -> every ligand; 0/-1/non-int -> typed error.
+
+        Regression (100x-41-B): plot_top_ligands read 0/-1 as "all rows"
+        while plot_feature_importance read them as "empty"/"all but one";
+        a string top_n raised a raw TypeError from the comparison."""
+        summary = self._summary()
+        assert len(plot_top_ligands(summary, top_n=None).axes[0].patches) == 10
+        for bad in (0, -1, "3", 2.5):
+            with pytest.raises(
+                DataValidationError, match="top_n must be a positive integer or None"
+            ):
+                plot_top_ligands(summary, top_n=bad)
+
+    def test_energy_distribution_rejects_non_positive_bins(self, close_all):
+        """Regression (100x-41-B): bins <= 0 leaked matplotlib's raw
+        ``ValueError: `bins` must be positive, when an integer``."""
+        for bad in (0, -3):
+            with pytest.raises(DataValidationError, match="bins must be a positive integer"):
+                plot_energy_distribution(self._summary(), bins=bad)
+
+    def test_energy_distribution_accepts_named_bin_strategy(self, close_all):
+        assert plot_energy_distribution(self._summary(), bins="auto") is not None
+
+    def test_explicit_energy_column_must_exist(self, close_all):
+        """Regression (100x-41-B): an explicitly requested column missing
+        from the frame was SILENTLY ignored, falling back to the default
+        whenever top_lowest_energy happened to be present."""
+        fallback = self._summary().rename(
+            columns={"best_lowest_energy": "top_lowest_energy"}
+        )
+        with pytest.raises(
+            DataValidationError, match="'binding'.*available.*top_lowest_energy"
+        ):
+            plot_energy_distribution(fallback, energy_column="binding")
+        with pytest.raises(DataValidationError, match="'binding'"):
+            plot_top_ligands(fallback, energy_column="binding")
+
+    def test_default_energy_column_missing_message_unchanged(self, close_all):
+        """None + no best/top column keeps the pre-existing message (the
+        fallback contract itself is unchanged)."""
+        with pytest.raises(DataValidationError, match="no energy column found"):
+            plot_energy_distribution(pd.DataFrame({"folder": ["a"]}))
+
     def test_energy_fallback_column(self, close_all):
         summary = self._summary().rename(columns={"best_lowest_energy": "top_lowest_energy"})
         fig = plot_energy_distribution(summary)
@@ -615,6 +787,22 @@ class TestDockingPlots:
 
         fig = plot_receptor_atom_types(_FakeReport())
         assert len(fig.axes[0].patches) == 2
+
+    def test_receptor_atom_types_rejects_junk_dict_values(self, close_all):
+        """Regression (100x-41-B): a receptor dict with junk values
+        leaked the raw ``int()`` ValueError/TypeError from the count
+        comprehension; a report-like object with junk counts too."""
+        with pytest.raises(DataValidationError, match="must be integers"):
+            plot_receptor_atom_types({"HD": "junk", "A": 130})
+        with pytest.raises(DataValidationError, match="must be integers"):
+            plot_receptor_atom_types({"HD": None, "A": 130})
+
+        class _JunkReport:
+            atom_types: ClassVar[dict[str, object]] = {"C": "many"}
+            output_pdbqt = "unused.pdbqt"
+
+        with pytest.raises(DataValidationError, match="must be integers"):
+            plot_receptor_atom_types(_JunkReport())
 
 
 # ---------------------------------------------------------------- generative

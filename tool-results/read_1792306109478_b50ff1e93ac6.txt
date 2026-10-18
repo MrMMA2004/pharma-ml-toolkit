@@ -1,0 +1,679 @@
+     1→"""Visual diagnostics for machine-learning results.
+     2→
+     3→Restores and upgrades the figures the legacy scripts hard-coded:
+     4→
+     5→* ``Classification/RF.py``  → ``plt.savefig('confusion_matrix.png')`` and
+     6→  one ROC curve per class — now :func:`plot_confusion_matrix` and
+     7→  :func:`plot_roc_curves`, which share one code path for binary and
+     8→  multiclass targets.
+     9→* ``Regression/RF.py``      → ``Predicted vs Actual`` scatter — now
+    10→  :func:`plot_predicted_vs_actual`, plus a residual companion.
+    11→
+    12→New chart types the originals never had: model-leaderboard bars with
+    13→CV error bars (:func:`plot_model_comparison`), class balance
+    14→(:func:`plot_class_distribution`), feature importance
+    15→(:func:`plot_feature_importance`) and per-fold CV scores
+    16→(:func:`plot_cv_scores`).
+    17→
+    18→Every function returns a matplotlib ``Figure`` (Agg backend, safe on
+    19→headless machines); persist it with
+    20→:func:`pharmaml.viz.save_figure` in png/svg/pdf.
+    21→
+    22→Examples
+    23→--------
+    24→>>> from pharmaml.viz import close_figure
+    25→>>> from pharmaml.viz.ml_plots import plot_confusion_matrix
+    26→>>> fig = plot_confusion_matrix([[3, 1], [0, 4]], labels=["active", "inactive"])
+    27→>>> len(fig.axes)            # heat-map axes + colour bar
+    28→2
+    29→>>> ax = fig.axes[0]
+    30→>>> (ax.get_xlabel(), ax.get_ylabel(), ax.get_title())
+    31→('Predicted label', 'True label', 'Confusion matrix')
+    32→>>> plot_confusion_matrix([[1, 2, 3], [4, 5, 6]])   # non-square -> typed error
+    33→Traceback (most recent call last):
+    34→...
+    35→pharmaml.exceptions.DataValidationError: confusion matrix must be square, got shape (2, 3)
+    36→>>> close_figure(fig)
+    37→
+    38→>>> from pharmaml.viz.ml_plots import plot_predicted_vs_actual
+    39→>>> fig = plot_predicted_vs_actual([1.0, 2.0, 3.0], [0.9, 2.2, 2.8])
+    40→>>> len(fig.axes), fig.axes[0].get_xlabel(), fig.axes[0].get_ylabel()
+    41→(1, 'actual', 'predicted (ŷ)')
+    42→>>> plot_predicted_vs_actual([1.0, 2.0], [1.0, 2.0, 3.0])
+    43→Traceback (most recent call last):
+    44→...
+    45→pharmaml.exceptions.DataValidationError: y_true (2,) and y_pred (3,) must match
+    46→>>> close_figure(fig)
+    47→
+    48→>>> from pharmaml.viz import figure_to_base64, save_figure
+    49→>>> from pharmaml.viz.ml_plots import plot_class_distribution
+    50→>>> fig = plot_class_distribution({"active": 30, "inactive": 10})
+    51→>>> fig.axes[0].get_ylabel(), fig.axes[0].get_title()
+    52→('samples', 'Class distribution — 40 sample(s), 2 class(es)')
+    53→>>> out = save_figure(fig, "/tmp/pharmaml_doctest_class_distribution.png")
+    54→>>> out.as_posix()
+    55→'/tmp/pharmaml_doctest_class_distribution.png'
+    56→>>> figure_to_base64(fig, fmt="gif")
+    57→Traceback (most recent call last):
+    58→...
+    59→pharmaml.exceptions.DataValidationError: Unsupported figure format 'gif'; supported: png, svg, pdf
+    60→>>> close_figure(fig); out.unlink()
+    61→"""
+    62→
+    63→from __future__ import annotations
+    64→
+    65→from collections.abc import Mapping
+    66→from typing import Any
+    67→
+    68→import numpy as np
+    69→import pandas as pd
+    70→
+    71→from pharmaml.exceptions import DataValidationError, ModelError
+    72→from pharmaml.logger import get_logger
+    73→from pharmaml.viz._compat import PALETTE, new_figure
+    74→
+    75→__all__ = [
+    76→    "plot_calibration_curve",
+    77→    "plot_class_distribution",
+    78→    "plot_confusion_matrix",
+    79→    "plot_cv_scores",
+    80→    "plot_feature_importance",
+    81→    "plot_learning_curve",
+    82→    "plot_model_comparison",
+    83→    "plot_predicted_vs_actual",
+    84→    "plot_residuals",
+    85→    "plot_roc_curves",
+    86→]
+    87→
+    88→_LOG = get_logger(__name__)
+    89→
+    90→
+    91→def _unwrap_confusion(confusion, labels: list[Any] | None):
+    92→    """Accept a raw matrix, a ``ClassificationReport`` or a ``Dataset``."""
+    93→    if hasattr(confusion, "confusion") and hasattr(confusion, "labels"):
+    94→        # ClassificationReport
+    95→        return np.asarray(confusion.confusion), list(confusion.labels)
+    96→    matrix = np.asarray(confusion)
+    97→    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+    98→        raise DataValidationError(
+    99→            f"confusion matrix must be square, got shape {matrix.shape}"
+   100→        )
+   101→    if labels is None:
+   102→        labels = [str(i) for i in range(matrix.shape[0])]
+   103→    if len(labels) != matrix.shape[0]:
+   104→        raise DataValidationError(
+   105→            f"{len(labels)} labels do not match a {matrix.shape[0]}x{matrix.shape[0]} matrix"
+   106→        )
+   107→    return matrix, list(labels)
+   108→
+   109→
+   110→def plot_confusion_matrix(
+   111→    confusion,
+   112→    labels: list[Any] | None = None,
+   113→    normalize: bool = False,
+   114→    title: str = "Confusion matrix",
+   115→) -> Any:
+   116→    """Heat-map of predicted-vs-true class counts.
+   117→
+   118→    Mirrors the legacy ``Classification/*.py`` confusion-matrix PNG but
+   119→    annotates each cell with both the count and its row-share, works for
+   120→    binary **and multiclass** problems, and colour-scales by correctness
+   121→    when ``normalize=True``.
+   122→
+   123→    Parameters
+   124→    ----------
+   125→    confusion:
+   126→        A square count matrix, a
+   127→        :class:`~pharmaml.ml.evaluation.ClassificationReport` (labels
+   128→        are read automatically), or any object exposing
+   129→        ``.confusion``/``.labels``.
+   130→    labels:
+   131→        Class labels in matrix order (optional when a report is passed).
+   132→    normalize:
+   133→        Scale colours by row-normalized shares instead of raw counts.
+   134→
+   135→    Returns
+   136→    -------
+   137→    matplotlib.figure.Figure
+   138→    """
+   139→    matrix, labels = _unwrap_confusion(confusion, labels)
+   140→    n = matrix.shape[0]
+   141→    display = matrix / matrix.sum(axis=1, keepdims=True) if normalize else matrix
+   142→
+   143→    fig, ax = new_figure(figsize=(2.2 + 1.1 * n, 2.2 + 1.0 * n))
+   144→    image = ax.imshow(display, cmap="YlGnBu", vmin=0)
+   145→    fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+   146→
+   147→    threshold = display.max() / 2.0 if display.max() else 0.0
+   148→    for i in range(n):
+   149→        for j in range(n):
+   150→            share = matrix[i, j] / matrix[i].sum() if matrix[i].sum() else 0.0
+   151→            # a float-dtype matrix (e.g. re-plotted normalized counts) must
+   152→            # not hit the ":d" format code — cast integer annotations
+   153→            cell = f"{display[i, j]:.2f}" if normalize else f"{round(float(display[i, j])):d}"
+   154→            annotation = cell + f"\n({share:.0%})"
+   155→            ax.text(
+   156→                j, i, annotation, ha="center", va="center", fontsize=9,
+   157→                color="white" if display[i, j] > threshold else "#1F2937",
+   158→            )
+   159→    ax.set_xticks(range(n), [str(label) for label in labels], rotation=45, ha="right")
+   160→    ax.set_yticks(range(n), [str(label) for label in labels])
+   161→    ax.set_xlabel("Predicted label")
+   162→    ax.set_ylabel("True label")
+   163→    ax.set_title(title + (" (row-normalized)" if normalize else ""))
+   164→    ax.grid(False)
+   165→    return fig
+   166→
+   167→
+   168→def plot_roc_curves(
+   169→    model: Any,
+   170→    X_test: np.ndarray | pd.DataFrame,
+   171→    y_test: np.ndarray | pd.Series | list,
+   172→    title: str = "ROC curves",
+   173→) -> Any:
+   174→    """Receiver-operating curves — binary or one-vs-rest multiclass.
+   175→
+   176→    Reproduces the legacy per-class ROC PNGs (``AUC {cls}={auc:.3f}``
+   177→    legend entries) for any classifier with ``predict_proba``:
+   178→
+   179→    * binary targets    → one curve for the positive class;
+   180→    * 3+ class targets  → one curve per class (one-vs-rest), each in a
+   181→      different house colour, sharing the diagonal reference.
+   182→
+   183→    Parameters
+   184→    ----------
+   185→    model:
+   186→        Fitted estimator or Pipeline exposing ``predict_proba``.
+   187→    X_test, y_test:
+   188→        Held-out features and labels.
+   189→
+   190→    Returns
+   191→    -------
+   192→    matplotlib.figure.Figure
+   193→
+   194→    Raises
+   195→    ------
+   196→    ModelError
+   197→        If the model lacks ``predict_proba``.
+   198→    """
+   199→    from sklearn.metrics import auc as sk_auc
+   200→    from sklearn.metrics import roc_curve
+   201→
+   202→    if not hasattr(model, "predict_proba"):
+   203→        raise ModelError(
+   204→            "plot_roc_curves needs a model with predict_proba; "
+   205→            "fit a probabilistic classifier (logistic_regression, random_forest, ...)"
+   206→        )
+   207→
+   208→    proba = np.asarray(model.predict_proba(X_test))
+   209→    classes = list(model.classes_)
+   210→    y_true = np.asarray(y_test)
+   211→
+   212→    fig, ax = new_figure(figsize=(7.0, 6.0))
+   213→    ax.plot([0, 1], [0, 1], linestyle="--", color="#9CA3AF", label="chance")
+   214→
+   215→    if len(classes) == 2:
+   216→        scores = proba[:, 1]
+   217→        fpr, tpr, _ = roc_curve(y_true, scores, pos_label=classes[1])
+   218→        area = sk_auc(fpr, tpr)
+   219→        ax.plot(fpr, tpr, color=PALETTE[0], lw=2.2,
+   220→                label=f"AUC {classes[1]}={area:.3f}")
+   221→    else:
+   222→        for index, cls in enumerate(classes):
+   223→            binary_truth = (y_true == cls).astype(int)
+   224→            scores = proba[:, index]
+   225→            try:
+   226→                fpr, tpr, _ = roc_curve(binary_truth, scores)
+   227→            except ValueError as exc:
+   228→                _LOG.warning("ROC for class %r skipped: %s", cls, exc)
+   229→                continue
+   230→            area = sk_auc(fpr, tpr)
+   231→            ax.plot(fpr, tpr, lw=2.0, color=PALETTE[index % len(PALETTE)],
+   232→                    label=f"AUC {cls}={area:.3f}")
+   233→
+   234→    ax.set_xlabel("False positive rate")
+   235→    ax.set_ylabel("True positive rate")
+   236→    ax.set_title(title)
+   237→    ax.set_xlim(-0.02, 1.02)
+   238→    ax.set_ylim(-0.02, 1.05)
+   239→    ax.legend(loc="lower right", fontsize=9)
+   240→    return fig
+   241→
+   242→
+   243→def plot_calibration_curve(
+   244→    model: Any,
+   245→    X_test: np.ndarray | pd.DataFrame,
+   246→    y_test: np.ndarray | pd.Series | list,
+   247→    n_bins: int = 10,
+   248→    title: str = "Calibration (reliability diagram)",
+   249→) -> Any:
+   250→    """Reliability diagram — are the predicted probabilities honest?
+   251→
+   252→    A diagnostic the legacy scripts never drew: discrimination (ROC)
+   253→    says *whether* the model ranks actives above inactives, calibration
+   254→    says whether a predicted ``0.8`` really means 80 % positives. Poorly
+   255→    calibrated probabilities quietly corrupt threshold choices, expected
+   256→    cost calculations and consensus rescoring.
+   257→
+   258→    * binary targets    → one curve (positive class) with its Brier score;
+   259→    * 3+ class targets  → one one-vs-rest curve per class, each with its
+   260→      Brier score, sharing the diagonal reference.
+   261→
+   262→    Parameters
+   263→    ----------
+   264→    model:
+   265→        Fitted estimator or Pipeline exposing ``predict_proba``.
+   266→    X_test, y_test:
+   267→        Held-out features and labels.
+   268→    n_bins:
+   269→        Probability bins for the diagram (classic: 10).
+   270→
+   271→    Returns
+   272→    -------
+   273→    matplotlib.figure.Figure
+   274→
+   275→    Raises
+   276→    ------
+   277→    ModelError
+   278→        If the model lacks ``predict_proba``.
+   279→    """
+   280→    from sklearn.calibration import calibration_curve
+   281→    from sklearn.metrics import brier_score_loss
+   282→
+   283→    if not hasattr(model, "predict_proba"):
+   284→        raise ModelError(
+   285→            "plot_calibration_curve needs a model with predict_proba; "
+   286→            "fit a probabilistic classifier (logistic_regression, random_forest, ...)"
+   287→        )
+   288→    if n_bins < 2:
+   289→        raise DataValidationError(f"n_bins must be >= 2, got {n_bins}")
+   290→
+   291→    proba = np.asarray(model.predict_proba(X_test))
+   292→    classes = list(model.classes_)
+   293→    y_true = np.asarray(y_test)
+   294→
+   295→    if len(classes) == 2:
+   296→        curves = [(classes[1], (y_true == classes[1]).astype(int), proba[:, 1])]
+   297→    else:
+   298→        curves = [
+   299→            (cls, (y_true == cls).astype(int), proba[:, index])
+   300→            for index, cls in enumerate(classes)
+   301→        ]
+   302→
+   303→    fig, ax = new_figure(figsize=(6.6, 6.0))
+   304→    ax.plot([0, 1], [0, 1], linestyle="--", color="#9CA3AF",
+   305→            label="perfectly calibrated")
+   306→
+   307→    for index, (cls, truth, scores) in enumerate(curves):
+   308→        fraction_positive, mean_predicted = calibration_curve(
+   309→            truth, scores, n_bins=n_bins, strategy="uniform"
+   310→        )
+   311→        brier = brier_score_loss(truth, scores)
+   312→        ax.plot(
+   313→            mean_predicted, fraction_positive, marker="o", lw=1.9,
+   314→            color=PALETTE[index % len(PALETTE)],
+   315→            label=f"{cls} — Brier {brier:.3f}",
+   316→        )
+   317→
+   318→    ax.set_xlabel("mean predicted probability")
+   319→    ax.set_ylabel("observed fraction of positives")
+   320→    ax.set_title(title)
+   321→    ax.set_xlim(-0.02, 1.02)
+   322→    ax.set_ylim(-0.02, 1.05)
+   323→    ax.legend(loc="upper left", fontsize=9)
+   324→    return fig
+   325→
+   326→
+   327→def plot_learning_curve(
+   328→    model: Any,
+   329→    X: np.ndarray | pd.DataFrame,
+   330→    y: np.ndarray | pd.Series | list,
+   331→    cv: int = 5,
+   332→    scoring: str | None = None,
+   333→    train_sizes: np.ndarray | list[float] | None = None,
+   334→    title: str = "Learning curve",
+   335→) -> Any:
+   336→    """Training-set size vs CV score — is more data still buying accuracy?
+   337→
+   338→    The honest answer to "should we assay 500 more compounds?" that a
+   339→    single CV number cannot give:
+   340→
+   341→    * both curves converging to a plateau → more data will not help much;
+   342→    * validation still climbing at the right edge → more data *will* help;
+   343→    * a persistent gap between the curves → variance/overfitting, not a
+   344→      data problem.
+   345→
+   346→    Parameters
+   347→    ----------
+   348→    model:
+   349→        Any scikit-learn compatible estimator (cloned per fold).
+   350→    X, y:
+   351→        Full training features and labels.
+   352→    cv:
+   353→        Fold count for the cross-validation at each size.
+   354→    scoring:
+   355→        Scorer name (default: estimator's ``score``).
+   356→    train_sizes:
+   357→        Absolute or fractional sizes; default ``10 % … 100 %`` in 8 steps.
+   358→
+   359→    Returns
+   360→    -------
+   361→    matplotlib.figure.Figure
+   362→    """
+   363→    from sklearn.model_selection import learning_curve as sklearn_learning_curve
+   364→
+   365→    if cv < 2:
+   366→        raise DataValidationError(f"cv must be >= 2, got {cv}")
+   367→    if train_sizes is None:
+   368→        train_sizes = np.linspace(0.1, 1.0, 8)
+   369→
+   370→    sizes, train_scores, val_scores = sklearn_learning_curve(
+   371→        model, X, y, cv=cv, scoring=scoring, train_sizes=train_sizes, n_jobs=None,
+   372→    )
+   373→    train_mean = train_scores.mean(axis=1)
+   374→    train_std = train_scores.std(axis=1)
+   375→    val_mean = val_scores.mean(axis=1)
+   376→    val_std = val_scores.std(axis=1)
+   377→
+   378→    fig, ax = new_figure(figsize=(8.4, 5.4))
+   379→    ax.fill_between(sizes, train_mean - train_std, train_mean + train_std,
+   380→                    alpha=0.15, color=PALETTE[0], linewidth=0)
+   381→    ax.plot(sizes, train_mean, marker="o", lw=1.9, color=PALETTE[0],
+   382→            label=f"training score ({train_mean[-1]:.3g})")
+   383→    ax.fill_between(sizes, val_mean - val_std, val_mean + val_std,
+   384→                    alpha=0.15, color=PALETTE[1], linewidth=0)
+   385→    ax.plot(sizes, val_mean, marker="s", lw=1.9, color=PALETTE[1],
+   386→            label=f"CV score ({val_mean[-1]:.3g})")
+   387→
+   388→    gap = float(train_mean[-1] - val_mean[-1])
+   389→    verdict = (
+   390→        f"gap ≈ {gap:.2f} — overfitting dominates, more data alone will not close it"
+   391→        if gap > 0.15
+   392→        else "curves converging — additional data has diminishing returns"
+   393→    )
+   394→    ax.set_xlabel("training samples")
+   395→    ax.set_ylabel(scoring or "score")
+   396→    ax.set_title(f"{title}\n{verdict}")
+   397→    ax.legend(loc="lower right", fontsize=9)
+   398→    return fig
+   399→
+   400→
+   401→def plot_predicted_vs_actual(
+   402→    y_true: np.ndarray | pd.Series | list,
+   403→    y_pred: np.ndarray | list,
+   404→    metrics: Mapping[str, float] | None = None,
+   405→    title: str = "Predicted vs actual",
+   406→) -> Any:
+   407→    """Parity scatter for regression, with the identity reference line.
+   408→
+   409→    Upgrades the legacy ``Regression/*.py`` figure: the diagonal
+   410→    ``ŷ = y`` line is now labelled, and an optional ``metrics`` mapping
+   411→    (e.g. ``{"RMSE": 0.38, "R²": 0.77}``) is rendered as a summary box.
+   412→    """
+   413→    truth = np.asarray(y_true, dtype=float)
+   414→    prediction = np.asarray(y_pred, dtype=float)
+   415→    if truth.shape != prediction.shape:
+   416→        raise DataValidationError(
+   417→            f"y_true {truth.shape} and y_pred {prediction.shape} must match"
+   418→        )
+   419→    if truth.size == 0:
+   420→        raise DataValidationError("no values to plot (empty y_true/y_pred)")
+   421→
+   422→    fig, ax = new_figure(figsize=(6.4, 6.0))
+   423→    low = float(min(truth.min(), prediction.min()))
+   424→    high = float(max(truth.max(), prediction.max()))
+   425→    pad = 0.05 * (high - low or 1.0)
+   426→    limits = (low - pad, high + pad)
+   427→    ax.plot(limits, limits, linestyle="--", color="#9CA3AF", label="perfect prediction (ŷ = y)")
+   428→    ax.scatter(truth, prediction, s=28, alpha=0.75, color=PALETTE[0], edgecolor="white",
+   429→               linewidth=0.4)
+   430→    ax.set_xlim(*limits)
+   431→    ax.set_ylim(*limits)
+   432→    ax.set_xlabel("actual")
+   433→    ax.set_ylabel("predicted (ŷ)")
+   434→    ax.set_title(title)
+   435→
+   436→    if metrics:
+   437→        text = "  ".join(f"{key}={value:.4g}" for key, value in metrics.items())
+   438→        ax.text(0.03, 0.97, text, transform=ax.transAxes, va="top", ha="left", fontsize=9,
+   439→                bbox={"boxstyle": "round,pad=0.35", "facecolor": "white",
+   440→                      "edgecolor": "#D1D5DB", "alpha": 0.9})
+   441→    ax.legend(loc="lower right", fontsize=9)
+   442→    return fig
+   443→
+   444→
+   445→def plot_residuals(
+   446→    y_true: np.ndarray | pd.Series | list,
+   447→    y_pred: np.ndarray | list,
+   448→    title: str = "Residual diagnostics",
+   449→) -> Any:
+   450→    """Residuals vs predicted (left) and residual histogram (right).
+   451→
+   452→    A residual view the legacy scripts never produced — heteroscedastic
+   453→    fans and skewed error distributions become visible at a glance.
+   454→    """
+   455→    truth = np.asarray(y_true, dtype=float)
+   456→    prediction = np.asarray(y_pred, dtype=float)
+   457→    if truth.size == 0:  # same contract as plot_predicted_vs_actual (not a
+   458→        # silent empty figure — every sibling plotter raises typed on empty)
+   459→        raise DataValidationError("no values to plot (empty y_true/y_pred)")
+   460→    residuals = truth - prediction
+   461→
+   462→    fig, (ax_res, ax_hist) = new_figure(nrows=1, ncols=2, figsize=(11.0, 4.8))
+   463→    ax_res.axhline(0.0, linestyle="--", color="#9CA3AF")
+   464→    ax_res.scatter(prediction, residuals, s=26, alpha=0.75, color=PALETTE[1],
+   465→                   edgecolor="white", linewidth=0.4)
+   466→    ax_res.set_xlabel("predicted (ŷ)")
+   467→    ax_res.set_ylabel("residual (y − ŷ)")
+   468→    ax_res.set_title("Residuals vs predicted")
+   469→
+   470→    ax_hist.hist(residuals, bins=min(30, max(8, len(residuals) // 4)), color=PALETTE[0],
+   471→                 alpha=0.85, edgecolor="white")
+   472→    ax_hist.axvline(0.0, linestyle="--", color="#9CA3AF")
+   473→    ax_hist.set_xlabel("residual (y − ŷ)")
+   474→    ax_hist.set_ylabel("count")
+   475→    ax_hist.set_title("Residual distribution")
+   476→    fig.suptitle(title, y=1.02)
+   477→    return fig
+   478→
+   479→
+   480→def plot_model_comparison(
+   481→    leaderboard: pd.DataFrame,
+   482→    metric: str | None = None,
+   483→    title: str = "Cross-validated model leaderboard",
+   484→) -> Any:
+   485→    """Leaderboard as horizontal bars with per-fold std error bars.
+   486→
+   487→    Turns the :func:`~pharmaml.ml.training.compare_models` DataFrame
+   488→    into a figure: models sorted by their mean CV metric, error bars
+   489→    showing fold-to-fold variability, values annotated at the bar ends.
+   490→
+   491→    Parameters
+   492→    ----------
+   493→    leaderboard:
+   494→        DataFrame from ``compare_models`` — a ``model`` column plus
+   495→        ``<metric>_mean`` / ``<metric>_std`` columns.
+   496→    metric:
+   497→        Metric name when the frame contains several; defaults to the
+   498→        first ``*_mean`` column found.
+   499→    """
+   500→    if "model" not in leaderboard.columns:
+   501→        raise DataValidationError("leaderboard needs a 'model' column (compare_models output)")
+   502→    if metric is None:
+   503→        mean_cols = [c for c in leaderboard.columns if c.endswith("_mean")]
+   504→        if not mean_cols:
+   505→            raise DataValidationError(
+   506→                "no '<metric>_mean' column found in the leaderboard frame"
+   507→            )
+   508→        metric = mean_cols[0][: -len("_mean")]
+   509→
+   510→    mean_col = f"{metric}_mean"
+   511→    std_col = f"{metric}_std"
+   512→    if mean_col not in leaderboard.columns:
+   513→        raise DataValidationError(f"column {mean_col!r} not found in the leaderboard")
+   514→
+   515→    frame = leaderboard.sort_values(mean_col, ascending=True)
+   516→    values = frame[mean_col].to_numpy(dtype=float)
+   517→    errors = frame[std_col].to_numpy(dtype=float) if std_col in frame.columns else None
+   518→
+   519→    fig, ax = new_figure(figsize=(8.6, 0.62 * len(frame) + 1.6))
+   520→    positions = np.arange(len(frame))
+   521→    ax.barh(positions, values, xerr=errors, color=PALETTE[0], alpha=0.88,
+   522→            edgecolor="white", height=0.62, error_kw={"elinewidth": 1.1, "capsize": 3})
+   523→    for pos, value in zip(positions, values):
+   524→        if np.isfinite(value):
+   525→            ax.text(value, pos, f" {value:.4g}", va="center", ha="left", fontsize=9)
+   526→    ax.set_yticks(positions, [str(name) for name in frame["model"]])
+   527→    ax.set_xlabel(f"mean CV {metric} (± std across folds)" if errors is not None
+   528→                  else f"mean CV {metric}")
+   529→    ax.set_title(title)
+   530→    return fig
+   531→
+   532→
+   533→def plot_class_distribution(
+   534→    class_counts: Mapping[Any, int] | Any,
+   535→    title: str = "Class distribution",
+   536→) -> Any:
+   537→    """Bar chart of class balance (accepts a mapping or a ``Dataset``)."""
+   538→    if hasattr(class_counts, "class_counts") and class_counts.class_counts is not None:
+   539→        class_counts = class_counts.class_counts
+   540→    if not isinstance(class_counts, Mapping):
+   541→        raise DataValidationError(
+   542→            "class_counts must be a mapping {label: count} or a classification Dataset"
+   543→        )
+   544→    if not class_counts:
+   545→        raise DataValidationError("class_counts is empty — nothing to plot")
+   546→
+   547→    labels = [str(key) for key in class_counts]
+   548→    counts = [int(value) for value in class_counts.values()]
+   549→    total = sum(counts)
+   550→
+   551→    fig, ax = new_figure(figsize=(1.9 * len(labels) + 3.4, 5.0))
+   552→    bars = ax.bar(labels, counts, color=PALETTE[: len(labels)], alpha=0.9, width=0.62,
+   553→                  edgecolor="white")
+   554→    for bar, count in zip(bars, counts):
+   555→        ax.text(bar.get_x() + bar.get_width() / 2.0, bar.get_height(),
+   556→                f"{count}\n({count / total:.0%})", ha="center", va="bottom", fontsize=9)
+   557→    ax.set_ylabel("samples")
+   558→    ax.set_title(f"{title} — {total} sample(s), {len(labels)} class(es)")
+   559→    return fig
+   560→
+   561→
+   562→def _extract_importances(model_or_mapping, feature_names: list[str] | None):
+   563→    """Normalise ``model`` / ``{name: value}`` inputs into (names, values)."""
+   564→    if isinstance(model_or_mapping, Mapping):
+   565→        names = [str(key) for key in model_or_mapping]
+   566→        values = np.asarray(list(model_or_mapping.values()), dtype=float)
+   567→        return names, values
+   568→
+   569→    estimator = model_or_mapping
+   570→    if hasattr(estimator, "named_steps"):  # sklearn Pipeline
+   571→        for step in reversed(list(estimator.named_steps.values())):
+   572→            if hasattr(step, "feature_importances_") or hasattr(step, "coef_"):
+   573→                estimator = step
+   574→                break
+   575→    if hasattr(estimator, "feature_importances_"):
+   576→        values = np.asarray(estimator.feature_importances_, dtype=float)
+   577→    elif hasattr(estimator, "coef_"):
+   578→        coef = np.asarray(estimator.coef_, dtype=float)
+   579→        values = np.abs(coef).max(axis=0) if coef.ndim > 1 else np.abs(coef)
+   580→    else:
+   581→        raise DataValidationError(
+   582→            "could not extract feature importances: pass a tree/linear model, "
+   583→            "a Pipeline containing one, or an explicit {feature: importance} mapping"
+   584→        )
+   585→
+   586→    # A Pipeline's preprocessing steps (impute/scale/one-hot) know the
+   587→    # transformed feature names — use them so one-hot expanded columns
+   588→    # stay readable instead of "x0, x1, ...".
+   589→    if (
+   590→        feature_names is None
+   591→        and hasattr(model_or_mapping, "named_steps")
+   592→        and len(model_or_mapping.named_steps) > 1
+   593→    ):
+   594→        try:
+   595→            expanded = list(model_or_mapping[:-1].get_feature_names_out())
+   596→        except Exception:  # noqa: BLE001 — capability probe; transformers vary
+   597→            expanded = []
+   598→        if expanded and len(expanded) == len(values):
+   599→            feature_names = expanded
+   600→    if feature_names is None:
+   601→        feature_names = [f"x{i}" for i in range(len(values))]
+   602→    if len(feature_names) != len(values):
+   603→        raise DataValidationError(
+   604→            f"{len(feature_names)} feature names for {len(values)} importance values"
+   605→        )
+   606→    return [str(name) for name in feature_names], values
+   607→
+   608→
+   609→def plot_feature_importance(
+   610→    model_or_mapping: Any,
+   611→    feature_names: list[str] | None = None,
+   612→    top_n: int = 15,
+   613→    title: str = "Feature importance",
+   614→) -> Any:
+   615→    """Top-N feature importances as horizontal bars.
+   616→
+   617→    Works with tree ensembles (``feature_importances_``), linear models
+   618→    (``|coef_|``), wrapped :class:`~sklearn.pipeline.Pipeline` models,
+   619→    or a plain ``{feature: importance}`` mapping when you computed the
+   620→    scores yourself.
+   621→    """
+   622→    names, values = _extract_importances(model_or_mapping, feature_names)
+   623→    # Stable argsort on the NEGATED values: descending by importance with
+   624→    # ties resolving first-declared-wins (matches plot_top_ligands); the
+   625→    # trailing reversal only flips display order so the top feature sits
+   626→    # highest on the axis. argsort(values)[::-1] would flip tied groups.
+   627→    order = np.argsort(-values, kind="stable")[: min(top_n, len(values))][::-1]
+   628→
+   629→    fig, ax = new_figure(figsize=(8.4, 0.42 * len(order) + 1.7))
+   630→    positions = np.arange(len(order))
+   631→    ax.barh(positions, values[order], color=PALETTE[0], alpha=0.88, height=0.62,
+   632→            edgecolor="white")
+   633→    for pos, value in zip(positions, values[order]):
+   634→        ax.text(value, pos, f" {value:.4g}", va="center", ha="left", fontsize=9)
+   635→    ax.set_yticks(positions, [names[i] for i in order])
+   636→    ax.set_xlabel("importance")
+   637→    ax.set_title(title)
+   638→    return fig
+   639→
+   640→
+   641→def plot_cv_scores(
+   642→    cv_scores: Any,
+   643→    model_name: str | None = None,
+   644→    metric: str | None = None,
+   645→    title: str = "Cross-validation fold scores",
+   646→) -> Any:
+   647→    """Per-fold CV scores as bars with the mean line and ±std band.
+   648→
+   649→    Accepts a :class:`~pharmaml.ml.training.TrainingResult` or a plain
+   650→    array-like of fold scores — the spread across folds is the honest
+   651→    uncertainty the legacy scripts hid behind a single mean.
+   652→    """
+   653→    if hasattr(cv_scores, "cv_scores") and cv_scores.cv_scores is not None:
+   654→        model_name = model_name or getattr(cv_scores, "name", None)
+   655→        scores = np.asarray(cv_scores.cv_scores, dtype=float)
+   656→    else:
+   657→        scores = np.asarray(cv_scores, dtype=float)
+   658→    scores = scores.reshape(-1)
+   659→    if scores.size == 0:
+   660→        raise DataValidationError("no CV fold scores to plot")
+   661→
+   662→    mean = float(scores.mean())
+   663→    std = float(scores.std())
+   664→    label = model_name or "model"
+   665→    metric_label = metric or "score"
+   666→
+   667→    fig, ax = new_figure(figsize=(7.6, 4.6))
+   668→    positions = np.arange(1, len(scores) + 1)
+   669→    ax.bar(positions, scores, color=PALETTE[0], alpha=0.85, width=0.6, edgecolor="white")
+   670→    ax.axhline(mean, color=PALETTE[1], lw=2.0,
+   671→               label=f"mean = {mean:.4g}")
+   672→    ax.axhspan(mean - std, mean + std, color=PALETTE[1], alpha=0.14,
+   673→               label=f"± 1 std = {std:.4g}")
+   674→    ax.set_xticks(positions, [f"fold {i}" for i in positions])
+   675→    ax.set_ylabel(metric_label)
+   676→    ax.set_title(f"{title} — {label}")
+   677→    ax.legend(fontsize=9, loc="best")
+   678→    return fig
+   679→

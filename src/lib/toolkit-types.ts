@@ -466,3 +466,80 @@ export interface DockingParseResponse {
     note: string;
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Feature Factory (chem features + top-K selection)                   */
+/* ------------------------------------------------------------------ */
+
+/** The seven descriptor/fingerprint families of pharmaml.chem.features. */
+export type FeatureFamily =
+  | "descriptors"
+  | "atompair_count"
+  | "ecfp"
+  | "avalon_count"
+  | "rdkit_fingerprint"
+  | "morgan_full"
+  | "morgan_scaffold";
+
+/** One ranked, selected feature row returned by /api/chem/features. */
+export interface FeatureFactoryRow {
+  rank: number;
+  feature: string;
+  family: string;
+  importance: number;
+}
+
+/** Response of the feature-factory bridge (real RDKit via pharmaml). */
+export interface FeatureFactoryResponse {
+  nMolecules: number;
+  dropped: Array<{ row: number; smiles: string }>;
+  totalFeatures: number;
+  familiesComputed: Record<string, number>;
+  k: number;
+  survivors: number;
+  method: string;
+  selected: FeatureFactoryRow[];
+  familyCounts: Record<string, number>;
+  elapsedSeconds: number;
+  rdkitVersion: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Docking ligand prep (SMILES -> PDBQT + grid box + GPF/DPF)          */
+/* ------------------------------------------------------------------ */
+
+/** One prepared (or failed) ligand from /api/docking/prep. */
+export interface LigandPrepRow {
+  smiles: string;
+  ok: boolean;
+  name: string;
+  atoms: number | null;
+  torsdof: number | null;
+  atomTypes: string[];
+  pdbqtText: string | null;
+  error: string | null;
+}
+
+/** Grid box computed from the first successfully prepared ligand. */
+export interface LigandPrepGridBox {
+  centerX: number;
+  centerY: number;
+  centerZ: number;
+  sizeX: number;
+  sizeY: number;
+  sizeZ: number;
+  npts: number[];
+  spacing: number;
+}
+
+/** Response of the docking-prep bridge (real RDKit/meeko via pharmaml). */
+export interface LigandPrepResponse {
+  ligands: LigandPrepRow[];
+  gridBox: LigandPrepGridBox | null;
+  gpfText: string | null;
+  dpfText: string | null;
+  nOk: number;
+  nFailed: number;
+  elapsedSeconds: number;
+  rdkitVersion: string;
+}

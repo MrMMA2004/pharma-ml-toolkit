@@ -10,6 +10,38 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.1] — 2026-10-18
+
+### Fixed — viz contract guards and ML contracts (100x-49)
+
+- **`top_n` is now one contract everywhere**: `plot_top_ligands` and
+  `plot_feature_importance` accept `top_n: int | None` — `None` keeps
+  every row, a positive integer keeps that many, and zero/negative or
+  non-integer values raise `DataValidationError` instead of the old
+  inconsistent behaviours (all rows / empty plot / all-but-one /
+  raw `TypeError`).
+- **An explicit `energy_column` that is missing from the scan frame now
+  raises** a `DataValidationError` naming the requested column and the
+  frame's actual columns — previously it was silently ignored and the
+  default column was used.
+- **Six raw-error corners now raise typed errors**: `plot_table_comparison`
+  label/frame arity, `plot_similarity_heatmap` on non-numeric data,
+  non-positive/non-integer `bins` in the two histogram plotters,
+  non-numeric metric cells in `plot_model_comparison`, junk receptor
+  atom-type mappings in `docking_plots`, and ROC/calibration plots on
+  stub estimators without `classes_` (`ModelError`).
+- **Duplicated column names are rejected early** by
+  `plot_descriptor_distributions` and `plot_model_comparison` with a
+  message naming the duplicates (previously: a misleading "no numeric
+  columns to plot" / every ytick reading "model").
+- **`ml.training` contracts documented and the silent all-NaN guard
+  added**: all-NaN `cv_scores` now log a loud warning naming the fold
+  scores (return values unchanged); the single-sample-fold `r2` NaN and
+  the NaN/±inf-target behaviour of `train_model` are documented
+  contracts.
+- **`chem.descriptors`**: the mordred `BCUT2D` NaN-preservation contract
+  is now documented on `descriptor_set`/Returns.
+
 ## [1.2.0] — 2026-10-18
 
 ### Added — the feature factory and the Docking tab

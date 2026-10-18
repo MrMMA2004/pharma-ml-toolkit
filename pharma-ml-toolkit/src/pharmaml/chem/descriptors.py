@@ -158,6 +158,12 @@ def compute_descriptors(
         come back as Mordred ``Error`` objects rather than numbers and
         are kept as-is in the frame -- mordred is exercised only by the
         full-deps CI job, never in the default environment.
+        Mordred's BCUT2D family can also legitimately evaluate to NaN
+        for some molecules (e.g. degenerate single-atom species): those
+        cells are PRESERVED as NaN in the returned frame -- no fillna
+        or imputation happens here, so an all-NaN descriptor column is
+        a real mordred verdict, not a bug (downstream, the ML
+        pipeline's SimpleImputer drops all-NaN columns silently).
     progress:
         Show a tqdm progress bar for large batches.
 
@@ -170,8 +176,11 @@ def compute_descriptors(
         failure.  For ``'rdkit_all'``, a molecule whose descriptor
         computation raises is dropped the same way, with a warning naming
         its original index -- e.g. zero-heavy-atom species such as ``[H]``
-        (RDKit's SPS descriptor divides by the heavy-atom count).  Use
-        :func:`compute_fingerprints` for bit/count fingerprints instead.
+        (RDKit's SPS descriptor divides by the heavy-atom count).  For
+        ``'mordred'``, NaN cells (BCUT2D on degenerate molecules) and
+        ``Error`` objects are preserved verbatim -- the NaN-preservation
+        contract above.  Use :func:`compute_fingerprints` for bit/count
+        fingerprints instead.
 
     Raises
     ------
