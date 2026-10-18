@@ -11,6 +11,7 @@ import {
   FileText,
   Loader2,
   NotebookText,
+  RefreshCw,
   Scale,
   ShieldCheck,
   TerminalSquare,
@@ -41,11 +42,21 @@ interface InstallStep {
   extras?: Array<{ name: string; note: string }>;
 }
 
+/** Placeholder inside INSTALL_STEPS commands for the versioned archive name —
+ *  substituted at render time so the static guide always shows the live
+ *  version (the file downloads as pharma-ml-toolkit-v<version>.zip). */
+const ZIP_NAME_TOKEN = "{ZIP_NAME}";
+
+/** Version this panel shipped with — the fallback when live tree stats have
+ *  not loaded yet (or the tree API is unreachable). Keep in sync with the
+ *  toolkit's pyproject.toml [project] version. */
+const SHIPPED_VERSION = "1.1.0";
+
 const INSTALL_STEPS: InstallStep[] = [
   {
     title: "Unpack the archive",
     description: "Creates a pharmaml/ working copy and moves the terminal into it.",
-    commands: ["unzip pharma-ml-toolkit.zip -d pharmaml && cd pharmaml"],
+    commands: ["unzip {ZIP_NAME} -d pharmaml && cd pharmaml"],
   },
   {
     title: "Install the package",
@@ -65,8 +76,8 @@ const INSTALL_STEPS: InstallStep[] = [
   },
   {
     title: "Verify the install",
-    description: "1478 tests should pass and the CLI answers with its version.",
-    commands: ["python -m pytest", "pharmaml --version"],
+    description: "1490 tests should pass and the CLI answers with its version.",
+    commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
   },
 ];
 
@@ -262,7 +273,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "1478 pytest cases across all domains",
+    tests: "1490 pytest cases across all domains",
     examples: "six executed notebooks + five no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -289,7 +300,7 @@ function collectDirSummary(
       name: "(root)",
       files: rootFiles,
       size: rootBytes,
-      note: "README, pyproject.toml, Dockerfile, requirements.txt, .gitignore",
+      note: "README, CHANGELOG, VERSION, playground.py, pyproject.toml, Dockerfile, requirements.txt",
     });
   }
   return out;
@@ -306,6 +317,13 @@ export function DownloadPanel() {
   const [downloading, setDownloading] = useState(false);
   /** Path of the featured file currently being fetched (spinner state). */
   const [fileBusy, setFileBusy] = useState<string | null>(null);
+
+  /** Archive version — live from the tree stats when loaded, else the shipped
+   *  one; the download route stamps the same value into the filename and the
+   *  X-Toolkit-Version response header. */
+  const version = stats?.version ?? SHIPPED_VERSION;
+  /** Versioned archive name — shown (and saved) everywhere the ZIP is named. */
+  const zipName = `pharma-ml-toolkit-v${version}.zip`;
 
   useEffect(() => {
     void ensureTree();
@@ -351,13 +369,13 @@ export function DownloadPanel() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "pharma-ml-toolkit.zip";
+      anchor.download = zipName;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
       toast.success("Download started", {
-        description: `pharma-ml-toolkit.zip · ${fmtBytes(blob.size)}`,
+        description: `${zipName} · ${fmtBytes(blob.size)}`,
       });
     } catch (err) {
       toast.error("Download failed", {
@@ -419,9 +437,10 @@ export function DownloadPanel() {
               <FileArchive className="size-7" aria-hidden />
             </span>
             <div className="space-y-1">
-              <CardTitle className="text-xl">Download pharma-ml-toolkit.zip</CardTitle>
+              <CardTitle className="text-xl">Download {zipName}</CardTitle>
               <CardDescription>
                 The complete Python package — source, tests, examples, Dockerfile and CI.
+                Versioned archive — updates in place, no uninstall needed.
               </CardDescription>
             </div>
             <Button
@@ -439,6 +458,9 @@ export function DownloadPanel() {
                 <>
                   <FileArchive className="size-5" aria-hidden />
                   Download ZIP
+                  <span className="ml-1 rounded-full bg-primary-foreground/15 px-2 py-0.5 font-mono text-xs font-normal tabular-nums">
+                    v{version}
+                  </span>
                   {stats ? (
                     <span className="ml-1 rounded-full bg-primary-foreground/15 px-2 py-0.5 font-mono text-xs font-normal tabular-nums">
                       ≈ {fmtBytes(stats.totalBytes)}
@@ -454,7 +476,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="1478" label="passing tests" />
+          <StatChip icon={CircleCheck} value="1490" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}
@@ -623,16 +645,16 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="space-y-3 py-3">
           <CommandStrip
-            command="unzip -t pharma-ml-toolkit.zip"
+            command={`unzip -t ${zipName}`}
             hint="Tests the CRC-32 checksum of every entry — a healthy archive reports “No errors detected”."
           />
           <div className="grid gap-2 sm:grid-cols-2">
             <CommandStrip
-              command="shasum -a 256 pharma-ml-toolkit.zip"
+              command={`shasum -a 256 ${zipName}`}
               context="terminal · macOS"
             />
             <CommandStrip
-              command="sha256sum pharma-ml-toolkit.zip"
+              command={`sha256sum ${zipName}`}
               context="terminal · linux"
             />
           </div>
@@ -696,7 +718,15 @@ export function DownloadPanel() {
                       className={cn("grid gap-2", step.commands.length > 1 && "sm:grid-cols-2")}
                     >
                       {step.commands.map((command) => (
-                        <CommandStrip key={command} command={command} />
+                        <CommandStrip
+                          key={command}
+                          command={command.replaceAll(ZIP_NAME_TOKEN, zipName)}
+                          hint={
+                            command.includes(ZIP_NAME_TOKEN)
+                              ? `the file downloads as ${zipName}`
+                              : undefined
+                          }
+                        />
                       ))}
                     </div>
                     {step.extras ? (
@@ -716,6 +746,45 @@ export function DownloadPanel() {
           </CardContent>
         </Card>
       </section>
+
+      {/* --------------------------- Update in place --------------------------- */}
+      <Card className="overflow-hidden py-0 shadow-sm">
+        <CardHeader className="border-b bg-muted/30 py-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <RefreshCw className="size-4 text-primary" aria-hidden />
+            Updating an existing copy
+          </CardTitle>
+          <CardDescription className="text-xs">
+            New version, no uninstall: the archive extracts over your existing folder and the
+            editable install picks up the new files immediately.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 py-3">
+          <CommandStrip
+            command={`unzip -o ${zipName} -d pharmaml`}
+            context="terminal · update in place"
+            hint="extract into the SAME folder you installed into (any name) — -o overwrites; nothing to uninstall first"
+          />
+          <CommandStrip
+            command="cat VERSION"
+            hint="what you have now — or python playground.py --version"
+          />
+          <div className="space-y-1.5">
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Because the install is editable (<code className="font-mono">pip install -e .</code>),
+              Python picks up the replaced files on the next run — reinstall only if{" "}
+              <code className="font-mono">pyproject.toml</code> gained dependencies.
+            </p>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Files removed between versions are left behind (harmless); delete the folder first
+              only if you want a truly clean slate.
+            </p>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              What changed: <code className="font-mono">CHANGELOG.md</code> in the archive root.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ------------------------------ License ------------------------------ */}
       <Card className="border py-0 shadow-sm">

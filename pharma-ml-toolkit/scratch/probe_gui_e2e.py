@@ -4,8 +4,9 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
-import playground  # noqa: E402
-import tkinter.messagebox as mb  # noqa: E402
+import tkinter.messagebox as mb
+
+import playground
 
 DIALOGS = []
 mb.showerror = lambda *a, **k: DIALOGS.append(("error", a))
@@ -88,6 +89,51 @@ assert pump_until_idle(timeout=600), "compare job hung"
 board_rows = app._board_tree.get_children()
 assert len(board_rows) >= 3, f"leaderboard rows: {len(board_rows)}"
 print("leaderboard:", len(board_rows), "models")
+
+# -- cell lines --------------------------------------------------------------
+app._bio_load_example()
+audit = app._bio_audit_text.get("1.0", "end")
+assert "duplicate pairs" in audit and "MCF-7 / crizotinib" in audit, audit[:120]
+bio_info = app._bio_info.cget("text")
+print("bio screen:", bio_info)
+assert "185 rows" in bio_info and "23 cell lines" in bio_info
+assert "erlotinib" in app._bio_compound_combo["values"]
+
+app._bio_build_matrix()
+assert pump_until_idle(), "matrix job hung"
+matrix_rows = app._bio_matrix_tree.get_children()
+assert len(matrix_rows) == 23, f"matrix rows: {len(matrix_rows)}"
+assert app._bio_matrix.shape == (23, 8), app._bio_matrix.shape
+print("bio matrix:", app._bio_matrix_info.cget("text"))
+
+app._bio_ic50_entry.delete(0, "end")
+app._bio_ic50_entry.insert(0, "3.2085197999117585")  # MCF-7 / erlotinib
+app._bio_ln_to_pic50()
+assert app._bio_ic50_result.cget("text") == "4.6066", app._bio_ic50_result.cget("text")
+print("bio converter: LN_IC50 3.2085197999117585 -> pIC50",
+      app._bio_ic50_result.cget("text"))
+
+app._bio_compound_var.set("erlotinib")
+app._bio_call_sensitive()
+assert pump_until_idle(), "sensitive/resistant job hung"
+print("bio calls:", app._bio_calls_summary.cget("text"))
+assert len(app._bio_calls_tree.get_children()) == 23
+
+app._bio_load_expr_example()
+expr_info = app._bio_expr_info.cget("text")
+print("bio expression:", expr_info)
+assert "23 cell lines" in expr_info and "300 genes" in expr_info
+
+app._bio_discover_biomarkers()
+assert pump_until_idle(timeout=300), "biomarker job hung"
+summary = app._bio_marker_summary.cget("text")
+print("bio biomarkers:", summary)
+assert "300 genes correlated" in summary and "1 significant" in summary
+first = app._bio_marker_tree.get_children()[0]
+values = app._bio_marker_tree.item(first, "values")
+assert values[0] == "EGFR" and values[1] == "-0.9783", values
+assert values[4] == "Yes" and "more sensitive" in values[5], values
+print("bio top hit:", values[0], values[1], values[3], values[4], "|", values[5])
 
 app._operator_combo.set("adaptive")
 app._run_evolution()

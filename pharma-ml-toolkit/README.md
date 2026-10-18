@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1478 tests).
+exceptions, input validation, and pytest coverage** (1490 tests).
 
 ---
 
@@ -87,7 +87,12 @@ A tabbed window opens with every calculation domain: **Chemistry** (IC50/Ki →
 pIC50/pKi, molar mass, the ~200-descriptor table for any SMILES, Tanimoto
 similarity), **PK/PD** (half-life/accumulation, plotted IV bolus decay and Emax
 curves, oral Cmax, Cockcroft–Gault with renal adjustment, loading/maintenance
-and pediatric dosing), **Data & ML** (open any CSV or a bundled example, train a
+and pediatric dosing), **Cell Lines** (GDSC/CCLE-style drug-response screens:
+load and audit a (cell line, compound, metric) table, collapse replicates,
+pivot the sensitivity matrix, call sensitive/resistant lines, and run the full
+biomarker-discovery pipeline with Benjamini-Hochberg FDR control — the bundled
+example recovers the planted EGFR biomarker for erlotinib in two clicks, plus
+the LN_IC50 ↔ pIC50 converter), **Data & ML** (open any CSV or a bundled example, train a
 registry model, read the metrics, browse a cross-validated leaderboard) and
 **Generative** (evolve molecules against QED/LogP objectives; adaptive runs
 render the operator-mix learning curve).
@@ -106,7 +111,33 @@ Engineering notes:
   builds).
 * **Scriptable** — `python playground.py --probe` prints a dependency report,
   `--self-test` builds the whole UI headlessly (used by the test suite under
-  Xvfb), `--version` prints versions.
+  Xvfb), `--version` prints the playground, package and toolkit versions.
+
+---
+
+## Versioned downloads & updating
+
+The downloadable archive is version-stamped: it downloads as
+`pharma-ml-toolkit-v1.1.0.zip`, carries its version in the `VERSION` file
+(and in `pyproject.toml` → `[project] version`), and the web explorer's
+Download tab shows the live version next to the size. `CHANGELOG.md` at the
+archive root documents every release; versions follow semver — minor bumps
+add features, patch bumps ship fixes.
+
+**Updating an existing copy needs no uninstall.** Unzip the new archive over
+your current folder — `-o` overwrites without prompting:
+
+```bash
+unzip -o pharma-ml-toolkit-v1.1.0.zip -d pharmaml   # your existing folder
+cat VERSION                                         # what you have now
+```
+
+Because the install is editable (`pip install -e .`), Python picks up the
+replaced files on the next run — nothing to uninstall or reinstall, unless
+`pyproject.toml` gained new dependencies (then re-run `pip install -e .`).
+`python playground.py --version` prints the playground, package and toolkit
+versions in one place. Files removed between versions are simply left behind
+(harmless); delete the folder first only for a truly clean slate.
 
 ---
 
@@ -130,10 +161,12 @@ pharma-ml-toolkit/
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
 ├── playground.py           # NEW: the graphical front end — `python playground.py` opens a tabbed
-│                            # Tkinter window over every domain (chemistry · PK/PD · QSAR · generative);
+│                            # Tkinter window over every domain (chemistry · PK/PD · cell lines · QSAR · generative);
 │                            # probes its dependencies at launch, degrades gracefully, headlessly
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
-├── tests/                   # 1478 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_playground.py + data/ fixtures)
+├── VERSION                 # the release version (1.1.0) — `cat VERSION` after extracting
+├── CHANGELOG.md            # what changed in each versioned release
+├── tests/                   # 1490 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);

@@ -160,6 +160,42 @@ async function walk(dirAbs: string, relDir: string, acc: WalkAccumulator): Promi
   return { name: path.basename(dirAbs), path: relDir, type: "dir", size, children };
 }
 
+/** The toolkit's release version: the `version = "x.y.z"` line inside
+ *  pyproject.toml's [project] section, falling back to the VERSION file,
+ *  then "0.0.0" when neither is readable. */
+export async function readToolkitVersion(): Promise<string> {
+  const fromPyproject = await readProjectVersion();
+  if (fromPyproject) return fromPyproject;
+  try {
+    return (await fs.readFile(path.join(TOOLKIT_ROOT, "VERSION"), "utf8")).trim();
+  } catch {
+    return "0.0.0";
+  }
+}
+
+/** Extract `version = "…"` from the [project] section of pyproject.toml —
+ *  any other section's version keys are ignored. Returns null when the file
+ *  is unreadable or carries no project version. */
+async function readProjectVersion(): Promise<string | null> {
+  try {
+    const content = await fs.readFile(path.join(TOOLKIT_ROOT, "pyproject.toml"), "utf8");
+    let inProject = false;
+    for (const rawLine of content.split("\n")) {
+      const line = rawLine.trim();
+      if (line.startsWith("[")) {
+        inProject = line === "[project]";
+        continue;
+      }
+      if (!inProject) continue;
+      const match = /^version\s*=\s*"([^"]+)"/.exec(line);
+      if (match) return match[1];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Recursively build the toolkit file tree plus aggregate stats. */
 export async function buildTree(): Promise<{ root: TreeNode; stats: TreeStats }> {
   const acc: WalkAccumulator = { files: 0, dirs: 0, totalLines: 0, totalBytes: 0 };
@@ -172,6 +208,7 @@ export async function buildTree(): Promise<{ root: TreeNode; stats: TreeStats }>
       dirs: acc.dirs,
       totalLines: acc.totalLines,
       totalBytes: acc.totalBytes,
+      version: await readToolkitVersion(),
     },
   };
 }

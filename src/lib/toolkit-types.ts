@@ -27,6 +27,8 @@ export interface TreeStats {
   dirs: number;
   totalLines: number;
   totalBytes: number;
+  /** Toolkit release version from pyproject.toml ([project] version). */
+  version: string;
 }
 
 export interface TreeResponse {

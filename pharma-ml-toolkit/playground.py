@@ -14,6 +14,10 @@ A tabbed graphical interface opens with every calculation domain of the
   and Emax curves (plotted), oral Cmax/tmax, Cockcroft-Gault creatinine
   clearance with renal dose adjustment, loading/maintenance dosing,
   BSA/weight-based and pediatric dose rules.
+* **Cell Lines**    -- GDSC-style drug-response screens: load and audit
+  a screen, pivot the sensitivity matrix, call sensitive vs resistant
+  lines, convert ``LN_IC50`` <-> pIC50, and discover expression
+  biomarkers for any compound (the EGFR / erlotinib story).
 * **Data & ML**     -- open any CSV (or one of the bundled example
   datasets), pick a target column, train a registry model with the
   toolkit's own preprocessing pipeline, inspect the metrics and the
@@ -30,9 +34,12 @@ Design notes
 * ``pharmaml`` itself resolves two ways: a normal installed package, or
   the ``src/`` tree sitting next to this file -- so the playground
   works straight after unzipping, before any ``pip install -e .``.
-* Long calculations (descriptor batches, model training, evolution)
-  run in a worker thread; the window never freezes and shows a
-  progress bar plus a live status line.
+* The playground version follows the toolkit's own version (read from
+  ``pyproject.toml`` / ``VERSION`` at import), so the two can never
+  silently drift apart.
+* Long calculations (descriptor batches, model training, evolution,
+  biomarker discovery) run in a worker thread; the window never freezes
+  and shows a progress bar plus a live status line.
 * Embedded figures reuse the toolkit's own plotting helpers, so the
   playground looks exactly like the package's published figures.
 
@@ -68,11 +75,54 @@ except ImportError:  # pragma: no cover -- a Python built without tkinter
     ttk = None  # type: ignore[assignment]
     tkfont = None  # type: ignore[assignment]
 
-__version__ = "1.0.0"
-
 TOOLKIT_ROOT = Path(__file__).resolve().parent
 SRC_DIR = TOOLKIT_ROOT / "src"
 EXAMPLES_DIR = TOOLKIT_ROOT / "examples" / "data"
+
+
+def toolkit_version() -> str:
+    """The toolkit's own version: pyproject ``[project]`` -> ``VERSION``.
+
+    A deliberate line scan (no ``tomllib`` import) so the value is
+    available on every Python that can start this file: the
+    ``version = "x.y.z"`` entry of the ``[project]`` section wins, a
+    bare ``VERSION`` file at the toolkit root is the fallback, and
+    ``"0.0.0"`` covers a tree with neither (never happens in the
+    shipped archive).
+    """
+    pyproject = TOOLKIT_ROOT / "pyproject.toml"
+    if pyproject.is_file():
+        in_project = False
+        try:
+            lines = pyproject.read_text(encoding="utf-8").splitlines()
+        except OSError:  # pragma: no cover - unreadable pyproject
+            lines = []
+        for raw_line in lines:
+            line = raw_line.strip()
+            if line.startswith("[") and line.endswith("]"):
+                in_project = line == "[project]"
+                continue
+            if not in_project or not line.startswith("version"):
+                continue
+            key, sep, value = line.partition("=")
+            if not sep or key.strip() != "version":
+                continue
+            declared = value.split("#", 1)[0].strip().strip('"').strip("'")
+            if declared:
+                return declared
+    version_file = TOOLKIT_ROOT / "VERSION"
+    if version_file.is_file():
+        try:
+            text = version_file.read_text(encoding="utf-8").strip()
+        except OSError:  # pragma: no cover - unreadable VERSION
+            text = ""
+        if text:
+            return text
+    return "0.0.0"
+
+
+#: The playground is versioned WITH the toolkit (see ``toolkit_version``).
+__version__ = toolkit_version()
 
 # -- visual language (a calm pharma green, no framework required) ------------
 BG = "#eef1ee"
@@ -91,6 +141,7 @@ _DEPENDENCIES: tuple[tuple[str, str, str, str], ...] = (
     ("numpy", "numpy", "array math behind every domain", "numpy"),
     ("pandas", "pandas", "descriptor / dataset / leaderboard tables", "pandas"),
     ("sklearn", "scikit-learn", "QSAR model training + evaluation", "scikit-learn"),
+    ("scipy", "SciPy", "statistics behind biomarker discovery", "scipy"),
     ("matplotlib", "matplotlib", "embedded figures (parity, profiles, curves)", "matplotlib"),
     ("rdkit", "RDKit", "chemistry: descriptors, fingerprints, QED, the GA", "rdkit"),
     ("torch", "PyTorch", "optional: the REINVENT-style RL optimiser", "torch"),
@@ -462,7 +513,7 @@ else:  # allow `import playground` on tkinter-less builds (probe path)
 
 
 class PlaygroundApp(_TkBase):  # type: ignore[misc]
-    """The playground window: one notebook, five domain tabs, one worker."""
+    """The playground window: one notebook, six domain tabs, one worker."""
 
     def __init__(self, dependencies: dict[str, bool] | None = None) -> None:
         if tk is None:  # pragma: no cover - guarded by main()
@@ -489,6 +540,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._desc_frame: Any = None
         self._desc_rows: list[tuple[str, str, str]] = []
         self._ga_result: Any = None
+        # -- Cell Lines tab state ----------------------------------- #
+        self._bio_screen: Any = None          # ResponseScreen (maybe collapsed)
+        self._bio_screen_path: Path | None = None
+        self._bio_collapsed = False
+        self._bio_matrix: Any = None           # cell line x compound DataFrame
+        self._bio_matrix_metric: str | None = None
+        self._bio_expr: Any = None             # raw expression frame
+        self._bio_expr_norm: Any = None        # normalize + impute cache
 
         self.title("PharmaML Playground")
         self.configure(background=BG)
@@ -626,9 +685,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         bar = ttk.Frame(self, style="Status.TFrame", padding=(12, 5))
         bar.pack(side="bottom", fill="x")
         if self.pharmaml is not None:
-            left = f"pharmaml {self.pharmaml.__version__} · playground {__version__}"
+            left = f"pharmaml {self.pharmaml.__version__} · toolkit v{__version__}"
         else:
-            left = "pharmaml not loaded -- run from the toolkit root or pip install -e ."
+            left = ("pharmaml not loaded -- run from the toolkit root or "
+                    f"pip install -e . · toolkit v{__version__}")
         ttk.Label(bar, text=left, style="Status.TLabel").pack(side="left")
         self._job_label = ttk.Label(bar, text="idle", style="Status.TLabel")
         self._job_label.pack(side="right", padx=(12, 0))
@@ -641,6 +701,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_home_tab()
         self._build_chemistry_tab()
         self._build_pk_tab()
+        self._build_cellline_tab()
         self._build_ml_tab()
         self._build_generative_tab()
 
@@ -819,7 +880,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     # -- menu actions ---------------------------------------------------- #
     def _menu_open_csv(self) -> None:
-        self._book.select(3)
+        self._book.select(self._ml_page)
         self._ml_open_csv()
 
     def _menu_save_figure(self) -> None:
@@ -856,7 +917,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "About PharmaML Playground",
             f"PharmaML Playground {__version__}\n{pharmaml_line}\n\n"
             "A single-file graphical front end for the pharmaml toolkit:\n"
-            "chemistry · PK/PD · QSAR machine learning · generative design.\n\n"
+            "chemistry · PK/PD · cell lines · QSAR machine learning · generative "
+            "design.\n\n"
             "Calculations run in pharmaml itself -- the playground only\n"
             "collects your inputs and renders the results.",
         )
@@ -878,7 +940,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         hero = make_card(
             page.grid, "PharmaML Playground", span=2, row=0, column=0,
             subtitle="One window for the whole toolkit -- chemistry, PK/PD dosing, "
-                     "QSAR modelling and the generative GA, without touching a terminal.",
+                     "cell-line biology, QSAR modelling and the generative GA, "
+                     "without touching a terminal.",
         )
         version_line = (
             f"playground {__version__} · pharmaml {self.pharmaml.__version__}"
@@ -919,7 +982,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             grid_append(status, ttk.Label(status, style="CardMuted.TLabel",
                           justify="left", text=(
                 "To light up every tab, from the toolkit root:\n"
-                "    pip install -e . numpy pandas scikit-learn matplotlib rdkit"
+                "    pip install -e . numpy pandas scikit-learn scipy matplotlib rdkit"
             )), pady=(8, 0))
         else:
             grid_append(status, ttk.Label(status, style="CardMuted.TLabel",
@@ -939,6 +1002,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 ("Half-life, accumulation, IV bolus decay and Emax curves, "
                  "Cockcroft–Gault, loading/maintenance and pediatric dosing."),
                 "numpy",
+            ),
+            (
+                "Cell Lines",
+                ("Drug-response screens: audit, the sensitivity matrix, sensitive "
+                 "vs resistant calls and expression biomarker discovery."),
+                "pandas + scipy",
             ),
             (
                 "Data & ML",
@@ -1603,10 +1672,560 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._start_job("Emax model", work, render)
 
     # ------------------------------------------------------------------ #
+    # Cell Lines tab
+    # ------------------------------------------------------------------ #
+    def _build_cellline_tab(self) -> None:
+        page = self._new_page("Cell Lines")
+        self._bio_compound_var = tk.StringVar()
+
+        screen = make_card(
+            page.grid, "Response screen", span=2, row=0, column=0,
+            subtitle="A GDSC/CCLE-style long table: one row per cell line × "
+                     "compound, one metric column (LN_IC50, AUC, ...).",
+        )
+        screen_buttons = ttk.Frame(screen, style="Card.TFrame")
+        screen_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
+        open_btn = self._action_button(screen_buttons, "Open CSV…", self._bio_open_csv)
+        open_btn.pack(side="left")
+        example_btn = self._action_button(
+            screen_buttons, "Load example", self._bio_load_example,
+            tooltip="The bundled 23-line × 8-compound screen "
+                    "(examples/data/cellline_screen.csv).",
+        )
+        example_btn.pack(side="left", padx=(10, 0))
+        self._bio_collapse_var = tk.BooleanVar(value=True)
+        collapse_check = ttk.Checkbutton(
+            screen, text="collapse replicates (median per duplicated pair)",
+            variable=self._bio_collapse_var,
+        )
+        collapse_check.grid(row=0, column=1, sticky="e")
+        self._bio_info = ttk.Label(screen, text="no screen loaded",
+                                   style="CardMuted.TLabel")
+        self._bio_info.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self._bio_audit_text = _grid_text(screen, height=6, mono=self._mono)
+        self._bio_audit_text.insert(
+            "1.0", "the screen audit appears here (missing values, duplicate pairs, ...)"
+        )
+        grid_append(screen, self._bio_audit_text, sticky="ew", pady=(6, 0))
+
+        matrix = make_card(
+            page.grid, "Sensitivity matrix", span=2, row=1, column=0,
+            subtitle="Pivot one metric into the classic cell line × compound table.",
+        )
+        self._bio_metric_combo = ttk.Combobox(matrix, state="readonly", width=22)
+        form_row(matrix, "metric", self._bio_metric_combo)
+        build_btn = self._action_button(
+            matrix, "Build matrix", self._bio_build_matrix, primary=True,
+            tooltip="Rows are cell lines, columns compounds; untested pairs stay "
+                    "blank.",
+        )
+        build_btn.grid(row=matrix.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._bio_matrix_info = ttk.Label(
+            matrix, text="no matrix yet — load a screen and press Build matrix",
+            style="CardMuted.TLabel",
+        )
+        self._bio_matrix_info.grid(row=build_btn.grid_info()["row"], column=1,
+                                   sticky="w", padx=(10, 0))
+        matrix_frame = ttk.Frame(matrix, style="Card.TFrame")
+        grid_append(matrix, matrix_frame, sticky="nsew", weight=True)
+        self._bio_matrix_tree = ttk.Treeview(matrix_frame, show="tree headings",
+                                             height=10)
+        matrix_bar_x = ttk.Scrollbar(matrix_frame, orient="horizontal",
+                                     command=self._bio_matrix_tree.xview)
+        matrix_bar_y = ttk.Scrollbar(matrix_frame, orient="vertical",
+                                     command=self._bio_matrix_tree.yview)
+        self._bio_matrix_tree.configure(xscrollcommand=matrix_bar_x.set,
+                                        yscrollcommand=matrix_bar_y.set)
+        self._bio_matrix_tree.heading("#0", text="cell line")
+        self._bio_matrix_tree.column("#0", width=110, stretch=True)
+        self._bio_matrix_tree.pack(side="left", fill="both", expand=True)
+        matrix_bar_y.pack(side="right", fill="y")
+        matrix_bar_x.pack(side="bottom", fill="x")
+
+        calls = make_card(
+            page.grid, "Sensitive vs resistant", row=2, column=0,
+            subtitle="Threshold one compound's panel into sensitivity calls.",
+        )
+        self._bio_compound_combo = ttk.Combobox(
+            calls, state="readonly", width=22, textvariable=self._bio_compound_var
+        )
+        form_row(calls, "compound", self._bio_compound_combo)
+        self._bio_q1 = ttk.Entry(calls, width=10)
+        self._bio_q1.insert(0, "0.25")
+        form_row(calls, "sensitive quantile", self._bio_q1)
+        self._bio_q2 = ttk.Entry(calls, width=10)
+        self._bio_q2.insert(0, "0.75")
+        form_row(calls, "resistant quantile", self._bio_q2)
+        self._bio_lower_var = tk.BooleanVar(value=True)
+        lower_check = ttk.Checkbutton(
+            calls, text="lower value = more sensitive (LN_IC50)",
+            variable=self._bio_lower_var,
+        )
+        form_row(calls, "direction", lower_check)
+        call_btn = self._action_button(calls, "Call", self._bio_call_sensitive)
+        call_btn.grid(row=calls.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._bio_calls_summary = ttk.Label(calls, text="—", style="CardMuted.TLabel",
+                                            wraplength=300, justify="left")
+        self._bio_calls_summary.grid(row=call_btn.grid_info()["row"], column=1,
+                                     sticky="w", padx=(10, 0))
+        calls_frame = ttk.Frame(calls, style="Card.TFrame")
+        grid_append(calls, calls_frame, sticky="nsew", weight=True)
+        self._bio_calls_tree = ttk.Treeview(calls_frame, columns=("call",),
+                                            show="tree headings", height=10)
+        self._bio_calls_tree.heading("#0", text="cell line")
+        self._bio_calls_tree.heading("call", text="call")
+        self._bio_calls_tree.column("#0", width=130, stretch=True)
+        self._bio_calls_tree.column("call", width=110, stretch=False)
+        calls_bar = ttk.Scrollbar(calls_frame, orient="vertical",
+                                  command=self._bio_calls_tree.yview)
+        self._bio_calls_tree.configure(yscrollcommand=calls_bar.set)
+        self._bio_calls_tree.pack(side="left", fill="both", expand=True)
+        calls_bar.pack(side="right", fill="y")
+
+        convert = make_card(
+            page.grid, "LN_IC50 ↔ pIC50", row=2, column=1,
+            subtitle="The GDSC and the chemist's scale, one number at a time.",
+        )
+        self._bio_ic50_entry = ttk.Entry(convert, width=22)
+        self._bio_ic50_entry.insert(0, "0")
+        form_row(convert, "value", self._bio_ic50_entry)
+        convert_buttons = ttk.Frame(convert, style="Card.TFrame")
+        convert_buttons.grid(row=convert.grid_size()[1], column=0, columnspan=2,
+                             sticky="w", pady=(6, 0))
+        ln_btn = self._action_button(convert_buttons, "LN_IC50 → pIC50",
+                                     self._bio_ln_to_pic50)
+        ln_btn.pack(side="left")
+        pi_btn = self._action_button(convert_buttons, "pIC50 → LN_IC50",
+                                     self._bio_pic50_to_ln)
+        pi_btn.pack(side="left", padx=(10, 0))
+        bind_enter(self._bio_ic50_entry, ln_btn)
+        result_row = ttk.Frame(convert, style="Card.TFrame")
+        result_row.grid(row=convert.grid_size()[1], column=0, columnspan=2,
+                        sticky="w", pady=(6, 0))
+        self._bio_ic50_result = ttk.Label(result_row, text="—",
+                                          style="Result.TLabel",
+                                          font=self._mono_result)
+        self._bio_ic50_result.pack(side="left")
+        copy_btn = self._action_button(
+            result_row, "Copy", lambda: self._copy(self._bio_ic50_result.cget("text"))
+        )
+        copy_btn.pack(side="left", padx=(10, 0))
+        grid_append(convert, ttk.Label(
+            convert, style="CardMuted.TLabel", wraplength=300, justify="left",
+            text="GDSC convention: LN_IC50 = ln(IC50 in µM), so 0 → pIC50 6.",
+        ), pady=(4, 0))
+
+        expression = make_card(
+            page.grid, "Expression table", span=2, row=3, column=0,
+            subtitle="Rows are cell lines, columns genes (log2 counts or "
+                     "intensities — normalisation happens inside the analysis).",
+        )
+        expression_buttons = ttk.Frame(expression, style="Card.TFrame")
+        expression_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
+        expr_open_btn = self._action_button(
+            expression_buttons, "Open expression CSV…", self._bio_open_expr_csv
+        )
+        expr_open_btn.pack(side="left")
+        expr_example_btn = self._action_button(
+            expression_buttons, "Load example", self._bio_load_expr_example,
+            tooltip="The bundled 23-line × 300-gene table "
+                    "(examples/data/cellline_expression.csv).",
+        )
+        expr_example_btn.pack(side="left", padx=(10, 0))
+        self._bio_expr_info = ttk.Label(expression, text="no expression table loaded",
+                                        style="CardMuted.TLabel")
+        self._bio_expr_info.grid(row=1, column=0, columnspan=2, sticky="w",
+                                 pady=(6, 0))
+
+        biomarkers = make_card(
+            page.grid, "Biomarker discovery", span=2, row=4, column=0,
+            subtitle="Correlate every gene's expression with one drug's response "
+                     "(Benjamini–Hochberg FDR control) — the EGFR / erlotinib "
+                     "story on the example data.",
+        )
+        self._bio_marker_compound_combo = ttk.Combobox(
+            biomarkers, state="readonly", width=22,
+            textvariable=self._bio_compound_var,
+        )
+        form_row(biomarkers, "compound", self._bio_marker_compound_combo)
+        self._bio_method_combo = ttk.Combobox(
+            biomarkers, state="readonly", width=22,
+            values=("spearman", "pearson"),
+        )
+        self._bio_method_combo.set("spearman")
+        form_row(biomarkers, "correlation method", self._bio_method_combo)
+        self._bio_topn_entry = ttk.Entry(biomarkers, width=10)
+        self._bio_topn_entry.insert(0, "10")
+        form_row(biomarkers, "top N genes", self._bio_topn_entry)
+        self._bio_marker_lower_var = tk.BooleanVar(value=True)
+        marker_lower_check = ttk.Checkbutton(
+            biomarkers, text="lower response = more sensitive (LN_IC50)",
+            variable=self._bio_marker_lower_var,
+        )
+        form_row(biomarkers, "direction", marker_lower_check)
+        marker_btn = self._action_button(
+            biomarkers, "Discover biomarkers", self._bio_discover_biomarkers,
+            primary=True,
+            tooltip="Normalises + imputes the expression table, correlates every "
+                    "gene against the compound's response column, ranks by |rho|.",
+        )
+        marker_btn.grid(row=biomarkers.grid_size()[1], column=0, sticky="w",
+                        pady=(6, 0))
+        self._bio_marker_summary = ttk.Label(
+            biomarkers,
+            text="no discovery yet — load a screen and an expression table",
+            style="CardMuted.TLabel", wraplength=620, justify="left",
+        )
+        self._bio_marker_summary.grid(row=marker_btn.grid_info()["row"], column=1,
+                                      sticky="w", padx=(10, 0))
+        marker_frame = ttk.Frame(biomarkers, style="Card.TFrame")
+        grid_append(biomarkers, marker_frame, sticky="nsew", weight=True)
+        self._bio_marker_tree = ttk.Treeview(
+            marker_frame,
+            columns=("gene", "rho", "p_value", "fdr", "significant", "direction"),
+            show="headings", height=10,
+        )
+        for column, width in (
+            ("gene", 110), ("rho", 90), ("p_value", 110), ("fdr", 110),
+            ("significant", 90), ("direction", 240),
+        ):
+            self._bio_marker_tree.heading(column, text=column)
+            self._bio_marker_tree.column(column, width=width, minwidth=64,
+                                         stretch=(column == "direction"))
+        marker_bar_y = ttk.Scrollbar(marker_frame, orient="vertical",
+                                     command=self._bio_marker_tree.yview)
+        self._bio_marker_tree.configure(yscrollcommand=marker_bar_y.set)
+        self._bio_marker_tree.pack(side="left", fill="both", expand=True)
+        marker_bar_y.pack(side="right", fill="y")
+
+    def _bio_open_csv(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas", "screen loading"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open a response screen",
+            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+        )
+        if path:
+            self._bio_load_path(Path(path))
+
+    def _bio_load_example(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas", "screen loading"):
+            return
+        path = EXAMPLES_DIR / "cellline_screen.csv"
+        if not path.is_file():
+            messagebox.showwarning("Missing example",
+                                   "examples/data/cellline_screen.csv was not found.")
+            return
+        self._bio_load_path(path)
+
+    def _bio_load_path(self, path: Path) -> None:
+        try:
+            from pharmaml.biology import (
+                audit_response_table,
+                collapse_replicates,
+                load_response_table,
+            )
+
+            raw = load_response_table(path)
+            audit_frame = audit_response_table(raw)
+            screen = raw
+            if bool(self._bio_collapse_var.get()):
+                screen = collapse_replicates(raw)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not read the response screen", exc)
+            return
+        self._bio_screen = screen
+        self._bio_screen_path = path
+        self._bio_collapsed = screen is not raw
+        self._bio_matrix = None
+        self._bio_matrix_metric = None
+
+        # the audit always describes the ORIGINAL table, so replicate
+        # issues stay visible even when they were just collapsed away
+        self._bio_audit_text.delete("1.0", "end")
+        if len(audit_frame):
+            self._bio_audit_text.insert("1.0", audit_frame.to_string())
+        else:
+            self._bio_audit_text.insert(
+                "1.0", "audit: no issues — identifiers, metric values and pairs all clean"
+            )
+
+        raw_rows = len(raw.frame)
+        rows_note = f"{raw_rows:,} rows"
+        if len(screen.frame) != raw_rows:
+            rows_note += f" ({len(screen.frame):,} after collapsing replicates)"
+        metrics = ", ".join(screen.metrics)
+        self._bio_info.configure(
+            text=(f"{path.name} — {rows_note} · {len(screen.cell_lines)} cell lines · "
+                  f"{len(screen.compounds)} compounds · metric(s): {metrics}")
+        )
+        self._bio_metric_combo["values"] = list(screen.metrics)
+        if screen.metrics:
+            self._bio_metric_combo.set(screen.metrics[0])
+        compounds = list(screen.compounds)
+        self._bio_compound_combo["values"] = compounds
+        self._bio_marker_compound_combo["values"] = compounds
+        if compounds:
+            self._bio_compound_var.set(compounds[0])
+
+    def _bio_build_matrix(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas", "the matrix"):
+            return
+        if self._bio_screen is None:
+            messagebox.showwarning("No screen", "Load a response screen first.")
+            return
+        metric = self._bio_metric_combo.get()
+        if not metric:
+            messagebox.showwarning("No metric", "Pick the response metric.")
+            return
+
+        def work() -> Any:
+            from pharmaml.biology import response_matrix
+
+            return response_matrix(self._bio_screen, metric), metric
+
+        def render(payload: Any) -> None:
+            matrix, used_metric = payload
+            self._bio_render_matrix(matrix, used_metric)
+
+        self._start_job(f"sensitivity matrix ({metric})", work, render)
+
+    def _bio_render_matrix(self, matrix: Any, metric: str) -> None:
+        self._bio_matrix = matrix
+        self._bio_matrix_metric = metric
+        tree = self._bio_matrix_tree
+        tree.delete(*tree.get_children())
+        compounds = [str(column) for column in matrix.columns]
+        tree["columns"] = compounds
+        for column in compounds:
+            tree.heading(column, text=column)
+            tree.column(column, width=96, minwidth=72, stretch=True)
+        for cell_line, row in matrix.iterrows():
+            values = [
+                "" if isinstance(value, float) and math.isnan(value)
+                else _cell_text(value)
+                for value in row.tolist()
+            ]
+            tree.insert("", "end", text=str(cell_line), values=values)
+        self._bio_matrix_info.configure(
+            text=(f"{len(matrix.index)} cell lines × {len(matrix.columns)} compounds · "
+                  f"untested pairs blank · metric {metric}")
+        )
+
+    def _bio_call_sensitive(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas", "sensitivity calls"):
+            return
+        if self._bio_screen is None:
+            messagebox.showwarning("No screen", "Load a response screen first.")
+            return
+        compound = self._bio_compound_var.get()
+        if not compound:
+            messagebox.showwarning("No compound", "Pick the compound to call.")
+            return
+        try:
+            sensitive_q = parse_float(self._bio_q1.get(), "sensitive quantile",
+                                      minimum=0.0, maximum=1.0)
+            resistant_q = parse_float(self._bio_q2.get(), "resistant quantile",
+                                      minimum=0.0, maximum=1.0)
+            if sensitive_q >= resistant_q:
+                raise ValueError(
+                    "the sensitive quantile must be below the resistant quantile"
+                )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        lower = bool(self._bio_lower_var.get())
+        metric = self._bio_metric_combo.get()
+
+        def work() -> Any:
+            from pharmaml.biology import call_sensitive_resistant, response_matrix
+
+            matrix = self._bio_matrix
+            built = matrix is None or self._bio_matrix_metric != metric
+            if built:
+                matrix = response_matrix(self._bio_screen, metric)
+            calls = call_sensitive_resistant(
+                matrix[compound], sensitive_q, resistant_q, lower_is_sensitive=lower
+            )
+            return matrix, metric, built, calls, compound
+
+        def render(payload: Any) -> None:
+            matrix, used_metric, built, calls, used_compound = payload
+            if built:
+                self._bio_render_matrix(matrix, used_metric)
+            counts = calls.value_counts()
+            labels = ("sensitive", "intermediate", "resistant", "not tested")
+            summary = " · ".join(f"{int(counts.get(label, 0))} {label}"
+                                 for label in labels)
+            self._bio_calls_summary.configure(
+                text=f"{used_compound}: {summary}", style="Field.TLabel"
+            )
+            self._bio_calls_tree.delete(*self._bio_calls_tree.get_children())
+            rank = {label: index for index, label in enumerate(labels)}
+            for cell_line, call in sorted(
+                calls.items(), key=lambda item: (rank.get(item[1], 99), str(item[0]))
+            ):
+                self._bio_calls_tree.insert("", "end", text=str(cell_line),
+                                            values=(call,))
+
+        self._start_job(f"sensitivity calls ({compound})", work, render)
+
+    def _bio_ln_to_pic50(self) -> None:
+        self._bio_convert_ic50("ln")
+
+    def _bio_pic50_to_ln(self) -> None:
+        self._bio_convert_ic50("pic50")
+
+    def _bio_convert_ic50(self, direction: str) -> None:
+        if not self._require_pharmaml() or not self._require("numpy", "conversion"):
+            return
+        from pharmaml.biology import ln_ic50_to_pic50, pic50_to_ln_ic50
+
+        try:
+            value = parse_float(self._bio_ic50_entry.get(), "value")
+            result = (
+                ln_ic50_to_pic50(value) if direction == "ln" else pic50_to_ln_ic50(value)
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Conversion failed", exc)
+            return
+        self._bio_ic50_result.configure(text=f"{result:.4f}")
+
+    def _bio_open_expr_csv(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas", "expression loading"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open an expression table",
+            filetypes=[("CSV table", "*.csv"), ("All files", "*.*")],
+        )
+        if path:
+            self._bio_load_expr_path(Path(path))
+
+    def _bio_load_expr_example(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas", "expression loading"):
+            return
+        path = EXAMPLES_DIR / "cellline_expression.csv"
+        if not path.is_file():
+            messagebox.showwarning(
+                "Missing example", "examples/data/cellline_expression.csv was not found."
+            )
+            return
+        self._bio_load_expr_path(path)
+
+    def _bio_load_expr_path(self, path: Path) -> None:
+        try:
+            import pandas as pd
+
+            try:
+                frame = pd.read_csv(path, index_col="cell_line")
+            except ValueError:
+                # user tables name their identifier column differently --
+                # fall back to the first column as the cell-line index
+                frame = pd.read_csv(path, index_col=0)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not read the expression table", exc)
+            return
+        if frame.empty:
+            messagebox.showwarning("Empty table", f"{path.name} has no rows.")
+            return
+        self._bio_expr = frame
+        self._bio_expr_norm = None
+        self._bio_expr_info.configure(
+            text=f"{path.name} — {len(frame):,} cell lines × {len(frame.columns):,} genes"
+        )
+
+    def _bio_discover_biomarkers(self) -> None:
+        if not self._require_pharmaml():
+            return
+        for module in ("numpy", "pandas", "scipy"):
+            if not self._require(module, "biomarker discovery"):
+                return
+        if self._bio_screen is None or self._bio_expr is None:
+            messagebox.showwarning(
+                "Missing data",
+                "Biomarker discovery needs BOTH a response screen and an "
+                "expression table — load one of each above, then try again.",
+            )
+            return
+        compound = self._bio_compound_var.get()
+        if not compound:
+            messagebox.showwarning("No compound", "Pick the compound to analyse.")
+            return
+        method = self._bio_method_combo.get() or "spearman"
+        try:
+            top_n = parse_int(self._bio_topn_entry.get(), "top N genes",
+                              minimum=1, maximum=500)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        lower = bool(self._bio_marker_lower_var.get())
+        metric = self._bio_metric_combo.get()
+
+        def work() -> Any:
+            from pharmaml.biology import (
+                impute_expression,
+                normalize_expression,
+                response_matrix,
+                sensitivity_associations,
+                top_biomarkers,
+            )
+
+            norm = self._bio_expr_norm
+            if norm is None:
+                norm = impute_expression(normalize_expression(self._bio_expr))
+            matrix = self._bio_matrix
+            built = matrix is None or self._bio_matrix_metric != metric
+            if built:
+                matrix = response_matrix(self._bio_screen, metric)
+            associations = sensitivity_associations(
+                norm, matrix[compound], method=method
+            )
+            top = top_biomarkers(associations, n=top_n)
+            return top, associations, norm, matrix, metric, built, compound
+
+        def render(payload: Any) -> None:
+            from pharmaml.biology import direction_of_association
+
+            top, associations, norm, matrix, used_metric, built, used_compound = payload
+            self._bio_expr_norm = norm
+            if built:
+                self._bio_render_matrix(matrix, used_metric)
+            n_significant = int(associations["significant"].sum())
+            strongest = float(associations["rho"].abs().max())
+            self._bio_marker_summary.configure(
+                text=(f"{len(associations):,} genes correlated · "
+                      f"{n_significant} significant at FDR < 0.05 · "
+                      f"strongest |rho| {strongest:.3f} — {used_compound}"),
+                style="Field.TLabel",
+            )
+            self._bio_marker_tree.delete(*self._bio_marker_tree.get_children())
+            for _, row in top.iterrows():
+                try:
+                    rho = float(row["rho"])
+                except (TypeError, ValueError):
+                    rho = float("nan")
+                self._bio_marker_tree.insert(
+                    "", "end",
+                    values=(
+                        _cell_text(row["gene"], limit=18),
+                        format_number(rho),
+                        _cell_text(row["p_value"]),
+                        _cell_text(row["fdr"]),
+                        "Yes" if bool(row["significant"]) else "No",
+                        direction_of_association(
+                            rho, lower_is_sensitive=lower
+                        ),
+                    ),
+                )
+
+        self._start_job(f"biomarkers for {compound}", work, render)
+
+    # ------------------------------------------------------------------ #
     # Data & ML tab
     # ------------------------------------------------------------------ #
     def _build_ml_tab(self) -> None:
         page = self._new_page("Data & ML")
+        self._ml_page = page
 
         data = make_card(page.grid, "Dataset", span=2, row=0, column=0,
                          subtitle="Any CSV the toolkit's read_table can sniff, or a bundled example.")
@@ -2249,6 +2868,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"pharmaml {module.__version__}")
         except Exception as exc:  # noqa: BLE001
             print(f"pharmaml unavailable ({exc})")
+        print(f"toolkit v{__version__}")
         return 0
 
     if args.probe:

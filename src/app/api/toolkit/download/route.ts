@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import { Readable } from "stream";
 import { promises as fs } from "fs";
 import { NextResponse } from "next/server";
-import { TOOLKIT_ROOT } from "@/lib/toolkit-fs";
+import { TOOLKIT_ROOT, readToolkitVersion } from "@/lib/toolkit-fs";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,9 +10,11 @@ export const runtime = "nodejs";
 /**
  * Stream a ZIP archive of the whole toolkit directory.
  * Uses the `zip` CLI piped to stdout so the archive streams to the client
- * without buffering the entire file in memory. Generated cache artifacts
- * (.pytest_cache, __pycache__) are excluded — matching the explorer tree
- * and the package's .gitignore.
+ * without buffering the entire file in memory. The archive is versioned:
+ * the filename embeds the toolkit's release version (pharma-ml-toolkit-v<version>.zip)
+ * and X-Toolkit-Version exposes it to tooling without a download. Generated
+ * cache artifacts (.pytest_cache, __pycache__) are excluded — matching the
+ * explorer tree and the package's .gitignore.
  */
 export async function GET() {
   try {
@@ -20,6 +22,10 @@ export async function GET() {
     if (!info.isDirectory()) {
       throw new Error("Toolkit directory is missing on the server.");
     }
+
+    // Version the filename (and expose X-Toolkit-Version) so releases can be
+    // told apart — and updated in place — without opening the archive.
+    const version = await readToolkitVersion();
 
     const child = spawn(
       "zip",
@@ -96,7 +102,8 @@ export async function GET() {
       status: 200,
       headers: {
         "Content-Type": "application/zip",
-        "Content-Disposition": 'attachment; filename="pharma-ml-toolkit.zip"',
+        "Content-Disposition": `attachment; filename="pharma-ml-toolkit-v${version}.zip"`,
+        "X-Toolkit-Version": version,
         "Cache-Control": "no-store",
       },
     });
