@@ -31,6 +31,7 @@ scans::
     pharmaml generative run --method ga --adaptive-operators --plot operators.png
     pharmaml generative run --method rl --recipe qed --plot drift.png
     pharmaml generative run --recipe druglike --pareto --pareto-plot front.png
+    pharmaml generative run --recipe druglike --pareto --pareto-keep 8
     pharmaml generative corpus
     pharmaml models list
 
@@ -693,6 +694,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="with --pareto: save the trade-off scatter (dominated molecules "
         "muted, the non-dominated front highlighted over the recipe's "
         "first two objectives, plot_pareto_front) to this path (png/svg/pdf)",
+    )
+    gen_run.add_argument(
+        "--pareto-keep", default=None, metavar="N", type=int,
+        help="with --pareto: prune the front to the N most isolated members "
+        "(NSGA-II crowding distance -- the trade-off corners always "
+        "survive; real three-objective runs can leave 40+ non-dominated "
+        "molecules, and rank-truncation would drop the very corners the "
+        "front exists to show). The un-pruned size is kept in the summary",
     )
 
     gen_corpus = generative_sub.add_parser(
@@ -1629,8 +1638,10 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
     (agent-vs-prior log-probabilities, the squared drift the anchor
     penalises, the exploration entropy).  With ``--pareto``
     (multi-objective recipes) the Pareto front -- the non-dominated
-    trade-off molecules -- is extracted and printed after it, and
-    ``--pareto-plot PATH`` saves the trade-off scatter.
+    trade-off molecules -- is extracted and printed after it,
+    ``--pareto-plot PATH`` saves the trade-off scatter, and
+    ``--pareto-keep N`` prunes an unwieldy front to its most isolated
+    members (NSGA-II crowding distance).
     """
     from pharmaml.exceptions import DataValidationError
     from pharmaml.generative import DEFAULT_CORPUS, GeneticOptimizer, ReinventOptimizer
@@ -1689,6 +1700,16 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             "Pareto front needs a multi-objective recipe (druglike, novel "
             "or similar), where the leaderboard's blended ranking hides "
             "the trade-offs"
+        )
+    pareto_keep = getattr(args, "pareto_keep", None)
+    if pareto_keep is not None and not pareto:
+        raise DataValidationError(
+            "--pareto-keep prunes the front --pareto extracts; re-run "
+            "with --pareto"
+        )
+    if pareto_keep is not None and pareto_keep < 1:
+        raise DataValidationError(
+            f"--pareto-keep must be at least 1, got {pareto_keep}"
         )
 
     seeds = _generative_seed_smiles(args)
@@ -1773,6 +1794,10 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
         from pharmaml.generative import pareto_front
 
         front = pareto_front(result)
+        if pareto_keep is not None:
+            # NSGA-II crowding-distance selection: keep the trade-off
+            # corners + the most isolated interiors, drop the crowd
+            front = front.prune(pareto_keep)
         print()
         print(f"pareto   : {front}")
         deepest = max(

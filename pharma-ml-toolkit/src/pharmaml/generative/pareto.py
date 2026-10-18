@@ -18,6 +18,15 @@ state); the front preserves the leaderboard's order (best total score
 first).  :func:`pharmaml.viz.generative_plots.plot_pareto_front` renders one
 run as the classic scatter with the front highlighted.
 
+Real runs can leave the front itself unwieldy -- a three-objective GA over
+a 300-molecule population for 30 generations routinely leaves 40+ members
+(a measured 46 of 8,108 in the round that added pruning).  The NSGA-II
+**crowding distance** (:meth:`ParetoFront.crowding_distance`) ranks the
+members by how isolated each sits in objective space -- the trade-off
+corners score +inf, crowded interiors score low -- and
+:meth:`ParetoFront.prune` keeps the most isolated ``k`` for a small,
+well-spread medchem shortlist.
+
 Example
 -------
 >>> from pharmaml.generative import GenerationResult, pareto_front
@@ -37,15 +46,28 @@ Example
 True
 >>> "strongest member 'B' dominates 1 others" in text
 True
->>> front.to_dataframe()
-   rank smiles   qed  novelty  dominates
-0     1      A  0.90     0.20          0
-1     2      B  0.40     0.90          1
-2     3      D  0.85     0.25          0
+>>> front.to_dataframe()           # crowding: inf = trade-off corner
+   rank smiles   qed  novelty  dominates  crowding
+0     1      A  0.90     0.20          0       inf
+1     2      B  0.40     0.90          1       inf
+2     3      D  0.85     0.25          0       2.0
+>>> front.crowding_distance()       # NSGA-II: A/B corner the trade-off
+(inf, inf, 2.0)
+>>> pruned = front.prune(2)         # the 2 most isolated of 3
+>>> pruned.smiles
+('A', 'B')
+>>> pruned.n_front                  # size of the un-pruned front
+3
+>>> front.prune(5) is front         # keep >= size: nothing to drop
+True
 >>> pareto_front(result, objectives=["qed"])
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: a Pareto front needs at least two objectives, got 1: ['qed']
+>>> front.prune(0)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: keep must be at least 1, got 0 -- a pruned front with no member is the empty front, not a selection
 """
 
 from __future__ import annotations
@@ -90,6 +112,11 @@ class ParetoFront:
     n_excluded:
         Molecules dropped because at least one selected objective value
         was NaN / +-inf -- dominance is undefined for them.
+    n_front:
+        Size of the front this one was pruned from (``None`` for an
+        un-pruned front).  Pairwise dominance does not depend on which
+        molecules are present, so a pruned front keeps every member's
+        original ``dominates`` count -- the audit survives the cut.
 
     Notes
     -----
@@ -106,6 +133,7 @@ class ParetoFront:
     dominates: tuple[int, ...]
     n_total: int
     n_excluded: int
+    n_front: int | None = None
 
     def __len__(self) -> int:
         """Number of front members."""
@@ -115,14 +143,142 @@ class ParetoFront:
         """True when no molecule survived the dominance filter."""
         return not self.smiles
 
+    def crowding_distance(self) -> tuple[float, ...]:
+        """NSGA-II crowding distance of every front member.
+
+        For each objective the members are sorted by value; the two
+        boundary positions (best and worst) mark their members' distance
+        as +inf -- the trade-off corners NSGA-II always preserves -- and
+        every interior member accumulates the normalised gap between its
+        neighbours, ``(next - prev) / (max - min)``.  An objective with no
+        spread (``max == min``) contributes 0 to everyone: it carries no
+        isolation information.  Sorts tie-break by leaderboard position,
+        so the result is deterministic (no RNG, a pure function of the
+        front).
+
+        Returns
+        -------
+        tuple[float, ...]
+            One value per member, aligned with ``smiles``; ``+inf`` marks
+            a boundary member (best or worst on at least one objective),
+            larger finite values mean more isolated (a sparser region of
+            objective space), 0 means squeezed between immediate
+            neighbours on every objective.  An empty front returns
+            ``()``; a lone member or a fully degenerate front (no spread
+            on any objective) returns 0.0s -- crowding measures *spread*,
+            and there is none to measure.
+
+        Example
+        -------
+        >>> from pharmaml.generative import GenerationResult, pareto_front
+        >>> front = pareto_front(GenerationResult(
+        ...     smiles=["A", "B", "D"], scores=[0.9, 0.8, 0.7],
+        ...     breakdown=[{"qed": 0.9, "novelty": 0.2},
+        ...                {"qed": 0.4, "novelty": 0.9},
+        ...                {"qed": 0.85, "novelty": 0.25}]))
+        >>> front.crowding_distance()          # A/B corner, D interior
+        (inf, inf, 2.0)
+        """
+        count = len(self.smiles)
+        if count == 0:
+            return ()
+        distances = [0.0] * count
+        for name in self.objectives:
+            values = [entry[name] for entry in self.values]
+            low, high = min(values), max(values)
+            if high <= low:  # no spread -> no isolation information
+                continue
+            order = sorted(range(count), key=lambda i: (values[i], i))
+            distances[order[0]] = math.inf
+            distances[order[-1]] = math.inf
+            for position in range(1, count - 1):
+                index = order[position]
+                gap = values[order[position + 1]] - values[order[position - 1]]
+                distances[index] += gap / (high - low)
+        return tuple(distances)
+
+    def prune(self, keep: int) -> ParetoFront:
+        """The ``keep`` most isolated members (crowding-distance selection).
+
+        Ranks the members by :meth:`crowding_distance` (largest first;
+        +inf boundary corners first among them; ties broken by
+        leaderboard rank), keeps the top ``keep``, and re-emits them in
+        LEADERBOARD order -- the front's standing convention.  A real
+        three-objective run can leave 40+ front members; this is the
+        principled way to cut them to a shortlist that still spans the
+        trade-off surface (rank-ordered truncation would drop the corners
+        the front exists to show).
+
+        The returned front carries ``n_front`` = the un-pruned size, keeps
+        every member's original ``dominates`` count (pairwise dominance
+        cannot change with membership), and preserves ``n_total`` /
+        ``n_excluded`` from the original scan.
+
+        Parameters
+        ----------
+        keep:
+            How many members to retain.  ``keep >= len(front)`` returns
+            the front itself (it is frozen and immutable, safe to share);
+            ``keep < 1`` raises.
+
+        Returns
+        -------
+        ParetoFront
+            The pruned front (or this one, when nothing would be dropped).
+
+        Raises
+        ------
+        DataValidationError
+            If ``keep`` is less than 1.
+
+        Example
+        -------
+        >>> from pharmaml.generative import GenerationResult, pareto_front
+        >>> front = pareto_front(GenerationResult(
+        ...     smiles=["A", "B", "C", "D"], scores=[0.9, 0.8, 0.7, 0.1],
+        ...     breakdown=[{"qed": 0.9, "novelty": 0.2},
+        ...                {"qed": 0.4, "novelty": 0.9},
+        ...                {"qed": 0.3, "novelty": 0.3},
+        ...                {"qed": 0.85, "novelty": 0.25}]))
+        >>> pruned = front.prune(2)
+        >>> pruned.smiles              # the two corners, leaderboard order
+        ('A', 'B')
+        >>> pruned.n_front, len(pruned)
+        (3, 2)
+        >>> "pruned to the 2 most isolated of 3" in str(pruned)
+        True
+        """
+        if keep < 1:
+            raise DataValidationError(
+                f"keep must be at least 1, got {keep} -- a pruned front "
+                "with no member is the empty front, not a selection"
+            )
+        if keep >= len(self.smiles):
+            return self
+        distances = self.crowding_distance()
+        # largest distance first (+inf corners lead); leaderboard rank as
+        # the deterministic tie-break -- the textbook NSGA-II sort
+        ranked = sorted(range(len(self.smiles)), key=lambda i: (-distances[i], i))
+        selected = sorted(ranked[:keep])  # re-emit in leaderboard order
+        return ParetoFront(
+            objectives=self.objectives,
+            smiles=tuple(self.smiles[i] for i in selected),
+            values=tuple(self.values[i] for i in selected),
+            dominates=tuple(self.dominates[i] for i in selected),
+            n_total=self.n_total,
+            n_excluded=self.n_excluded,
+            n_front=len(self.smiles),
+        )
+
     def to_dataframe(self) -> pd.DataFrame:
-        """Front table: rank, SMILES, one column per objective, dominates."""
+        """Front table: rank, SMILES, objectives, dominates, crowding."""
         frame = pd.DataFrame(
             {"rank": range(1, len(self.smiles) + 1), "smiles": list(self.smiles)}
         )
         for objective in self.objectives:
             frame[objective] = [entry[objective] for entry in self.values]
         frame["dominates"] = list(self.dominates)
+        frame["crowding"] = list(self.crowding_distance())
         return frame
 
     def __str__(self) -> str:
@@ -134,11 +290,25 @@ class ParetoFront:
                 f"({self.n_excluded} excluded for non-finite values)"
             )
         strongest = max(range(len(self.smiles)), key=lambda i: self.dominates[i])
-        return (
+        # a pruned front reports the ORIGINAL non-dominated count (the
+        # prune suffix carries the cut) -- claiming "3 of 36 non-dominated"
+        # for a 7-member front cut to 3 would be factually wrong
+        non_dominated = (
+            self.n_front if self.n_front is not None else len(self.smiles)
+        )
+        base = (
             f"Pareto front over {len(self.objectives)} objectives [{head}]: "
-            f"{len(self.smiles)} of {self.n_total} molecules non-dominated "
-            f"({self.n_excluded} excluded for non-finite values); "
-            f"strongest member {self.smiles[strongest]!r} dominates "
+            f"{non_dominated} of {self.n_total} molecules non-dominated "
+            f"({self.n_excluded} excluded for non-finite values)"
+        )
+        if self.n_front is not None:
+            base += (
+                f"; pruned to the {len(self.smiles)} most isolated of "
+                f"{self.n_front} by crowding distance"
+            )
+        return (
+            base
+            + f"; strongest member {self.smiles[strongest]!r} dominates "
             f"{self.dominates[strongest]} others"
         )
 

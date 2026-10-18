@@ -4368,13 +4368,17 @@ class TestParetoFront:
     def test_to_dataframe_and_str_audit(self) -> None:
         front = pareto_front(self._demo_result())
         frame = front.to_dataframe()
-        assert list(frame.columns) == ["rank", "smiles", "qed", "novelty", "dominates"]
+        assert list(frame.columns) == [
+            "rank", "smiles", "qed", "novelty", "dominates", "crowding",
+        ]
         assert frame["rank"].tolist() == [1, 2, 3]
         assert frame["smiles"].tolist() == ["A", "B", "D"]
         assert frame["dominates"].tolist() == [0, 1, 0]
+        assert frame["crowding"].tolist() == [math.inf, math.inf, 2.0]
         text = str(front)
         assert text.startswith("Pareto front over 2 objectives [qed, novelty]: 3 of 4")
         assert "non-dominated" in text and "0 excluded" in text
+        assert "pruned" not in text  # an un-pruned front never claims pruning
 
     def test_empty_front_str_audit(self) -> None:
         # every molecule dominated by the next -> a single-member front,
@@ -4386,3 +4390,181 @@ class TestParetoFront:
         front = pareto_front(result)
         assert front.smiles == ("X",)
         assert str(front).startswith("Pareto front over 2 objectives [a, b]: 1 of 2")
+
+
+class TestParetoCrowding:
+    """NSGA-II crowding distance + prune: the unwieldy-front shortlist.
+
+    Fail-first context (100x-67): a real three-objective GA
+    (population 300, 30 generations) leaves 46 of 8,108 molecules
+    non-dominated -- a front too big to eyeball, and the CLI's old
+    rank-truncation would have dropped the very corners the front
+    exists to show.  Crowding distance ranks members by isolation;
+    prune keeps the corners + the most isolated interiors.
+    """
+
+    @staticmethod
+    def _five_member_result() -> GenerationResult:
+        """Five front members + two dominated molecules (M6/M7).
+
+        Hand-derived crowding over the front: qed spread 0.5, nov spread
+        0.7; M3 = 0.6 + 0.5, M4 = 0.4 + 0.5, M5 = 0.7 + 0.5 (each interior
+        gap normalised by its objective's range).  M1/M3 both dominate M7
+        (0.8, 0.1), M4/M5 both dominate M6 (0.45, 0.5) -- so the front's
+        dominates counts are (1, 0, 1, 1, 1).
+        """
+        return GenerationResult(
+            smiles=["M1", "M2", "M3", "M4", "M5", "M6", "M7"],
+            scores=[0.9, 0.8, 0.7, 0.65, 0.6, 0.55, 0.5],
+            breakdown=[{"qed": 0.9, "nov": 0.2},
+                       {"qed": 0.4, "nov": 0.9},
+                       {"qed": 0.85, "nov": 0.25},
+                       {"qed": 0.5, "nov": 0.6},
+                       {"qed": 0.6, "nov": 0.55},
+                       {"qed": 0.45, "nov": 0.5},
+                       {"qed": 0.8, "nov": 0.1}],
+        )
+
+    # -- crowding_distance contract ------------------------------------- #
+
+    def test_crowding_boundaries_inf_interior_normalized_sum(self) -> None:
+        front = pareto_front(self._five_member_result())
+        # M1 best qed / worst nov, M2 worst qed / best nov -> both inf;
+        # interiors: M3 1.1, M4 0.9, M5 1.2 (sum over both objectives)
+        assert front.crowding_distance() == pytest.approx(
+            (math.inf, math.inf, 1.1, 0.9, 1.2)
+        )
+
+    def test_crowding_two_member_front_both_boundary(self) -> None:
+        result = GenerationResult(
+            smiles=["P", "Q"], scores=[0.9, 0.5],
+            breakdown=[{"a": 0.9, "b": 0.1}, {"a": 0.1, "b": 0.9}],
+        )
+        front = pareto_front(result)
+        assert front.crowding_distance() == (math.inf, math.inf)
+
+    def test_crowding_degenerate_objective_contributes_zero(self) -> None:
+        # 'b' carries no spread (all 0.5) -> domination runs on 'a' alone;
+        # the lone front member has nothing to measure -> 0.0, not inf
+        result = GenerationResult(
+            smiles=["P", "Q", "R"], scores=[0.9, 0.5, 0.1],
+            breakdown=[{"a": 0.9, "b": 0.5},
+                       {"a": 0.4, "b": 0.5},
+                       {"a": 0.6, "b": 0.5}],
+        )
+        front = pareto_front(result)
+        assert front.smiles == ("P",)  # P dominates Q and R on 'a' alone
+        assert front.crowding_distance() == (0.0,)
+
+    def test_crowding_identical_members_score_zero(self) -> None:
+        result = GenerationResult(
+            smiles=["P", "Q"], scores=[0.5, 0.5],
+            breakdown=[{"a": 0.5, "b": 0.5}, {"a": 0.5, "b": 0.5}],
+        )
+        front = pareto_front(result)
+        # equal values: dominance needs a strict edge -> both on the front,
+        # no spread on either objective -> nothing to measure
+        assert front.crowding_distance() == (0.0, 0.0)
+
+    def test_crowding_empty_front_returns_empty_tuple(self) -> None:
+        empty = ParetoFront(
+            objectives=("a", "b"), smiles=(), values=(), dominates=(),
+            n_total=0, n_excluded=0,
+        )
+        assert empty.crowding_distance() == ()
+        assert empty.prune(3) is empty  # nothing to drop, identity
+
+    def test_crowding_is_pure_and_deterministic(self) -> None:
+        front = pareto_front(self._five_member_result())
+        assert front.crowding_distance() == front.crowding_distance()
+
+    # -- prune contract -------------------------------------------------- #
+
+    def test_prune_keeps_corners_plus_most_isolated_interior(self) -> None:
+        front = pareto_front(self._five_member_result())
+        pruned = front.prune(3)
+        # ranked: M1/M2 (inf, rank tie-break), then M5 (1.2) > M3 (1.1) >
+        # M4 (0.9); leaderboard order re-emitted
+        assert pruned.smiles == ("M1", "M2", "M5")
+
+    def test_prune_carries_the_audit_fields(self) -> None:
+        front = pareto_front(self._five_member_result())
+        pruned = front.prune(2)
+        assert pruned.n_front == 5            # the un-pruned size
+        assert pruned.n_total == front.n_total
+        assert pruned.n_excluded == front.n_excluded
+        assert pruned.objectives == front.objectives
+        # pairwise dominance cannot change with membership: the ORIGINAL
+        # counts survive the cut (M1/M3 dominate M7, M4/M5 dominate M6)
+        assert front.dominates == (1, 0, 1, 1, 1)
+        assert pruned.dominates == (1, 0)
+
+    def test_prune_str_is_honest_about_the_cut(self) -> None:
+        front = pareto_front(self._five_member_result())
+        text = str(front.prune(2))
+        # the ORIGINAL front size leads (5 of 7 non-dominated); the prune
+        # suffix carries the cut (2 of 5 kept)
+        assert "5 of 7 molecules non-dominated" in text
+        assert "pruned to the 2 most isolated of 5 by crowding distance" in text
+        assert "strongest member 'M1' dominates 1 others" in text
+
+    def test_prune_keep_at_least_size_returns_self(self) -> None:
+        front = pareto_front(self._five_member_result())
+        assert front.prune(5) is front       # exactly the size: no-op
+        assert front.prune(99) is front      # beyond: no-op
+        assert front.prune(5).n_front is None  # never claims pruning
+
+    def test_prune_keep_below_one_rejected(self) -> None:
+        front = pareto_front(self._five_member_result())
+        with pytest.raises(DataValidationError, match="keep must be at least 1"):
+            front.prune(0)
+        with pytest.raises(DataValidationError, match="keep must be at least 1"):
+            front.prune(-3)
+
+    def test_prune_selection_is_monotonic_in_keep(self) -> None:
+        # the ranked list is deterministic, so bigger keep extends the
+        # selection -- never reshuffles it
+        front = pareto_front(self._five_member_result())
+        for smaller, larger in [(1, 2), (2, 3), (3, 4), (4, 5)]:
+            small = set(front.prune(smaller).smiles)
+            large = set(front.prune(larger).smiles)
+            assert small <= large
+
+    def test_pruned_front_to_dataframe_keeps_conventions(self) -> None:
+        front = pareto_front(self._five_member_result())
+        frame = front.prune(3).to_dataframe()
+        assert frame["smiles"].tolist() == ["M1", "M2", "M5"]
+        assert frame["rank"].tolist() == [1, 2, 3]  # ranks re-dense
+        # crowding is a property of the SET: the pruned front re-measures
+        # isolation among its own members -- M5, interior between the two
+        # corners on both objectives, now scores (0.9-0.4)/0.5 +
+        # (0.9-0.2)/0.7 = 2.0 (it was 1.2 inside the five-member crowd)
+        assert frame["crowding"].tolist() == [math.inf, math.inf, pytest.approx(2.0)]
+
+    # -- integration with the pinned real GA run ------------------------- #
+
+    def test_ga_run_prune_corners_and_monotonicity(self) -> None:
+        objective = MultiObjective(
+            [QedObjective(), NoveltyObjective(), LogPBandObjective(1.0, 3.0)])
+        result = GeneticOptimizer(
+            objective, population_size=24, generations=8, seed=11,
+        ).optimize()
+        front = pareto_front(result)
+        assert (front.n_total, len(front)) == (159, 23)  # the pinned probe
+        pruned = front.prune(5)
+        # the selection is a subset of genuine front members
+        assert set(pruned.smiles) <= set(front.smiles)
+        assert len(pruned) == 5 and pruned.n_front == 23
+        # monotonicity on a real front: prune(10) extends prune(5)
+        assert set(pruned.smiles) <= set(front.prune(10).smiles)
+        # every inf member of the original front survives a keep >= #inf
+        distances = front.crowding_distance()
+        inf_members = {
+            front.smiles[i] for i, d in enumerate(distances) if math.isinf(d)
+        }
+        assert inf_members <= set(pruned.smiles)
+        # determinism: a second prune reproduces the selection
+        again = pareto_front(GeneticOptimizer(
+            objective, population_size=24, generations=8, seed=11,
+        ).optimize())
+        assert again.prune(5).smiles == pruned.smiles

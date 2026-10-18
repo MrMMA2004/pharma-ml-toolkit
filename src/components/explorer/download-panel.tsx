@@ -77,7 +77,7 @@ const INSTALL_STEPS: InstallStep[] = [
   },
   {
     title: "Verify the install",
-    description: "1745 tests should pass and the CLI answers with its version.",
+    description: "1762 tests should pass and the CLI answers with its version.",
     commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
   },
 ];
@@ -252,6 +252,22 @@ const FEATURED_FILES: Array<{
     badgeClass: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
   },
   {
+    path: "examples/complete_generative_workflow.ipynb",
+    title: "Complete molecule generation workflow (zero → one hundred)",
+    description:
+      "Executed Jupyter notebook — the generative chemistry tour: corpus → objective library → multi-objective blend → GA de novo + Pareto front → seeded generation → lead optimisation → scaffold hopping (ring / linker / fused-ring / topology cuts) → adaptive operators → RL with a prior SMILES policy → novelty → GA-vs-RL head-to-head. 6 figures committed inline.",
+    icon: NotebookText,
+    badgeClass: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  },
+  {
+    path: "examples/complete_cellline_workflow.ipynb",
+    title: "Complete cell line analysis workflow (zero → one hundred)",
+    description:
+      "Executed Jupyter notebook — the biology path: a GDSC-style response screen import → QC audit → LN_IC50→pIC50 normalization → the cell × compound potency matrix → sensitive-vs-resistant quantile calls → omics feature selection → biomarker discovery → the response model, with dnn and dnn_residual joining the leaderboard. 3 figures committed inline.",
+    icon: NotebookText,
+    badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  },
+  {
     path: "examples/complete_ml_workflow_no_output.ipynb",
     title: "No-output notebook twins (lightweight)",
     description:
@@ -282,7 +298,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "1745 pytest cases across all domains",
+    tests: "1762 pytest cases across all domains",
     examples: "seven executed notebooks + six no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -485,7 +501,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="1745" label="passing tests" />
+          <StatChip icon={CircleCheck} value="1762" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}

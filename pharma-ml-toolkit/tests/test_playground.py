@@ -1784,9 +1784,14 @@ class TestGenerativeParetoCard:
         assert len(rows) == 7
         columns = list(app._pareto_tree["columns"])
         assert columns == ["rank", "smiles", "qed", "mw_band", "tpsa_band",
-                           "dominates"]
+                           "dominates", "crowding"]
         first = app._pareto_tree.item(rows[0], "values")
         assert first[0] == "1"  # leaderboard rank 1 is always on the front
+        # rank 1 leads the BLEND, not necessarily an objective extreme --
+        # the +inf crowding seats belong to the trade-off corners instead
+        # (this pinned run: 5 of 7 members are boundary corners)
+        all_values = [app._pareto_tree.item(row, "values") for row in rows]
+        assert sum("inf" in values for values in all_values) == 5
         assert app._pareto_x_combo["values"] == ("qed", "mw_band", "tpsa_band")
         assert app._pareto_y_combo["values"] == ("qed", "mw_band", "tpsa_band")
         assert app._pareto_x_combo.get() == "qed"
@@ -1837,9 +1842,10 @@ class TestGenerativeParetoCard:
         app._save_pareto_front()
         assert target.is_file()
         lines = target.read_text(encoding="utf-8").strip().splitlines()
-        assert lines[0] == "rank,smiles,qed,mw_band,tpsa_band,dominates"
+        assert lines[0] == "rank,smiles,qed,mw_band,tpsa_band,dominates,crowding"
         assert len(lines) == 8  # header + the 7 pinned front members
         assert any("dominates" not in line for line in lines[1:])  # real rows
+        assert any("inf" in line for line in lines[1:])  # corner members
         # the info dialog reports the written path, nothing errored
         assert any(call[1][0] == "Saved" for call in quiet_dialogs)
 

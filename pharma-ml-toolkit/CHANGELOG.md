@@ -10,6 +10,48 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.18] — 2026-10-19
+
+### Added — Pareto pruning, NSGA-II crowding distance (100x-67)
+
+- **`ParetoFront.crowding_distance()`** (from
+  `pharmaml.generative`) — the NSGA-II crowding distance for every
+  front member: per objective, members are sorted by value, the two
+  boundary positions mark their members +inf (the trade-off corners
+  NSGA-II always preserves), and interiors accumulate the normalised
+  neighbour gap. A no-spread objective (max == min) contributes 0 to
+  everyone — crowding measures *spread*, and a lone member or a fully
+  degenerate front returns 0.0s. Deterministic (value, index) sorts;
+  a pure function of the front.
+- **`ParetoFront.prune(keep)`** — the `keep` most isolated members,
+  ranked by crowding distance (corners first, ties broken by
+  leaderboard rank) and re-emitted in leaderboard order. The
+  selection is monotonic in `keep` (a bigger keep extends, never
+  reshuffles); `keep >= len(front)` returns the front itself.
+  A pruned front carries `n_front` (the un-pruned size), keeps every
+  member's original `dominates` count (pairwise dominance cannot
+  change with membership), and its `__str__` honestly reports the
+  original non-dominated count plus the cut. Motivation (measured):
+  a real three-objective GA over a 300-molecule population for 30
+  generations leaves 46 of 8,108 molecules non-dominated — and
+  rank-truncation would drop the very corners the front exists to
+  show.
+- **`ParetoFront.to_dataframe()` gains the `crowding` column** —
+  the isolation ranking sits next to the domination counts, so the
+  reader sees who earned their seat (+inf = a corner).
+- **CLI `--pareto-keep N`** (with `--pareto`) — prunes the printed
+  front to its most isolated members; the summary reports the
+  original front size plus the cut (`pruned to the 8 most isolated
+  of 46 by crowding distance`). Actionable typed errors for a
+  missing `--pareto` and for `keep < 1`, following the `--pareto-plot`
+  convention.
+- Tests +17: `TestParetoCrowding` (14: boundary/interior/degenerate/
+  identical/empty/singleton hand-derived pins, prune corners +
+  monotonicity + audit carry-over + honest `__str__`, the pinned real
+  GA run with its 5 inf corners surviving `prune(5)`) and 3 CLI
+  tests (pruned table + honest summary, missing `--pareto`, `keep
+  < 1`). The `to_dataframe` columns pin updated for `crowding`.
+
 ## [1.2.17] — 2026-10-19
 
 ### Added — RL prior introspection (100x-66)

@@ -1188,6 +1188,51 @@ class TestGenerativeRunParetoFlag:
         assert "dominates" in out  # the front table's trade-off column
         assert "(front truncated to 3 of 7 non-dominated molecules" in out
 
+    def test_pareto_keep_prunes_to_most_isolated_with_honest_summary(
+        self, tmp_path, capsys
+    ):
+        # the same pinned seed-42 druglike run (7 of 36 non-dominated),
+        # pruned to the 3 most isolated: the summary reports the ORIGINAL
+        # front size + the cut, and the table carries the crowding column
+        # (inf = the trade-off corners that must survive)
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "druglike",
+            "--iterations", "4", "--population", "12", "--seed", "42",
+            "--top", "3", "--pareto", "--pareto-keep", "3",
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "7 of 36 molecules non-dominated" in out  # original size
+        assert "pruned to the 3 most isolated of 7 by crowding distance" in out
+        assert "crowding" in out  # the front table's isolation column
+        assert "inf" in out       # corner members survive as +inf
+        # the rank-truncation warning must NOT fire: prune already selected
+        assert "front truncated" not in out
+
+    def test_pareto_keep_without_pareto_is_an_error(self, tmp_path, capsys):
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "druglike",
+            "--iterations", "1", "--population", "8",
+            "--pareto-keep", "4",
+        ])
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "--pareto-keep prunes the front --pareto extracts" in error
+        assert "re-run with --pareto" in error
+
+    def test_pareto_keep_below_one_is_an_error(self, tmp_path, capsys):
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "druglike",
+            "--iterations", "1", "--population", "8",
+            "--pareto", "--pareto-keep", "0",
+        ])
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "--pareto-keep must be at least 1, got 0" in error
+
     def test_pareto_plot_writes_png_and_echoes_the_objective_pair(
         self, tmp_path, capsys
     ):

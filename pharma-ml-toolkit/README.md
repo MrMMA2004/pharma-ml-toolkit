@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1745 tests).
+exceptions, input validation, and pytest coverage** (1762 tests).
 
 ---
 
@@ -213,7 +213,7 @@ pharma-ml-toolkit/
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1745 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1762 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -838,6 +838,20 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   the trade-off scatter with the front highlighted, and the returned
   `ParetoFront` carries domination counts, a `to_dataframe()` table and
   a one-line audit `__str__`.
+* **Pareto pruning (NSGA-II crowding distance):** real fronts can outgrow
+  the report itself — a three-objective GA over a 300-molecule population
+  for 30 generations leaves 46 of 8,108 molecules non-dominated, and
+  rank-truncating that table would drop the very corners the front exists
+  to show. `front.crowding_distance()` ranks every member by isolation in
+  objective space (+inf for the trade-off corners, low values for the
+  crowded middle), `front.prune(8)` keeps the most isolated members with
+  the corners guaranteed to survive (the selection is monotonic in `keep`
+  and deterministic), and `to_dataframe()` carries the `crowding` column
+  so the reader sees who earned their seat. The CLI twin is
+  `--pareto-keep N` (e.g. `pharmaml generative run --recipe druglike
+  --pareto --pareto-keep 8`): the summary honestly reports the original
+  front size plus the cut — `pruned to the 8 most isolated of 46 by
+  crowding distance`.
 * **RL prior introspection** — the RL loop always *computed* the prior-drift
   diagnostics for its anchor loss; now it records them instead of discarding
   them. Every `result.history` row carries `drift` (the squared
@@ -870,8 +884,10 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   is the full structural mode; with `--adaptive-operators`, `--plot <path>`
   saves the run's operator-trajectory figure in png/svg/pdf; with
   `--pareto` (multi-objective recipes) the front is printed after the
-  leaderboard and `--pareto-plot <path>` saves its trade-off scatter —
-  e.g. `pharmaml generative run --recipe druglike --pareto --pareto-plot front.png`) and
+  leaderboard, `--pareto-plot <path>` saves its trade-off scatter, and
+  `--pareto-keep N` prunes an unwieldy front to its most isolated members
+  — e.g. `pharmaml generative run --recipe druglike --pareto
+  --pareto-keep 8 --pareto-plot front.png`) and
   `pharmaml generative corpus`.
 * Requires `pip install "pharmaml[chem]"`; the RNN/RL half additionally needs
   `pip install "pharmaml[deep]"` (PyTorch is imported lazily — the package works without it).
