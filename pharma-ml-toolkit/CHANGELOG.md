@@ -10,6 +10,31 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.21] — 2026-10-19
+
+### Added — the prune story closes in the flagship notebook (100x-70)
+
+- **The generative workflow notebook gains the crowding-distance
+  shortlist section** (§4, right after the Pareto-front cells): a
+  markdown intro (the unwieldy-front problem — the measured 46 of
+  8,108; why rank-truncation drops the corners), a code cell
+  (`front.crowding_distance()` with the corner census, `prune(8)`'s
+  honest audit, the 8-row table with the crowding column, and the
+  crowding-encoded scatter), and a markdown verdict. The teachable
+  pinned outcome: the front's strongest dominator (557 dominated
+  molecules) does **not** make the shortlist — it sits in a crowded
+  region of objective space; dominating many molecules and being an
+  isolated trade-off anchor are different virtues.
+- **§10 publish** now bundles the encoded figure (`pareto_pruned` —
+  6 → 7 figures); **§11 recap** carries the prune sentence.
+- The patch driver (scratch/patch_pareto_prune_70.py) follows the 59
+  convention: insert-after-anchor + string patches + nbclient
+  execution + twin regeneration + 24 source / 18 output pins + the
+  fabrication gate; new bindings (distances / shortlist /
+  fig_pruned) collide with nothing (AST-audited).
+- test_viz notebook pins gain `crowding_distance`, `front.prune(8)`
+  and the encoded-figure title.
+
 ## [1.2.20] — 2026-10-19
 
 ### Added — the crowding distance reaches the Pareto figure (100x-69)

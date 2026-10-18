@@ -1509,6 +1509,10 @@ class TestNotebookArtifacts:
             "save_visual_bundle",
             # §6b adaptive operators — the learning-curve figure
             "plot_operator_trajectory",
+            # §4b the crowding-distance shortlist (100x-70)
+            "crowding_distance",
+            "front.prune(8)",
+            "title=\"Crowding-encoded front\"",
         ):
             assert symbol in sources, f"generative notebook lost its {symbol} section"
 
