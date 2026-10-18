@@ -10,6 +10,58 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.11] — 2026-10-19
+
+### Added — "Copy inputs as JSON", the footer's second affordance (100x-60)
+
+- **Every content tab's footer strip gains a quiet "Copy inputs as
+  JSON" button** next to the 100x-55 reset button: one click puts the
+  tab's LIVE inputs on the clipboard as a small JSON snippet
+  (`{tab, variables, families, texts}` — the session file's own field
+  vocabulary, scoped to one tab), with the item count in the status
+  line.  A share-lite for issue reports and quick hand-offs (the full
+  File ▸ Export/Import session flow stays for whole-window state).
+  4 new tests in `tests/test_playground.py` (live-value reflection,
+  corpus-text inclusion, index-explicit isolation, field typing) plus
+  the 100x-55 census test extended to both footer buttons.
+
+## [1.2.10] — 2026-10-19
+
+### Added — the Pareto front in the executed notebook (100x-59)
+
+- **`examples/complete_generative_workflow.ipynb` gains the Pareto-front
+  section** (three cells after the §4 de novo leaderboard): the dominance
+  definition, the one-line audit + the full 26-row front table + the
+  `qed × similarity` trade-off scatter for the pinned 613-molecule run,
+  and the interpretation — rank 1 dominates 557 (as it must), the
+  **deepest front member sits at leaderboard rank 197**, and the scatter
+  title's "8 of 613" is the documented 2-objective projection of the
+  3-objective front.  The §10 visual bundle ships the figure as its 6th
+  entry (`pareto_front`) and the §11 recap bullet tells the rank-197
+  story.  Driver: `scratch/patch_pareto_notebook_59.py` (insert +
+  patch + nbclient execution + twins + 30 pins + fabrication gate);
+  the no-output twin regenerated.  With this round the Pareto axis
+  spans every surface: library (1.2.7), CLI (1.2.8), playground
+  (1.2.9), notebook (1.2.10).
+
+## [1.2.9] — 2026-10-19
+
+### Added — the Pareto front in the playground (100x-58)
+
+- **The Generative tab's new "Pareto front" card**: every multi-objective
+  run (the new objective kind **"Multi-objective (QED × MW × TPSA)"** —
+  the CLI's `druglike` recipe — plus the existing "QED + LogP blend")
+  fills the audit line, the non-dominated table (rank / smiles /
+  per-objective scores / domination counts), the deepest front member's
+  leaderboard rank, an objective-pair scatter (grey dominated dots, the
+  front highlighted and connected; the x/y pair is switchable and
+  re-plottable) and a **Save front as CSV** export.  Single-objective
+  runs get an explainer instead of an empty card.  On the pinned seed-42
+  demo (population 12, 4 generations): "7 of 36 molecules non-dominated",
+  deepest rank 20.  7 new tests in `tests/test_playground.py`
+  (deterministic run, single-objective explainer, objective-pair
+  re-plot, CSV export, no-run guards, objective-factory coverage).
+
 ## [1.2.8] — 2026-10-19
 
 ### Added — the Pareto front on the CLI (100x-57)

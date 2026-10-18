@@ -30,7 +30,10 @@ A tabbed graphical interface opens with every calculation domain of the
   parity/confusion figure, cross-validate a model leaderboard.
 * **Generative**    -- run the genetic algorithm on a SMILES corpus with
   any bundled objective (QED, LogP window, ...); adaptive runs render
-  the operator-mix learning curve (``plot_operator_trajectory``).
+  the operator-mix learning curve (``plot_operator_trajectory``), and
+  multi-objective runs fill the Pareto front card: the audit line, the
+  non-dominated table (with the deepest hidden trade-off rank), the
+  objective-pair scatter and a CSV export of the front.
 
 Design notes
 ------------
@@ -61,7 +64,10 @@ Design notes
   every content tab ALSO carries its own quiet ``Reset this tab to
   defaults`` button pinned in a non-scrolling footer strip below the
   cards (Home, which owns no inputs, carries none), so the reset is
-  always one click away without scrolling back up.
+  always one click away without scrolling back up.  Next to it sits
+  the footer's second affordance: ``Copy inputs as JSON`` puts the
+  SAME tab's live inputs on the clipboard as a small JSON snippet --
+  a share-lite for issue reports and quick hand-offs.
 * ``View ▸ Follow system / Light / Dark`` recolours the whole window
   (two named palettes drive every shade); the choice is part of the
   saved session.  Embedded figures keep the toolkit's white
@@ -393,6 +399,7 @@ _OBJECTIVE_KINDS = (
     "Molecular weight window",
     "TPSA window",
     "QED + LogP blend",
+    "Multi-objective (QED \u00d7 MW \u00d7 TPSA)",
 )
 
 #: Resolved once on first figure render: the TkAgg canvas class, or None when
@@ -724,6 +731,16 @@ def build_objective(kind: str, lo: float, hi: float) -> Any:
         return MolecularWeightBandObjective(lo, hi)
     if kind == "TPSA window":
         return TpsaBandObjective(lo, hi)
+    if kind == "Multi-objective (QED \u00d7 MW \u00d7 TPSA)":
+        # the CLI's 'druglike' recipe: equal-weight triple whose blended
+        # leaderboard hides the trade-offs the Pareto front card surfaces.
+        return MultiObjective(
+            [
+                QedObjective(),
+                MolecularWeightBandObjective(150, 450),
+                TpsaBandObjective(30, 90),
+            ]
+        )
     return MultiObjective(
         [QedObjective(), LogPBandObjective(lo, hi)], weights=[0.7, 0.3]
     )
@@ -973,6 +990,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._desc_frame: Any = None
         self._desc_rows: list[tuple[str, str, str]] = []
         self._ga_result: Any = None
+        # -- Generative Pareto card state (100x-58) ------------------ #
+        self._pareto_front: Any = None      # ParetoFront of the last run
+        self._pareto_result: Any = None     # the GenerationResult it came from
         # -- Cell Lines tab state ----------------------------------- #
         self._bio_screen: Any = None          # ResponseScreen (maybe collapsed)
         self._bio_screen_path: Path | None = None
@@ -1274,6 +1294,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             Tooltip(button, "Restore only THIS tab's inputs to their launch "
                             "defaults -- every other tab keeps its live "
                             "values (same as File \u25b8 Reset current tab).")
+            # per-tab copy button (100x-60): the same ownership map, read
+            # LIVE -- a share-lite JSON snippet of this tab's inputs on
+            # the clipboard (paste into an issue, a script, or a message).
+            copy_button = ttk.Button(page.footer, text="Copy inputs as JSON",
+                                     style="Ghost.TButton",
+                                     command=lambda idx=index:
+                                         self._copy_tab_inputs(idx))
+            copy_button.pack(side="right", padx=(0, 6), pady=(4, 5))
+            Tooltip(copy_button,
+                    "Copy THIS tab's live inputs as a JSON snippet -- the "
+                    "same fields the session file stores, for one tab. "
+                    "Paste it into an issue report or a colleague's "
+                    "import (File \u25b8 Import session takes full files).")
         return page
 
     def _action_button(self, parent: Any, text: str, command: Callable[[], None],
@@ -1686,6 +1719,53 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         label = self._book.tab(index, "text")
         self._job_label.configure(
             text=f"{label.lower()} tab reset · {applied} inputs back to defaults")
+
+    def _copy_tab_inputs(self, index: int) -> None:
+        """Copy ONE tab's live inputs as a share-lite JSON snippet.
+
+        The same ownership map the per-tab reset uses decides what
+        belongs to the tab; values are read LIVE (not the launch
+        defaults) and coerced the session's way, so the snippet is a
+        plain ``{tab, variables, families, texts}`` dict -- paste it
+        into an issue report, a script, or a message.
+        """
+        names = self._tab_input_owners.get(index, set())
+        text_widgets = {"pasted": self._feat_pasted_text,
+                        "corpus": self._corpus_text}
+        variables: dict[str, Any] = {}
+        families: dict[str, bool] = {}
+        texts: dict[str, str] = {}
+        for name in sorted(names):
+            if name.startswith("family:"):
+                family = name[len("family:"):]
+                var = self._feat_family_vars.get(family)
+                if var is not None:
+                    with contextlib.suppress(tk.TclError):
+                        families[family] = bool(var.get())
+                continue
+            if name.startswith("text:"):
+                key = name[len("text:"):]
+                widget = text_widgets.get(key)
+                if widget is not None:
+                    texts[key] = widget.get("1.0", "end-1c")
+                continue
+            widget = getattr(self, name, None)
+            if isinstance(widget, tk.Variable):
+                with contextlib.suppress(tk.TclError):
+                    variables[name] = widget.get()
+            elif isinstance(widget, ttk.Entry):
+                variables[name] = widget.get()
+        label = self._book.tab(index, "text").strip()
+        payload = {
+            "tab": label,
+            "variables": variables,
+            "families": families,
+            "texts": texts,
+        }
+        items = len(variables) + len(families) + len(texts)
+        self._copy(json.dumps(payload, indent=2, sort_keys=True))
+        self._job_label.configure(
+            text=f"{label.lower()} inputs copied as JSON · {items} items")
 
     def _walk_widgets(self, widget: Any) -> Iterator[Any]:
         """Yield ``widget`` and every descendant (the GUI-tree walk)."""
@@ -4998,6 +5078,48 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         save_btn.pack(side="left")
         self._ga_host = self._figure_host(results, height=340)
 
+        # -- Pareto front card (100x-58) ------------------------------ #
+        pareto = make_card(
+            page.grid, "Pareto front", span=2, row=2, column=0,
+            subtitle="Molecules no other candidate dominates — the trade-offs "
+                     "a blended leaderboard hides. Filled after every "
+                     "multi-objective run."
+        )
+        self._pareto_summary = ttk.Label(
+            pareto, text="no multi-objective run yet — pick 'QED + LogP blend' or "
+                         "'Multi-objective (QED × MW × TPSA)' and press Run evolution",
+            style="CardMuted.TLabel", wraplength=640, justify="left",
+        )
+        grid_append(pareto, self._pareto_summary)
+        pareto_tree_frame = ttk.Frame(pareto, style="Card.TFrame")
+        grid_append(pareto, pareto_tree_frame, sticky="nsew", weight=True)
+        self._pareto_tree = ttk.Treeview(pareto_tree_frame, show="headings", height=6)
+        pareto_bar = ttk.Scrollbar(pareto_tree_frame, orient="vertical",
+                                   command=self._pareto_tree.yview)
+        self._pareto_tree.configure(yscrollcommand=pareto_bar.set)
+        self._pareto_tree.pack(side="left", fill="both", expand=True)
+        pareto_bar.pack(side="right", fill="y")
+        pareto_buttons = ttk.Frame(pareto, style="Card.TFrame")
+        grid_append(pareto, pareto_buttons, sticky="w", pady=(6, 0))
+        ttk.Label(pareto_buttons, text="plot", style="Field.TLabel").pack(side="left")
+        self._pareto_x_combo = ttk.Combobox(pareto_buttons, state="readonly", width=14,
+                                            values=())
+        self._pareto_x_combo.pack(side="left", padx=(6, 3))
+        ttk.Label(pareto_buttons, text="×", style="CardMuted.TLabel").pack(side="left")
+        self._pareto_y_combo = ttk.Combobox(pareto_buttons, state="readonly", width=14,
+                                            values=())
+        self._pareto_y_combo.pack(side="left", padx=(3, 6))
+        plot_front_btn = self._action_button(
+            pareto_buttons, "Plot front", self._plot_pareto_front,
+            tooltip="Scatter of the two selected objectives: dominated molecules "
+                    "muted, the front highlighted and connected.",
+        )
+        plot_front_btn.pack(side="left")
+        save_front_btn = self._action_button(pareto_buttons, "Save front as CSV…",
+                                             self._save_pareto_front)
+        save_front_btn.pack(side="left", padx=(10, 0))
+        self._pareto_host = self._figure_host(pareto, height=300)
+
     def _objective_hint(self, _event: Any = None) -> None:
         kind = self._objective_combo.get()
         hints = {
@@ -5008,6 +5130,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "Molecular weight window": "Target a molecular-weight band (e.g. 250–450).",
             "TPSA window": "Target a polar-surface-area band (e.g. 40–90 Å²).",
             "QED + LogP blend": "0.7 × QED + 0.3 × the LogP window.",
+            "Multi-objective (QED \u00d7 MW \u00d7 TPSA)":
+                "Equal-weight triple (MW 150–450, TPSA 30–90); the Pareto "
+                "front card below shows the trade-offs the blend hides.",
         }
         self._objective_hint_label.configure(text=hints.get(kind, ""))
 
@@ -5106,6 +5231,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._close_embedded(self._ga_host)
                 for child in self._ga_host.winfo_children():
                     child.destroy()
+            self._render_pareto(result)
 
         label = f"evolving {generations} generations ({operator_selection})"
         self._start_job(label, work, render)
@@ -5127,6 +5253,113 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             written = write_table(self._ga_result.to_dataframe(), path)
             messagebox.showinfo("Saved", f"Leaderboard written to\n{written}")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not save", exc)
+
+    # -- the Pareto front card (100x-58) ------------------------------- #
+    def _render_pareto(self, result: Any) -> None:
+        """Fill the Pareto-front card from a finished run.
+
+        A single-objective run carries no per-objective breakdown, so the
+        card explains itself instead; a MultiObjective run gets the audit
+        line, the front table, the plottable objective pair and — when
+        matplotlib is available — the auto-drawn trade-off scatter.
+        """
+        self._pareto_front = None
+        self._pareto_result = None
+        self._pareto_tree.delete(*self._pareto_tree.get_children())
+        self._pareto_x_combo.set("")
+        self._pareto_y_combo.set("")
+        self._pareto_x_combo["values"] = ()
+        self._pareto_y_combo["values"] = ()
+        self._close_embedded(self._pareto_host)
+        for child in self._pareto_host.winfo_children():
+            child.destroy()
+        if not any(result.breakdown):
+            self._pareto_summary.configure(
+                text="this run optimises a single objective — the Pareto front "
+                     "needs a multi-objective run ('QED + LogP blend' or "
+                     "'Multi-objective (QED × MW × TPSA)')",
+                style="CardMuted.TLabel",
+            )
+            return
+        try:
+            from pharmaml.generative import pareto_front
+
+            front = pareto_front(result)
+        except Exception as exc:  # noqa: BLE001 - surfaced inline, not modal
+            self._pareto_summary.configure(
+                text=f"Pareto front unavailable: {exc}", style="CardMuted.TLabel")
+            return
+        self._pareto_front = front
+        self._pareto_result = result
+        summary = str(front)
+        deepest = max(
+            (result.smiles.index(smiles) for smiles in front.smiles), default=0,
+        ) + 1
+        if deepest > 1:
+            summary += (
+                "\ndeepest front member sits at leaderboard rank "
+                f"{deepest} of {len(result)} — a trade-off the blended ranking hides"
+            )
+        self._pareto_summary.configure(text=summary, style="Field.TLabel")
+        frame = front.to_dataframe()
+        self._pareto_tree.delete(*self._pareto_tree.get_children())
+        columns = [str(column) for column in frame.columns]
+        self._pareto_tree["columns"] = columns
+        for column in columns:
+            self._pareto_tree.heading(column, text=column)
+            width = 320 if column == "smiles" else 96
+            self._pareto_tree.column(column, width=width, stretch=(column == "smiles"))
+        for _, row in frame.head(24).iterrows():
+            self._pareto_tree.insert(
+                "", "end",
+                values=[_cell_text(value, limit=60) for value in row.tolist()],
+            )
+        self._pareto_x_combo["values"] = list(front.objectives)
+        self._pareto_y_combo["values"] = list(front.objectives)
+        self._pareto_x_combo.set(front.objectives[0])
+        self._pareto_y_combo.set(front.objectives[1])
+        if self.deps.get("matplotlib"):
+            self._plot_pareto_front()
+
+    def _plot_pareto_front(self) -> None:
+        """Draw the trade-off scatter for the selected objective pair."""
+        if self._pareto_result is None or self._pareto_front is None:
+            messagebox.showinfo("Nothing to plot",
+                                "Run a multi-objective evolution first.")
+            return
+        if not self._require("matplotlib", "the Pareto plot"):
+            return
+        x = self._pareto_x_combo.get()
+        y = self._pareto_y_combo.get()
+        try:
+            from pharmaml.viz import plot_pareto_front
+
+            figure = plot_pareto_front(self._pareto_result, x=x, y=y)
+            self._render_figure(self._pareto_host, figure)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Pareto plot failed", exc)
+
+    def _save_pareto_front(self) -> None:
+        """Write the front table of the last multi-objective run as CSV."""
+        if self._pareto_front is None:
+            messagebox.showinfo("Nothing to save",
+                                "Run a multi-objective evolution first.")
+            return
+        if not self._require_pharmaml():
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save Pareto front", defaultextension=".csv",
+            filetypes=[("CSV table", "*.csv")],
+        )
+        if not path:
+            return
+        try:
+            from pharmaml.utils.io import write_table
+
+            written = write_table(self._pareto_front.to_dataframe(), path)
+            messagebox.showinfo("Saved", f"Pareto front written to\n{written}")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save", exc)
 

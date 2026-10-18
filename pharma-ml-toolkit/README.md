@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1674 tests).
+exceptions, input validation, and pytest coverage** (1685 tests).
 
 ---
 
@@ -104,7 +104,9 @@ columns, and run AutoDock4/Vina when the binaries are on your PATH),
 **Data & ML** (open any CSV or a bundled example, train a
 registry model, read the metrics, browse a cross-validated leaderboard) and
 **Generative** (evolve molecules against QED/LogP objectives; adaptive runs
-render the operator-mix learning curve).
+render the operator-mix learning curve; multi-objective runs fill the Pareto
+front card — audit line, non-dominated table with the deepest hidden
+trade-off rank, an objective-pair scatter and a CSV export of the front).
 
 Engineering notes:
 
@@ -133,7 +135,10 @@ Engineering notes:
   active tab's inputs while every other tab keeps its live values. Every
   content tab also carries its own quiet **"Reset this tab to defaults"**
   button pinned in a non-scrolling footer strip below the cards, so the
-  reset is always one click away (Home, which owns no inputs, has none).
+  reset is always one click away (Home, which owns no inputs, has none) —
+  with a second footer affordance next to it, **"Copy inputs as JSON"**:
+  the same tab's live inputs on the clipboard as a small JSON snippet,
+  a share-lite for issue reports and quick hand-offs.
 * **Light and dark** — `View ▸ Follow system / Light / Dark` recolours the
   whole window from two named palettes; the choice travels with the session
   and embedded figures keep the published white plot background.
@@ -191,7 +196,7 @@ pharma-ml-toolkit/
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1674 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1685 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);

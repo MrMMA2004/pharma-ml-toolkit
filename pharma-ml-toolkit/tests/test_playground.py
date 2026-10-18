@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
+import json
 import shutil
 import subprocess
 import sys
@@ -1629,7 +1630,7 @@ class TestPerTabResetButtons:
         return [widget for widget in page.footer.winfo_children()
                 if widget.winfo_class() == "TButton"]
 
-    def test_every_content_tab_carries_exactly_one_reset_button(
+    def test_every_content_tab_carries_both_footer_buttons(
         self, playground: Any, xvfb_display: str, isolated_home: Path,
     ) -> None:
         app = playground.PlaygroundApp()
@@ -1641,12 +1642,14 @@ class TestPerTabResetButtons:
             assert page.footer.master is page
             assert page.footer.master is not page.body
             buttons = self._footer_buttons(app, index)
-            if index == 0:  # Home owns no inputs -> no reset affordance
+            if index == 0:  # Home owns no inputs -> no footer affordances
                 assert buttons == []
             else:
-                assert len(buttons) == 1
-                assert buttons[0].cget("text") == "Reset this tab to defaults"
-                assert buttons[0].cget("style") == "Ghost.TButton"
+                texts = [str(b.cget("text")) for b in buttons]
+                assert texts.count("Reset this tab to defaults") == 1
+                assert texts.count("Copy inputs as JSON") == 1
+                for button in buttons:
+                    assert button.cget("style") == "Ghost.TButton"
         app.destroy()
 
     def test_footer_button_resets_own_tab_not_the_selected_one(
@@ -1665,7 +1668,10 @@ class TestPerTabResetButtons:
         chemistry = next(
             index for index, names in app._tab_input_owners.items()
             if "_aff_value" in names)
-        self._footer_buttons(app, chemistry)[0].invoke()
+        reset = next(
+            b for b in self._footer_buttons(app, chemistry)
+            if str(b.cget("text")) == "Reset this tab to defaults")
+        reset.invoke()
         assert app._aff_value.get() == default_aff  # its own tab restored
         assert bool(app._tune_var.get()) is (not default_tune)  # Data & ML kept
         assert "tab reset" in str(app._job_label.cget("text"))
@@ -1702,3 +1708,237 @@ class TestPerTabResetButtons:
         assert style.lookup("Ghost.TButton", "background") != light_bg
         app._set_theme("light")
         app.destroy()
+
+
+# --------------------------------------------------------------------- #
+# the Generative tab's Pareto front card (100x-58)
+# --------------------------------------------------------------------- #
+class TestGenerativeParetoCard:
+    DRUGLIKE = "Multi-objective (QED \u00d7 MW \u00d7 TPSA)"
+
+    def test_objective_kinds_gain_the_druglike_triple(self, playground: Any) -> None:
+        assert self.DRUGLIKE in playground._OBJECTIVE_KINDS
+
+    def test_build_objective_druglike_scores_the_triple(
+        self, playground: Any
+    ) -> None:
+        # the CLI's 'druglike' recipe, rebuilt by its GUI label: the
+        # aspirin breakdown must carry exactly the three band objectives.
+        objective = playground.build_objective(self.DRUGLIKE, 1.0, 3.0)
+        _total, breakdown = objective.score_with_breakdown(
+            "CC(=O)Oc1ccccc1C(=O)O")
+        assert sorted(breakdown) == ["mw_band", "qed", "tpsa_band"]
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        # persist_session=False: the suite must not leak the mutated
+        # Generative inputs into the developer's real session file.
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def _run_druglike(self, app: Any, *, population: str = "12",
+                      generations: str = "4") -> None:
+        app._objective_combo.set(self.DRUGLIKE)
+        app._pop_size.set(population)
+        app._generations.set(generations)
+        app._run_evolution()
+        assert self._drain_jobs(app), "evolution job hung"
+
+    def test_multiobjective_run_fills_the_pareto_card(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._run_druglike(app)
+        # the pinned deterministic seed-42 run: 36 molecules, 7 on the front
+        summary = app._pareto_summary.cget("text")
+        assert "Pareto front over 3 objectives [qed, mw_band, tpsa_band]" in summary
+        assert "7 of 36 molecules non-dominated" in summary
+        assert "deepest front member sits at leaderboard rank 20" in summary
+        rows = app._pareto_tree.get_children()
+        assert len(rows) == 7
+        columns = list(app._pareto_tree["columns"])
+        assert columns == ["rank", "smiles", "qed", "mw_band", "tpsa_band",
+                           "dominates"]
+        first = app._pareto_tree.item(rows[0], "values")
+        assert first[0] == "1"  # leaderboard rank 1 is always on the front
+        assert app._pareto_x_combo["values"] == ("qed", "mw_band", "tpsa_band")
+        assert app._pareto_y_combo["values"] == ("qed", "mw_band", "tpsa_band")
+        assert app._pareto_x_combo.get() == "qed"
+        assert app._pareto_y_combo.get() == "mw_band"
+        assert app._pareto_host._pg_figure is not None  # auto-drawn scatter
+        assert quiet_dialogs == []
+
+    def test_single_objective_run_explains_itself(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._objective_combo.set("QED drug-likeness")
+        app._pop_size.set("8")
+        app._generations.set("4")
+        app._run_evolution()
+        assert self._drain_jobs(app), "evolution job hung"
+        summary = app._pareto_summary.cget("text")
+        assert "single objective" in summary
+        assert "Multi-objective" in summary
+        assert app._pareto_tree.get_children() == ()
+        assert app._pareto_front is None
+        assert getattr(app._pareto_host, "_pg_figure", None) is None
+        assert app._ga_result is not None  # the run itself succeeded
+        assert quiet_dialogs == []
+
+    def test_plot_button_follows_the_selected_objective_pair(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._run_druglike(app)
+        app._pareto_y_combo.set("tpsa_band")
+        app._plot_pareto_front()
+        figure = app._pareto_host._pg_figure
+        assert figure is not None
+        axes = figure.get_axes()[0]
+        assert axes.get_xlabel() == "qed"
+        assert axes.get_ylabel() == "tpsa_band"
+        assert quiet_dialogs == []
+
+    def test_save_front_writes_the_full_table(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any],
+        monkeypatch: Any, tmp_path: Path,
+    ) -> None:
+        self._run_druglike(app)
+        target = tmp_path / "front.csv"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename",
+            lambda **_kwargs: str(target),
+        )
+        app._save_pareto_front()
+        assert target.is_file()
+        lines = target.read_text(encoding="utf-8").strip().splitlines()
+        assert lines[0] == "rank,smiles,qed,mw_band,tpsa_band,dominates"
+        assert len(lines) == 8  # header + the 7 pinned front members
+        assert any("dominates" not in line for line in lines[1:])  # real rows
+        # the info dialog reports the written path, nothing errored
+        assert any(call[1][0] == "Saved" for call in quiet_dialogs)
+
+    def test_plot_and_save_guard_without_a_run(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._plot_pareto_front()
+        app._save_pareto_front()
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert titles.count("Nothing to plot") == 1
+        assert titles.count("Nothing to save") == 1  # both guards fired, no raise
+
+
+# --------------------------------------------------------------------- #
+# the per-tab "Copy inputs as JSON" footer affordance (100x-60)
+# --------------------------------------------------------------------- #
+class TestCopyTabInputs:
+    """The footer's second affordance: one tab's live inputs, as a
+    small JSON snippet on the clipboard (share-lite -- the same fields
+    the session file stores, scoped to one tab, read live)."""
+
+    @pytest.fixture()
+    def isolated_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        monkeypatch.setenv("HOME", str(tmp_path))
+        return tmp_path
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str, isolated_home: Path) -> Any:
+        application = playground.PlaygroundApp()
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    def _tab_index(self, app: Any, owner_name: str) -> int:
+        return next(
+            index for index, names in app._tab_input_owners.items()
+            if owner_name in names)
+
+    def _copy_tab(self, app: Any, index: int) -> dict[str, Any]:
+        app._copy_tab_inputs(index)
+        app.update()  # let the clipboard land
+        return json.loads(app.clipboard_get())
+
+    def test_copy_chemistry_inputs_reflects_live_values(
+        self, playground: Any, app: Any,
+    ) -> None:
+        chemistry = self._tab_index(app, "_aff_value")
+        app._aff_value.delete(0, "end")
+        app._aff_value.insert(0, "9.9")
+        payload = self._copy_tab(app, chemistry)
+        assert payload["tab"] == "Chemistry"
+        assert payload["variables"]["_aff_value"] == "9.9"  # LIVE, not default
+        assert payload["families"]  # the descriptor-family checkboxes
+        assert set(payload) == {"tab", "variables", "families", "texts"}
+        assert "copied as JSON" in str(app._job_label.cget("text"))
+        # the items count in the status line matches the payload size
+        items = (len(payload["variables"]) + len(payload["families"])
+                 + len(payload["texts"]))
+        assert f"{items} items" in str(app._job_label.cget("text"))
+
+    def test_copy_generative_inputs_includes_corpus_text(
+        self, playground: Any, app: Any,
+    ) -> None:
+        generative = self._tab_index(app, "text:corpus")  # the ownership key
+        app._corpus_text.delete("1.0", "end")
+        app._corpus_text.insert("1.0", "CCO\nCCC")
+        payload = self._copy_tab(app, generative)
+        assert payload["tab"] == "Generative"
+        assert payload["texts"]["corpus"] == "CCO\nCCC"
+        assert payload["variables"]["_objective_combo"] == "QED drug-likeness"
+        assert payload["variables"]["_pop_size"] == "24"
+
+    def test_copy_is_index_explicit_and_isolated(
+        self, playground: Any, app: Any,
+    ) -> None:
+        # copy CHEMISTRY while a DIFFERENT tab is selected: the payload
+        # must carry Chemistry's inputs only -- no cross-tab leakage.
+        app._book.select(6)  # Generative visible
+        chemistry = self._tab_index(app, "_aff_value")
+        payload = self._copy_tab(app, chemistry)
+        assert "_aff_value" in payload["variables"]
+        assert "_pop_size" not in payload["variables"]  # Generative's
+        assert "corpus" not in payload["texts"]          # Generative's
+        assert payload["tab"] == "Chemistry"
+
+    def test_copied_json_round_trips_through_the_session_fields(
+        self, playground: Any, app: Any,
+    ) -> None:
+        # the snippet's field vocabulary is the session file's own:
+        # variables / families / texts, JSON-clean under indent+sort_keys.
+        chemistry = self._tab_index(app, "_aff_value")
+        payload = self._copy_tab(app, chemistry)
+        for name, value in payload["variables"].items():
+            assert isinstance(name, str)
+            assert isinstance(value, (str, int, float, bool))
+        for checked in payload["families"].values():
+            assert isinstance(checked, bool)
+        for content in payload["texts"].values():
+            assert isinstance(content, str)
