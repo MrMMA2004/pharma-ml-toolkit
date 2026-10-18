@@ -1148,3 +1148,97 @@ class TestGenerativeRunPlotFlag:
         error = capsys.readouterr().err
         assert "--plot" in error and "ga only" in error
         assert not figure.exists()
+
+
+class TestGenerativeRunParetoFlag:
+    """`generative run --pareto`: the multi-objective trade-off report.
+
+    Fail-first (100x-57): the flags did not exist before this round --
+    ``--pareto`` was an argparse "unrecognized arguments" SystemExit(2),
+    and the handler printed no pareto block.  The CLI surface follows the
+    --plot convention (100x-44-A): actionable typed errors for wrong
+    recipes, the artifact path echoed back, figures never leaked.
+    """
+
+    def test_pareto_on_multi_recipe_prints_front_audit_and_table(
+        self, tmp_path, capsys
+    ):
+        # seed-42 druglike run: 7 of 36 molecules non-dominated (pinned,
+        # deterministic); the deepest-rank line is the round's story.
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "druglike",
+            "--iterations", "4", "--population", "12", "--seed", "42",
+            "--top", "3", "--pareto",
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "pareto   : Pareto front over 3 objectives" in out
+        assert "[qed, mw_band, tpsa_band]" in out
+        assert "7 of 36 molecules non-dominated" in out
+        assert "deepest front member sits at leaderboard rank" in out
+        assert "dominates" in out  # the front table's trade-off column
+        assert "(front truncated to 3 of 7 non-dominated molecules" in out
+
+    def test_pareto_plot_writes_png_and_echoes_the_objective_pair(
+        self, tmp_path, capsys
+    ):
+        figure = tmp_path / "front.png"
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "druglike",
+            "--iterations", "4", "--population", "12", "--seed", "42",
+            "--top", "3", "--pareto", "--pareto-plot", str(figure),
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert f"pareto plot: {figure}" in out
+        assert "(front over qed x mw_band" in out
+        assert figure.is_file() and figure.stat().st_size > 1_000
+        assert figure.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"  # PNG magic
+        # matplotlib figures must not leak between CLI invocations
+        import matplotlib.pyplot as plt
+
+        assert plt.get_fignums() == []
+
+    def test_pareto_on_single_objective_recipe_is_an_actionable_error(
+        self, tmp_path, capsys
+    ):
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "qed",
+            "--iterations", "1", "--population", "8", "--pareto",
+        ])
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "error:" in error
+        assert "'qed' recipe optimises a single objective" in error
+        assert "druglike, novel or similar" in error
+
+    def test_pareto_plot_without_pareto_is_an_error(self, tmp_path, capsys):
+        figure = tmp_path / "never.png"
+        code = main([
+            "generative", "run",
+            "--method", "ga", "--recipe", "druglike",
+            "--iterations", "1", "--population", "8",
+            "--pareto-plot", str(figure),
+        ])
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "--pareto-plot" in error and "re-run with --pareto" in error
+        assert not figure.exists()
+
+    def test_pareto_works_on_the_rl_method_too(self, tmp_path, capsys):
+        # RL fills the same per-objective breakdown (rl.py collects
+        # score_with_breakdown like the GA) -- --pareto is method-neutral
+        # by design, unlike the GA-only introspection flags.
+        pytest.importorskip("torch")
+        code = main([
+            "generative", "run",
+            "--method", "rl", "--recipe", "druglike",
+            "--iterations", "2", "--batch-size", "8", "--seed", "7",
+            "--top", "3", "--pareto",
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "pareto   : Pareto front over 3 objectives" in out

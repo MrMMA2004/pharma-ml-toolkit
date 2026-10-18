@@ -27,7 +27,10 @@ layer for **all** toolkit codes:
 * generative    — :func:`plot_operator_trajectory` (the adaptive GA's
                   operator mix per generation — the "GA that learns"
                   learning curve, synced with the score trajectory every
-                  run already carries in ``history``);
+                  run already carries in ``history``) and
+                  :func:`plot_pareto_front` (a MultiObjective run's
+                  trade-off scatter: dominated points muted, the
+                  non-dominated front highlighted);
 * everywhere    — :class:`HTMLReport` (self-contained report with
                   embedded figures), :func:`export_table`
                   (csv/tsv/markdown/json/html), :func:`save_visual_bundle`.
@@ -65,7 +68,10 @@ from pharmaml.viz.docking_plots import (
     plot_receptor_atom_types,
     plot_top_ligands,
 )
-from pharmaml.viz.generative_plots import plot_operator_trajectory
+from pharmaml.viz.generative_plots import (
+    plot_operator_trajectory,
+    plot_pareto_front,
+)
 from pharmaml.viz.ml_plots import (
     plot_calibration_curve,
     plot_class_distribution,
@@ -120,6 +126,7 @@ __all__ = [
     "plot_model_comparison",
     # generative figures
     "plot_operator_trajectory",
+    "plot_pareto_front",
     "plot_predicted_vs_actual",
     "plot_receptor_atom_types",
     "plot_residuals",

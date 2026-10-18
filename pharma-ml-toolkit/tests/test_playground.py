@@ -1601,3 +1601,104 @@ class TestSessionShareAndReset:
             if any(name.startswith("text:") for name in names)]
         assert 1 in text_tabs  # pasted SMILES corpus lives on Chemistry
         app.destroy()
+
+
+# --------------------------------------------------------------------- #
+# per-tab reset buttons pinned in every tab footer (100x-55)
+# --------------------------------------------------------------------- #
+class TestPerTabResetButtons:
+    """A quiet "Reset this tab to defaults" button pinned below every
+    content tab's scroll area (Home -- zero inputs -- carries none).
+
+    Fail-first (100x-55): ``ScrollFrame`` had no ``footer`` strip,
+    ``_new_page`` built no button and ``_reset_tab`` did not exist; the
+    probe (/tmp/task55/probe_reset_button.py) printed ``PROBE FAIL:
+    missing buttons on tabs [1, 2, 3, 4, 5, 6]`` against the pristine
+    source, and these tests were run red through the same file-copy
+    round-trip before the fix was restored.
+    """
+
+    @pytest.fixture()
+    def isolated_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        """Point HOME at a scratch dir so tests never touch a real session."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        return tmp_path
+
+    def _footer_buttons(self, app: Any, index: int) -> list[Any]:
+        page = app._book.nametowidget(app._book.tabs()[index])
+        return [widget for widget in page.footer.winfo_children()
+                if widget.winfo_class() == "TButton"]
+
+    def test_every_content_tab_carries_exactly_one_reset_button(
+        self, playground: Any, xvfb_display: str, isolated_home: Path,
+    ) -> None:
+        app = playground.PlaygroundApp()
+        app.update_idletasks()
+        for index in range(7):
+            page = app._book.nametowidget(app._book.tabs()[index])
+            assert hasattr(page, "footer")
+            # pinned OUTSIDE the scroll body: always visible, never scrolled
+            assert page.footer.master is page
+            assert page.footer.master is not page.body
+            buttons = self._footer_buttons(app, index)
+            if index == 0:  # Home owns no inputs -> no reset affordance
+                assert buttons == []
+            else:
+                assert len(buttons) == 1
+                assert buttons[0].cget("text") == "Reset this tab to defaults"
+                assert buttons[0].cget("style") == "Ghost.TButton"
+        app.destroy()
+
+    def test_footer_button_resets_own_tab_not_the_selected_one(
+        self, playground: Any, xvfb_display: str, isolated_home: Path,
+    ) -> None:
+        app = playground.PlaygroundApp()
+        app.update_idletasks()
+        default_aff = app._aff_value.get()
+        default_tune = bool(app._tune_var.get())
+        app._aff_value.delete(0, "end")
+        app._aff_value.insert(0, "9.9")
+        app._tune_var.set(not default_tune)
+        # PK/PD is the VISIBLE tab -- Chemistry's footer button must still
+        # reset CHEMISTRY (index-explicit wiring, not "current tab")
+        app._book.select(2)
+        chemistry = next(
+            index for index, names in app._tab_input_owners.items()
+            if "_aff_value" in names)
+        self._footer_buttons(app, chemistry)[0].invoke()
+        assert app._aff_value.get() == default_aff  # its own tab restored
+        assert bool(app._tune_var.get()) is (not default_tune)  # Data & ML kept
+        assert "tab reset" in str(app._job_label.cget("text"))
+        app.destroy()
+
+    def test_reset_tab_is_index_explicit(
+        self, playground: Any, xvfb_display: str, isolated_home: Path,
+    ) -> None:
+        app = playground.PlaygroundApp()
+        app.update_idletasks()
+        default_tune = bool(app._tune_var.get())
+        app._aff_value.delete(0, "end")
+        app._aff_value.insert(0, "5.5")
+        app._tune_var.set(not default_tune)
+        data_ml = next(
+            index for index, names in app._tab_input_owners.items()
+            if "_tune_var" in names)
+        app._book.select(1)  # Chemistry visible; Data & ML reset by INDEX
+        app._reset_tab(data_ml)
+        assert bool(app._tune_var.get()) is default_tune  # restored
+        assert app._aff_value.get() == "5.5"  # the other tab untouched
+        app.destroy()
+
+    def test_ghost_button_style_follows_the_live_theme(
+        self, playground: Any, xvfb_display: str, isolated_home: Path,
+    ) -> None:
+        app = playground.PlaygroundApp()
+        app.update_idletasks()
+        style = playground.ttk.Style(app)
+        light_bg = playground.BG
+        assert style.lookup("Ghost.TButton", "background") == light_bg
+        app._set_theme("dark")
+        assert style.lookup("Ghost.TButton", "background") == playground.BG
+        assert style.lookup("Ghost.TButton", "background") != light_bg
+        app._set_theme("light")
+        app.destroy()

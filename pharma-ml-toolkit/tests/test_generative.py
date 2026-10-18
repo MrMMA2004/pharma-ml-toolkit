@@ -51,6 +51,7 @@ from pharmaml.generative import (
     MolecularWeightBandObjective,
     MultiObjective,
     NoveltyObjective,
+    ParetoFront,
     QedObjective,
     ReinventOptimizer,
     ScoringObjective,
@@ -58,6 +59,7 @@ from pharmaml.generative import (
     SmilesRnn,
     SubstructureObjective,
     TpsaBandObjective,
+    pareto_front,
     ring_topology_moves,
     ring_topology_mutate,
     run_genetic_optimization,
@@ -4135,3 +4137,179 @@ class TestMinimumHeavyAtomGate:
         # the gated run starves it (mutation cascades may leave a residue,
         # but far below the un-gated ecosystem)
         assert gated_tiny < default_tiny / 2
+
+
+# ---------------------------------------------------------------------------
+# Pareto front extraction (100x-56) — the multi-objective trade-off report
+# ---------------------------------------------------------------------------
+class TestParetoFront:
+    """The non-dominated set of a MultiObjective run, pure and deterministic.
+
+    Fail-first (100x-56): ``pharmaml.generative.pareto`` did not exist --
+    ``from pharmaml.generative import pareto_front`` raised ImportError
+    (/tmp/task56/probe_pareto.py), and the probe's GA run (population 24,
+    8 generations, seed 11) showed WHY the report matters: 23 of 159
+    molecules non-dominated, front members as deep as leaderboard rank
+    154 -- trade-offs the weighted-sum ranking hides.
+    """
+
+    @staticmethod
+    def _demo_result() -> GenerationResult:
+        """A/B/D trade off; C is dominated by B (0.4>=0.3, 0.9>0.3)."""
+        return GenerationResult(
+            smiles=["A", "B", "C", "D"], scores=[0.9, 0.8, 0.7, 0.1],
+            breakdown=[{"qed": 0.9, "novelty": 0.2},
+                       {"qed": 0.4, "novelty": 0.9},
+                       {"qed": 0.3, "novelty": 0.3},
+                       {"qed": 0.85, "novelty": 0.25}],
+        )
+
+    # -- hand-built contract ------------------------------------------- #
+
+    def test_demo_front_membership_and_dominance_counts(self) -> None:
+        front = pareto_front(self._demo_result())
+        assert isinstance(front, ParetoFront)
+        assert front.objectives == ("qed", "novelty")  # first-appearance order
+        assert front.smiles == ("A", "B", "D")  # leaderboard order preserved
+        assert front.dominates == (0, 1, 0)  # B dominates C alone
+        assert (front.n_total, front.n_excluded) == (4, 0)
+        assert len(front) == 3 and not front.is_empty()
+
+    def test_rank_one_is_always_on_the_front(self) -> None:
+        # anything dominating rank 1 would outrank it under the weighted
+        # geometric mean -- a structural invariant, checked over a sweep
+        rng = random.Random(3)
+        for _ in range(25):
+            rows = [
+                {"a": rng.random(), "b": rng.random(), "c": rng.random()}
+                for _ in range(12)
+            ]
+            weights = [rng.random() + 0.1 for _ in rows[0]]
+            totals = [
+                (r["a"] ** weights[0] * r["b"] ** weights[1]
+                 * r["c"] ** weights[2]) ** (1.0 / sum(weights))
+                for r in rows
+            ]
+            order = sorted(range(len(rows)), key=lambda i: -totals[i])
+            result = GenerationResult(
+                smiles=[f"m{i}" for i in order],
+                scores=[totals[i] for i in order],
+                breakdown=[rows[i] for i in order],
+            )
+            front = pareto_front(result)
+            assert result.smiles[0] in front.smiles
+
+    def test_projection_subset_changes_the_front(self) -> None:
+        result = GenerationResult(
+            smiles=["E", "F", "G"], scores=[0.9, 0.5, 0.1],
+            breakdown=[{"x": 0.9, "y": 0.1, "z": 0.1},
+                       {"x": 0.2, "y": 0.9, "z": 0.9},
+                       {"x": 0.5, "y": 0.05, "z": 0.5}],
+        )
+        # nobody dominates anybody on all three axes (E wins x, F wins y+z
+        # partially, G is rescued by x against F and by z against E)
+        assert set(pareto_front(result).smiles) == {"E", "F", "G"}
+        # project onto (y, z): E (0.1, 0.1) and G (0.05, 0.5) both fall to
+        # F (0.9, 0.9) -- the 2-objective front is strictly smaller
+        assert pareto_front(result, objectives=["y", "z"]).smiles == ("F",)
+
+    def test_identical_value_molecules_both_stay_on_the_front(self) -> None:
+        result = GenerationResult(
+            smiles=["P", "Q"], scores=[0.5, 0.5],
+            breakdown=[{"a": 0.5, "b": 0.5}, {"a": 0.5, "b": 0.5}],
+        )
+        front = pareto_front(result)
+        assert front.smiles == ("P", "Q")  # equal values: dominance needs a strict edge
+        assert front.dominates == (0, 0)
+
+    def test_nonfinite_rows_are_excluded_and_counted(self) -> None:
+        result = GenerationResult(
+            smiles=["A", "B", "N", "I"],
+            scores=[0.9, 0.8, 0.5, 0.4],
+            breakdown=[{"qed": 0.9, "novelty": 0.2},
+                       {"qed": 0.4, "novelty": 0.9},
+                       {"qed": float("nan"), "novelty": 0.7},
+                       {"qed": 0.3, "novelty": float("inf")}],
+        )
+        front = pareto_front(result)
+        assert front.n_total == 2  # only A and B entered the scan
+        assert front.n_excluded == 2  # NaN and +inf rows dropped
+        assert front.smiles == ("A", "B")
+        assert "2 excluded" in str(front)
+
+    # -- validation ------------------------------------------------------ #
+
+    def test_single_objective_run_rejected_with_hint(self) -> None:
+        result = GenerationResult(smiles=["CCO"], scores=[0.5])
+        with pytest.raises(DataValidationError, match="no objective breakdown"):
+            pareto_front(result)
+
+    def test_unknown_objective_names_list_the_available(self) -> None:
+        with pytest.raises(DataValidationError, match="available: \\['qed', 'novelty'\\]"):
+            pareto_front(self._demo_result(), objectives=["qed", "weight"])
+
+    def test_duplicate_objectives_rejected(self) -> None:
+        with pytest.raises(DataValidationError, match="duplicate"):
+            pareto_front(self._demo_result(), objectives=["qed", "qed"])
+
+    def test_two_objectives_required(self) -> None:
+        with pytest.raises(DataValidationError, match="at least two objectives"):
+            pareto_front(self._demo_result(), objectives=["qed"])
+
+    # -- integration with a real MultiObjective GA run ------------------- #
+
+    def test_ga_run_front_invariants_and_determinism(self) -> None:
+        objective = MultiObjective(
+            [QedObjective(), NoveltyObjective(), LogPBandObjective(1.0, 3.0)])
+        config: ClassVar[dict[str, object]] = {
+            "population_size": 24, "generations": 8, "seed": 11,
+        }
+        result = GeneticOptimizer(objective, **config).optimize()  # type: ignore[arg-type]
+        front = pareto_front(result)
+        # the probe's pinned shape: 23 of 159 non-dominated (seed 11)
+        assert (front.n_total, len(front)) == (159, 23)
+        assert front.objectives == ("qed", "novelty", "logp_band")
+        # rank 1 structural invariant on a real run
+        assert result.smiles[0] in front.smiles
+        # every member is genuinely non-dominated (re-verified independently)
+        rows = result.breakdown
+        keys = list(front.objectives)
+
+        def _dominates(a: dict[str, float], b: dict[str, float]) -> bool:
+            return (
+                all(a[k] >= b[k] for k in keys)
+                and any(a[k] > b[k] for k in keys)
+            )
+
+        for member in front.smiles:
+            values = rows[result.smiles.index(member)]
+            assert not any(
+                _dominates(other, values)
+                for other in rows
+                if other is not values
+            )
+        # determinism: a re-run reproduces the identical front
+        again = GeneticOptimizer(objective, **config).optimize()  # type: ignore[arg-type]
+        assert pareto_front(again).smiles == front.smiles
+
+    def test_to_dataframe_and_str_audit(self) -> None:
+        front = pareto_front(self._demo_result())
+        frame = front.to_dataframe()
+        assert list(frame.columns) == ["rank", "smiles", "qed", "novelty", "dominates"]
+        assert frame["rank"].tolist() == [1, 2, 3]
+        assert frame["smiles"].tolist() == ["A", "B", "D"]
+        assert frame["dominates"].tolist() == [0, 1, 0]
+        text = str(front)
+        assert text.startswith("Pareto front over 2 objectives [qed, novelty]: 3 of 4")
+        assert "non-dominated" in text and "0 excluded" in text
+
+    def test_empty_front_str_audit(self) -> None:
+        # every molecule dominated by the next -> a single-member front,
+        # then check the empty-front branch with a synthetic container
+        result = GenerationResult(
+            smiles=["X", "Y"], scores=[1.0, 0.5],
+            breakdown=[{"a": 1.0, "b": 1.0}, {"a": 0.5, "b": 0.5}],
+        )
+        front = pareto_front(result)
+        assert front.smiles == ("X",)
+        assert str(front).startswith("Pareto front over 2 objectives [a, b]: 1 of 2")

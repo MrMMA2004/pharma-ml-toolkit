@@ -117,6 +117,7 @@ after adding new public functions.
 | `MolecularWeightBandObjective` | class | Gaussian band on average molecular weight (Da).  See |
 | `MultiObjective` | class | Weighted geometric mean of several objectives, with veto semantics. |
 | `NoveltyObjective` | class | Structural novelty against a reference corpus. |
+| `ParetoFront` | class | The non-dominated set of one generation run (audit-ready). |
 | `QedObjective` | class | RDKit QED (quantitative estimate of drug-likeness). |
 | `ReinventOptimizer` | class | Policy-gradient fine-tuning of a SMILES RNN prior. |
 | `ScoringObjective` | class | Base class for generation objectives: ``score(smiles) -> [0, 1]``. |
@@ -124,6 +125,7 @@ after adding new public functions.
 | `SmilesRnn` | class | Character-level GRU SMILES generator (CPU-only, torch optional). |
 | `SubstructureObjective` | class | Hard pharmacophore constraint: 1.0 when ``smarts`` matches. |
 | `TpsaBandObjective` | class | Gaussian band on topological polar surface area (Å²).  See |
+| `pareto_front` | function | Extract the non-dominated molecules (Pareto front) of a run. |
 | `ring_topology_moves` | function | Every distinct one-step ring-size mutant of ``smiles`` (sorted). |
 | `ring_topology_mutate` | function | Draw one ring-size mutant of ``smiles`` with ``rng`` (or ``None``). |
 | `run_genetic_optimization` | function | One-call genetic optimisation (thin :class:`GeneticOptimizer` wrapper). |
@@ -271,6 +273,7 @@ after adding new public functions.
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
+| `plot_pareto_front` | function | One scatter per MultiObjective run: dominated points muted, front lit. |
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
 | `plot_receptor_atom_types` | function | Bar chart of the AutoDock atom-type census of a receptor. |
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |

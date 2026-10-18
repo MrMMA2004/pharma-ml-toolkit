@@ -29,6 +29,7 @@ scans::
     pharmaml generative run --method ga --recipe novel --scaffold --seed 42
     pharmaml generative run --method ga --recipe qed --scaffold-hop --seed 42
     pharmaml generative run --method ga --adaptive-operators --plot operators.png
+    pharmaml generative run --recipe druglike --pareto --pareto-plot front.png
     pharmaml generative corpus
     pharmaml models list
 
@@ -674,6 +675,20 @@ def _build_parser() -> argparse.ArgumentParser:
         "figure (the run's score curve plus the per-generation operator mix "
         "learning its way, plot_operator_trajectory) to this path "
         "(png/svg/pdf)",
+    )
+    gen_run.add_argument(
+        "--pareto", action="store_true", default=False,
+        help="multi-objective recipes only (druglike/novel/similar): after "
+        "the leaderboard, extract and print the Pareto front -- the "
+        "non-dominated molecules (improving one objective necessarily "
+        "sacrifices another; front members can sit arbitrarily deep in "
+        "the leaderboard -- the trade-offs the blended ranking hides)",
+    )
+    gen_run.add_argument(
+        "--pareto-plot", default=None, metavar="PATH",
+        help="with --pareto: save the trade-off scatter (dominated molecules "
+        "muted, the non-dominated front highlighted over the recipe's "
+        "first two objectives, plot_pareto_front) to this path (png/svg/pdf)",
     )
 
     gen_corpus = generative_sub.add_parser(
@@ -1606,7 +1621,10 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
 
     With ``--method ga --adaptive-operators --plot PATH`` the run's
     operator-trajectory figure (score curve + per-generation operator mix)
-    is saved alongside the leaderboard.
+    is saved alongside the leaderboard; with ``--pareto`` (multi-objective
+    recipes) the Pareto front -- the non-dominated trade-off molecules --
+    is extracted and printed after it, and ``--pareto-plot PATH`` saves
+    the trade-off scatter.
     """
     from pharmaml.exceptions import DataValidationError
     from pharmaml.generative import DEFAULT_CORPUS, GeneticOptimizer, ReinventOptimizer
@@ -1655,6 +1673,20 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             "--plot draws the operator trajectory an adaptive run collects "
             "-- re-run with --adaptive-operators (a uniform run's operator "
             "mix is fixed, so it has no trajectory to draw)"
+        )
+    pareto = bool(getattr(args, "pareto", False))
+    pareto_plot_path = getattr(args, "pareto_plot", None)
+    if pareto_plot_path and not pareto:
+        raise DataValidationError(
+            "--pareto-plot saves the trade-off scatter --pareto extracts; "
+            "re-run with --pareto"
+        )
+    if pareto and args.recipe in ("qed", "logp"):
+        raise DataValidationError(
+            f"the {args.recipe!r} recipe optimises a single objective -- a "
+            "Pareto front needs a multi-objective recipe (druglike, novel "
+            "or similar), where the leaderboard's blended ranking hides "
+            "the trade-offs"
         )
 
     seeds = _generative_seed_smiles(args)
@@ -1726,6 +1758,43 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
     if args.out:
         written = write_table(leaderboard, args.out)
         print(f"\nleaderboard ({len(leaderboard)} molecules) -> {written}")
+    if pareto and not result.is_empty():
+        from pharmaml.generative import pareto_front
+
+        front = pareto_front(result)
+        print()
+        print(f"pareto   : {front}")
+        deepest = max(
+            (result.smiles.index(smiles) for smiles in front.smiles),
+            default=0,
+        ) + 1
+        if deepest > 1:
+            print(
+                f"           deepest front member sits at leaderboard rank "
+                f"{deepest} of {len(result)} -- a trade-off the blended "
+                "ranking hides"
+            )
+        front_rows = max(args.top, 0)
+        shown_front = front.to_dataframe().head(front_rows)
+        print()
+        print(shown_front.to_string(index=False))
+        if len(front) > front_rows:
+            print(
+                f"\n(front truncated to {front_rows} of {len(front)} "
+                "non-dominated molecules; raise --top or use --out for more)"
+            )
+        if pareto_plot_path:
+            from pharmaml.viz import close_figure, save_figure
+            from pharmaml.viz.generative_plots import plot_pareto_front
+
+            x, y = front.objectives[0], front.objectives[1]
+            figure = plot_pareto_front(result, x=x, y=y)
+            written_figure = save_figure(figure, pareto_plot_path)
+            close_figure(figure)
+            print(
+                f"\npareto plot: {written_figure} (front over {x} x {y}, "
+                "dominated molecules muted)"
+            )
     return 0
 
 

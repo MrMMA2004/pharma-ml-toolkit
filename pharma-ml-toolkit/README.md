@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1653 tests).
+exceptions, input validation, and pytest coverage** (1674 tests).
 
 ---
 
@@ -130,7 +130,10 @@ Engineering notes:
   to any path (mail it to a colleague), `File ▸ Import session` applies
   such a file onto the live window (theme included), and
   `File ▸ Reset current tab to defaults` (Ctrl+Shift+R) restores just the
-  active tab's inputs while every other tab keeps its live values.
+  active tab's inputs while every other tab keeps its live values. Every
+  content tab also carries its own quiet **"Reset this tab to defaults"**
+  button pinned in a non-scrolling footer strip below the cards, so the
+  reset is always one click away (Home, which owns no inputs, has none).
 * **Light and dark** — `View ▸ Follow system / Light / Dark` recolours the
   whole window from two named palettes; the choice travels with the session
   and embedded figures keep the published white plot background.
@@ -188,7 +191,7 @@ pharma-ml-toolkit/
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1653 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1674 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -774,6 +777,17 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   adaptive level, drawing `result.metadata["operator_trajectory"]` — one
   full-precision record per generation (record 0 is the exactly-fair
   prior, the final record the closing mix).
+* **Multi-objective trade-offs (Pareto front):** a `MultiObjective` run
+  ranks by one blended number, which hides the trade-offs —
+  `pareto_front(result)` (from `pharmaml.generative`) re-reads the run's
+  per-objective breakdown and extracts the non-dominated set: the
+  molecules where improving one objective necessarily sacrifices
+  another. Front members can sit arbitrarily deep in the leaderboard
+  (a real run below: 23 of 159 molecules non-dominated, the deepest at
+  rank 154); `plot_pareto_front(result, x="qed", y="novelty")` renders
+  the trade-off scatter with the front highlighted, and the returned
+  `ParetoFront` carries domination counts, a `to_dataframe()` table and
+  a one-line audit `__str__`.
 * **Method trade-offs, honestly:** the GA explores wider (hundreds of unique molecules
   per run, no extra dependency, seeded *and* de novo modes) while RL fine-tunes a learned
   prior and needs fewer evaluations to focus on high-scoring neighbourhoods — but costs a
@@ -785,7 +799,10 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   ring-size mutation mode — e.g.
   `pharmaml generative run --method ga --recipe novel --scaffold --scaffold-hop --seed 42`
   is the full structural mode; with `--adaptive-operators`, `--plot <path>`
-  saves the run's operator-trajectory figure in png/svg/pdf) and
+  saves the run's operator-trajectory figure in png/svg/pdf; with
+  `--pareto` (multi-objective recipes) the front is printed after the
+  leaderboard and `--pareto-plot <path>` saves its trade-off scatter —
+  e.g. `pharmaml generative run --recipe druglike --pareto --pareto-plot front.png`) and
   `pharmaml generative corpus`.
 * Requires `pip install "pharmaml[chem]"`; the RNN/RL half additionally needs
   `pip install "pharmaml[deep]"` (PyTorch is imported lazily — the package works without it).
@@ -983,7 +1000,10 @@ feature-importance figures (parity + residual diagnostics for regression)
 — into `<out>/report/`, no Python required. `ml compare --plot` saves the
 leaderboard bar chart and `--out` exports the table in any of
 csv/tsv/md/json/html; `generative run --adaptive-operators --plot <path>`
-saves the adaptive GA's operator-trajectory figure. All plotting flags
+saves the adaptive GA's operator-trajectory figure, and
+`generative run --recipe druglike|novel|similar --pareto` prints the
+multi-objective Pareto front after the leaderboard (with
+`--pareto-plot <path>` saving the trade-off scatter). All plotting flags
 require the `reports` extra (`pip install 'pharmaml[reports]'`).
 
 ---

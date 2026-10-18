@@ -47,7 +47,13 @@ runs in seconds on a laptop CPU:
 4. **Inspect** -- every run returns a
    :class:`~pharmaml.generative.GenerationResult` (ranked deduplicated
    canonical SMILES, per-objective breakdown, per-iteration history,
-   metadata) with ``to_dataframe()`` for the leaderboard.
+   metadata) with ``to_dataframe()`` for the leaderboard; a
+   :class:`~pharmaml.generative.MultiObjective` run additionally answers
+   *what are the trade-offs?* -- :func:`~pharmaml.generative.pareto_front`
+   extracts the non-dominated set from the breakdown (the molecules where
+   improving one objective necessarily sacrifices another; front members
+   can sit arbitrarily deep in the leaderboard), rendered by
+   :func:`pharmaml.viz.plot_pareto_front`.
 
 Example
 -------
@@ -76,6 +82,7 @@ from __future__ import annotations
 
 from .corpus import DEFAULT_CORPUS
 from .genetic import GeneticOptimizer, run_genetic_optimization
+from .pareto import ParetoFront, pareto_front
 from .result import GenerationResult
 from .rl import ReinventOptimizer, run_rl_optimization
 from .rnn import SmilesRnn
@@ -101,6 +108,7 @@ __all__ = [
     "MolecularWeightBandObjective",
     "MultiObjective",
     "NoveltyObjective",
+    "ParetoFront",
     "QedObjective",
     "ReinventOptimizer",
     "ScoringObjective",
@@ -108,6 +116,7 @@ __all__ = [
     "SmilesRnn",
     "SubstructureObjective",
     "TpsaBandObjective",
+    "pareto_front",
     "ring_topology_moves",
     "ring_topology_mutate",
     "run_genetic_optimization",

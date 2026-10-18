@@ -10,6 +10,66 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.8] — 2026-10-19
+
+### Added — the Pareto front on the CLI (100x-57)
+
+- **`pharmaml generative run --pareto`** (multi-objective recipes
+  `druglike` / `novel` / `similar`, GA or RL — both fill the per-objective
+  breakdown) prints the front after the leaderboard: the one-line audit,
+  the deepest front member's leaderboard rank ("a trade-off the blended
+  ranking hides" — on the seed-42 druglike demo the deepest sits at rank
+  149 of 159), the front table (per-objective scores + domination counts,
+  truncated at `--top` with an explicit note), and
+  **`--pareto-plot PATH`** saves the trade-off scatter over the recipe's
+  first two objectives.  Actionable typed errors follow the `--plot`
+  convention: single-objective recipes (`qed` / `logp`) are rejected with
+  the multi-objective recipe list, `--pareto-plot` without `--pareto` is
+  rejected with the fix.  The epilog fence and README gained the example
+  `pharmaml generative run --recipe druglike --pareto --pareto-plot front.png`.
+
+## [1.2.7] — 2026-10-19
+
+### Added — multi-objective Pareto front report (100x-56)
+
+- **`pharmaml.generative.pareto_front(result)`** re-reads a
+  `MultiObjective` run's per-objective breakdown and extracts the
+  **non-dominated set** — the molecules where improving one objective
+  necessarily sacrifices another.  The weighted-geometric-mean leaderboard
+  hides these trade-offs: on the demo run (QED × novelty × LogP band,
+  population 24, 8 generations, seed 11) 23 of 159 molecules are
+  Pareto-optimal and the deepest sits at leaderboard rank 154.  The
+  returned `ParetoFront` carries the front in leaderboard order,
+  per-member domination counts, the examined/excluded tallies (NaN / ±inf
+  rows are excluded — dominance is undefined for them),
+  `to_dataframe()` and a one-line audit `__str__`.  A `objectives=`
+  keyword projects the front onto a subset of the objectives (the
+  2-objective front is never larger than the 3-objective one).
+- **`pharmaml.viz.plot_pareto_front(result, x=..., y=...)`** renders the
+  trade-off scatter: dominated molecules as muted dots, the 2-objective
+  front over the plotted pair as a connected accent line, front size in
+  the title.  Re-exported from `pharmaml.viz` (INDEX regenerated).
+- 12 new tests (`TestParetoFront`): hand-built dominance contracts, the
+  rank-1-is-always-on-the-front invariant over a 25-case random sweep,
+  projection semantics, NaN/±inf exclusion, validation errors, a pinned
+  real-GA run (23/159, deterministic twin), dataframe/audit contracts.
+
+## [1.2.6] — 2026-10-19
+
+### Added — per-tab reset buttons pinned in every tab footer (100x-55)
+
+- Every content tab (Chemistry, PK/PD, Cell Lines, Docking, Data & ML,
+  Generative) now carries its own quiet **"Reset this tab to defaults"**
+  button in a NEW non-scrolling footer strip below the scrollable cards
+  (`ScrollFrame.footer`), so the reset is always one click away without
+  scrolling back up — Home, which owns no inputs, deliberately carries
+  none.  The button is wired index-explicitly through the new
+  `_reset_tab(index)` method (the `File ▸ Reset current tab to defaults`
+  menu command and Ctrl+Shift+R now delegate to it too), so a tab can be
+  reset even while another one is visible.  The quiet "Ghost.TButton"
+  style is flat on the page background, muted until hovered, and follows
+  the live theme like every other widget.
+
 ## [1.2.5] — 2026-10-19
 
 ### Added — shareable playground sessions + per-tab reset (100x-54)

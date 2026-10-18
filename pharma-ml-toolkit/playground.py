@@ -57,7 +57,11 @@ Design notes
   Import session`` applies such a file onto the live window --
   including the theme.  ``File ▸ Reset current tab to defaults``
   (Ctrl+Shift+R) restores just the active tab's inputs to their
-  freshly-launched values, leaving every other tab untouched.
+  freshly-launched values, leaving every other tab untouched -- and
+  every content tab ALSO carries its own quiet ``Reset this tab to
+  defaults`` button pinned in a non-scrolling footer strip below the
+  cards (Home, which owns no inputs, carries none), so the reset is
+  always one click away without scrolling back up.
 * ``View ▸ Follow system / Light / Dark`` recolours the whole window
   (two named palettes drive every shade); the choice is part of the
   saved session.  Embedded figures keep the toolkit's white
@@ -791,11 +795,16 @@ class ScrollFrame(ttk.Frame):  # type: ignore[misc] # ttk is None headless
     """A vertically scrollable tab page with mouse-wheel support.
 
     Cards live on ``self.body``; the inner frame always stays as wide as
-    the viewport so cards stretch with the window.
+    the viewport so cards stretch with the window.  ``self.footer`` is a
+    NON-scrolling strip pinned below the canvas (packed first, so the
+    scroll area shrinks around it) -- tab-level affordances that must
+    stay visible live there (the per-tab reset button, 100x-55).
     """
 
     def __init__(self, master: Any) -> None:
         super().__init__(master, style="Tab.TFrame")
+        self.footer = ttk.Frame(self, style="Tab.TFrame")
+        self.footer.pack(side="bottom", fill="x")
         self._canvas = tk.Canvas(self, background=BG, highlightthickness=0, bd=0)
         self._bar = ttk.Scrollbar(self, orient="vertical", command=self._canvas.yview)
         self.body = ttk.Frame(self._canvas, style="Tab.TFrame")
@@ -1093,6 +1102,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         style.map("TButton",
                   background=[("active", ACCENT_SOFT), ("disabled", BG)],
                   foreground=[("disabled", MUTED)])
+        # the quiet tab-footer reset button (100x-55): flat on the page
+        # background, muted until hovered -- an affordance, not an action
+        style.configure("Ghost.TButton", background=BG, foreground=MUTED,
+                        borderwidth=0, lightcolor=BG, darkcolor=BG,
+                        focusthickness=1, focuscolor=MUTED, padding=(8, 2),
+                        font=("TkDefaultFont", 9))
+        style.map("Ghost.TButton",
+                  background=[("active", BG), ("disabled", BG)],
+                  foreground=[("active", ACCENT), ("disabled", BORDER)],
+                  lightcolor=[("pressed", BG)],
+                  darkcolor=[("pressed", BG)])
         style.configure("TNotebook", background=BG, borderwidth=0,
                         tabmargins=(10, 6, 12, 0))
         style.configure("TNotebook.Tab", background=TAB, foreground=MUTED,
@@ -1233,7 +1253,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_ml_tab()
         self._build_generative_tab()
 
-    def _new_page(self, title: str) -> Any:
+    def _new_page(self, title: str, reset: bool = True) -> Any:
         page = ScrollFrame(self._book)
         grid = ttk.Frame(page.body, style="Tab.TFrame")
         grid.pack(fill="both", expand=True)
@@ -1241,6 +1261,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         grid.columnconfigure(1, weight=1, uniform="cards")
         page.grid = grid  # type: ignore[attr-defined]
         self._book.add(page, text=f"  {title}  ")
+        if reset:
+            # per-tab reset button (100x-55): the ownership map is keyed
+            # by tab index, and add() just appended this page -- its index
+            # is the last one.  Pinned in the non-scrolling footer so it
+            # stays reachable without scrolling back up.
+            index = len(self._book.tabs()) - 1
+            button = ttk.Button(page.footer, text="Reset this tab to defaults",
+                                style="Ghost.TButton",
+                                command=lambda idx=index: self._reset_tab(idx))
+            button.pack(side="right", padx=(0, 14), pady=(4, 5))
+            Tooltip(button, "Restore only THIS tab's inputs to their launch "
+                            "defaults -- every other tab keeps its live "
+                            "values (same as File \u25b8 Reset current tab).")
         return page
 
     def _action_button(self, parent: Any, text: str, command: Callable[[], None],
@@ -1594,16 +1627,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._job_label.configure(text=f"session imported · {source}")
 
     def _reset_current_tab(self) -> None:
-        """File ▸ Reset current tab to defaults (100x-54).
-
-        Only the CURRENT tab's inputs are reset -- every other tab keeps
-        its live values -- using the defaults snapshot taken right after
-        the tabs were built (before any session restore).
-        """
+        """File ▸ Reset current tab to defaults (Ctrl+Shift+R, 100x-54)."""
         try:
             index = self._book.index(self._book.select())
         except tk.TclError:  # pragma: no cover - no tab selected
             return
+        self._reset_tab(index)
+
+    def _reset_tab(self, index: int) -> None:
+        """Reset ONE tab's inputs to launch defaults (per-tab footer
+        button, 100x-55; the File-menu command delegates here).
+
+        Only the named tab's inputs are reset -- every other tab keeps
+        its live values -- using the defaults snapshot taken right after
+        the tabs were built (before any session restore).
+        """
         names = self._tab_input_owners.get(index, set())
         defaults = self._session_defaults
         text_widgets = {"pasted": self._feat_pasted_text,
@@ -1822,7 +1860,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     # Home tab
     # ------------------------------------------------------------------ #
     def _build_home_tab(self) -> None:
-        page = self._new_page("Home")
+        page = self._new_page("Home", reset=False)  # no inputs to reset
         hero = make_card(
             page.grid, "PharmaML Playground", span=2, row=0, column=0,
             subtitle="One window for the whole toolkit -- chemistry, PK/PD dosing, "
