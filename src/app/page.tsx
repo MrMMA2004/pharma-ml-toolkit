@@ -56,7 +56,7 @@ function ThemeToggle() {
   );
 }
 
-const FALLBACK_STATS = { files: 248, lines: "94,639" };
+const FALLBACK_STATS = { files: 252, lines: "97,319" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
@@ -198,7 +198,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">1711 tests</span>
+            <span className="text-primary">1737 tests</span>
           </p>
         </div>
       </footer>

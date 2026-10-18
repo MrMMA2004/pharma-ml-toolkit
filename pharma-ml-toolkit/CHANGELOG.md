@@ -10,6 +10,89 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.16] — 2026-10-19
+
+### Added / Fixed — the keyboard-shortcut hint row + a dead accelerator (100x-65)
+
+- **A quiet hint row above the status bar** lists every global
+  accelerator (Ctrl+O open · Ctrl+S save figure · Ctrl+Shift+S save
+  session · Ctrl+Shift+R reset this tab · Ctrl+Q quit), so the
+  bindings are discoverable without opening a menu.
+  ``View ▸ Shortcut hints`` (a new checkbutton) or the row's own
+  ``Hide`` button toggles it; the preference is a plain
+  ``tk.Variable`` on the app, so the generic session machinery saves
+  and restores it like any other input (``_restore_session``
+  re-applies visibility after the variables load).
+- **Bug fix: Ctrl+Shift+R did nothing.**  The File menu (and the
+  module docstring) had advertised it as the "Reset current tab to
+  defaults" accelerator since the feature landed (100x-54), but no
+  ``bind_all`` ever existed.  Bound now — and the new
+  ``TestShortcutHints`` suite pins all five advertised accelerators to
+  real bindings, so an advertised-but-unbound shortcut can never ship
+  again.
+- 5 new tests: bindings pinned, hint text == SHORTCUT_HINTS, row
+  geometry above the status bar, View-toggle/Hide-button visibility
+  flips (pack_info based, no mapping needed), and the preference
+  surviving a session round trip.
+
+## [1.2.15] — 2026-10-19
+
+### Fixed — notebook freshness: committed outputs now match the shipped tree (100x-64)
+
+- **The staleness audit**: five notebooks' committed outputs still
+  printed ``pharmaml 1.0.0`` (executed during the round-26 conversion)
+  and the generative one ``1.2.9`` (round 44), while the shipped tree
+  was 1.2.14 — the committed evidence predated the code that ships
+  with it.  All seven notebooks re-executed top-to-bottom against
+  current code (~3 min total); the substantive numbers proved stable
+  (the ML notebook's diff was version lines, tmpdir names, timings and
+  a timestamp — CV ROC-AUC 0.916 ± 0.019 identical), so the refresh
+  is an honesty fix, not a numbers change.
+- **A freshness guard keeps it that way**:
+  ``test_executed_outputs_print_shipped_version`` (parametrized over
+  all seven executed notebooks) pins the ``pharmaml <version>`` print
+  in the committed outputs to the *shipped* ``__version__`` — a
+  version bump now requires re-executing the notebooks
+  (``scratch/reexecute_all_notebooks_64.py``, the new one-command
+  driver that re-runs all seven and regenerates the no-output twins),
+  so outputs can never silently predate the tree again.
+- The cell line notebook's setup cell now prints its version like
+  every other notebook (it was the only one that didn't — the guard
+  requires it).
+- README: the FDR claims tightened to the executed precision
+  (rho=+0.978, FDR≈2.4e-13); the deterministic-examples bullet
+  documents the freshness guard + driver convention.
+- +7 tests.
+
+## [1.2.14] — 2026-10-19
+
+### Added — the deep learning workflow notebook (100x-63)
+
+- **`examples/complete_deep_learning_workflow.ipynb`** — the sixth
+  workflow notebook and the executed-notebook face of the Deep
+  Learning tab (1.2.12): 26 cells, executed with all outputs and six
+  inline figures committed (~15 s on a laptop CPU).  Where the cell
+  line notebook only meets `dnn` through the `compare_models`
+  leaderboard, this one walks the **direct estimator API** of
+  ``pharmaml.ml.neural``: data entry → split → `DeepMLPRegressor`
+  (the sklearn contract) → the per-epoch history record plotted by
+  ``plot_training_history`` (best-validation marker + the
+  early-stopping verdict) → parity/residuals → plain-vs-residual
+  architecture comparison (same split, same seed) → the registry path
+  ``train_model("dnn", ...)`` (with the wrapped-vs-direct R²
+  difference explained) → `DeepMLPClassifier` + confusion matrix →
+  history export as CSV → recap.
+- The **no-output twin**
+  (`complete_deep_learning_workflow_no_output.ipynb`) derives via
+  `scratch/strip_notebook_outputs.py`, which gained the notebook in
+  its tuple; the drift-guard in `tests/test_notebook_variants.py`
+  grew with it (`VARIANTS` + the executed-notebook fabrication guard —
+  7 notebooks × 9 banned tokens = 63 assertions, zero allowlist
+  entries).
+- Built by `scratch/build_deep_learning_notebook_63.py` (nbclient
+  under the single-threaded env; `MPLBACKEND` popped first so inline
+  PNGs survive — the 100x-43 lesson).  +14 tests.
+
 ## [1.2.13] — 2026-10-19
 
 ### Fixed — the numeric-feature pre-flight + the session round-trip pin (100x-62)

@@ -1,6 +1,6 @@
 """Guards for the notebook variants and the no-inline-fabrication contract.
 
-Two guard families live here:
+Three guard families live here:
 
 * ``TestNoOutputVariants`` — the ``*_no_output.ipynb`` twins are derived
   artifacts (scratch/strip_notebook_outputs.py): identical cell sources to
@@ -14,10 +14,17 @@ Two guard families live here:
   byte-identically by ``scratch/build_example_data.py``, whose provenance
   map names the exact notebook cell each file came from) — the parametrized
   guard below keeps it that way.
+* ``test_executed_outputs_print_shipped_version`` — the freshness guard
+  (round 100x-64): every executed notebook's setup cell prints
+  ``pharmaml <version>`` into the committed outputs; the guard pins that
+  print to the *shipped* ``__version__`` so committed outputs can never
+  silently predate the tree that ships them (the 1.0.0-era drift this
+  round cleaned up).
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import nbformat
@@ -31,6 +38,7 @@ VARIANTS = (
     "complete_pk_workflow",
     "complete_cellline_workflow",
     "complete_generative_workflow",
+    "complete_deep_learning_workflow",
 )
 
 EXECUTED_NOTEBOOKS = VARIANTS + ("pharmaml_walkthrough",)
@@ -84,6 +92,45 @@ class TestNoOutputVariants:
         )
 
 
+@pytest.mark.parametrize("name", EXECUTED_NOTEBOOKS)
+def test_executed_outputs_print_shipped_version(name: str):
+    """Committed outputs must come from the code that ships with them.
+
+    Every executed notebook prints ``pharmaml <version>`` in its setup
+    cell; the committed stream output records the version that actually
+    produced the outputs.  A mismatch means the outputs predate the
+    shipped tree (e.g. 1.0.0-era outputs shipped with 1.2.x code) — after
+    any version bump, re-run scratch/reexecute_all_notebooks_64.py and
+    regenerate the twins so the committed evidence stays honest.
+    """
+    from pharmaml import __version__
+
+    nb = _read(name)
+    printed: set[str] = set()
+    for cell in nb.cells:
+        if cell.cell_type != "code":
+            continue
+        for out in cell.get("outputs", []):
+            text = "".join(out.get("text", [])) or "".join(
+                out.get("data", {}).get("text/plain", [])
+            )
+            printed.update(
+                m.group(1)
+                for m in re.finditer(r"pharmaml (\d+\.\d+\.\d+)", text)
+            )
+    assert printed, (
+        f"{name}: no committed output prints the pharmaml version — "
+        "every executed notebook's setup cell should print it"
+    )
+    stale = printed - {__version__}
+    assert not stale, (
+        f"{name}: committed outputs print pharmaml {sorted(stale)} but "
+        f"the shipped tree is {__version__} — re-run "
+        "scratch/reexecute_all_notebooks_64.py (then the twins via "
+        "scratch/strip_notebook_outputs.py)"
+    )
+
+
 # The no-inline-fabrication contract (round 24).  Each token below is a
 # code shape that ONLY ever appeared in a real inline data-fabrication
 # cell pre-conversion (verified against the round-23 git HEAD state,
@@ -129,7 +176,7 @@ BANNED_FABRICATION_TOKENS = (
 def test_no_inline_fabrication(name: str, token: str):
     """Executed notebooks must load data from files, never fabricate it.
 
-    6 notebooks x 9 banned tokens = 54 assertions, zero allowlist entries.
+    7 notebooks x 9 banned tokens = 63 assertions, zero allowlist entries.
     The no-output twins are covered transitively: their sources are pinned
     to these originals by ``TestNoOutputVariants.test_sources_match_original``.
     """

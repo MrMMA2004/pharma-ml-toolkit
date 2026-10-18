@@ -37,6 +37,7 @@ NOTEBOOKS = (
     "complete_pk_workflow.ipynb",
     "complete_cellline_workflow.ipynb",
     "complete_generative_workflow.ipynb",
+    "complete_deep_learning_workflow.ipynb",
 )
 
 NOTE_SOURCE = """\

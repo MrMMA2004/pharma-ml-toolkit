@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1711 tests).
+exceptions, input validation, and pytest coverage** (1737 tests).
 
 ---
 
@@ -29,7 +29,11 @@ exceptions, input validation, and pytest coverage** (1711 tests).
   `examples/data/` inventory (43 files — every input table, the demo receptor and the demo
   docking campaign; see the tree below), regenerated deterministically by
   `scratch/build_example_data.py`; the example scripts keep their fixed seeds — no external
-  datasets required.
+  datasets required. A pytest freshness guard also pins every executed notebook's
+  committed outputs to the *shipped* version (the setup cell prints
+  `pharmaml <version>`), so the committed evidence can never silently predate the
+  tree that ships it — after a version bump, `scratch/reexecute_all_notebooks_64.py`
+  re-runs all seven notebooks (~3 min) and regenerates the no-output twins.
 * **Safety**: pharmaceutical functions validate every input (positive doses, ordered time series,
   bounded fractions) and raise `DataValidationError` on bad values rather than returning nonsense.
 * **Docs stay in sync with code**: `docs/INDEX.md` is auto-generated from each module's `__all__`
@@ -148,6 +152,13 @@ Engineering notes:
 * **Light and dark** — `View ▸ Follow system / Light / Dark` recolours the
   whole window from two named palettes; the choice travels with the session
   and embedded figures keep the published white plot background.
+* **Keyboard-first** — every global accelerator is bound and pinned by
+  tests: Ctrl+O open · Ctrl+S save figure · Ctrl+Shift+S save session ·
+  Ctrl+Shift+R reset this tab · Ctrl+Q quit. A quiet **shortcut hint row**
+  above the status bar lists them all (the Ctrl+Shift+R binding itself was
+  a 100x-65 bug fix: the menu had advertised it since the reset feature
+  landed, but no binding existed); `View ▸ Shortcut hints` or the row's own
+  **Hide** button toggles it, and the preference rides the session file.
 
 ---
 
@@ -202,8 +213,8 @@ pharma-ml-toolkit/
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1711 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
-├── examples/                # runnable demos + six executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · walkthrough) + five no-output twins
+├── tests/                   # 1737 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
 │                            #   regenerate deterministically via scratch/build_example_data.py
@@ -311,7 +322,7 @@ re-run; the CLI equivalent is `pharmaml pharma pk --data profile.csv`.
 (`examples/pharmaml_walkthrough.ipynb` remains the every-domain tour including
 PK, docking and chem conversions.)
 
-Each of the five workflow notebooks also ships a **no-output twin**
+Each of the six workflow notebooks also ships a **no-output twin**
 (`*_no_output.ipynb`) — identical cells with every output stripped, 4–30 % of
 the executed size (the ML twin is 46 KB vs 1.1 MB), for slow connections; run
 it top-to-bottom to produce the results yourself. A pytest drift-guard pins
@@ -331,7 +342,7 @@ and `examples/data/cellline_expression.csv`):
 > per-compound ranking → §5 sensitive/resistant calling by quantiles → §6 omics
 > features (log2 + z, MAD gene selection) → §7 **biomarker discovery**
 > (per-gene Spearman vs response, BH-FDR — the planted EGFR → erlotinib
-> association is recovered at rho=+0.978, FDR=2e-13) → §8 classical response
+> association is recovered at rho=+0.978, FDR≈2.4e-13) → §8 classical response
 > model → §9 **deep learning** (`dnn` / `dnn_residual` in the same
 > `compare_models` leaderboard — where `dnn` tops the table, see the
 > target-standardisation note under *Deep learning*) → §10 recap.
@@ -386,6 +397,34 @@ The 12-drug seed table ships as `examples/data/seed_molecules.csv` — point
 `SEEDS_CSV` at your own CSV and every cell below it runs unchanged. §1–§6 need
 RDKit (`pip install 'pharmaml[chem]'`); §7 additionally needs PyTorch
 (`pip install 'pharmaml[deep]'`).
+
+### The complete deep learning process in one notebook
+
+`examples/complete_deep_learning_workflow.ipynb` is the sixth workflow
+notebook — the executed-notebook face of the PyTorch estimators behind the
+playground's *Deep Learning* tab (100x-61), executed with all outputs and
+six inline figures committed in ~15 s on a laptop CPU. Where the cell line
+notebook only meets `dnn` through the `compare_models` leaderboard, this one
+walks the **direct estimator API** of `pharmaml.ml.neural`:
+
+> §1 data entry (the shipped `qsar_regression.csv`, audited on the way in) →
+> §2 the seed-reproducible train/test split → §3 **`DeepMLPRegressor`** (the
+> sklearn contract: fit/predict/score, minibatch Adam, per-feature
+> standardisation, early stopping on a held-out validation fraction) → §4
+> **the training story** — the per-epoch history record plotted by
+> `plot_training_history`, dashed best-validation marker, the
+> early-stopping verdict in the title → §5 evaluation (parity scatter,
+> residuals, R²/RMSE/MAE) → §6 **architecture comparison** — plain
+> `(16, 8)` vs `ResidualMLPRegressor (16, 16, 16)` under the same split,
+> same seed, same cap → §7 the **registry path**
+> (`train_model("dnn", ...)` — impute + scale wrapped; why its R² differs
+> from the direct path, explained) → §8 **`DeepMLPClassifier`** (3-level
+> activity, 91 % accuracy, confusion matrix) → §9 the history record
+> exported as CSV → §10 recap with the playground cross-reference.
+
+Point §1 at your own descriptor table and every cell below runs unchanged
+(same story as the other notebooks). PyTorch is the only extra:
+`pip install 'pharmaml[deep]'`.
 
 ### Bringing your own data (CSV / TSV / Excel)
 
@@ -824,7 +863,7 @@ A complete workflow for **cell line pharmacology** — GDSC/CCLE-style drug-resp
 screens paired with expression data — in the same "Zero to One Hundred" style as the
 other domains. A fully executed notebook walks every stage:
 `examples/complete_cellline_workflow.ipynb` (24 cell lines, 8 compounds, planted
-EGFR → erlotinib biomarker recovered with rho=+0.978, FDR=2e-13).
+EGFR → erlotinib biomarker recovered with rho=+0.978, FDR≈2.4e-13).
 
 ```python
 from pharmaml.biology import (
@@ -867,7 +906,7 @@ print(direction_of_association(top.iloc[0]["rho"], lower_is_sensitive=True))
   pIC50: higher = sensitive) and documented per function.
 * `sensitivity_associations` is the omics → biomarker step: per-gene Spearman/Pearson
   correlation against one drug's response vector, Benjamini–Hochberg FDR, sorted by
-  effect size — the notebook's planted EGFR biomarker survives FDR=2e-13.
+  effect size — the notebook's planted EGFR biomarker survives FDR≈2.4e-13.
 * CLI twins: `pharmaml biology response-audit` and `pharmaml biology top-biomarkers`.
 * The notebook closes by predicting erlotinib response from expression with
   classical ML **and the `dnn` / `dnn_residual` deep-learning models in one

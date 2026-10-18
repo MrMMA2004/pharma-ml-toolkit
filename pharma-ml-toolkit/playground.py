@@ -82,6 +82,12 @@ Design notes
   published-figure background on purpose -- plot legibility first.
 * Embedded figures reuse the toolkit's own plotting helpers, so the
   playground looks exactly like the package's published figures.
+* A quiet keyboard-shortcut hint row sits above the status bar,
+  listing every global accelerator (Ctrl+O open · Ctrl+S save figure ·
+  Ctrl+Shift+S save session · Ctrl+Shift+R reset this tab · Ctrl+Q
+  quit -- all five bound and pinned by tests).  ``View ▸ Shortcut
+  hints`` or the row's own ``Hide`` button toggles it, and the
+  preference rides the session file like any other input.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -816,6 +822,24 @@ _DL_ARCHITECTURES: tuple[str, ...] = (
 #: (the test suite pins the two together, so they cannot drift).
 _DL_ACTIVATIONS: tuple[str, ...] = ("relu", "tanh", "gelu", "sigmoid")
 
+#: The keyboard-shortcut hint row (100x-65): one quiet line above the
+#: status bar listing every global accelerator.  The five entries mirror
+#: the ``bind_all`` sequences in ``_build_menu`` (the test suite pins the
+#: set together, so a new binding without a hint -- or vice versa --
+#: fails loudly).
+SHORTCUT_HINTS: tuple[tuple[str, str], ...] = (
+    ("Ctrl+O", "open"),
+    ("Ctrl+S", "save figure"),
+    ("Ctrl+Shift+S", "save session"),
+    ("Ctrl+Shift+R", "reset this tab"),
+    ("Ctrl+Q", "quit"),
+)
+
+
+def shortcut_hints_text() -> str:
+    """Render the hint row's one-line label from :data:`SHORTCUT_HINTS`."""
+    return " \u00b7 ".join(f"{keys} {what}" for keys, what in SHORTCUT_HINTS)
+
 
 def parse_hidden_layers(raw: str) -> tuple[int, ...]:
     """Parse the hidden-layers entry (``"64, 32"``) into a width tuple.
@@ -1172,6 +1196,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_style()
         self._build_menu()
         self._build_statusbar()
+        self._build_hintbar()
         self._build_tabs()
         # Per-tab reset support (100x-54): snapshot the freshly built
         # (default) inputs and which tab owns which input BEFORE the
@@ -1353,6 +1378,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             view_menu.add_radiobutton(label=label, value=value,
                                        variable=self._theme_var,
                                        command=self._on_theme_change)
+        # Shortcut-hint row visibility (100x-65): a plain tk.Variable, so
+        # the generic session machinery persists it for free.
+        self._hints_var = tk.BooleanVar(value=True)
+        view_menu.add_checkbutton(
+            label="Shortcut hints", variable=self._hints_var,
+            command=self._apply_hint_visibility)
         bar.add_cascade(label="View", menu=view_menu)
 
         help_menu = tk.Menu(bar, tearoff=0)
@@ -1367,11 +1398,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self.bind_all("<Control-o>", lambda _e: self._menu_open_csv())
         self.bind_all("<Control-s>", lambda _e: self._menu_save_figure())
         self.bind_all("<Control-Shift-S>", lambda _e: self._save_session_now())
+        # 100x-65: the menu (and the docstring) had advertised Ctrl+Shift+R
+        # since 100x-54, but no binding ever existed -- pressing it did
+        # nothing.  Bound now, and the test suite pins all five sequences.
+        self.bind_all("<Control-Shift-R>", lambda _e: self._reset_current_tab())
         self.bind_all("<Control-q>", lambda _e: self._on_close())
 
     def _build_statusbar(self) -> None:
         bar = ttk.Frame(self, style="Status.TFrame", padding=(12, 5))
         bar.pack(side="bottom", fill="x")
+        self._status_bar = bar  # pinned so tests can order hint row vs bar
         if self.pharmaml is not None:
             left = f"pharmaml {self.pharmaml.__version__} · toolkit v{__version__}"
         else:
@@ -1382,6 +1418,50 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._job_label.pack(side="right", padx=(12, 0))
         self._progress = ttk.Progressbar(bar, mode="indeterminate", length=130)
         self._progress.pack(side="right")
+
+    def _build_hintbar(self) -> None:
+        """The keyboard-shortcut hint row (100x-65), above the status bar.
+
+        One quiet line listing every global accelerator, so the bindings
+        are discoverable without opening a menu.  ``View \u25b8 Shortcut
+        hints`` (or the row's own ``Hide`` button) toggles it; the
+        preference is a plain ``tk.Variable`` on ``self``, so the session
+        machinery saves and restores it like any other input.  Packed
+        ``side="bottom"`` AFTER the status bar claimed the bottom edge,
+        which pins it directly above the status line.
+        """
+        bar = ttk.Frame(self, style="Status.TFrame", padding=(12, 2))
+        label = ttk.Label(bar, text=shortcut_hints_text(),
+                          style="Status.TLabel")
+        label.pack(side="left")
+        Tooltip(label,
+                "The global keyboard shortcuts, also listed in the File "
+                "menu.  View \u25b8 Shortcut hints re-enables this row "
+                "after hiding it (the preference is saved with the "
+                "session).")
+        hide = ttk.Button(bar, text="Hide", style="Ghost.TButton",
+                          command=self._hide_hints)
+        hide.pack(side="right", padx=(12, 0))
+        Tooltip(hide, "Hide the shortcut hint row (View \u25b8 Shortcut "
+                      "hints brings it back).")
+        self._hint_bar = bar
+        bar.pack(side="bottom", fill="x")
+        self._apply_hint_visibility()
+
+    def _apply_hint_visibility(self) -> None:
+        """Show/hide the hint row to match :attr:`_hints_var`."""
+        bar = getattr(self, "_hint_bar", None)
+        if bar is None:
+            return
+        if self._hints_var.get():
+            bar.pack(side="bottom", fill="x")
+        else:
+            bar.pack_forget()
+
+    def _hide_hints(self) -> None:
+        """The hint row's own Hide button -- flip the preference off."""
+        self._hints_var.set(False)
+        self._apply_hint_visibility()
 
     def _build_tabs(self) -> None:
         self._book = ttk.Notebook(self)
@@ -1971,6 +2051,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if var is not None:
                 with contextlib.suppress(tk.TclError):
                     var.set(bool(checked))
+        # the hint row's visibility rides a tk.Variable, so a restored
+        # session may have flipped it -- re-apply after the variables.
+        self._apply_hint_visibility()
         text_widgets = {"pasted": self._feat_pasted_text,
                         "corpus": self._corpus_text}
         for key, content in session["texts"].items():

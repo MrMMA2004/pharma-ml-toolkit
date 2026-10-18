@@ -19,7 +19,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -1942,6 +1942,98 @@ class TestCopyTabInputs:
             assert isinstance(checked, bool)
         for content in payload["texts"].values():
             assert isinstance(content, str)
+
+
+# --------------------------------------------------------------------- #
+# the keyboard-shortcut hint row + the five bound accelerators (100x-65)
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestShortcutHints:
+    ACCELERATORS: ClassVar[dict[str, str]] = {
+        "Ctrl+O": "<Control-o>",
+        "Ctrl+S": "<Control-s>",
+        "Ctrl+Shift+S": "<Control-Shift-S>",
+        "Ctrl+Shift+R": "<Control-Shift-R>",
+        "Ctrl+Q": "<Control-q>",
+    }
+
+    def test_every_advertised_accelerator_is_bound(
+        self, playground: Any, xvfb_display: str,
+    ) -> None:
+        # Ctrl+Shift+R was advertised in the File menu (and the module
+        # docstring) since 100x-54 with NO binding behind it -- pressing
+        # it did nothing.  This pins all five sequences to real bindings.
+        app = playground.PlaygroundApp(persist_session=False)
+        try:
+            for label, sequence in self.ACCELERATORS.items():
+                assert app.bind_all(sequence), (
+                    f"{label} ({sequence}) is advertised but not bound")
+        finally:
+            app.destroy()
+
+    def test_hint_row_lists_every_shortcut(
+        self, playground: Any, xvfb_display: str,
+    ) -> None:
+        from tkinter import ttk
+
+        app = playground.PlaygroundApp(persist_session=False)
+        try:
+            text = playground.shortcut_hints_text()
+            for keys, what in playground.SHORTCUT_HINTS:
+                assert f"{keys} {what}" in text
+            labels = [child for child in app._hint_bar.winfo_children()
+                      if isinstance(child, ttk.Label)]
+            assert labels, "the hint row carries no label"
+            assert labels[0].cget("text") == text
+        finally:
+            app.destroy()
+
+    def test_hint_row_sits_above_the_status_bar(
+        self, playground: Any, xvfb_display: str,
+    ) -> None:
+        app = playground.PlaygroundApp(persist_session=False)
+        try:
+            app.update_idletasks()
+            assert app._hint_bar.winfo_rooty() < app._status_bar.winfo_rooty()
+        finally:
+            app.destroy()
+
+    def test_view_toggle_and_hide_button_flip_visibility(
+        self, playground: Any, xvfb_display: str,
+    ) -> None:
+        app = playground.PlaygroundApp(persist_session=False)
+        try:
+            assert app._hints_var.get() is True
+            assert app._hint_bar.pack_info()["side"] == "bottom"
+            # the row's own Hide button flips the preference and unpacks
+            app._hide_hints()
+            assert app._hints_var.get() is False
+            with pytest.raises(playground.tk.TclError):
+                app._hint_bar.pack_info()
+            # the View checkbutton's command re-shows it
+            app._hints_var.set(True)
+            app._apply_hint_visibility()
+            assert app._hint_bar.pack_info()["side"] == "bottom"
+        finally:
+            app.destroy()
+
+    def test_hint_preference_survives_a_session_round_trip(
+        self, playground: Any, xvfb_display: str,
+    ) -> None:
+        first = playground.PlaygroundApp(persist_session=False)
+        second = playground.PlaygroundApp(persist_session=False)
+        try:
+            first._hide_hints()
+            payload = first._collect_session()
+            assert payload["variables"]["_hints_var"] is False
+            second._session = payload
+            second._restore_session()
+            assert second._hints_var.get() is False
+            with pytest.raises(playground.tk.TclError):
+                second._hint_bar.pack_info()
+        finally:
+            first.destroy()
+            second.destroy()
 
 
 # --------------------------------------------------------------------- #
