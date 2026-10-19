@@ -27,10 +27,12 @@ A tabbed graphical interface opens with every calculation domain of the
 * **Data & ML**     -- open any CSV (or one of the bundled example
   datasets), pick a target column, train a registry model with the
   toolkit's own preprocessing pipeline, inspect the metrics and the
-  parity/confusion figure, cross-validate a model leaderboard, and
-  write the whole run as a report bundle -- ``report.html`` +
-  figures + tables (+ the multi-page ``report.pdf`` when ticked),
-  the CLI ``--plots``/``--pdf-report`` story, mouse edition.
+  parity/confusion figure, cross-validate a model leaderboard, write
+  the whole run as a report bundle -- ``report.html`` + figures +
+  tables (+ the multi-page ``report.pdf`` when ticked), the CLI
+  ``--plots``/``--pdf-report`` story, mouse edition -- and audit any
+  new CSV against the last trained model before predicting (the
+  ``ml check`` story, mouse edition: every difference named).
 * **Deep Learning** -- the toolkit's PyTorch estimators behind one card
   of inputs: pick the architecture (feed-forward or residual MLP), the
   hidden widths, dropout, activation, Adam's learning rate and weight
@@ -1155,10 +1157,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._last_figure: Any = None
         self._ml_frame: Any = None
         self._ml_path: Path | None = None
-        # -- Data & ML report state (100x-76) ------------------------ #
-        # (trained, report, task, X_test, y_test) of the last successful
-        # train -- the Save-report button rebuilds the CLI's bundle from it.
-        self._ml_last_run: tuple[Any, Any, str, Any, Any] | None = None
+        # -- Data & ML report state (100x-76, extended 100x-79) ----- #
+        # (trained, report, task, X_test, y_test, train_target) of the
+        # last successful train -- the Save-report button rebuilds the
+        # CLI's bundle from it; the Check-CSV button audits new data
+        # against it (the training target rides along as the automatic
+        # --target drop).
+        self._ml_last_run: tuple[Any, Any, str, Any, Any, str] | None = None
         self._desc_frame: Any = None
         self._desc_rows: list[tuple[str, str, str]] = []
         self._ga_result: Any = None
@@ -4975,6 +4980,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "bundle -- report.html + figures + tables (+ report.pdf "
                     "when ticked), the CLI --plots/--pdf-report story.")
         report_btn.pack(side="left", padx=(10, 0))
+        check_btn = self._action_button(
+            buttons, "Check CSV…", self._ml_check_csv,
+            tooltip="Audit any CSV against the last trained model before "
+                    "predicting -- missing features, extra columns, "
+                    "reordering and version drift, all named (the ml check "
+                    "story, mouse edition; the training target is dropped "
+                    "automatically when present).")
+        check_btn.pack(side="left", padx=(10, 0))
 
         results = make_card(page.grid, "Results", span=2, row=3, column=0)
         self._ml_metrics = ttk.Frame(results, style="Card.TFrame")
@@ -5129,8 +5142,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         def render(payload: Any) -> None:
             trained, report, task, dropped, y_test, x_test = payload
-            # the Save-report button rebuilds the CLI bundle from this run
-            self._ml_last_run = (trained, report, task, x_test, y_test)
+            # the Save-report button rebuilds the CLI bundle from this run;
+            # the Check-CSV button audits new data against it (the training
+            # target rides along as the automatic --target drop).
+            self._ml_last_run = (trained, report, task, x_test, y_test, target)
             self._fill_ml_metrics(trained, report, task, dropped)
             if not self.deps.get("matplotlib"):
                 return
@@ -5192,7 +5207,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         target = filedialog.askdirectory(title="Choose the report folder")
         if not target:
             return
-        trained, report, task, x_test, y_test = self._ml_last_run
+        trained, report, task, x_test, y_test, _train_target = self._ml_last_run
         model_name = trained.name
 
         def work() -> Any:
@@ -5261,6 +5276,77 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         self._start_job("writing the report bundle", work, render)
+
+    def _ml_check_csv(self) -> None:
+        """Audit any CSV against the last trained model (``ml check``, GUI).
+
+        The production failure mode this closes, mouse edition: a model
+        trained months ago, a regenerated CSV, and a crash deep inside
+        sklearn.  The handler reads the chosen file, drops the training
+        target column when the CSV still carries it (the GUI's automatic
+        ``--target`` -- it knows the name, the CLI asks), writes a
+        throwaway bundle from the stored run inside a temp directory and
+        renders the verdict of :func:`validate_bundle_input`: missing
+        features, extra columns, reordering and version drift, every
+        difference named.  The temp bundle is deleted with its directory;
+        nothing touches the user's tree.
+        """
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "CSV auditing"):
+            return
+        if self._ml_last_run is None:
+            messagebox.showwarning(
+                "No run yet",
+                "Train a model first -- the audit checks a new dataset "
+                "against the model bundle of the last run.",
+            )
+            return
+        if filedialog is None:  # pragma: no cover - headless fallback
+            return
+        chosen = filedialog.askopenfilename(
+            title="Choose the dataset to audit",
+            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+        )
+        if not chosen:
+            return
+        path = Path(chosen)
+        trained, _report, task, x_test, _y_test, train_target = self._ml_last_run
+        model_name = trained.name
+
+        def work() -> Any:
+            import tempfile
+
+            from pharmaml.ml import save_model, validate_bundle_input
+            from pharmaml.utils.io import read_table
+
+            frame = read_table(path)
+            if train_target and train_target in frame.columns:
+                # the automatic --target: re-auditing the very CSV the
+                # model was trained on works out of the box.
+                frame = frame.drop(columns=[train_target])
+            with tempfile.TemporaryDirectory() as tmp:
+                bundle = Path(tmp) / "playground_model.joblib"
+                save_model(
+                    trained.model, bundle,
+                    name=trained.name, task=task,
+                    features=list(x_test.columns),
+                )
+                return validate_bundle_input(bundle, frame)
+
+        def render(audit: Any) -> None:
+            verdict = "OK" if audit.ok else "FAIL"
+            self._job_label.configure(text=f"audit: {verdict} · {path.name}")
+            message = (
+                f"{path.name} vs the {model_name} bundle:\n\n{audit}\n\n"
+                "The CLI twin:\n"
+                "  pharmaml ml check --model <bundle> --data "
+                f"{path.name}"
+            )
+            if train_target:
+                message += f" --target {train_target}"
+            messagebox.showinfo(f"Dataset audit: {verdict}", message)
+
+        self._start_job(f"auditing {path.name}", work, render)
 
     def _fill_ml_metrics(self, trained: Any, report: Any, task: str,
                          dropped: list[str]) -> None:

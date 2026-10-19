@@ -10,6 +10,36 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.29] — 2026-10-19
+
+### Added — the persistence audit reaches the playground (Check CSV…)
+
+- **Data & ML tab, "Check CSV…" button** — the GUI axis of the round-trip
+  audit 1.2.27 shipped (`validate_bundle_input` / `ml check`) and 1.2.28
+  demonstrated in the executed notebook: after a training run, pick any
+  CSV and the handler audits it against the last model before you
+  predict — missing features, extra columns, reordering and version
+  drift, every difference named, in a dialog (plus the `ml check` CLI
+  twin line, target flag included).
+- The GUI's advantage over the CLI: it *knows* the training target
+  column's name, so the label is dropped automatically when the audited
+  CSV still carries it — re-auditing the very CSV the model was trained
+  on works out of the box (the CLI needs `--target` for that).
+- The bundle itself is a throwaway: `save_model` writes it into a temp
+  directory inside the worker thread, `validate_bundle_input` reads the
+  verdict, and the temp directory deletes itself — nothing touches the
+  user's tree. `_ml_last_run` gains the training target as a sixth
+  element (the Save-report flow unchanged).
+- Tests +4 (`TestMLCheckCSV`): the no-run guard (remedy named), the
+  cancelled picker (no job started), the OK verdict end-to-end on
+  `qsar_regression.csv` (dialog title/body/CLI-twin/job-label pinned,
+  `--target pIC50` named), and the FAIL verdict on a drifted copy
+  (feature dropped + feature renamed → `missing 2 feature(s): descr_000,
+  descr_001` / `1 extra column(s) … descr_1`, label auto-dropped). All
+  four passed on the first run, after a manual Xvfb smoke of both paths.
+- README's playground bullet and the web download panel's playground
+  card gain the Check-CSV sentence.
+
 ## [1.2.28] — 2026-10-19
 
 ### Added — the persistence audit reaches the executed notebook (§12)

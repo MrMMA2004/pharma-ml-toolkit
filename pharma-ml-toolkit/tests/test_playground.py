@@ -2647,7 +2647,7 @@ class TestMLReportBundle:
     def test_report_pdf_gate_without_fpdf(
         self, app: Any, dialogs: list[Any], monkeypatch: Any, playground: Any
     ) -> None:
-        app._ml_last_run = (object(), object(), "regression", None, None)
+        app._ml_last_run = (object(), object(), "regression", None, None, "pic50")
         monkeypatch.setattr(playground, "fpdf_available", lambda: False)
         app._ml_pdf_var.set(True)
         app._ml_save_report()
@@ -2705,3 +2705,124 @@ class TestMLReportBundle:
         assert (target / "report.html").is_file()
         assert (target / "predicted_vs_actual.png").is_file()
         assert not (target / "report.pdf").exists()  # the unticked default
+
+
+class TestMLCheckCSV:
+    """``_ml_check_csv`` audits any CSV against the stored run (ml check, GUI).
+
+    The audit story's last axis (100x-79): library (100x-77) -> CLI
+    (100x-77) -> executed notebook (100x-78) -> here.  Guards first (no
+    run, cancelled picker), then the OK verdict on the very CSV the model
+    was trained on (the automatic ``--target`` drop) and the FAIL verdict
+    on a drifted copy -- missing and extra columns, all named.
+    """
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 120.0) -> bool:
+        """Pump the Tk loop until the worker queue drains (probe pattern)."""
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _train(app: Any) -> None:
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
+                          / "qsar_regression.csv")
+        app._ml_train()
+        assert TestMLCheckCSV._drain(app), "training job did not finish"
+        assert app._ml_last_run is not None
+
+    def test_check_needs_a_run_first(
+        self, app: Any, dialogs: list[Any]
+    ) -> None:
+        app._ml_check_csv()
+        assert not app._busy  # the guard fired before any job started
+        titles = [call[1][0] for call in dialogs]
+        assert "No run yet" in titles
+        assert "Train a model first" in dialogs[0][1][1]  # the remedy, named
+
+    def test_check_cancelled_starts_no_job(
+        self, app: Any, monkeypatch: Any, playground: Any
+    ) -> None:
+        app._ml_last_run = (object(), object(), "regression", None, None, "pIC50")
+        monkeypatch.setattr(playground.filedialog, "askopenfilename",
+                            lambda **k: "")
+        app._ml_check_csv()
+        assert not app._busy  # the cancelled picker never queued work
+
+    def test_check_audit_ok_on_training_csv(
+        self, app: Any, dialogs: list[Any], monkeypatch: Any, playground: Any
+    ) -> None:
+        self._train(app)
+        csv = str(TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
+        monkeypatch.setattr(playground.filedialog, "askopenfilename",
+                            lambda **k: csv)
+        app._ml_check_csv()
+        assert self._drain(app), "audit job did not finish"
+
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos, "the verdict dialog never fired"
+        title, body = infos[0][1][0], infos[0][1][1]
+        assert title == "Dataset audit: OK"
+        assert "audit: OK" in body
+        assert "qsar_regression.csv" in body
+        assert "pharmaml ml check --model <bundle>" in body  # the CLI twin
+        assert "--target pIC50" in body  # the automatic target drop, named
+        assert "audit: OK" in app._job_label.cget("text")
+
+    def test_check_audit_flags_drift(
+        self, app: Any, dialogs: list[Any], monkeypatch: Any,
+        playground: Any, tmp_path: Path,
+    ) -> None:
+        import pandas as pd
+
+        self._train(app)
+        # the months-later CSV: one feature dropped, one renamed.
+        frame = pd.read_csv(
+            TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv"
+        )
+        frame = frame.drop(columns=["descr_000"]).rename(
+            columns={"descr_001": "descr_1"}
+        )
+        drifted = tmp_path / "drifted.csv"
+        frame.to_csv(drifted, index=False)
+
+        monkeypatch.setattr(playground.filedialog, "askopenfilename",
+                            lambda **k: str(drifted))
+        app._ml_check_csv()
+        assert self._drain(app), "audit job did not finish"
+
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos, "the verdict dialog never fired"
+        title, body = infos[0][1][0], infos[0][1][1]
+        assert title == "Dataset audit: FAIL"
+        assert "missing 2 feature(s): descr_000, descr_001" in body
+        assert "1 extra column(s) the model does not know: descr_1" in body
+        assert "--target pIC50" in body  # the label itself was auto-dropped
+        assert "audit: FAIL" in app._job_label.cget("text")
