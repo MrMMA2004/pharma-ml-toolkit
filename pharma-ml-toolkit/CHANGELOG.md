@@ -10,6 +10,34 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.27] — 2026-10-19
+
+### Added — the model round-trip audit (`validate_bundle_input` / `ml check`)
+
+- **`validate_bundle_input(path, frame)`** (`pharmaml.ml.persistence`): the
+  production failure mode this closes — a model saved months ago, a
+  regenerated CSV, and a crash deep inside sklearn with a cryptic
+  feature-count error.  The bundle's metadata already recorded the
+  ordered feature names; the audit now checks a new frame against that
+  contract *up front* and names every difference: missing features,
+  extra columns the model has never seen, **reordering** (sklearn
+  rejects a same-set-different-order frame even when the names match),
+  the feature-count contract when names were never recorded
+  (`n_features_in_` vs frame width), and **version drift** — the
+  sklearn/pharmaml mismatches `load_model` only logged, surfaced in the
+  returned `ModelInputReport` (frozen dataclass; `ok` + the column
+  buckets + human-readable `messages`; drift is always a warning, it
+  never flips `ok`).  `str(report)` renders exactly what the CLI
+  prints.
+- **`pharmaml ml check --model x.joblib --data new.csv`**: the CLI twin
+  — prints the bundle's provenance block (name, task, trained-at,
+  pharmaml/sklearn versions, the feature preview) and the audit
+  verdict; **exit 1 on a failed audit** (CI-friendly: run it between a
+  regenerated CSV and a predict step).  `--target <col>` drops the
+  training label first, so re-auditing the very CSV the model was
+  trained on works out of the box — and when the audit fails with
+  extra columns, the output ends with a hint pointing at that flag.
+
 ## [1.2.26] — 2026-10-19
 
 ### Added — the report bundle reaches the playground (the PDF arc closes)

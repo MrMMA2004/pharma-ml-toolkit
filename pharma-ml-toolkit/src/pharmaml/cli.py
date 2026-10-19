@@ -11,6 +11,7 @@ scans::
     pharmaml ml train    --data qsar.csv --keep-categorical  # one-hot string features
     pharmaml ml compare  --data qsar.csv --target Target --task classification --plot
     pharmaml ml compare  --data qsar.csv --pdf-report         # leaderboard + report.pdf
+    pharmaml ml check   --model artifacts/x.joblib --data new.csv  # round-trip audit
     pharmaml data inspect --data qsar.csv                  # audit your own file
     pharmaml data split  --data qsar.csv --test-size 0.2 --val-size 0.1
     pharmaml data convert --data ligands.csv --to sdf      # .smi/.csv/.sdf round-trip
@@ -215,6 +216,24 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     compare.add_argument(
         "--out-dir", default="reports", help="directory for --plot artifacts"
+    )
+
+    check = ml_sub.add_parser(
+        "check", help="audit a saved model against a new dataset"
+    )
+    check.add_argument(
+        "--model", required=True,
+        help="a .joblib bundle written by a previous `ml train` run",
+    )
+    check.add_argument(
+        "--data", required=True,
+        help="the new CSV/Excel to validate against the bundle's feature "
+        "contract before inference",
+    )
+    check.add_argument(
+        "--target", default=None,
+        help="drop this column (the training target) before the audit — "
+        "handy when re-checking the very CSV the model was trained on",
     )
 
     # ---- chem --------------------------------------------------------
@@ -1064,6 +1083,55 @@ def _cmd_ml_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ml_check(args: argparse.Namespace) -> int:
+    """`ml check` — the round-trip audit before inference.
+
+    Prints the bundle's provenance block, then the feature-contract
+    verdict; exit 1 when the audit fails (CI-friendly: run it between
+    a regenerated CSV and a predict step).  ``--target`` drops the
+    training-label column first, so re-checking the original training
+    CSV works out of the box.
+    """
+    from pharmaml.ml.persistence import load_model, validate_bundle_input
+    from pharmaml.utils.io import read_table
+
+    _, metadata = load_model(args.model)
+    print(f"model:    {metadata.get('name', '<unknown>')} ({metadata.get('task', '?')})")
+    print(
+        f"trained:  {metadata.get('trained_at', '?')} "
+        f"(pharmaml {metadata.get('pharmaml_version', '?')}, "
+        f"sklearn {metadata.get('sklearn_version', '?')})"
+    )
+    features = metadata.get("features")
+    if isinstance(features, list) and features:
+        preview = ", ".join(str(name) for name in features[:6])
+        more = "…" if len(features) > 6 else ""
+        print(f"features: {len(features)} ({preview}{more})")
+    else:
+        print("features: (not recorded — the count contract is checked)")
+
+    frame = read_table(args.data)
+    if args.target is not None:
+        if args.target not in frame.columns:
+            print(
+                f"error: --target {args.target!r} is not a column of "
+                f"{args.data} (columns: {', '.join(map(str, frame.columns))})",
+                file=sys.stderr,
+            )
+            return 1
+        frame = frame.drop(columns=[args.target])
+    report = validate_bundle_input(args.model, frame)
+    print(f"data:     {Path(args.data).name} — {len(frame):,} rows x "
+          f"{len(frame.columns)} columns")
+    print(report)
+    if not report.ok and report.extra and args.target is None:
+        print(
+            "hint: if one of the extra columns is the training target, "
+            "pass --target <column> to drop it before the audit"
+        )
+    return 0 if report.ok else 1
+
+
 def _cmd_chem_pic50(args: argparse.Namespace) -> int:
     from pharmaml.chem.converters import add_pic50_column
     from pharmaml.utils.io import read_table, write_table
@@ -1898,6 +1966,7 @@ _HANDLERS = {
     ("data", "convert"): _cmd_data_convert,
     ("ml", "train"): _cmd_ml_train,
     ("ml", "compare"): _cmd_ml_compare,
+    ("ml", "check"): _cmd_ml_check,
     ("chem", "pic50"): _cmd_chem_pic50,
     ("chem", "descriptors"): _cmd_chem_descriptors,
     ("chem", "compare"): _cmd_chem_compare,

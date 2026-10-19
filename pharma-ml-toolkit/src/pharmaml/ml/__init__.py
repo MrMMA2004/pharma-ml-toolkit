@@ -14,7 +14,12 @@ from pharmaml.ml.neural import (
     ResidualMLPClassifier,
     ResidualMLPRegressor,
 )
-from pharmaml.ml.persistence import load_model, save_model
+from pharmaml.ml.persistence import (
+    ModelInputReport,
+    load_model,
+    save_model,
+    validate_bundle_input,
+)
 from pharmaml.ml.preprocessing import (
     build_preprocessor,
     clean_numeric_frame,
@@ -29,6 +34,7 @@ __all__ = [
     "MODEL_REGISTRY",
     "DeepMLPClassifier",
     "DeepMLPRegressor",
+    "ModelInputReport",
     "ResidualMLPClassifier",
     "ResidualMLPRegressor",
     "build_model",
@@ -44,4 +50,5 @@ __all__ = [
     "save_model",
     "split_features_target",
     "train_model",
+    "validate_bundle_input",
 ]

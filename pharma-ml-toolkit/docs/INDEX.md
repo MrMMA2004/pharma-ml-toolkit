@@ -88,6 +88,7 @@ after adding new public functions.
 | `MODEL_REGISTRY` | constant |  |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
+| `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
 | `ResidualMLPClassifier` | class | Residual (skip-connection) deep-network classifier (PyTorch). |
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
 | `build_model` | function | Instantiate an unfitted estimator from the registry. |
@@ -103,6 +104,7 @@ after adding new public functions.
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
 | `split_features_target` | function | Separate features from the target column. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
+| `validate_bundle_input` | function | Audit a new dataset against a saved model bundle before inference. |
 
 ## `pharmaml.generative`
 

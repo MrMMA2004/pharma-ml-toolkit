@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1809 tests).
+exceptions, input validation, and pytest coverage** (1821 tests).
 
 ---
 
@@ -223,7 +223,7 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 1809 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1821 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -513,6 +513,7 @@ pharmaml ml train  --data my_compounds.csv --model rf --plots --keep-categorical
 pharmaml ml train  --data my_compounds.csv --pdf-report          # bundle + report.pdf
 pharmaml ml compare --data my_compounds.csv --target activity --plot
 pharmaml ml compare --data my_compounds.csv --pdf-report        # leaderboard + report.pdf
+pharmaml ml check   --model artifacts/rf.joblib --data new.csv --target activity
 ```
 
 `--task auto` (the default) infers classification vs regression from the target column, so
@@ -571,9 +572,23 @@ save_model(result.model, "artifacts/rf.joblib", name="random_forest",
            task="classification", metrics={"accuracy": report.accuracy})
 model, metadata = load_model("artifacts/rf.joblib")
 
+from pharmaml.ml import validate_bundle_input
+audit = validate_bundle_input("artifacts/rf.joblib", new_frame)
+print(audit)   # 'audit: OK' or every difference named
+
 leaderboard = compare_models(ds.X, ds.y, ds.task, cv=5)
 print(leaderboard.head())   # one row per model, sorted by CV metric
 ```
+
+`validate_bundle_input` is the round-trip audit: before predicting on a new
+dataset with a model saved months ago, it checks the frame against the
+bundle's recorded feature contract (names *and* order — sklearn rejects a
+reordered frame even when the set matches) and names every difference:
+missing features, extra columns, reordering, the feature-count contract when
+names were never recorded, plus sklearn/pharmaml version drift as warnings.
+The CLI twin is `pharmaml ml check --model artifacts/rf.joblib --data new.csv`
+(exit 1 on a failed audit — CI-friendly; `--target <col>` drops the training
+label first so re-auditing the training CSV works out of the box).
 
 A fully **executed Jupyter notebook** covering all four domains lives at
 `examples/pharmaml_walkthrough.ipynb` (every cell has its output committed — run it

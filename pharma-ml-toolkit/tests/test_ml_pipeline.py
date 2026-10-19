@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -23,7 +24,12 @@ from pharmaml.ml.models import (
     list_models,
     resolve_model_name,
 )
-from pharmaml.ml.persistence import load_model, save_model, write_metadata_sidecar
+from pharmaml.ml.persistence import (
+    load_model,
+    save_model,
+    validate_bundle_input,
+    write_metadata_sidecar,
+)
 from pharmaml.ml.preprocessing import (
     build_preprocessor,
     clean_numeric_frame,
@@ -962,6 +968,106 @@ class TestPersistenceEdgeCases:
         assert data["features"] == ["a", "b"]
         assert data["metrics"] == {"accuracy": 0.9}
         assert "sklearn_version" in data
+
+
+class TestValidateBundleInput:
+    """The round-trip audit (100x-77): a saved bundle vs new data.
+
+    Closes the production failure mode -- model saved months ago,
+    regenerated CSV, cryptic sklearn feature-count crash -- by checking
+    the frame against the bundle's recorded feature contract up front.
+    """
+
+    @staticmethod
+    def _saved_bundle(tmp_path, features=None) -> Path:
+        rng = np.random.default_rng(0)
+        X = rng.normal(size=(16, 3))
+        y = (X[:, 0] > 0).astype(int)
+        model = LogisticRegression().fit(X, y)
+        return save_model(
+            model,
+            tmp_path / "audit.joblib",
+            name="logreg",
+            task="classification",
+            features=features,
+        )
+
+    @staticmethod
+    def _frame() -> pd.DataFrame:
+        rng = np.random.default_rng(1)
+        return pd.DataFrame(
+            rng.normal(size=(8, 3)), columns=["a", "b", "c"]
+        )
+
+    def test_happy_path_ok_with_no_messages(self, tmp_path) -> None:
+        path = self._saved_bundle(tmp_path, features=["a", "b", "c"])
+        report = validate_bundle_input(path, self._frame())
+        assert report.ok
+        assert report.messages == ()
+        assert report.missing == () and report.extra == ()
+        assert not report.reordered and not report.count_only
+
+    def test_missing_feature_named(self, tmp_path) -> None:
+        path = self._saved_bundle(tmp_path, features=["a", "b", "c"])
+        frame = self._frame().drop(columns=["b"])
+        report = validate_bundle_input(path, frame)
+        assert not report.ok
+        assert report.missing == ("b",)
+        assert any("missing 1 feature" in message for message in report.messages)
+
+    def test_extra_column_named(self, tmp_path) -> None:
+        path = self._saved_bundle(tmp_path, features=["a", "b", "c"])
+        frame = self._frame().assign(z=1.0)
+        report = validate_bundle_input(path, frame)
+        assert not report.ok
+        assert report.extra == ("z",)
+        assert any("extra column" in message for message in report.messages)
+
+    def test_reordered_columns_fail_even_with_same_set(self, tmp_path) -> None:
+        # sklearn rejects a same-set-different-order frame: the audit
+        # must flag it BEFORE the cryptic estimator error.
+        path = self._saved_bundle(tmp_path, features=["a", "b", "c"])
+        frame = self._frame()[["b", "a", "c"]]
+        report = validate_bundle_input(path, frame)
+        assert not report.ok
+        assert report.reordered
+        assert report.missing == () and report.extra == ()
+        assert any("different order" in message for message in report.messages)
+
+    def test_count_contract_when_features_not_recorded(self, tmp_path) -> None:
+        # no feature names in the bundle -> n_features_in_ vs width
+        path = self._saved_bundle(tmp_path, features=None)
+        report = validate_bundle_input(path, self._frame())
+        assert report.ok and report.count_only
+        narrow = validate_bundle_input(path, self._frame()[["a", "b"]])
+        assert not narrow.ok
+        assert any("feature-count contract" in m for m in narrow.messages)
+
+    def test_version_drift_is_warning_not_failure(self, tmp_path, monkeypatch) -> None:
+        from pharmaml.ml import persistence as persistence_module
+
+        path = self._saved_bundle(tmp_path, features=["a", "b", "c"])
+        monkeypatch.setattr(persistence_module, "__version__", "0.0.1-test")
+        report = validate_bundle_input(path, self._frame())
+        assert report.ok  # drift never flips the verdict by itself
+        assert len(report.version_warnings) == 1
+        assert "pharmaml drift" in report.version_warnings[0]
+        assert any(m.startswith("warning:") for m in report.messages)
+
+    def test_non_dataframe_rejected(self, tmp_path) -> None:
+        path = self._saved_bundle(tmp_path, features=["a", "b", "c"])
+        with pytest.raises(DataValidationError, match="DataFrame"):
+            validate_bundle_input(path, np.zeros((4, 3)))
+
+    def test_str_renders_verdict_and_problems(self, tmp_path) -> None:
+        path = self._saved_bundle(tmp_path, features=["a", "b", "c"])
+        report = validate_bundle_input(path, self._frame().drop(columns=["a"]))
+        rendered = str(report)
+        assert rendered.startswith("audit: FAIL")
+        assert "missing 1 feature(s): a" in rendered
+        assert validate_bundle_input(path, self._frame()).__str__().startswith(
+            "audit: OK"
+        )
 
 
 class TestPreprocessingEdgeCases:

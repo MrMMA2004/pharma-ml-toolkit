@@ -261,6 +261,81 @@ class TestMLCompareCommand:
         assert "error:" in capsys.readouterr().err
 
 
+class TestMLCheckCommand:
+    """`pharmaml ml check` — the round-trip audit on the CLI (100x-77)."""
+
+    @pytest.fixture()
+    def saved_model(self, clf_csv, tmp_path, monkeypatch):
+        """Train + save a bundle the way `ml train` does."""
+        monkeypatch.chdir(tmp_path)
+        code = main([
+            "ml", "train", "--data", clf_csv, "--model", "logistic",
+            "--no-tune", "--cv", "3", "--out", str(tmp_path / "art"),
+        ])
+        assert code == 0
+        bundle = tmp_path / "artifacts" / "logistic_regression_classification.joblib"
+        assert bundle.is_file()
+        return str(bundle)
+
+    def test_check_ok_with_target_dropped(
+        self, reg_csv, capsys, monkeypatch, tmp_path
+    ):
+        # the natural workflow: re-audit the very CSV the model was
+        # trained on -- --target drops the label column first.  (reg_csv:
+        # all-numeric columns, so the bundle's features are exactly
+        # the non-target columns.)
+        monkeypatch.chdir(tmp_path)
+        code = main([
+            "ml", "train", "--data", reg_csv, "--model", "ridge",
+            "--no-tune", "--cv", "3", "--out", str(tmp_path / "art"),
+        ])
+        assert code == 0
+        bundle = str(tmp_path / "artifacts" / "ridge_regression.joblib")
+        code = main([
+            "ml", "check", "--model", bundle, "--data", reg_csv,
+            "--target", "pIC50",
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "model:    ridge (regression)" in out
+        assert "trained:  " in out and "pharmaml 1." in out
+        assert "audit: OK" in out
+
+    def test_check_fails_with_exit_one_and_hint(
+        self, clf_csv, saved_model, capsys, monkeypatch, tmp_path
+    ):
+        # no --target: the label column is an extra the model does not
+        # know -> FAIL, exit 1, and the --target hint points the way.
+        monkeypatch.chdir(tmp_path)
+        code = main([
+            "ml", "check", "--model", saved_model, "--data", clf_csv,
+        ])
+        assert code == 1
+        out = capsys.readouterr().out
+        assert "audit: FAIL" in out
+        assert "extra column" in out and "Target" in out
+        assert "hint: if one of the extra columns is the training target" in out
+
+    def test_check_unknown_target_errors(
+        self, clf_csv, saved_model, capsys, monkeypatch, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+        code = main([
+            "ml", "check", "--model", saved_model, "--data", clf_csv,
+            "--target", "nope",
+        ])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "error: --target 'nope' is not a column" in err
+
+    def test_check_missing_bundle_errors(self, clf_csv, capsys):
+        code = main([
+            "ml", "check", "--model", "ghost.joblib", "--data", clf_csv,
+        ])
+        assert code == 1
+        assert "error:" in capsys.readouterr().err
+
+
 class TestInspectShowsCategorical:
     def test_inspect(self, clf_csv, capsys):
         code = main(["data", "inspect", "--data", clf_csv, "--head", "2"])

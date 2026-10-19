@@ -79,20 +79,31 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import joblib
 import numpy
 import sklearn
 
 from pharmaml import __version__
-from pharmaml.exceptions import PersistenceError
+from pharmaml.exceptions import DataValidationError, PersistenceError
 from pharmaml.logger import get_logger
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    import pandas as pd
 
 _LOG = get_logger(__name__)
 
-__all__ = ["bundle_metadata", "load_model", "save_model", "write_metadata_sidecar"]
+__all__ = [
+    "ModelInputReport",
+    "bundle_metadata",
+    "load_model",
+    "save_model",
+    "validate_bundle_input",
+    "write_metadata_sidecar",
+]
 
 _BUNDLE_KEY_MODEL = "model"
 _BUNDLE_KEY_META = "metadata"
@@ -225,6 +236,166 @@ def load_model(path: str | Path) -> tuple[Any, dict[str, Any]]:
             sklearn.__version__,
         )
     return bundle[_BUNDLE_KEY_MODEL], metadata
+
+
+@dataclass(frozen=True)
+class ModelInputReport:
+    """Verdict of :func:`validate_bundle_input` — the round-trip audit.
+
+    ``ok`` is ``True`` only when the frame satisfies the bundle's
+    feature contract exactly (names *and* order, or the feature count
+    when names were never recorded).  Version drift is reported as
+    warnings — it never flips ``ok`` by itself, because a drifted stack
+    may still predict fine; the audit names it so the caller decides.
+
+    ``__str__`` renders the one-line verdict plus every problem, the
+    format ``pharmaml ml check`` prints.
+    """
+
+    ok: bool
+    missing: tuple[str, ...] = ()
+    extra: tuple[str, ...] = ()
+    reordered: bool = False
+    count_only: bool = False
+    version_warnings: tuple[str, ...] = ()
+    messages: tuple[str, ...] = field(default=())
+
+    def __str__(self) -> str:
+        head = "OK" if self.ok else "FAIL"
+        lines = [f"audit: {head}"]
+        lines.extend(f"  - {message}" for message in self.messages)
+        return "\n".join(lines)
+
+
+def validate_bundle_input(path: str | Path, frame: pd.DataFrame) -> ModelInputReport:
+    """Audit a new dataset against a saved model bundle before inference.
+
+    The production failure mode this closes: a model saved months ago,
+    a regenerated CSV, and a crash deep inside sklearn with a cryptic
+    feature-count error.  The bundle's metadata already records the
+    ordered feature names — this function checks the new frame against
+    that contract up front and names every difference:
+
+    * **missing** — features the model expects but the frame lacks;
+    * **extra** — columns the model has never seen;
+    * **reordered** — the same names in a different order (sklearn
+      rejects those even when the *set* matches);
+    * **count contract** — when the bundle was saved without feature
+      names, the model's ``n_features_in_`` is compared with the
+      frame's width instead;
+    * **version warnings** — sklearn/pharmaml drift between training
+      and load time (the same conditions :func:`load_model` only logs,
+      surfaced here so CLI and GUI callers can show them).
+
+    Parameters
+    ----------
+    path:
+        A bundle written by :func:`save_model`.
+    frame:
+        The new data (anything with ``.columns``, i.e. a DataFrame).
+
+    Returns
+    -------
+    ModelInputReport
+        ``ok`` plus the column buckets; ``messages`` carries every
+        problem in a human-readable form.
+
+    Raises
+    ------
+    DataValidationError
+        When ``frame`` has no ``columns`` attribute.
+    PersistenceError
+        When the bundle cannot be loaded (see :func:`load_model`).
+
+    Examples
+    --------
+    >>> from pharmaml.ml.persistence import save_model, validate_bundle_input
+    >>> from sklearn.linear_model import LinearRegression
+    >>> import pandas as pd
+    >>> model = LinearRegression().fit([[0.0], [1.0], [2.0]], [0.0, 2.0, 4.0])
+    >>> path = save_model(model, "/tmp/pharmaml_doctest_model/audit.joblib",
+    ...                   name="y=2x", task="regression", features=["x"])
+    >>> report = validate_bundle_input(path, pd.DataFrame({"x": [3.0]}))
+    >>> report.ok
+    True
+    >>> drifted = validate_bundle_input(path, pd.DataFrame({"x": [1.0], "z": [2.0]}))
+    >>> (drifted.ok, drifted.extra)
+    (False, ('z',))
+    >>> import shutil
+    >>> shutil.rmtree("/tmp/pharmaml_doctest_model")
+    """
+    if not hasattr(frame, "columns"):
+        raise DataValidationError(
+            "validate_bundle_input needs a DataFrame (with .columns), "
+            f"got {type(frame).__name__}"
+        )
+    model, metadata = load_model(path)
+
+    messages: list[str] = []
+    version_warnings: list[str] = []
+    trained_sklearn = metadata.get("sklearn_version")
+    if trained_sklearn is not None and trained_sklearn != sklearn.__version__:
+        warning = (
+            f"sklearn drift: trained with {trained_sklearn}, runtime is "
+            f"{sklearn.__version__} -- re-validate before drawing conclusions"
+        )
+        version_warnings.append(warning)
+        messages.append(f"warning: {warning}")
+    trained_pharmaml = metadata.get("pharmaml_version")
+    if trained_pharmaml is not None and trained_pharmaml != __version__:
+        warning = (
+            f"pharmaml drift: trained with {trained_pharmaml}, runtime is "
+            f"{__version__}"
+        )
+        version_warnings.append(warning)
+        messages.append(f"warning: {warning}")
+
+    expected = metadata.get("features")
+    missing: tuple[str, ...] = ()
+    extra: tuple[str, ...] = ()
+    reordered = False
+    count_only = False
+
+    if isinstance(expected, list) and expected:
+        columns = [str(column) for column in frame.columns]
+        wanted = [str(column) for column in expected]
+        missing = tuple(name for name in wanted if name not in columns)
+        extra = tuple(name for name in columns if name not in wanted)
+        if missing:
+            messages.append(
+                f"missing {len(missing)} feature(s): {', '.join(missing)}"
+            )
+        if extra:
+            messages.append(
+                f"{len(extra)} extra column(s) the model does not know: "
+                f"{', '.join(extra)}"
+            )
+        if not missing and not extra and columns != wanted:
+            reordered = True
+            messages.append(
+                "feature columns are in a different order than trained on "
+                f"(expected: {', '.join(wanted[:5])}"
+                + ("…" if len(wanted) > 5 else "") + ")"
+            )
+    else:
+        count_only = True
+        n_in = getattr(model, "n_features_in_", None)
+        if n_in is not None and int(n_in) != len(frame.columns):
+            messages.append(
+                f"feature-count contract: model expects {int(n_in)} "
+                f"feature(s), frame has {len(frame.columns)} column(s)"
+            )
+
+    ok = not messages or all(m.startswith("warning:") for m in messages)
+    return ModelInputReport(
+        ok=ok,
+        missing=missing,
+        extra=extra,
+        reordered=reordered,
+        count_only=count_only,
+        version_warnings=tuple(version_warnings),
+        messages=tuple(messages),
+    )
 
 
 def write_metadata_sidecar(model_path: str | Path) -> Path:
