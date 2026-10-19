@@ -10,6 +10,34 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.30] — 2026-10-19
+
+### Added — the persistence audit reaches the Deep Learning tab
+
+- **Deep Learning tab, "Check CSV…" button** — the deep twin of 1.2.29's
+  Data & ML audit: the PyTorch estimators (`DeepMLP*` / `ResidualMLP*`)
+  satisfy the same sklearn contract — `n_features_in_` and
+  `feature_names_in_` recorded at fit, joblib-serialisable — so
+  `validate_bundle_input` audits them exactly like the registry models.
+  After a training run, pick any CSV and the handler audits it against
+  the last network before you predict: missing features, extra columns,
+  reordering and version drift, every difference named, in a dialog
+  (plus the `ml check` CLI twin line, target flag included).
+- The training label is dropped automatically when the audited CSV
+  still carries it (the GUI's advantage, same as 1.2.29), the bundle is
+  a throwaway inside a temp directory that deletes itself, and the
+  audit state (`_dl_last_run`) is set before the matplotlib guard so
+  Check CSV also works when plotting is unavailable.
+- Tests +4 (`TestDLCheckCSV`, the `TestMLCheckCSV` pattern): the no-run
+  guard (remedy named), the cancelled picker (no job started), the OK
+  verdict end-to-end on `qsar_regression.csv` (dialog title/body/
+  CLI-twin/job-label pinned, `--target pIC50` and the
+  `DeepMLPRegressor bundle` named), and the FAIL verdict on a drifted
+  copy (missing 2 / extra 1, all named). All four passed on the first
+  run, after a manual Xvfb smoke of both paths.
+- README's Deep Learning bullet gains the audit sentence; the web
+  download panel's playground card mentions both tabs.
+
 ## [1.2.29] — 2026-10-19
 
 ### Added — the persistence audit reaches the playground (Check CSV…)

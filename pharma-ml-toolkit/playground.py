@@ -40,7 +40,9 @@ A tabbed graphical interface opens with every calculation domain of the
   watch the held-out metrics, the parity/confusion figure and the
   epoch-by-epoch loss curves (``plot_training_history`` -- the
   early-stopping verdict rides on the title, the per-epoch records
-  export as CSV).
+  export as CSV) -- and audit any new CSV against the last trained
+  network before predicting (the ``ml check`` story, deep edition:
+  every difference named, the training target dropped automatically).
 * **Generative**    -- run the genetic algorithm OR the reinforcement
   learning optimiser on a SMILES corpus with any bundled objective (QED,
   LogP window, ...); adaptive GA runs render the operator-mix learning
@@ -5450,6 +5452,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dl_frame = None
         self._dl_path = None
         self._dl_history: list[dict[str, Any]] = []
+        self._dl_last_run: tuple[Any, str, str, Any, str] | None = None
 
         data = make_card(page.grid, "Dataset", span=2, row=0, column=0,
                          subtitle="Any CSV the toolkit's read_table can sniff, or a "
@@ -5543,6 +5546,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "stratified early stopping, then held-out metrics, the "
                     "parity/confusion figure and the loss curves.")
         train_btn.pack(side="left")
+        check_btn = self._action_button(
+            buttons, "Check CSV…", self._dl_check_csv,
+            tooltip="Audit any CSV against the last trained network before "
+                    "predicting -- missing features, extra columns, "
+                    "reordering and version drift, all named (the ml check "
+                    "story, deep edition; the training target is dropped "
+                    "automatically when present).")
+        check_btn.pack(side="left", padx=(10, 0))
 
         results = make_card(page.grid, "Results", span=2, row=3, column=0)
         self._dl_metrics = ttk.Frame(results, style="Card.TFrame")
@@ -5693,11 +5704,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 network, x_test, y_test, task,
                 keep_predictions=(task == "regression"),
             )
-            return network, report, task, dropped, y_test, seconds
+            return network, report, task, dropped, y_test, seconds, x_test
 
         def render(payload: Any) -> None:
-            network, report, task, dropped, y_test, seconds = payload
+            network, report, task, dropped, y_test, seconds, x_test = payload
             self._dl_history = list(network.history_)
+            # the audit state (100x-81): the fitted network plus the run's
+            # feature contract -- set before the matplotlib guard so Check
+            # CSV also works when plotting is unavailable.
+            self._dl_last_run = (network, estimator_name, task, x_test, target)
             self._fill_dl_metrics(network, report, task, dropped, seconds)
             self._fill_dl_history_summary(network)
             if not self.deps.get("matplotlib"):
@@ -5817,6 +5832,77 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Saved", f"Training history written to\n{written}")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save", exc)
+
+    def _dl_check_csv(self) -> None:
+        """Audit any CSV against the last trained network (``ml check``).
+
+        The deep twin of ``_ml_check_csv`` (100x-79): the neural
+        estimators satisfy the same sklearn contract -- ``n_features_in_``
+        and ``feature_names_in_`` recorded at fit, joblib-serialisable --
+        so :func:`validate_bundle_input` audits them exactly like the
+        registry models.  The handler reads the chosen file, drops the
+        training target column when the CSV still carries it (the GUI's
+        automatic ``--target``), writes a throwaway bundle from the
+        stored run inside a temp directory and renders the verdict:
+        missing features, extra columns, reordering and version drift,
+        every difference named.  The temp bundle is deleted with its
+        directory; nothing touches the user's tree.
+        """
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "CSV auditing"):
+            return
+        if self._dl_last_run is None:
+            messagebox.showwarning(
+                "No run yet",
+                "Train a network first -- the audit checks a new dataset "
+                "against the model bundle of the last run.",
+            )
+            return
+        if filedialog is None:  # pragma: no cover - headless fallback
+            return
+        chosen = filedialog.askopenfilename(
+            title="Choose the dataset to audit",
+            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+        )
+        if not chosen:
+            return
+        path = Path(chosen)
+        network, estimator_name, task, x_test, train_target = self._dl_last_run
+
+        def work() -> Any:
+            import tempfile
+
+            from pharmaml.ml import save_model, validate_bundle_input
+            from pharmaml.utils.io import read_table
+
+            frame = read_table(path)
+            if train_target and train_target in frame.columns:
+                # the automatic --target: re-auditing the very CSV the
+                # network was trained on works out of the box.
+                frame = frame.drop(columns=[train_target])
+            with tempfile.TemporaryDirectory() as tmp:
+                bundle = Path(tmp) / "playground_model.joblib"
+                save_model(
+                    network, bundle,
+                    name=estimator_name, task=task,
+                    features=list(x_test.columns),
+                )
+                return validate_bundle_input(bundle, frame)
+
+        def render(audit: Any) -> None:
+            verdict = "OK" if audit.ok else "FAIL"
+            self._job_label.configure(text=f"audit: {verdict} · {path.name}")
+            message = (
+                f"{path.name} vs the {estimator_name} bundle:\n\n{audit}\n\n"
+                "The CLI twin:\n"
+                "  pharmaml ml check --model <bundle> --data "
+                f"{path.name}"
+            )
+            if train_target:
+                message += f" --target {train_target}"
+            messagebox.showinfo(f"Dataset audit: {verdict}", message)
+
+        self._start_job(f"auditing {path.name}", work, render)
 
     # ------------------------------------------------------------------ #
     # Generative tab
