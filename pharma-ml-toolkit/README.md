@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1962 tests).
+exceptions, input validation, and pytest coverage** (1978 tests).
 
 ---
 
@@ -33,7 +33,7 @@ exceptions, input validation, and pytest coverage** (1962 tests).
   committed outputs to the *shipped* version (the setup cell prints
   `pharmaml <version>`), so the committed evidence can never silently predate the
   tree that ships it — after a version bump, `scratch/reexecute_all_notebooks_64.py`
-  re-runs all seven notebooks (~3 min) and regenerates the no-output twins.
+  re-runs all eight notebooks (~3 min) and regenerates the no-output twins.
 * **Safety**: pharmaceutical functions validate every input (positive doses, ordered time series,
   bounded fractions) and raise `DataValidationError` on bad values rather than returning nonsense.
 * **Docs stay in sync with code**: `docs/INDEX.md` is auto-generated from each module's `__all__`
@@ -237,8 +237,8 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 1962 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
-├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
+├── tests/                   # 1978 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
 │                            #   regenerate deterministically via scratch/build_example_data.py
@@ -347,7 +347,7 @@ re-run; the CLI equivalent is `pharmaml pharma pk --data profile.csv`.
 (`examples/pharmaml_walkthrough.ipynb` remains the every-domain tour including
 PK, docking and chem conversions.)
 
-Each of the six workflow notebooks also ships a **no-output twin**
+Each of the seven workflow notebooks also ships a **no-output twin**
 (`*_no_output.ipynb`) — identical cells with every output stripped, 4–30 % of
 the executed size (the ML twin is 46 KB vs 1.1 MB), for slow connections; run
 it top-to-bottom to produce the results yourself. A pytest drift-guard pins
@@ -452,6 +452,34 @@ walks the **direct estimator API** of `pharmaml.ml.neural`:
 Point §1 at your own descriptor table and every cell below runs unchanged
 (same story as the other notebooks). PyTorch is the only extra:
 `pip install 'pharmaml[deep]'`.
+
+### The complete tuning & hierarchical workflow in one notebook
+
+`examples/complete_tuning_workflow.ipynb` is the seventh workflow
+notebook — the executed-notebook face of the four 1.2.36 features (the
+user's request round): 3D-RISM-KH solvation descriptors, `HierarchicalSVR`,
+the keras-tuner-style search and batch normalization, executed with all
+outputs and five inline figures committed in ~20 s on a laptop CPU:
+
+> §1 data entry (the shipped `qsar_regression.csv`) → §2 **3D-RISM-KH
+descriptors** — the ten water-scale quantities for the shipped 12-drug set,
+the surrogate contract told honestly (features, not RISM-calibrated
+energies) → §3 **`HierarchicalSVR` vs the global SVR** — the three potency
+regimes k-means finds, the per-cluster diagnostics table, two parity
+scatters → §4 **`RandomSearch`** over an ANN hypermodel — the
+hyperparameters-space protocol, one shared seeded fold split for every
+trial, the defaults-vs-best gain line, the leaderboard figure → §5
+**`Hyperband`** successive halving over the deep hypermodel — the resource
+ladder (mean CV R² climbing rung by rung) and the epoch economics → §6
+**batchnorm A/B** — same split, same seed, only the flag differs; the
+honest verdict on a small standardised table → §7 recap with the CLI/web
+cross-references (`pharmaml chem rism`, `pharmaml ml tune`, the playground's
+Hierarchical group).
+
+A pytest guard pins the committed verdicts (the hsvr/global R² pair, the
+tuner's gain line, Hyperband's savings, the A/B lines) so the demo can
+never silently become stale. RDKit powers §2 and PyTorch §5-§6 — both
+optional extras.
 
 ### Bringing your own data (CSV / TSV / Excel)
 

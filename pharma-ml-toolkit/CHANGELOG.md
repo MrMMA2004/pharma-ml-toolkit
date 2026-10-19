@@ -10,6 +10,53 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.37] — 2026-10-19
+
+### Added — the executed-notebook face of the four-feature round: `complete_tuning_workflow.ipynb`
+
+- **`examples/complete_tuning_workflow.ipynb`** (plus its no-output twin): the
+  seventh workflow notebook, walking the four 1.2.36 features in the order a
+  modeller meets them — §1 data entry (the shipped `qsar_regression.csv`) →
+  §2 **3D-RISM-KH descriptors** on the shipped 12-drug set (`seed_molecules.csv`),
+  the ten water-scale columns with the surrogate contract told honestly
+  (features for QSAR, not RISM-calibrated energies; the Gsolv = LJ + Coulomb
+  decomposition, the dipole ranking) → §3 **`HierarchicalSVR` vs the global
+  SVR** under the same split and seed (R² 0.38 → 0.62 on this table), the
+  honest per-cluster diagnostics (three potency regimes: mean pIC50 7.6/3.9/5.1
+  with their trust radii) and two parity scatters → §4 **`RandomSearch`** over
+  `build_ann_regressor`: the HyperParameters collection/trial protocol, one
+  shared seeded fold split for every trial, the apples-to-apples baseline
+  (the hypermodel's defaults scored under the tuner's own folds: 0.623 →
+  0.820, **gain +0.197 R²**), the leaderboard as a `plot_model_comparison`
+  figure → §5 **`Hyperband`** over `build_deep_regressor` (`resource="epochs"`,
+  η=3, max 27): the resource ladder committed straight from the trials frame
+  (mean CV R² 0.251 → 0.539 → 0.841 across the 3/9/27-epoch rungs) and the
+  epoch economics — 783 epoch-budgets spent of a naive 1863, **58 % saved** →
+  §6 **batchnorm A/B** — same split, same seed, same capacity, only the flag
+  differs; the honest verdict on a small standardised table (plain 0.941 vs
+  batchnorm 0.916 — per-batch statistics add noise here; that is exactly why
+  §5's hypermodel makes the flag searchable, and its winner indeed chose off)
+  → §7 recap with the CLI/web cross-references.  Executed in ~20 s on a
+  laptop CPU; every number is produced by the cells (seeded, deterministic);
+  RDKit powers §2 and PyTorch §5-§6, both optional extras.
+- **Guard test** (`test_tuning_workflow_quartet_is_committed`): pins the
+  committed verdicts — the RISM table, the hsvr/global R² pair, the tuner
+  gain line, Hyperband's savings line, the two A/B lines — so the demo can
+  never silently become stale or un-executed (the §12/§9 convention, third
+  member).
+- **Registrations**: the strip/reexecute drivers and the
+  `test_notebook_variants` guard family now cover eight executed notebooks
+  (72 no-fabrication assertions); the README notebook tour gains the seventh
+  workflow section and the tree/eight-count lines.
+
+### Fixed — the sandbox venv had been reset between rounds
+
+- The toolkit virtualenv lost its optional-dependency layer between rounds
+  (the bridge answered `pharmaml.chem.features unavailable`): reinstalled
+  `rdkit 2026.09.1`, `torch 2.14.1+cpu`, `meeko` (+ `gemmi`) and the editable
+  `pharmaml` install; the web `/api/chem/features` bridge (the `rism_` family
+  included) verified end-to-end afterwards.
+
 ## [1.2.36] — 2026-10-19
 
 ### Added — the four-request round: 3D-RISM-KH descriptors, HSVR, the keras-tuner, batch normalization
