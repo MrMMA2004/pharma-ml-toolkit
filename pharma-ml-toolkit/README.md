@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1839 tests).
+exceptions, input validation, and pytest coverage** (1844 tests).
 
 ---
 
@@ -104,7 +104,11 @@ as PDBQT with a per-ligand audit, turn a PDB/CIF receptor into a clean
 receptor PDBQT and distribute it into every campaign folder, compute the
 grid box and write the matching GPF/DPF pair for a reference ligand, parse
 DLG/Vina results — or scan an entire campaign — with ligand-efficiency
-columns, and run AutoDock4/Vina when the binaries are on your PATH),
+columns, run AutoDock4/Vina when the binaries are on your PATH, and
+**rescore any loaded table — or an external summary CSV — into the
+explainable consensus**: one 0–1 `<column>_norm` unit per evidence column
+plus the consensus, with the evidence recipe and the driving-evidence
+verdict; the `docking rescore` CLI, mouse edition),
 **Data & ML** (open any CSV or a bundled example, train a
 registry model, read the metrics, browse a cross-validated leaderboard,
 and write the whole run as a one-click report bundle — `report.html` +
@@ -230,7 +234,7 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 1839 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1844 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);

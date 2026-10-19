@@ -590,6 +590,21 @@ def parse_float_triple(raw: str, field: str) -> tuple[float, float, float]:
 #: The Docking tab's campaign-runner engines (combobox values).
 _DOCK_ENGINES = ("AutoDock4 campaign", "Vina single ligand")
 
+# Canonical evidence columns for the consensus rescore card, in
+# preference order -- the names consensus_rescore's own examples and the
+# §9 notebook demo use.  The prefill intersects these with the loaded
+# table's columns; anything else is typed by hand.
+_RESCORE_PREFERRED_COLUMNS = (
+    "ligand_efficiency",
+    "LE (kcal/mol/atom)",
+    "best_lowest_energy",
+    "lowest_energy",
+    "affinity",
+    "best_num_in_cluster",
+    "num_in_cluster",
+    "cluster_size",
+)
+
 
 def docking_engine_binaries(engine: str) -> tuple[str, ...]:
     """The external binaries an engine needs on ``PATH``.
@@ -4217,6 +4232,52 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_run_summary.grid(row=run_btn.grid_info()["row"], column=1,
                                     sticky="w", padx=(10, 0))
 
+        # -- card 6: consensus rescore (the explainable ranking) -------- #
+        rescore = make_card(
+            page.grid, "Consensus rescore", row=2, column=1,
+            subtitle="Combine the loaded table's evidence into one 0–1 "
+                     "consensus, with the per-column units that explain "
+                     "the winner (the docking rescore CLI, mouse edition).",
+        )
+        rescore_buttons = ttk.Frame(rescore, style="Card.TFrame")
+        rescore_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
+        rescore_csv_btn = self._action_button(
+            rescore_buttons, "Open summary CSV…", self._dock_open_rescore_csv,
+            tooltip="Any summary table (a saved scan, a rescored CSV, an "
+                    "enriched export) -- the --data twin.",
+        )
+        rescore_csv_btn.pack(side="left")
+        self._dock_rescore_info = ttk.Label(
+            rescore_buttons, text="rescores the results table above",
+            style="CardMuted.TLabel", wraplength=240, justify="left",
+        )
+        self._dock_rescore_info.pack(side="left", padx=(10, 0))
+        self._dock_rescore_columns_entry = ttk.Entry(rescore, width=32)
+        self._dock_rescore_columns_entry.insert(
+            0, "best_lowest_energy, best_num_in_cluster")
+        form_row(rescore, "evidence columns", self._dock_rescore_columns_entry)
+        self._dock_rescore_weights_entry = ttk.Entry(rescore, width=32)
+        form_row(rescore, "weights (blank = uniform)",
+                 self._dock_rescore_weights_entry)
+        self._dock_rescore_higher_entry = ttk.Entry(rescore, width=32)
+        form_row(rescore, "higher-is-better (blank = auto)",
+                 self._dock_rescore_higher_entry)
+        rescore_btn = self._action_button(
+            rescore, "Rescore table", self._dock_rescore, primary=True,
+            tooltip="consensus_rescore's explainable twin: one 0–1 _norm "
+                    "unit per evidence column plus the consensus. The "
+                    "leaderboard replaces the results tree; Save results "
+                    "CSV… writes the rescored table.",
+        )
+        rescore_btn.grid(row=rescore.grid_size()[1], column=0, columnspan=2,
+                         sticky="w", pady=(6, 0))
+        self._dock_rescore_text = _grid_text(rescore, height=7, mono=self._mono)
+        self._dock_rescore_text.insert(
+            "1.0", "the evidence recipe and the driving-evidence verdict "
+                   "appear here",
+        )
+        grid_append(rescore, self._dock_rescore_text, sticky="ew", pady=(6, 0))
+
     # -- ligand library card ------------------------------------------- #
     def _dock_open_csv(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas",
@@ -4601,6 +4662,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                       f"{len(frame) - ok} incomplete — {root.name}"),
                 style="Field.TLabel",
             )
+            self._dock_rescore_prefill()
 
         self._start_job(f"scanning {root.name}", work, render)
 
@@ -4693,6 +4755,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if used_atoms is not None:
                 info += f" · LE over {used_atoms} heavy atoms"
             self._dock_results_info.configure(text=info, style="Field.TLabel")
+            self._dock_rescore_prefill()
 
         self._start_job(f"parsing {path.name}", work, render)
 
@@ -4743,6 +4806,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                      f"— {path.name}",
                 style="Field.TLabel",
             )
+            self._dock_rescore_prefill()
 
         self._start_job(f"parsing {path.name}", work, render)
 
@@ -4766,6 +4830,192 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Saved", f"Results written to\n{written}")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save", exc)
+
+    # -- consensus rescore card ------------------------------------------ #
+    def _dock_open_rescore_csv(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "summary loading"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open a docking summary table",
+            filetypes=[("Summary table", "*.csv *.tsv"), ("All files", "*.*")],
+        )
+        if path:
+            self._dock_load_rescore_csv(Path(path))
+
+    def _dock_load_rescore_csv(self, path: Path) -> None:
+        def work() -> Any:
+            from pharmaml.utils.io import read_table
+
+            return read_table(path)
+
+        def render(frame: Any) -> None:
+            if frame.empty:
+                messagebox.showwarning("Empty table", f"{path.name} has no rows.")
+                return
+            self._dock_results_frame = frame
+            self._dock_results_source = "csv"
+            tree = self._dock_results_tree
+            tree.delete(*tree.get_children())
+            columns = [str(column) for column in frame.columns]
+            tree["columns"] = columns
+            for column in columns:
+                tree.heading(column, text=column)
+                tree.column(column, width=150 if column == columns[0] else 120,
+                            minwidth=80, stretch=(column == columns[0]))
+            for row in frame.to_dict("records"):
+                values = [
+                    _cell_text(None if (isinstance(row[column], float)
+                                        and math.isnan(row[column]))
+                               else row[column], limit=40)
+                    for column in columns
+                ]
+                tree.insert("", "end", values=values)
+            self._dock_results_info.configure(
+                text=f"{len(frame)} row(s) · {path.name} — rescore ready",
+                style="Field.TLabel",
+            )
+            self._dock_rescore_prefill()
+
+        self._start_job(f"reading {path.name}", work, render)
+
+    def _dock_rescore_prefill(self) -> None:
+        """Seed the evidence-columns entry from the loaded table.
+
+        Preference-ordered: the toolkit's canonical evidence names win;
+        otherwise the numeric columns (minus the identity) are listed.
+        """
+        frame = self._dock_results_frame
+        if frame is None:
+            return
+        available = {str(column) for column in frame.columns}
+        preferred = [name for name in _RESCORE_PREFERRED_COLUMNS
+                     if name in available]
+        if not preferred:
+            preferred = [str(column) for column in frame.columns[1:8]]
+        if preferred:
+            entry = self._dock_rescore_columns_entry
+            entry.delete(0, "end")
+            entry.insert(0, ", ".join(preferred[:6]))
+
+    def _dock_rescore(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "consensus rescoring"):
+            return
+        frame = self._dock_results_frame
+        if frame is None:
+            messagebox.showwarning(
+                "No table loaded",
+                "Scan a campaign, open a DLG / Vina log or a summary CSV "
+                "first -- the rescore ranks the loaded results table.",
+            )
+            return
+        columns = [name.strip() for name in
+                   self._dock_rescore_columns_entry.get().split(",")
+                   if name.strip()]
+        if not columns:
+            messagebox.showerror("Input", "name at least one evidence column")
+            return
+        weights: list[float] | None = None
+        raw_weights = self._dock_rescore_weights_entry.get().strip()
+        if raw_weights:
+            try:
+                weights = [parse_float(raw, "weight", minimum=0.0, maximum=100.0)
+                           for raw in raw_weights.split(",")]
+            except ValueError as exc:
+                messagebox.showerror("Input", str(exc))
+                return
+        higher_is_better: dict[str, bool] = {}
+        raw_higher = self._dock_rescore_higher_entry.get().strip()
+        if raw_higher:
+            higher_is_better = {name.strip(): True for name in
+                                raw_higher.split(",") if name.strip()}
+
+        def work() -> Any:
+            from pharmaml.docking import consensus_breakdown
+
+            breakdown = consensus_breakdown(
+                frame, columns, weights=weights,
+                higher_is_better=higher_is_better or None,
+            )
+            rescored = frame.copy()
+            for column in breakdown.columns:
+                rescored[column] = breakdown[column].to_numpy()
+            return rescored.sort_values(
+                "consensus", ascending=False, na_position="last"
+            ).reset_index(drop=True)
+
+        def render(rescored: Any) -> None:
+            self._dock_results_frame = rescored
+            self._dock_results_source = "rescore"
+            tree = self._dock_results_tree
+            tree.delete(*tree.get_children())
+            identity = str(rescored.columns[0])
+            norm_columns = [f"{column}_norm" for column in columns]
+            show = [identity] + [column for column in norm_columns + ["consensus"]
+                                 if column != identity]
+            tree["columns"] = show
+            for column in show:
+                tree.heading(column, text=column)
+                tree.column(column, width=150 if column == identity else 130,
+                            minwidth=80, stretch=(column == identity))
+            for row in rescored.to_dict("records"):
+                values = [
+                    _cell_text(None if (isinstance(row[column], float)
+                                        and math.isnan(row[column]))
+                               else row[column], limit=40)
+                    for column in show
+                ]
+                tree.insert("", "end", values=values)
+            # The introspection lines, the CLI's recipe + verdict.
+            directions = higher_is_better or {}
+            recipe = ", ".join(
+                f"{column} ("
+                + ("higher" if directions.get(
+                    column, not column.endswith(("energy", "affinity")))
+                   else "lower")
+                + "=better"
+                + (f", weight {weight:g}" if weights else "")
+                + ")"
+                for column, weight in zip(columns, weights or [1.0] * len(columns))
+            )
+            lines = [f"evidence: {recipe}"]
+            lines.append(
+                f"{len(rescored)} row(s) rescored -- consensus = weighted "
+                "mean of the _norm columns, higher is better"
+            )
+            valid = rescored["consensus"].dropna()
+            if len(valid):
+                # Column-wise access keeps each dtype: .loc[scalar] would
+                # upcast the whole row Series to float64 and render the
+                # integer identity ("rank 4") as "4.0".
+                top_index = int(valid.idxmax())
+                identity_value = rescored[identity].iloc[top_index]
+                top_consensus = float(rescored["consensus"].iloc[top_index])
+                top_norms = {
+                    column: float(rescored[column].iloc[top_index])
+                    for column in norm_columns
+                }
+                driver = max(top_norms, key=lambda name: top_norms[name])
+                lines.append(
+                    f"{identity_value} tops the table (consensus "
+                    f"{top_consensus:.3f}): {driver} = "
+                    f"{top_norms[driver]:.3f} is the driving evidence"
+                )
+            self._dock_rescore_text.delete("1.0", "end")
+            self._dock_rescore_text.insert("1.0", "\n".join(lines))
+            self._dock_rescore_info.configure(
+                text=f"rescored · {len(rescored)} row(s) · {len(columns)} "
+                     f"evidence column(s) -- Save results CSV… writes the table",
+                style="Field.TLabel",
+            )
+            self._dock_results_info.configure(
+                text=f"{len(rescored)} row(s) · consensus ranking "
+                     f"({len(columns)} evidence columns)",
+                style="Field.TLabel",
+            )
+
+        self._start_job("rescoring the loaded table", work, render)
 
     # -- campaign runner card -------------------------------------------- #
     def _dock_choose_campaign_root(self) -> None:

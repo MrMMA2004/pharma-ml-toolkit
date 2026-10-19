@@ -1017,6 +1017,163 @@ class TestDockingGuiUnderXvfb:
         assert "1 failed" in summary  # /usr/bin/true produces no .dlg
         assert quiet_dialogs == []
 
+    def test_docking_consensus_rescore_example_campaign(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_load_example_campaign()
+        assert self._drain_jobs(app), "campaign scan job hung"
+
+        # the prefill seeds the scan table's canonical evidence columns
+        prefill = app._dock_rescore_columns_entry.get()
+        assert prefill == "best_lowest_energy, best_num_in_cluster"
+
+        app._dock_rescore()
+        assert self._drain_jobs(app), "rescore job hung"
+        assert app._dock_results_source == "rescore"
+        tree = app._dock_results_tree
+        rows = tree.get_children()
+        assert len(rows) == 14  # 12 scored + the 2 incomplete folders
+        assert list(tree["columns"]) == [
+            "folder", "best_lowest_energy_norm",
+            "best_num_in_cluster_norm", "consensus",
+        ]
+        winner = list(tree.item(rows[0], "values"))
+        assert winner == ["13_coumarin", "0.3682", "1.0000", "0.6841"]
+        # the two NaN folders sort last and show empty consensus cells
+        assert tree.item(rows[-1], "values")[0] == "10_nicotine"
+        assert tree.item(rows[-1], "values")[-1] == ""
+        # the frame behind Save results CSV… is the full rescored table
+        frame = app._dock_results_frame
+        assert list(frame.columns[:1]) + list(frame.columns[-3:]) == [
+            "folder", "best_lowest_energy_norm",
+            "best_num_in_cluster_norm", "consensus",
+        ]
+        text = app._dock_rescore_text.get("1.0", "end")
+        assert "evidence: best_lowest_energy (lower=better)" in text
+        assert "best_num_in_cluster (higher=better)" in text
+        assert "14 row(s) rescored" in text
+        assert ("13_coumarin tops the table (consensus 0.684): "
+                "best_num_in_cluster_norm = 1.000 is the driving evidence"
+                ) in text
+        assert quiet_dialogs == []
+
+    def test_docking_consensus_rescore_dlg_with_ligand_efficiency(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_heavyatoms_entry.delete(0, "end")
+        app._dock_heavyatoms_entry.insert(0, "13")  # aspirin heavy atoms
+        app._dock_open_example_dlg()
+        assert self._drain_jobs(app), "DLG + LE job hung"
+
+        # the prefill prefers the LE column first (§9's story: energy,
+        # cluster population and ligand efficiency)
+        prefill = app._dock_rescore_columns_entry.get()
+        assert prefill == "LE (kcal/mol/atom), lowest_energy, num_in_cluster"
+
+        app._dock_rescore()
+        assert self._drain_jobs(app), "rescore job hung"
+        rows = app._dock_results_tree.get_children()
+        assert len(rows) == 5  # aspirin's five clusters
+        assert list(app._dock_results_tree["columns"]) == [
+            "rank", "LE (kcal/mol/atom)_norm", "lowest_energy_norm",
+            "num_in_cluster_norm", "consensus",
+        ]
+        # rank 4 wins: LE + energy units 0.901 carry it, not rank 1
+        winner = list(app._dock_results_tree.item(rows[0], "values"))
+        assert winner == ["4", "0.9008", "0.9008", "0.7778", "0.8598"]
+        text = app._dock_rescore_text.get("1.0", "end")
+        assert "weight" not in text.split("\n")[0]  # uniform -> no weights
+        assert ("4 tops the table (consensus 0.860): "
+                "LE (kcal/mol/atom)_norm = 0.901 is the driving evidence"
+                ) in text
+        assert quiet_dialogs == []
+
+    def test_docking_rescore_weights_change_the_recipe_line(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_load_example_campaign()
+        assert self._drain_jobs(app), "campaign scan job hung"
+        app._dock_rescore_weights_entry.insert(0, "1,3")
+        app._dock_rescore()
+        assert self._drain_jobs(app), "weighted rescore job hung"
+        rows = app._dock_results_tree.get_children()
+        # cluster population x3 lifts the same winner higher
+        assert app._dock_results_tree.item(rows[0], "values")[0] == "13_coumarin"
+        assert app._dock_results_tree.item(rows[0], "values")[-1] == "0.8420"
+        text = app._dock_rescore_text.get("1.0", "end")
+        assert "best_lowest_energy (lower=better, weight 1)" in text
+        assert "best_num_in_cluster (higher=better, weight 3)" in text
+        assert quiet_dialogs == []
+
+    def test_docking_rescore_gates(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # no results table loaded -> the guard names the remedy
+        app._dock_rescore()
+        assert len(quiet_dialogs) == 1
+        kind, args = quiet_dialogs[0]
+        assert kind == "showwarning"
+        message = " ".join(str(part) for part in args)
+        assert "Scan a campaign" in message
+
+        # a loaded table but an empty columns entry -> input error
+        app._dock_load_example_campaign()
+        assert self._drain_jobs(app), "campaign scan job hung"
+        app._dock_rescore_columns_entry.delete(0, "end")
+        app._dock_rescore()
+        assert len(quiet_dialogs) == 2
+        kind, args = quiet_dialogs[1]
+        assert kind == "showerror"
+        assert "at least one evidence column" in " ".join(str(p) for p in args)
+
+        # malformed weights -> the parse_float error verbatim
+        app._dock_rescore_columns_entry.insert(
+            0, "best_lowest_energy, best_num_in_cluster")
+        app._dock_rescore_weights_entry.insert(0, "1,x")
+        app._dock_rescore()
+        assert len(quiet_dialogs) == 3
+        kind, args = quiet_dialogs[2]
+        assert kind == "showerror"
+        assert "is not a number" in " ".join(str(p) for p in args)
+        assert not app._busy  # every gate stopped before any job started
+
+    def test_docking_rescore_open_summary_csv(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any],
+        monkeypatch: Any, tmp_path: Any,
+    ) -> None:
+        # the --data twin: any summary CSV becomes the results table
+        summary = tmp_path / "enriched_summary.csv"
+        summary.write_text(
+            "ligand,best_lowest_energy,best_num_in_cluster,ligand_efficiency\n"
+            "aspirin,-4.9100,15,0.3777\n"
+            "theophylline,-11.5100,15,0.8854\n"
+            "metformin,-8.1300,19,0.9033\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename",
+            lambda **_k: str(summary),
+        )
+        app._dock_open_rescore_csv()
+        assert self._drain_jobs(app), "summary CSV job hung"
+        assert app._dock_results_source == "csv"
+        assert len(app._dock_results_tree.get_children()) == 3
+        # the prefill recognises the enriched table's canonical columns
+        assert app._dock_rescore_columns_entry.get() == (
+            "ligand_efficiency, best_lowest_energy, best_num_in_cluster")
+        info = app._dock_results_info.cget("text")
+        assert "3 row(s)" in info and "enriched_summary.csv" in info
+
+        # and the §9 verdict reproduces on it: LE carries metformin
+        app._dock_rescore()
+        assert self._drain_jobs(app), "rescore job hung"
+        text = app._dock_rescore_text.get("1.0", "end")
+        assert "metformin tops the table" in text
+        assert "ligand_efficiency_norm = 1.000 is the driving evidence" in text
+        first = app._dock_results_tree.get_children()[0]
+        assert app._dock_results_tree.item(first, "values")[0] == "metformin"
+        assert quiet_dialogs == []
+
 
 # --------------------------------------------------------------------- #
 # session persistence + theme switching, live under Xvfb

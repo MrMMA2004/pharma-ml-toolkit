@@ -10,6 +10,44 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.33] — 2026-10-19
+
+### Added — the consensus breakdown reaches the last two surfaces: the GUIs
+
+- **The playground's Docking tab gains a "Consensus rescore" card** (the
+  desktop axis of the consensus story, closing the arc library
+  1.2.31 → CLI 1.2.31 → notebook 1.2.32 → GUI): "Rescore table" runs the
+  real `consensus_breakdown` over the loaded results table (campaign
+  scan, DLG, Vina or any summary CSV opened through the card's own
+  **Open summary CSV…** button — the CLI's `--data` twin) and replaces
+  the results tree with the explainable leaderboard: the identity
+  column, one 0–1 `<column>_norm` unit per evidence column and the
+  consensus, sorted descending with NaN rows last. The verdict panel
+  prints the CLI-identical recipe line (every column's direction and
+  weight) plus the driving-evidence verdict for the winner — the
+  per-row argmax over the `_norm` units. Evidence columns, weights and
+  higher-is-better overrides are typed in three entries, prefilled from
+  each loaded table (the toolkit's canonical evidence names in
+  preference order: ligand efficiency first, then energy, then cluster
+  population). The rescored frame becomes the results table, so **Save
+  results CSV…** writes exactly the CLI's `*_rescored.csv` content.
+- Tests +5 (`tests/test_playground.py`, live under Xvfb): the example
+  campaign rescore (14 rows, `13_coumarin` wins at 0.684 on the cluster
+  unit, the two incomplete folders keep NaN and sort last, the full
+  rescored frame behind the save button), the DLG + ligand-efficiency
+  rescore (rank 4 wins at 0.860 — the LE/energy units carry it, not
+  rank 1), the weights recipe line (1,3 lifts the winner to 0.842 with
+  both weights named), the three input gates (no table / empty columns
+  / malformed weights, each naming its remedy before any job starts),
+  and the summary-CSV round trip (the `--data` twin, reproducing §9's
+  metformin verdict on a three-ligand enriched table).
+- The verdict computation reads the winning row column-wise
+  (`.iloc[valid.idxmax()]` per column): `.loc[scalar]` on the mixed-dtype
+  frame upcasts the row Series to float64 and would render integer
+  identities ("rank 4") as "4.0".
+- README's playground Docking tour names the rescore card; test counts
+  1839 → 1844.
+
 ## [1.2.32] — 2026-10-19
 
 ### Added — the consensus breakdown reaches the executed notebook (§9 demo)
