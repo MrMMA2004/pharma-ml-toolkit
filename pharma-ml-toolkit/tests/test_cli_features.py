@@ -752,6 +752,102 @@ class TestDockingRescoreCommand:
         err = capsys.readouterr().err
         assert "--weights must be comma-separated numbers" in err
 
+    def test_rescore_plots_bundle_skips_energy_without_folder(
+        self, summary: Path, tmp_path, capsys, monkeypatch
+    ) -> None:
+        """--plots on a ligand-identity table: the consensus ranking
+        figure + the breakdown table ship; the energy landscape needs a
+        folder column and is skipped (the feature_importance pattern)."""
+        import matplotlib
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(matplotlib, "use", lambda *_a, **_k: None)
+        out_dir = tmp_path / "plots"
+        code = main(
+            [
+                "docking", "rescore",
+                "--data", str(summary),
+                "--columns", "best_lowest_energy,cluster_size",
+                "--out", str(tmp_path / "r.csv"),
+                "--plots", "--out-dir", str(out_dir),
+            ]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "plots:" in out and "report.html" in out
+        assert (out_dir / "report.html").is_file()
+        assert (out_dir / "consensus_ranking.png").is_file()
+        assert (out_dir / "consensus_breakdown.csv").is_file()
+        assert (out_dir / "consensus_breakdown.md").is_file()
+        # no folder column -> no energy landscape; --plots alone -> no PDF
+        assert not (out_dir / "energy_distribution.png").exists()
+        assert not (out_dir / "report.pdf").exists()
+
+    def test_rescore_plots_bundle_with_energy_distribution(
+        self, tmp_path, capsys, monkeypatch
+    ) -> None:
+        """A scan-shaped table (folder + best_lowest_energy) gets BOTH
+        figures in the bundle."""
+        import matplotlib
+        import pandas as pd
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(matplotlib, "use", lambda *_a, **_k: None)
+        scan = tmp_path / "scan.csv"
+        pd.DataFrame(
+            {
+                "folder": ["01_lig", "02_lig", "03_lig"],
+                "best_lowest_energy": [-7.1, -8.5, -6.3],
+                "best_num_in_cluster": [15, 10, 20],
+            }
+        ).to_csv(scan, index=False)
+        out_dir = tmp_path / "plots"
+        code = main(
+            [
+                "docking", "rescore",
+                "--data", str(scan),
+                "--columns", "best_lowest_energy,best_num_in_cluster",
+                "--out", str(tmp_path / "r.csv"),
+                "--plots", "--out-dir", str(out_dir),
+            ]
+        )
+        assert code == 0
+        assert (out_dir / "report.html").is_file()
+        assert (out_dir / "consensus_ranking.png").is_file()
+        assert (out_dir / "energy_distribution.png").is_file()
+
+    def test_rescore_pdf_report_implies_plots_and_writes_pdf(
+        self, summary: Path, tmp_path, capsys, monkeypatch
+    ) -> None:
+        # --pdf-report without --plots: the bundle still ships (the flag
+        # implies it) and report.pdf lands next to report.html.
+        pypdf = pytest.importorskip("pypdf")
+        import matplotlib
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(matplotlib, "use", lambda *_a, **_k: None)
+        out_dir = tmp_path / "plots"
+        code = main(
+            [
+                "docking", "rescore",
+                "--data", str(summary),
+                "--columns", "best_lowest_energy,cluster_size",
+                "--out", str(tmp_path / "r.csv"),
+                "--pdf-report", "--out-dir", str(out_dir),
+            ]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "plots:" in out and "report.html" in out  # implied bundle
+        assert "pdf:" in out and "report.pdf" in out
+        assert (out_dir / "report.pdf").is_file()
+        # title page + one page per table/figure — at least 3 here
+        reader = pypdf.PdfReader(str(out_dir / "report.pdf"))
+        assert len(reader.pages) >= 3
+        first = reader.pages[0].extract_text()
+        assert "pharmaml docking rescore" in first
+        assert "evidence" in first.lower()
+
 
 class TestChemTableCommands:
     """`pharmaml chem compare` / `chem merge` surface tables.py in the CLI."""

@@ -446,6 +446,22 @@ def _build_parser() -> argparse.ArgumentParser:
         "--top", type=int, default=15,
         help="leaderboard rows to print (default 15)",
     )
+    rescore.add_argument(
+        "--plots", action="store_true",
+        help="emit the visual bundle (report.html + consensus ranking "
+        "figure + the breakdown table) into --out-dir — requires "
+        "pharmaml[reports]",
+    )
+    rescore.add_argument(
+        "--pdf-report", action="store_true",
+        help="with the visual bundle, also write report.pdf — the "
+        "multi-page document (one page per table/figure); implies "
+        "--plots — requires pharmaml[reports]",
+    )
+    rescore.add_argument(
+        "--out-dir", default="reports",
+        help="visual bundle output directory (default ./reports)",
+    )
 
     campaign = docking_sub.add_parser(
         "campaign",
@@ -1507,6 +1523,34 @@ def _cmd_docking_rescore(args: argparse.Namespace) -> int:
         f"{len(rescored)} ligand(s) rescored -> {written} "
         "(consensus = weighted mean of the _norm columns, higher is better)"
     )
+
+    if args.plots or args.pdf_report:
+        from pharmaml.viz import plot_consensus_ranking, save_visual_bundle
+
+        figures: dict[str, Any] = {
+            "consensus_ranking": plot_consensus_ranking(rescored)
+        }
+        try:
+            # scan-shaped tables also carry the energy landscape; a
+            # consensus-only table simply skips it (the feature_importance
+            # skip pattern from ml train --plots).
+            from pharmaml.viz import plot_energy_distribution
+
+            figures["energy_distribution"] = plot_energy_distribution(rescored)
+        except DataValidationError:
+            pass
+        written_bundle = save_visual_bundle(
+            figures,
+            tables={"consensus_breakdown": rescored},
+            out_dir=args.out_dir,
+            title=f"pharmaml docking rescore — {len(columns)} evidence column(s)",
+            subtitle=f"{recipe} — {source.name}",
+            pdf_report=args.pdf_report,
+        )
+        bundle_dir = Path(args.out_dir)
+        print(f"plots:    {bundle_dir / 'report.html'} (+{len(written_bundle) - 1} files)")
+        if args.pdf_report:
+            print(f"pdf:      {bundle_dir / 'report.pdf'}")
     return 0
 
 

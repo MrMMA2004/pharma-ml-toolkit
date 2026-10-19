@@ -23,6 +23,8 @@ layer for **all** toolkit codes:
                   the ligand-set reconciliation utilities);
 * docking       — :func:`plot_energy_distribution`,
                   :func:`plot_top_ligands`,
+                  :func:`plot_consensus_ranking` (the figure twin of
+                  the explainable consensus leaderboard),
                   :func:`plot_receptor_atom_types`;
 * generative    — :func:`plot_operator_trajectory` (the adaptive GA's
                   operator mix per generation — the "GA that learns"
@@ -71,6 +73,7 @@ from pharmaml.viz.chem_plots import (
     plot_table_comparison,
 )
 from pharmaml.viz.docking_plots import (
+    plot_consensus_ranking,
     plot_energy_distribution,
     plot_receptor_atom_types,
     plot_top_ligands,
@@ -127,11 +130,11 @@ __all__ = [
     # pharma figures
     "plot_concentration_profile",
     "plot_confusion_matrix",
+    "plot_consensus_ranking",
     "plot_cv_scores",
     # chem figures
     "plot_descriptor_distributions",
     "plot_dose_accumulation",
-    # docking figures
     "plot_energy_distribution",
     "plot_feature_importance",
     "plot_learning_curve",

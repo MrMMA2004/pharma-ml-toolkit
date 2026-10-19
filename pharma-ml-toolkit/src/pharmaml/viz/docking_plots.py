@@ -7,6 +7,9 @@ module visualises them:
   energies across a ligand library with the median marked;
 * :func:`plot_top_ligands` — ranked horizontal bars of the strongest
   binders, ready to drop into a report or presentation;
+* :func:`plot_consensus_ranking` — the same ranked-bar reading for the
+  0–1 consensus (the figure twin of ``consensus_breakdown``'s
+  leaderboard);
 * :func:`plot_receptor_atom_types` — the AutoDock type census of a
   prepared receptor (donors, acceptors, carbons, metals), the figure
   behind the ``types A×87 C×526 ...`` line ``gpfer.py`` hard-coded.
@@ -83,7 +86,12 @@ import pandas as pd
 from pharmaml.exceptions import DataValidationError
 from pharmaml.viz._compat import PALETTE, new_figure
 
-__all__ = ["plot_energy_distribution", "plot_receptor_atom_types", "plot_top_ligands"]
+__all__ = [
+    "plot_consensus_ranking",
+    "plot_energy_distribution",
+    "plot_receptor_atom_types",
+    "plot_top_ligands",
+]
 
 #: Column scanned for the per-ligand best affinity.
 _ENERGY_COLUMN = "best_lowest_energy"
@@ -411,5 +419,125 @@ def plot_top_ligands(
         )
     ax.set_yticks(positions, frame["ligand"].tolist())
     ax.set_xlabel("best binding energy (kcal/mol) — lower is stronger")
+    ax.set_title(title)
+    return fig
+
+
+def plot_consensus_ranking(
+    rescored: pd.DataFrame,
+    identity_column: str | None = None,
+    consensus_column: str = "consensus",
+    top_n: int | None = 15,
+    title: str = "Consensus ranking — strongest evidence wins",
+) -> Any:
+    """Horizontal bars of ligands ranked by the 0–1 consensus.
+
+    The figure twin of :func:`~pharmaml.docking.consensus_breakdown`'s
+    leaderboard: bars are sorted so the strongest consensus sits on top
+    of the axis, the value is annotated outside the bar tip and the
+    identity labels come from ``identity_column`` (the frame's first
+    column by default — ``folder`` for campaign scans, ``ligand`` for
+    enriched tables, ``rank`` for cluster tables).  Rows whose consensus
+    is NaN (incomplete inputs) cannot rank and are dropped.
+
+    Parameters
+    ----------
+    rescored:
+        Frame carrying the consensus column — the output of
+        ``consensus_rescore``/``consensus_breakdown`` joined back onto the
+        summary table (or the ``docking rescore`` CLI's written table).
+    identity_column:
+        Column naming each row; ``None`` uses the frame's first column.
+        An explicitly passed column must exist — a missing one raises
+        the typed error naming it.
+    consensus_column:
+        The 0–1 score column (default ``"consensus"``).
+    top_n:
+        How many ligands to show; ``None`` shows every ligand in the
+        frame.  Values below 1 and non-integers raise
+        :class:`~pharmaml.exceptions.DataValidationError` (the same
+        contract as :func:`plot_top_ligands`).
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``rescored`` is not a DataFrame, the consensus column is
+        missing or holds no numeric values, the identity column is
+        missing, or ``top_n`` is invalid.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from pharmaml.viz import close_figure
+    >>> from pharmaml.viz.docking_plots import plot_consensus_ranking
+    >>> rescored = pd.DataFrame({"ligand": ["A", "B", "C"],
+    ...                          "consensus": [0.2, 0.9, 0.5]})
+    >>> fig = plot_consensus_ranking(rescored)
+    >>> [t.get_text() for t in fig.axes[0].get_yticklabels()]   # strongest on top
+    ['A', 'C', 'B']
+    >>> fig.axes[0].get_xlabel()
+    'consensus (0–1, weighted mean of the _norm units) — higher is stronger'
+    >>> close_figure(fig)
+    >>> plot_consensus_ranking(pd.DataFrame({"ligand": ["A"]}))
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: consensus column 'consensus' not found in the rescored frame; available: ['ligand']
+    """
+    _check_top_n(top_n)
+    if not isinstance(rescored, pd.DataFrame):
+        raise DataValidationError(
+            f"rescored must be a pandas DataFrame, got {type(rescored).__name__}"
+        )
+    if consensus_column not in rescored.columns:
+        raise DataValidationError(
+            f"consensus column {consensus_column!r} not found in the "
+            f"rescored frame; available: {list(rescored.columns)}"
+        )
+    if identity_column is None:
+        identity_column = str(rescored.columns[0])
+    elif identity_column not in rescored.columns:
+        raise DataValidationError(
+            f"identity column {identity_column!r} not found in the "
+            f"rescored frame; available: {list(rescored.columns)}"
+        )
+    scores = pd.to_numeric(rescored[consensus_column], errors="coerce")
+    frame = pd.DataFrame({
+        "ligand": [str(name) for name in rescored[identity_column]],
+        "score": scores.to_numpy(dtype=float),
+    }).dropna(subset=["score"])
+    if frame.empty:
+        raise DataValidationError(
+            f"column {consensus_column!r} has no numeric consensus values "
+            "to rank (all NaN or non-numeric)"
+        )
+    # kind="stable": ties resolve first-declared-wins, matching the
+    # leaderboard's sort (and plot_top_ligands' tie contract).
+    frame = frame.sort_values("score", ascending=False, kind="stable").head(
+        len(frame) if top_n is None else int(top_n)
+    )
+    frame = frame.iloc[::-1]  # strongest consensus at the top of the axis
+
+    fig, ax = new_figure(figsize=(8.6, 0.44 * len(frame) + 1.7))
+    positions = np.arange(len(frame))
+    ax.barh(positions, frame["score"].to_numpy(), color=PALETTE[0], alpha=0.88,
+            height=0.62, edgecolor="white")
+    for pos, value in zip(positions, frame["score"].to_numpy()):
+        # consensus is 0-1: annotate OUTSIDE the bar tip (ha="left" puts
+        # the label right of the positive bar end), never on top of it
+        ax.text(
+            value, pos, f" {value:.3g}", va="center",
+            ha="right" if value < 0 else "left", fontsize=9,
+        )
+    ax.set_yticks(positions, frame["ligand"].tolist())
+    ax.set_xlim(0.0, max(1.0, float(frame["score"].max()) * 1.12))
+    ax.set_xlabel(
+        "consensus (0–1, weighted mean of the _norm units) — higher is stronger"
+    )
     ax.set_title(title)
     return fig

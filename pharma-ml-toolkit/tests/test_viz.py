@@ -37,6 +37,7 @@ from pharmaml.viz import (
     plot_class_distribution,
     plot_concentration_profile,
     plot_confusion_matrix,
+    plot_consensus_ranking,
     plot_cv_scores,
     plot_descriptor_distributions,
     plot_dose_accumulation,
@@ -807,6 +808,59 @@ class TestDockingPlots:
         summary = self._summary().rename(columns={"best_lowest_energy": "top_lowest_energy"})
         fig = plot_energy_distribution(summary)
         assert fig is not None
+
+    def test_consensus_ranking_sorted_nan_dropped(self, close_all):
+        """The figure twin of the explainable leaderboard: strongest
+        consensus on top, NaN rows (incomplete inputs) cannot rank."""
+        rescored = pd.DataFrame({
+            "ligand": ["A", "B", "C", "D"],
+            "consensus": [0.2, 0.9, 0.5, float("nan")],
+        })
+        fig = plot_consensus_ranking(rescored)
+        ticks = [t.get_text() for t in fig.axes[0].get_yticklabels()]
+        assert ticks == ["A", "C", "B"]  # bottom-to-top: strongest last
+        assert len(fig.axes[0].patches) == 3  # the NaN row is dropped
+        assert fig.axes[0].get_xlabel() == (
+            "consensus (0–1, weighted mean of the _norm units) — higher is stronger"
+        )
+
+    def test_consensus_ranking_top_n_and_identity(self, close_all):
+        rescored = pd.DataFrame({
+            "folder": ["lig1", "lig2", "lig3", "lig4"],
+            "consensus": [0.1, 0.4, 0.9, 0.6],
+        })
+        fig = plot_consensus_ranking(rescored, top_n=2)
+        # identity defaults to the frame's FIRST column (folder), and the
+        # cut keeps the two strongest
+        ticks = [t.get_text() for t in fig.axes[0].get_yticklabels()]
+        assert ticks == ["lig4", "lig3"]
+        # an explicit identity column must exist, naming the available set
+        with pytest.raises(
+            DataValidationError, match="'name'.*available.*folder"
+        ):
+            plot_consensus_ranking(rescored, identity_column="name")
+
+    def test_consensus_ranking_validation(self, close_all):
+        rescored = pd.DataFrame({"ligand": ["A"], "consensus": [0.5]})
+        # not a DataFrame
+        with pytest.raises(DataValidationError, match="must be a pandas DataFrame"):
+            plot_consensus_ranking([("A", 0.5)])
+        # missing consensus column, naming the available columns
+        with pytest.raises(
+            DataValidationError, match="'consensus'.*available.*ligand"
+        ):
+            plot_consensus_ranking(pd.DataFrame({"ligand": ["A"]}))
+        # all-NaN consensus: nothing can rank
+        with pytest.raises(DataValidationError, match="no numeric consensus"):
+            plot_consensus_ranking(
+                pd.DataFrame({"ligand": ["A", "B"], "consensus": [None, None]})
+            )
+        # the shared top_n contract
+        for bad in (0, -1, "3", 2.5):
+            with pytest.raises(
+                DataValidationError, match="top_n must be a positive integer or None"
+            ):
+                plot_consensus_ranking(rescored, top_n=bad)
 
     def test_missing_energy_column(self, close_all):
         with pytest.raises(DataValidationError):

@@ -273,6 +273,7 @@ after adding new public functions.
 | `plot_cv_scores` | function | Per-fold CV scores as bars with the mean line and ±std band. |
 | `plot_descriptor_distributions` | function | Histogram grid over the numeric columns of a table. |
 | `plot_dose_accumulation` | function | One-compartment superposition of an intermittent IV regimen. |
+| `plot_consensus_ranking` | function | Horizontal bars of ligands ranked by the 0–1 consensus. |
 | `plot_energy_distribution` | function | Histogram of per-ligand best binding energies (kcal/mol). |
 | `plot_feature_importance` | function | Top-N feature importances as horizontal bars. |
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |

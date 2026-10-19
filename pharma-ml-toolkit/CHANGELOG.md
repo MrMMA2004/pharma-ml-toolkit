@@ -10,6 +10,43 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.34] — 2026-10-19
+
+### Added — the rescore joins the report story (`--plots` + the ranking figure)
+
+- **`plot_consensus_ranking`** (`pharmaml.viz.docking_plots`, exported
+  from `pharmaml.viz`) — the figure twin of
+  `consensus_breakdown`'s leaderboard: horizontal bars sorted so the
+  strongest 0–1 consensus sits on top, the value annotated outside the
+  bar tip, identity labels from the frame's first column by default
+  (`folder` for scans, `ligand` for enriched tables, `rank` for cluster
+  tables — overridable via `identity_column`). NaN consensus rows
+  cannot rank and are dropped; the validation contract mirrors
+  `plot_top_ligands` (typed `DataValidationError` naming the missing
+  column and the available set; the shared `top_n` guard; first-
+  declared-wins ties via the stable sort).
+- **`pharmaml docking rescore --plots [--pdf-report] [--out-dir]`** —
+  the rescore command joins the `ml train --plots` story: the visual
+  bundle (`report.html` + figures + tables) now ships for the consensus
+  ranking too. The bundle always carries `consensus_ranking.png` (the
+  new figure over the rescored table) and the `consensus_breakdown`
+  table (csv + markdown, the explainable units riding along); scan-
+  shaped tables (a `folder` column + energies) additionally get
+  `energy_distribution.png`, while consensus-only tables skip it (the
+  `feature_importance` skip pattern). `--pdf-report` implies `--plots`
+  and writes the multi-page `report.pdf`; the printed recipe line rides
+  along as the bundle's subtitle.
+- Tests +6: `tests/test_viz.py` +3 (sorted order with NaN dropped +
+  the axis label contract; `top_n` cut + default/explicit identity
+  column; the four validation guards incl. the shared `top_n`
+  contract) and `tests/test_cli_features.py` +3 (the ligand-identity
+  bundle without the energy figure, the scan-shaped bundle with both
+  figures, and `--pdf-report` implying `--plots` with a ≥3-page
+  document whose title page names the evidence).
+- README: the CLI quick-start gains the `--plots` rescore line; the
+  viz section imports and demonstrates `plot_consensus_ranking`; test
+  counts 1844 → 1850. `docs/INDEX.md` regenerated (237 → 238 symbols).
+
 ## [1.2.33] — 2026-10-19
 
 ### Added — the consensus breakdown reaches the last two surfaces: the GUIs
