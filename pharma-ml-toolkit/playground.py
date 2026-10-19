@@ -1206,6 +1206,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_ligand_path: Path | None = None      # reference ligand PDBQT
         self._dock_box: Any = None             # GridBox
         self._dock_results_frame: Any = None   # current results table
+        self._dock_rescore_last: tuple[Any, list[str], list[float] | None,
+                                       dict[str, bool], str] | None = None
+        # (rescored frame, evidence columns, weights, higher overrides,
+        #  source label) — the Save report… payload
         self._dock_results_source: str | None = None    # campaign / dlg / vina
         self._dock_campaign_root: Path | None = None    # AutoDock4 batch root
         self._dock_vina_receptor: Path | None = None
@@ -4269,8 +4273,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "leaderboard replaces the results tree; Save results "
                     "CSV… writes the rescored table.",
         )
-        rescore_btn.grid(row=rescore.grid_size()[1], column=0, columnspan=2,
-                         sticky="w", pady=(6, 0))
+        rescore_btn.grid(row=rescore.grid_size()[1], column=0, sticky="w",
+                         pady=(6, 0))
+        report_btn = self._action_button(
+            rescore, "Save report…", self._dock_save_report,
+            tooltip="Write the last rescore as the one-click visual "
+                    "bundle -- report.html + the consensus-ranking figure "
+                    "+ the breakdown table (the CLI --plots/--pdf-report "
+                    "story, mouse edition).",
+        )
+        report_btn.grid(row=rescore_btn.grid_info()["row"], column=1,
+                        sticky="w", padx=(10, 0))
+        self._dock_pdf_var = tk.BooleanVar(value=False)
+        pdf_check = ttk.Checkbutton(
+            rescore, text="include report.pdf", variable=self._dock_pdf_var)
+        Tooltip(pdf_check, "Also write the multi-page PDF document -- "
+                           "needs fpdf (pharmaml[reports])")
+        grid_append(rescore, pdf_check, sticky="w", pady=(2, 0))
         self._dock_rescore_text = _grid_text(rescore, height=7, mono=self._mono)
         self._dock_rescore_text.insert(
             "1.0", "the evidence recipe and the driving-evidence verdict "
@@ -4948,6 +4967,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(rescored: Any) -> None:
             self._dock_results_frame = rescored
             self._dock_results_source = "rescore"
+            source_label = (self._dock_results_info.cget("text")
+                            if self._dock_results_info.winfo_exists()
+                            else "loaded table")
+            self._dock_rescore_last = (
+                rescored, columns, weights, dict(higher_is_better), source_label,
+            )
             tree = self._dock_results_tree
             tree.delete(*tree.get_children())
             identity = str(rescored.columns[0])
@@ -5016,6 +5041,102 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         self._start_job("rescoring the loaded table", work, render)
+
+    def _dock_save_report(self) -> None:
+        """Write the last rescore as the one-click visual bundle.
+
+        The same ``report.html`` + figures + tables bundle the CLI's
+        ``docking rescore --plots`` writes (plus the multi-page
+        ``report.pdf`` when the checkbox is ticked -- the
+        ``--pdf-report`` twin), rebuilt from the stored rescore and
+        saved into a folder the user picks.  Figures are created under
+        the package's forced-Agg backend inside the worker thread; they
+        never touch Tk.
+        """
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the report figures"):
+            return
+        if self._dock_rescore_last is None:
+            messagebox.showwarning(
+                "No rescore yet",
+                "Rescore a table first -- the report needs the explainable "
+                "leaderboard of the last rescore.",
+            )
+            return
+        want_pdf = bool(self._dock_pdf_var.get())
+        if want_pdf and not fpdf_available():
+            messagebox.showwarning(
+                "PDF needs fpdf",
+                "The multi-page PDF document needs fpdf -- install it "
+                "with:  pip install 'pharmaml[reports]'\n"
+                "(the HTML report works without it -- untick the box to "
+                "continue).",
+            )
+            return
+        if filedialog is None:  # pragma: no cover - headless fallback
+            return
+        target = filedialog.askdirectory(title="Choose the report folder")
+        if not target:
+            return
+        rescored, columns, weights, higher_is_better, source_label = (
+            self._dock_rescore_last
+        )
+        directions = higher_is_better or {}
+
+        def work() -> Any:
+            from pharmaml.exceptions import DataValidationError
+            from pharmaml.viz import (
+                plot_consensus_ranking,
+                plot_energy_distribution,
+                save_visual_bundle,
+            )
+
+            figures: dict[str, Any] = {
+                "consensus_ranking": plot_consensus_ranking(rescored)
+            }
+            try:
+                # scan-shaped tables also carry the energy landscape; a
+                # consensus-only table simply skips it (the CLI's skip
+                # pattern, byte for byte).
+                figures["energy_distribution"] = plot_energy_distribution(
+                    rescored
+                )
+            except DataValidationError:
+                pass
+            recipe = ", ".join(
+                f"{column} ("
+                + ("higher" if directions.get(
+                    column, not column.endswith(("energy", "affinity")))
+                   else "lower")
+                + "=better"
+                + (f", weight {weight:g}" if weights else "")
+                + ")"
+                for column, weight in zip(columns, weights or [1.0] * len(columns))
+            )
+            return save_visual_bundle(
+                figures,
+                tables={"consensus_breakdown": rescored},
+                out_dir=target,
+                title=(f"playground docking rescore — "
+                       f"{len(columns)} evidence column(s)"),
+                subtitle=f"{recipe} — {source_label}",
+                pdf_report=want_pdf,
+            )
+
+        def render(written: Any) -> None:
+            names = [path.name for path in written]
+            extra = " + report.pdf" if want_pdf else ""
+            self._job_label.configure(
+                text=f"report saved · {target} ({len(written)} files{extra})"
+            )
+            messagebox.showinfo(
+                "Report saved",
+                f"{len(written)} files written to {target}:\n"
+                + "\n".join(names[:8])
+                + ("\n…" if len(names) > 8 else ""),
+            )
+
+        self._start_job("writing the report bundle", work, render)
 
     # -- campaign runner card -------------------------------------------- #
     def _dock_choose_campaign_root(self) -> None:

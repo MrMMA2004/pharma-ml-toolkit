@@ -1176,6 +1176,118 @@ class TestDockingGuiUnderXvfb:
 
 
 # --------------------------------------------------------------------- #
+# docking rescore report bundle, live under Xvfb
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestDockingRescoreReport:
+    """``_dock_save_report`` rebuilds the CLI bundle from the stored rescore.
+
+    The report story's docking axis (100x-86): library figure (1.2.34) ->
+    CLI --plots (1.2.34) -> GUI.  Guards first (no rescore, no fpdf),
+    then the end-to-end flow on the example campaign with the PDF
+    ticked, and the unticked HTML-only default.
+    """
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 120.0) -> bool:
+        """Pump the Tk loop until the worker queue drains (probe pattern)."""
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def test_report_needs_a_rescore_first(
+        self, app: Any, dialogs: list[Any]
+    ) -> None:
+        app._dock_save_report()
+        assert not app._busy  # the guard fired before any job started
+        titles = [call[1][0] for call in dialogs]
+        assert "No rescore yet" in titles
+        assert "explainable" in dialogs[0][1][1]  # the remedy, named
+
+    def test_report_pdf_gate_without_fpdf(
+        self, app: Any, dialogs: list[Any], monkeypatch: Any, playground: Any
+    ) -> None:
+        app._dock_rescore_last = (object(), ["a"], None, {}, "x")
+        monkeypatch.setattr(playground, "fpdf_available", lambda: False)
+        app._dock_pdf_var.set(True)
+        app._dock_save_report()
+        assert not app._busy  # gated before the folder dialog
+        titles = [call[1][0] for call in dialogs]
+        assert "PDF needs fpdf" in titles
+        assert "pharmaml[reports]" in dialogs[0][1][1]  # the install hint
+
+    def test_report_bundle_end_to_end(
+        self, app: Any, dialogs: list[Any], monkeypatch: Any,
+        playground: Any, tmp_path: Path,
+    ) -> None:
+        pypdf = pytest.importorskip("pypdf")
+        target = tmp_path / "bundle"
+        monkeypatch.setattr(playground.filedialog, "askdirectory",
+                            lambda **k: str(target))
+        app._dock_load_example_campaign()
+        assert self._drain(app), "campaign scan job did not finish"
+        app._dock_rescore()
+        assert self._drain(app), "rescore job did not finish"
+        assert app._dock_rescore_last is not None  # now reportable
+
+        app._dock_pdf_var.set(True)
+        app._dock_save_report()
+        assert self._drain(app), "report job did not finish"
+
+        # the CLI --plots bundle, mouse edition: both figures (the scan
+        # table is folder-shaped) + the breakdown table + the documents
+        assert (target / "report.html").is_file()
+        assert (target / "report.pdf").is_file()
+        assert (target / "consensus_ranking.png").is_file()
+        assert (target / "energy_distribution.png").is_file()
+        assert (target / "consensus_breakdown.csv").is_file()
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos, "the success dialog never fired"
+        assert infos[0][1][0] == "Report saved"
+        assert "report saved" in app._job_label.cget("text")
+        reader = pypdf.PdfReader(str(target / "report.pdf"))
+        first = reader.pages[0].extract_text()
+        assert "playground docking rescore" in first
+        assert "evidence" in first.lower()
+
+        # the unticked default: a second save ships HTML only
+        target_html = tmp_path / "bundle_html"
+        monkeypatch.setattr(playground.filedialog, "askdirectory",
+                            lambda **k: str(target_html))
+        app._dock_pdf_var.set(False)
+        app._dock_save_report()
+        assert self._drain(app), "second report job did not finish"
+        assert (target_html / "report.html").is_file()
+        assert not (target_html / "report.pdf").exists()  # the unticked default
+
+
+# --------------------------------------------------------------------- #
 # session persistence + theme switching, live under Xvfb
 # --------------------------------------------------------------------- #
 @XVFB_SKIP

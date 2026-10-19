@@ -10,6 +10,38 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.35] — 2026-10-19
+
+### Added — the rescore report story reaches the GUI (`Save report…`)
+
+- **The playground's Consensus rescore card gains a "Save report…"
+  button + an "include report.pdf" checkbox** (the `_ml_save_report`
+  pattern, transplanted to the docking axis): the last rescore is
+  stored as a 5-tuple (rescored frame, evidence columns, weights,
+  direction overrides, source label) and the button rebuilds the
+  EXACT `docking rescore --plots` bundle from it —
+  `consensus_ranking.png` (always), `energy_distribution.png` (scan-
+  shaped tables only, the CLI's skip pattern), the
+  `consensus_breakdown` table, `report.html`, and the multi-page
+  `report.pdf` when the checkbox is ticked. The guard chain mirrors
+  the ML twin: require pharmaml + matplotlib → "No rescore yet"
+  warning naming the remedy → the fpdf gate with its install hint →
+  the folder picker; figures build under the forced-Agg backend inside
+  the worker thread, never touching Tk. The bundle's subtitle carries
+  the CLI-identical recipe line plus the source table's label.
+- Tests +3 (`tests/test_playground.py`, a new
+  `TestDockingRescoreReport` class live under Xvfb): the no-rescore
+  guard (warning names the explainable leaderboard), the fpdf gate
+  (the install hint, gated before the folder dialog), and the
+  end-to-end flow on the example campaign — campaign scan → rescore →
+  save with the PDF ticked → all five artifacts verified (both
+  figures ride along because the scan table is folder-shaped), the
+  "Report saved" dialog, the job label, the PDF's title page naming
+  the evidence — plus the unticked default (a second save ships HTML
+  only).
+- README's playground Docking tour names the report button; test
+  counts 1850 → 1853.
+
 ## [1.2.34] — 2026-10-19
 
 ### Added — the rescore joins the report story (`--plots` + the ranking figure)
