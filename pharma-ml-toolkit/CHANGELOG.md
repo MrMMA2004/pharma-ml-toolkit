@@ -10,6 +10,61 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.38] — 2026-10-19
+
+### Added — the desktop playground joins the four-feature story: the Tune card + the batchnorm checkbox
+
+- **`playground.py` — Data & ML tab: the “Hyperparameter search (random)”
+  card** (open since 100x-87): the `ml tune --searcher random` story, mouse
+  edition.  A keras-tuner-style `RandomSearch` over the same hypermodel
+  families the CLI resolves (`ann` / `hsvr` / `dnn` — pinned to the CLI's own
+  registry by a test so the two surfaces cannot drift).  Every trial is scored
+  by mean CV on the SAME shuffled folds; the family's **defaults are scored
+  too** under those exact folds (the number the search has to beat); the
+  winner is refit and scored on the held-out 20 %.  The leaderboard card fills
+  with the trial ranking (rank / trial / configuration / score / ± std, best
+  first, failed trials last) and a one-line summary carries best vs defaults
+  (the gain), the held-out verdict and the winning configuration.  **Apply
+  best** carries the winner forward: `ann`/`hsvr` point the model combobox at
+  the family; `dnn` prefills the WHOLE Deep Learning tab from the winning
+  parameters (layers, dropout, learning rate, activation, **batchnorm**,
+  epochs — plus the dataset and the target column) and switches to it, so the
+  loss curves and the report pipeline run on the exact winner.  **Save
+  trials CSV…** writes the full trials table (the CLI `--out` story).  Guards:
+  hsvr on a classification target explains itself and starts no job; trials /
+  cv bounds are pre-flighted; the zero-numeric-feature rule fires before any
+  search starts (the 100x-62 convention).
+- **`playground.py` — Deep Learning tab: the batchnorm checkbox** (the second
+  half of the open item): `batchnorm=True` on all four torch estimators from
+  one tick — with the estimator's own batch-size ≥ 2 guard surfaced as a
+  pre-flight dialog, and the session file carrying the new input for free
+  (the widget-tree ownership map picked it up automatically).
+- **`pharmaml.ml.tuner.make_cv_splitter` (new public API)** — the tuners' fold
+  protocol (`KFold(shuffle, random_state=0)`; stratified for classes, plain
+  KFold fallback when stratification is impossible) exposed so a baseline can
+  be scored under the EXACT folds the search used — the apples-to-apples
+  contract the notebook §4, the web tune route and now the playground's Tune
+  card all rely on; previously each surface re-implemented (or hardcoded) the
+  rule, the classic drift trap.  Both tuners' `search()` now route through it
+  (one implementation, zero behaviour change); exported from `pharmaml.ml`
+  and documented with doctests.
+- Tests +15: `test_tuner.py` +3 (the public splitter: delegation to the
+  tuners' own protocol across regression / stratified / singleton-fallback /
+  auto cases, argument guards, the package export) and `test_playground.py`
+  +12 (the config-text renderer, the CLI-registry pin, the card defaults, the
+  ann search end-to-end incl. Apply best, the hsvr classification guard, the
+  before-any-search guards, the bad-settings pre-flight, the trials CSV
+  export, the dnn → Deep-Learning-tab bridge, the batchnorm run + the
+  singleton-batch pre-flight, and the numeric-feature guard for the search).
+
+### Changed
+
+- The Data & ML tab's leaderboard card is now titled “Leaderboard” with a
+  dynamic status line that names what it currently shows (the registry CV
+  ranking or the trial ranking) — two stories, one table.
+- The Deep Learning session round-trip pin grows to 15 saved inputs (the
+  batchnorm checkbox rides the generic save/restore machinery for free).
+
 ## [1.2.37] — 2026-10-19
 
 ### Added — the executed-notebook face of the four-feature round: `complete_tuning_workflow.ipynb`

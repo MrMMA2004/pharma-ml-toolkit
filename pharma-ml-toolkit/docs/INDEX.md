@@ -113,6 +113,7 @@ after adding new public functions.
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `list_models` | function | List registry entries with availability information. |
 | `load_model` | function | Load a model bundle saved by :func:`save_model`. |
+| `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |

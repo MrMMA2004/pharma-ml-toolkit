@@ -30,19 +30,25 @@ A tabbed graphical interface opens with every calculation domain of the
   parity/confusion figure, cross-validate a model leaderboard, write
   the whole run as a report bundle -- ``report.html`` + figures +
   tables (+ the multi-page ``report.pdf`` when ticked), the CLI
-  ``--plots``/``--pdf-report`` story, mouse edition -- and audit any
-  new CSV against the last trained model before predicting (the
-  ``ml check`` story, mouse edition: every difference named).
+  ``--plots``/``--pdf-report`` story, mouse edition -- run a
+  keras-tuner-style hyperparameter search (``ml tune``'s RandomSearch
+  over the ann / dnn / hsvr families, with the defaults baseline, the
+  held-out verdict, an apply-best bridge to the Deep Learning tab and
+  a trials CSV export) -- and audit any new CSV against the last
+  trained model before predicting (the ``ml check`` story, mouse
+  edition: every difference named).
 * **Deep Learning** -- the toolkit's PyTorch estimators behind one card
   of inputs: pick the architecture (feed-forward or residual MLP), the
   hidden widths, dropout, activation, Adam's learning rate and weight
-  decay, the early-stopping patience and validation fraction, then
-  watch the held-out metrics, the parity/confusion figure and the
-  epoch-by-epoch loss curves (``plot_training_history`` -- the
-  early-stopping verdict rides on the title, the per-epoch records
-  export as CSV) -- and audit any new CSV against the last trained
-  network before predicting (the ``ml check`` story, deep edition:
-  every difference named, the training target dropped automatically).
+  decay, the early-stopping patience and validation fraction, toggle
+  batch normalisation (``batchnorm=True``, 1.2.36 -- a BatchNorm1d
+  between every hidden linear map and its activation), then watch the
+  held-out metrics, the parity/confusion figure and the epoch-by-epoch
+  loss curves (``plot_training_history`` -- the early-stopping verdict
+  rides on the title, the per-epoch records export as CSV) -- and audit
+  any new CSV against the last trained network before predicting (the
+  ``ml check`` story, deep edition: every difference named, the
+  training target dropped automatically).
 * **Generative**    -- run the genetic algorithm OR the reinforcement
   learning optimiser on a SMILES corpus with any bundled objective (QED,
   LogP window, ...); adaptive GA runs render the operator-mix learning
@@ -933,6 +939,51 @@ def deep_estimator_name(architecture: str, task: str) -> str:
     return family + ("Classifier" if task == "classification" else "Regressor")
 
 
+#: Data & ML tab (100x-90): hypermodel families the Tune card offers --
+#: the same tokens the CLI's ``ml tune --estimator`` accepts.
+_TUNE_ESTIMATORS: tuple[str, ...] = ("ann", "hsvr", "dnn")
+
+#: Hypermodel builder names for the Tune card, keyed by
+#: ``(estimator, task)`` -- resolved on the worker thread (the playground
+#: never imports ``pharmaml`` at module scope), and pinned to the CLI's
+#: own ``ml tune`` registry by the test suite so the two surfaces cannot
+#: drift apart (the ``_DL_ACTIVATIONS`` pin pattern).
+_TUNE_HYPERMODELS: dict[tuple[str, str], str] = {
+    ("ann", "regression"): "build_ann_regressor",
+    ("ann", "classification"): "build_ann_classifier",
+    ("dnn", "regression"): "build_deep_regressor",
+    ("dnn", "classification"): "build_deep_classifier",
+    ("hsvr", "regression"): "build_hsvr",
+}
+
+
+def tune_config_text(params: dict[str, Any]) -> str:
+    """Render one trial's hyperparameters as ``k=v`` tokens.
+
+    Floats go through ``%g`` (``alpha=0.001``, not ``alpha=0.0010000``),
+    booleans render as ``on`` / ``off`` and everything else as ``str``.
+    Keys are sorted so the leaderboard's configuration column is stable
+    across trials (and across runs -- determinism is the tuner's own
+    contract).
+
+    >>> tune_config_text({"units": 64, "alpha": 0.001, "batchnorm": True})
+    'alpha=0.001 batchnorm=on units=64'
+    >>> tune_config_text({"gamma": "scale"})
+    'gamma=scale'
+    """
+    tokens: list[str] = []
+    for key in sorted(params):
+        value = params[key]
+        if isinstance(value, bool):
+            text = "on" if value else "off"
+        elif isinstance(value, float):
+            text = f"{value:g}"
+        else:
+            text = str(value)
+        tokens.append(f"{key}={text}")
+    return " ".join(tokens)
+
+
 def _cell_text(value: Any, limit: int = 26) -> str:
     """Render one table cell for the preview/leaderboard trees."""
     if value is None:
@@ -1181,6 +1232,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # against it (the training target rides along as the automatic
         # --target drop).
         self._ml_last_run: tuple[Any, Any, str, Any, Any, str] | None = None
+        # -- Hyperparameter-search card state (100x-90) ------------- #
+        # (TunerResults, estimator token, task, target column) of the
+        # last search -- the Apply-best and Save-trials payloads.
+        self._tune_last: tuple[Any, str, str, str] | None = None
         self._desc_frame: Any = None
         self._desc_rows: list[tuple[str, str, str]] = []
         self._ga_result: Any = None
@@ -5362,15 +5417,75 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "automatically when present).")
         check_btn.pack(side="left", padx=(10, 0))
 
-        results = make_card(page.grid, "Results", span=2, row=3, column=0)
+        tuner = make_card(
+            page.grid, "Hyperparameter search (random)", span=2, row=3, column=0,
+            subtitle="The ml tune --searcher random story, mouse edition: a "
+                     "keras-tuner-style RandomSearch over a whole estimator "
+                     "family (not the per-model grid search above). Every "
+                     "trial is scored by mean CV on the SAME shuffled folds; "
+                     "the family's defaults are scored too -- the number the "
+                     "search has to beat; the winner is refit and scored on "
+                     "the held-out 20%."
+        )
+        self._tune_estimator_combo = ttk.Combobox(tuner, state="readonly", width=26,
+                                                  values=_TUNE_ESTIMATORS)
+        self._tune_estimator_combo.set("ann")
+        Tooltip(self._tune_estimator_combo,
+                "ann = the sklearn MLP hypermodel; dnn = the torch deep MLP "
+                "(batchnorm searchable, needs torch); hsvr = the hierarchical "
+                "SVR (regression only). The same families the CLI's "
+                "ml tune --estimator accepts.")
+        form_row(tuner, "estimator", self._tune_estimator_combo)
+        self._tune_trials = ttk.Spinbox(tuner, from_=4, to=40, increment=1, width=10)
+        self._tune_trials.set("8")
+        form_row(tuner, "trials", self._tune_trials)
+        self._tune_cv = ttk.Spinbox(tuner, from_=2, to=5, increment=1, width=10)
+        self._tune_cv.set("3")
+        form_row(tuner, "cv folds", self._tune_cv)
+        tune_buttons = ttk.Frame(tuner, style="Card.TFrame")
+        grid_append(tuner, tune_buttons, sticky="w", pady=(8, 0))
+        search_btn = self._action_button(
+            tune_buttons, "Run search", self._ml_tune,
+            tooltip="RandomSearch over the chosen family's space -- trials "
+                    "ranked by mean CV score on the leaderboard card below; "
+                    "the summary line carries best vs defaults (the gain) "
+                    "and the held-out verdict. Deterministic end-to-end "
+                    "(the same seed folds the same way twice).")
+        search_btn.pack(side="left")
+        apply_btn = self._action_button(
+            tune_buttons, "Apply best", self._ml_tune_apply,
+            tooltip="Carry the winning configuration forward: ann/hsvr point "
+                    "the model combobox at the family; dnn prefills the whole "
+                    "Deep Learning tab (layers, dropout, learning rate, "
+                    "activation, batchnorm, epochs) and switches to it.")
+        apply_btn.pack(side="left", padx=(10, 0))
+        save_trials_btn = self._action_button(
+            tune_buttons, "Save trials CSV…", self._ml_tune_save_trials,
+            tooltip="Write the full trials table (one row per trial: score, "
+                    "std, every hyperparameter) -- the CLI --out story.")
+        save_trials_btn.pack(side="left", padx=(10, 0))
+        self._tune_summary = ttk.Label(
+            tuner, text="no search yet — pick an estimator family and run it",
+            style="CardMuted.TLabel", wraplength=620, justify="left")
+        grid_append(tuner, self._tune_summary, sticky="w", pady=(6, 0))
+
+        results = make_card(page.grid, "Results", span=2, row=4, column=0)
         self._ml_metrics = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, self._ml_metrics, sticky="ew")
         ttk.Label(self._ml_metrics, text="train a model to see metrics",
                   style="CardMuted.TLabel").pack(anchor="w")
         self._ml_host = self._figure_host(results, height=330)
 
-        board = make_card(page.grid, "Model leaderboard (cross-validation)", span=2,
-                          row=4, column=0)
+        board = make_card(
+            page.grid, "Leaderboard", span=2, row=5, column=0,
+            subtitle="Compare models fills it with the cross-validated "
+                     "registry ranking; a hyperparameter search fills it "
+                     "with the trial ranking, best first."
+        )
+        self._board_status = ttk.Label(
+            board, text="empty — run Compare models or a hyperparameter search",
+            style="CardMuted.TLabel", wraplength=620, justify="left")
+        grid_append(board, self._board_status, sticky="w")
         board_frame = ttk.Frame(board, style="Card.TFrame")
         grid_append(board, board_frame, sticky="nsew", weight=True)
         self._board_tree = ttk.Treeview(board_frame, show="headings", height=6)
@@ -5762,6 +5877,242 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 row=index // 4, column=(index % 4) * 2 + 1, sticky="w", padx=(0, 18)
             )
 
+    def _ml_tune(self) -> None:
+        """Run a RandomSearch over the chosen hypermodel family.
+
+        The ``ml tune --searcher random`` story, mouse edition: the
+        same hypermodels the CLI resolves, the same public
+        ``make_cv_splitter`` folds for every trial AND for the
+        hypermodel's defaults (the apples-to-apples baseline the search
+        has to beat), the winner refit on the train split and scored on
+        the held-out 20% -- all inside the worker thread, deterministically
+        (seed 42, the tab's own convention).
+        """
+        if not self._require_pharmaml():
+            return
+        if not self._require("pandas", "the search") or not self._require(
+                "sklearn", "the search"
+        ):
+            return
+        if self._ml_frame is None:
+            messagebox.showwarning("No dataset", "Open a CSV or load an example first.")
+            return
+        target = self._target_combo.get()
+        if not target:
+            messagebox.showwarning("No target", "Pick the column to predict.")
+            return
+        # pre-flight (100x-62): the search shares the tab's rule -- a
+        # zero-numeric-feature dataset fails before any job starts.
+        numeric, dropped = numeric_feature_columns(self._ml_frame, target)
+        if not numeric:
+            messagebox.showwarning(
+                "No numeric features",
+                "Every non-target column is non-numeric"
+                + (f" ({', '.join(dropped)})" if dropped else "")
+                + ".  The hypermodels need numeric feature columns -- compute "
+                "descriptors first (the Chemistry tab's feature factory).",
+            )
+            return
+        task = self._task_combo.get()
+        if task == "auto":
+            task = self._infer_task(target)
+        estimator = self._tune_estimator_combo.get()
+        hypermodel_name = _TUNE_HYPERMODELS.get((estimator, task))
+        if hypermodel_name is None:
+            messagebox.showwarning(
+                "hsvr is regression-only",
+                "The HierarchicalSVR hypermodel has no classification "
+                "variant -- pick ann or dnn for a classification target.",
+            )
+            return
+        if estimator == "dnn" and not self._require("torch", "the dnn search"):
+            return
+        try:
+            max_trials = parse_int(self._tune_trials.get(), "trials",
+                                   minimum=4, maximum=40)
+            cv = parse_int(self._tune_cv.get(), "cv folds",
+                           minimum=2, maximum=5)
+        except ValueError as exc:
+            messagebox.showwarning("Check the search settings", str(exc))
+            return
+
+        def work() -> Any:
+            from sklearn.model_selection import cross_val_score
+
+            import pharmaml.ml.tuner as tuner_module
+            from pharmaml.ml import evaluate_model
+            from pharmaml.ml.preprocessing import make_train_test_split
+            from pharmaml.ml.tuner import HyperParameters, RandomSearch, make_cv_splitter
+
+            hypermodel = getattr(tuner_module, hypermodel_name)
+            objective = "r2" if task == "regression" else "accuracy"
+            frame = self._ml_frame
+            y = frame[target]
+            numeric, _dropped = numeric_feature_columns(frame, target)
+            x_train, x_test, y_train, y_test = make_train_test_split(
+                frame[numeric], y, random_state=42
+            )
+            tuner = RandomSearch(
+                hypermodel, objective=objective, max_trials=max_trials,
+                cv=cv, task=task, seed=42,
+            )
+            results = tuner.search(x_train, y_train)
+            # the baseline: the hypermodel's defaults under the tuner's
+            # own fold protocol (the public splitter -- same folds, only
+            # the configuration differs).
+            defaults = hypermodel(HyperParameters())
+            base = cross_val_score(
+                defaults, x_train, y_train, scoring=objective,
+                cv=make_cv_splitter(task, y_train, cv),
+            )
+            # the held-out verdict: the winner was refit on the train
+            # split inside search(); score it like any trained model.
+            report = evaluate_model(
+                results.best_estimator, x_test, y_test, task,
+                keep_predictions=False,
+            )
+            return results, float(base.mean()), float(base.std()), report, objective
+
+        def render(payload: Any) -> None:
+            results, base_mean, base_std, report, objective = payload
+            self._tune_last = (results, estimator, task, target)
+            held_out = report.r2 if task == "regression" else report.accuracy
+            held_label = "held-out R²" if task == "regression" else "held-out accuracy"
+            gain = results.best_score - base_mean
+            self._tune_summary.configure(
+                text=f"best {results.best_score:.4f} ± "
+                     f"{results.best_trial.score_std:.4f} CV {objective} · "
+                     f"defaults {base_mean:.4f} ± {base_std:.4f} → gain "
+                     f"{gain:+.4f} · {held_label} {held_out:.4f} · winner: "
+                     + tune_config_text(results.best_params)
+            )
+            ranked = sorted(
+                (t for t in results.trials if not t.failed),
+                key=lambda t: t.score, reverse=True,
+            )
+            failed = [t for t in results.trials if t.failed]
+            self._board_tree.delete(*self._board_tree.get_children())
+            columns = ["rank", "trial", "configuration", "score", "± std"]
+            self._board_tree["columns"] = columns
+            for column in columns:
+                self._board_tree.heading(column, text=column)
+                self._board_tree.column(column, width=140, minwidth=72, stretch=True)
+            for rank, trial in enumerate(ranked, start=1):
+                self._board_tree.insert(
+                    "", "end",
+                    values=[rank, trial.trial_id,
+                            _cell_text(tune_config_text(trial.hyperparameters), limit=52),
+                            f"{trial.score:.4f}", f"{trial.score_std:.4f}"],
+                )
+            for trial in failed:
+                self._board_tree.insert(
+                    "", "end",
+                    values=["—", trial.trial_id,
+                            _cell_text(tune_config_text(trial.hyperparameters), limit=52),
+                            "failed", ""],
+                )
+            self._board_status.configure(
+                text=f"RandomSearch over {estimator} ({task}) — "
+                     f"{len(results.trials)} trial(s), objective {objective}; "
+                     f"ranked by mean CV score, failed trials last"
+            )
+
+        self._start_job(f"tuning {estimator} ({task})", work, render)
+
+    def _ml_tune_apply(self) -> None:
+        """Carry the winning configuration forward (Apply best).
+
+        ``ann`` / ``hsvr``: point the model combobox at the family so
+        Train & evaluate picks it up (the registry's own defaults --
+        the winning hyperparameters live in the leaderboard and the
+        trials CSV).  ``dnn``: prefill the whole Deep Learning tab from
+        the winning parameters (layers, dropout, learning rate,
+        activation, batchnorm, epochs -- the hypermodel's own knobs) and
+        switch to it, dataset included, so the loss curves and the
+        report pipeline run on the exact winner.
+        """
+        if self._tune_last is None:
+            messagebox.showwarning(
+                "No search yet",
+                "Run a hyperparameter search first -- Apply best carries "
+                "the winning configuration of the last search forward.",
+            )
+            return
+        results, estimator, task, target = self._tune_last
+        params = results.best_params
+        if estimator == "dnn":
+            if not self._require("torch", "the Deep Learning tab"):
+                return
+            if self._ml_path is not None:
+                self._dl_load_path(self._ml_path)
+            if target in list(self._dl_target_combo["values"]):
+                self._dl_target_combo.set(target)
+            self._dl_task_combo.set(task)
+            units = int(params.get("units", 64))
+            n_layers = int(params.get("n_layers", 2))
+            self._dl_hidden_entry.delete(0, "end")
+            self._dl_hidden_entry.insert(
+                0, ", ".join(str(units) for _ in range(n_layers)))
+            self._dl_dropout.set(f"{float(params.get('dropout', 0.1)):g}")
+            self._dl_lr_entry.delete(0, "end")
+            self._dl_lr_entry.insert(0, f"{float(params.get('learning_rate', 1e-3)):g}")
+            activation = str(params.get("activation", "relu"))
+            if activation in _DL_ACTIVATIONS:
+                self._dl_activation_combo.set(activation)
+            self._dl_batchnorm_var.set(bool(params.get("batchnorm", False)))
+            self._dl_epochs.set(str(int(params.get("epochs", 80))))
+            self._dl_patience.set("10")  # the hypermodel's own fixed value
+            self._tune_summary.configure(
+                text="applied to the Deep Learning tab — hit Train & evaluate "
+                     "there for the loss curves and the report bundle")
+            with contextlib.suppress(tk.TclError):
+                self._book.select(self._dl_page)
+            return
+        self._task_combo.set(task)
+        self._refresh_model_choices(task)
+        self._model_combo.set(estimator)
+        self._tune_summary.configure(
+            text=f"applied — model set to {estimator}; hit Train & evaluate "
+                 "for the full report pipeline (the registry's own "
+                 "defaults; the winning config: "
+                 + tune_config_text(params) + ")"
+        )
+
+    def _ml_tune_save_trials(self) -> None:
+        """Write the last search's trials table (the CLI ``--out`` story)."""
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "the trials table"):
+            return
+        if self._tune_last is None:
+            messagebox.showwarning(
+                "No search yet",
+                "Run a hyperparameter search first -- the trials table is "
+                "the leaderboard's full record (score, std, every "
+                "hyperparameter, failed flag).",
+            )
+            return
+        if filedialog is None:  # pragma: no cover - headless fallback
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save the trials table",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        results, _estimator, _task, _target = self._tune_last
+        try:
+            from pharmaml.utils.io import write_table
+
+            written = write_table(results.trials_frame(), Path(path))
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not write the trials table", exc)
+            return
+        self._job_label.configure(
+            text=f"trials saved · {Path(written).name} "
+                 f"({len(results.trials)} rows)"
+        )
+
     def _ml_compare(self) -> None:
         if not self._require_pharmaml():
             return
@@ -5811,6 +6162,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._board_tree.insert(
                     "", "end", values=[_cell_text(value, limit=30) for value in row.tolist()]
                 )
+            self._board_status.configure(
+                text="3-fold CV over the available registry — the score column "
+                     "is the task's objective (higher is better)"
+            )
 
         self._start_job(f"comparing models ({task})", work, render)
 
@@ -5872,7 +6227,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                                  "decay, per-feature standardisation and early stopping "
                                  "on a held-out validation fraction. Hidden layers are "
                                  "comma-separated widths -- empty = a single linear "
-                                 "layer, the regularised baseline.")
+                                 "layer, the regularised baseline. Batch norm (1.2.36) "
+                                 "inserts a BatchNorm1d between every hidden linear "
+                                 "map and its activation.")
         self._dl_arch_combo = ttk.Combobox(net, state="readonly", width=26,
                                            values=_DL_ARCHITECTURES)
         self._dl_arch_combo.set(_DL_ARCHITECTURES[0])
@@ -5908,6 +6265,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dl_seed_entry = ttk.Entry(net, width=12)
         self._dl_seed_entry.insert(0, "42")
         form_row(net, "random seed", self._dl_seed_entry)
+        self._dl_batchnorm_var = tk.BooleanVar(value=False)
+        batchnorm_check = ttk.Checkbutton(
+            net, text="batch normalisation between the hidden layers",
+            variable=self._dl_batchnorm_var)
+        Tooltip(batchnorm_check,
+                "batchnorm=True (1.2.36): a BatchNorm1d after every hidden "
+                "linear map, before its activation -- residual blocks "
+                "normalise BEFORE the skip add. Running statistics ride in "
+                "the portable weight dict, so predict/pickle work unchanged. "
+                "Needs batch size >= 2 (singleton tail batches are skipped "
+                "with a debug log).")
+        form_row(net, "batch norm", batchnorm_check)
         buttons = ttk.Frame(net, style="Card.TFrame")
         buttons.grid(row=net.grid_size()[1], column=0, columnspan=2, sticky="w",
                      pady=(8, 0))
@@ -6042,6 +6411,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except ValueError as exc:
             messagebox.showwarning("Check the network settings", str(exc))
             return
+        batchnorm = bool(self._dl_batchnorm_var.get())
+        if batchnorm and batch_size < 2:
+            # the estimator's own guard, surfaced before the job starts
+            # (the GUI's pre-flight convention): BatchNorm1d cannot run on
+            # single-row batches.
+            messagebox.showwarning(
+                "Batch norm needs batches",
+                "Batch normalisation needs a batch size of at least 2 -- "
+                "BatchNorm1d cannot estimate statistics from single rows. "
+                "Raise the batch size or untick batch norm.",
+            )
+            return
         task = self._dl_task_combo.get()
         if task == "auto":
             task = self._infer_task(target, self._dl_frame)
@@ -6066,7 +6447,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 hidden_layers=hidden, dropout=dropout, activation=activation,
                 epochs=epochs, batch_size=batch_size, learning_rate=learning_rate,
                 weight_decay=weight_decay, patience=patience, val_split=val_split,
-                random_state=seed,
+                batchnorm=batchnorm, random_state=seed,
             )
             started = _time.perf_counter()
             network.fit(x_train, y_train)

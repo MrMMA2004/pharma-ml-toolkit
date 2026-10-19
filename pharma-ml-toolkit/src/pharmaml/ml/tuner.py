@@ -119,6 +119,7 @@ __all__ = [
     "build_deep_classifier",
     "build_deep_regressor",
     "build_hsvr",
+    "make_cv_splitter",
 ]
 
 
@@ -486,6 +487,61 @@ def _make_splitter(task: str, y: np.ndarray, cv: int) -> Any:
     return KFold(n_splits=cv, shuffle=True, random_state=0)
 
 
+def make_cv_splitter(task: str, y: Any, cv: int) -> Any:
+    """The tuners' fold protocol, as a public helper.
+
+    ``KFold(n_splits=cv, shuffle=True, random_state=0)`` for regression,
+    ``StratifiedKFold`` for classification — falling back to the plain
+    shuffled ``KFold`` when stratification is impossible (the smallest
+    class holds fewer members than the fold count).  The tuners score
+    every trial under exactly these folds, so scoring a *baseline*
+    configuration with the same splitter is apples-to-apples (the
+    playground's Tune button and the tuning notebook both do this).
+
+    Parameters
+    ----------
+    task:
+        ``'auto'`` (numeric targets with > 10 distinct values infer
+        regression; anything else classification), ``'regression'`` or
+        ``'classification'``.
+    y:
+        The target vector (anything ``numpy.asarray`` accepts).
+    cv:
+        Fold count (>= 2).
+
+    Raises
+    ------
+    ModelError
+        For an invalid ``cv`` or ``task`` argument.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pharmaml.ml.tuner import make_cv_splitter
+    >>> make_cv_splitter("regression", np.arange(30.0), 3)
+    KFold(n_splits=3, random_state=0, shuffle=True)
+    >>> make_cv_splitter("classification", ["a"] * 10 + ["b"] * 10, 2)
+    StratifiedKFold(n_splits=2, random_state=0, shuffle=True)
+    >>> make_cv_splitter("classification", ["a"] * 2 + ["b"] * 30, 4)
+    KFold(n_splits=4, random_state=0, shuffle=True)
+    >>> make_cv_splitter("regression", np.arange(10.0), 1)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: cv must be an integer >= 2, got 1
+    """
+    if (
+        isinstance(cv, bool)
+        or not isinstance(cv, (int, np.integer))
+        or int(cv) < 2
+    ):
+        raise ModelError(f"cv must be an integer >= 2, got {cv!r}")
+    if task not in {"auto", "regression", "classification"}:
+        raise ModelError(
+            f"task must be 'auto', 'regression' or 'classification', got {task!r}"
+        )
+    return _make_splitter(task, np.asarray(y), int(cv))
+
+
 def _collect_space(hypermodel: HyperModel) -> list[_HyperParameterSpec]:
     """Run the hypermodel once in space-collection mode (defaults drawn).
 
@@ -612,7 +668,7 @@ class RandomSearch:
         self._validate()
         scorer, objective_label = _resolve_objective(self.objective)
         space = _collect_space(self.hypermodel)
-        splitter = _make_splitter(self.task, np.asarray(y), int(self.cv))
+        splitter = make_cv_splitter(self.task, y, int(self.cv))
         rng = np.random.default_rng(int(self.seed))
 
         trials: list[TrialResult] = []
@@ -735,7 +791,7 @@ class Hyperband:
                 f"{self.resource!r} — add hp.Int({self.resource!r}, ...) to the "
                 "builder (or pass resource=<declared name>)"
             )
-        splitter = _make_splitter(self.task, np.asarray(y), int(self.cv))
+        splitter = make_cv_splitter(self.task, y, int(self.cv))
         rng = np.random.default_rng(int(self.seed))
         eta, r_max, r_min = int(self.eta), int(self.max_resource), int(self.min_resource)
 

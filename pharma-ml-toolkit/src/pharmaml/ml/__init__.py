@@ -41,6 +41,7 @@ from pharmaml.ml.tuner import (
     build_deep_classifier,
     build_deep_regressor,
     build_hsvr,
+    make_cv_splitter,
 )
 
 __all__ = [
@@ -70,6 +71,7 @@ __all__ = [
     "has_categorical_columns",
     "list_models",
     "load_model",
+    "make_cv_splitter",
     "make_train_test_split",
     "resolve_model_name",
     "save_model",

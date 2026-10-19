@@ -3,8 +3,9 @@
 Covers the ``HyperParameters`` space protocol (collection mode, trial
 mode, re-registration), the ready-made hypermodels (ANN / deep / HSVR),
 ``RandomSearch`` (scoring, determinism, best-estimator refit, failure
-accounting) and ``Hyperband`` (brackets, rung resources, the resource
-declaration contract).
+accounting), ``Hyperband`` (brackets, rung resources, the resource
+declaration contract) and the public ``make_cv_splitter`` fold
+protocol.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from pharmaml.ml.tuner import (
     build_ann_classifier,
     build_ann_regressor,
     build_hsvr,
+    make_cv_splitter,
 )
 
 
@@ -358,6 +360,56 @@ class TestSplitterHeuristic:
         from sklearn.model_selection import StratifiedKFold
 
         assert isinstance(_make_splitter("auto", labels, cv=2), StratifiedKFold)
+
+
+# ---------------------------------------------------------------------------
+# make_cv_splitter (the public fold protocol, 100x-90)
+# ---------------------------------------------------------------------------
+class TestMakeCvSplitter:
+    def test_delegates_to_the_tuners_own_protocol(self) -> None:
+        """The public helper and the tuners' internal rule agree everywhere."""
+        from sklearn.model_selection import KFold, StratifiedKFold
+
+        from pharmaml.ml.tuner import _make_splitter, make_cv_splitter
+
+        cases = [
+            ("regression", np.linspace(0.0, 1.0, 30), 3),
+            ("classification", np.array(["a", "b"] * 15), 2),
+            ("classification", np.array([1.5, 2.5, 3.5, 4.5]), 2),  # singletons
+            ("auto", np.linspace(0.0, 1.0, 30), 5),
+            ("auto", np.array(["a", "b"] * 15), 4),
+        ]
+        for task, y, cv in cases:
+            public = make_cv_splitter(task, y, cv)
+            private = _make_splitter(task, np.asarray(y), cv)
+            assert type(public) is type(private), (task, cv)
+            assert public.n_splits == private.n_splits
+            assert public.random_state == private.random_state == 0
+            assert public.shuffle is True
+        assert isinstance(make_cv_splitter("regression", np.arange(30.0), 3), KFold)
+        assert isinstance(
+            make_cv_splitter("classification", ["a"] * 10 + ["b"] * 10, 2),
+            StratifiedKFold,
+        )
+
+    def test_accepts_list_targets_and_validates_arguments(self) -> None:
+        from pharmaml.ml.tuner import make_cv_splitter as _mcs
+
+        # lists (the GUI passes a pandas Series / list) are asarray'd fine
+        splitter = _mcs("regression", [float(i) for i in range(20)], 4)
+        assert splitter.n_splits == 4
+        with pytest.raises(ModelError, match="cv must be an integer >= 2"):
+            _mcs("regression", np.arange(10.0), 1)
+        with pytest.raises(ModelError, match="cv must be an integer >= 2"):
+            _mcs("regression", np.arange(10.0), cv=True)
+        with pytest.raises(ModelError, match="task must be"):
+            _mcs("regress", np.arange(10.0), 3)
+
+    def test_exported_from_the_ml_package(self) -> None:
+        import pharmaml.ml
+
+        assert pharmaml.ml.make_cv_splitter is make_cv_splitter
+        assert "make_cv_splitter" in pharmaml.ml.__all__
 
 
 # ---------------------------------------------------------------------------

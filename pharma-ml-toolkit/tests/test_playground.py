@@ -2461,6 +2461,36 @@ class TestDeepLearningTab:
         assert app._dl_host._pg_figure is not None       # confusion matrix
         assert app._dl_hist_host._pg_figure is not None  # loss curves
 
+    # -- batch normalisation (100x-90) --------------------------------------- #
+    def test_batchnorm_run_trains_with_the_flag_set(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._configure_tiny(app)
+        app._dl_load_example()
+        app._dl_batchnorm_var.set(True)
+        app._dl_train()
+        assert self._drain_jobs(app), "network training hung"
+        assert quiet_dialogs == []
+        network = app._dl_last_run[0]
+        assert network.batchnorm is True          # the checkbox reached the net
+        assert app._dl_host._pg_figure is not None
+        texts = self._metric_texts(app)
+        assert "DeepMLPRegressor (regression)" in texts
+
+    def test_batchnorm_with_singleton_batches_warns_before_the_job(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._configure_tiny(app)
+        app._dl_load_example()
+        app._dl_batch.set("1")
+        app._dl_batchnorm_var.set(True)
+        app._dl_train()
+        assert not app._busy  # the pre-flight stopped before any job
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "Batch norm needs batches" in titles
+        message = quiet_dialogs[0][1][1]
+        assert "at least 2" in message
+
     # -- the history CSV export ---------------------------------------------- #
     def test_save_history_writes_the_exact_csv(
         self, playground: Any, app: Any, quiet_dialogs: list[Any],
@@ -2514,7 +2544,7 @@ class TestDeepLearningTab:
     ) -> None:
         # the generic save/restore machinery walks vars(self) for
         # Variable/Entry widgets -- every _dl_* input rides it for free.
-        # This pins the whole tab: 14 saved keys, 12 mutated values
+        # This pins the whole tab: 15 saved keys, 13 mutated values
         # restored verbatim onto a freshly built window.
         first = playground.PlaygroundApp(persist_session=False)
         second = playground.PlaygroundApp(persist_session=False)
@@ -2535,9 +2565,10 @@ class TestDeepLearningTab:
             first._dl_seed_entry.delete(0, "end")
             first._dl_seed_entry.insert(0, "7")
             first._dl_task_combo.set("regression")
+            first._dl_batchnorm_var.set(True)
             payload = first._collect_session()
             saved = [key for key in payload["variables"] if key.startswith("_dl_")]
-            assert len(saved) == 14  # every input on the tab
+            assert len(saved) == 15  # every input on the tab
 
             second._session = payload
             second._restore_session()
@@ -2553,6 +2584,7 @@ class TestDeepLearningTab:
             assert second._dl_valsplit.get() == "0.2"
             assert second._dl_seed_entry.get() == "7"
             assert second._dl_task_combo.get() == "regression"
+            assert second._dl_batchnorm_var.get() is True
         finally:
             first.destroy()
             second.destroy()
@@ -2693,6 +2725,235 @@ class TestNumericFeatureGuard:
         assert not app._busy
         titles = [call[1][0] for call in quiet_dialogs]
         assert "No numeric features" in titles
+
+    def test_ml_tune_guards_zero_numeric_features(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        self._load_all_object_csv(app, tmp_path)
+        app._ml_tune()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No numeric features" in titles
+
+
+# --------------------------------------------------------------------- #
+# the Data & ML tab's Hyperparameter search card (100x-90) -- the
+# RandomSearch story, mouse edition
+# --------------------------------------------------------------------- #
+class TestTunerCard:
+    """The Tune card: pure rendering helpers, the CLI-registry pin, the
+    search's leaderboard / baseline / held-out wiring, the Apply-best
+    flows (ann points the model combobox; dnn prefills the Deep Learning
+    tab) and the Save-trials export."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 300.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- pure helpers (no Tk, no pharmaml import needed) ------------------ #
+    def test_config_text_renders_sorted_compact_tokens(
+        self, playground: Any
+    ) -> None:
+        text = playground.tune_config_text(
+            {"units": 64, "alpha": 0.001, "batchnorm": True, "gamma": "scale"}
+        )
+        assert text == "alpha=0.001 batchnorm=on gamma=scale units=64"
+        # floats never trail zeros; booleans are on/off; ints stay ints
+        assert playground.tune_config_text({"dropout": 0.3}) == "dropout=0.3"
+        assert playground.tune_config_text({"batchnorm": False}) == "batchnorm=off"
+        assert playground.tune_config_text({"n_layers": 2}) == "n_layers=2"
+        assert playground.tune_config_text({}) == ""
+
+    def test_hypermodel_names_mirror_the_cli_registry(
+        self, playground: Any
+    ) -> None:
+        # the GUI card and the CLI resolve the SAME hypermodels -- pinned
+        # together so one surface cannot drift from the other (the
+        # _DL_ACTIVATIONS pin pattern).
+        from pharmaml.cli import _tune_hypermodels
+
+        cli = {key: fn.__name__ for key, fn in _tune_hypermodels().items()}
+        assert dict(playground._TUNE_HYPERMODELS) == cli
+        # the combobox offers exactly the registry's estimator tokens
+        assert set(playground._TUNE_ESTIMATORS) == {key[0] for key in cli}
+        # hsvr really is the regression-only odd one out
+        assert ("hsvr", "classification") not in playground._TUNE_HYPERMODELS
+
+    def test_defaults_before_any_run(self, app: Any) -> None:
+        assert app._tune_estimator_combo.get() == "ann"
+        assert app._tune_trials.get() == "8"
+        assert app._tune_cv.get() == "3"
+        assert app._tune_last is None
+        assert "no search yet" in app._tune_summary.cget("text")
+        assert "empty" in app._board_status.cget("text")
+
+    # -- the search runs ---------------------------------------------------- #
+    def test_ann_search_fills_leaderboard_summary_and_applies(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._tune_trials.set("4")
+        app._tune_cv.set("2")
+        app._ml_tune()
+        assert self._drain_jobs(app), "the search hung"
+        assert quiet_dialogs == []
+
+        rows = app._board_tree.get_children()
+        assert len(rows) == 4  # one row per trial
+        assert list(app._board_tree["columns"]) == [
+            "rank", "trial", "configuration", "score", "± std"]
+        scores = [float(app._board_tree.item(row, "values")[3]) for row in rows]
+        assert scores == sorted(scores, reverse=True)  # best first
+        # the rank-1 row IS the winning trial (id, score, config text)
+        best = app._tune_last[0].best_trial
+        first = app._board_tree.item(rows[0], "values")
+        assert first[0] == "1"
+        assert int(first[1]) == best.trial_id
+        assert first[3] == f"{best.score:.4f}"  # the rendered cell
+        assert first[4] == f"{best.score_std:.4f}"
+        full = playground.tune_config_text(best.hyperparameters)
+        rendered = str(first[2])
+        if rendered.endswith("…"):  # the column truncates long configs
+            assert full.startswith(rendered[:-1])
+        else:
+            assert rendered == full
+        assert full.startswith("alpha=")  # sorted k=v tokens
+
+        summary = app._tune_summary.cget("text")
+        assert "CV r2" in summary
+        assert "defaults" in summary and "gain" in summary
+        assert "held-out R²" in summary
+        assert "winner:" in summary
+        status = app._board_status.cget("text")
+        assert status.startswith("RandomSearch over ann (regression)")
+        assert "objective r2" in status
+        assert app._tune_last is not None
+        results = app._tune_last[0]
+        assert len(results.trials) == 4
+
+        # Apply best (ann): the model combobox points at the family
+        app._ml_tune_apply()
+        assert quiet_dialogs == []
+        assert app._model_combo.get() == "ann"
+        assert app._task_combo.get() == "regression"
+        assert "applied" in app._tune_summary.cget("text")
+
+    def test_hsvr_on_a_classification_target_guards(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._example_combo.set("qsar_classification.csv")
+        app._ml_load_example()
+        app._tune_estimator_combo.set("hsvr")
+        app._ml_tune()
+        assert not app._busy  # the gate stopped before any job started
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "hsvr is regression-only" in titles
+
+    def test_apply_and_save_before_any_search_guard(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_tune_apply()
+        app._ml_tune_save_trials()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert titles.count("No search yet") == 2
+
+    def test_bad_search_settings_warn_not_crash(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._tune_trials.set("2")  # below the minimum of 4
+        app._ml_tune()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "Check the search settings" in titles
+
+    # -- the trials CSV export ---------------------------------------------- #
+    def test_save_trials_writes_the_full_table(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any],
+        monkeypatch: Any, tmp_path: Path,
+    ) -> None:
+        app._ml_load_example()
+        app._tune_trials.set("4")
+        app._tune_cv.set("2")
+        app._ml_tune()
+        assert self._drain_jobs(app), "the search hung"
+        out = tmp_path / "trials.csv"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename",
+            lambda **kwargs: str(out),
+        )
+        app._ml_tune_save_trials()
+        assert quiet_dialogs == []
+        lines = out.read_text(encoding="utf-8").splitlines()
+        assert lines[0].startswith("trial_id,score,score_std")
+        assert len(lines) == 5  # header + 4 trials
+        assert "n_layers" in lines[0] and "alpha" in lines[0]
+        assert "trials saved" in app._job_label.cget("text")
+
+    # -- the dnn bridge ------------------------------------------------------ #
+    def test_dnn_search_applies_best_to_the_deep_learning_tab(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._tune_estimator_combo.set("dnn")
+        app._tune_trials.set("4")
+        app._tune_cv.set("2")
+        app._ml_tune()
+        assert self._drain_jobs(app, timeout=420), "the dnn search hung"
+        assert quiet_dialogs == []
+        assert len(app._board_tree.get_children()) == 4
+        assert "objective r2" in app._board_status.cget("text")
+        params = app._tune_last[0].best_params
+
+        app._ml_tune_apply()
+        assert quiet_dialogs == []
+        # the whole Deep Learning tab is prefilled from the winner
+        expected_hidden = ", ".join(
+            str(int(params["units"])) for _ in range(int(params["n_layers"])))
+        assert app._dl_hidden_entry.get() == expected_hidden
+        assert app._dl_dropout.get() == f"{float(params['dropout']):g}"
+        assert app._dl_lr_entry.get() == f"{float(params['learning_rate']):g}"
+        assert app._dl_activation_combo.get() == params["activation"]
+        assert app._dl_batchnorm_var.get() is bool(params["batchnorm"])
+        assert app._dl_epochs.get() == str(int(params["epochs"]))
+        assert app._dl_patience.get() == "10"  # the hypermodel's fixed value
+        assert app._dl_task_combo.get() == "regression"
+        assert app._dl_target_combo.get() == "pIC50"
+        # the dataset came along: same rows as the ML tab's frame
+        assert app._dl_frame is not None
+        assert len(app._dl_frame) == len(app._ml_frame)
+        # and the notebook switched to the Deep Learning tab
+        assert app._book.index(app._book.select()) == app._book.index(app._dl_page)
+        assert "Deep Learning" in app._tune_summary.cget("text")
 
 
 class TestGenerativeRLCard:
