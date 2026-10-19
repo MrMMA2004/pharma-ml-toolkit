@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1821 tests).
+exceptions, input validation, and pytest coverage** (1822 tests).
 
 ---
 
@@ -223,7 +223,7 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 1821 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1822 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -588,7 +588,10 @@ missing features, extra columns, reordering, the feature-count contract when
 names were never recorded, plus sklearn/pharmaml version drift as warnings.
 The CLI twin is `pharmaml ml check --model artifacts/rf.joblib --data new.csv`
 (exit 1 on a failed audit — CI-friendly; `--target <col>` drops the training
-label first so re-auditing the training CSV works out of the box).
+label first so re-auditing the training CSV works out of the box). The ML
+workflow notebook demonstrates the audit end-to-end on a drifted copy of its
+own CSV — the OK verdict, the named drift and the reorder trap, all with
+committed outputs (`examples/complete_ml_workflow.ipynb`, §12).
 
 A fully **executed Jupyter notebook** covering all four domains lives at
 `examples/pharmaml_walkthrough.ipynb` (every cell has its output committed — run it

@@ -20,6 +20,11 @@ Three guard families live here:
   print to the *shipped* ``__version__`` so committed outputs can never
   silently predate the tree that ships them (the 1.0.0-era drift this
   round cleaned up).
+* ``test_ml_workflow_persistence_audit_is_committed`` — the §12 audit
+  demo guard (round 100x-78): the ML workflow demonstrates
+  ``validate_bundle_input`` on a drifted copy of its own shipped frame;
+  the guard pins the committed verdicts so the demo can never silently
+  become stale or un-executed.
 """
 
 from __future__ import annotations
@@ -129,6 +134,40 @@ def test_executed_outputs_print_shipped_version(name: str):
         "scratch/reexecute_all_notebooks_64.py (then the twins via "
         "scratch/strip_notebook_outputs.py)"
     )
+
+
+def test_ml_workflow_persistence_audit_is_committed():
+    """The §12 persistence-audit demo (round 100x-78) must stay executed.
+
+    ``validate_bundle_input`` — the inference-time contract audit from
+    100x-77 (library + the ``ml check`` CLI) — is demonstrated in the ML
+    workflow's §12 on a drifted copy of the notebook's own shipped frame
+    (one feature dropped, one renamed, one brand-new column) plus the
+    reorder trap.  The committed stream outputs are the evidence the
+    demo actually ran: an OK verdict on the training frame, a FAIL
+    verdict naming the exact drift, and the reorder rejection.  A cell
+    edit nobody re-executed, or a verdict that changed shape, fails here.
+    """
+    nb = _read("complete_ml_workflow")
+    sources = "\n".join(c.source for c in nb.cells if c.cell_type == "code")
+    assert "from pharmaml.ml import validate_bundle_input" in sources, (
+        "complete_ml_workflow lost the §12 audit demo"
+    )
+    assert "drifted = ds.X.drop(columns=[ds.feature_names[0]])" in sources
+
+    outputs = "\n".join(
+        "".join(out.get("text", []))
+        for c in nb.cells
+        if c.cell_type == "code"
+        for out in c.get("outputs", [])
+    )
+    assert "audit: OK" in outputs
+    assert "missing 2 feature(s): descr_00, descr_01" in outputs
+    assert (
+        "2 extra column(s) the model does not know: renamed_feature, batch_id"
+        in outputs
+    ), "the drift demo's named extras changed — re-execute the notebook"
+    assert "feature columns are in a different order than trained on" in outputs
 
 
 # The no-inline-fabrication contract (round 24).  Each token below is a

@@ -10,6 +10,35 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.28] — 2026-10-19
+
+### Added — the persistence audit reaches the executed notebook (§12)
+
+- **`examples/complete_ml_workflow.ipynb` §12** now *demonstrates* the
+  round-trip audit 1.2.27 shipped (library + `ml check` CLI) instead of
+  just linking it: after the save/load/score cells, four new cells run
+  `validate_bundle_input` against the very bundle the notebook just
+  wrote —
+  - the **OK verdict** on the training frame itself (the contract holds);
+  - the **drift demo** on a derived copy of the notebook's own shipped
+    CSV (one feature dropped, one renamed, one brand-new column — the
+    three ways real data drifts), with the FAIL verdict naming every
+    difference: `missing 2 feature(s): descr_00, descr_01` /
+    `2 extra column(s) … renamed_feature, batch_id`;
+  - the **reorder trap** — the same names in a different order, sklearn's
+    subtlest rejection, caught before `predict()` ever runs;
+  - the **CLI twin** in markdown: `pharmaml ml check … --target activity`,
+    exit-1-for-CI and the `--target` workflow note.
+- All outputs are **committed** (the notebook is executed top-to-bottom
+  with the shipped code) and **pinned** by a new drift-guard test
+  (`test_ml_workflow_persistence_audit_is_committed` in
+  `tests/test_notebook_variants.py`): a cell edit nobody re-executed, or
+  a verdict that changed shape, fails the suite.
+- The §12 intro markdown and the §14 recap's Deploy row now name
+  `validate_bundle_input`; README's audit paragraph points at the
+  notebook demo. The no-output twin regenerated
+  (`scratch/strip_notebook_outputs.py`), sources pinned identical.
+
 ## [1.2.27] — 2026-10-19
 
 ### Added — the model round-trip audit (`validate_bundle_input` / `ml check`)
