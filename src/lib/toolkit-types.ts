@@ -191,6 +191,11 @@ export interface MLTrainRequest {
   lr?: number;
   /** Linear SVM margin C (0.01–100). */
   C?: number;
+  /** HSVR k-means cluster count (2–8). */
+  nClusters?: number;
+  /** HSVR trust radius factor (0.25–6): R = factor × the cluster's max
+   *  member distance from its centroid. */
+  radiusFactor?: number;
   testSize: number;
   cv: 0 | 3 | 5 | 10;
   seed: number;
@@ -254,6 +259,23 @@ export interface MLTrainResponse {
   /** kNN / MLP / Naive Bayes / SVM: echoed hyperparameters (the honest
    *  "learned parameters" card content for hyperparameter-driven models). */
   modelParams?: Record<string, number>;
+  /** HSVR only: per-cluster geometry + local-fit diagnostics. */
+  hsvr?: {
+    nClusters: number;
+    radiusFactor: number;
+    alpha: number;
+    clusters: Array<{
+      /** Train rows assigned to the cluster. */
+      size: number;
+      /** Trust radius R (standardized-space distance units). */
+      radius: number;
+      /** In-sample R² of the cluster-local ridge fit (constant → 1). */
+      localR2: number;
+      /** True when the cluster kept too few rows for ridge and fell back
+       *  to the cluster mean. */
+      constant: boolean;
+    }>;
+  };
   series: {
     test: Array<{ x: number; y: number; label?: number }>;
     curve?: Array<{ x: number; yhat: number }>;
@@ -267,6 +289,77 @@ export interface MLTrainResponse {
     seed: number;
     features: string[];
     /** Present when the run trained on a user-uploaded CSV. */
+    source?: CsvSourceMeta;
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* ML hyperparameter search (RandomSearch)                              */
+/* ------------------------------------------------------------------ */
+
+export interface MLTuneRequest {
+  task: MLTask;
+  model: string;
+  /** RandomSearch trial budget (4–40, clamped to the space size). */
+  maxTrials: number;
+  /** CV folds used to score each trial (3 / 5 / 10 — never off). */
+  cv: 3 | 5 | 10;
+  seed: number;
+  testSize: number;
+  /** Synthetic-generator knobs (ignored when csv is present). */
+  samples: number;
+  noise: number;
+  /** Raw CSV text — when present, tuning uses the uploaded data. */
+  csv?: string;
+  csvName?: string;
+  /** Regression only: feature/target column picks (same semantics as train). */
+  featureColumns?: string[];
+  featureColumn?: string;
+  featureColumn2?: string;
+  targetColumn?: string;
+}
+
+/** One RandomSearch trial — a sampled configuration plus its mean CV score. */
+export interface MLTuneTrial {
+  /** 1-based trial number, in the order the configs were drawn. */
+  trial: number;
+  /** The sampled hyperparameter assignment. */
+  params: Record<string, number>;
+  /** Mean score across the CV folds (R² or accuracy). */
+  score: number;
+}
+
+export interface MLTuneResponse {
+  task: MLTask;
+  model: string;
+  /** Scored objective name ("R²" or "Accuracy"). */
+  objective: string;
+  /** CV folds per trial. */
+  cvK: number;
+  /** Requested trial budget. */
+  maxTrials: number;
+  /** Total configurations in the model's discrete search grid. */
+  spaceSize: number;
+  /** True when the whole grid was evaluated (budget ≥ space size). */
+  exhaustive: boolean;
+  /** Leaderboard — best score first, ties by trial number. */
+  trials: MLTuneTrial[];
+  /** The default-configuration CV score, for honest comparison. */
+  baseline: { params: Record<string, number>; score: number };
+  best: {
+    params: Record<string, number>;
+    /** Mean CV score of the winning configuration. */
+    cvScore: number;
+    /** Held-out test metric of the best-config refit on the train split. */
+    testMetric: number;
+    testMetricName: string;
+    /** Improvement over the default configuration's CV score. */
+    improvement: number;
+  };
+  datasetMeta: {
+    nTotal: number;
+    features: string[];
+    /** Present when tuning ran on a user-uploaded CSV. */
     source?: CsvSourceMeta;
   };
 }

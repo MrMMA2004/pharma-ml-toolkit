@@ -1320,6 +1320,241 @@ export function fitMlpClassifier(
 }
 
 /* ------------------------------------------------------------------ */
+/* Hierarchical SVR (HSVR) — seeded k-means + local ridge blend        */
+/* ------------------------------------------------------------------ */
+
+/** Result of a seeded k-means run (Lloyd iterations in the clustered space). */
+export interface KMeansFit {
+  /** Cluster index per row (0..k−1; ties break to the lowest index). */
+  assignments: number[];
+  /** Converged centroids. */
+  centroids: number[][];
+  /** Member row indices per cluster. */
+  members: number[][];
+  /** Lloyd iterations until assignments stopped changing. */
+  iterations: number;
+}
+
+/**
+ * Deterministic seeded k-means: k-means++ seeding driven by `rand`, then
+ * Lloyd iterations until the assignment vector stops changing (capped at
+ * 100). Distance ties break to the lowest cluster index; an empty cluster
+ * re-seeds at the row currently farthest from its assigned centroid.
+ */
+export function kMeansSeeded(Z: number[][], k: number, rand: () => number): KMeansFit {
+  const n = Z.length;
+  const kk = Math.max(1, Math.min(k, n));
+  const dims = Z[0]?.length ?? 0;
+
+  const dist2 = (a: number[], b: number[]): number => {
+    let d = 0;
+    for (let j = 0; j < dims; j++) d += ((a[j] ?? 0) - (b[j] ?? 0)) ** 2;
+    return d;
+  };
+
+  /* k-means++ seeding. */
+  const centroids: number[][] = [(Z[Math.floor(rand() * n)] ?? Z[0]!).slice()];
+  while (centroids.length < kk) {
+    const d2 = Z.map((row) => Math.min(...centroids.map((c) => dist2(row, c))));
+    const total = d2.reduce((a, b) => a + b, 0);
+    if (total <= 1e-12) {
+      centroids.push((Z[0] ?? []).slice()); // degenerate: duplicate points
+      continue;
+    }
+    let r = rand() * total;
+    let pick = n - 1;
+    for (let i = 0; i < n; i++) {
+      r -= d2[i] ?? 0;
+      if (r <= 0) {
+        pick = i;
+        break;
+      }
+    }
+    centroids.push((Z[pick] ?? Z[0]!).slice());
+  }
+
+  /* Lloyd iterations. */
+  const assignments = new Array<number>(n).fill(0);
+  let iterations = 0;
+  for (;;) {
+    iterations++;
+    let changed = false;
+    for (let i = 0; i < n; i++) {
+      const row = Z[i]!;
+      let best = 0;
+      let bestD = Infinity;
+      for (let c = 0; c < kk; c++) {
+        const d = dist2(row, centroids[c]!);
+        if (d < bestD - 1e-15) {
+          bestD = d;
+          best = c;
+        }
+      }
+      if (assignments[i] !== best) {
+        assignments[i] = best;
+        changed = true;
+      }
+    }
+
+    const sums = Array.from({ length: kk }, () => new Array<number>(dims).fill(0));
+    const counts = new Array<number>(kk).fill(0);
+    for (let i = 0; i < n; i++) {
+      const c = assignments[i]!;
+      counts[c] = (counts[c] ?? 0) + 1;
+      for (let j = 0; j < dims; j++) sums[c]![j] = (sums[c]![j] ?? 0) + (Z[i]![j] ?? 0);
+    }
+    for (let c = 0; c < kk; c++) {
+      if ((counts[c] ?? 0) > 0) {
+        centroids[c] = (sums[c] ?? []).map((v) => v / (counts[c] ?? 1));
+      } else {
+        /* Empty cluster: re-seed at the row farthest from its centroid. */
+        let far = 0;
+        let farD = -1;
+        for (let i = 0; i < n; i++) {
+          const d = dist2(Z[i]!, centroids[assignments[i] ?? 0]!);
+          if (d > farD) {
+            farD = d;
+            far = i;
+          }
+        }
+        centroids[c] = (Z[far] ?? Z[0]!).slice();
+      }
+    }
+    if (!changed || iterations >= 100) break;
+  }
+
+  const members: number[][] = Array.from({ length: kk }, () => []);
+  for (let i = 0; i < n; i++) members[assignments[i] ?? 0]!.push(i);
+  return { assignments, centroids, members, iterations };
+}
+
+/** Per-cluster diagnostics surfaced by the HSVR fit. */
+export interface HsvrClusterInfo {
+  /** Train rows assigned to the cluster. */
+  size: number;
+  /** Trust radius R = radiusFactor × the max member distance to the centroid. */
+  radius: number;
+  /** In-sample R² of the cluster-local model (constant clusters → 1). */
+  localR2: number;
+  /** True when the cluster kept too few rows for a ridge fit and fell back
+   *  to predicting the cluster mean (the constant stand-in). */
+  constant: boolean;
+}
+
+/** The full HSVR model — global ridge + per-cluster local ridges blended
+ *  by a linear trust-radius fade. */
+export interface HsvrModel extends RowRegressor {
+  std: Standardizer;
+  /** Per-cluster geometry in standardized space. */
+  clusters: Array<{ centroid: number[]; radius: number }>;
+  /** Honest diagnostics for the learned-parameters card. */
+  info: HsvrClusterInfo[];
+}
+
+/**
+ * Hierarchical SVR (the web port of pharmaml.ml.hierarchical.HierarchicalSVR
+ * with ridge as the local/global learner): seeded k-means in standardized
+ * feature space, one ridge model per cluster plus a global ridge over all
+ * rows. Predictions blend the nearest cluster's local model with the global
+ * model through a linear trust radius — full local weight at the centroid,
+ * zero at R = radiusFactor × the cluster's max member distance; queries
+ * beyond R fall back to the pure global prediction. Clusters too small to
+ * fit ridge (n < k + 2) keep a constant stand-in at the cluster mean.
+ */
+export function fitHsvr(
+  X: number[][],
+  y: number[],
+  opts: {
+    nClusters?: number;
+    radiusFactor?: number;
+    alpha?: number;
+    rand: () => number;
+  } = { rand: mulberry32(0) }
+): HsvrModel {
+  const nClusters = opts.nClusters ?? 3;
+  const radiusFactor = opts.radiusFactor ?? 1.5;
+  const alpha = opts.alpha ?? 1;
+  const rand = opts.rand;
+  const k = X[0]?.length ?? 0;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+  const km = kMeansSeeded(Z, nClusters, rand);
+
+  /* Global ridge over every row — also the far-query fallback. */
+  const global = fitMultivariateRegression(X, y, { alpha });
+
+  const clusters: Array<{ centroid: number[]; radius: number }> = [];
+  const locals: Array<RowRegressor> = [];
+  const info: HsvrClusterInfo[] = [];
+
+  km.members.forEach((members, c) => {
+    const centroid = km.centroids[c]!;
+    let maxDist = 0;
+    for (const i of members) {
+      const d = Math.sqrt(
+        Z[i]!.reduce((acc, v, j) => acc + (v - (centroid[j] ?? 0)) ** 2, 0)
+      );
+      if (d > maxDist) maxDist = d;
+    }
+    /* Strictly positive so weight at the centroid is exactly 1. */
+    const radius = maxDist * radiusFactor + 1e-9;
+    clusters.push({ centroid: [...centroid], radius });
+
+    const localX = members.map((i) => X[i]!);
+    const localY = members.map((i) => y[i]!);
+    if (localX.length >= k + 2 && localX.length > 0) {
+      const m = fitMultivariateRegression(localX, localY, { alpha });
+      locals.push({ predict: (xs) => m.predict(xs) });
+      const pred = localX.map((xs) => m.predict(xs));
+      info.push({
+        size: members.length,
+        radius,
+        localR2: regressionMetrics(localY, pred).r2,
+        constant: false,
+      });
+    } else {
+      /* Constant stand-in (the _ConstantSVR equivalent): cluster mean. */
+      const yMean = mean(localY);
+      locals.push({ predict: () => yMean });
+      const sst = localY.reduce((acc, v) => acc + (v - yMean) ** 2, 0);
+      info.push({
+        size: members.length,
+        radius,
+        localR2: sst <= 1e-12 ? 1 : 0,
+        constant: true,
+      });
+    }
+  });
+
+  return {
+    std,
+    clusters,
+    info,
+    predict(xsRaw: number[]) {
+      const z = std.transform(xsRaw);
+      /* Nearest centroid (ties → lowest index, matching k-means). */
+      let best = 0;
+      let bestD = Infinity;
+      for (let c = 0; c < clusters.length; c++) {
+        let d = 0;
+        const cen = clusters[c]!.centroid;
+        for (let j = 0; j < z.length; j++) d += ((z[j] ?? 0) - (cen[j] ?? 0)) ** 2;
+        if (d < bestD - 1e-15) {
+          bestD = d;
+          best = c;
+        }
+      }
+      const d = Math.sqrt(bestD);
+      const R = clusters[best]!.radius;
+      const w = Math.max(0, 1 - d / R);
+      const local = locals[best]!.predict(xsRaw);
+      const glob = global.predict(xsRaw);
+      return w * local + (1 - w) * glob;
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Aggregation helpers                                                 */
 /* ------------------------------------------------------------------ */
 

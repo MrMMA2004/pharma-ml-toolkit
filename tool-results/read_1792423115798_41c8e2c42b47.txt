@@ -1,0 +1,1336 @@
+     1→/**
+     2→ * Pure, deterministic math for the ML training playground API.
+     3→ * Everything here is side-effect free and driven by a seeded PRNG
+     4→ * (mulberry32) so the same request always yields the same dataset.
+     5→ */
+     6→
+     7→/* ------------------------------------------------------------------ */
+     8→/* Random number generation                                            */
+     9→/* ------------------------------------------------------------------ */
+    10→
+    11→/** Deterministic 32-bit PRNG returning floats in [0, 1). */
+    12→export function mulberry32(seed: number): () => number {
+    13→  let a = seed >>> 0;
+    14→  return () => {
+    15→    a |= 0;
+    16→    a = (a + 0x6d2b79f5) | 0;
+    17→    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    18→    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    19→    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    20→  };
+    21→}
+    22→
+    23→/** Standard normal draw via Box–Muller, consuming two uniforms. */
+    24→export function gaussian(rand: () => number): number {
+    25→  let u = 0;
+    26→  let v = 0;
+    27→  while (u === 0) u = rand();
+    28→  while (v === 0) v = rand();
+    29→  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    30→}
+    31→
+    32→/** Seeded Fisher–Yates shuffle of [0, n). */
+    33→export function shuffledIndices(n: number, rand: () => number): number[] {
+    34→  const idx = Array.from({ length: n }, (_, i) => i);
+    35→  for (let i = n - 1; i > 0; i--) {
+    36→    const j = Math.floor(rand() * (i + 1));
+    37→    const tmp = idx[i];
+    38→    idx[i] = idx[j];
+    39→    idx[j] = tmp;
+    40→  }
+    41→  return idx;
+    42→}
+    43→
+    44→/** Split indices into train/test sets using a seeded shuffle. */
+    45→export function shuffledSplit(
+    46→  n: number,
+    47→  testFraction: number,
+    48→  rand: () => number
+    49→): { train: number[]; test: number[] } {
+    50→  const idx = shuffledIndices(n, rand);
+    51→  const nTest = Math.min(Math.max(1, Math.round(n * testFraction)), n - 2);
+    52→  return { test: idx.slice(0, nTest), train: idx.slice(nTest) };
+    53→}
+    54→
+    55→/** k contiguous folds over a seeded shuffle of [0, n). */
+    56→export function kFoldSplit(n: number, k: number, rand: () => number): number[][] {
+    57→  const idx = shuffledIndices(n, rand);
+    58→  const base = Math.floor(n / k);
+    59→  const rem = n % k;
+    60→  const folds: number[][] = [];
+    61→  let start = 0;
+    62→  for (let f = 0; f < k; f++) {
+    63→    const size = base + (f < rem ? 1 : 0);
+    64→    folds.push(idx.slice(start, start + size));
+    65→    start += size;
+    66→  }
+    67→  return folds;
+    68→}
+    69→
+    70→/* ------------------------------------------------------------------ */
+    71→/* Linear algebra                                                      */
+    72→/* ------------------------------------------------------------------ */
+    73→
+    74→/**
+    75→ * Solve A·x = b via Gaussian elimination with partial pivoting.
+    76→ * @throws Error when the system is (numerically) singular.
+    77→ */
+    78→export function solveLinearSystem(A: number[][], b: number[]): number[] {
+    79→  const n = b.length;
+    80→  const M: number[][] = A.map((row, i) => [...row, b[i]]);
+    81→  for (let col = 0; col < n; col++) {
+    82→    let pivot = col;
+    83→    for (let r = col + 1; r < n; r++) {
+    84→      if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
+    85→    }
+    86→    if (Math.abs(M[pivot][col]) < 1e-12) {
+    87→      throw new Error("Singular normal-equation matrix — try different parameters.");
+    88→    }
+    89→    if (pivot !== col) {
+    90→      const tmp = M[col];
+    91→      M[col] = M[pivot];
+    92→      M[pivot] = tmp;
+    93→    }
+    94→    for (let r = 0; r < n; r++) {
+    95→      if (r === col) continue;
+    96→      const f = M[r][col] / M[col][col];
+    97→      if (f === 0) continue;
+    98→      for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+    99→    }
+   100→  }
+   101→  return M.map((row, i) => row[n] / row[i]);
+   102→}
+   103→
+   104→/* ------------------------------------------------------------------ */
+   105→/* Regression                                                          */
+   106→/* ------------------------------------------------------------------ */
+   107→
+   108→export interface RegressionModel {
+   109→  mu: number;
+   110→  sigma: number;
+   111→  degree: number;
+   112→  /** w[0] = intercept on standardized features, then powers of z. */
+   113→  w: number[];
+   114→  predict(xRaw: number): number;
+   115→}
+   116→
+   117→/** Mean and population standard deviation helper. */
+   118→function stats(values: number[]): { mu: number; sigma: number } {
+   119→  const n = values.length;
+   120→  const mu = values.reduce((a, b) => a + b, 0) / n;
+   121→  const sigma = Math.sqrt(values.reduce((a, b) => a + (b - mu) ** 2, 0) / n);
+   122→  return { mu, sigma: sigma > 1e-12 ? sigma : 1 };
+   123→}
+   124→
+   125→/**
+   126→ * Fit least-squares (optionally ridge-regularized) polynomial regression.
+   127→ * x is standardized with train-set statistics; the intercept is never
+   128→ * penalized. Solved in closed form via normal equations.
+   129→ */
+   130→export function fitLinearRegression(
+   131→  xs: number[],
+   132→  ys: number[],
+   133→  opts: { alpha?: number; degree?: number } = {}
+   134→): RegressionModel {
+   135→  const alpha = opts.alpha ?? 0;
+   136→  const degree = opts.degree ?? 1;
+   137→  const n = xs.length;
+   138→  if (n < degree + 2) throw new Error("Not enough samples to fit the model.");
+   139→  const { mu, sigma } = stats(xs);
+   140→
+   141→  const p = degree + 1;
+   142→  const A: number[][] = Array.from({ length: p }, () => new Array<number>(p).fill(0));
+   143→  const b: number[] = new Array<number>(p).fill(0);
+   144→
+   145→  for (let i = 0; i < n; i++) {
+   146→    const z = (xs[i] - mu) / sigma;
+   147→    const row: number[] = [1];
+   148→    let zp = 1;
+   149→    for (let d = 1; d <= degree; d++) {
+   150→      zp *= z;
+   151→      row.push(zp);
+   152→    }
+   153→    for (let j = 0; j < p; j++) {
+   154→      b[j] += row[j] * ys[i];
+   155→      for (let k = j; k < p; k++) {
+   156→        const v = row[j] * row[k];
+   157→        A[j][k] += v;
+   158→        if (k !== j) A[k][j] += v;
+   159→      }
+   160→    }
+   161→  }
+   162→  for (let j = 1; j < p; j++) A[j][j] += alpha; // ridge: skip intercept
+   163→
+   164→  const w = solveLinearSystem(A, b);
+   165→  return {
+   166→    mu,
+   167→    sigma,
+   168→    degree,
+   169→    w,
+   170→    predict(xRaw: number) {
+   171→      const z = (xRaw - mu) / sigma;
+   172→      let acc = w[0];
+   173→      let zp = 1;
+   174→      for (let d = 1; d <= degree; d++) {
+   175→        zp *= z;
+   176→        acc += w[d] * zp;
+   177→      }
+   178→      return acc;
+   179→    },
+   180→  };
+   181→}
+   182→
+   183→export interface MultivariateModel {
+   184→  /** Per-feature train-set means (raw units). */
+   185→  mus: number[];
+   186→  /** Per-feature train-set population stds (raw units). */
+   187→  sigmas: number[];
+   188→  /** w[0] = intercept on standardized features, then one weight per feature. */
+   189→  w: number[];
+   190→  /** Predict from raw (unstandardized) feature values. */
+   191→  predict(xsRaw: number[]): number;
+   192→}
+   193→
+   194→/**
+   195→ * Fit least-squares (optionally ridge-regularized) multivariate linear
+   196→ * regression on k features. Mirrors fitLinearRegression's conventions:
+   197→ * each feature is standardized with train-set statistics, the intercept is
+   198→ * never penalized, and the system is solved in closed form via normal
+   199→ * equations (Gaussian elimination with partial pivoting).
+   200→ */
+   201→export function fitMultivariateRegression(
+   202→  X: number[][],
+   203→  y: number[],
+   204→  opts: { alpha?: number } = {}
+   205→): MultivariateModel {
+   206→  const alpha = opts.alpha ?? 0;
+   207→  const n = X.length;
+   208→  const k = X[0]?.length ?? 0;
+   209→  if (n < k + 2) {
+   210→    throw new Error(`Not enough samples to fit the model (${n} rows, ${k} features).`);
+   211→  }
+   212→
+   213→  const mus: number[] = [];
+   214→  const sigmas: number[] = [];
+   215→  for (let j = 0; j < k; j++) {
+   216→    const col = X.map((row) => row[j] ?? 0);
+   217→    const s = stats(col);
+   218→    mus.push(s.mu);
+   219→    sigmas.push(s.sigma);
+   220→  }
+   221→
+   222→  const p = k + 1;
+   223→  const A: number[][] = Array.from({ length: p }, () => new Array<number>(p).fill(0));
+   224→  const b: number[] = new Array<number>(p).fill(0);
+   225→  for (let i = 0; i < n; i++) {
+   226→    const row: number[] = [1];
+   227→    for (let j = 0; j < k; j++) {
+   228→      row.push(((X[i]?.[j] ?? 0) - mus[j]!) / sigmas[j]!);
+   229→    }
+   230→    for (let j = 0; j < p; j++) {
+   231→      b[j] += row[j]! * (y[i] ?? 0);
+   232→      for (let c = j; c < p; c++) {
+   233→        const v = row[j]! * row[c]!;
+   234→        A[j]![c] += v;
+   235→        if (c !== j) A[c]![j] += v;
+   236→      }
+   237→    }
+   238→  }
+   239→  for (let j = 1; j < p; j++) A[j]![j] += alpha; // ridge: skip intercept
+   240→
+   241→  const w = solveLinearSystem(A, b);
+   242→  return {
+   243→    mus,
+   244→    sigmas,
+   245→    w,
+   246→    predict(xsRaw: number[]) {
+   247→      let acc = w[0] ?? 0;
+   248→      for (let j = 0; j < k; j++) {
+   249→        const z = ((xsRaw[j] ?? 0) - mus[j]!) / sigmas[j]!;
+   250→        acc += (w[j + 1] ?? 0) * z;
+   251→      }
+   252→      return acc;
+   253→    },
+   254→  };
+   255→}
+   256→
+   257→export interface RegressionMetrics {
+   258→  rmse: number;
+   259→  mae: number;
+   260→  r2: number;
+   261→}
+   262→
+   263→export function regressionMetrics(yTrue: number[], yPred: number[]): RegressionMetrics {
+   264→  const n = yTrue.length;
+   265→  let se = 0;
+   266→  let ae = 0;
+   267→  let sst = 0;
+   268→  const ym = yTrue.reduce((a, b) => a + b, 0) / n;
+   269→  for (let i = 0; i < n; i++) {
+   270→    se += (yTrue[i] - yPred[i]) ** 2;
+   271→    ae += Math.abs(yTrue[i] - yPred[i]);
+   272→    sst += (yTrue[i] - ym) ** 2;
+   273→  }
+   274→  return {
+   275→    rmse: Math.sqrt(se / n),
+   276→    mae: ae / n,
+   277→    r2: sst > 1e-12 ? 1 - se / sst : 0,
+   278→  };
+   279→}
+   280→
+   281→/** The noiseless generating line behind makeRegressionData: y = 0.8x + 0.5. */
+   282→export function regressionTrueY(x: number): number {
+   283→  return 0.8 * x + 0.5;
+   284→}
+   285→
+   286→/** y = regressionTrueY(x) + noise·N(0,1), x ~ U(-3, 3). */
+   287→export function makeRegressionData(
+   288→  n: number,
+   289→  noise: number,
+   290→  rand: () => number
+   291→): { xs: number[]; ys: number[] } {
+   292→  const xs: number[] = [];
+   293→  const ys: number[] = [];
+   294→  for (let i = 0; i < n; i++) {
+   295→    const x = rand() * 6 - 3;
+   296→    const y = regressionTrueY(x) + noise * gaussian(rand);
+   297→    xs.push(x);
+   298→    ys.push(y);
+   299→  }
+   300→  return { xs, ys };
+   301→}
+   302→
+   303→/* ------------------------------------------------------------------ */
+   304→/* Classification (two moons + logistic regression)                    */
+   305→/* ------------------------------------------------------------------ */
+   306→
+   307→export interface MoonPoint {
+   308→  x: number;
+   309→  y: number;
+   310→  label: number;
+   311→}
+   312→
+   313→/** Standard two-moons generator (sklearn-compatible geometry). */
+   314→export function makeMoons(n: number, noise: number, rand: () => number): MoonPoint[] {
+   315→  const nOut = Math.floor(n / 2);
+   316→  const nIn = n - nOut;
+   317→  const pts: MoonPoint[] = [];
+   318→  for (let i = 0; i < nOut; i++) {
+   319→    const t = (Math.PI * i) / Math.max(nOut - 1, 1);
+   320→    pts.push({ x: Math.cos(t), y: Math.sin(t), label: 0 });
+   321→  }
+   322→  for (let i = 0; i < nIn; i++) {
+   323→    const t = (Math.PI * i) / Math.max(nIn - 1, 1);
+   324→    pts.push({ x: 1 - Math.cos(t), y: 0.5 - Math.sin(t), label: 1 });
+   325→  }
+   326→  if (noise > 0) {
+   327→    for (const p of pts) {
+   328→      p.x += noise * gaussian(rand);
+   329→      p.y += noise * gaussian(rand);
+   330→    }
+   331→  }
+   332→  return pts;
+   333→}
+   334→
+   335→export interface LogisticModel {
+   336→  mu: [number, number];
+   337→  sigma: [number, number];
+   338→  w: [number, number];
+   339→  bias: number;
+   340→  /** Predicted probability of class 1. */
+   341→  predict(xRaw: number, yRaw: number): number;
+   342→}
+   343→
+   344→/**
+   345→ * Batch gradient-descent logistic regression with L2 regularization
+   346→ * (bias not penalized). Features are standardized with train statistics.
+   347→ */
+   348→export function fitLogisticRegression(
+   349→  pts: Array<{ x: number; y: number; label: number }>,
+   350→  opts: { l2?: number; lr?: number; epochs?: number } = {}
+   351→): LogisticModel {
+   352→  const l2 = opts.l2 ?? 1;
+   353→  const lr = opts.lr ?? 0.1;
+   354→  const epochs = opts.epochs ?? 800;
+   355→  const n = pts.length;
+   356→  const xs = pts.map((p) => p.x);
+   357→  const ys = pts.map((p) => p.y);
+   358→  const sx = stats(xs);
+   359→  const sy = stats(ys);
+   360→
+   361→  const F = pts.map((p) => [(p.x - sx.mu) / sx.sigma, (p.y - sy.mu) / sy.sigma]);
+   362→  const labels = pts.map((p) => p.label);
+   363→
+   364→  let w0 = 0;
+   365→  let w1 = 0;
+   366→  let bias = 0;
+   367→  for (let e = 0; e < epochs; e++) {
+   368→    let gw0 = 0;
+   369→    let gw1 = 0;
+   370→    let gb = 0;
+   371→    for (let i = 0; i < n; i++) {
+   372→      const z = bias + w0 * F[i][0] + w1 * F[i][1];
+   373→      const p = 1 / (1 + Math.exp(-z));
+   374→      const err = p - labels[i];
+   375→      gb += err;
+   376→      gw0 += err * F[i][0];
+   377→      gw1 += err * F[i][1];
+   378→    }
+   379→    bias -= (lr * gb) / n;
+   380→    w0 -= lr * (gw0 / n + l2 * w0);
+   381→    w1 -= lr * (gw1 / n + l2 * w1);
+   382→  }
+   383→  return {
+   384→    mu: [sx.mu, sy.mu],
+   385→    sigma: [sx.sigma, sy.sigma],
+   386→    w: [w0, w1],
+   387→    bias,
+   388→    predict(xRaw, yRaw) {
+   389→      const zx = (xRaw - sx.mu) / sx.sigma;
+   390→      const zy = (yRaw - sy.mu) / sy.sigma;
+   391→      const z = bias + w0 * zx + w1 * zy;
+   392→      return 1 / (1 + Math.exp(-z));
+   393→    },
+   394→  };
+   395→}
+   396→
+   397→export interface ClassificationMetrics {
+   398→  accuracy: number;
+   399→  precision: number;
+   400→  recall: number;
+   401→  f1: number;
+   402→}
+   403→
+   404→export function classificationMetrics(yTrue: number[], yPred: number[]): ClassificationMetrics {
+   405→  const n = yTrue.length;
+   406→  let tp = 0;
+   407→  let fp = 0;
+   408→  let tn = 0;
+   409→  let fn = 0;
+   410→  for (let i = 0; i < n; i++) {
+   411→    if (yTrue[i] === 1 && yPred[i] === 1) tp++;
+   412→    else if (yTrue[i] === 0 && yPred[i] === 1) fp++;
+   413→    else if (yTrue[i] === 0 && yPred[i] === 0) tn++;
+   414→    else fn++;
+   415→  }
+   416→  const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+   417→  const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
+   418→  return {
+   419→    accuracy: (tp + tn) / n,
+   420→    precision,
+   421→    recall,
+   422→    f1: precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0,
+   423→  };
+   424→}
+   425→
+   426→/* ------------------------------------------------------------------ */
+   427→/* Feature-matrix standardization (train-set statistics)               */
+   428→/* ------------------------------------------------------------------ */
+   429→
+   430→/** Column-wise train-set μ/σ used to map raw feature rows into the
+   431→ *  standardized space every multivariate trainer below works in. */
+   432→export interface Standardizer {
+   433→  mus: number[];
+   434→  sigmas: number[];
+   435→  /** Map one raw feature row to standardized space. */
+   436→  transform(xsRaw: number[]): number[];
+   437→}
+   438→
+   439→export function fitStandardizer(X: number[][]): Standardizer {
+   440→  const k = X[0]?.length ?? 0;
+   441→  const mus: number[] = [];
+   442→  const sigmas: number[] = [];
+   443→  for (let j = 0; j < k; j++) {
+   444→    const s = stats(X.map((row) => row[j] ?? 0));
+   445→    mus.push(s.mu);
+   446→    sigmas.push(s.sigma);
+   447→  }
+   448→  return {
+   449→    mus,
+   450→    sigmas,
+   451→    transform(xsRaw: number[]) {
+   452→      const out: number[] = [];
+   453→      for (let j = 0; j < k; j++) {
+   454→        out.push(((xsRaw[j] ?? 0) - mus[j]!) / sigmas[j]!);
+   455→      }
+   456→      return out;
+   457→    },
+   458→  };
+   459→}
+   460→
+   461→/** Predict from raw (unstandardized) feature rows. */
+   462→export interface RowRegressor {
+   463→  predict(xsRaw: number[]): number;
+   464→}
+   465→
+   466→/** Binary classifier over raw (unstandardized) feature rows. */
+   467→export interface RowClassifier {
+   468→  /** Hard class prediction (0/1). */
+   469→  predict(xsRaw: number[]): 0 | 1;
+   470→  /** Probability of class 1 when the model exposes one. */
+   471→  predictProba?(xsRaw: number[]): number;
+   472→}
+   473→
+   474→/** Normalize non-negative importances to sum 1 (uniform fallback when the
+   475→ *  model produced no splits at all). */
+   476→export function normalizeImportance(raw: number[]): number[] {
+   477→  const total = raw.reduce((a, b) => a + Math.max(b, 0), 0);
+   478→  if (total <= 1e-12) return raw.map(() => 1 / Math.max(raw.length, 1));
+   479→  return raw.map((v) => Math.max(v, 0) / total);
+   480→}
+   481→
+   482→/* ------------------------------------------------------------------ */
+   483→/* Lasso / elastic net — coordinate descent with soft-thresholding     */
+   484→/* ------------------------------------------------------------------ */
+   485→
+   486→/**
+   487→ * Elastic-net linear regression fit by cyclic coordinate descent on the
+   488→ * sklearn-convention objective
+   489→ *   (1/2n)·‖y − b − X·w‖² + α·(l1Ratio·‖w‖₁ + ½(1−l1Ratio)·‖w‖²),
+   490→ * so `alpha`/`l1Ratio` mean exactly what they mean in sklearn's
+   491→ * Lasso/ElasticNet. Features are standardized with train statistics; the
+   492→ * intercept is never penalized. l1Ratio = 1 reduces to lasso.
+   493→ */
+   494→export function fitElasticNet(
+   495→  X: number[][],
+   496→  y: number[],
+   497→  opts: { alpha?: number; l1Ratio?: number; sweeps?: number } = {}
+   498→): RowRegressor & { std: Standardizer; w: number[]; b: number } {
+   499→  const alpha = opts.alpha ?? 1;
+   500→  const l1Ratio = opts.l1Ratio ?? 0.5;
+   501→  const sweeps = opts.sweeps ?? 600;
+   502→  const n = X.length;
+   503→  const k = X[0]?.length ?? 0;
+   504→  const std = fitStandardizer(X);
+   505→  const Z = X.map((row) => std.transform(row));
+   506→
+   507→  const yMean = mean(y);
+   508→  const w = new Array<number>(k).fill(0);
+   509→  // Column means of Z (≈ 0, kept for an exact intercept refresh).
+   510→  const zMeans = new Array<number>(k).fill(0);
+   511→  const zSq = new Array<number>(k).fill(0); // (1/n)·Σ z_j²
+   512→  for (let i = 0; i < n; i++) {
+   513→    for (let j = 0; j < k; j++) {
+   514→      const v = Z[i]![j] ?? 0;
+   515→      zMeans[j] = (zMeans[j] ?? 0) + v / n;
+   516→      zSq[j] = (zSq[j] ?? 0) + (v * v) / n;
+   517→    }
+   518→  }
+   519→
+   520→  // Residual r = y − b − Z·w, maintained incrementally.
+   521→  let b = yMean;
+   522→  const r = y.map((v) => v - b);
+   523→  const l1Pen = alpha * l1Ratio;
+   524→  const l2Pen = alpha * (1 - l1Ratio);
+   525→
+   526→  for (let s = 0; s < sweeps; s++) {
+   527→    for (let j = 0; j < k; j++) {
+   528→      const zj = zSq[j] ?? 0;
+   529→      const denom = zj + l2Pen;
+   530→      if (denom <= 1e-12) continue;
+   531→      // rho = (1/n)·Σ z_ij·(r_i + z_ij·w_j) — partial residual correlation.
+   532→      let rho = 0;
+   533→      for (let i = 0; i < n; i++) {
+   534→        rho += (Z[i]![j] ?? 0) * ((r[i] ?? 0) + (Z[i]![j] ?? 0) * w[j]!);
+   535→      }
+   536→      rho /= n;
+   537→      const soft = Math.sign(rho) * Math.max(Math.abs(rho) - l1Pen, 0);
+   538→      const wNew = soft / denom;
+   539→      if (wNew !== w[j]) {
+   540→        const delta = w[j]! - wNew;
+   541→        for (let i = 0; i < n; i++) {
+   542→          r[i] = (r[i] ?? 0) + (Z[i]![j] ?? 0) * delta;
+   543→        }
+   544→        w[j] = wNew;
+   545→      }
+   546→    }
+   547→    // Intercept refresh: b = mean(y) − Σ_j w_j·mean(z_j).
+   548→    let shift = 0;
+   549→    for (let j = 0; j < k; j++) shift += w[j]! * (zMeans[j] ?? 0);
+   550→    const bNew = yMean - shift;
+   551→    if (bNew !== b) {
+   552→      const db = bNew - b;
+   553→      for (let i = 0; i < n; i++) r[i] = (r[i] ?? 0) - db;
+   554→      b = bNew;
+   555→    }
+   556→  }
+   557→
+   558→  return {
+   559→    std,
+   560→    w,
+   561→    b,
+   562→    predict(xsRaw: number[]) {
+   563→      const z = std.transform(xsRaw);
+   564→      let acc = b;
+   565→      for (let j = 0; j < k; j++) acc += w[j]! * (z[j] ?? 0);
+   566→      return acc;
+   567→    },
+   568→  };
+   569→}
+   570→
+   571→/* ------------------------------------------------------------------ */
+   572→/* k-nearest neighbours                                                */
+   573→/* ------------------------------------------------------------------ */
+   574→
+   575→/** Euclidean distance in standardized space to every stored train row. */
+   576→function knnNeighbours(Z: number[][], z: number[]): number[] {
+   577→  const dists: number[] = [];
+   578→  for (let i = 0; i < Z.length; i++) {
+   579→    let d = 0;
+   580→    const row = Z[i]!;
+   581→    for (let j = 0; j < z.length; j++) {
+   582→      const diff = (row[j] ?? 0) - (z[j] ?? 0);
+   583→      d += diff * diff;
+   584→    }
+   585→    dists.push(d);
+   586→  }
+   587→  return dists;
+   588→}
+   589→
+   590→/** Indices of the k smallest distances (stable on ties → train order). */
+   591→function kSmallest(dists: number[], k: number): number[] {
+   592→  const order = dists.map((d, i) => ({ d, i }));
+   593→  order.sort((a, b) => (a.d === b.d ? a.i - b.i : a.d - b.d));
+   594→  return order.slice(0, Math.min(k, order.length)).map((o) => o.i);
+   595→}
+   596→
+   597→/** kNN regression: mean label of the k nearest train points. */
+   598→export function fitKnnRegressor(
+   599→  X: number[][],
+   600→  y: number[],
+   601→  opts: { k?: number } = {}
+   602→): RowRegressor {
+   603→  const k = opts.k ?? 5;
+   604→  const std = fitStandardizer(X);
+   605→  const Z = X.map((row) => std.transform(row));
+   606→  return {
+   607→    predict(xsRaw: number[]) {
+   608→      const z = std.transform(xsRaw);
+   609→      const idx = kSmallest(knnNeighbours(Z, z), k);
+   610→      return mean(idx.map((i) => y[i] ?? 0));
+   611→    },
+   612→  };
+   613→}
+   614→
+   615→/* ------------------------------------------------------------------ */
+   616→/* CART decision trees (variance + gini)                               */
+   617→/* ------------------------------------------------------------------ */
+   618→
+   619→interface CartNode {
+   620→  n: number;
+   621→  feature?: number;
+   622→  threshold?: number;
+   623→  left?: CartNode;
+   624→  right?: CartNode;
+   625→  /** Regression: mean y · Classification: P(class 1). */
+   626→  value?: number;
+   627→}
+   628→
+   629→/** Sum of squared errors of y over the given row indices. */
+   630→function sseOf(y: number[], idx: number[]): { sse: number; mean: number } {
+   631→  let s = 0;
+   632→  let sq = 0;
+   633→  for (const i of idx) {
+   634→    const v = y[i] ?? 0;
+   635→    s += v;
+   636→    sq += v * v;
+   637→  }
+   638→  const m = s / idx.length;
+   639→  return { sse: sq - (s * s) / idx.length, mean: m };
+   640→}
+   641→
+   642→/**
+   643→ * Best CART split over row indices: scan every feature in column order,
+   644→ * every midpoint between consecutive distinct sorted values, and keep the
+   645→ * FIRST strict maximum of the variance-reduction gain (sklearn's
+   646→ * BestSplitter tie convention). Returns the split plus its SSE reduction,
+   647→ * or null when no positive-gain split exists.
+   648→ */
+   649→function bestVarianceSplit(
+   650→  X: number[][],
+   651→  y: number[],
+   652→  idx: number[]
+   653→): { feature: number; threshold: number; gain: number } | null {
+   654→  const n = idx.length;
+   655→  const k = X[0]?.length ?? 0;
+   656→  let sumAll = 0;
+   657→  let sqAll = 0;
+   658→  for (const i of idx) {
+   659→    const v = y[i] ?? 0;
+   660→    sumAll += v;
+   661→    sqAll += v * v;
+   662→  }
+   663→  const sseP = sqAll - (sumAll * sumAll) / n;
+   664→  let bestFeature = -1;
+   665→  let bestThreshold = 0;
+   666→  let bestGain = 1e-12; // strictly positive improvement required
+   667→  for (let j = 0; j < k; j++) {
+   668→    const order = [...idx].sort((a, b) => (X[a]![j] ?? 0) - (X[b]![j] ?? 0));
+   669→    let sumL = 0;
+   670→    let sqL = 0;
+   671→    for (let m = 0; m + 1 < n; m++) {
+   672→      const v = y[order[m]!] ?? 0;
+   673→      sumL += v;
+   674→      sqL += v * v;
+   675→      const xCur = X[order[m]!]![j] ?? 0;
+   676→      const xNext = X[order[m + 1]!]![j] ?? 0;
+   677→      if (xCur === xNext) continue; // no midpoint between equal values
+   678→      const nL = m + 1;
+   679→      const nR = n - nL;
+   680→      const sseL = sqL - (sumL * sumL) / nL;
+   681→      const sumR = sumAll - sumL;
+   682→      const sqR = sqAll - sqL;
+   683→      const sseR = sqR - (sumR * sumR) / nR;
+   684→      const gain = sseP - sseL - sseR;
+   685→      if (gain > bestGain) {
+   686→        bestGain = gain;
+   687→        bestFeature = j;
+   688→        bestThreshold = (xCur + xNext) / 2;
+   689→      }
+   690→    }
+   691→  }
+   692→  return bestFeature >= 0
+   693→    ? { feature: bestFeature, threshold: bestThreshold, gain: bestGain }
+   694→    : null;
+   695→}
+   696→
+   697→/** Build a variance-reduction CART subtree over `idx` (z-space rows).
+   698→ *  `gains[j]` accumulates (SSE_p − SSE_l − SSE_r)/N per split, sklearn's
+   699→ *  feature-importance convention. */
+   700→function buildRegressionNode(
+   701→  X: number[][],
+   702→  y: number[],
+   703→  idx: number[],
+   704→  depth: number,
+   705→  maxDepth: number,
+   706→  gains: number[]
+   707→): CartNode {
+   708→  const { sse, mean: value } = sseOf(y, idx);
+   709→  const node: CartNode = { n: idx.length };
+   710→  if (depth >= maxDepth || idx.length < 2 || sse <= 1e-12) {
+   711→    node.value = value;
+   712→    return node;
+   713→  }
+   714→  const split = bestVarianceSplit(X, y, idx);
+   715→  if (!split) {
+   716→    node.value = value;
+   717→    return node;
+   718→  }
+   719→  const leftIdx: number[] = [];
+   720→  const rightIdx: number[] = [];
+   721→  for (const i of idx) {
+   722→    if ((X[i]![split.feature] ?? 0) <= split.threshold) leftIdx.push(i);
+   723→    else rightIdx.push(i);
+   724→  }
+   725→  if (leftIdx.length === 0 || rightIdx.length === 0) {
+   726→    node.value = value;
+   727→    return node;
+   728→  }
+   729→  gains[split.feature] = (gains[split.feature] ?? 0) + split.gain / y.length;
+   730→  node.feature = split.feature;
+   731→  node.threshold = split.threshold;
+   732→  node.left = buildRegressionNode(X, y, leftIdx, depth + 1, maxDepth, gains);
+   733→  node.right = buildRegressionNode(X, y, rightIdx, depth + 1, maxDepth, gains);
+   734→  return node;
+   735→}
+   736→
+   737→function predictTreeNode(node: CartNode, z: number[]): number {
+   738→  let cur = node;
+   739→  while (cur.value === undefined) {
+   740→    const goLeft = (z[cur.feature ?? 0] ?? 0) <= (cur.threshold ?? 0);
+   741→    cur = (goLeft ? cur.left : cur.right) ?? cur;
+   742→  }
+   743→  return cur.value ?? 0;
+   744→}
+   745→
+   746→/** CART regression tree with depth cap; importance = raw variance-reduction
+   747→ *  gains (normalize with normalizeImportance for display). */
+   748→export function fitRegressionTree(
+   749→  X: number[][],
+   750→  y: number[],
+   751→  opts: { maxDepth?: number } = {}
+   752→): RowRegressor & { rawImportance: number[] } {
+   753→  const maxDepth = opts.maxDepth ?? 4;
+   754→  const std = fitStandardizer(X);
+   755→  const Z = X.map((row) => std.transform(row));
+   756→  const idx = Array.from({ length: X.length }, (_, i) => i);
+   757→  const gains = new Array<number>(Z[0]?.length ?? 0).fill(0);
+   758→  const root = buildRegressionNode(Z, y, idx, 0, maxDepth, gains);
+   759→  return {
+   760→    rawImportance: gains,
+   761→    predict(xsRaw: number[]) {
+   762→      return predictTreeNode(root, std.transform(xsRaw));
+   763→    },
+   764→  };
+   765→}
+   766→
+   767→/* ------------------------------------------------------------------ */
+   768→/* Bootstrap-aggregated forests (regression)                           */
+   769→/* ------------------------------------------------------------------ */
+   770→
+   771→/** Random forest regression: seeded bootstrap aggregation of depth-capped
+   772→ *  CART trees. Importance = mean of per-tree normalized importances,
+   773→ *  renormalized (sklearn's convention). */
+   774→export function fitRandomForestRegressor(
+   775→  X: number[][],
+   776→  y: number[],
+   777→  opts: { nEstimators?: number; maxDepth?: number; rand: () => number } = { rand: mulberry32(0) }
+   778→): RowRegressor & { importance: number[] } {
+   779→  const nEstimators = opts.nEstimators ?? 50;
+   780→  const maxDepth = opts.maxDepth ?? 6;
+   781→  const rand = opts.rand;
+   782→  const n = X.length;
+   783→  const k = X[0]?.length ?? 0;
+   784→  const std = fitStandardizer(X);
+   785→  const Z = X.map((row) => std.transform(row));
+   786→  const trees: CartNode[] = [];
+   787→  const perTreeImportance: number[][] = [];
+   788→  for (let t = 0; t < nEstimators; t++) {
+   789→    const boot: number[] = [];
+   790→    for (let i = 0; i < n; i++) boot.push(Math.floor(rand() * n));
+   791→    const gains = new Array<number>(k).fill(0);
+   792→    trees.push(buildRegressionNode(Z, y, boot, 0, maxDepth, gains));
+   793→    perTreeImportance.push(normalizeImportance(gains));
+   794→  }
+   795→  const importance = normalizeImportance(
+   796→    perTreeImportance.reduce(
+   797→      (acc, imp) => acc.map((v, j) => v + (imp[j] ?? 0)),
+   798→      new Array<number>(k).fill(0)
+   799→    )
+   800→  );
+   801→  return {
+   802→    importance,
+   803→    predict(xsRaw: number[]) {
+   804→      const z = std.transform(xsRaw);
+   805→      return mean(trees.map((root) => predictTreeNode(root, z)));
+   806→    },
+   807→  };
+   808→}
+   809→
+   810→/* ------------------------------------------------------------------ */
+   811→/* Gradient boosting (regression)                                      */
+   812→/* ------------------------------------------------------------------ */
+   813→
+   814→/** Gradient-boosted regression: depth-3 CART trees fit to the running
+   815→ *  residuals, each shrunk by `learningRate`. Importance accumulates raw
+   816→ *  variance-reduction gains across all rounds, normalized to Σ = 1. */
+   817→export function fitGradientBoostingRegressor(
+   818→  X: number[][],
+   819→  y: number[],
+   820→  opts: { rounds?: number; learningRate?: number; maxDepth?: number } = {}
+   821→): RowRegressor & { importance: number[] } {
+   822→  const rounds = opts.rounds ?? 50;
+   823→  const lr = opts.learningRate ?? 0.1;
+   824→  const maxDepth = opts.maxDepth ?? 3;
+   825→  const n = X.length;
+   826→  const k = X[0]?.length ?? 0;
+   827→  const std = fitStandardizer(X);
+   828→  const Z = X.map((row) => std.transform(row));
+   829→  const f0 = mean(y);
+   830→  const F = new Array<number>(n).fill(f0);
+   831→  const trees: Array<{ root: CartNode }> = [];
+   832→  const gains = new Array<number>(k).fill(0);
+   833→  const idx = Array.from({ length: n }, (_, i) => i);
+   834→  for (let r = 0; r < rounds; r++) {
+   835→    const residual = F.map((f, i) => (y[i] ?? 0) - f);
+   836→    const root = buildRegressionNode(Z, residual, idx, 0, maxDepth, gains);
+   837→    trees.push({ root });
+   838→    for (let i = 0; i < n; i++) {
+   839→      F[i] = (F[i] ?? 0) + lr * predictTreeNode(root, Z[i]!);
+   840→    }
+   841→  }
+   842→  return {
+   843→    importance: normalizeImportance(gains),
+   844→    predict(xsRaw: number[]) {
+   845→      const z = std.transform(xsRaw);
+   846→      let acc = f0;
+   847→      for (const t of trees) acc += lr * predictTreeNode(t.root, z);
+   848→      return acc;
+   849→    },
+   850→  };
+   851→}
+   852→
+   853→/* ------------------------------------------------------------------ */
+   854→/* MLP — one tanh hidden layer (regression + classification)           */
+   855→/* ------------------------------------------------------------------ */
+   856→
+   857→interface MlpWeights {
+   858→  /** [hidden][k+1] — last column is the bias. */
+   859→  W1: number[][];
+   860→  /** [1][hidden+1] — last column is the bias. */
+   861→  W2: number[][];
+   862→}
+   863→
+   864→function initMlp(k: number, hidden: number, rand: () => number): MlpWeights {
+   865→  const scale1 = Math.sqrt(1 / Math.max(k, 1));
+   866→  const scale2 = Math.sqrt(1 / Math.max(hidden, 1));
+   867→  const W1 = Array.from({ length: hidden }, () =>
+   868→    Array.from({ length: k + 1 }, (_, j) => (j === k ? 0 : gaussian(rand) * scale1))
+   869→  );
+   870→  const W2 = [Array.from({ length: hidden + 1 }, (_, h) => (h === hidden ? 0 : gaussian(rand) * scale2))];
+   871→  return { W1, W2 };
+   872→}
+   873→
+   874→/** Regression MLP: tanh hidden layer, linear output, full-batch gradient
+   875→ *  descent on MSE. Targets are standardized with train statistics and
+   876→ *  mapped back at predict time (pIC50-scale targets would otherwise crawl
+   877→ *  — the same bug class the toolkit's neural.py guards against). */
+   878→export function fitMlpRegressor(
+   879→  X: number[][],
+   880→  y: number[],
+   881→  opts: { hidden?: number; epochs?: number; lr?: number; rand: () => number } = { rand: mulberry32(0) }
+   882→): RowRegressor {
+   883→  const hidden = opts.hidden ?? 16;
+   884→  const epochs = opts.epochs ?? 200;
+   885→  const lr = opts.lr ?? 0.05;
+   886→  const rand = opts.rand;
+   887→  const n = X.length;
+   888→  const k = X[0]?.length ?? 0;
+   889→  const std = fitStandardizer(X);
+   890→  const Z = X.map((row) => std.transform(row));
+   891→  const yStats = stats(y);
+   892→  const t = y.map((v) => (v - yStats.mu) / yStats.sigma);
+   893→
+   894→  const { W1, W2 } = initMlp(k, hidden, rand);
+   895→  const a1 = new Array<number>(hidden).fill(0);
+   896→
+   897→  for (let e = 0; e < epochs; e++) {
+   898→    const gW1 = Array.from({ length: hidden }, () => new Array<number>(k + 1).fill(0));
+   899→    const gW2 = [new Array<number>(hidden + 1).fill(0)];
+   900→    for (let i = 0; i < n; i++) {
+   901→      const zrow = Z[i]!;
+   902→      // forward
+   903→      for (let h = 0; h < hidden; h++) {
+   904→        let acc = W1[h]![k]!;
+   905→        for (let j = 0; j < k; j++) acc += W1[h]![j]! * (zrow[j] ?? 0);
+   906→        a1[h] = Math.tanh(acc);
+   907→      }
+   908→      let out = W2[0]![hidden]!;
+   909→      for (let h = 0; h < hidden; h++) out += W2[0]![h]! * a1[h]!;
+   910→      const err = (out - (t[i] ?? 0)) / n; // d(mean squared error)/d(out)
+   911→      // backward
+   912→      for (let h = 0; h < hidden; h++) {
+   913→        gW2[0]![h]! += err * a1[h]!;
+   914→        const dz = (1 - a1[h]! * a1[h]!) * W2[0]![h]! * err;
+   915→        for (let j = 0; j < k; j++) gW1[h]![j]! += dz * (zrow[j] ?? 0);
+   916→        gW1[h]![k]! += dz;
+   917→      }
+   918→      gW2[0]![hidden]! += err;
+   919→    }
+   920→    for (let h = 0; h < hidden; h++) {
+   921→      for (let j = 0; j <= k; j++) W1[h]![j]! -= lr * gW1[h]![j]!;
+   922→    }
+   923→    for (let j = 0; j <= hidden; j++) W2[0]![j]! -= lr * gW2[0]![j]!;
+   924→  }
+   925→
+   926→  return {
+   927→    predict(xsRaw: number[]) {
+   928→      const z = std.transform(xsRaw);
+   929→      for (let h = 0; h < hidden; h++) {
+   930→        let acc = W1[h]![k]!;
+   931→        for (let j = 0; j < k; j++) acc += W1[h]![j]! * (z[j] ?? 0);
+   932→        a1[h] = Math.tanh(acc);
+   933→      }
+   934→      let out = W2[0]![hidden]!;
+   935→      for (let h = 0; h < hidden; h++) out += W2[0]![h]! * a1[h]!;
+   936→      return out * yStats.sigma + yStats.mu;
+   937→    },
+   938→  };
+   939→}
+   940→
+   941→/* ------------------------------------------------------------------ */
+   942→/* Classification: kNN / CART gini / forest / NB / SVM / MLP           */
+   943→/* ------------------------------------------------------------------ */
+   944→
+   945→/** kNN classifier: probability = fraction of class-1 neighbours among the
+   946→ *  k nearest train points (odd k ⇒ no vote ties). */
+   947→export function fitKnnClassifier(
+   948→  X: number[][],
+   949→  labels: number[],
+   950→  opts: { k?: number } = {}
+   951→): RowClassifier {
+   952→  const k = opts.k ?? 5;
+   953→  const std = fitStandardizer(X);
+   954→  const Z = X.map((row) => std.transform(row));
+   955→  return {
+   956→    predictProba(xsRaw: number[]) {
+   957→      const z = std.transform(xsRaw);
+   958→      const idx = kSmallest(knnNeighbours(Z, z), k);
+   959→      return mean(idx.map((i) => labels[i] ?? 0));
+   960→    },
+   961→    predict(xsRaw: number[]) {
+   962→      const z = std.transform(xsRaw);
+   963→      const idx = kSmallest(knnNeighbours(Z, z), k);
+   964→      return mean(idx.map((i) => labels[i] ?? 0)) >= 0.5 ? 1 : 0;
+   965→    },
+   966→  };
+   967→}
+   968→
+   969→/** Gini impurity of a 0/1 label subset. */
+   970→function giniOf(labels: number[], idx: number[]): number {
+   971→  let ones = 0;
+   972→  for (const i of idx) if ((labels[i] ?? 0) === 1) ones++;
+   973→  const p = ones / idx.length;
+   974→  return 1 - p * p - (1 - p) * (1 - p);
+   975→}
+   976→
+   977→/** Best gini split — same scan/tie convention as bestVarianceSplit.
+   978→ *  Gain = n·gini_p − n_l·gini_l − n_r·gini_r. */
+   979→function bestGiniSplit(
+   980→  X: number[][],
+   981→  labels: number[],
+   982→  idx: number[]
+   983→): { feature: number; threshold: number; gain: number } | null {
+   984→  const n = idx.length;
+   985→  const k = X[0]?.length ?? 0;
+   986→  const giniP = giniOf(labels, idx);
+   987→  let onesAll = 0;
+   988→  for (const i of idx) if ((labels[i] ?? 0) === 1) onesAll++;
+   989→  let bestFeature = -1;
+   990→  let bestThreshold = 0;
+   991→  let bestGain = 1e-12;
+   992→  for (let j = 0; j < k; j++) {
+   993→    const order = [...idx].sort((a, b) => (X[a]![j] ?? 0) - (X[b]![j] ?? 0));
+   994→    let onesL = 0;
+   995→    for (let m = 0; m + 1 < n; m++) {
+   996→      if ((labels[order[m]!] ?? 0) === 1) onesL++;
+   997→      const xCur = X[order[m]!]![j] ?? 0;
+   998→      const xNext = X[order[m + 1]!]![j] ?? 0;
+   999→      if (xCur === xNext) continue;
+  1000→      const nL = m + 1;
+  1001→      const nR = n - nL;
+  1002→      const pL = onesL / nL;
+  1003→      const giniL = 1 - pL * pL - (1 - pL) * (1 - pL);
+  1004→      const onesR = onesAll - onesL;
+  1005→      const pR = onesR / nR;
+  1006→      const giniR = 1 - pR * pR - (1 - pR) * (1 - pR);
+  1007→      const gain = n * giniP - nL * giniL - nR * giniR;
+  1008→      if (gain > bestGain) {
+  1009→        bestGain = gain;
+  1010→        bestFeature = j;
+  1011→        bestThreshold = (xCur + xNext) / 2;
+  1012→      }
+  1013→    }
+  1014→  }
+  1015→  return bestFeature >= 0
+  1016→    ? { feature: bestFeature, threshold: bestThreshold, gain: bestGain }
+  1017→    : null;
+  1018→}
+  1019→
+  1020→function countOnes(labels: number[], idx: number[]): number {
+  1021→  let ones = 0;
+  1022→  for (const i of idx) if ((labels[i] ?? 0) === 1) ones++;
+  1023→  return ones;
+  1024→}
+  1025→
+  1026→function buildClassificationNode(
+  1027→  X: number[][],
+  1028→  labels: number[],
+  1029→  idx: number[],
+  1030→  depth: number,
+  1031→  maxDepth: number,
+  1032→  gains: number[]
+  1033→): CartNode {
+  1034→  const ones = countOnes(labels, idx);
+  1035→  const value = ones / idx.length;
+  1036→  const node: CartNode = { n: idx.length };
+  1037→  if (depth >= maxDepth || idx.length < 2 || value === 0 || value === 1) {
+  1038→    node.value = value;
+  1039→    return node;
+  1040→  }
+  1041→  const split = bestGiniSplit(X, labels, idx);
+  1042→  if (!split) {
+  1043→    node.value = value;
+  1044→    return node;
+  1045→  }
+  1046→  const leftIdx: number[] = [];
+  1047→  const rightIdx: number[] = [];
+  1048→  for (const i of idx) {
+  1049→    if ((X[i]![split.feature] ?? 0) <= split.threshold) leftIdx.push(i);
+  1050→    else rightIdx.push(i);
+  1051→  }
+  1052→  if (leftIdx.length === 0 || rightIdx.length === 0) {
+  1053→    node.value = value;
+  1054→    return node;
+  1055→  }
+  1056→  gains[split.feature] = (gains[split.feature] ?? 0) + split.gain / labels.length;
+  1057→  node.feature = split.feature;
+  1058→  node.threshold = split.threshold;
+  1059→  node.left = buildClassificationNode(X, labels, leftIdx, depth + 1, maxDepth, gains);
+  1060→  node.right = buildClassificationNode(X, labels, rightIdx, depth + 1, maxDepth, gains);
+  1061→  return node;
+  1062→}
+  1063→
+  1064→/** CART classification tree (gini). Leaves carry P(class 1); hard
+  1065→ *  prediction thresholds that probability at 0.5. */
+  1066→export function fitClassificationTree(
+  1067→  X: number[][],
+  1068→  labels: number[],
+  1069→  opts: { maxDepth?: number } = {}
+  1070→): RowClassifier & { rawImportance: number[] } {
+  1071→  const maxDepth = opts.maxDepth ?? 4;
+  1072→  const std = fitStandardizer(X);
+  1073→  const Z = X.map((row) => std.transform(row));
+  1074→  const idx = Array.from({ length: X.length }, (_, i) => i);
+  1075→  const gains = new Array<number>(Z[0]?.length ?? 0).fill(0);
+  1076→  const root = buildClassificationNode(Z, labels, idx, 0, maxDepth, gains);
+  1077→  const proba = (xsRaw: number[]): number => predictTreeNode(root, std.transform(xsRaw));
+  1078→  return {
+  1079→    rawImportance: gains,
+  1080→    predictProba: proba,
+  1081→    predict(xsRaw: number[]) {
+  1082→      return proba(xsRaw) >= 0.5 ? 1 : 0;
+  1083→    },
+  1084→  };
+  1085→}
+  1086→
+  1087→/** Random forest classifier: seeded bagging of gini CART trees;
+  1088→ *  probability = mean of per-tree leaf class fractions. */
+  1089→export function fitRandomForestClassifier(
+  1090→  X: number[][],
+  1091→  labels: number[],
+  1092→  opts: { nEstimators?: number; maxDepth?: number; rand: () => number } = { rand: mulberry32(0) }
+  1093→): RowClassifier & { importance: number[] } {
+  1094→  const nEstimators = opts.nEstimators ?? 50;
+  1095→  const maxDepth = opts.maxDepth ?? 6;
+  1096→  const rand = opts.rand;
+  1097→  const n = X.length;
+  1098→  const k = X[0]?.length ?? 0;
+  1099→  const std = fitStandardizer(X);
+  1100→  const Z = X.map((row) => std.transform(row));
+  1101→  const trees: CartNode[] = [];
+  1102→  const perTreeImportance: number[][] = [];
+  1103→  for (let t = 0; t < nEstimators; t++) {
+  1104→    const boot: number[] = [];
+  1105→    for (let i = 0; i < n; i++) boot.push(Math.floor(rand() * n));
+  1106→    const gains = new Array<number>(k).fill(0);
+  1107→    trees.push(buildClassificationNode(Z, labels, boot, 0, maxDepth, gains));
+  1108→    perTreeImportance.push(normalizeImportance(gains));
+  1109→  }
+  1110→  const importance = normalizeImportance(
+  1111→    perTreeImportance.reduce(
+  1112→      (acc, imp) => acc.map((v, j) => v + (imp[j] ?? 0)),
+  1113→      new Array<number>(k).fill(0)
+  1114→    )
+  1115→  );
+  1116→  const proba = (xsRaw: number[]): number => {
+  1117→    const z = std.transform(xsRaw);
+  1118→    return mean(trees.map((root) => predictTreeNode(root, z)));
+  1119→  };
+  1120→  return {
+  1121→    importance,
+  1122→    predictProba: proba,
+  1123→    predict(xsRaw: number[]) {
+  1124→      return proba(xsRaw) >= 0.5 ? 1 : 0;
+  1125→    },
+  1126→  };
+  1127→}
+  1128→
+  1129→/** Gaussian Naive Bayes: per-class Gaussian log-posterior with sklearn's
+  1130→ *  var_smoothing epsilon (1e-9 × the largest global feature variance)
+  1131→ *  added to every class-conditional variance. */
+  1132→export function fitGaussianNB(
+  1133→  X: number[][],
+  1134→  labels: number[],
+  1135→  opts: { varSmoothing?: number } = {}
+  1136→): RowClassifier & { priors: [number, number]; logPosterior(xsRaw: number[]): [number, number] } {
+  1137→  const varSmoothing = opts.varSmoothing ?? 1e-9;
+  1138→  const n = X.length;
+  1139→  const k = X[0]?.length ?? 0;
+  1140→  const std = fitStandardizer(X);
+  1141→  const Z = X.map((row) => std.transform(row));
+  1142→
+  1143→  // sklearn's epsilon: var_smoothing × max over features of the global
+  1144→  // (whole-train-set) population variance.
+  1145→  let maxVar = 0;
+  1146→  for (let j = 0; j < k; j++) {
+  1147→    const s = stats(Z.map((row) => row[j] ?? 0));
+  1148→    if (s.sigma * s.sigma > maxVar) maxVar = s.sigma * s.sigma;
+  1149→  }
+  1150→  const eps = varSmoothing * maxVar;
+  1151→
+  1152→  const fit: Array<{ prior: number; mus: number[]; vars: number[] }> = [];
+  1153→  for (const c of [0, 1] as const) {
+  1154→    const rows = Z.filter((_, i) => (labels[i] ?? 0) === c);
+  1155→    const prior = rows.length / n;
+  1156→    const mus: number[] = [];
+  1157→    const vars: number[] = [];
+  1158→    for (let j = 0; j < k; j++) {
+  1159→      const s = stats(rows.map((row) => row[j] ?? 0));
+  1160→      mus.push(s.mu);
+  1161→      vars.push(s.sigma * s.sigma + eps);
+  1162→    }
+  1163→    fit.push({ prior, mus, vars });
+  1164→  }
+  1165→
+  1166→  function logPosterior(xsRaw: number[]): [number, number] {
+  1167→    const z = std.transform(xsRaw);
+  1168→    const out: [number, number] = [0, 0];
+  1169→    for (let c = 0 as 0 | 1; c <= 1; c++) {
+  1170→      const f = fit[c]!;
+  1171→      let lp = Math.log(Math.max(f.prior, 1e-300));
+  1172→      for (let j = 0; j < k; j++) {
+  1173→        const v = f.vars[j]!;
+  1174→        const diff = (z[j] ?? 0) - f.mus[j]!;
+  1175→        lp += -0.5 * Math.log(2 * Math.PI * v) - (diff * diff) / (2 * v);
+  1176→      }
+  1177→      out[c] = lp;
+  1178→    }
+  1179→    return out;
+  1180→  }
+  1181→
+  1182→  return {
+  1183→    priors: [fit[0]!.prior, fit[1]!.prior],
+  1184→    logPosterior,
+  1185→    predictProba(xsRaw: number[]) {
+  1186→      const [lp0, lp1] = logPosterior(xsRaw);
+  1187→      return 1 / (1 + Math.exp(lp0 - lp1));
+  1188→    },
+  1189→    predict(xsRaw: number[]) {
+  1190→      const [lp0, lp1] = logPosterior(xsRaw);
+  1191→      return lp1 > lp0 ? 1 : 0; // argmax with ties → class 0 (np.argmax)
+  1192→    },
+  1193→  };
+  1194→}
+  1195→
+  1196→/** Linear SVM: L2-regularized squared-hinge objective solved by batch
+  1197→ *  gradient descent,
+  1198→ *    J(θ) = ½‖θ‖² + C·Σ max(0, 1 − y·θ·u)ᵀ²,  u = [z, 1],
+  1199→ *  mirroring liblinear/LinearSVC — including its quirk of regularizing the
+  1200→ *  bias (a constant-1 feature). The step size is 1/L with L an explicit
+  1201→ *  Lipschitz upper bound (1 + 2C·Σ‖u‖²), so GD never diverges. */
+  1202→export function fitLinearSvm(
+  1203→  X: number[][],
+  1204→  labels: number[],
+  1205→  opts: { C?: number; epochs?: number } = {}
+  1206→): RowClassifier & { w: number[]; bias: number } {
+  1207→  const C = opts.C ?? 1;
+  1208→  const epochs = opts.epochs ?? 3000;
+  1209→  const n = X.length;
+  1210→  const k = X[0]?.length ?? 0;
+  1211→  const std = fitStandardizer(X);
+  1212→  const Z = X.map((row) => std.transform(row));
+  1213→
+  1214→  const theta = new Array<number>(k + 1).fill(0); // [w…, b]
+  1215→  let lipSum = 0;
+  1216→  for (let i = 0; i < n; i++) {
+  1217→    let s = 1; // bias feature contributes 1
+  1218→    for (let j = 0; j < k; j++) s += (Z[i]![j] ?? 0) ** 2;
+  1219→    lipSum += s;
+  1220→  }
+  1221→  const step = 1 / (1 + 2 * C * lipSum);
+  1222→
+  1223→  for (let e = 0; e < epochs; e++) {
+  1224→    const grad = new Array<number>(k + 1).fill(0);
+  1225→    for (let i = 0; i < n; i++) {
+  1226→      let margin = theta[k]!;
+  1227→      for (let j = 0; j < k; j++) margin += theta[j]! * (Z[i]![j] ?? 0);
+  1228→      const yi = (labels[i] ?? 0) === 1 ? 1 : -1;
+  1229→      const viol = 1 - yi * margin;
+  1230→      if (viol > 0) {
+  1231→        const coef = 2 * C * viol * yi;
+  1232→        for (let j = 0; j < k; j++) grad[j]! -= coef * (Z[i]![j] ?? 0);
+  1233→        grad[k]! -= coef;
+  1234→      }
+  1235→    }
+  1236→    for (let j = 0; j <= k; j++) {
+  1237→      // ∇J = θ + (−2C·Σ viol·y·u); the loop above accumulated the hinge part.
+  1238→      theta[j]! -= step * (theta[j]! + grad[j]!);
+  1239→    }
+  1240→  }
+  1241→
+  1242→  const w = theta.slice(0, k);
+  1243→  const bias = theta[k] ?? 0;
+  1244→  return {
+  1245→    w,
+  1246→    bias,
+  1247→    predict(xsRaw: number[]) {
+  1248→      const z = std.transform(xsRaw);
+  1249→      let margin = bias;
+  1250→      for (let j = 0; j < k; j++) margin += w[j]! * (z[j] ?? 0);
+  1251→      return margin >= 0 ? 1 : 0;
+  1252→    },
+  1253→  };
+  1254→}
+  1255→
+  1256→/** Classification MLP: tanh hidden layer, sigmoid output, full-batch
+  1257→ *  gradient descent on cross-entropy. Seeded initialization. */
+  1258→export function fitMlpClassifier(
+  1259→  X: number[][],
+  1260→  labels: number[],
+  1261→  opts: { hidden?: number; epochs?: number; lr?: number; rand: () => number } = { rand: mulberry32(0) }
+  1262→): RowClassifier {
+  1263→  const hidden = opts.hidden ?? 16;
+  1264→  const epochs = opts.epochs ?? 200;
+  1265→  const lr = opts.lr ?? 0.05;
+  1266→  const rand = opts.rand;
+  1267→  const n = X.length;
+  1268→  const k = X[0]?.length ?? 0;
+  1269→  const std = fitStandardizer(X);
+  1270→  const Z = X.map((row) => std.transform(row));
+  1271→
+  1272→  const { W1, W2 } = initMlp(k, hidden, rand);
+  1273→  const a1 = new Array<number>(hidden).fill(0);
+  1274→
+  1275→  for (let e = 0; e < epochs; e++) {
+  1276→    const gW1 = Array.from({ length: hidden }, () => new Array<number>(k + 1).fill(0));
+  1277→    const gW2 = [new Array<number>(hidden + 1).fill(0)];
+  1278→    for (let i = 0; i < n; i++) {
+  1279→      const zrow = Z[i]!;
+  1280→      for (let h = 0; h < hidden; h++) {
+  1281→        let acc = W1[h]![k]!;
+  1282→        for (let j = 0; j < k; j++) acc += W1[h]![j]! * (zrow[j] ?? 0);
+  1283→        a1[h] = Math.tanh(acc);
+  1284→      }
+  1285→      let out = W2[0]![hidden]!;
+  1286→      for (let h = 0; h < hidden; h++) out += W2[0]![h]! * a1[h]!;
+  1287→      const p = 1 / (1 + Math.exp(-out));
+  1288→      const err = (p - (labels[i] ?? 0)) / n; // d(mean CE)/d(out)
+  1289→      for (let h = 0; h < hidden; h++) {
+  1290→        gW2[0]![h]! += err * a1[h]!;
+  1291→        const dz = (1 - a1[h]! * a1[h]!) * W2[0]![h]! * err;
+  1292→        for (let j = 0; j < k; j++) gW1[h]![j]! += dz * (zrow[j] ?? 0);
+  1293→        gW1[h]![k]! += dz;
+  1294→      }
+  1295→      gW2[0]![hidden]! += err;
+  1296→    }
+  1297→    for (let h = 0; h < hidden; h++) {
+  1298→      for (let j = 0; j <= k; j++) W1[h]![j]! -= lr * gW1[h]![j]!;
+  1299→    }
+  1300→    for (let j = 0; j <= hidden; j++) W2[0]![j]! -= lr * gW2[0]![j]!;
+  1301→  }
+  1302→
+  1303→  const proba = (xsRaw: number[]): number => {
+  1304→    const z = std.transform(xsRaw);
+  1305→    for (let h = 0; h < hidden; h++) {
+  1306→      let acc = W1[h]![k]!;
+  1307→      for (let j = 0; j < k; j++) acc += W1[h]![j]! * (z[j] ?? 0);
+  1308→      a1[h] = Math.tanh(acc);
+  1309→    }
+  1310→    let out = W2[0]![hidden]!;
+  1311→    for (let h = 0; h < hidden; h++) out += W2[0]![h]! * a1[h]!;
+  1312→    return 1 / (1 + Math.exp(-out));
+  1313→  };
+  1314→  return {
+  1315→    predictProba: proba,
+  1316→    predict(xsRaw: number[]) {
+  1317→      return proba(xsRaw) >= 0.5 ? 1 : 0;
+  1318→    },
+  1319→  };
+  1320→}
+  1321→
+  1322→/* ------------------------------------------------------------------ */
+  1323→/* Aggregation helpers                                                 */
+  1324→/* ------------------------------------------------------------------ */
+  1325→
+  1326→export function mean(values: number[]): number {
+  1327→  return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+  1328→}
+  1329→
+  1330→/** Population standard deviation. */
+  1331→export function populationStd(values: number[]): number {
+  1332→  if (values.length < 2) return 0;
+  1333→  const m = mean(values);
+  1334→  return Math.sqrt(values.reduce((a, b) => a + (b - m) ** 2, 0) / values.length);
+  1335→}
+  1336→

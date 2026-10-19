@@ -12,13 +12,16 @@ import {
   FileUp,
   History,
   Loader2,
+  Network,
   Play,
   RotateCcw,
   Sigma,
+  SlidersHorizontal,
   Table2,
   TrendingDown,
   TrendingUp,
   TriangleAlert,
+  Trophy,
   X,
   ZoomIn,
 } from "lucide-react";
@@ -80,6 +83,8 @@ import type {
   DatasetPreviewResponse,
   MLTrainResponse,
   MLTrainRequest,
+  MLTuneRequest,
+  MLTuneResponse,
 } from "@/lib/toolkit-types";
 
 type Task = "regression" | "classification";
@@ -91,7 +96,7 @@ type Task = "regression" | "classification";
 /** How the "Learned parameters" card summarizes this model family. */
 type ModelKind = "coefficients" | "importance" | "params";
 
-type ModelGroup = "linear" | "trees" | "instance" | "probabilistic" | "neural";
+type ModelGroup = "linear" | "trees" | "instance" | "probabilistic" | "neural" | "hierarchical";
 
 const GROUP_LABELS: Record<ModelGroup, string> = {
   linear: "Linear family",
@@ -99,11 +104,26 @@ const GROUP_LABELS: Record<ModelGroup, string> = {
   instance: "Instance-based",
   probabilistic: "Probabilistic",
   neural: "Neural",
+  hierarchical: "Hierarchical",
 };
 
 /** One contextual hyperparameter control. */
 interface HyperSpec {
-  key: "alpha" | "l2" | "l1Ratio" | "k" | "maxDepth" | "nEstimators" | "rounds" | "learningRate" | "hidden" | "epochs" | "lr" | "C";
+  key:
+    | "alpha"
+    | "l2"
+    | "l1Ratio"
+    | "k"
+    | "maxDepth"
+    | "nEstimators"
+    | "rounds"
+    | "learningRate"
+    | "hidden"
+    | "epochs"
+    | "lr"
+    | "C"
+    | "nClusters"
+    | "radiusFactor";
   label: string;
   control: "input" | "slider";
   unit?: string;
@@ -218,6 +238,18 @@ const REG_MODELS: ModelSpec[] = [
       { key: "lr", label: "learning rate", control: "slider", unit: "η", min: 0.005, max: 0.5, step: 0.005 },
     ],
   },
+  {
+    id: "hsvr",
+    label: "Hierarchical SVR (HSVR)",
+    hint: "Seeded k-means clusters + per-cluster ridge, blended by trust radius",
+    group: "hierarchical",
+    kind: "params",
+    hp: [
+      { key: "nClusters", label: "clusters", control: "slider", unit: "k", min: 2, max: 8, step: 1 },
+      { key: "radiusFactor", label: "trust radius ×", control: "slider", unit: "×", min: 0.5, max: 4, step: 0.25 },
+      ALPHA_HP,
+    ],
+  },
 ];
 
 const CLS_MODELS: ModelSpec[] = [
@@ -286,7 +318,7 @@ const CLS_MODELS: ModelSpec[] = [
   },
 ];
 
-const MODEL_GROUPS: ModelGroup[] = ["linear", "trees", "instance", "probabilistic", "neural"];
+const MODEL_GROUPS: ModelGroup[] = ["linear", "trees", "instance", "probabilistic", "neural", "hierarchical"];
 
 /** Slider hyperparameter defaults (server-side defaults mirrored). */
 const DEFAULT_HP: Record<string, number> = {
@@ -300,7 +332,31 @@ const DEFAULT_HP: Record<string, number> = {
   epochs: 200,
   lr: 0.05,
   C: 1,
+  nClusters: 3,
+  radiusFactor: 1.5,
 };
+
+/** Models with a RandomSearch tuning space on the server (the honest
+ *  mirror of REG_TUNE_SPACES / CLS_TUNE_SPACES in lib/ml-models.ts). */
+const TUNEABLE_REG = new Set([
+  "ridge",
+  "lasso",
+  "elastic_net",
+  "knn",
+  "decision_tree",
+  "random_forest",
+  "gradient_boosting",
+  "mlp",
+  "hsvr",
+]);
+const TUNEABLE_CLS = new Set([
+  "logistic",
+  "knn",
+  "decision_tree",
+  "random_forest",
+  "svm_linear",
+  "mlp",
+]);
 
 /** Honest footer note per model — how it was actually trained. */
 const MODEL_NOTES: Record<string, string> = {
@@ -317,6 +373,8 @@ const MODEL_NOTES: Record<string, string> = {
   gradient_boosting: "Each round fits a depth-3 tree to the current residuals, shrunk by the learning rate.",
   gaussian_nb: "Class-conditional Gaussians (μ, σ per feature) feed the log-posterior; no tunable hyperparameters.",
   mlp: "One tanh hidden layer, full-batch gradient descent, seeded init — a demo-scale network, not production deep learning.",
+  hsvr:
+    "Seeded k-means splits the standardized train rows; each cluster keeps its own ridge fit, blended with the global ridge by a linear trust radius (full local weight at the centroid, zero at radius × the cluster's reach; farther queries fall back to the global model). Clusters too small for ridge predict their mean.",
 };
 
 /** Pretty labels for echoed modelParams keys. */
@@ -333,6 +391,8 @@ const HP_LABELS: Record<string, string> = {
   nEstimators: "trees",
   rounds: "rounds",
   learningRate: "learning rate",
+  nClusters: "clusters",
+  radiusFactor: "trust radius ×",
 };
 
 function specOf(task: Task, model: string): ModelSpec | null {
@@ -383,6 +443,12 @@ function assignHp(body: MLTrainRequest, key: string, value: number): void {
       break;
     case "C":
       body.C = value;
+      break;
+    case "nClusters":
+      body.nClusters = value;
+      break;
+    case "radiusFactor":
+      body.radiusFactor = value;
       break;
   }
 }
@@ -505,10 +571,14 @@ export function MlPlayground() {
   const modelSpec = specOf(task, modelSel) ?? REG_MODELS[0]!;
   const specs = task === "regression" ? REG_MODELS : CLS_MODELS;
 
-  /** Select a model and reset the slider hyperparameters to its defaults. */
+  /** Select a model, reset the slider hyperparameters, and drop any
+   *  leaderboard that belonged to the previous model. */
   function selectModel(id: string) {
     setModelSel(id);
     setHp({ ...DEFAULT_HP });
+    setTuneStatus("idle");
+    setTuneResult(null);
+    setTuneError(null);
   }
 
   /* Multivariate mode: regression result with ≥2 standardized features
@@ -529,6 +599,15 @@ export function MlPlayground() {
 
   /* X-range zoom on the preview scatter — null = full range. */
   const [xZoom, setXZoom] = useState<[number, number] | null>(null);
+
+  /* RandomSearch tuner state — transient, mirroring ml tune on the server.
+   * maxTrials rides in state so the budget is visible before searching. */
+  const [tuneStatus, setTuneStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [tuneResult, setTuneResult] = useState<MLTuneResponse | null>(null);
+  const [tuneError, setTuneError] = useState<string | null>(null);
+  const [maxTrials, setMaxTrials] = useState<string>("12");
+  const tuning = tuneStatus === "running";
+  const tuneable = (task === "regression" ? TUNEABLE_REG : TUNEABLE_CLS).has(modelSel);
 
   /* Uploaded-CSV state: drag feedback, paste area, hidden file input. */
   const [dragOver, setDragOver] = useState(false);
@@ -667,6 +746,9 @@ export function MlPlayground() {
     setError(null);
     setPreview(null);
     setXZoom(null);
+    setTuneStatus("idle");
+    setTuneResult(null);
+    setTuneError(null);
   }
 
   /** Restore the default experiment setup and drop any stored results. */
@@ -679,6 +761,9 @@ export function MlPlayground() {
     setPreview(null);
     setError(null);
     setXZoom(null);
+    setTuneStatus("idle");
+    setTuneResult(null);
+    setTuneError(null);
   }
 
   /* ------------------------- CSV data loading ------------------------- */
@@ -880,6 +965,104 @@ export function MlPlayground() {
       const message = err instanceof Error ? err.message : "Training request failed.";
       setError(message);
     }
+  }
+
+  /** Run the RandomSearch tuner over the selected model's discrete search
+   *  grid — the web mirror of `ml tune --searcher random`. Each trial is
+   *  scored with the same k-fold CV the server uses, so the leaderboard is
+   *  directly comparable to the Train metrics. */
+  async function runTune() {
+    if (source === "synthetic" && !seedValid) {
+      setTuneError("Seed must be a non-negative integer (0 – 2147483647).");
+      return;
+    }
+    if (source === "csv" && (!mlCsv || !csvUsable)) {
+      setTuneError(
+        `Load a CSV with at least ${MIN_CSV_ROWS} rows and 2 numeric columns before tuning.`
+      );
+      return;
+    }
+    if (!tuneable) {
+      setTuneError(
+        `${modelSpec.label} has no tunable hyperparameters — pick a model with a search space.`
+      );
+      return;
+    }
+    setTuneStatus("running");
+    setTuneError(null);
+    const body: MLTuneRequest = {
+      task,
+      samples,
+      noise,
+      model: modelSel,
+      maxTrials: Number.parseInt(maxTrials, 10) || 12,
+      /* The tuner always cross-validates; CV=Off falls back to 5-fold. */
+      cv: (Number.parseInt(cv, 10) >= 3 ? Number.parseInt(cv, 10) : 5) as 3 | 5 | 10,
+      seed: Number.parseInt(seed, 10) || 0,
+      testSize: testSizePct / 100,
+    };
+    if (source === "csv" && mlCsv) {
+      body.csv = mlCsv.text;
+      body.csvName = mlCsv.fileName;
+      if (task === "regression") {
+        if (featureColumns.length > 0) body.featureColumns = featureColumns;
+        if (targetColumn) body.targetColumn = targetColumn;
+      } else {
+        if (featureColumn) body.featureColumn = featureColumn;
+        if (featureColumn2) body.featureColumn2 = featureColumn2;
+        if (targetColumn) body.targetColumn = targetColumn;
+      }
+    }
+    try {
+      const res = await fetch("/api/ml/tune", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        const message =
+          typeof data === "object" && data !== null && "error" in data
+            ? `${String((data as { error: unknown }).error)}${
+                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+                  : ""
+              }`
+            : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      const payload = data as MLTuneResponse;
+      setTuneResult(payload);
+      setTuneStatus("done");
+      toast.success("Search complete", {
+        description: `${payload.trials.length} trials · best ${payload.objective} ${fmtNum(
+          payload.best.cvScore,
+          4
+        )} (${payload.best.improvement >= 0 ? "+" : ""}${fmtNum(
+          payload.best.improvement,
+          4
+        )} vs defaults)`,
+      });
+    } catch (err) {
+      setTuneStatus("error");
+      setTuneResult(null);
+      setTuneError(err instanceof Error ? err.message : "Tuning request failed.");
+    }
+  }
+
+  /** Copy the winning configuration into the setup panel (sliders + α/λ
+   *  input fields), ready for a fresh Train-model run. */
+  function applyBestParams() {
+    if (!tuneResult) return;
+    const p = tuneResult.best.params;
+    setHp((prev) => ({ ...prev, ...p }));
+    if (typeof p.alpha === "number") setMlConfig({ alpha: String(p.alpha) });
+    if (typeof p.l2 === "number") setMlConfig({ l2: String(p.l2) });
+    toast.success("Best parameters applied", {
+      description: Object.entries(p)
+        .map(([k, v]) => `${HP_LABELS[k] ?? k} ${fmtHp(v)}`)
+        .join(" · "),
+    });
   }
 
   /** Restore a previous run: config snapshot + full result + charts. The
@@ -1548,6 +1731,70 @@ export function MlPlayground() {
             )}
           </div>
 
+          {/* Hyperparameter search — RandomSearch over the selected model's
+              discrete grid (the ml tune mirror). Only for tunable models. */}
+          {tuneable ? (
+            <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs font-medium" htmlFor="ml-max-trials">
+                  Hyperparameter search
+                </Label>
+                <span className="text-[11px] text-muted-foreground">RandomSearch</span>
+              </div>
+              <div className="flex gap-2">
+                <Select value={maxTrials} onValueChange={setMaxTrials}>
+                  <SelectTrigger
+                    id="ml-max-trials"
+                    className="h-10 w-[104px] shrink-0"
+                    aria-label="RandomSearch trial budget"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[8, 12, 16, 20, 30, 40].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n} trials
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="secondary"
+                  className="h-10 flex-1 gap-2"
+                  onClick={() => void runTune()}
+                  disabled={running || tuning}
+                >
+                  {tuning ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                      Searching…
+                    </>
+                  ) : (
+                    <>
+                      <SlidersHorizontal className="size-4" aria-hidden />
+                      Tune {modelSpec.label.split(" (")[0]}
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                {cv === "0"
+                  ? "CV is off — trials score with 5-fold CV anyway."
+                  : `Every trial scores ${cv}-fold CV ${
+                      task === "regression" ? "R²" : "accuracy"
+                    }; same seed → same leaderboard.`}
+              </p>
+              {tuneError ? (
+                <p className="text-[11px] leading-snug text-destructive">{tuneError}</p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="rounded-md border border-dashed px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+              {modelSpec.label} has no tunable hyperparameters — the RandomSearch card needs a
+              model with a search space.
+            </p>
+          )}
+
           <div className="flex gap-2">
             <Button
               size="lg"
@@ -1929,7 +2176,7 @@ export function MlPlayground() {
               <p className="text-sm font-medium">No results yet</p>
               <p className="max-w-sm text-xs text-muted-foreground">
                 Pick a data source — the seeded server-side generator or your own CSV — pick one of
-                the 10 regression or 7 classification models, then press{" "}
+                the 11 regression or 7 classification models, then press{" "}
                 <strong className="font-semibold text-foreground">Train model</strong>. Every
                 run is deterministic: same seed, same data, same numbers.
               </p>
@@ -2266,7 +2513,7 @@ export function MlPlayground() {
                     )
                   ) : null}
 
-                  {/* Instance-based / neural / NB / SVM: hyperparameter echo. */}
+                  {/* Instance-based / neural / NB / SVM / HSVR: hyperparameter echo. */}
                   {paramsPanel?.kind === "params" ? (
                     paramsPanel.data ? (
                       <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5" aria-label="Model hyperparameters">
@@ -2288,6 +2535,56 @@ export function MlPlayground() {
                     )
                   ) : null}
 
+                  {/* HSVR: per-cluster geometry + local-fit diagnostics. */}
+                  {result.hsvr ? (
+                    <div className="mt-3 space-y-1.5">
+                      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        <Network className="size-3" aria-hidden />
+                        k-means clusters (train rows)
+                      </p>
+                      <div className="overflow-hidden rounded-lg border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="h-8">Cluster</TableHead>
+                              <TableHead className="h-8 text-right">Rows</TableHead>
+                              <TableHead className="h-8 text-right">Trust radius</TableHead>
+                              <TableHead className="h-8 text-right">Local R²</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {result.hsvr.clusters.map((c, i) => (
+                              <TableRow key={i}>
+                                <TableCell className="py-1.5 font-mono text-xs">
+                                  #{i + 1}
+                                  {c.constant ? (
+                                    <span className="ml-1.5 rounded-sm border bg-muted/50 px-1 text-[9px] uppercase text-muted-foreground">
+                                      mean
+                                    </span>
+                                  ) : null}
+                                </TableCell>
+                                <TableCell className="py-1.5 text-right font-mono text-xs tabular-nums">
+                                  {c.size}
+                                </TableCell>
+                                <TableCell className="py-1.5 text-right font-mono text-xs tabular-nums">
+                                  {fmtNum(c.radius, 3)}
+                                </TableCell>
+                                <TableCell className="py-1.5 text-right font-mono text-xs tabular-nums">
+                                  {fmtNum(c.localR2, 3)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <p className="text-[11px] leading-snug text-muted-foreground">
+                        Local R² is in-sample on the cluster&rsquo;s own rows; &ldquo;mean&rdquo;
+                        clusters kept too few rows for a ridge fit and predict their mean.
+                        Queries beyond a cluster&rsquo;s radius fall back to the global ridge.
+                      </p>
+                    </div>
+                  ) : null}
+
                   <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
                     {MODEL_NOTES[result.model] ??
                       (result.task === "regression"
@@ -2300,6 +2597,162 @@ export function MlPlayground() {
               </Card>
             </div>
           </>
+        ) : null}
+
+        {/* ------------------------------ Tuner results ------------------------------ */}
+        {tuning ? (
+          <Card className="py-0 shadow-sm">
+            <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
+              <p className="text-sm font-medium">
+                Searching {modelSpec.label} hyperparameters…
+              </p>
+              <p className="max-w-md text-xs text-muted-foreground">
+                {maxTrials} RandomSearch trials, each scored with{" "}
+                {(Number.parseInt(cv, 10) >= 3 ? cv : "5")}-fold CV{" "}
+                {task === "regression" ? "R²" : "accuracy"} on the{" "}
+                {source === "csv" && mlCsv ? mlCsv.fileName : "seeded generator"} data. The
+                leaderboard lands here when the search finishes.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {tuneResult && tuneStatus === "done" ? (
+          <Card className="overflow-hidden py-0 shadow-sm">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/30 py-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Trophy className="size-4.5" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <CardTitle className="text-base">Hyperparameter search</CardTitle>
+                  <CardDescription className="text-xs">
+                    RandomSearch · {tuneResult.model} · {tuneResult.trials.length}{" "}
+                    {tuneResult.exhaustive
+                      ? "trials (full grid)"
+                      : `of ${tuneResult.spaceSize} configs`}{" "}
+                    · {tuneResult.cvK}-fold CV {tuneResult.objective}
+                  </CardDescription>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                className="h-8 shrink-0 gap-1.5 text-xs"
+                onClick={applyBestParams}
+                aria-label="Apply the best hyperparameters to the setup panel"
+              >
+                <Check className="size-3.5" aria-hidden />
+                Apply best
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3 pb-4">
+              {/* Best-vs-baseline summary strip. */}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+                  <p className="text-xs text-muted-foreground">Best CV {tuneResult.objective}</p>
+                  <p className="font-mono text-xl font-semibold tabular-nums">
+                    {fmtNum(tuneResult.best.cvScore, 4)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+                  <p className="text-xs text-muted-foreground">
+                    Held-out {tuneResult.best.testMetricName}
+                  </p>
+                  <p className="font-mono text-xl font-semibold tabular-nums">
+                    {fmtNum(tuneResult.best.testMetric, 4)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+                  <p className="text-xs text-muted-foreground">Defaults CV</p>
+                  <p className="font-mono text-xl font-semibold tabular-nums">
+                    {fmtNum(tuneResult.baseline.score, 4)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+                  <p className="text-xs text-muted-foreground">Gain vs defaults</p>
+                  <p
+                    className={`font-mono text-xl font-semibold tabular-nums ${
+                      tuneResult.best.improvement >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-destructive"
+                    }`}
+                  >
+                    {tuneResult.best.improvement >= 0 ? "+" : ""}
+                    {fmtNum(tuneResult.best.improvement, 4)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Leaderboard — best first, winner highlighted. */}
+              <div className="max-h-80 overflow-y-auto thin-scrollbar rounded-lg border">
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
+                    <TableRow>
+                      <TableHead className="h-9 w-12 text-right">#</TableHead>
+                      <TableHead className="h-9">Trial</TableHead>
+                      <TableHead className="h-9">Configuration</TableHead>
+                      <TableHead className="h-9 text-right">CV {tuneResult.objective}</TableHead>
+                      <TableHead className="h-9 text-right">Δ default</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tuneResult.trials.map((t, rank) => {
+                      const winner = rank === 0;
+                      const delta = t.score - tuneResult.baseline.score;
+                      return (
+                        <TableRow
+                          key={t.trial}
+                          className={winner ? "bg-primary/5" : undefined}
+                        >
+                          <TableCell className="py-1.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                            {rank + 1}
+                          </TableCell>
+                          <TableCell className="py-1.5 font-mono text-xs">
+                            {t.trial}
+                            {winner ? (
+                              <Trophy
+                                className="ml-1 inline size-3 text-primary"
+                                aria-hidden
+                              />
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="py-1.5 font-mono text-[11px] text-muted-foreground">
+                            {Object.entries(t.params)
+                              .map(([k, v]) => `${HP_LABELS[k] ?? k} ${fmtHp(v)}`)
+                              .join(" · ")}
+                          </TableCell>
+                          <TableCell className="py-1.5 text-right font-mono text-xs font-semibold tabular-nums">
+                            {fmtNum(t.score, 4)}
+                          </TableCell>
+                          <TableCell
+                            className={`py-1.5 text-right font-mono text-xs tabular-nums ${
+                              delta >= 0
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-destructive"
+                            }`}
+                          >
+                            {delta >= 0 ? "+" : ""}
+                            {fmtNum(delta, 4)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                Same data and folds for every trial — only the parameters vary, so the ranking is
+                a fair comparison. The winner is refit on the train split for the held-out{" "}
+                {tuneResult.best.testMetricName} above.{" "}
+                {tuneResult.exhaustive
+                  ? "The budget covered the whole grid, so this is a full grid search."
+                  : `The ${tuneResult.spaceSize}-configuration grid was sampled without replacement; a larger budget explores more of it.`}{" "}
+                Deterministic: same seed → same leaderboard.
+              </p>
+            </CardContent>
+          </Card>
         ) : null}
 
         {/* ------------------------------ Run history ------------------------------ */}

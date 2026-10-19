@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
   hashCsvSeed,
+  numericColumnNames,
   parseCsv,
   resolveClassification,
   resolveMultiRegression,
@@ -13,31 +14,25 @@ import {
 } from "@/lib/csv";
 import {
   classificationMetrics,
-  fitClassificationTree,
-  fitElasticNet,
-  fitGaussianNB,
-  fitGradientBoostingRegressor,
-  fitKnnClassifier,
-  fitKnnRegressor,
   fitLinearRegression,
-  fitLinearSvm,
-  fitLogisticRegression,
-  fitMlpClassifier,
-  fitMlpRegressor,
-  fitMultivariateRegression,
-  fitRandomForestClassifier,
-  fitRandomForestRegressor,
-  fitRegressionTree,
   kFoldSplit,
   makeMoons,
   makeRegressionData,
   mean,
   mulberry32,
-  normalizeImportance,
   populationStd,
   regressionMetrics,
   shuffledSplit,
 } from "@/lib/ml-math";
+import {
+  CLASSIFICATION_MODELS,
+  REGRESSION_MODELS,
+  fitClassificationModel,
+  fitRegressionModel,
+  modelRng,
+  resolveHyper,
+  type RegFit,
+} from "@/lib/ml-models";
 import type { CVFold, CsvSourceMeta, MLTrainResponse } from "@/lib/toolkit-types";
 
 export const dynamic = "force-dynamic";
@@ -46,33 +41,8 @@ export const runtime = "nodejs";
 const cvSchema = z.union([z.literal(0), z.literal(3), z.literal(5), z.literal(10)]);
 
 /* ------------------------------------------------------------------ */
-/* Model registry                                                      */
+/* Request schema                                                      */
 /* ------------------------------------------------------------------ */
-
-/** Regression models: 3 legacy (byte-compatible) + 7 rebuilt. */
-const REGRESSION_MODELS = [
-  "linear",
-  "polynomial",
-  "ridge",
-  "lasso",
-  "elastic_net",
-  "knn",
-  "decision_tree",
-  "random_forest",
-  "gradient_boosting",
-  "mlp",
-] as const;
-
-/** Classification models: legacy logistic + 6 rebuilt. */
-const CLASSIFICATION_MODELS = [
-  "logistic",
-  "knn",
-  "decision_tree",
-  "random_forest",
-  "gaussian_nb",
-  "svm_linear",
-  "mlp",
-] as const;
 
 /** Hyperparameters the API accepts (all optional, task/model-scoped). */
 const hyperSchema = {
@@ -88,6 +58,9 @@ const hyperSchema = {
   epochs: z.number().int().min(10).max(2000).optional(),
   lr: z.number().min(0.001).max(1).optional(),
   C: z.number().min(0.01).max(100).optional(),
+  /* HSVR */
+  nClusters: z.number().int().min(2).max(8).optional(),
+  radiusFactor: z.number().min(0.25).max(6).optional(),
 };
 
 const bodySchema = z
@@ -155,68 +128,9 @@ type TrainBody = {
   epochs?: number;
   lr?: number;
   C?: number;
+  nClusters?: number;
+  radiusFactor?: number;
 };
-
-/** Hyperparameters with per-model defaults applied. */
-interface Hyper {
-  alpha: number;
-  l1Ratio: number;
-  k: number;
-  maxDepth: number;
-  nEstimators: number;
-  rounds: number;
-  learningRate: number;
-  hidden: number;
-  epochs: number;
-  lr: number;
-  C: number;
-  l2: number;
-}
-
-function resolveHyper(req: TrainBody): Hyper {
-  return {
-    alpha: num(req.alpha, 1),
-    l1Ratio: num(req.l1Ratio, 0.5),
-    k: num(req.k, 5),
-    maxDepth: num(req.maxDepth, 4),
-    nEstimators: num(req.nEstimators, 50),
-    rounds: num(req.rounds, 50),
-    learningRate: num(req.learningRate, 0.1),
-    hidden: num(req.hidden, 16),
-    epochs: num(req.epochs, 200),
-    lr: num(req.lr, 0.05),
-    C: num(req.C, 1),
-    l2: num(req.l2, 1),
-  };
-}
-
-/** Deterministic RNG stream for model internals (bagging / MLP init).
- *  Slot 0 = the main run, slots 1..k = the CV folds — every training run
- *  gets its own stream so identical requests stay byte-identical. */
-function modelRng(effSeed: number, slot: number): () => number {
-  return mulberry32((effSeed + 104729 + 6151 * slot) >>> 0);
-}
-
-function num(value: number | undefined, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-/** Count numeric columns without importing the resolver (for mode choice). */
-function numericCandidates(table: { columns: string[]; rows: string[][] }): number {
-  let count = 0;
-  for (let c = 0; c < table.columns.length; c++) {
-    let nonEmpty = 0;
-    let parseable = 0;
-    for (const row of table.rows) {
-      const cell = row[c] ?? "";
-      if (cell === "") continue;
-      nonEmpty++;
-      if (Number.isFinite(Number(cell))) parseable++;
-    }
-    if (nonEmpty > 0 && parseable / nonEmpty >= 0.9) count++;
-  }
-  return count;
-}
 
 /** Min/max via loop — safe for very large CSVs (spread would overflow). */
 function extent(values: number[]): [number, number] {
@@ -298,7 +212,7 @@ export async function POST(request: NextRequest) {
           (req.featureColumns?.length ?? 0) >= 2 ||
           (req.featureColumns === undefined &&
             !req.featureColumn &&
-            numericCandidates(table) >= 3);
+            numericColumnNames(table).length >= 3);
         csvData = multi
           ? resolveMultiRegression(table, req.featureColumns, req.targetColumn)
           : resolveRegression(table, req.featureColumn ?? req.featureColumns?.[0], req.targetColumn);
@@ -353,113 +267,6 @@ export async function POST(request: NextRequest) {
 /* ------------------------------------------------------------------ */
 /* Regression                                                          */
 /* ------------------------------------------------------------------ */
-
-/** What every regression fit produces: a row predictor plus the honest
- *  parameter summary for the model family (coefficients for the linear
- *  family, normalized impurity-reduction importances for trees/ensembles,
- *  echoed hyperparameters for kNN/MLP). */
-interface RegFit {
-  predict(xsRaw: number[]): number;
-  coefficients?: { intercept: number; coefs: number[]; standardized: boolean };
-  featureImportance?: { features: string[]; importance: number[]; measure: "variance" | "gini" };
-  modelParams?: Record<string, number>;
-}
-
-/** Fit any regression model over a raw (unstandardized) feature matrix. */
-function fitRegressionModel(
-  model: string,
-  XTrain: number[][],
-  yTrain: number[],
-  hp: Hyper,
-  rand: () => number,
-  featureNames: string[]
-): RegFit {
-  switch (model) {
-    case "linear":
-    case "polynomial":
-    case "ridge": {
-      /* Multivariate closed-form path (degree is 1 here; the single-feature
-       * polynomial case is handled by the caller). */
-      const effAlpha = model === "ridge" ? hp.alpha : 0;
-      const m = fitMultivariateRegression(XTrain, yTrain, { alpha: effAlpha });
-      return {
-        predict: (xs) => m.predict(xs),
-        coefficients: { intercept: m.w[0] ?? 0, coefs: m.w.slice(1), standardized: true },
-      };
-    }
-    case "lasso":
-    case "elastic_net": {
-      const l1Ratio = model === "lasso" ? 1 : hp.l1Ratio;
-      const m = fitElasticNet(XTrain, yTrain, { alpha: hp.alpha, l1Ratio });
-      return {
-        predict: (xs) => m.predict(xs),
-        coefficients: { intercept: m.b, coefs: [...m.w], standardized: true },
-        modelParams:
-          model === "elastic_net"
-            ? { alpha: hp.alpha, l1Ratio }
-            : { alpha: hp.alpha },
-      };
-    }
-    case "knn": {
-      const m = fitKnnRegressor(XTrain, yTrain, { k: hp.k });
-      return { predict: (xs) => m.predict(xs), modelParams: { k: hp.k } };
-    }
-    case "decision_tree": {
-      const m = fitRegressionTree(XTrain, yTrain, { maxDepth: hp.maxDepth });
-      return {
-        predict: (xs) => m.predict(xs),
-        featureImportance: {
-          features: featureNames,
-          importance: normalizeImportance(m.rawImportance),
-          measure: "variance",
-        },
-      };
-    }
-    case "random_forest": {
-      const m = fitRandomForestRegressor(XTrain, yTrain, {
-        nEstimators: hp.nEstimators,
-        maxDepth: hp.maxDepth,
-        rand,
-      });
-      return {
-        predict: (xs) => m.predict(xs),
-        featureImportance: {
-          features: featureNames,
-          importance: m.importance,
-          measure: "variance",
-        },
-      };
-    }
-    case "gradient_boosting": {
-      const m = fitGradientBoostingRegressor(XTrain, yTrain, {
-        rounds: hp.rounds,
-        learningRate: hp.learningRate,
-      });
-      return {
-        predict: (xs) => m.predict(xs),
-        featureImportance: {
-          features: featureNames,
-          importance: m.importance,
-          measure: "variance",
-        },
-      };
-    }
-    case "mlp": {
-      const m = fitMlpRegressor(XTrain, yTrain, {
-        hidden: hp.hidden,
-        epochs: hp.epochs,
-        lr: hp.lr,
-        rand,
-      });
-      return {
-        predict: (xs) => m.predict(xs),
-        modelParams: { hidden: hp.hidden, epochs: hp.epochs, lr: hp.lr },
-      };
-    }
-    default:
-      throw new Error(`Unknown regression model "${model}".`);
-  }
-}
 
 function runRegression(
   req: TrainBody,
@@ -569,6 +376,7 @@ function runRegression(
     ...(fit.coefficients ? { coefficients: fit.coefficients } : {}),
     ...(fit.featureImportance ? { featureImportance: fit.featureImportance } : {}),
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),
+    ...(fit.hsvr ? { hsvr: fit.hsvr } : {}),
     series: {
       test: test.map((i) => ({ x: xs[i] ?? 0, y: ys[i] ?? 0 })),
       curve,
@@ -655,6 +463,7 @@ function runMultiRegression(
     ...(fit.coefficients ? { coefficients: fit.coefficients } : {}),
     ...(fit.featureImportance ? { featureImportance: fit.featureImportance } : {}),
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),
+    ...(fit.hsvr ? { hsvr: fit.hsvr } : {}),
     series: {
       test: yPred.map((yhat, i) => ({ x: yhat, y: yTrue[i] ?? 0 })),
       curve,
@@ -674,103 +483,6 @@ function runMultiRegression(
 /* ------------------------------------------------------------------ */
 /* Classification                                                      */
 /* ------------------------------------------------------------------ */
-
-/** What every classifier produces: a hard 0/1 prediction over raw feature
- *  pairs plus the honest parameter summary for the model family. */
-interface ClsFit {
-  predict01(xRaw: number, yRaw: number): 0 | 1;
-  coefficients?: { intercept: number; coefs: number[]; standardized: boolean };
-  featureImportance?: { features: string[]; importance: number[]; measure: "variance" | "gini" };
-  modelParams?: Record<string, number>;
-}
-
-/** Fit any classification model over raw (unstandardized) 2-feature rows. */
-function fitClassificationModel(
-  model: string,
-  XTrain: number[][],
-  labelsTrain: number[],
-  hp: Hyper,
-  rand: () => number,
-  featureNames: string[]
-): ClsFit {
-  switch (model) {
-    case "logistic": {
-      /* Legacy path: identical trainer invocation (batch GD, lr 0.1,
-       * 800 epochs, L2 with bias exempt) for byte compatibility. */
-      const pts = XTrain.map((row, i) => ({
-        x: row[0] ?? 0,
-        y: row[1] ?? 0,
-        label: labelsTrain[i] ?? 0,
-      }));
-      const m = fitLogisticRegression(pts, { l2: hp.l2, lr: 0.1, epochs: 800 });
-      return {
-        predict01: (x, y) => (m.predict(x, y) >= 0.5 ? 1 : 0),
-        coefficients: { intercept: m.bias, coefs: [...m.w], standardized: true },
-      };
-    }
-    case "knn": {
-      const m = fitKnnClassifier(XTrain, labelsTrain, { k: hp.k });
-      return {
-        predict01: (x, y) => m.predict([x, y]),
-        modelParams: { k: hp.k },
-      };
-    }
-    case "decision_tree": {
-      const m = fitClassificationTree(XTrain, labelsTrain, { maxDepth: hp.maxDepth });
-      return {
-        predict01: (x, y) => m.predict([x, y]),
-        featureImportance: {
-          features: featureNames,
-          importance: normalizeImportance(m.rawImportance),
-          measure: "gini",
-        },
-      };
-    }
-    case "random_forest": {
-      const m = fitRandomForestClassifier(XTrain, labelsTrain, {
-        nEstimators: hp.nEstimators,
-        maxDepth: hp.maxDepth,
-        rand,
-      });
-      return {
-        predict01: (x, y) => m.predict([x, y]),
-        featureImportance: {
-          features: featureNames,
-          importance: m.importance,
-          measure: "gini",
-        },
-      };
-    }
-    case "gaussian_nb": {
-      const m = fitGaussianNB(XTrain, labelsTrain);
-      return {
-        predict01: (x, y) => m.predict([x, y]),
-        modelParams: { varSmoothing: 1e-9 },
-      };
-    }
-    case "svm_linear": {
-      const m = fitLinearSvm(XTrain, labelsTrain, { C: hp.C });
-      return {
-        predict01: (x, y) => m.predict([x, y]),
-        modelParams: { C: hp.C },
-      };
-    }
-    case "mlp": {
-      const m = fitMlpClassifier(XTrain, labelsTrain, {
-        hidden: hp.hidden,
-        epochs: hp.epochs,
-        lr: hp.lr,
-        rand,
-      });
-      return {
-        predict01: (x, y) => m.predict([x, y]),
-        modelParams: { hidden: hp.hidden, epochs: hp.epochs, lr: hp.lr },
-      };
-    }
-    default:
-      throw new Error(`Unknown classification model "${model}".`);
-  }
-}
 
 function runClassification(
   req: TrainBody,

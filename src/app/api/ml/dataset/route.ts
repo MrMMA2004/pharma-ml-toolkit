@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  numericColumnNames,
   parseCsv,
   resolveClassification,
   resolveMultiRegression,
@@ -101,19 +102,6 @@ function pearson(a: number[], b: number[]): number {
 /** Index column name that never collides with a user column. */
 function indexColumn(...used: string[]): string {
   return used.includes("i") ? "i#" : "i";
-}
-
-/** Fraction of non-empty cells in a column that parse as numbers. */
-function numericRatio(table: { rows: string[][] }, colIdx: number): number {
-  let nonEmpty = 0;
-  let parseable = 0;
-  for (const row of table.rows) {
-    const cell = row[colIdx] ?? "";
-    if (cell === "") continue;
-    nonEmpty++;
-    if (Number.isFinite(Number(cell))) parseable++;
-  }
-  return nonEmpty === 0 ? 0 : parseable / nonEmpty;
 }
 
 /** Build the CSV-source preview (raw column values, strided scatter points). */
@@ -286,9 +274,7 @@ export async function POST(request: NextRequest) {
           (req.featureColumns?.length ?? 0) >= 2 ||
           (req.featureColumns === undefined &&
             !req.featureColumn &&
-            table.columns.filter(
-              (_, c) => numericRatio(table, c) >= 0.9
-            ).length >= 3);
+            numericColumnNames(table).length >= 3);
         data = multi
           ? resolveMultiRegression(table, req.featureColumns, req.targetColumn)
           : resolveRegression(table, req.featureColumn ?? req.featureColumns?.[0], req.targetColumn);
