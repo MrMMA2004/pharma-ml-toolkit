@@ -9,6 +9,7 @@ plotting works on servers without a display.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import ClassVar
 
@@ -20,7 +21,7 @@ import pytest
 matplotlib.use("Agg", force=True)
 
 from pharmaml.data import load_dataset
-from pharmaml.exceptions import DataValidationError, ModelError
+from pharmaml.exceptions import DataValidationError, DependencyError, ModelError
 from pharmaml.ml import (
     compare_models,
     evaluate_model,
@@ -29,6 +30,7 @@ from pharmaml.ml import (
 )
 from pharmaml.viz import (
     HTMLReport,
+    export_docx,
     export_table,
     metrics_to_dataframe,
     plot_calibration_curve,
@@ -54,6 +56,7 @@ from pharmaml.viz import (
     plot_top_ligands,
     plot_training_history,
     save_figure,
+    save_pdf_report,
     save_visual_bundle,
 )
 
@@ -1154,6 +1157,127 @@ class TestVisualBundle:
         import matplotlib.pyplot as plt
 
         assert fig not in [plt.figure(n) for n in plt.get_fignums()]
+
+    def test_bundle_pdf_report(self, trained_classifier, tmp_path):
+        """pdf_report=True adds the multi-page document, ordered second."""
+        _, report, _, _ = trained_classifier
+        written = save_visual_bundle(
+            figures={"confusion": plot_confusion_matrix(report)},
+            tables={"metrics": metrics_to_dataframe(report)},
+            out_dir=tmp_path / "bpdf",
+            pdf_report=True,
+        )
+        names = [p.name for p in written]
+        assert names[0] == "report.html"
+        assert names[1] == "report.pdf"
+        assert (tmp_path / "bpdf" / "report.pdf").read_bytes()[:5] == b"%PDF-"
+
+    def test_bundle_without_pdf_report_unchanged(self, trained_classifier, tmp_path):
+        """Default False keeps the 1.2.23 artifact set (no report.pdf)."""
+        _, report, _, _ = trained_classifier
+        written = save_visual_bundle(
+            figures={"confusion": plot_confusion_matrix(report)},
+            out_dir=tmp_path / "bnopdf",
+        )
+        assert not any(p.name == "report.pdf" for p in written)
+
+
+class TestSavePdfReport:
+    """The multi-page PDF document -- the legacy scripts' ONLY report
+    format (fpdf was declared in the reports extra since 1.0 but never
+    wired to a function until now)."""
+
+    @staticmethod
+    def _reader(path):
+        pypdf = pytest.importorskip("pypdf")
+        return pypdf.PdfReader(str(path))
+
+    def test_pages_metrics_table_and_figure(self, trained_classifier, tmp_path):
+        _, report, _, _ = trained_classifier
+        out = save_pdf_report(
+            {"confusion": plot_confusion_matrix(report)},
+            tables={"metrics": metrics_to_dataframe(report)},
+            metrics=report,
+            out_path=tmp_path / "report.pdf",
+            title="PDF test",
+        )
+        assert out.read_bytes()[:5] == b"%PDF-"
+        reader = self._reader(out)
+        assert len(reader.pages) == 3  # title+metrics / table / figure
+        page0 = reader.pages[0].extract_text() or ""
+        assert "PDF test" in page0
+        assert "accuracy" in page0  # a committed metric line
+        assert len(reader.pages[2].images) == 1  # the embedded figure
+
+    def test_unicode_title_transliterated_not_crashed(self, tmp_path):
+        # Helvetica encodes latin-1 only; the em dash, >= and the arrow
+        # must survive as ASCII instead of raising FPDFException.
+        out = save_pdf_report(
+            {},
+            out_path=tmp_path / "uni.pdf",
+            title="potency >= 5 — active -> shortlist",
+        )
+        reader = self._reader(out)
+        assert len(reader.pages) == 1
+        page0 = reader.pages[0].extract_text() or ""
+        assert "potency >= 5" in page0 and "active -> shortlist" in page0
+
+    def test_table_truncation_note(self, tmp_path):
+        frame = pd.DataFrame({"a": range(80)})
+        out = save_pdf_report({}, tables={"big": frame}, out_path=tmp_path / "big.pdf")
+        reader = self._reader(out)
+        assert len(reader.pages) == 2  # title / table -- the cap keeps ONE page
+        page1 = reader.pages[1].extract_text() or ""
+        assert "42 more rows" in page1
+        assert "\n75\n" not in page1  # row 75 was truncated, not rendered
+
+    def test_close_false_keeps_figure_open(self, trained_classifier, tmp_path):
+        _, report, _, _ = trained_classifier
+        fig = plot_confusion_matrix(report)
+        save_pdf_report({"f": fig}, out_path=tmp_path / "open.pdf", close=False)
+        import matplotlib.pyplot as plt
+
+        assert fig in [plt.figure(n) for n in plt.get_fignums()]
+
+    def test_path_escape_rejected(self, trained_classifier, tmp_path):
+        _, report, _, _ = trained_classifier
+        fig = plot_confusion_matrix(report)
+        with pytest.raises(DataValidationError, match="plain file name"):
+            save_pdf_report({"../escape": fig}, out_path=tmp_path / "x.pdf")
+        with pytest.raises(DataValidationError, match="plain file name"):
+            save_pdf_report({}, tables={"../escape": pd.DataFrame({"a": [1]})},
+                            out_path=tmp_path / "x.pdf")
+        assert not (tmp_path / "escape.png").exists()
+
+    def test_fpdf_missing_raises(self, monkeypatch, tmp_path):
+        monkeypatch.setitem(sys.modules, "fpdf", None)
+        with pytest.raises(DependencyError, match="fpdf"):
+            save_pdf_report({}, out_path=tmp_path / "x.pdf")
+
+
+class TestExportDocx:
+    """Word tables -- the legacy approved.py wrote a bare name list."""
+
+    def test_roundtrip_table_with_header(self, tmp_path):
+        frame = pd.DataFrame({"model": ["rf", "svm"], "score": [0.91, 0.87]})
+        out = export_docx(frame, tmp_path / "board.docx")
+        assert out.suffix == ".docx" and out.exists()
+        docx = pytest.importorskip("docx")
+        table = docx.Document(str(out)).tables[0]
+        assert table.cell(0, 0).text == "model"
+        assert table.cell(1, 0).text == "rf"
+        assert table.cell(1, 1).text == "0.91"  # compact float formatting
+
+    def test_max_rows_cap(self, tmp_path):
+        frame = pd.DataFrame({"a": range(10)})
+        out = export_docx(frame, tmp_path / "t.docx", max_rows=3)
+        docx = pytest.importorskip("docx")
+        assert len(docx.Document(str(out)).tables[0].rows) == 4  # header + 3
+
+    def test_docx_missing_raises(self, monkeypatch, tmp_path):
+        monkeypatch.setitem(sys.modules, "docx", None)
+        with pytest.raises(DependencyError, match="python-docx"):
+            export_docx(pd.DataFrame({"a": [1]}), tmp_path / "t.docx")
 
 
 def plot_confusion_curves_safe(trained_classifier):

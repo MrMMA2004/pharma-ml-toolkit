@@ -10,6 +10,40 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.24] — 2026-10-19
+
+### Added — what the ZIP was missing (the follow-up to the coverage audit)
+
+- **`save_pdf_report`** (`pharmaml.viz.report`): the multi-page **PDF
+  document** — a title page with the metrics, one page per table
+  (header row + rows, capped at 38 rows so the page layout holds),
+  and one page per figure (rendered headlessly through Agg into a
+  temporary png, embedded full-width).  This is the upgrade of the
+  original archive's *signature output*: every model script ended by
+  assembling an fpdf report with the classification report and the
+  confusion/ROC images — and `fpdf>=1.7` has been declared in the
+  `reports` extra since the first release, waiting for the function.
+  Non-latin-1 punctuation is transliterated (`—` → `-`, `≥` → `>=`)
+  because the built-in Helvetica only encodes latin-1 — a unicode
+  metric name never crashes the report.  `save_visual_bundle` gains
+  `pdf_report=True`, which writes `report.pdf` as the bundle's second
+  artifact (after `report.html`); the ML notebook §13 now turns it on
+  and lists the PDF in its artifact table.
+- **`export_docx`** (`pharmaml.viz.report`): any DataFrame as a real
+  Word `.docx` document — a bordered grid table with a bold header
+  row, cells formatted like every other export (compact floats,
+  `NaN`/`inf` never leak as raw `nan`).  Upgrades the legacy
+  `approved.py`, which wrote a bare list of approved-drug names to
+  .docx; `python-docx>=1.1` joins the `reports` extra.
+- **`LICENSE`** (MIT): the pyproject declared
+  `license = { text = "MIT" }` and the MIT classifier since 1.0 — the
+  file itself never existed.  A "production-ready" package now ships
+  its licence text.
+- **`py.typed`** (PEP 561): the package is fully typed (mypy clean
+  across 60 files) but downstream mypy users got no type info because
+  the marker was missing.  Now `[tool.setuptools.package-data]`
+  ships it, and `import pharmaml` type-checks for library users.
+
 ## [1.2.23] — 2026-10-19
 
 ### Added — the one-by-one RAR coverage audit (closes the last two gaps)

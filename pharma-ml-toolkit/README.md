@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1791 tests).
+exceptions, input validation, and pytest coverage** (1802 tests).
 
 ---
 
@@ -205,7 +205,7 @@ pharma-ml-toolkit/
 │   ├── data.py              # bring your own data: load_dataset, infer_task, summarize
 │   ├── cli.py               # `pharmaml` command-line interface
 │   ├── chem/                # converters, descriptors, similarity, tables, standardize
-│   ├── ml/                  # preprocessing, models (18: incl. dnn + dnn_residual PyTorch), neural.py, training, evaluation, persistence
+│   ├── ml/                  # preprocessing, models (20: incl. dnn + dnn_residual PyTorch), neural.py, training, evaluation, persistence
 │   ├── generative/          # NEW: molecule generation — corpus, objective library, SMILES GA, RNN prior, RL
 │   ├── biology/             # NEW: response screens, omics, biomarkers — cell line analysis
 │   ├── pharma/              # units, pk, pd, dosage, approvals
@@ -218,7 +218,9 @@ pharma-ml-toolkit/
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1791 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── LICENSE                 # MIT — the pyproject declaration, materialised
+├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
+├── tests/                   # 1802 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -1028,6 +1030,7 @@ from pharmaml.viz import (
     plot_table_comparison,
     plot_energy_distribution, plot_top_ligands,
     HTMLReport, export_table, metrics_to_dataframe, save_visual_bundle, save_figure,
+    export_docx, save_pdf_report,
 )
 
 fig = plot_confusion_matrix(report)          # ClassificationReport -> heat-map (2+ classes)
@@ -1038,12 +1041,21 @@ fig4 = plot_learning_curve(model, X, y, cv=5)  # is more data still buying accur
 fig5 = plot_table_comparison(comparison)  # ligand-set overlap (compare_tables result)
 
 export_table(leaderboard, "leaderboard.md")  # csv / tsv / markdown / json / html
+export_docx(leaderboard, "leaderboard.docx")  # a real Word document (python-docx)
 
 save_visual_bundle(                          # one call -> report.html + files
     figures={"confusion": fig, "roc": fig2},
     tables={"leaderboard": leaderboard},
     metrics=report,
     out_dir="reports",
+    pdf_report=True,     # + report.pdf: the multi-page document (the legacy
+                         #   scripts' fpdf output, upgraded — title + metrics,
+                         #   one page per table, one page per figure)
+)
+
+save_pdf_report(                             # or standalone, without the bundle
+    {"confusion": fig}, tables={"leaderboard": leaderboard},
+    metrics=report, out_path="model_report.pdf",
 )
 ```
 

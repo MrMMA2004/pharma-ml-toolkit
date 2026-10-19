@@ -37,7 +37,10 @@ layer for **all** toolkit codes:
                   entropy — four panels over ``history``);
 * everywhere    — :class:`HTMLReport` (self-contained report with
                   embedded figures), :func:`export_table`
-                  (csv/tsv/markdown/json/html), :func:`save_visual_bundle`.
+                  (csv/tsv/markdown/json/html), :func:`save_pdf_report`
+                  (multi-page PDF document — the legacy scripts' only
+                  report format), :func:`export_docx` (Word tables),
+                  :func:`save_visual_bundle`.
 
 matplotlib stays optional: importing this package never needs it —
 only *calling* a plotting function does (clear
@@ -97,8 +100,10 @@ from pharmaml.viz.pharma_plots import (
 from pharmaml.viz.report import (
     TABLE_FORMATS,
     HTMLReport,
+    export_docx,
     export_table,
     metrics_to_dataframe,
+    save_pdf_report,
     save_visual_bundle,
 )
 
@@ -110,6 +115,7 @@ __all__ = [
     # reports & tables
     "HTMLReport",
     "close_figure",
+    "export_docx",
     "export_table",
     "figure_to_base64",
     "get_pyplot",
@@ -144,5 +150,6 @@ __all__ = [
     "plot_training_history",
     "require_matplotlib",
     "save_figure",
+    "save_pdf_report",
     "save_visual_bundle",
 ]

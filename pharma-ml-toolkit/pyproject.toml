@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pharmaml"
-version = "1.2.23"
+version = "1.2.24"
 description = "A production-ready toolkit for QSAR machine learning, pharmaceutical calculations (PK/PD/dosage), and molecular-docking workflows."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -61,6 +61,7 @@ reports = [
     "matplotlib>=3.7",
     "seaborn>=0.13",
     "fpdf>=1.7",
+    "python-docx>=1.1",
 ]
 dev = [
     "pytest>=7.4",
@@ -80,6 +81,9 @@ Homepage = "https://github.com/example/pharma-ml-toolkit"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+pharmaml = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "src"]

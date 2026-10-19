@@ -1,4 +1,4 @@
-"""Multi-format output of results — HTML reports and exportable tables.
+"""Multi-format output of results — HTML/PDF/Word reports and exportable tables.
 
 "Various visual formats" in one place:
 
@@ -6,17 +6,25 @@
   artifact: metric cards, styled tables and **embedded** figures
   (base64 png/svg), openable in any browser, e-mailable, and safe to
   archive (no external assets);
+* :func:`save_pdf_report` — a multi-page **PDF document** (title +
+  metrics, one page per table, one page per figure) via fpdf — the
+  legacy scripts' *only* report format, now first-class (non-latin-1
+  punctuation is transliterated so the built-in fonts never choke);
 * :func:`export_table` — the same DataFrame as ``csv``, ``tsv``,
   ``markdown``, ``json`` or ``html`` depending on the extension (the
   legacy scripts only ever wrote csv/xlsx);
+* :func:`export_docx` — any table as a real Word ``.docx`` document
+  with a grid-styled header row (the legacy ``approved.py`` wrote a
+  bare list of approved-drug names to .docx);
 * :func:`metrics_to_dataframe` — any report object
   (:class:`~pharmaml.ml.evaluation.ClassificationReport`,
   :class:`~pharmaml.ml.evaluation.RegressionReport`,
   :class:`~pharmaml.pharma.pk.PKSummary`, plain dict) as a tidy
   metric/value table;
 * :func:`save_visual_bundle` — one call that renders figures + tables +
-  metrics into a directory and the companion ``report.html``; this is
-  what the CLI ``--plots``/``data entry`` options use.
+  metrics into a directory and the companion ``report.html`` (plus an
+  optional ``report.pdf`` with ``pdf_report=True``); this is what the
+  CLI ``--plots``/``data entry`` options use.
 
 Examples
 --------
@@ -43,6 +51,19 @@ Examples
 >>> from pathlib import Path
 >>> Path(out).unlink(); Path(out_csv).unlink()
 
+The document writers (fpdf + python-docx, both in the ``reports``
+extra) upgrade the legacy scripts' *only* output formats:
+>>> from pharmaml.viz.report import export_docx, save_pdf_report
+>>> out_docx = export_docx(board, "/tmp/pharmaml_doctest_board.docx")
+>>> out_docx.suffix
+'.docx'
+>>> out_pdf = save_pdf_report({}, tables={"leaderboard": board},
+...                           out_path="/tmp/pharmaml_doctest_report.pdf",
+...                           title="Doctest report")
+>>> out_pdf.read_bytes()[:5]                      # a real PDF document
+b'%PDF-'
+>>> Path(out_docx).unlink(); Path(out_pdf).unlink()
+
 >>> from pharmaml.viz.report import HTMLReport
 >>> report = (HTMLReport("QSAR run", subtitle="random_forest | 3 classes")
 ...           .add_metrics({"roc_auc": 0.91, "n_samples": 4})
@@ -66,13 +87,14 @@ pharmaml.exceptions.DataValidationError: add_metrics accepts report objects or d
 from __future__ import annotations
 
 import html
+import tempfile
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from pharmaml.exceptions import DataValidationError
+from pharmaml.exceptions import DataValidationError, DependencyError
 from pharmaml.logger import get_logger
 from pharmaml.utils.io import ensure_directory
 from pharmaml.viz._compat import close_figure, figure_to_base64, save_figure
@@ -80,8 +102,10 @@ from pharmaml.viz._compat import close_figure, figure_to_base64, save_figure
 __all__ = [
     "TABLE_FORMATS",
     "HTMLReport",
+    "export_docx",
     "export_table",
     "metrics_to_dataframe",
+    "save_pdf_report",
     "save_visual_bundle",
 ]
 
@@ -237,6 +261,242 @@ def export_table(frame: pd.DataFrame, path: str | Path, max_rows: int | None = N
     return file_path
 
 
+#: Non-latin-1 punctuation that appears in PharmaML outputs (em/en
+#: dashes, comparison arrows, typographic quotes, ...) transliterated to
+#: the ASCII the PDF built-in fonts actually encode.  Everything else
+#: outside latin-1 degrades to ``?`` via ``errors="replace"`` -- the
+#: report never crashes on a metric name.
+_NON_LATIN1_MAP: dict[str, str] = {
+    "\u2014": "-",   # em dash
+    "\u2013": "-",   # en dash
+    "\u2212": "-",   # minus sign
+    "\u2192": "->",  # rightwards arrow
+    "\u2190": "<-",  # leftwards arrow
+    "\u2265": ">=",  # greater-or-equal
+    "\u2264": "<=",  # less-or-equal
+    "\u2248": "~",   # almost equal
+    "\u221e": "inf",  # infinity
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2026": "...",  # ellipsis
+}
+
+
+def _latin1_safe(text: str) -> str:
+    """Transliterate text down to what Helvetica can encode (latin-1)."""
+    for src, dst in _NON_LATIN1_MAP.items():
+        text = text.replace(src, dst)
+    return text.encode("latin-1", errors="replace").decode("latin-1")
+
+
+def _plain_value(value: Any) -> str:
+    """Format a cell for the document writers (compact floats, ascii NaN)."""
+    if isinstance(value, float):
+        if np.isnan(value):
+            return "NaN"
+        if not np.isfinite(value):
+            return "+inf" if value > 0 else "-inf"
+        return f"{value:.6g}"
+    return str(value)
+
+
+#: Rows shown per table page in :func:`save_pdf_report`.  38 rows of
+#: 6 mm + heading + header + note stay under the A4 text height
+#: (297 - 10 - 15 mm), so the "one page per table" layout holds;
+#: longer tables are truncated with a note (auto page break would
+#: otherwise split them silently).
+_PDF_TABLE_MAX_ROWS = 38
+
+
+def _pdf_write(pdf: Any, text: str, size: int, style: str = "", h: float = 6.0) -> None:
+    """Write one wrapping text block, pinned to the left margin.
+
+    fpdf2's ``multi_cell`` leaves the x cursor at the RIGHT margin after
+    a block (``XPos.RIGHT`` default), so a second ``multi_cell(0, ...)``
+    would find zero width and raise "Not enough horizontal space";
+    fpdf1 reset x to the left margin.  ``set_x(l_margin)`` before every
+    block is the behaviour both versions share.
+    """
+    pdf.set_x(pdf.l_margin)
+    pdf.set_font("Helvetica", style, size)
+    pdf.multi_cell(0, h, text)
+
+
+def save_pdf_report(
+    figures: dict[str, Any],
+    tables: dict[str, pd.DataFrame] | None = None,
+    metrics: Any = None,
+    out_path: str | Path = "report.pdf",
+    title: str = "PharmaML results",
+    subtitle: str | None = None,
+    close: bool = True,
+) -> Path:
+    """Write a multi-page PDF document report (metrics, tables, figures).
+
+    Upgrades the legacy scripts' *only* report format: every model
+    script in the original archive ended by assembling an fpdf PDF with
+    the classification report and the confusion/ROC images, one page
+    each.  Here the same document is one typed call -- a title page
+    with the metrics, one page per table (header row + rows, truncated
+    at 38 rows with a note), and one page per figure (rendered to png
+    through the headless Agg backend, so no display is needed).
+
+    Requires fpdf (``pip install 'pharmaml[reports]'``); non-latin-1
+    punctuation is transliterated (``em dash`` -> ``-``) because the
+    built-in Helvetica only encodes latin-1 -- the report never crashes
+    on a unicode metric name.
+
+    Parameters
+    ----------
+    figures:
+        ``{page_heading: matplotlib Figure}`` -- one PDF page each.
+    tables:
+        ``{page_heading: DataFrame}`` -- one PDF page each.
+    metrics:
+        Report object or dict, rendered as ``metric: value`` lines on
+        the title page (via :func:`metrics_to_dataframe`).
+    out_path:
+        Destination ``.pdf`` path (parents created).
+    title, subtitle:
+        Title-page headings.
+    close:
+        Close the figures after writing (pass ``False`` to keep them).
+
+    Returns
+    -------
+    Path
+        The resolved output path.
+
+    Raises
+    ------
+    DependencyError
+        If fpdf is not installed.
+    """
+    for name in figures:
+        _validate_bundle_name(name)
+    for name in tables or {}:
+        _validate_bundle_name(name)
+    try:
+        from fpdf import FPDF
+    except ImportError as exc:  # pragma: no cover - environment guard
+        raise DependencyError(
+            "fpdf is not installed. Install with: pip install fpdf "
+            "(or 'pharmaml[reports]')"
+        ) from exc
+
+    dest = Path(out_path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # Title page: heading, optional subtitle, metrics as name: value.
+    pdf.add_page()
+    _pdf_write(pdf, _latin1_safe(title), 16, style="B", h=10)
+    if subtitle:
+        _pdf_write(pdf, _latin1_safe(subtitle), 11, style="I", h=7)
+    if metrics is not None:
+        pdf.ln(4)
+        _pdf_write(pdf, "Metrics", 12, style="B", h=8)
+        for row in metrics_to_dataframe(metrics).itertuples(index=False):
+            _pdf_write(pdf, _latin1_safe(f"{row[0]}: {_plain_value(row[1])}"), 10, h=6)
+
+    # One page per table: bold header row, then the body, 60 rows max.
+    for name, frame in (tables or {}).items():
+        pdf.add_page()
+        _pdf_write(pdf, _latin1_safe(name.replace("_", " ").title()), 13, style="B", h=9)
+        _pdf_write(
+            pdf, _latin1_safe(" | ".join(str(col) for col in frame.columns)), 9, style="B"
+        )
+        shown = frame.head(_PDF_TABLE_MAX_ROWS)
+        for row in shown.itertuples(index=False):
+            line = " | ".join(_plain_value(value) for value in row)
+            _pdf_write(pdf, _latin1_safe(line), 9, h=6)
+        if len(frame) > _PDF_TABLE_MAX_ROWS:
+            _pdf_write(pdf, f"... ({len(frame) - _PDF_TABLE_MAX_ROWS} more rows)", 9, h=6)
+
+    # One page per figure: render to a temporary png (Agg, headless-safe)
+    # and embed full-width -- fpdf reads the file at image() time, so the
+    # temp directory only needs to live for the loop.
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, figure in figures.items():
+            png_path = Path(tmp) / f"{name}.png"
+            save_figure(figure, png_path)
+            pdf.add_page()
+            _pdf_write(pdf, _latin1_safe(name.replace("_", " ").title()), 13, style="B", h=9)
+            pdf.image(str(png_path), x=15, w=180)
+
+    pdf.output(str(dest))
+    if close:
+        for figure in figures.values():
+            close_figure(figure)
+    _LOG.info("PDF report: %d page(s) -> %s", pdf.page, dest)
+    return dest
+
+
+def export_docx(
+    frame: pd.DataFrame,
+    path: str | Path,
+    max_rows: int | None = None,
+) -> Path:
+    """Write a DataFrame as a Word ``.docx`` document with a grid table.
+
+    Upgrades the legacy ``approved.py``, which wrote a bare list of
+    approved-drug names to a .docx: any table now exports with a bold
+    header row and a bordered grid, cell-formatted like every other
+    PharmaML export (compact floats, ``NaN``/``inf`` never leak as raw
+    ``nan``).
+
+    Requires python-docx (``pip install 'pharmaml[reports]'``).
+
+    Parameters
+    ----------
+    frame:
+        The table to write.
+    path:
+        Destination ``.docx`` path (parent directories created).
+    max_rows:
+        Row cap (``None`` writes every row).
+
+    Returns
+    -------
+    Path
+        The resolved output path.
+
+    Raises
+    ------
+    DependencyError
+        If python-docx is not installed.
+    """
+    try:
+        from docx import Document
+    except ImportError as exc:  # pragma: no cover - environment guard
+        raise DependencyError(
+            "python-docx is not installed. Install with: pip install python-docx "
+            "(or 'pharmaml[reports]')"
+        ) from exc
+
+    dest = Path(path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shown = frame.head(max_rows) if max_rows is not None else frame
+
+    document = Document()
+    table = document.add_table(rows=1, cols=len(shown.columns))
+    table.style = "Table Grid"
+    for cell, column in zip(table.rows[0].cells, shown.columns):
+        cell.text = str(column)
+        cell.paragraphs[0].runs[0].bold = True
+    for row in shown.itertuples(index=False):
+        cells = table.add_row().cells
+        for cell, value in zip(cells, row):
+            cell.text = _plain_value(value)
+    document.save(str(dest))
+    _LOG.info("Wrote %d row(s) -> %s", len(shown), dest)
+    return dest
+
+
 class HTMLReport:
     """Builder for a self-contained HTML report.
 
@@ -363,12 +623,14 @@ def save_visual_bundle(
     subtitle: str | None = None,
     formats: tuple[str, ...] = ("png",),
     close: bool = True,
+    pdf_report: bool = False,
 ) -> list[Path]:
     """Render figures + tables + metrics into one directory + HTML report.
 
     The bundle layout::
 
         <out_dir>/report.html        self-contained visual report
+        <out_dir>/report.pdf         multi-page PDF document (pdf_report=True)
         <out_dir>/<figure>.png       every figure as a file
         <out_dir>/<table>.csv        every table as machine-readable csv
         <out_dir>/<table>.md         ... and human-readable markdown
@@ -387,11 +649,16 @@ def save_visual_bundle(
         always embeds png.
     close:
         Close the figures after rendering (set False to keep drawing).
+    pdf_report:
+        Also write ``report.pdf`` — the multi-page document (title +
+        metrics, one page per table, one page per figure) via
+        :func:`save_pdf_report`.  Requires fpdf.
 
     Returns
     -------
     list[Path]
-        Every artifact written, in a stable order (report first).
+        Every artifact written, in a stable order (report.html first,
+        report.pdf second when requested).
     """
     # Validate stem keys BEFORE creating anything: a "../x" key must fail
     # typed instead of writing outside out_dir.
@@ -418,7 +685,23 @@ def save_visual_bundle(
             written.append(save_figure(figure, out / f"{name}.{fmt}"))
         report.add_figure(figure, caption=name.replace("_", " ").title())
 
+    pdf_path: Path | None = None
+    if pdf_report:
+        # After the figure files + HTML embedding, from the same (still
+        # open) figure objects; the bundle closes them below itself.
+        pdf_path = save_pdf_report(
+            figures,
+            tables=tables,
+            metrics=metrics,
+            out_path=out / "report.pdf",
+            title=title,
+            subtitle=subtitle,
+            close=False,
+        )
+
     written.insert(0, report.save(out / "report.html"))
+    if pdf_path is not None:
+        written.insert(1, pdf_path)
     if close:
         for figure in figures.values():
             close_figure(figure)

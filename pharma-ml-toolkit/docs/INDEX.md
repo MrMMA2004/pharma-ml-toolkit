@@ -257,6 +257,7 @@ after adding new public functions.
 | `TABLE_FORMATS` | constant |  |
 | `HTMLReport` | class | Builder for a self-contained HTML report. |
 | `close_figure` | function | Close a figure defensively (no-op when matplotlib is absent). |
+| `export_docx` | function | Write a DataFrame as a Word ``.docx`` document with a grid table. |
 | `export_table` | function | Write a DataFrame in a *visual* format chosen by the extension. |
 | `figure_to_base64` | function | Render a figure to a ``data:`` URI for embedding in HTML reports. |
 | `get_pyplot` | function | Return ``matplotlib.pyplot`` with a safe backend already selected. |
@@ -286,6 +287,7 @@ after adding new public functions.
 | `plot_training_history` | function | Epoch-by-epoch loss curves with the early-stopping verdict. |
 | `require_matplotlib` | function | Import matplotlib lazily and pick the right backend. |
 | `save_figure` | function | Save a figure to ``png``/``svg``/``pdf`` (chosen by extension). |
+| `save_pdf_report` | function | Write a multi-page PDF document report (metrics, tables, figures). |
 | `save_visual_bundle` | function | Render figures + tables + metrics into one directory + HTML report. |
 
 ## `pharmaml.utils.io`

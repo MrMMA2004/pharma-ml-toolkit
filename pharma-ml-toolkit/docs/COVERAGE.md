@@ -20,7 +20,7 @@ folder) is the point of the upgrade: one registry, one pipeline.
 
 | Rar file | PharmaML surface | Status |
 | --- | --- | --- |
-| `RF.py` | `ml.build_model('random_forest')` + `train_model` (GridSearchCV, stratified split) + `evaluate_model` + `ml.persistence.save_model`; viz: `plot_confusion_matrix`, `plot_roc_curves`; CLI `ml train` | ✅ |
+| `RF.py` | `ml.build_model('random_forest')` + `train_model` (GridSearchCV, stratified split) + `evaluate_model` + `ml.persistence.save_model`; viz: `plot_confusion_matrix`, `plot_roc_curves`; the fpdf PDF report → `viz.save_pdf_report` (title + metrics, one page per table, one page per figure; `save_visual_bundle(..., pdf_report=True)`); CLI `ml train` | ✅ |
 | `SVM.py` | `ml.build_model('svm')` (probability=True path pinned by tests) | ✅ |
 | `XGboost.py` | `ml.build_model('xgboost')` (optional-gated) + LabelEncoder handling inside `make_train_test_split` | ✅ |
 | `LightGBM.py` | `ml.build_model('lightgbm')` | ✅ |
@@ -83,7 +83,7 @@ folder) is the point of the upgrade: one registry, one pipeline.
 | `others/General/common_between_two_excel.py` | `chem.compare_tables(...).common` / `.only_in_a` / `.only_in_b` (name-normalized set operations; TableComparison) | ✅ |
 | `others/compare/notcommon.py` | `chem.compare_tables(...).only_in_a / .only_in_b` differences report; CLI `chem compare` | ✅ |
 | `others/compare/smilesgetter.py` | `chem.annotate_with_smiles` (join SMILES onto a ligand-name column, extension/case normalization) | ✅ |
-| `others/General/approved.py` | `pharma.filter_approved_drugs` (17 TSVs → approved names; the rar wrote .docx — the toolkit returns the frame, `utils.io.write_table` serialises) | ⚠ output is a table, not a Word document |
+| `others/General/approved.py` | `pharma.filter_approved_drugs` (17 TSVs → approved names) + `viz.export_docx` (any table as a real Word document — the rar wrote a bare .docx name list) | ✅ |
 | `others/General/Nameextracter.py` | `docking.list_file_names` (file inventory → table) | ✅ |
 | `others/General/adder.py` | `docking.distribute_files` + `docking.distribute_receptor` (copy binaries/receptor into every campaign subfolder) | ✅ |
 | `others/General/delete.py` | `docking.cleanup_tree` (keep-list + pattern, dry-run default) | ✅ |
@@ -133,15 +133,23 @@ folder) is the point of the upgrade: one registry, one pipeline.
 
 - **118 files** audited one by one (112 `.py`, 2 `.ipynb`, 1 `.pkl`, 3 `.txt`);
   every file has a row above.
-- **Two functional gaps found and closed in this release**: penalized
+- **Two functional gaps found and closed in 1.2.23**: penalized
   *logistic* classification (the rar's `Classification/Lasso.py` and
   `Classification/Elastic net.py` — 2 files) gained the registry entries
   `lasso_logistic` and `elastic_net_logistic`; Avalon fingerprints (the
   rar's Descriptor wrappers — 7 files) gained the `avalon` kind on
   `compute_fingerprints`, bit and count flavours.
-- **Five rows intentionally absorbed** (dataset-specific weights, a
-  .docx output, a .mol2 output, the deprecated MGLTools bridge, empty
-  placeholders) — each with the reason stated in its row.
+- **Two more "absorbed" outputs became first-class in 1.2.24**: the
+  fpdf **PDF model report** (every rar model script's signature output)
+  is now `viz.save_pdf_report` + `save_visual_bundle(pdf_report=True)`,
+  and the **.docx export** (the rar's `approved.py`) is now
+  `viz.export_docx` — fpdf was declared in the `reports` extra since
+  1.0 but never wired to a function until the audit asked what the ZIP
+  was missing.
+- **Three rows intentionally absorbed** (dataset-specific `.pkl`
+  weights, `.mol2` output — needs Open Babel, and the deprecated
+  MGLTools bridge; plus the empty placeholders, which contain nothing)
+  — each with the reason stated in its row.
 - The near-duplicate explosion (≈30 model scripts × 2 tasks + folder
   copies) collapses into **20 registry models + 2 ensemble builders**
   with one training/evaluation/persistence pipeline.
