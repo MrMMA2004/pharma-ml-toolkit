@@ -10,6 +10,37 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.31] — 2026-10-19
+
+### Added — the consensus ranking becomes explainable (`docking rescore`)
+
+- **`consensus_breakdown`** (`pharmaml.docking.scoring`) — the
+  introspection twin of `consensus_rescore`: identical validation and
+  normalisation (the shared `_normalised_evidence` core, so the two can
+  never drift apart), but instead of collapsing the evidence into one
+  Series it returns one `<column>_norm` unit column per evidence column
+  plus the `consensus` — read a row across the `_norm` columns to see
+  *which* evidence drove a ligand's rank. `consensus_rescore` itself is
+  now a thin wrapper over the same core (byte-identical behavior).
+- **`pharmaml docking rescore`** — the CLI surface the consensus story
+  never had: reads a summary CSV (a `scan --out` or `vina-scan` export),
+  combines the requested evidence columns into the 0–1 consensus, prints
+  the leaderboard with the per-column `_norm` units plus a recipe line
+  naming every column's direction and weight, and writes the rescored
+  table (default `<stem>_rescored.csv`). `--weights`,
+  `--higher`/`--lower` direction overrides and `--top` are supported;
+  errors (missing column, non-numeric weights) go through the standard
+  CLI error wrapper with exit 1.
+- Tests +8: four library tests in `TestScoring` (per-column units +
+  consensus values, agreement with `consensus_rescore` across weights/
+  directions/NaN policy, direction override + zero-variance NaN
+  preservation, the shared validation contract) and four CLI tests in
+  `TestDockingRescoreCommand` (leaderboard + written CSV + recipe line,
+  both direction overrides with effective ranking pins, `--top`
+  truncation, error paths with exit 1).
+- README's docking section gains the `consensus_breakdown` line and the
+  CLI quick-start gains the `rescore` example.
+
 ## [1.2.30] — 2026-10-19
 
 ### Added — the persistence audit reaches the Deep Learning tab

@@ -23,6 +23,7 @@ from pharmaml.docking.preparation import (
     write_gpf,
 )
 from pharmaml.docking.scoring import (
+    consensus_breakdown,
     consensus_rescore,
     ligand_efficiency,
     ligand_efficiency_series,
@@ -338,6 +339,88 @@ class TestScoring:
         # its min-max unit values 0.0 / 1.0
         assert scores.iloc[0] == pytest.approx(0.25)
         assert scores.iloc[2] == pytest.approx(0.75)
+
+    # -- consensus_breakdown: the explainable ranking (100x-82) ------- #
+    def test_breakdown_keeps_per_column_units_plus_consensus(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "ligand": ["L1", "L2", "L3"],
+                "best_lowest_energy": [-10.0, -8.0, -6.0],
+                "cluster_size": [10, 30, 20],
+            }
+        )
+        breakdown = consensus_breakdown(
+            frame, ["best_lowest_energy", "cluster_size"]
+        )
+        assert list(breakdown.columns) == [
+            "best_lowest_energy_norm",
+            "cluster_size_norm",
+            "consensus",
+        ]
+        # energy is lower-is-better: -10 -> 1.0 (best), -6 -> 0.0
+        assert breakdown["best_lowest_energy_norm"].tolist() == pytest.approx(
+            [1.0, 0.5, 0.0]
+        )
+        # cluster size is higher-is-better: 30 -> 1.0, 10 -> 0.0
+        assert breakdown["cluster_size_norm"].tolist() == pytest.approx(
+            [0.0, 1.0, 0.5]
+        )
+        assert breakdown["consensus"].tolist() == pytest.approx([0.5, 0.75, 0.25])
+        # the row-level introspection story: L2's rank is driven by its
+        # cluster (unit 1.0) despite a mediocre energy (unit 0.5).
+        assert breakdown.loc[1, "cluster_size_norm"] == pytest.approx(1.0)
+
+    def test_breakdown_matches_rescore_on_the_shared_core(self) -> None:
+        # The two public functions can never drift apart: same input ->
+        # identical consensus, including weights, direction overrides and
+        # the NaN policy.
+        frame = pd.DataFrame(
+            {
+                "a": [1.0, 5.0, float("nan"), 3.0],
+                "e": [-9.0, -7.0, -8.0, -7.5],
+            }
+        )
+        for columns, weights, directions in (
+            (["a", "e"], None, None),
+            (["a", "e"], [3.0, 1.0], None),
+            (["a", "e"], [1.0, 1.0], {"e": True}),
+        ):
+            score = consensus_rescore(
+                frame, columns, weights=weights, higher_is_better=directions
+            )
+            breakdown = consensus_breakdown(
+                frame, columns, weights=weights, higher_is_better=directions
+            )
+            assert breakdown["consensus"].tolist() == pytest.approx(
+                score.tolist(), nan_ok=True
+            )
+            assert breakdown.index.equals(frame.index)
+
+    def test_breakdown_direction_override_and_zero_variance(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "score": [5.0, float("nan"), 5.0],  # zero variance + NaN row
+                "n": [1, 2, 3],
+            }
+        )
+        breakdown = consensus_breakdown(
+            frame, ["score", "n"], higher_is_better={"score": True}
+        )
+        # zero-variance column contributes the neutral 0.5 on finite rows
+        # and NaN on the NaN row (the documented policy).
+        assert breakdown["score_norm"].tolist() == pytest.approx(
+            [0.5, float("nan"), 0.5], nan_ok=True
+        )
+        assert breakdown["consensus"].iloc[1] != breakdown["consensus"].iloc[1]
+
+    def test_breakdown_validation_matches_rescore_contract(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0]})
+        with pytest.raises(DataValidationError, match="missing columns"):
+            consensus_breakdown(frame, columns=["nope"])
+        with pytest.raises(DataValidationError, match="non-negative"):
+            consensus_breakdown(frame, columns=["a"], weights=[-1.0])
+        with pytest.raises(DataValidationError, match="columns list is empty"):
+            consensus_breakdown(frame, columns=[])
 
     def test_ligand_efficiency_series_atom_count_validation(self) -> None:
         # Regression: 12.5 atoms used to be silently truncated to 12

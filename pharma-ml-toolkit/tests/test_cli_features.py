@@ -4,8 +4,8 @@ Exercises ``pharmaml.data split``, ``ml train --plots/--keep-categorical``,
 ``ml train --pdf-report`` / ``ml compare --pdf-report`` (the 100x-75 CLI
 surface of the PDF document), ``ml compare --out/--plot``, model aliases
 and the docking campaign subcommands (``dpf``/``collect``/``torsion``/
-``gpf-scan``/``vina-scan``) through :func:`pharmaml.cli.main` exactly the
-way a shell would invoke them.
+``gpf-scan``/``vina-scan``/``rescore``) through :func:`pharmaml.cli.main`
+exactly the way a shell would invoke them.
 """
 
 from __future__ import annotations
@@ -613,6 +613,144 @@ class TestDockingCampaignCommands:
         assert "error:" in err
         assert "bogus" in err
         assert "available columns" in err
+
+
+class TestDockingRescoreCommand:
+    """``pharmaml docking rescore`` -- the consensus_breakdown CLI surface.
+
+    The explainable ranking (100x-82): evidence columns of a summary
+    CSV combine into one 0-1 consensus, the leaderboard and the written
+    table keep the per-column ``_norm`` units, and the printed recipe
+    line names every column's direction and weight.
+    """
+
+    @pytest.fixture()
+    def summary(self, tmp_path: Path) -> Path:
+        import pandas as pd
+
+        src = tmp_path / "summary.csv"
+        pd.DataFrame(
+            {
+                "ligand": ["L1", "L2", "L3", "L4"],
+                "best_lowest_energy": [-10.0, -8.0, -6.0, -7.5],
+                "cluster_size": [10, 30, 20, 20],
+            }
+        ).to_csv(src, index=False)
+        return src
+
+    def test_rescore_prints_leaderboard_and_writes_csv(
+        self, summary: Path, capsys
+    ) -> None:
+        import pandas as pd
+
+        out = summary.parent / "ranked.csv"
+        code = main(
+            [
+                "docking", "rescore",
+                "--data", str(summary),
+                "--columns", "best_lowest_energy,cluster_size",
+                "--weights", "1,3",
+                "--out", str(out),
+            ]
+        )
+        assert code == 0
+        text = capsys.readouterr().out
+        # the explainable leaderboard: the driving evidence rides along
+        assert "best_lowest_energy_norm" in text and "cluster_size_norm" in text
+        assert "consensus" in text
+        assert "L2" in text.splitlines()[1]  # cluster-weighted winner first
+        # the recipe line names every column's direction and weight
+        assert "evidence: best_lowest_energy (lower=better, weight 1)" in text
+        assert "cluster_size (higher=better, weight 3)" in text
+        assert "4 ligand(s) rescored" in text
+        # the written table: sorted by consensus desc, units included
+        ranked = pd.read_csv(out)
+        assert list(ranked["ligand"][:2]) == ["L2", "L4"]
+        assert ranked["consensus"].is_monotonic_decreasing
+        assert ranked.loc[0, "cluster_size_norm"] == pytest.approx(1.0)
+
+    def test_rescore_direction_override_flips_energy(
+        self, summary: Path, capsys
+    ) -> None:
+        # single evidence column + --higher: the ranking inverts cleanly
+        # (L3's -6.0 is the highest value once "higher is better").
+        code = main(
+            [
+                "docking", "rescore",
+                "--data", str(summary),
+                "--columns", "best_lowest_energy",
+                "--higher", "best_lowest_energy",
+            ]
+        )
+        assert code == 0
+        text = capsys.readouterr().out
+        assert "evidence: best_lowest_energy (higher=better)" in text
+        assert "L3" in text.splitlines()[1]  # -6.0 tops the flipped ranking
+        # the default output lands next to the input
+        assert (summary.parent / "summary_rescored.csv").is_file()
+
+        # --lower on the second column: L1's tiny cluster (worst by
+        # default) becomes the best evidence -- the flip is effective.
+        code = main(
+            [
+                "docking", "rescore",
+                "--data", str(summary),
+                "--columns", "best_lowest_energy,cluster_size",
+                "--lower", "cluster_size",
+                "--out", str(summary.parent / "flipped.csv"),
+            ]
+        )
+        assert code == 0
+        text = capsys.readouterr().out
+        assert "cluster_size (lower=better)" in text
+        assert "L1" in text.splitlines()[1]  # best energy + flipped cluster
+
+    def test_rescore_top_limits_the_printed_leaderboard(
+        self, summary: Path, capsys
+    ) -> None:
+        code = main(
+            [
+                "docking", "rescore",
+                "--data", str(summary),
+                "--columns", "best_lowest_energy,cluster_size",
+                "--top", "2",
+                "--out", str(summary.parent / "t.csv"),
+            ]
+        )
+        assert code == 0
+        text = capsys.readouterr().out
+        data_rows = [
+            line for line in text.splitlines()
+            if line.strip().startswith(("L1", "L2", "L3", "L4"))
+        ]
+        assert len(data_rows) == 2  # the table itself still has all 4 rows
+        assert "4 ligand(s) rescored" in text
+
+    def test_rescore_errors_through_the_standard_wrapper(
+        self, summary: Path, capsys
+    ) -> None:
+        code = main(
+            [
+                "docking", "rescore",
+                "--data", str(summary),
+                "--columns", "no_such_column",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "error: missing columns ['no_such_column']" in err
+
+        code = main(
+            [
+                "docking", "rescore",
+                "--data", str(summary),
+                "--columns", "best_lowest_energy",
+                "--weights", "one",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "--weights must be comma-separated numbers" in err
 
 
 class TestChemTableCommands:

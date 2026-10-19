@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1830 tests).
+exceptions, input validation, and pytest coverage** (1838 tests).
 
 ---
 
@@ -230,7 +230,7 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 1830 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1838 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -1033,6 +1033,7 @@ import pandas as pd
 from pharmaml.docking import (
     compute_grid_box, write_gpf, parse_vina_output,
     parse_dlg_cluster_table, ligand_efficiency, consensus_rescore,
+    consensus_breakdown,
 )
 
 box = compute_grid_box("reference_ligand.pdbqt", padding=4.0)   # grid box around the co-crystal ligand
@@ -1045,6 +1046,7 @@ le = ligand_efficiency(affinity_kcal_mol=-9.6, num_heavy_atoms=32)  # 0.30 kcal/
 
 scores = pd.DataFrame({"vina": [...], "ad4": [...]})  # one row per ligand
 consensus = consensus_rescore(scores, columns=["vina", "ad4"])     # 0–1 combined score
+breakdown = consensus_breakdown(scores, columns=["vina", "ad4"])   # + per-column _norm units — the explainable ranking
 ```
 
 ### Visualization & reports (every domain)
@@ -1125,6 +1127,7 @@ pharmaml docking check --directory runs/
 pharmaml docking torsion --dir ligand_folders/    # TORSDOF/REMARK/BRANCH consistency
 pharmaml docking gpf-scan --dir runs/             # ligand_types census per r.gpf
 pharmaml docking vina-scan --dir vina_results/    # best affinity per .log
+pharmaml docking rescore --data summary.csv --columns best_lowest_energy,cluster_size --weights 1,3    # explainable 0–1 consensus (per-column _norm units)
 pharmaml docking collect --dir runs/ --pattern '^\\d+\\.pdbqt$'  # gather artifacts
 pharmaml docking campaign list --dir ligand_folders/ --ext .pdbqt --out names.csv
 pharmaml docking campaign distribute --dir ligand_folders/ --file receptor.pdbqt

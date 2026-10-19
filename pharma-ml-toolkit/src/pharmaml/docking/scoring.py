@@ -7,7 +7,10 @@ two standard analysis hooks:
 * :func:`ligand_efficiency` -- binding energy normalised by heavy-atom
   count, the classic flat-scoring correction [1]_;
 * :func:`consensus_rescore` -- min-max normalisation of several
-  evidence columns into one 0–1 consensus score.
+  evidence columns into one 0–1 consensus score;
+* :func:`consensus_breakdown` -- the same normalisation, kept apart:
+  one 0–1 unit column per evidence column plus the consensus, so a
+  ranking can be *explained* (which evidence drove which ligand).
 
 References
 ----------
@@ -56,6 +59,15 @@ pharmaml.exceptions.DataValidationError: missing columns ['cluster'] for rescori
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: got 1 weights for 2 columns
+
+>>> from pharmaml.docking.scoring import consensus_breakdown
+>>> breakdown = consensus_breakdown(
+...     summary, ["best_lowest_energy", "cluster_size"])
+>>> breakdown.round(2).to_dict("list")          # the explainable ranking
+{'best_lowest_energy_norm': [1.0, 0.5, 0.0], 'cluster_size_norm': [0.0, 1.0, 0.5], 'consensus': [0.5, 0.75, 0.25]}
+>>> breakdown["consensus"].tolist() == consensus_rescore(          # same core
+...     summary, ["best_lowest_energy", "cluster_size"]).tolist()
+True
 """
 
 from __future__ import annotations
@@ -68,7 +80,12 @@ from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
 
-__all__ = ["consensus_rescore", "ligand_efficiency", "ligand_efficiency_series"]
+__all__ = [
+    "consensus_breakdown",
+    "consensus_rescore",
+    "ligand_efficiency",
+    "ligand_efficiency_series",
+]
 
 
 def _validated_atom_count(value: object, atoms_col: str) -> int:
@@ -159,49 +176,27 @@ def ligand_efficiency_series(
     return affinities.abs() / atoms
 
 
-def consensus_rescore(
+def _normalised_evidence(
     frame: pd.DataFrame,
     columns: list[str],
-    weights: list[float] | None = None,
-    higher_is_better: dict[str, bool] | None = None,
-) -> pd.Series:
-    """Combine several docking evidence columns into a 0–1 consensus.
+    weights: list[float] | None,
+    higher_is_better: dict[str, bool] | None,
+) -> tuple[list[pd.Series], list[float]]:
+    """Validate the consensus inputs and normalise each column to 0–1.
 
-    Each column is min-max normalised across the table (direction
-    configurable per column), then a weighted average produces the
-    final score.  Typical inputs: lowest binding energy, cluster
-    population, ligand efficiency.
-
-    Parameters
-    ----------
-    frame:
-        Docking summary table (one row per ligand).
-    columns:
-        Columns to combine.
-    weights:
-        Per-column weights (uniform when None).  Must match length.
-    higher_is_better:
-        Map column -> direction.  Columns whose names end in
-        ``energy`` or ``affinity`` (e.g. ``best_lowest_energy``,
-        ``best_affinity`` -- the outputs of :func:`parse_dlg_summary`
-        and :func:`scan_vina_directory`) default to False (more
-        negative = better); everything else (cluster sizes, ligand
-        efficiency, ...) defaults to True.
+    The shared core of :func:`consensus_rescore` and
+    :func:`consensus_breakdown`: every check (empty list, missing
+    columns, weight length/values, empty frame, all-NaN column) and the
+    per-column min-max normalisation with direction flipping, NaN
+    policy and the zero-variance neutral 0.5 -- so the two public
+    functions can never drift apart.
 
     Returns
     -------
-    pandas.Series
-        Consensus score in [0, 1]; higher is always better.  Rows whose
-        input columns hold NaN/inf keep NaN (with a warning naming the
-        column) instead of silently poisoning the table.
-
-    Raises
-    ------
-    DataValidationError
-        On an empty ``columns`` list, missing columns, weight-length
-        mismatch, invalid weights (negative or all-zero), an empty
-        frame, or a column with no numeric values at all (all NaN or
-        non-numeric after coercion).
+    tuple of (list of pandas.Series, list of float)
+        One normalised unit Series per requested column (direction
+        applied: higher is always better) and the effective weights
+        (uniform when ``weights`` is None).
     """
     if not columns:
         raise DataValidationError(
@@ -268,6 +263,136 @@ def consensus_rescore(
             # "energy" or "affinity") are "lower is better".
             unit = 1.0 - unit
         normalised.append(unit)
+    return normalised, weights
 
+
+def _weighted_consensus(
+    normalised: list[pd.Series], weights: list[float]
+) -> pd.Series:
+    """Weighted mean of the normalised units, clipped to [0, 1]."""
     score = sum(w * s for w, s in zip(weights, normalised)) / sum(weights)
     return score.clip(0.0, 1.0)
+
+
+def consensus_rescore(
+    frame: pd.DataFrame,
+    columns: list[str],
+    weights: list[float] | None = None,
+    higher_is_better: dict[str, bool] | None = None,
+) -> pd.Series:
+    """Combine several docking evidence columns into a 0–1 consensus.
+
+    Each column is min-max normalised across the table (direction
+    configurable per column), then a weighted average produces the
+    final score.  Typical inputs: lowest binding energy, cluster
+    population, ligand efficiency.  Use :func:`consensus_breakdown`
+    when the ranking itself must be explainable (it keeps the
+    per-column normalised units next to the consensus).
+
+    Parameters
+    ----------
+    frame:
+        Docking summary table (one row per ligand).
+    columns:
+        Columns to combine.
+    weights:
+        Per-column weights (uniform when None).  Must match length.
+    higher_is_better:
+        Map column -> direction.  Columns whose names end in
+        ``energy`` or ``affinity`` (e.g. ``best_lowest_energy``,
+        ``best_affinity`` -- the outputs of :func:`parse_dlg_summary`
+        and :func:`scan_vina_directory`) default to False (more
+        negative = better); everything else (cluster sizes, ligand
+        efficiency, ...) defaults to True.
+
+    Returns
+    -------
+    pandas.Series
+        Consensus score in [0, 1]; higher is always better.  Rows whose
+        input columns hold NaN/inf keep NaN (with a warning naming the
+        column) instead of silently poisoning the table.
+
+    Raises
+    ------
+    DataValidationError
+        On an empty ``columns`` list, missing columns, weight-length
+        mismatch, invalid weights (negative or all-zero), an empty
+        frame, or a column with no numeric values at all (all NaN or
+        non-numeric after coercion).
+    """
+    normalised, effective = _normalised_evidence(
+        frame, columns, weights, higher_is_better
+    )
+    return _weighted_consensus(normalised, effective)
+
+
+def consensus_breakdown(
+    frame: pd.DataFrame,
+    columns: list[str],
+    weights: list[float] | None = None,
+    higher_is_better: dict[str, bool] | None = None,
+) -> pd.DataFrame:
+    """Explain a consensus ranking: per-column units plus the score.
+
+    The introspection twin of :func:`consensus_rescore` -- identical
+    validation and normalisation (the shared core), but instead of
+    collapsing the evidence into one Series it returns a frame with one
+    ``<column>_norm`` column per evidence column (each min-max
+    normalised to 0–1, direction applied so higher is always better)
+    plus the final ``consensus`` column.  Read a row across the ``_norm``
+    columns to see *which* evidence drove a ligand's rank -- the answer
+    to "why is this compound on top?".
+
+    Parameters
+    ----------
+    frame:
+        Docking summary table (one row per ligand).
+    columns:
+        Evidence columns to combine.
+    weights:
+        Per-column weights (uniform when None).  Must match length.
+    higher_is_better:
+        Map column -> direction, overriding the energy/affinity
+        name heuristic (see :func:`consensus_rescore`).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``<evidence>_norm`` (one per requested column, 0–1,
+        higher = better) and ``consensus`` (the weighted mean, clipped
+        to [0, 1]; higher = better).  The index matches ``frame``;
+        rows whose inputs hold NaN/inf keep NaN exactly like
+        :func:`consensus_rescore`.
+
+    Raises
+    ------
+    DataValidationError
+        Same contract as :func:`consensus_rescore` (shared validation
+        core): empty ``columns``, missing columns, weight-length
+        mismatch, negative or all-zero weights, empty frame, or an
+        all-NaN evidence column.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from pharmaml.docking.scoring import consensus_breakdown
+    >>> summary = pd.DataFrame({"ligand": ["L1", "L2", "L3"],
+    ...                         "best_lowest_energy": [-10.0, -8.0, -6.0],
+    ...                         "cluster_size": [10, 30, 20]})
+    >>> breakdown = consensus_breakdown(summary,
+    ...     ["best_lowest_energy", "cluster_size"], weights=[1.0, 3.0])
+    >>> list(breakdown.columns)
+    ['best_lowest_energy_norm', 'cluster_size_norm', 'consensus']
+    >>> breakdown["consensus"].round(3).tolist()   # L2 wins on cluster size
+    [0.25, 0.875, 0.375]
+    >>> breakdown["cluster_size_norm"].tolist()  # the driving evidence
+    [0.0, 1.0, 0.5]
+    """
+    normalised, effective = _normalised_evidence(
+        frame, columns, weights, higher_is_better
+    )
+    breakdown = pd.DataFrame(index=frame.index)
+    for col, unit in zip(columns, normalised):
+        breakdown[f"{col}_norm"] = unit
+    breakdown["consensus"] = _weighted_consensus(normalised, effective)
+    return breakdown

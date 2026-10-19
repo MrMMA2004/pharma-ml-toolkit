@@ -220,6 +220,7 @@ after adding new public functions.
 | `cleanup_tree` | function | Delete every file not on the allowlist, bottom-up. |
 | `collect_files` | function | Collect matching files from a campaign tree into one folder. |
 | `compute_grid_box` | function | Compute a grid box enclosing a reference ligand plus padding. |
+| `consensus_breakdown` | function | Explain a consensus ranking: per-column units plus the score. |
 | `consensus_rescore` | function | Combine several docking evidence columns into a 0–1 consensus. |
 | `delete_named_files` | function | Delete every file named ``filename`` anywhere under ``directory``. |
 | `distribute_files` | function | Copy each file into every immediate sub-directory of ``target_dir``. |

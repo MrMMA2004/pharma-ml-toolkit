@@ -43,6 +43,7 @@ from pharmaml.docking.receptor import (
     prepare_protein,
 )
 from pharmaml.docking.scoring import (
+    consensus_breakdown,
     consensus_rescore,
     ligand_efficiency,
     ligand_efficiency_series,
@@ -68,6 +69,7 @@ __all__ = [
     "cleanup_tree",
     "collect_files",
     "compute_grid_box",
+    "consensus_breakdown",
     "consensus_rescore",
     "delete_named_files",
     "distribute_files",

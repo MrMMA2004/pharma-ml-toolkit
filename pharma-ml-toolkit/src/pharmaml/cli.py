@@ -25,6 +25,7 @@ scans::
     pharmaml docking torsion --dir ligand_folders/
     pharmaml docking gpf-scan --dir docking_run/
     pharmaml docking vina-scan --dir vina_results/
+    pharmaml docking rescore --data summary.csv --columns best_lowest_energy,cluster_size
     pharmaml biology response-audit --data screen.csv --metric LN_IC50
     pharmaml biology top-biomarkers --expression expr.csv --response resp.csv --response-column pIC50
     pharmaml generative run --recipe qed --method ga --iterations 20 --seed 42
@@ -412,6 +413,39 @@ def _build_parser() -> argparse.ArgumentParser:
         help="rank Vina .log files of a results tree by best affinity",
     )
     vina_scan.add_argument("--dir", required=True, help="directory tree with Vina logs")
+
+    rescore = docking_sub.add_parser(
+        "rescore",
+        help="combine evidence columns of a summary CSV into a 0-1 consensus",
+    )
+    rescore.add_argument(
+        "--data", required=True,
+        help="docking summary table (CSV/TSV; scan --out or vina-scan exports)",
+    )
+    rescore.add_argument(
+        "--columns", required=True,
+        help="comma-separated evidence columns to combine",
+    )
+    rescore.add_argument(
+        "--weights", default=None,
+        help="comma-separated per-column weights (uniform when omitted)",
+    )
+    rescore.add_argument(
+        "--higher", default=None,
+        help="comma-separated columns to treat as higher-is-better (override)",
+    )
+    rescore.add_argument(
+        "--lower", default=None,
+        help="comma-separated columns to treat as lower-is-better (override)",
+    )
+    rescore.add_argument(
+        "--out", default=None,
+        help="output CSV (default <stem>_rescored.csv next to the input)",
+    )
+    rescore.add_argument(
+        "--top", type=int, default=15,
+        help="leaderboard rows to print (default 15)",
+    )
 
     campaign = docking_sub.add_parser(
         "campaign",
@@ -1419,6 +1453,63 @@ def _cmd_docking_vina_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_docking_rescore(args: argparse.Namespace) -> int:
+    """Combine a summary table's evidence columns into a consensus ranking."""
+    from pathlib import Path
+
+    from pharmaml.docking import consensus_breakdown
+    from pharmaml.exceptions import DataValidationError
+    from pharmaml.utils.io import read_table, write_table
+
+    frame = read_table(args.data)
+    columns = [c.strip() for c in args.columns.split(",") if c.strip()]
+    weights: list[float] | None = None
+    if args.weights:
+        try:
+            weights = [float(w) for w in args.weights.split(",")]
+        except ValueError as exc:
+            raise DataValidationError(
+                f"--weights must be comma-separated numbers ({args.weights!r})"
+            ) from exc
+    higher_is_better: dict[str, bool] = {}
+    for names, value in ((args.higher, True), (args.lower, False)):
+        if names:
+            higher_is_better.update(
+                {n.strip(): value for n in names.split(",") if n.strip()}
+            )
+
+    breakdown = consensus_breakdown(
+        frame, columns, weights=weights,
+        higher_is_better=higher_is_better or None,
+    )
+    rescored = frame.copy()
+    for column in breakdown.columns:
+        rescored[column] = breakdown[column].to_numpy()
+    rescored = rescored.sort_values(
+        "consensus", ascending=False, na_position="last"
+    ).reset_index(drop=True)
+
+    source = Path(args.data)
+    out = Path(args.out) if args.out else source.with_name(f"{source.stem}_rescored.csv")
+    written = write_table(rescored, out)
+
+    # the introspection lines: which evidence, which direction, which weight.
+    directions = higher_is_better or {}
+    recipe = ", ".join(
+        f"{col} ({'higher' if directions.get(col, not col.endswith(('energy', 'affinity'))) else 'lower'}=better"
+        + (f", weight {w:g}" if weights else "")
+        + ")"
+        for col, w in zip(columns, weights or [1.0] * len(columns))
+    )
+    print(rescored.head(max(args.top, 0)).to_string(index=False))
+    print(f"\nevidence: {recipe}")
+    print(
+        f"{len(rescored)} ligand(s) rescored -> {written} "
+        "(consensus = weighted mean of the _norm columns, higher is better)"
+    )
+    return 0
+
+
 def _cmd_docking_campaign(args: argparse.Namespace) -> int:
     """Dispatch ``pharmaml docking campaign <verb>`` sub-commands."""
     from pharmaml.docking import (
@@ -1983,6 +2074,7 @@ _HANDLERS = {
     ("docking", "torsion"): _cmd_docking_torsion,
     ("docking", "gpf-scan"): _cmd_docking_gpf_scan,
     ("docking", "vina-scan"): _cmd_docking_vina_scan,
+    ("docking", "rescore"): _cmd_docking_rescore,
     ("docking", "campaign"): _cmd_docking_campaign,
     ("biology", "response-audit"): _cmd_biology_response_audit,
     ("biology", "top-biomarkers"): _cmd_biology_top_biomarkers,
