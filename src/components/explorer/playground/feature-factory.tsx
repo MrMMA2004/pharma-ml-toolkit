@@ -61,6 +61,7 @@ const FAMILY_BITS: Record<FeatureFamily, number> = {
   rdkit_fingerprint: 2048,
   morgan_full: 2048,
   morgan_scaffold: 2048,
+  rism: 10, // 3D-RISM-KH solvation descriptors (pharmaml.chem.rism)
 };
 
 const FAMILY_LABELS: Record<FeatureFamily, string> = {
@@ -71,6 +72,7 @@ const FAMILY_LABELS: Record<FeatureFamily, string> = {
   rdkit_fingerprint: "RDKit fingerprint",
   morgan_full: "Morgan bits",
   morgan_scaffold: "Morgan-on-scaffold",
+  rism: "RISM-KH solvation",
 };
 
 const ALL_FAMILIES = Object.keys(FAMILY_BITS) as FeatureFamily[];
@@ -94,9 +96,10 @@ const TABLE_ROW_CAP = 200;
 
 type Status = "idle" | "running" | "done" | "error";
 
-/** Feature factory: SMILES list -> 7-family 10,000+ column matrix ->
+/** Feature factory: SMILES list -> 8-family 10,000+ column matrix ->
  *  variance ranking -> top-K selection, computed with real RDKit through
- *  the pharmaml.chem.features API on the server. */
+ *  the pharmaml.chem.features API on the server (the 8th family is the
+ *  3D-RISM-KH solvation descriptor set). */
 export function FeatureFactory() {
   const [smilesText, setSmilesText] = useState(DEFAULT_SMILES);
   const [families, setFamilies] = useState<FeatureFamily[]>(ALL_FAMILIES);
@@ -270,7 +273,7 @@ export function FeatureFactory() {
             <Label className="text-xs font-medium">
               Feature families{" "}
               <span className="font-normal text-muted-foreground">
-                ({families.length}/7 · ≈{widthEstimate.toLocaleString("en-US")} columns)
+                ({families.length}/8 · ≈{widthEstimate.toLocaleString("en-US")} columns)
               </span>
             </Label>
             <div className="flex flex-wrap gap-1.5">

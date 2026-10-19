@@ -44,6 +44,7 @@ from pharmaml.chem.features import (
     MORGAN_BITS,
     MORGAN_RADIUS,
     RDKIT_FP_BITS,
+    RISM_DESCRIPTOR_COUNT,
     FeatureReport,
     FeatureSelection,
     compute_feature_frame,
@@ -94,7 +95,7 @@ def library_smiles() -> list[str]:
 
 @pytest.fixture(scope="module")
 def full_library() -> tuple[pd.DataFrame, FeatureReport]:
-    """All 7 families over the shipped 10-row library (8 valid molecules)."""
+    """All 8 families over the shipped 10-row library (8 valid molecules)."""
     return compute_feature_frame(library_smiles())
 
 
@@ -152,6 +153,7 @@ class TestModuleContract:
             "rdkit_fingerprint",
             "morgan_full",
             "morgan_scaffold",
+            "rism",
         )
 
     def test_family_prefixes_mapping(self) -> None:
@@ -163,6 +165,7 @@ class TestModuleContract:
             "rdkit_fingerprint": "rdkit_bit_",
             "morgan_full": "morgan_full_bit_",
             "morgan_scaffold": "morgan_scaffold_bit_",
+            "rism": "rism_",
         }
         assert list(FAMILY_PREFIXES) == list(FEATURE_FAMILIES)
 
@@ -209,9 +212,11 @@ class TestModuleContract:
             "MORGAN_BITS",
             "MORGAN_RADIUS",
             "RDKIT_FP_BITS",
+            "RISM_DESCRIPTOR_COUNT",
             "FeatureReport",
             "FeatureSelection",
             "compute_feature_frame",
+            "compute_rism_descriptors",
             "family_of_column",
             "rank_features",
             "select_top_features",
@@ -430,7 +435,7 @@ class TestFamilyValues:
 
 
 # ---------------------------------------------------------------------------
-# The full 7-family run over the shipped ligand library
+# The full 8-family run over the shipped ligand library
 # ---------------------------------------------------------------------------
 class TestFullFamilyRun:
     """The 10,000+-column contract over examples/data/ligand_library.csv."""
@@ -450,9 +455,10 @@ class TestFullFamilyRun:
             "rdkit_fingerprint": 2048,
             "morgan_full": 2048,
             "morgan_scaffold": 2048,
+            "rism": RISM_DESCRIPTOR_COUNT,
         }
         assert list(report.families) == list(FEATURE_FAMILIES)  # canonical order
-        assert report.total_columns == 10_752 + n_props  # 5 x 2048 + 512 + props
+        assert report.total_columns == 10_752 + RISM_DESCRIPTOR_COUNT + n_props
         assert report.total_columns > 10_000  # the headline contract
         assert report.total_columns == sum(report.families.values())
         assert frame.shape == (8, report.total_columns)
@@ -471,7 +477,7 @@ class TestFullFamilyRun:
             start += width
         assert start == frame.shape[1]
         assert frame.columns[0].startswith("desc_")
-        assert frame.columns[-1] == "morgan_scaffold_bit_2047"
+        assert frame.columns[-1] == "rism_q_neg_frac"  # the rism family closes the frame
 
     def test_dropped_and_valid_accounting(
         self, full_library: tuple[pd.DataFrame, FeatureReport]
@@ -919,7 +925,7 @@ class TestSelectionMetadata:
         }
         assert meta["n_molecules"] == 8
         assert meta["dropped"] == [[8, "not_a_smiles"], [9, ""]]
-        assert meta["total_features"] == 10_752 + len(
+        assert meta["total_features"] == 10_752 + RISM_DESCRIPTOR_COUNT + len(
             rdMolDescriptors.Properties.GetAvailableProperties()
         )
         assert meta["k_requested"] == 3

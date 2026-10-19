@@ -183,6 +183,12 @@ def _res_dnn_reg():
     return ResidualMLPRegressor(random_state=42)
 
 
+def _hsvr():
+    from pharmaml.ml.hierarchical import HierarchicalSVR
+
+    return HierarchicalSVR(random_state=42)
+
+
 #: Optional requirement -> pip extra that installs it (used by the
 #: DependencyError hint in :func:`build_model` so every backend names
 #: its own extra instead of a hard-coded one).
@@ -316,7 +322,11 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
             "hidden_layer_sizes": [(64,), (128, 64), (256, 128, 64)],
             "alpha": [1e-4, 1e-3, 1e-2],
         },
-        notes="MLP neural net (upgrades ANN.py / ANN class.py)",
+        notes=(
+            "MLP neural net (upgrades ANN.py / ANN class.py); batch "
+            "normalisation: use the dnn/dnn_residual estimators "
+            "(batchnorm=True) — sklearn's MLP has no BN layers"
+        ),
     ),
     "xgboost": ModelSpec(
         name="xgboost",
@@ -352,7 +362,10 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
             "dropout": [0.0, 0.1],
             "learning_rate": [1e-3, 3e-4],
         },
-        notes="deep feed-forward network (PyTorch) — needs `pip install 'pharmaml[deep]'`",
+        notes=(
+            "deep feed-forward network (PyTorch, batchnorm=True available) — "
+            "needs `pip install 'pharmaml[deep]'`"
+        ),
     ),
     "dnn_residual": ModelSpec(
         name="dnn_residual",
@@ -364,7 +377,24 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
             "dropout": [0.0, 0.1],
             "learning_rate": [1e-3, 3e-4],
         },
-        notes="residual deep network (PyTorch) — needs `pip install 'pharmaml[deep]'`",
+        notes=(
+            "residual deep network (PyTorch, batchnorm=True available) — "
+            "needs `pip install 'pharmaml[deep]'`"
+        ),
+    ),
+    "hsvr": ModelSpec(
+        name="hsvr",
+        task="regression",
+        factory=lambda: _hsvr(),
+        param_grid={
+            "n_clusters": [2, 3, 4],
+            "C": [0.1, 1.0, 10.0],
+            "gamma": ["scale", "auto"],
+        },
+        notes=(
+            "hierarchical SVR: k-means local specialists blended with a "
+            "global SVR (regression only)"
+        ),
     ),
 }
 
@@ -408,6 +438,10 @@ MODEL_ALIASES: dict[str, str] = {
     "dnn_residual": "dnn_residual",
     "resnet": "dnn_residual",
     "residual_dnn": "dnn_residual",
+    "hsvr": "hsvr",
+    "hierarchical_svr": "hsvr",
+    "hierarchicalsvr": "hsvr",
+    "h_svr": "hsvr",
 }
 
 

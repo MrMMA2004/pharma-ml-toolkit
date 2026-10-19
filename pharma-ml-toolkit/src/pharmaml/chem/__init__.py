@@ -26,6 +26,7 @@ from pharmaml.chem.features import (
     MORGAN_BITS,
     MORGAN_RADIUS,
     RDKIT_FP_BITS,
+    RISM_DESCRIPTOR_COUNT,
     FeatureReport,
     FeatureSelection,
     compute_feature_frame,
@@ -34,6 +35,7 @@ from pharmaml.chem.features import (
     select_top_features,
     selection_metadata,
 )
+from pharmaml.chem.rism import RISM_DESCRIPTORS, compute_rism_descriptors
 from pharmaml.chem.similarity import (
     tanimoto_from_bitarrays,
     tanimoto_from_sets,
@@ -62,6 +64,8 @@ __all__ = [
     "MORGAN_BITS",
     "MORGAN_RADIUS",
     "RDKIT_FP_BITS",
+    "RISM_DESCRIPTORS",
+    "RISM_DESCRIPTOR_COUNT",
     "UNSUPPORTED_METALS",
     "FeatureReport",
     "FeatureSelection",
@@ -76,6 +80,7 @@ __all__ = [
     "compute_feature_frame",
     "compute_fingerprints",
     "compute_maccs",
+    "compute_rism_descriptors",
     "family_of_column",
     "ic50_to_pic50",
     "ki_to_pki",

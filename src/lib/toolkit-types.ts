@@ -502,7 +502,7 @@ export interface DockingRescoreResponse {
 /* Feature Factory (chem features + top-K selection)                   */
 /* ------------------------------------------------------------------ */
 
-/** The seven descriptor/fingerprint families of pharmaml.chem.features. */
+/** The eight descriptor/fingerprint/solvation families of pharmaml.chem.features. */
 export type FeatureFamily =
   | "descriptors"
   | "atompair_count"
@@ -510,7 +510,8 @@ export type FeatureFamily =
   | "avalon_count"
   | "rdkit_fingerprint"
   | "morgan_full"
-  | "morgan_scaffold";
+  | "morgan_scaffold"
+  | "rism";
 
 /** One ranked, selected feature row returned by /api/chem/features. */
 export interface FeatureFactoryRow {

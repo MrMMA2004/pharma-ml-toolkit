@@ -11,8 +11,9 @@ the notebook glue with explicit contracts:
   order and :data:`FAMILY_PREFIXES` the column naming, so a feature frame
   is always ``desc_*`` + ``apc_bit_*`` + ``ecfp_bit_*`` +
   ``avalon_count_*`` + ``rdkit_bit_*`` + ``morgan_full_bit_*`` +
-  ``morgan_scaffold_bit_*`` (5 x 2048 + 512 + the current RDKit property
-  list -- more than 10,000 columns in total).
+  ``morgan_scaffold_bit_*`` + ``rism_*`` (5 x 2048 + 512 + the current
+  RDKit property list + the ten 3D-RISM-KH solvation descriptors -- more
+  than 10,000 columns in total).
 * **Failure accounting instead of silent drops.**  Molecules that fail to
   parse or compute are dropped from the frame and recorded with their
   original row index in :class:`FeatureReport`; only the Murcko-scaffold
@@ -65,7 +66,7 @@ ValueError: smiles is empty -- pass at least one SMILES string
 >>> compute_feature_frame(["CCO"], families=("ecfp", "typo"))
 Traceback (most recent call last):
 ...
-ValueError: unknown feature family 'typo'; valid families are: descriptors, atompair_count, ecfp, avalon_count, rdkit_fingerprint, morgan_full, morgan_scaffold
+ValueError: unknown feature family 'typo'; valid families are: descriptors, atompair_count, ecfp, avalon_count, rdkit_fingerprint, morgan_full, morgan_scaffold, rism
 >>> compute_feature_frame(["CCO"], families=())
 Traceback (most recent call last):
 ...
@@ -76,7 +77,7 @@ ValueError: families is empty -- pass at least one family name
 >>> family_of_column("SMILES")
 Traceback (most recent call last):
 ...
-ValueError: unknown feature-column prefix in 'SMILES'; columns must start with one of: desc_, apc_bit_, ecfp_bit_, avalon_count_, rdkit_bit_, morgan_full_bit_, morgan_scaffold_bit_
+ValueError: unknown feature-column prefix in 'SMILES'; columns must start with one of: desc_, apc_bit_, ecfp_bit_, avalon_count_, rdkit_bit_, morgan_full_bit_, morgan_scaffold_bit_, rism_
 
 >>> frame, report = compute_feature_frame(["CCCCCCCC"], families=("morgan_scaffold",))
 >>> (frame.shape, float(frame.iloc[0].sum()), report.n_valid)   # acyclic: kept
@@ -146,6 +147,7 @@ __all__ = [
     "MORGAN_BITS",
     "MORGAN_RADIUS",
     "RDKIT_FP_BITS",
+    "RISM_DESCRIPTOR_COUNT",
     "FeatureReport",
     "FeatureSelection",
     "compute_feature_frame",
@@ -155,7 +157,7 @@ __all__ = [
     "selection_metadata",
 ]
 
-#: The seven feature families, in canonical output order.
+#: The eight feature families, in canonical output order.
 FEATURE_FAMILIES: tuple[str, ...] = (
     "descriptors",
     "atompair_count",
@@ -164,6 +166,7 @@ FEATURE_FAMILIES: tuple[str, ...] = (
     "rdkit_fingerprint",
     "morgan_full",
     "morgan_scaffold",
+    "rism",
 )
 
 #: Column-name prefix of every family (unique, no prefix is a prefix of
@@ -176,6 +179,7 @@ FAMILY_PREFIXES: dict[str, str] = {
     "rdkit_fingerprint": "rdkit_bit_",
     "morgan_full": "morgan_full_bit_",
     "morgan_scaffold": "morgan_scaffold_bit_",
+    "rism": "rism_",
 }
 
 #: Fold length of the sparse atom-pair count fingerprint.
@@ -191,6 +195,10 @@ MORGAN_BITS = 2048
 #: Morgan fingerprint radius (ECFP-style).
 MORGAN_RADIUS = 2
 
+#: Number of RISM-KH solvation descriptor columns (see
+#: :data:`pharmaml.chem.rism.RISM_DESCRIPTORS`).
+RISM_DESCRIPTOR_COUNT = 10
+
 #: Bit length of each fingerprint family, keyed by family name.
 _FAMILY_BITS: dict[str, int] = {
     "atompair_count": ATOMPAIR_BITS,
@@ -199,6 +207,7 @@ _FAMILY_BITS: dict[str, int] = {
     "rdkit_fingerprint": RDKIT_FP_BITS,
     "morgan_full": MORGAN_BITS,
     "morgan_scaffold": MORGAN_BITS,
+    "rism": RISM_DESCRIPTOR_COUNT,
 }
 
 #: Reference bit lengths recorded by :func:`selection_metadata` (the six
@@ -481,6 +490,10 @@ def compute_feature_frame(
       ``MurckoScaffold.GetScaffoldForMol`` (NOT the rar's
       ``GetMurckoScaffold``, which no longer exists), then Morgan bits;
       an empty (acyclic) scaffold yields a zero row, never a drop.
+    * ``rism``: the ten 3D-RISM-KH-inspired solvation descriptors from
+      :mod:`pharmaml.chem.rism` (embedded 3D geometry + Gasteiger
+      charges, pairwise tempered-KH surrogate), named
+      ``rism_gsolv_kcalmol`` ... ``rism_q_neg_frac``.
     """
     smiles_list = _as_smiles_list(smiles, "smiles")
     # Cheap validation BEFORE any parsing: caller bugs must not wait for a
@@ -584,12 +597,27 @@ def _family_plan(
 
         computers["rdkit_fingerprint"] = rdkit_vector
 
+    if "rism" in requested:
+        # 3D-RISM-KH solvation descriptors: the pairwise surrogate from
+        # pharmaml.chem.rism (embedding + Gasteiger charges inside).
+        from pharmaml.chem.rism import _rism_computer
+
+        computers["rism"] = _rism_computer()
+
     columns: list[str] = []
     family_widths: dict[str, int] = {}
     for family in requested:
         if family == "descriptors":
             width = len(property_names)
             columns.extend(f"desc_{name}" for name in property_names)
+        elif family == "rism":
+            # Import stays local so a missing/unimportable rism module
+            # surfaces only when the family is requested.
+            from pharmaml.chem.rism import _rism_family_columns
+
+            names = _rism_family_columns()
+            width = len(names)
+            columns.extend(names)
         else:
             width = _FAMILY_BITS[family]
             prefix = FAMILY_PREFIXES[family]

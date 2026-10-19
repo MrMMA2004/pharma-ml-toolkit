@@ -6,15 +6,15 @@ domains into one coherent package:
 | Domain | What it does |
 |---|---|
 | **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
-| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families**), cross-validated training (binary **and multiclass**), evaluation, persistence |
+| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families** + **hierarchical SVR**), cross-validated training (binary **and multiclass**), evaluation, persistence, keras-tuner-style hyperparameter search (`RandomSearch` / `Hyperband` over `HyperParameters` spaces) |
 | **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
 | **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management |
-| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, the seven-family **feature factory** (`compute_feature_frame` → 10,000+ columns per molecule, `rank_features`, `select_top_features` two-layer top-K selection), SMI/CSV/SDF format conversion, tautomer standardization + 3D ligand generation (SMILES→PDB), ligand-table reconciliation & merging |
+| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, the eight-family **feature factory** (`compute_feature_frame` → 10,000+ columns per molecule, `rank_features`, `select_top_features` two-layer top-K selection; the 8th family is the **3D-RISM-KH solvation descriptor** set `compute_rism_descriptors`), SMI/CSV/SDF format conversion, tautomer standardization + 3D ligand generation (SMILES→PDB), ligand-table reconciliation & merging |
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1853 tests).
+exceptions, input validation, and pytest coverage** (1962 tests).
 
 ---
 
@@ -237,7 +237,7 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 1853 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1962 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -614,10 +614,12 @@ top-to-bottom to see training metrics, NCA results and docking tables).
 
 Registry models: `logistic_regression`, `ridge_classifier`, `svm`, `knn`, `decision_tree`,
 `random_forest`, `adaboost`, `ann`, `lasso`, `ridge`, `elastic_net`, `linear_regression`,
-`huber_regression` (outlier-robust), plus `xgboost` / `lightgbm` / `catboost` when the
-optional packages are installed — and two **deep-learning families**: `dnn` (deep
-feed-forward MLP) and `dnn_residual` (residual net with learned skip projections),
-both classification **and** regression, powered by PyTorch (`pip install 'pharmaml[deep]'`).
+`huber_regression` (outlier-robust), `hsvr` (**hierarchical SVR** — k-means local
+specialists blended with a global SVR, regression only), plus `xgboost` / `lightgbm` /
+`catboost` when the optional packages are installed — and two **deep-learning families**:
+`dnn` (deep feed-forward MLP) and `dnn_residual` (residual net with learned skip
+projections), both classification **and** regression, powered by PyTorch
+(`pip install 'pharmaml[deep]'`).
 They are full sklearn-API citizens — `train_model("dnn", …)`, `compare_models(models=[…,
 "dnn"])` and grid search work unchanged; without torch installed they simply report
 unavailable instead of breaking anything.
@@ -640,10 +642,15 @@ board = compare_models(X, y, task="regression",
                        models=["elastic_net", "random_forest", "ann", "dnn", "dnn_residual"])
 ```
 
-Both families: minibatch Adam with weight decay, dropout, early stopping on a
+Both families: minibatch Adam with weight decay, dropout, **optional batch
+normalisation** (`batchnorm=True` inserts a `BatchNorm1d` between every hidden linear
+map and its activation — running statistics ride along in the portable weight dict,
+`batch_size=1` is rejected and singleton tail batches are skipped), early stopping on a
 validation split, per-feature standardization fitted inside `fit`, deterministic under
 `random_state`, multiclass softmax, and sklearn `clone`/`GridSearchCV`/pickle compatible.
 Aliases: `deep_mlp` → `dnn`, `resnet` / `residual_dnn` → `dnn_residual`.
+(sklearn's own MLP behind `ann` has no BN layers — the registry note points
+batch-normalisation users at the torch estimators.)
 
 **Target standardisation for regression.** Regression targets are z-scaled inside
 `fit` (on the training rows only) and mapped back at `predict`. Pharmaceutical
@@ -654,6 +661,87 @@ is learned (a plain `MLPRegressor`-style net then loses to linear regression by
 an order of magnitude). With internal scaling the deep models are competitive
 from the first epochs: in the cell line notebook's leaderboard `dnn` posts the
 best CV RMSE (0.47 vs 0.49 for the tuned elastic net).
+
+#### Hierarchical SVR (`hsvr`) — local specialists for heterogeneous data
+
+One global kernel SVR underfits when different regions of chemical space carry
+different input–output structure. `HierarchicalSVR` (registry key `hsvr`, aliases
+`hierarchical_svr` / `h_svr`) keeps the global SVR as the upper level and adds
+k-means local specialists below it; predictions blend the nearest cluster's local
+model with the global one, the local weight fading from `alpha` at the centroid to
+0 at the cluster's trust radius — far-from-training queries fall back to the global
+model instead of extrapolating through an unfamiliar local kernel:
+
+```python
+from pharmaml.ml import HierarchicalSVR, train_model
+
+result = train_model("hsvr", "regression", X_train, y_train, tune=True)
+hsvr = result.model
+hsvr.cluster_sizes_    # rows per specialist
+hsvr.radii_            # per-cluster trust radii (standardised space)
+
+# Or standalone, fully sklearn-compatible (clone/GridSearchCV/pickle):
+hsvr = HierarchicalSVR(n_clusters=3, alpha=0.8, radius_factor=2.0,
+                       random_state=42).fit(X_train, y_train)
+```
+
+#### Keras-tuner-style hyperparameter search (`ml.tuner`)
+
+The `HyperParameters` / `RandomSearch` / `Hyperband` programming model from
+[Keras Tuner](https://keras.io/keras_tuner/), re-implemented over ANY
+scikit-learn-compatible estimator — no TensorFlow requirement (the toolkit's deep
+nets are PyTorch, the legacy ANN is sklearn's MLP). The hypermodel declares its
+space by calling `hp.Int(...)`/`hp.Float(...)`/`hp.Choice(...)`/`hp.Boolean(...)`
+inside the builder; the tuner samples, cross-validates and refits the winner:
+
+```python
+from pharmaml.ml import RandomSearch, Hyperband, build_ann_regressor, build_deep_regressor
+
+# Any sklearn scorer name (or a callable(estimator, X, y) -> float); higher wins.
+results = RandomSearch(build_ann_regressor, objective="r2",
+                       max_trials=12, cv=3, seed=42).search(X, y)
+results.best_params, results.best_score, results.best_estimator
+print(results.summary())            # the leaderboard
+results.trials_frame().to_csv("trials.csv", index=False)
+
+# Successive halving over the resource hyperparameter (epochs for the deep nets,
+# max_iter for the sklearn ANN; batchnorm is itself searchable):
+results = Hyperband(build_deep_regressor, objective="r2",
+                    resource="epochs", max_resource=81).search(X, y)
+```
+
+Ready-made hypermodels: `build_ann_regressor` / `build_ann_classifier` (sklearn
+MLP), `build_deep_regressor` / `build_deep_classifier` (PyTorch, with
+`batchnorm` a `hp.Boolean` slot) and `build_hsvr`. The CLI twin is
+`pharmaml ml tune` (random or hyperband, leaderboard + trials table +
+`--save-best` bundle). Failed trials are recorded, not fatal; sampling is
+seeded, so the same seed + data always reproduce the same search.
+
+#### 3D-RISM-KH solvation descriptors (`chem.rism`)
+
+Ten solvation-theory descriptors shaped after the quantities a 3D-RISM-KH
+analysis reports — site distribution peaks (`RISM_Ow_gmax` / `RISM_Hw_gmax`),
+first-shell coordination numbers (`RISM_*_cn1`), an excluded-volume estimate,
+the Gasteiger dipole, charge hydration asymmetry, and a solvation free energy
+decomposed into Lennard-Jones and Coulomb parts — computed from a documented
+*pairwise tempered-KH surrogate* (ETKDG 3D embedding + Gasteiger charges +
+screened site potentials) that runs in milliseconds instead of grid-hours.
+Fully deterministic; intended as QSAR features for solubility/permeability
+endpoints, not as a production RISM calculation:
+
+```python
+from pharmaml.chem import compute_rism_descriptors
+
+frame = compute_rism_descriptors(["CCO", "c1ccccc1"], solvent="spc")  # or "tip3p"
+# RISM_Gsolv_kcalmol, RISM_Glj_kcalmol, RISM_Gcoul_kcalmol, RISM_Ow_gmax,
+# RISM_Hw_gmax, RISM_Ow_cn1, RISM_Hw_cn1, RISM_Ow_exclvol_A3,
+# RISM_dipole_D, RISM_q_neg_frac
+```
+
+The same ten columns are the **8th feature-factory family** (`rism_` prefix —
+`compute_feature_frame(smiles, families=("descriptors", "rism", ...))`), so the
+solvation descriptors ride along the 10,000-column ranking/selection pipeline.
+The CLI twin is `pharmaml chem rism --data mols.csv [--solvent tip3p]`.
 
 #### Classification — two recipes: exactly 2 classes, or K classes of your choosing
 
@@ -1121,8 +1209,12 @@ pharmaml data convert --data ligands.csv --to smi          # table -> .smi lines
 pharmaml ml train --data my.csv --target activity --task auto
 pharmaml ml train --data my.csv --model rf --cv 5 --plots --keep-categorical
 pharmaml ml compare --data my.csv --target activity --out board.csv --plot
+pharmaml ml tune --data my.csv --estimator ann --max-trials 12 --objective r2    # keras-tuner-style search
+pharmaml ml tune --data my.csv --estimator dnn --searcher hyperband              # successive halving over epochs
+pharmaml ml tune --data my.csv --estimator hsvr --save-best tuned.joblib         # hierarchical SVR, refit winner
 pharmaml chem pic50 --data data.csv --column "IC50 (nM)" --unit nM
 pharmaml chem descriptors --data data.csv --smiles-col SMILES
+pharmaml chem rism --data data.csv --smiles-col SMILES --solvent spc             # 3D-RISM-KH solvation descriptors
 pharmaml chem compare --data-a d_summary.csv --data-b ligands.csv --column Ligand --figure overlap.png
 pharmaml chem merge --dir batches/ --first-columns SMILES,pIC50
 pharmaml pharma pk --data conc.csv --time time --conc conc

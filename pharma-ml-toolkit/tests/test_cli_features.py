@@ -1717,3 +1717,129 @@ class TestGenerativeRunParetoFlag:
         assert code == 0
         out = capsys.readouterr().out
         assert "pareto   : Pareto front over 3 objectives" in out
+
+
+# ---------------------------------------------------------------------------
+# chem rism — the 3D-RISM-KH solvation descriptor table
+# ---------------------------------------------------------------------------
+class TestChemRismCommand:
+    @pytest.fixture()
+    def mols_csv(self, tmp_path) -> str:
+        frame = pd.DataFrame(
+            {
+                "SMILES": ["CCO", "c1ccccc1", "CC(=O)Oc1ccccc1C(=O)O"],
+                "Name": ["ethanol", "benzene", "aspirin"],
+            }
+        )
+        path = tmp_path / "mols.csv"
+        frame.to_csv(path, index=False)
+        return str(path)
+
+    def test_rism_writes_default_output(self, mols_csv, capsys) -> None:
+        code = main(["chem", "rism", "--data", mols_csv])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "3D-RISM-KH descriptors ->" in out
+        assert "10 columns" in out and "solvent=spc" in out
+        written = Path(mols_csv).with_name("mols_rism.csv")
+        assert written.is_file()
+        frame = pd.read_csv(written)
+        assert "RISM_Gsolv_kcalmol" in frame.columns
+        assert "RISM_dipole_D" in frame.columns
+        assert len(frame) == 3
+
+    def test_rism_explicit_out_and_solvent(self, mols_csv, tmp_path, capsys) -> None:
+        out_path = tmp_path / "solvation.tsv"
+        code = main([
+            "chem", "rism", "--data", mols_csv, "--solvent", "tip3p",
+            "--out", str(out_path),
+        ])
+        assert code == 0
+        assert "solvent=tip3p" in capsys.readouterr().out
+        assert out_path.is_file()
+
+    def test_rism_missing_smiles_column_errors(self, tmp_path, capsys) -> None:
+        path = tmp_path / "no_smiles.csv"
+        pd.DataFrame({"a": [1]}).to_csv(path, index=False)
+        code = main(["chem", "rism", "--data", str(path)])
+        assert code == 1
+        assert "not found" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# ml tune — the keras-tuner-style hyperparameter search
+# ---------------------------------------------------------------------------
+class TestMLTuneCommand:
+    def test_random_search_regression_with_out_and_save_best(
+        self, reg_csv, tmp_path, capsys, monkeypatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        trials_path = tmp_path / "trials.csv"
+        bundle_path = tmp_path / "tuned.joblib"
+        code = main([
+            "ml", "tune", "--data", reg_csv, "--estimator", "ann",
+            "--max-trials", "2", "--cv", "2", "--seed", "11",
+            "--out", str(trials_path), "--save-best", str(bundle_path),
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "tuner:    random over ann (objective=r2)" in out
+        assert "RandomSearch: 2 trial(s)" in out
+        assert "best:" in out and "score:" in out
+        assert "saved:" in out
+        trials = pd.read_csv(trials_path)
+        assert len(trials) == 2
+        assert "n_layers" in trials.columns
+        assert bundle_path.is_file()
+
+    def test_float_targets_flip_to_regression(self, reg_csv, capsys) -> None:
+        code = main([
+            "ml", "tune", "--data", reg_csv, "--max-trials", "1", "--cv", "2",
+        ])
+        assert code == 0
+        # pIC50-style continuous targets must search the regression
+        # hypermodel even when the loader's class-count heuristic
+        # initially calls them classification.
+        assert "task:     regression" in capsys.readouterr().out
+
+    def test_hsvr_estimator(self, reg_csv, tmp_path, capsys, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        code = main([
+            "ml", "tune", "--data", reg_csv, "--estimator", "hsvr",
+            "--max-trials", "2", "--cv", "2",
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "tuner:    random over hsvr" in out
+        assert "n_clusters" in out
+
+    def test_hyperband_reports_rung_resources(
+        self, reg_csv, tmp_path, capsys, monkeypatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        code = main([
+            "ml", "tune", "--data", reg_csv, "--estimator", "ann",
+            "--searcher", "hyperband", "--max-resource", "9",
+            "--min-resource", "1", "--cv", "2",
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "tuner:    hyperband over ann" in out
+        assert "Hyperband:" in out
+        assert "resource=" in out
+
+    def test_hyperband_over_hsvr_errors(self, reg_csv, capsys) -> None:
+        code = main([
+            "ml", "tune", "--data", reg_csv, "--estimator", "hsvr",
+            "--searcher", "hyperband",
+        ])
+        assert code == 1
+        assert "does not declare the resource" in capsys.readouterr().err
+
+    def test_classification_objective_auto(self, clf_csv, tmp_path, capsys, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        code = main([
+            "ml", "tune", "--data", clf_csv, "--max-trials", "1", "--cv", "2",
+        ])
+        assert code == 0
+        assert "objective=accuracy" in capsys.readouterr().out

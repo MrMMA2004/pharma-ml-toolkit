@@ -179,14 +179,15 @@ class TestRegistry:
             assert spec.requires == "torch"
             assert "PyTorch" in spec.notes
 
-    def test_registry_has_twenty_entries(self) -> None:
+    def test_registry_has_twenty_one_entries(self) -> None:
         entries = list_models(only_available=False)
-        assert len(entries) == 20
+        assert len(entries) == 21
         dnn_entries = [e for e in entries if e["name"] in {"dnn", "dnn_residual"}]
         assert len(dnn_entries) == 2
+        assert {e["name"] for e in entries} >= {"hsvr", "dnn", "dnn_residual"}
         if not all(e["available"] for e in dnn_entries):
             pytest.skip("torch not installed in this environment")
-        assert len(list_models()) == 20
+        assert len(list_models()) == 21
 
     def test_aliases_resolve(self) -> None:
         assert resolve_model_name("deep_mlp") == "dnn"
@@ -225,8 +226,8 @@ class TestRegistry:
         entries = list_models(only_available=False)
         flagged = {e["name"]: e["available"] for e in entries}
         assert flagged["dnn"] is False and flagged["dnn_residual"] is False
-        # only_available=True drops them (18 core/boosting entries remain)
-        assert len(list_models()) == 18
+        # only_available=True drops them (19 core/boosting/hsvr entries remain)
+        assert len(list_models()) == 19
         with pytest.raises(DependencyError, match="torch"):
             build_model("dnn", "classification")
 
@@ -373,6 +374,7 @@ class TestSklearnCompatibility:
             "val_split",
             "random_state",
             "device",
+            "batchnorm",
         }
         for estimator in (
             DeepMLPClassifier(),
@@ -1057,3 +1059,93 @@ class TestFeatureNameContract:
         assert list(model.feature_names_in_) == [
             f"b{i}" for i in range(X_train.shape[1])
         ]
+
+
+# ---------------------------------------------------------------------------
+# Batch normalisation (batchnorm=True)
+# ---------------------------------------------------------------------------
+class TestBatchNormalization:
+    """The optional BatchNorm1d layer between linear maps and activations."""
+
+    def test_regressor_learns_with_batchnorm(self, regression_data: tuple) -> None:
+        X_train, X_test, y_train, y_test = regression_data
+        model = fast_regressor(batchnorm=True, epochs=60).fit(X_train, y_train)
+        assert model.score(X_test, y_test) > 0.9
+        assert np.isfinite(model.predict(X_test)).all()
+
+    def test_running_statistics_persist_in_the_weight_dict(self) -> None:
+        X = np.linspace(0.0, 1.0, 40).reshape(-1, 1)
+        y = 2.0 * X[:, 0] + 1.0
+        model = fast_regressor(batchnorm=True, epochs=10).fit(X, y)
+        bn_keys = [key for key in model._weights if "running_mean" in key]
+        assert bn_keys, "BatchNorm buffers missing from the portable weights"
+        assert all(np.isfinite(model._weights[key]).all() for key in bn_keys)
+
+    def test_determinism_with_batchnorm(self, regression_data: tuple) -> None:
+        X_train, _, y_train, _ = regression_data
+        first = fast_regressor(batchnorm=True, epochs=5).fit(X_train, y_train)
+        second = fast_regressor(batchnorm=True, epochs=5).fit(X_train, y_train)
+        assert np.array_equal(first.predict(X_train), second.predict(X_train))
+
+    def test_classifier_with_batchnorm(self, binary_data: tuple) -> None:
+        X_train, X_test, y_train, y_test = binary_data
+        model = fast_classifier(batchnorm=True, epochs=40).fit(X_train, y_train)
+        assert accuracy_score(y_test, model.predict(X_test)) > 0.85
+        probabilities = model.predict_proba(X_test)
+        assert np.allclose(probabilities.sum(axis=1), 1.0)
+
+    def test_residual_estimators_with_batchnorm(self, regression_data: tuple) -> None:
+        X_train, _, y_train, _ = regression_data
+        for estimator in (
+            ResidualMLPRegressor(hidden_layers=(16, 16), epochs=30, random_state=0),
+            ResidualMLPClassifier(hidden_layers=(16, 16), epochs=30, random_state=0),
+        ):
+            fitted = estimator.set_params(batchnorm=True).fit(X_train, y_train)
+            assert np.isfinite(fitted.predict(X_train)).all()
+
+    def test_batchnorm_requires_a_real_batch_size(self) -> None:
+        X = np.linspace(0.0, 1.0, 20).reshape(-1, 1)
+        y = X[:, 0]
+        with pytest.raises(ModelError, match="batch_size must be >= 2"):
+            DeepMLPRegressor(batchnorm=True, batch_size=1).fit(X, y)
+
+    def test_batchnorm_rejects_non_bool(self) -> None:
+        with pytest.raises(ModelError, match="batchnorm must be a bool"):
+            DeepMLPRegressor(batchnorm=1).fit(
+                np.zeros((4, 2)), np.zeros(4)
+            )
+
+    def test_singleton_tail_batches_are_skipped(self) -> None:
+        # 8 training rows with batch_size 7 leaves a 1-sample tail batch;
+        # BatchNorm1d cannot normalise it, so the epoch skips it instead
+        # of crashing.
+        X = np.linspace(0.0, 1.0, 8).reshape(-1, 1)
+        y = 2.0 * X[:, 0]
+        model = fast_regressor(batchnorm=True, batch_size=7, epochs=5).fit(X, y)
+        assert np.isfinite(model.predict(X)).all()
+
+    def test_batchnorm_needs_two_training_rows(self) -> None:
+        # val_split steals every row but one from training
+        X = np.zeros((2, 1)) + np.array([[0.0], [1.0]])
+        y = np.array([0.0, 1.0])
+        with pytest.raises(ModelError, match="at least 2 training rows"):
+            DeepMLPRegressor(
+                batchnorm=True, val_split=0.5, epochs=2, random_state=0
+            ).fit(X, y)
+
+    def test_pickle_round_trip_rebuilds_the_bn_layers(self, regression_data: tuple) -> None:
+        import io
+
+        X_train, _, y_train, _ = regression_data
+        model = fast_regressor(batchnorm=True, epochs=3).fit(X_train, y_train)
+        buffer = io.BytesIO()
+        joblib.dump(model, buffer)
+        buffer.seek(0)
+        restored = joblib.load(buffer)
+        assert np.allclose(restored.predict(X_train), model.predict(X_train))
+
+    def test_get_params_and_clone_carry_batchnorm(self) -> None:
+        params = DeepMLPRegressor(batchnorm=True).get_params()
+        assert params["batchnorm"] is True
+        twin = clone(DeepMLPRegressor(batchnorm=True))
+        assert twin.get_params()["batchnorm"] is True

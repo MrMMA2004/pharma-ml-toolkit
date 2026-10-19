@@ -5,9 +5,10 @@ the name "ANN"; this module brings *real* deep learning to the
 toolkit: feed-forward networks (:class:`DeepMLPClassifier` /
 :class:`DeepMLPRegressor`) and residual networks
 (:class:`ResidualMLPClassifier` / :class:`ResidualMLPRegressor`) built
-on PyTorch, with minibatch Adam training (weight decay), early
-stopping on a held-out validation split and per-feature
-standardisation fitted on the training data.
+on PyTorch, with minibatch Adam training (weight decay), optional
+batch normalisation (``batchnorm=True``), early stopping on a held-out
+validation split and per-feature standardisation fitted on the training
+data.
 
 The estimators follow the scikit-learn estimator contract (``fit`` /
 ``predict`` / ``predict_proba``, ``get_params`` / ``set_params``,
@@ -63,6 +64,17 @@ pharmaml.exceptions.ModelError: dropout must be in [0, 1), got 1.5
 True
 >>> twin = DeepMLPRegressor(hidden_layers=(32,), epochs=300, random_state=0).fit(X, y)
 >>> np.array_equal(net.predict(X), twin.predict(X))   # same seed, identical net
+True
+
+Batch normalisation (``batchnorm=True``) inserts a ``BatchNorm1d``
+between every hidden linear map and its activation; the running
+statistics ride along in the portable NumPy weight dict:
+
+>>> bn = DeepMLPRegressor(hidden_layers=(32,), batchnorm=True, epochs=200,
+...                        random_state=0).fit(X, y)
+>>> any("running_mean" in key for key in bn._weights)   # BN buffers persisted
+True
+>>> bn.score(X, y) > 0.9     # the same surface, normalised pre-activations
 True
 """
 
@@ -144,17 +156,25 @@ def _build_network(
     n_out: int,
     activation: str,
     dropout: float,
+    batchnorm: bool = False,
 ) -> Any:
     """Construct an *untrained* torch network for the given architecture.
 
-    ``residual=False`` builds a plain feed-forward stack (Linear ->
-    activation -> dropout between hidden layers); ``residual=True``
-    builds :class:`_ResidualNet` blocks with skip connections.  An
-    empty ``hidden`` tuple yields a single linear layer (a generalised
-    linear model) in both cases.
+    ``residual=False`` builds a plain feed-forward stack; each hidden
+    layer is Linear -> (BatchNorm1d) -> activation -> dropout, with the
+    optional batch normalisation inserted between the linear map and
+    the activation (the canonical order — the normalised pre-activation
+    feeds a better-conditioned nonlinearity, and inference runs in eval
+    mode against the stored running statistics).  ``residual=True``
+    builds :class:`_ResidualNet` blocks with skip connections (each
+    block: fc1 -> bn1 -> act -> dropout -> fc2 -> bn2, then the additive
+    skip and a final activation).  An empty ``hidden`` tuple yields a
+    single linear layer (a generalised linear model) in both cases —
+    with no hidden layer there is nothing to normalise, so ``batchnorm``
+    is silently irrelevant there.
     """
     if residual:
-        return _torch_networks()[2](n_in, hidden, n_out, activation, dropout)
+        return _torch_networks()[2](n_in, hidden, n_out, activation, dropout, batchnorm)
 
     from torch import nn
 
@@ -162,7 +182,9 @@ def _build_network(
     widths = [n_in, *hidden, n_out]
     for i in range(len(widths) - 1):
         layers.append(nn.Linear(widths[i], widths[i + 1]))
-        if i < len(widths) - 2:  # hidden layer -> activation + dropout
+        if i < len(widths) - 2:  # hidden layer -> (bn) -> activation -> dropout
+            if batchnorm:
+                layers.append(nn.BatchNorm1d(widths[i + 1]))
             layers.append(_make_activation(activation))
             if dropout > 0:
                 layers.append(nn.Dropout(dropout))
@@ -188,19 +210,29 @@ def _torch_networks() -> tuple[Any, type, type]:
         from torch import nn
 
         class ResidualBlock(nn.Module):
-            """Linear -> activation -> dropout -> Linear with an input skip.
+            """Linear -> BN -> activation -> dropout -> Linear -> BN with an
+            input skip.
 
             The skip is an identity when input and output widths match,
             else a learned linear projection (the dense analogue of a
-            1x1 convolution).
+            1x1 convolution).  Batch normalisation (when enabled) sits
+            after each linear map and BEFORE the residual add, so the
+            summed branches stay on a comparable scale.
             """
 
             def __init__(
-                self, width_in: int, width_out: int, activation: str, dropout: float
+                self,
+                width_in: int,
+                width_out: int,
+                activation: str,
+                dropout: float,
+                batchnorm: bool,
             ) -> None:
                 super().__init__()
                 self.fc1 = nn.Linear(width_in, width_out)
                 self.fc2 = nn.Linear(width_out, width_out)
+                self.bn1 = nn.BatchNorm1d(width_out) if batchnorm else nn.Identity()
+                self.bn2 = nn.BatchNorm1d(width_out) if batchnorm else nn.Identity()
                 self.act = _make_activation(activation)
                 self.drop = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
                 self.skip = (
@@ -208,8 +240,8 @@ def _torch_networks() -> tuple[Any, type, type]:
                 )
 
             def forward(self, x: torch.Tensor) -> torch.Tensor:
-                out = self.fc2(self.drop(self.act(self.fc1(x))))
-                return self.act(out + self.skip(x))
+                out = self.fc2(self.drop(self.act(self.bn1(self.fc1(x)))))
+                return self.act(self.bn2(out) + self.skip(x))
 
         class ResidualNet(nn.Module):
             """A stack of :class:`ResidualBlock` layers plus a linear head."""
@@ -221,11 +253,12 @@ def _torch_networks() -> tuple[Any, type, type]:
                 n_out: int,
                 activation: str,
                 dropout: float,
+                batchnorm: bool = False,
             ) -> None:
                 super().__init__()
                 widths = [n_in, *hidden]
                 self.blocks = nn.ModuleList(
-                    ResidualBlock(widths[i], widths[i + 1], activation, dropout)
+                    ResidualBlock(widths[i], widths[i + 1], activation, dropout, batchnorm)
                     for i in range(len(widths) - 1)
                 )
                 self.head = nn.Linear(widths[-1], n_out)
@@ -316,6 +349,16 @@ class _BaseDeepEstimator(BaseEstimator):
             raise ModelError(
                 f"random_state must be an integer seed (determinism contract), "
                 f"got {self.random_state!r}"
+            )
+        if not isinstance(self.batchnorm, bool):
+            raise ModelError(
+                f"batchnorm must be a bool, got {self.batchnorm!r}"
+            )
+        if self.batchnorm and int(self.batch_size) < 2:
+            raise ModelError(
+                "batch_size must be >= 2 when batchnorm=True — BatchNorm1d "
+                "statistics are undefined on single-sample training batches "
+                f"(got batch_size={self.batch_size!r})"
             )
         return hidden
 
@@ -634,6 +677,7 @@ class _BaseDeepEstimator(BaseEstimator):
         torch.manual_seed(int(self.random_state))
 
         dropout = float(self.dropout)
+        batchnorm = bool(self.batchnorm)
         # Snapshot of the *fitted* architecture — later set_params calls
         # cannot desynchronise the weight rebuild.
         self._net_spec_: dict[str, Any] = {
@@ -643,9 +687,16 @@ class _BaseDeepEstimator(BaseEstimator):
             "n_out": int(n_out),
             "activation": self.activation,
             "dropout": dropout,
+            "batchnorm": batchnorm,
         }
         network = _build_network(
-            self._residual, self._net_spec_["n_in"], hidden, n_out, self.activation, dropout
+            self._residual,
+            self._net_spec_["n_in"],
+            hidden,
+            n_out,
+            self.activation,
+            dropout,
+            batchnorm,
         )
         network.to(device)
 
@@ -670,6 +721,12 @@ class _BaseDeepEstimator(BaseEstimator):
             val_t = torch.as_tensor(val_idx, dtype=torch.long, device=device)
             X_val, y_val = X_t[val_t], y_t[val_t]
 
+        if batchnorm and int(train_t.numel()) < 2:
+            raise ModelError(
+                "batchnorm=True needs at least 2 training rows — got "
+                f"{int(train_t.numel())} (lower val_split or disable batchnorm)"
+            )
+
         epochs = int(self.epochs)
         batch_size = int(self.batch_size)
         patience = int(self.patience)
@@ -685,6 +742,15 @@ class _BaseDeepEstimator(BaseEstimator):
             batch_losses: list[float] = []
             for start in range(0, perm.numel(), batch_size):
                 batch = perm[start : start + batch_size]
+                members = int(batch.numel())
+                if members < 2 and batchnorm:
+                    # BatchNorm1d cannot compute batch statistics from a
+                    # single sample (the partial last batch); skip the
+                    # leftover row instead of crashing the epoch.
+                    _LOG.debug(
+                        "skipping %d-sample batch (BatchNorm1d needs >= 2)", members
+                    )
+                    continue
                 optimizer.zero_grad()
                 loss = criterion(network(X_tr[batch]), y_tr[batch])
                 loss.backward()
@@ -777,8 +843,13 @@ class _BaseDeepEstimator(BaseEstimator):
 
             spec = self._net_spec_
             network = _build_network(
-                spec["residual"], spec["n_in"], spec["hidden"], spec["n_out"],
-                spec["activation"], spec["dropout"],
+                spec["residual"],
+                spec["n_in"],
+                spec["hidden"],
+                spec["n_out"],
+                spec["activation"],
+                spec["dropout"],
+                spec["batchnorm"],
             )
             network.load_state_dict(
                 {key: torch.from_numpy(value) for key, value in self._weights.items()}
@@ -844,6 +915,15 @@ class DeepMLPClassifier(ClassifierMixin, _BaseDeepEstimator):
     dropout:
         Dropout probability applied after every hidden activation
         (``0`` disables it).
+    batchnorm:
+        Insert a ``torch.nn.BatchNorm1d`` between every hidden linear
+        map and its activation (``False`` by default).  Training-time
+        batch statistics drive the normalisation (running averages are
+        tracked for inference, where the network always runs in eval
+        mode); a ``batch_size`` of 1 is rejected at fit time and
+        partial singleton tail batches are skipped — BatchNorm1d
+        statistics are undefined on single samples.  With no hidden
+        layers the flag has nothing to normalise and is ignored.
     activation:
         Hidden activation token: ``'relu'``, ``'tanh'``, ``'gelu'`` or
         ``'sigmoid'``.
@@ -913,6 +993,7 @@ class DeepMLPClassifier(ClassifierMixin, _BaseDeepEstimator):
         hidden_layers=(64, 32),
         dropout=0.1,
         activation="relu",
+        batchnorm=False,
         epochs=120,
         batch_size=32,
         learning_rate=1e-3,
@@ -925,6 +1006,7 @@ class DeepMLPClassifier(ClassifierMixin, _BaseDeepEstimator):
         self.hidden_layers = hidden_layers
         self.dropout = dropout
         self.activation = activation
+        self.batchnorm = batchnorm
         self.epochs = epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -990,6 +1072,7 @@ class DeepMLPRegressor(RegressorMixin, _BaseDeepEstimator):
         hidden_layers=(64, 32),
         dropout=0.1,
         activation="relu",
+        batchnorm=False,
         epochs=120,
         batch_size=32,
         learning_rate=1e-3,
@@ -1002,6 +1085,7 @@ class DeepMLPRegressor(RegressorMixin, _BaseDeepEstimator):
         self.hidden_layers = hidden_layers
         self.dropout = dropout
         self.activation = activation
+        self.batchnorm = batchnorm
         self.epochs = epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -1073,6 +1157,7 @@ class ResidualMLPClassifier(ClassifierMixin, _BaseDeepEstimator):
         hidden_layers=(64, 64, 64),
         dropout=0.1,
         activation="relu",
+        batchnorm=False,
         epochs=120,
         batch_size=32,
         learning_rate=1e-3,
@@ -1085,6 +1170,7 @@ class ResidualMLPClassifier(ClassifierMixin, _BaseDeepEstimator):
         self.hidden_layers = hidden_layers
         self.dropout = dropout
         self.activation = activation
+        self.batchnorm = batchnorm
         self.epochs = epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -1140,6 +1226,7 @@ class ResidualMLPRegressor(RegressorMixin, _BaseDeepEstimator):
         hidden_layers=(64, 64, 64),
         dropout=0.1,
         activation="relu",
+        batchnorm=False,
         epochs=120,
         batch_size=32,
         learning_rate=1e-3,
@@ -1152,6 +1239,7 @@ class ResidualMLPRegressor(RegressorMixin, _BaseDeepEstimator):
         self.hidden_layers = hidden_layers
         self.dropout = dropout
         self.activation = activation
+        self.batchnorm = batchnorm
         self.epochs = epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate

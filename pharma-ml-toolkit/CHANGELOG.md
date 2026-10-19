@@ -10,6 +10,85 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.36] — 2026-10-19
+
+### Added — the four-request round: 3D-RISM-KH descriptors, HSVR, the keras-tuner, batch normalization
+
+- **3D-RISM-KH-inspired solvation descriptors** (`pharmaml.chem.rism`): the
+  ten quantities a 3D-RISM-KH analysis reports — solvation free energy
+  decomposed into Lennard-Jones and Coulomb parts, water O/H site
+  distribution peaks, first-shell coordination numbers, a hydration-
+  exclusion volume, the Gasteiger dipole and the charge-hydration
+  asymmetry — computed from a documented *pairwise tempered-KH surrogate*
+  that runs in milliseconds: ETKDGv3 embedding (fixed seeds, MMFF94→UFF
+  relaxation) + Gasteiger charges + Lorentz-Berthelot site potentials
+  with a smooth dielectric ramp (1 at contact → 78.4 far away — the
+  mean-field stand-in for the OZ-solve screening the surrogate cannot
+  express) + the KH closure branches with the attractive Boltzmann
+  exponent tempered at K=2.0 (bare point-charge H-bond contacts would
+  reach e**33; real RISM water site peaks live at ~5-10 = e**K).  Site
+  densities respect water stoichiometry (1 O + 2 H per molecule — a
+  naive equal-density solvent is net-charged and its 1/d tails blew
+  ethanol's Gcoul to -28,000 kcal/mol); the shell window anchors at the
+  pair's g peak (the first g>=1 crossing sits in the 1.0-1.2 band on the
+  LJ wall and closed the window instantly — benzene's Hw_cn1 was 0.0);
+  the excluded-volume onset uses the steric (LJ-only) distribution
+  (like-charge pairs keep the total-potential g < 0.5 out into the
+  screened tail).  SPC and TIP3P site models; fully deterministic
+  (repeated calls bit-identical); the Gasteiger dipole of ethanol lands
+  at 1.62 D vs the experimental 1.69 D.  The same ten columns are the
+  **8th feature-factory family** (`rism_` prefix) riding the
+  10,000-column ranking/selection pipeline.  CLI twin: `chem rism
+  --data mols.csv [--solvent tip3p] [--temperature 310]`.
+- **HierarchicalSVR** (`pharmaml.ml.hierarchical`, registry key `hsvr`,
+  aliases `hierarchical_svr`/`h_svr`): the two-level regression
+  estimator for heterogeneous QSAR data — k-means local specialists
+  (seeded, standardised space) blended with a global SVR, the local
+  weight fading linearly from `alpha` at the centroid to 0 at the
+  cluster's trust radius so far queries fall back to the global model.
+  Full sklearn contract (clone/GridSearchCV/pickle), constant-target
+  clusters answered by a stand-in constant (SVR's dual has no support
+  vectors for a single distinct value), DataValidationError/ModelError
+  guards throughout, `train_model("hsvr", ...)` and `compare_models`
+  wired.
+- **Keras-tuner-style hyperparameter search** (`pharmaml.ml.tuner`):
+  `HyperParameters` with the `Int`/`Float`/`Choice`/`Boolean`/`Fixed`
+  methods called *inside* the hypermodel (space-collection mode returns
+  defaults and registers slots; trial mode returns the oracle's values),
+  `RandomSearch` (seeded sampling, cross-validated scoring via any
+  sklearn scorer or callable, failed trials recorded not fatal, the
+  winner refitted on the full data as `results.best_estimator`) and
+  `Hyperband` (the classic Li et al. brackets — ceil((s_max+1)·eta^s/(s+1))
+  configs at max_resource/eta^s, top ceil(n/eta) promoted per rung, the
+  resource hyperparameter overridden and clamped per rung).  Ready-made
+  hypermodels for the whole neural axis: `build_ann_regressor`/
+  `build_ann_classifier` (sklearn MLP, `max_iter` resource),
+  `build_deep_regressor`/`build_deep_classifier` (PyTorch, `epochs`
+  resource, `batchnorm` a `hp.Boolean` slot) and `build_hsvr`.  The
+  `ml tune` CLI runs either searcher with `--out` trials table and
+  `--save-best` bundle; `--task auto` flips non-integer float targets
+  with > 10 distinct values to regression (the loader's class-count
+  heuristic calls small numeric targets classification, and scoring
+  'accuracy' on singleton float classes crashes every trial).  The
+  StratifiedKFold splitter falls back to plain KFold when the smallest
+  class is smaller than the fold count.
+- **Batch normalization on the deep estimators**: `batchnorm=True` on
+  all four torch estimators (`DeepMLP*`, `ResidualMLP*`) inserts a
+  `BatchNorm1d` between every hidden linear map and its activation
+  (residual blocks: fc1→bn1→act→drop→fc2→bn2, BN before the residual
+  add); running statistics ride along in the portable NumPy weight dict
+  and the rebuild-on-predict path reconstructs the layers from the
+  architecture snapshot.  `batch_size=1` is rejected at fit time and
+  singleton tail batches are skipped (BatchNorm1d statistics are
+  undefined on single samples); the ANN registry note points BN users
+  at the torch estimators (sklearn's MLP has no BN layers).
+- Tests +108 (new `tests/test_rism.py` / `test_hierarchical.py` /
+  `test_tuner.py`, a `TestBatchNormalization` class in `test_neural.py`,
+  `TestChemRismCommand` + `TestMLTuneCommand` in `test_cli_features.py`,
+  the 8-family updates in `test_features.py`; registry count pins
+  20 → 21).  README gains the four feature sections + CLI lines; counts
+  1853 → 1962.
+
 ## [1.2.35] — 2026-10-19
 
 ### Added — the rescore report story reaches the GUI (`Save report…`)

@@ -237,6 +237,58 @@ def _build_parser() -> argparse.ArgumentParser:
         "handy when re-checking the very CSV the model was trained on",
     )
 
+    tune = ml_sub.add_parser(
+        "tune", help="keras-tuner-style hyperparameter search (RandomSearch/Hyperband)"
+    )
+    tune.add_argument("--data", required=True, help="CSV/Excel with features+target")
+    tune.add_argument("--target", default=None, help="target column (auto-detected)")
+    tune.add_argument(
+        "--task", choices=["classification", "regression", "auto"], default="auto",
+        help="task type; 'auto' infers it from the target column (default)",
+    )
+    tune.add_argument(
+        "--estimator", choices=["ann", "dnn", "hsvr"], default="ann",
+        help="hypermodel family: sklearn MLP ('ann'), PyTorch deep network "
+        "('dnn', batchnorm searchable) or hierarchical SVR ('hsvr', "
+        "regression only)",
+    )
+    tune.add_argument(
+        "--searcher", choices=["random", "hyperband"], default="random",
+        help="search strategy: uniform random sampling or successive-halving "
+        "Hyperband over the resource hyperparameter",
+    )
+    tune.add_argument(
+        "--max-trials", type=int, default=10,
+        help="trial count for --searcher random (default 10)",
+    )
+    tune.add_argument(
+        "--objective", default="auto",
+        help="sklearn scorer name ('r2', 'accuracy', 'roc_auc', ...) or 'auto' "
+        "(r2 for regression, accuracy for classification)",
+    )
+    tune.add_argument("--cv", type=int, default=3, help="cross-validation folds")
+    tune.add_argument("--seed", type=int, default=42, help="sampling/seed")
+    tune.add_argument(
+        "--min-resource", type=int, default=1,
+        help="hyperband: smallest resource budget (default 1)",
+    )
+    tune.add_argument(
+        "--max-resource", type=int, default=27,
+        help="hyperband: largest resource budget (default 27)",
+    )
+    tune.add_argument(
+        "--eta", type=int, default=3,
+        help="hyperband: promotion factor between rungs (default 3)",
+    )
+    tune.add_argument(
+        "--out", default=None,
+        help="write the trials table to this path (csv/tsv/md/json/html)",
+    )
+    tune.add_argument(
+        "--save-best", default=None,
+        help="save the best estimator as a .joblib bundle (ml check compatible)",
+    )
+
     # ---- chem --------------------------------------------------------
     chem_parser = subparsers.add_parser("chem", help="cheminformatics utilities")
     chem_sub = chem_parser.add_subparsers(dest="chem_command", required=True)
@@ -257,6 +309,22 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["rdkit_all", "morgan", "mordred"], default="rdkit_all",
     )
     descriptors.add_argument("--out", default=None)
+
+    rism = chem_sub.add_parser(
+        "rism",
+        help="compute 3D-RISM-KH-inspired solvation descriptors for a SMILES table",
+    )
+    rism.add_argument("--data", required=True)
+    rism.add_argument("--smiles-col", default="SMILES")
+    rism.add_argument(
+        "--solvent", choices=["spc", "tip3p"], default="spc",
+        help="solvent site model for the pairwise KH surrogate",
+    )
+    rism.add_argument(
+        "--temperature", type=float, default=298.15,
+        help="absolute temperature in kelvin (default 298.15)",
+    )
+    rism.add_argument("--out", default=None)
 
     chem_compare = chem_sub.add_parser(
         "compare", help="reconcile a ligand column across two tables"
@@ -1182,6 +1250,127 @@ def _cmd_ml_check(args: argparse.Namespace) -> int:
     return 0 if report.ok else 1
 
 
+#: Hypermodel registry for `ml tune`: (estimator token, task) -> builder.
+def _tune_hypermodels() -> dict[tuple[str, str], Any]:
+    """Lazily import the tuner hypermodels (keeps CLI import path lean)."""
+    from pharmaml.ml.tuner import (
+        build_ann_classifier,
+        build_ann_regressor,
+        build_deep_classifier,
+        build_deep_regressor,
+        build_hsvr,
+    )
+
+    return {
+        ("ann", "regression"): build_ann_regressor,
+        ("ann", "classification"): build_ann_classifier,
+        ("dnn", "regression"): build_deep_regressor,
+        ("dnn", "classification"): build_deep_classifier,
+        ("hsvr", "regression"): build_hsvr,
+    }
+
+
+def _cmd_ml_tune(args: argparse.Namespace) -> int:
+    """`ml tune` — keras-tuner-style hyperparameter search.
+
+    Runs RandomSearch or Hyperband over the chosen hypermodel family,
+    prints the leaderboard + best configuration, optionally writes the
+    trials table (``--out``) and saves the refit best estimator as a
+    ``ml check``-compatible bundle (``--save-best``).
+    """
+    from pharmaml.ml.persistence import save_model
+    from pharmaml.ml.tuner import Hyperband, RandomSearch
+
+    dataset = _load_cli_dataset(args)
+    tune_task = dataset.task
+    if args.task == "auto" and tune_task == "classification":
+        # The loader's class-count heuristic calls small numeric targets
+        # classification; a NON-INTEGER float target with > 10 distinct
+        # values is a measurement column (pIC50-style), so the tuner
+        # should search the regression hypermodel and score r2. Integer-
+        # coded labels keep the loader's classification verdict.
+        import numpy as np
+
+        y_arr = np.asarray(dataset.y)
+        if (
+            np.issubdtype(y_arr.dtype, np.floating)
+            and not bool(np.equal(np.mod(y_arr, 1), 0).all())
+            and np.unique(y_arr).size > 10
+        ):
+            tune_task = "regression"
+    hypermodels = _tune_hypermodels()
+    key = (args.estimator, tune_task)
+    hypermodel = hypermodels.get(key)
+    if hypermodel is None:
+        print(
+            f"error: estimator {args.estimator!r} has no hypermodel for task "
+            f"{tune_task!r} (hsvr is regression-only; ann/dnn are dual-task)",
+            file=sys.stderr,
+        )
+        return 1
+
+    objective = args.objective
+    if objective == "auto":
+        objective = "r2" if tune_task == "regression" else "accuracy"
+
+    if args.searcher == "random":
+        tuner: Any = RandomSearch(
+            hypermodel,
+            objective=objective,
+            max_trials=args.max_trials,
+            cv=args.cv,
+            task=tune_task,
+            seed=args.seed,
+        )
+    else:
+        resource = "max_iter" if args.estimator == "ann" else "epochs"
+        tuner = Hyperband(
+            hypermodel,
+            objective=objective,
+            resource=resource,
+            max_resource=args.max_resource,
+            min_resource=args.min_resource,
+            eta=args.eta,
+            cv=args.cv,
+            task=tune_task,
+            seed=args.seed,
+        )
+
+    results = tuner.search(dataset.X, dataset.y)
+    print(f"dataset:  {dataset.n_samples} rows x {dataset.n_features} features")
+    print(f"task:     {tune_task}")
+    print(f"tuner:    {args.searcher} over {args.estimator} (objective={objective})")
+    print(results.summary())
+    print(f"best:     {results.best_params}")
+    print(
+        f"score:    {results.best_score:.4f} "
+        f"+/- {results.best_trial.score_std:.4f} (cv={args.cv})"
+    )
+
+    if args.out:
+        from pharmaml.utils.io import write_table
+
+        path = write_table(results.trials_frame(), args.out)
+        print(f"trials:   {path}")
+    if args.save_best:
+        model_path = Path(args.save_best)
+        save_model(
+            results.best_estimator,
+            model_path,
+            name=f"{args.estimator}_tuned",
+            task=tune_task,
+            features=dataset.feature_names,
+            best_params=results.best_params,
+            metrics={
+                "objective": objective,
+                "cv_score": results.best_score,
+                "cv_std": results.best_trial.score_std,
+            },
+        )
+        print(f"saved:    {model_path}")
+    return 0
+
+
 def _cmd_chem_pic50(args: argparse.Namespace) -> int:
     from pharmaml.chem.converters import add_pic50_column
     from pharmaml.utils.io import read_table, write_table
@@ -1221,6 +1410,41 @@ def _cmd_chem_descriptors(args: argparse.Namespace) -> int:
     # report the path it RETURNS, not the one the user typed (26-R5).
     written = write_table(merged, out)
     print(f"descriptors -> {written} ({descriptors.shape[1] - 1} columns)")
+    return 0
+
+
+def _cmd_chem_rism(args: argparse.Namespace) -> int:
+    """`chem rism` — the 3D-RISM-KH solvation descriptor table.
+
+    Mirrors ``chem descriptors`` (positional join, default
+    ``<stem>_rism.csv`` output) so the two descriptor pipelines behave
+    identically from the shell.
+    """
+    from pharmaml.chem.rism import RISM_DESCRIPTORS, compute_rism_descriptors
+    from pharmaml.utils.io import read_table, write_table
+
+    frame = read_table(args.data)
+    if args.smiles_col not in frame.columns:
+        print(f"error: column {args.smiles_col!r} not found", file=sys.stderr)
+        return 1
+    descriptors = compute_rism_descriptors(
+        frame[args.smiles_col],
+        solvent=args.solvent,
+        temperature=args.temperature,
+    )
+    merged = frame.reset_index(drop=True).join(
+        descriptors.drop(columns=["SMILES"]), how="left"
+    )
+    merged.index = frame.index
+    out = Path(args.out) if args.out else Path(args.data).with_name(
+        Path(args.data).stem + "_rism.csv"
+    )
+    written = write_table(merged, out)
+    print(
+        f"3D-RISM-KH descriptors -> {written} "
+        f"({len(RISM_DESCRIPTORS)} columns, solvent={args.solvent}, "
+        f"T={args.temperature:g} K, {len(descriptors)} valid molecules)"
+    )
     return 0
 
 
@@ -2102,8 +2326,10 @@ _HANDLERS = {
     ("ml", "train"): _cmd_ml_train,
     ("ml", "compare"): _cmd_ml_compare,
     ("ml", "check"): _cmd_ml_check,
+    ("ml", "tune"): _cmd_ml_tune,
     ("chem", "pic50"): _cmd_chem_pic50,
     ("chem", "descriptors"): _cmd_chem_descriptors,
+    ("chem", "rism"): _cmd_chem_rism,
     ("chem", "compare"): _cmd_chem_compare,
     ("chem", "merge"): _cmd_chem_merge,
     ("pharma", "pk"): _cmd_pharma_pk,

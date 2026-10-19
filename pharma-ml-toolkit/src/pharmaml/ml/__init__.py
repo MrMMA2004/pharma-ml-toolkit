@@ -1,6 +1,8 @@
-"""QSAR machine learning: preprocessing, training, evaluation, persistence."""
+"""QSAR machine learning: preprocessing, training, evaluation, persistence,
+hyperparameter tuning."""
 
 from pharmaml.ml.evaluation import evaluate_model
+from pharmaml.ml.hierarchical import HierarchicalSVR
 from pharmaml.ml.models import (
     MODEL_ALIASES,
     MODEL_REGISTRY,
@@ -28,15 +30,38 @@ from pharmaml.ml.preprocessing import (
     split_features_target,
 )
 from pharmaml.ml.training import compare_models, train_model
+from pharmaml.ml.tuner import (
+    Hyperband,
+    HyperParameters,
+    RandomSearch,
+    TrialResult,
+    TunerResults,
+    build_ann_classifier,
+    build_ann_regressor,
+    build_deep_classifier,
+    build_deep_regressor,
+    build_hsvr,
+)
 
 __all__ = [
     "MODEL_ALIASES",
     "MODEL_REGISTRY",
     "DeepMLPClassifier",
     "DeepMLPRegressor",
+    "HierarchicalSVR",
+    "HyperParameters",
+    "Hyperband",
     "ModelInputReport",
+    "RandomSearch",
     "ResidualMLPClassifier",
     "ResidualMLPRegressor",
+    "TrialResult",
+    "TunerResults",
+    "build_ann_classifier",
+    "build_ann_regressor",
+    "build_deep_classifier",
+    "build_deep_regressor",
+    "build_hsvr",
     "build_model",
     "build_preprocessor",
     "clean_numeric_frame",

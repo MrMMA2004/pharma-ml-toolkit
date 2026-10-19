@@ -46,6 +46,8 @@ after adding new public functions.
 | `MORGAN_BITS` | constant |  |
 | `MORGAN_RADIUS` | constant |  |
 | `RDKIT_FP_BITS` | constant |  |
+| `RISM_DESCRIPTORS` | constant |  |
+| `RISM_DESCRIPTOR_COUNT` | constant |  |
 | `UNSUPPORTED_METALS` | constant |  |
 | `FeatureReport` | class | Audit record for one :func:`compute_feature_frame` run. |
 | `FeatureSelection` | class | Result of :func:`select_top_features`. |
@@ -60,6 +62,7 @@ after adding new public functions.
 | `compute_feature_frame` | function | Compute a multi-family feature matrix for a batch of SMILES. |
 | `compute_fingerprints` | function | Compute fingerprints for a list of SMILES. |
 | `compute_maccs` | function | Compute the 167-bit MACCS key fingerprints. |
+| `compute_rism_descriptors` | function | Compute 3D-RISM-KH-inspired solvation descriptors for SMILES. |
 | `family_of_column` | function | Return the feature family a frame column belongs to. |
 | `ic50_to_pic50` | function | Convert an IC50 measurement to pIC50 = -log10(IC50 [M]). |
 | `ki_to_pki` | function | Convert an inhibition constant to pKi = -log10(Ki [M]). |
@@ -80,7 +83,7 @@ after adding new public functions.
 
 ## `pharmaml.ml`
 
-*QSAR machine learning: preprocessing, training, evaluation, persistence.*
+*QSAR machine learning: preprocessing, training, evaluation, persistence,*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -88,9 +91,20 @@ after adding new public functions.
 | `MODEL_REGISTRY` | constant |  |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
+| `HierarchicalSVR` | class | Hierarchical Support Vector Regression (global + per-cluster SVRs). |
+| `HyperParameters` | class | The keras-tuner container of hyperparameter definitions. |
+| `Hyperband` | class | Hyperband successive halving over a resource hyperparameter. |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
+| `RandomSearch` | class | Random search over the hypermodel's declared space. |
 | `ResidualMLPClassifier` | class | Residual (skip-connection) deep-network classifier (PyTorch). |
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
+| `TrialResult` | class | One evaluated trial. |
+| `TunerResults` | class | The outcome of one :meth:`RandomSearch.search` / Hyperband run. |
+| `build_ann_classifier` | function | sklearn MLP classifier hypermodel (the legacy ANN upgrade). |
+| `build_ann_regressor` | function | sklearn MLP regressor hypermodel (the legacy ANN upgrade). |
+| `build_deep_classifier` | function | Deep MLP classifier hypermodel (PyTorch, ``batchnorm`` searchable). |
+| `build_deep_regressor` | function | Deep MLP regressor hypermodel (PyTorch, ``batchnorm`` searchable). |
+| `build_hsvr` | function | :class:`~pharmaml.ml.hierarchical.HierarchicalSVR` hypermodel. |
 | `build_model` | function | Instantiate an unfitted estimator from the registry. |
 | `build_preprocessor` | function | Build the (impute -> scale) preprocessing pipeline. |
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
@@ -270,10 +284,10 @@ after adding new public functions.
 | `plot_class_distribution` | function | Bar chart of class balance (accepts a mapping or a ``Dataset``). |
 | `plot_concentration_profile` | function | Plot one PK profile: linear + semi-log panels with AUC shading. |
 | `plot_confusion_matrix` | function | Heat-map of predicted-vs-true class counts. |
+| `plot_consensus_ranking` | function | Horizontal bars of ligands ranked by the 0–1 consensus. |
 | `plot_cv_scores` | function | Per-fold CV scores as bars with the mean line and ±std band. |
 | `plot_descriptor_distributions` | function | Histogram grid over the numeric columns of a table. |
 | `plot_dose_accumulation` | function | One-compartment superposition of an intermittent IV regimen. |
-| `plot_consensus_ranking` | function | Horizontal bars of ligands ranked by the 0–1 consensus. |
 | `plot_energy_distribution` | function | Histogram of per-ligand best binding energies (kcal/mol). |
 | `plot_feature_importance` | function | Top-N feature importances as horizontal bars. |
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
