@@ -15,6 +15,7 @@ import { PharmaCalcs } from "@/components/explorer/playground/pharma-calcs";
 import { MlPlayground } from "@/components/explorer/playground/ml-playground";
 import { BiologyPlayground } from "@/components/explorer/playground/biology-playground";
 import { DockingParser } from "@/components/explorer/playground/docking-parser";
+import { ConsensusRescore } from "@/components/explorer/playground/consensus-rescore";
 import { FeatureFactory } from "@/components/explorer/playground/feature-factory";
 import { LigandPrep } from "@/components/explorer/playground/ligand-prep";
 import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
@@ -22,9 +23,9 @@ import { LigandReconciler } from "@/components/explorer/playground/ligand-reconc
 import { useToolkitStore } from "@/lib/store";
 
 /** Playground: pharma calculators / PK-PD explorer / ML training / cell line
- * biology / docking parser + ligand prep / feature factory / ligand-set
- * reconciler. The active sub-tab and the PK/PD state live in the store so
- * both survive switching away and back. */
+ * biology / docking parser + consensus rescore + ligand prep / feature
+ * factory / ligand-set reconciler. The active sub-tab and the PK/PD state
+ * live in the store so both survive switching away and back. */
 export function Playground() {
   const playgroundTab = useToolkitStore((s) => s.playgroundTab);
   const setPlaygroundTab = useToolkitStore((s) => s.setPlaygroundTab);
@@ -106,7 +107,10 @@ export function Playground() {
         <BiologyPlayground />
       </TabsContent>
       <TabsContent value="docking" className="mt-4 sm:mt-6">
-        <DockingParser />
+        <div className="space-y-4 sm:space-y-6">
+          <DockingParser />
+          <ConsensusRescore />
+        </div>
       </TabsContent>
       <TabsContent value="features" className="mt-4 sm:mt-6">
         <FeatureFactory />

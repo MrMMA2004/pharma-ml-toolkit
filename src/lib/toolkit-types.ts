@@ -468,6 +468,37 @@ export interface DockingParseResponse {
 }
 
 /* ------------------------------------------------------------------ */
+/* Consensus rescore (docking summary tables)                          */
+/* ------------------------------------------------------------------ */
+
+/** One row of the explainable leaderboard: the identity column value plus
+ *  one 0-1 `<column>_norm` unit per evidence column and the consensus. */
+export interface DockingRescoreRow {
+  [key: string]: string | number | null;
+}
+
+/** The "why the winner wins" verdict (per-row argmax over the _norm units). */
+export interface DockingRescoreVerdict {
+  identity: string | null;
+  consensus: number;
+  driver: string;
+  driverValue: number;
+}
+
+/** Response of POST /api/docking/rescore — the pharmaml consensus_breakdown
+ *  twin (same shared core as consensus_rescore and the CLI). */
+export interface DockingRescoreResponse {
+  identityColumn: string;
+  columns: string[];
+  rows: DockingRescoreRow[];
+  /** "col (lower=better, weight 1), ..." — byte-identical to the CLI's line. */
+  recipe: string;
+  nRows: number;
+  verdict: DockingRescoreVerdict | null;
+  pharmamlVersion: string;
+}
+
+/* ------------------------------------------------------------------ */
 /* Feature Factory (chem features + top-K selection)                   */
 /* ------------------------------------------------------------------ */
 
