@@ -2585,3 +2585,123 @@ class TestGenerativeRLCard:
         assert "0.200 →     0.800" in text  # best_score first → last
         assert "0.000 →     4.000" in text  # the drift
         assert "the anchor penalises" in text  # the teaching note
+
+
+# --------------------------------------------------------------------- #
+# the Data & ML tab's Save-report button (100x-76) -- the CLI's
+# --plots/--pdf-report bundle, mouse edition
+# --------------------------------------------------------------------- #
+class TestMLReportBundle:
+    """``_ml_save_report`` rebuilds the CLI bundle from the stored run.
+
+    The report story's last axis: library (100x-74) -> CLI (100x-75) ->
+    GUI.  Guards first (no run, no fpdf), then the end-to-end flow on
+    the classification example with the PDF ticked.
+    """
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 120.0) -> bool:
+        """Pump the Tk loop until the worker queue drains (probe pattern)."""
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def test_fpdf_available_is_a_bool(self, playground: Any) -> None:
+        assert isinstance(playground.fpdf_available(), bool)
+
+    def test_report_needs_a_run_first(
+        self, app: Any, dialogs: list[Any]
+    ) -> None:
+        app._ml_save_report()
+        assert not app._busy  # the guard fired before any job started
+        titles = [call[1][0] for call in dialogs]
+        assert "No run yet" in titles
+        assert "held-out metrics" in dialogs[0][1][1]  # the remedy, named
+
+    def test_report_pdf_gate_without_fpdf(
+        self, app: Any, dialogs: list[Any], monkeypatch: Any, playground: Any
+    ) -> None:
+        app._ml_last_run = (object(), object(), "regression", None, None)
+        monkeypatch.setattr(playground, "fpdf_available", lambda: False)
+        app._ml_pdf_var.set(True)
+        app._ml_save_report()
+        assert not app._busy  # gated before the folder dialog
+        titles = [call[1][0] for call in dialogs]
+        assert "PDF needs fpdf" in titles
+        assert "pharmaml[reports]" in dialogs[0][1][1]  # the install hint
+
+    def test_report_bundle_end_to_end(
+        self, app: Any, dialogs: list[Any], monkeypatch: Any,
+        playground: Any, tmp_path: Path,
+    ) -> None:
+        pypdf = pytest.importorskip("pypdf")
+        target = tmp_path / "bundle"
+        monkeypatch.setattr(playground.filedialog, "askdirectory",
+                            lambda **k: str(target))
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
+                          / "qsar_classification.csv")
+        app._model_combo.set("logistic_regression")
+        app._ml_train()
+        assert self._drain(app), "training job did not finish"
+        assert app._ml_last_run is not None  # the run is now reportable
+
+        app._ml_pdf_var.set(True)
+        app._ml_save_report()
+        assert self._drain(app), "report job did not finish"
+
+        assert (target / "report.html").is_file()
+        assert (target / "report.pdf").is_file()
+        assert (target / "confusion_matrix.png").is_file()
+        assert (target / "held_out_metrics.csv").is_file()
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos, "the success dialog never fired"
+        assert infos[0][1][0] == "Report saved"
+        assert "report saved" in app._job_label.cget("text")
+        reader = pypdf.PdfReader(str(target / "report.pdf"))
+        first = reader.pages[0].extract_text()
+        assert "playground ml train" in first
+        assert "logistic_regression" in first
+
+    def test_report_html_only_when_pdf_unticked(
+        self, app: Any, dialogs: list[Any], monkeypatch: Any,
+        playground: Any, tmp_path: Path,
+    ) -> None:
+        # the default pin: unticked -> the bundle without report.pdf
+        target = tmp_path / "bundle_html"
+        monkeypatch.setattr(playground.filedialog, "askdirectory",
+                            lambda **k: str(target))
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
+                          / "qsar_regression.csv")
+        app._ml_train()
+        assert self._drain(app), "training job did not finish"
+        app._ml_save_report()
+        assert self._drain(app), "report job did not finish"
+        assert (target / "report.html").is_file()
+        assert (target / "predicted_vs_actual.png").is_file()
+        assert not (target / "report.pdf").exists()  # the unticked default

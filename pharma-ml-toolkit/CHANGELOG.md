@@ -10,6 +10,26 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.26] — 2026-10-19
+
+### Added — the report bundle reaches the playground (the PDF arc closes)
+
+- **Data & ML ▸ "Save report…"**: the GUI twin of the CLI's
+  `ml train --plots` / `--pdf-report` pair.  After any training run,
+  the button rebuilds the *same* visual bundle the CLI writes —
+  `report.html`, the confusion/ROC/class-distribution (or
+  parity/residual) figures, CV fold scores, feature importances and
+  the held-out metrics tables — into a folder picked with a native
+  dialog; the *include report.pdf* checkbox adds the multi-page
+  document (title/metrics page, one page per table, one page per
+  figure).  Figures are built inside the worker thread under the
+  package's forced-Agg backend, so the window stays responsive and no
+  Tk canvas is ever touched from off the main thread.  Guards follow
+  the house pattern: no run yet → "Train a model first"; a ticked PDF
+  without fpdf → the exact `pip install 'pharmaml[reports]'` hint
+  (new `fpdf_available()` probe helper); the success dialog + the
+  status bar echo the file count and the target folder.
+
 ## [1.2.25] — 2026-10-19
 
 ### Added — the PDF document reaches the command line

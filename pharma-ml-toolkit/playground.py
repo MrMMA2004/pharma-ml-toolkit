@@ -27,7 +27,10 @@ A tabbed graphical interface opens with every calculation domain of the
 * **Data & ML**     -- open any CSV (or one of the bundled example
   datasets), pick a target column, train a registry model with the
   toolkit's own preprocessing pipeline, inspect the metrics and the
-  parity/confusion figure, cross-validate a model leaderboard.
+  parity/confusion figure, cross-validate a model leaderboard, and
+  write the whole run as a report bundle -- ``report.html`` +
+  figures + tables (+ the multi-page ``report.pdf`` when ticked),
+  the CLI ``--plots``/``--pdf-report`` story, mouse edition.
 * **Deep Learning** -- the toolkit's PyTorch estimators behind one card
   of inputs: pick the architecture (feed-forward or residual MLP), the
   hidden widths, dropout, activation, Adam's learning rate and weight
@@ -454,6 +457,22 @@ def probe_dependencies() -> dict[str, bool]:
         except (ImportError, ValueError):  # pragma: no cover - exotic setups
             status[module] = False
     return status
+
+
+def fpdf_available() -> bool:
+    """Report whether the PDF-report dependency is importable.
+
+    Companion to :func:`probe_dependencies` for the one optional dep the
+    heavy-packages table does not carry: ``fpdf`` (the ``fpdf2`` wheel,
+    part of the ``reports`` extra) writes the multi-page ``report.pdf``
+    behind the Data & ML tab's *include report.pdf* checkbox.
+    """
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec("fpdf") is not None
+    except (ImportError, ValueError):  # pragma: no cover - exotic setups
+        return False
 
 
 def load_pharmaml() -> Any:
@@ -1136,6 +1155,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._last_figure: Any = None
         self._ml_frame: Any = None
         self._ml_path: Path | None = None
+        # -- Data & ML report state (100x-76) ------------------------ #
+        # (trained, report, task, X_test, y_test) of the last successful
+        # train -- the Save-report button rebuilds the CLI's bundle from it.
+        self._ml_last_run: tuple[Any, Any, str, Any, Any] | None = None
         self._desc_frame: Any = None
         self._desc_rows: list[tuple[str, str, str]] = []
         self._ga_result: Any = None
@@ -4940,6 +4963,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                                           tooltip="Cross-validated leaderboard over the "
                                                   "available registry.")
         compare_btn.pack(side="left", padx=(10, 0))
+        self._ml_pdf_var = tk.BooleanVar(value=False)
+        pdf_check = ttk.Checkbutton(
+            buttons, text="include report.pdf", variable=self._ml_pdf_var)
+        Tooltip(pdf_check, "Also write the multi-page PDF document -- "
+                           "needs fpdf (pharmaml[reports])")
+        pdf_check.pack(side="left", padx=(10, 0))
+        report_btn = self._action_button(
+            buttons, "Save report…", self._ml_save_report,
+            tooltip="Write the last training run as the one-click visual "
+                    "bundle -- report.html + figures + tables (+ report.pdf "
+                    "when ticked), the CLI --plots/--pdf-report story.")
+        report_btn.pack(side="left", padx=(10, 0))
 
         results = make_card(page.grid, "Results", span=2, row=3, column=0)
         self._ml_metrics = ttk.Frame(results, style="Card.TFrame")
@@ -5090,10 +5125,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 trained.model, x_test, y_test, task,
                 keep_predictions=(task == "regression"),
             )
-            return trained, report, task, dropped, y_test
+            return trained, report, task, dropped, y_test, x_test
 
         def render(payload: Any) -> None:
-            trained, report, task, dropped, y_test = payload
+            trained, report, task, dropped, y_test, x_test = payload
+            # the Save-report button rebuilds the CLI bundle from this run
+            self._ml_last_run = (trained, report, task, x_test, y_test)
             self._fill_ml_metrics(trained, report, task, dropped)
             if not self.deps.get("matplotlib"):
                 return
@@ -5119,6 +5156,111 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._show_error("Plot failed", exc)
 
         self._start_job(f"training {model_name} ({task})", work, render)
+
+    def _ml_save_report(self) -> None:
+        """Write the last training run as the one-click visual bundle.
+
+        The same ``report.html`` + figures + tables bundle the CLI's
+        ``ml train --plots`` writes (plus the multi-page ``report.pdf``
+        when the checkbox is ticked -- the ``--pdf-report`` twin),
+        rebuilt from the stored run and saved into a folder the user
+        picks.  Figures are created under the package's forced-Agg
+        backend inside the worker thread; they never touch Tk.
+        """
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the report figures"):
+            return
+        if self._ml_last_run is None:
+            messagebox.showwarning(
+                "No run yet",
+                "Train a model first -- the report needs the held-out "
+                "metrics and figures of the last run.",
+            )
+            return
+        want_pdf = bool(self._ml_pdf_var.get())
+        if want_pdf and not fpdf_available():
+            messagebox.showwarning(
+                "PDF needs fpdf",
+                "The multi-page PDF document needs fpdf -- install it "
+                "with:  pip install 'pharmaml[reports]'\n"
+                "(the HTML report works without it -- untick the box to "
+                "continue).",
+            )
+            return
+        if filedialog is None:  # pragma: no cover - headless fallback
+            return
+        target = filedialog.askdirectory(title="Choose the report folder")
+        if not target:
+            return
+        trained, report, task, x_test, y_test = self._ml_last_run
+        model_name = trained.name
+
+        def work() -> Any:
+            import pandas as pd
+
+            from pharmaml.exceptions import DataValidationError
+            from pharmaml.viz import (
+                metrics_to_dataframe,
+                ml_plots,
+                save_visual_bundle,
+            )
+
+            figures: dict[str, Any] = {}
+            tables: dict[str, Any] = {}
+            if task == "classification":
+                figures["confusion_matrix"] = ml_plots.plot_confusion_matrix(
+                    report
+                )
+                if hasattr(trained.model, "predict_proba"):
+                    figures["roc_curves"] = ml_plots.plot_roc_curves(
+                        trained.model, x_test, y_test
+                    )
+                counts = pd.Series(y_test).value_counts(sort=False).to_dict()
+                figures["class_distribution"] = ml_plots.plot_class_distribution(
+                    counts
+                )
+                tables["class_counts"] = pd.DataFrame(
+                    {"class": list(counts), "count": list(counts.values())}
+                )
+            else:
+                y_pred = trained.model.predict(x_test)
+                figures["predicted_vs_actual"] = ml_plots.plot_predicted_vs_actual(
+                    y_test, y_pred, metrics=report.as_dict()
+                )
+                figures["residuals"] = ml_plots.plot_residuals(y_test, y_pred)
+            if trained.cv_scores is not None:
+                figures["cv_scores"] = ml_plots.plot_cv_scores(trained)
+            try:
+                figures["feature_importance"] = ml_plots.plot_feature_importance(
+                    trained.model
+                )
+            except DataValidationError:  # kernel SVM / KNN: no importances
+                pass
+            tables["held_out_metrics"] = metrics_to_dataframe(report)
+            return save_visual_bundle(
+                figures,
+                tables,
+                metrics=report,
+                out_dir=target,
+                title=f"playground ml train — {model_name} ({task})",
+                subtitle=self._ml_path.name if self._ml_path else "playground run",
+                pdf_report=want_pdf,
+            )
+
+        def render(written: Any) -> None:
+            names = [path.name for path in written]
+            extra = " + report.pdf" if want_pdf else ""
+            self._job_label.configure(
+                text=f"report saved · {target} ({len(written)} files{extra})"
+            )
+            messagebox.showinfo(
+                "Report saved",
+                f"{len(written)} files written to {target}:\n"
+                + "\n".join(names[:8])
+                + ("\n…" if len(names) > 8 else ""),
+            )
+
+        self._start_job("writing the report bundle", work, render)
 
     def _fill_ml_metrics(self, trained: Any, report: Any, task: str,
                          dropped: list[str]) -> None:
