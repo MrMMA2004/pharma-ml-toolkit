@@ -6,7 +6,7 @@ domains into one coherent package:
 | Domain | What it does |
 |---|---|
 | **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
-| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families** + **hierarchical SVR**), cross-validated training (binary **and multiclass**), evaluation, persistence, keras-tuner-style hyperparameter search (`RandomSearch` / `Hyperband` over `HyperParameters` spaces, with the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines) |
+| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families** + **hierarchical SVR**), cross-validated training (binary **and multiclass**), evaluation, persistence, keras-tuner-style hyperparameter search (`RandomSearch` / `Hyperband` over `HyperParameters` spaces, with the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines and `resource_bounds` sizing Hyperband ladders from the family's own declared grid) |
 | **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
 | **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management |
@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1993 tests).
+exceptions, input validation, and pytest coverage** (2001 tests).
 
 ---
 
@@ -122,7 +122,11 @@ over the ann / hsvr / dnn hypermodel families, every trial scored on the
 same shuffled folds, the family's defaults scored too (the number the
 search has to beat), the winner refit and scored on the held-out 20 %,
 an apply-best bridge (ann/hsvr point the model combobox; dnn prefills
-the whole Deep Learning tab) and a trials CSV export — and audit any
+the whole Deep Learning tab) and a trials CSV export — or `--searcher
+hyperband`'s successive halving over the family's resource budget
+(ann's max_iter, dnn's epochs; the ladder is the family's own declared
+grid via `resource_bounds`, the leaderboard gains a resource column and
+the status line carries the honest budget economics) — and audit any
 new CSV against the last trained model with **Check CSV…**:
 missing features, extra columns, reordering and version drift, every
 difference named, the training label dropped automatically; the `ml
@@ -245,7 +249,7 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 1993 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 2001 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -745,6 +749,13 @@ results.trials_frame().to_csv("trials.csv", index=False)
 results = Hyperband(build_deep_regressor, objective="r2",
                     resource="epochs", max_resource=81).search(X, y)
 
+# Size the ladder from the family's OWN declared grid -- the shipped
+# hypermodels' resource slots (the playground's Tune card does exactly this):
+from pharmaml.ml import resource_bounds
+r_min, r_max = resource_bounds(build_ann_regressor, "max_iter")   # (200, 1000)
+results = Hyperband(build_ann_regressor, resource="max_iter",
+                    max_resource=r_max, min_resource=r_min, eta=3).search(X, y)
+
 # Score a baseline under the tuner's OWN folds -- apples to apples:
 from sklearn.model_selection import cross_val_score
 from pharmaml.ml import HyperParameters, make_cv_splitter
@@ -757,11 +768,15 @@ Ready-made hypermodels: `build_ann_regressor` / `build_ann_classifier` (sklearn
 MLP), `build_deep_regressor` / `build_deep_classifier` (PyTorch, with
 `batchnorm` a `hp.Boolean` slot) and `build_hsvr`. The CLI twin is
 `pharmaml ml tune` (random or hyperband, leaderboard + trials table +
-`--save-best` bundle) and the desktop playground's **Hyperparameter search**
-card runs the same search with the defaults baseline, an apply-best bridge
-into the Deep Learning tab and a trials CSV export (mouse edition). Failed
-trials are recorded, not fatal; sampling is seeded, so the same seed + data
-always reproduce the same search.
+`--save-best` bundle) and the desktop playground's **Hyperparameter
+search** card runs the same search in either flavour — RandomSearch, or
+Hyperband with the rung ladder sized from the family's own declared grid
+via `resource_bounds` (a resource column in the leaderboard, the honest
+budget line: “budget 3998 of a naive 6000 max_iter (33% saved)”) — with
+the defaults baseline, an apply-best bridge into the Deep Learning tab
+(the winner's rung resource rides along) and a trials CSV export (mouse
+edition). Failed trials are recorded, not fatal; sampling is seeded, so
+the same seed + data always reproduce the same search.
 
 #### 3D-RISM-KH solvation descriptors (`chem.rism`)
 

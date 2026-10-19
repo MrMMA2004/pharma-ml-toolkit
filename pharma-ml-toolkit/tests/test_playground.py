@@ -2809,7 +2809,9 @@ class TestTunerCard:
 
     def test_defaults_before_any_run(self, app: Any) -> None:
         assert app._tune_estimator_combo.get() == "ann"
+        assert app._tune_searcher_combo.get() == "random"
         assert app._tune_trials.get() == "8"
+        assert app._tune_eta.get() == "3"
         assert app._tune_cv.get() == "3"
         assert app._tune_last is None
         assert "no search yet" in app._tune_summary.cget("text")
@@ -2866,6 +2868,76 @@ class TestTunerCard:
         assert app._task_combo.get() == "regression"
         assert "applied" in app._tune_summary.cget("text")
 
+    def test_ann_hyperband_search_rungs_the_declared_ladder(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # the ladder IS the family's declared max_iter grid (200-1000,
+        # via the public resource_bounds) -> eta 3 gives s_max=1: bracket
+        # 1 runs 3 trials @333 + 1 promoted @999, bracket 0 runs 2 @1000.
+        app._ml_load_example()
+        app._tune_searcher_combo.set("hyperband")
+        app._tune_cv.set("2")
+        app._ml_tune()
+        assert self._drain_jobs(app), "the hyperband search hung"
+        assert quiet_dialogs == []
+        results = app._tune_last[0]
+        assert len(results.trials) == 6
+        assert sorted({int(t.resource) for t in results.trials}) == [333, 999, 1000]
+
+        rows = app._board_tree.get_children()
+        assert len(rows) == 6
+        assert list(app._board_tree["columns"]) == [
+            "rank", "trial", "configuration", "resource", "score", "± std"]
+        best = results.best_trial
+        first = app._board_tree.item(rows[0], "values")
+        assert first[0] == "1"
+        assert int(first[1]) == best.trial_id
+        assert first[3] == f"{best.resource:g}"  # the resource column
+        assert first[4] == f"{best.score:.4f}"
+        # every rendered resource cell matches its trial's rung
+        for row, trial in zip(rows, sorted(
+                results.trials, key=lambda t: t.score, reverse=True)):
+            assert app._board_tree.item(row, "values")[3] == f"{trial.resource:g}"
+
+        status = app._board_status.cget("text")
+        assert status.startswith("Hyperband over ann (regression)")
+        assert "objective r2" in status
+        assert "η 3" in status and "resource max_iter 200–1000" in status
+        # the epoch-economics line: 3×333 + 1×999 + 2×1000 = 3998 spent
+        # vs a naive 6×1000 = 6000 -> 33% saved
+        assert "budget 3998 of a naive 6000 max_iter" in status
+        assert "(33% saved)" in status
+        summary = app._tune_summary.cget("text")
+        assert "defaults" in summary and "gain" in summary
+        assert f"max_iter={int(best.resource)}" in summary
+
+    def test_dnn_hyperband_applies_best_to_the_deep_learning_tab(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # dnn's ladder is the declared epochs grid (30-150): eta 3 ->
+        # bracket 1 runs 3 @50 + 1 promoted @150, bracket 0 runs 2 @150.
+        app._ml_load_example()
+        app._tune_estimator_combo.set("dnn")
+        app._tune_searcher_combo.set("hyperband")
+        app._tune_cv.set("2")
+        app._ml_tune()
+        assert self._drain_jobs(app, timeout=420), "the dnn hyperband hung"
+        assert quiet_dialogs == []
+        results = app._tune_last[0]
+        assert len(results.trials) == 6
+        assert sorted({int(t.resource) for t in results.trials}) == [50, 150]
+        assert "resource epochs 30–150" in app._board_status.cget("text")
+
+        params = results.best_params
+        app._ml_tune_apply()
+        assert quiet_dialogs == []
+        # the winner's rung resource (the epochs override) rode along
+        assert app._dl_epochs.get() == str(int(params["epochs"]))
+        assert int(params["epochs"]) in (50, 150)
+        assert app._dl_task_combo.get() == "regression"
+        assert app._book.index(app._book.select()) == app._book.index(app._dl_page)
+        assert "Deep Learning" in app._tune_summary.cget("text")
+
     def test_hsvr_on_a_classification_target_guards(
         self, app: Any, quiet_dialogs: list[Any]
     ) -> None:
@@ -2876,6 +2948,21 @@ class TestTunerCard:
         assert not app._busy  # the gate stopped before any job started
         titles = [call[1][0] for call in quiet_dialogs]
         assert "hsvr is regression-only" in titles
+
+    def test_hsvr_hyperband_guards_before_any_job(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # hsvr declares no resource slot -- the pre-flight mirrors the
+        # library's resource_bounds error before any bracket starts.
+        app._ml_load_example()
+        app._tune_estimator_combo.set("hsvr")
+        app._tune_searcher_combo.set("hyperband")
+        app._ml_tune()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "hsvr has no resource slot" in titles
+        body = quiet_dialogs[0][1][1]
+        assert "ann or dnn" in body and "random" in body
 
     def test_apply_and_save_before_any_search_guard(
         self, app: Any, quiet_dialogs: list[Any]

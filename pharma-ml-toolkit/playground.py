@@ -32,9 +32,12 @@ A tabbed graphical interface opens with every calculation domain of the
   tables (+ the multi-page ``report.pdf`` when ticked), the CLI
   ``--plots``/``--pdf-report`` story, mouse edition -- run a
   keras-tuner-style hyperparameter search (``ml tune``'s RandomSearch
-  over the ann / dnn / hsvr families, with the defaults baseline, the
-  held-out verdict, an apply-best bridge to the Deep Learning tab and
-  a trials CSV export) -- and audit any new CSV against the last
+  over the ann / dnn / hsvr families, or Hyperband successive halving
+  over the resource budget -- ann's ``max_iter``, dnn's ``epochs`` --
+  with the rung ladder sized from the family's own declared grid via
+  ``resource_bounds``, the epoch-economics budget line, the defaults
+  baseline, the held-out verdict, an apply-best bridge to the Deep
+  Learning tab and a trials CSV export) -- and audit any new CSV against the last
   trained model before predicting (the ``ml check`` story, mouse
   edition: every difference named).
 * **Deep Learning** -- the toolkit's PyTorch estimators behind one card
@@ -942,6 +945,15 @@ def deep_estimator_name(architecture: str, task: str) -> str:
 #: Data & ML tab (100x-90): hypermodel families the Tune card offers --
 #: the same tokens the CLI's ``ml tune --estimator`` accepts.
 _TUNE_ESTIMATORS: tuple[str, ...] = ("ann", "hsvr", "dnn")
+
+#: Searcher tokens for the Tune card -- the same two the CLI's
+#: ``ml tune --searcher`` accepts (random | hyperband).
+_TUNE_SEARCHERS: tuple[str, ...] = ("random", "hyperband")
+
+#: The resource slot each Hyperband-able family halves over -- the
+#: CLI's own rule (``max_iter`` for the sklearn ann, ``epochs`` for
+#: the torch dnn); hsvr declares neither, so the card guards it.
+_TUNE_RESOURCES: dict[str, str] = {"ann": "max_iter", "dnn": "epochs"}
 
 #: Hypermodel builder names for the Tune card, keyed by
 #: ``(estimator, task)`` -- resolved on the worker thread (the playground
@@ -5418,14 +5430,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         check_btn.pack(side="left", padx=(10, 0))
 
         tuner = make_card(
-            page.grid, "Hyperparameter search (random)", span=2, row=3, column=0,
-            subtitle="The ml tune --searcher random story, mouse edition: a "
-                     "keras-tuner-style RandomSearch over a whole estimator "
-                     "family (not the per-model grid search above). Every "
-                     "trial is scored by mean CV on the SAME shuffled folds; "
-                     "the family's defaults are scored too -- the number the "
-                     "search has to beat; the winner is refit and scored on "
-                     "the held-out 20%."
+            page.grid, "Hyperparameter search", span=2, row=3, column=0,
+            subtitle="The ml tune story, mouse edition: a keras-tuner-style "
+                     "search over a whole estimator family (not the "
+                     "per-model grid search above). RandomSearch samples "
+                     "full-budget trials; Hyperband starts brackets of "
+                     "configs at a fraction of the resource budget (ann's "
+                     "max_iter, dnn's epochs -- the ladder is the family's "
+                     "own declared grid) and keeps only the top 1/η per "
+                     "rung. Every trial is scored by mean CV on the SAME "
+                     "shuffled folds; the family's defaults are scored too "
+                     "-- the number the search has to beat; the winner is "
+                     "refit and scored on the held-out 20%."
         )
         self._tune_estimator_combo = ttk.Combobox(tuner, state="readonly", width=26,
                                                   values=_TUNE_ESTIMATORS)
@@ -5436,9 +5452,35 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "SVR (regression only). The same families the CLI's "
                 "ml tune --estimator accepts.")
         form_row(tuner, "estimator", self._tune_estimator_combo)
+        self._tune_searcher_combo = ttk.Combobox(
+            tuner, state="readonly", width=26, values=_TUNE_SEARCHERS)
+        self._tune_searcher_combo.set("random")
+        Tooltip(self._tune_searcher_combo,
+                "random = RandomSearch, every trial at the full budget "
+                "(the trials spinbox decides how many); hyperband = "
+                "successive halving over the family's resource slot -- "
+                "brackets start many configs at a small budget and keep "
+                "only the top 1/η per rung, so the trials spinbox is "
+                "ignored (the brackets decide; ann and dnn only -- hsvr "
+                "declares no resource slot). The same tokens the CLI's "
+                "ml tune --searcher accepts.")
+        form_row(tuner, "searcher", self._tune_searcher_combo)
         self._tune_trials = ttk.Spinbox(tuner, from_=4, to=40, increment=1, width=10)
         self._tune_trials.set("8")
+        Tooltip(self._tune_trials,
+                "RandomSearch only: how many full-budget trials to draw. "
+                "Hyperband ignores this -- its brackets fix the trial "
+                "count from η and the resource ladder.")
         form_row(tuner, "trials", self._tune_trials)
+        self._tune_eta = ttk.Spinbox(tuner, from_=2, to=4, increment=1, width=10)
+        self._tune_eta.set("3")
+        Tooltip(self._tune_eta,
+                "Hyperband only: the halving factor η -- every rung keeps "
+                "the top ceil(n/η) configs and multiplies their budget by "
+                "η. Bigger η = more brackets, more trials at tiny budgets; "
+                "smaller η = fewer, deeper brackets. RandomSearch ignores "
+                "this.")
+        form_row(tuner, "η (hyperband)", self._tune_eta)
         self._tune_cv = ttk.Spinbox(tuner, from_=2, to=5, increment=1, width=10)
         self._tune_cv.set("3")
         form_row(tuner, "cv folds", self._tune_cv)
@@ -5446,11 +5488,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         grid_append(tuner, tune_buttons, sticky="w", pady=(8, 0))
         search_btn = self._action_button(
             tune_buttons, "Run search", self._ml_tune,
-            tooltip="RandomSearch over the chosen family's space -- trials "
-                    "ranked by mean CV score on the leaderboard card below; "
-                    "the summary line carries best vs defaults (the gain) "
-                    "and the held-out verdict. Deterministic end-to-end "
-                    "(the same seed folds the same way twice).")
+            tooltip="Search the chosen family's space -- RandomSearch "
+                    "samples full-budget trials, Hyperband halves the "
+                    "resource rung by rung; trials ranked by mean CV score "
+                    "on the leaderboard card below; the summary line "
+                    "carries best vs defaults (the gain) and the held-out "
+                    "verdict. Deterministic end-to-end (the same seed "
+                    "folds the same way twice).")
         search_btn.pack(side="left")
         apply_btn = self._action_button(
             tune_buttons, "Apply best", self._ml_tune_apply,
@@ -5878,14 +5922,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
     def _ml_tune(self) -> None:
-        """Run a RandomSearch over the chosen hypermodel family.
+        """Run a hyperparameter search over the chosen family.
 
-        The ``ml tune --searcher random`` story, mouse edition: the
-        same hypermodels the CLI resolves, the same public
-        ``make_cv_splitter`` folds for every trial AND for the
-        hypermodel's defaults (the apples-to-apples baseline the search
-        has to beat), the winner refit on the train split and scored on
-        the held-out 20% -- all inside the worker thread, deterministically
+        The ``ml tune`` story, mouse edition: RandomSearch samples
+        full-budget trials; Hyperband (``--searcher hyperband``)
+        successive-halves the family's resource slot -- ann's
+        ``max_iter``, dnn's ``epochs`` -- with the rung ladder sized
+        from the family's own declared grid via the public
+        ``resource_bounds`` (so every rung stays inside the declared
+        space and the final rung is exactly the full budget).  Both
+        searchers score every trial AND the hypermodel's defaults
+        under the same public ``make_cv_splitter`` folds (the
+        apples-to-apples baseline the search has to beat), and the
+        winner is refit on the train split and scored on the held-out
+        20% -- all inside the worker thread, deterministically
         (seed 42, the tab's own convention).
         """
         if not self._require_pharmaml():
@@ -5927,11 +5977,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         if estimator == "dnn" and not self._require("torch", "the dnn search"):
             return
+        searcher = self._tune_searcher_combo.get()
+        resource = _TUNE_RESOURCES.get(estimator)
+        if searcher == "hyperband" and resource is None:
+            messagebox.showwarning(
+                "hsvr has no resource slot",
+                "Hyperband halves a resource budget rung by rung -- ann's "
+                "max_iter, dnn's epochs. The HierarchicalSVR hypermodel "
+                "declares no resource slot, so there is nothing to halve. "
+                "Pick ann or dnn, or switch the searcher back to random.",
+            )
+            return
         try:
             max_trials = parse_int(self._tune_trials.get(), "trials",
                                    minimum=4, maximum=40)
             cv = parse_int(self._tune_cv.get(), "cv folds",
                            minimum=2, maximum=5)
+            eta = parse_int(self._tune_eta.get(), "eta",
+                            minimum=2, maximum=4)
         except ValueError as exc:
             messagebox.showwarning("Check the search settings", str(exc))
             return
@@ -5942,7 +6005,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             import pharmaml.ml.tuner as tuner_module
             from pharmaml.ml import evaluate_model
             from pharmaml.ml.preprocessing import make_train_test_split
-            from pharmaml.ml.tuner import HyperParameters, RandomSearch, make_cv_splitter
+            from pharmaml.ml.tuner import (
+                Hyperband,
+                HyperParameters,
+                RandomSearch,
+                make_cv_splitter,
+                resource_bounds,
+            )
 
             hypermodel = getattr(tuner_module, hypermodel_name)
             objective = "r2" if task == "regression" else "accuracy"
@@ -5952,10 +6021,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             x_train, x_test, y_train, y_test = make_train_test_split(
                 frame[numeric], y, random_state=42
             )
-            tuner = RandomSearch(
-                hypermodel, objective=objective, max_trials=max_trials,
-                cv=cv, task=task, seed=42,
-            )
+            ladder: tuple[int, int] | None = None
+            if searcher == "hyperband":
+                # the ladder IS the family's declared resource grid --
+                # r_min its smallest value, R its largest (the full
+                # budget a plain Train runs at).
+                r_min, r_max = resource_bounds(hypermodel, resource or "epochs")
+                ladder = (r_min, r_max)
+                tuner: Any = Hyperband(
+                    hypermodel, objective=objective, resource=resource or "epochs",
+                    max_resource=r_max, min_resource=r_min, eta=eta,
+                    cv=cv, task=task, seed=42,
+                )
+            else:
+                tuner = RandomSearch(
+                    hypermodel, objective=objective, max_trials=max_trials,
+                    cv=cv, task=task, seed=42,
+                )
             results = tuner.search(x_train, y_train)
             # the baseline: the hypermodel's defaults under the tuner's
             # own fold protocol (the public splitter -- same folds, only
@@ -5971,10 +6053,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 results.best_estimator, x_test, y_test, task,
                 keep_predictions=False,
             )
-            return results, float(base.mean()), float(base.std()), report, objective
+            return results, float(base.mean()), float(base.std()), report, objective, ladder
 
         def render(payload: Any) -> None:
-            results, base_mean, base_std, report, objective = payload
+            results, base_mean, base_std, report, objective, ladder = payload
             self._tune_last = (results, estimator, task, target)
             held_out = report.r2 if task == "regression" else report.accuracy
             held_label = "held-out R²" if task == "regression" else "held-out accuracy"
@@ -5992,30 +6074,50 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
             failed = [t for t in results.trials if t.failed]
             self._board_tree.delete(*self._board_tree.get_children())
-            columns = ["rank", "trial", "configuration", "score", "± std"]
+            if ladder is None:
+                columns = ["rank", "trial", "configuration", "score", "± std"]
+            else:
+                columns = ["rank", "trial", "configuration", "resource", "score", "± std"]
             self._board_tree["columns"] = columns
             for column in columns:
                 self._board_tree.heading(column, text=column)
                 self._board_tree.column(column, width=140, minwidth=72, stretch=True)
+
+            def row_values(rank: int | str, trial: Any) -> list[str]:
+                cells = [str(rank), str(trial.trial_id),
+                         _cell_text(tune_config_text(trial.hyperparameters), limit=52)]
+                if ladder is not None:
+                    cells.append("" if trial.resource is None
+                                 else f"{trial.resource:g}")
+                cells.append(f"{trial.score:.4f}")
+                cells.append(f"{trial.score_std:.4f}")
+                return cells
+
             for rank, trial in enumerate(ranked, start=1):
                 self._board_tree.insert(
-                    "", "end",
-                    values=[rank, trial.trial_id,
-                            _cell_text(tune_config_text(trial.hyperparameters), limit=52),
-                            f"{trial.score:.4f}", f"{trial.score_std:.4f}"],
-                )
+                    "", "end", values=row_values(rank, trial))
             for trial in failed:
                 self._board_tree.insert(
-                    "", "end",
-                    values=["—", trial.trial_id,
-                            _cell_text(tune_config_text(trial.hyperparameters), limit=52),
-                            "failed", ""],
+                    "", "end", values=row_values("—", trial))
+            if ladder is None:
+                self._board_status.configure(
+                    text=f"RandomSearch over {estimator} ({task}) — "
+                         f"{len(results.trials)} trial(s), objective {objective}; "
+                         f"ranked by mean CV score, failed trials last"
                 )
-            self._board_status.configure(
-                text=f"RandomSearch over {estimator} ({task}) — "
-                     f"{len(results.trials)} trial(s), objective {objective}; "
-                     f"ranked by mean CV score, failed trials last"
-            )
+            else:
+                r_min, r_max = ladder
+                spent = sum(t.resource or 0.0 for t in results.trials)
+                naive = len(results.trials) * r_max
+                saved = 100.0 * (1.0 - spent / naive) if naive > 0 else 0.0
+                self._board_status.configure(
+                    text=f"Hyperband over {estimator} ({task}) — "
+                         f"{len(results.trials)} trial(s), objective {objective} · "
+                         f"η {eta}, resource {resource} {r_min}–{r_max} · "
+                         f"budget {spent:g} of a naive {naive:g} {resource} "
+                         f"({saved:.0f}% saved) · ranked by mean CV score, "
+                         "failed trials last (promotions keep the top ⌈n/η⌉)"
+                )
 
         self._start_job(f"tuning {estimator} ({task})", work, render)
 

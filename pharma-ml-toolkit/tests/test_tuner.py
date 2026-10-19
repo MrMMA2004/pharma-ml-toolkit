@@ -5,7 +5,7 @@ mode, re-registration), the ready-made hypermodels (ANN / deep / HSVR),
 ``RandomSearch`` (scoring, determinism, best-estimator refit, failure
 accounting), ``Hyperband`` (brackets, rung resources, the resource
 declaration contract) and the public ``make_cv_splitter`` fold
-protocol.
+protocol + ``resource_bounds`` ladder helper.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from pharmaml.ml.tuner import (
     build_ann_regressor,
     build_hsvr,
     make_cv_splitter,
+    resource_bounds,
 )
 
 
@@ -410,6 +411,66 @@ class TestMakeCvSplitter:
 
         assert pharmaml.ml.make_cv_splitter is make_cv_splitter
         assert "make_cv_splitter" in pharmaml.ml.__all__
+
+
+# ---------------------------------------------------------------------------
+# resource_bounds — the GUI's Hyperband ladder (100x-92)
+# ---------------------------------------------------------------------------
+class TestResourceBounds:
+    def test_shipped_families_pin_their_declared_grids(self) -> None:
+        from pharmaml.ml.tuner import (
+            build_deep_classifier,
+            build_deep_regressor,
+        )
+
+        # the CLI's resource rule (max_iter for ann, epochs for dnn)
+        # backed by each family's own declared grid
+        assert resource_bounds(build_ann_regressor, "max_iter") == (200, 1000)
+        assert resource_bounds(build_ann_classifier, "max_iter") == (200, 1000)
+        assert resource_bounds(build_deep_regressor, "epochs") == (30, 150)
+        assert resource_bounds(build_deep_classifier, "epochs") == (30, 150)
+
+    def test_missing_slot_raises_the_actionable_error(self) -> None:
+        # hsvr declares no resource slot -- the library and the GUI's
+        # pre-flight guard agree there is nothing to halve.
+        with pytest.raises(
+            ModelError, match="does not declare the resource hyperparameter 'epochs'"
+        ):
+            resource_bounds(build_hsvr, "epochs")
+
+    def test_non_int_slots_are_rejected(self) -> None:
+        from sklearn.linear_model import Ridge
+
+        def float_resource(hp: HyperParameters) -> object:
+            hp.Float("budget", 0.5, 2.5)
+            return Ridge()
+
+        with pytest.raises(ModelError, match="must be an hp.Int slot"):
+            resource_bounds(float_resource, "budget")
+
+    def test_the_declared_grid_sizes_a_real_hyperband(self) -> None:
+        X, y = linear_data(60)
+        r_min, r_max = resource_bounds(build_ann_regressor, "max_iter")
+        results = Hyperband(
+            build_ann_regressor, resource="max_iter",
+            max_resource=r_max, min_resource=r_min, eta=3, cv=2, seed=5,
+        ).search(X, y)
+        # the hand-computed schedule: s_max = floor(log(1000/200, 3)) = 1
+        # -> bracket 1 runs 3 trials @333 + 1 promoted @999, bracket 0
+        # runs 2 @1000 -- six trials, three rung resources, every rung
+        # inside the declared space.
+        assert len(results.trials) == 6
+        resources = sorted({int(t.resource) for t in results.trials})
+        assert resources == [333, 999, 1000]
+        for trial in results.trials:
+            assert 200 <= int(trial.resource) <= 1000
+            assert trial.hyperparameters["max_iter"] == int(trial.resource)
+
+    def test_exported_from_the_ml_package(self) -> None:
+        import pharmaml.ml
+
+        assert pharmaml.ml.resource_bounds is resource_bounds
+        assert "resource_bounds" in pharmaml.ml.__all__
 
 
 # ---------------------------------------------------------------------------

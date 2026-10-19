@@ -120,6 +120,7 @@ __all__ = [
     "build_deep_regressor",
     "build_hsvr",
     "make_cv_splitter",
+    "resource_bounds",
 ]
 
 
@@ -542,6 +543,60 @@ def make_cv_splitter(task: str, y: Any, cv: int) -> Any:
     return _make_splitter(task, np.asarray(y), int(cv))
 
 
+def resource_bounds(hypermodel: HyperModel, resource: str) -> tuple[int, int]:
+    """The declared ``[min, max]`` grid of a hypermodel's resource slot.
+
+    The Hyperband ladder for a *shipped* hypermodel: the resource slot's
+    own declared bounds ARE the ladder — ``max_resource`` is the grid's
+    largest value (the full budget a plain ``Train`` runs at) and
+    ``min_resource`` the smallest, so every rung resource stays inside
+    the declared space.  The playground's Tune card uses this to size
+    ``Hyperband`` without hardcoding the families' grids.
+
+    Parameters
+    ----------
+    hypermodel:
+        Callable ``(hp) -> estimator`` (e.g.
+        :func:`build_ann_regressor`).
+    resource:
+        Name of the resource slot (e.g. ``'max_iter'``, ``'epochs'``).
+
+    Returns
+    -------
+    tuple[int, int]
+        ``(min_resource, max_resource)`` — the declared grid's first
+        and last values.
+
+    Raises
+    ------
+    ModelError
+        When the hypermodel does not declare the slot, or declares it
+        as anything other than an ``hp.Int`` grid (resources must be
+        countable budgets).
+
+    Examples
+    --------
+    >>> resource_bounds(build_ann_regressor, "max_iter")
+    (200, 1000)
+    >>> resource_bounds(build_hsvr, "epochs")
+    Traceback (most recent call last):
+        ...
+    pharmaml.exceptions.ModelError: the hypermodel does not declare the resource hyperparameter 'epochs'
+    """
+    for spec in _collect_space(hypermodel):
+        if spec.name == resource:
+            if spec.kind != "int" or not spec.values:
+                raise ModelError(
+                    f"the resource hyperparameter {resource!r} must be an "
+                    f"hp.Int slot with a discrete grid, got kind {spec.kind!r}"
+                )
+            return int(spec.values[0]), int(spec.values[-1])
+    raise ModelError(
+        f"the hypermodel does not declare the resource hyperparameter "
+        f"{resource!r}"
+    )
+
+
 def _collect_space(hypermodel: HyperModel) -> list[_HyperParameterSpec]:
     """Run the hypermodel once in space-collection mode (defaults drawn).
 
@@ -736,6 +791,13 @@ class Hyperband:
     ModelError
         For invalid constructor values, when the hypermodel does not
         declare the ``resource`` slot, or when every trial fails.
+
+    See Also
+    --------
+    resource_bounds:
+        The declared grid of a shipped hypermodel's resource slot —
+        the ``(min_resource, max_resource)`` pair that keeps every
+        rung inside the family's declared space.
     """
 
     def __init__(

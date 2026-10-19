@@ -10,6 +10,61 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.39] — 2026-10-20
+
+### Added — the desktop Tune card speaks Hyperband too: the resource ladder from the family's own grid
+
+- **`pharmaml.ml.tuner.resource_bounds` (new public API)** — the declared
+  `[min, max]` grid of a hypermodel's resource slot, exported from
+  `pharmaml.ml` and documented with doctests. The Hyperband ladder for a
+  *shipped* hypermodel: `max_resource` is the grid's largest value (the full
+  budget a plain Train runs at), `min_resource` the smallest — every rung
+  stays inside the declared space and the final rung is (up to integer
+  division) the full budget. Raises the actionable `ModelError` when the
+  hypermodel declares no such slot (hsvr) or a non-`hp.Int` slot.
+- **`playground.py` — the Tune card's Hyperband mode**: a `searcher` combobox
+  (random | hyperband — the CLI's own tokens) plus an η spinbox (2–4,
+  default 3). Hyperband successive-halves the family's resource slot —
+  `max_iter` for the sklearn `ann`, `epochs` for the torch `dnn` — with the
+  rung ladder sized from the family's own declared grid via
+  `resource_bounds` (no hardcoded budgets; the trials spinbox is ignored and
+  says so in its tooltip). The leaderboard grows a **resource** column
+  (hyperband mode only) and the status line carries the epoch-economics
+  story the notebook §5 and the web card tell: bracket count, the ladder
+  (`resource max_iter 200–1000`), the honest budget line (`budget 3998 of a
+  naive 6000 max_iter (33% saved)`) and the promotion rule. **Apply best**
+  carries the winner's rung resource along (dnn prefills the Deep Learning
+  tab's epochs from the winning rung); **Save trials CSV…** already carried
+  the resource column (the CLI `--out` story). Guards: `hsvr` + hyperband
+  pre-flights with the actionable message (no resource slot to halve — pick
+  ann or dnn, or switch back to random) before any bracket starts; η bounds
+  pre-flighted with the other settings.
+- **Web — the HSVR trust-radius card's blend-weight overlay**: a “Blend
+  weights” toggle (single-feature models only) draws each cluster's trust
+  fade w(z) = 1 − |z − centroid| / R as a tent polyline on a secondary
+  right-hand 0–1 axis — the linear blend the prediction actually computes,
+  finally visible (full local weight at the centroid, the dashed band's edge
+  is exactly where the local voice falls silent). Dots' hover titles gain
+  their exact local weight (1-D for single-feature, 2-D when the plot is the
+  whole feature space; projected models keep honest coordinates-only
+  titles); the legend gains a tent glyph; multi-feature models get the
+  honest “the fade depends on the whole feature vector” note instead of a
+  misleading curve.
+- Tests +8: `test_tuner.py` +5 (`TestResourceBounds`: the four shipped
+  families' pinned grids, the missing-slot error, the non-Int rejection, a
+  real Hyperband sized by the declared grid — the 333/999/1000 schedule —
+  and the package export) and `test_playground.py` +3 (the hsvr+hyperband
+  pre-flight, the ann hyperband end-to-end — 6 trials, the resource column,
+  the budget line, the winner's `max_iter` — and the dnn hyperband → Deep
+  Learning tab bridge) plus the searcher/eta defaults pinned into the
+  existing defaults test. `+1` doctest (the `resource_bounds` examples).
+
+### Changed
+
+- The Tune card is retitled “Hyperparameter search” (was “… (random)”) with
+  a subtitle covering both searchers; the session file carries the searcher
+  and η inputs for free (the generic widget walk).
+
 ## [1.2.38] — 2026-10-19
 
 ### Added — the desktop playground joins the four-feature story: the Tune card + the batchnorm checkbox

@@ -19,6 +19,7 @@ import {
   RotateCcw,
   Sigma,
   SlidersHorizontal,
+  Activity,
   Table2,
   TrendingDown,
   TrendingUp,
@@ -548,12 +549,22 @@ function clusterColor(i: number): string {
  * by its k-means cluster, centroid diamonds, and the dashed trust regions
  * (a vertical band per cluster for single-feature models where dimB is
  * the target; an axis-scaled ellipse otherwise). Hand-rolled SVG so the
- * trust geometry renders exactly at data scale.
+ * trust geometry renders exactly at data scale. With `showBlend` (single
+ * feature only), each cluster's blend-weight tent w(z) = 1 − |z − c| / R
+ * rides on a secondary right axis (0→1) — the linear fade the prediction
+ * actually blends through.
  */
-function HsvrTrustScatter({ scatter }: { scatter: HsvrScatterData }) {
+function HsvrTrustScatter({
+  scatter,
+  showBlend,
+}: {
+  scatter: HsvrScatterData;
+  showBlend: boolean;
+}) {
   const W = 560;
   const H = 300;
-  const pad = { l: 46, r: 14, top: 14, b: 34 };
+  const overlay = showBlend && scatter.bIsTarget;
+  const pad = { l: 46, r: overlay ? 34 : 14, top: 14, b: 34 };
   const pw = W - pad.l - pad.r;
   const ph = H - pad.top - pad.b;
 
@@ -591,6 +602,10 @@ function HsvrTrustScatter({ scatter }: { scatter: HsvrScatterData }) {
   const sy = ph / (bMax - bMin);
   const px = (a: number) => pad.l + (a - aMin) * sx;
   const py = (b: number) => pad.top + ph - (b - bMin) * sy;
+  /* Blend-weight secondary axis (overlay only): w=1 at the frame top,
+   * w=0 at the bottom — the tents are explanations, not target-scale
+   * series, so the right axis carries their own 0→1 scale. */
+  const pyw = (w: number) => pad.top + ph - w * ph;
 
   /* Four gridlines + tick labels per axis. */
   const aTicks = Array.from({ length: 5 }, (_, i) => aMin + ((aMax - aMin) * i) / 4);
@@ -604,7 +619,7 @@ function HsvrTrustScatter({ scatter }: { scatter: HsvrScatterData }) {
           viewBox={`0 0 ${W} ${H}`}
           className="h-full w-full overflow-visible"
           role="img"
-          aria-label={`HSVR trust-radius scatter: ${scatter.points.length} train rows in ${scatter.dimA} × ${scatter.dimB} coordinates, coloured by k-means cluster, with dashed trust regions`}
+          aria-label={`HSVR trust-radius scatter: ${scatter.points.length} train rows in ${scatter.dimA} × ${scatter.dimB} coordinates, coloured by k-means cluster, with dashed trust regions${overlay ? " and per-cluster blend-weight tents on a secondary 0–1 axis" : ""}`}
         >
           {/* Grid + ticks */}
           {aTicks.map((v, i) => (
@@ -717,24 +732,67 @@ function HsvrTrustScatter({ scatter }: { scatter: HsvrScatterData }) {
               );
             })}
           </g>
+          {/* Blend-weight tents (single feature: the tent along the
+           * feature axis IS the weight function w(z)). Clipped like the
+           * trust regions; drawn under the train rows. */}
+          {overlay ? (
+            <g clipPath="url(#hsvr-frame)">
+              {scatter.centroids.map((c, i) => (
+                <polyline
+                  key={`blend-${i}`}
+                  points={`${px(c.a - c.radius)},${pyw(0)} ${px(c.a)},${pyw(1)} ${px(
+                    c.a + c.radius
+                  )},${pyw(0)}`}
+                  fill="none"
+                  stroke={clusterColor(i)}
+                  strokeWidth={1.75}
+                  strokeLinejoin="round"
+                  strokeOpacity={0.85}
+                >
+                  <title>{`cluster #${i + 1} · w(z) = 1 − |z − centroid| / R — 1 at the centroid, 0 at R = ${fmtNum(
+                    c.radius,
+                    3
+                  )}`}</title>
+                </polyline>
+              ))}
+            </g>
+          ) : null}
           {/* Train rows, coloured by cluster. */}
-          {scatter.points.map((p, i) => (
-            <circle
-              key={`pt-${i}`}
-              cx={px(p.a)}
-              cy={py(p.b)}
-              r={2.8}
-              fill={clusterColor(p.cluster)}
-              fillOpacity={0.85}
-              stroke={clusterColor(p.cluster)}
-              strokeWidth={0.5}
-            >
-              <title>{`cluster #${p.cluster + 1} · ${scatter.dimA} ${fmtNum(
-                p.a,
-                3
-              )} · ${scatter.dimB} ${fmtNum(p.b, 3)}`}</title>
-            </circle>
-          ))}
+          {scatter.points.map((p, i) => {
+            /* Exact local weight for the hover title: 1-D for
+             * single-feature models, 2-D when the plot IS the feature
+             * space; projected (k > 2) models keep the honest
+             * coordinates-only title. */
+            const cen = scatter.centroids[p.cluster];
+            let w: number | null = null;
+            if (cen) {
+              if (scatter.bIsTarget) {
+                w = Math.max(0, 1 - Math.abs(p.a - cen.a) / cen.radius);
+              } else if (!scatter.projected) {
+                const d = Math.sqrt((p.a - cen.a) ** 2 + (p.b - cen.b) ** 2);
+                w = Math.max(0, 1 - d / cen.radius);
+              }
+            }
+            return (
+              <circle
+                key={`pt-${i}`}
+                cx={px(p.a)}
+                cy={py(p.b)}
+                r={2.8}
+                fill={clusterColor(p.cluster)}
+                fillOpacity={0.85}
+                stroke={clusterColor(p.cluster)}
+                strokeWidth={0.5}
+              >
+                <title>{`cluster #${p.cluster + 1} · ${scatter.dimA} ${fmtNum(
+                  p.a,
+                  3
+                )} · ${scatter.dimB} ${fmtNum(p.b, 3)}${
+                  w !== null ? ` · local weight w = ${fmtNum(w, 2)}` : ""
+                }`}</title>
+              </circle>
+            );
+          })}
           {/* Centroid diamonds. */}
           {scatter.centroids.map((c, i) => (
             <g key={`cen-${i}`}>
@@ -770,6 +828,45 @@ function HsvrTrustScatter({ scatter }: { scatter: HsvrScatterData }) {
           >
             {scatter.dimB.length > 22 ? `${scatter.dimB.slice(0, 21)}…` : scatter.dimB}
           </text>
+          {/* Secondary blend-weight axis (overlay only): ticks at
+           * w = 0 / 0.5 / 1 on the right edge + the mini "w" title. */}
+          {overlay ? (
+            <g>
+              {[0, 0.5, 1].map((w) => (
+                <g key={`wt-${w}`}>
+                  <line
+                    x1={pad.l + pw}
+                    y1={pyw(w)}
+                    x2={pad.l + pw + 4}
+                    y2={pyw(w)}
+                    stroke={CHART.gridStroke}
+                    strokeOpacity={0.7}
+                  />
+                  <text
+                    x={pad.l + pw + 6}
+                    y={pyw(w) + 3}
+                    textAnchor="start"
+                    className="fill-muted-foreground"
+                    style={{
+                      fontSize: 9,
+                      fontFamily: "var(--font-mono, monospace)",
+                    }}
+                  >
+                    {w === 0.5 ? "0.5" : `${w}`}
+                  </text>
+                </g>
+              ))}
+              <text
+                x={pad.l + pw + 6}
+                y={pad.top - 3}
+                textAnchor="start"
+                className="fill-muted-foreground"
+                style={{ fontSize: 9.5, fontStyle: "italic" }}
+              >
+                w
+              </text>
+            </g>
+          ) : null}
         </svg>
       </div>
       {/* Legend */}
@@ -816,6 +913,20 @@ function HsvrTrustScatter({ scatter }: { scatter: HsvrScatterData }) {
           </svg>
           trust radius
         </span>
+        {overlay ? (
+          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <svg width="18" height="10" viewBox="0 0 18 10" aria-hidden>
+              <polyline
+                points="1,9 9,1 17,9"
+                fill="none"
+                stroke={CHART.stone}
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+            </svg>
+            blend weight w(z)
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -917,6 +1028,10 @@ export function MlPlayground() {
   const [maxTrials, setMaxTrials] = useState<string>("12");
   const [searcher, setSearcher] = useState<"random" | "hyperband">("random");
   const [etaSel, setEtaSel] = useState<string>("3");
+  /* Trust-radius card: whether the HSVR blend-weight tents ride on the
+   * scatter (single-feature models only — the fade depends on the whole
+   * feature vector otherwise). */
+  const [showBlend, setShowBlend] = useState(true);
   const tuning = tuneStatus === "running";
   const tuneable = (task === "regression" ? TUNEABLE_REG : TUNEABLE_CLS).has(modelSel);
   const hyperbandable = HYPERBAND_MODELS.has(modelSel);
@@ -3009,10 +3124,32 @@ export function MlPlayground() {
                       {result.hsvr.radiusFactor} — hover any row or centroid
                     </CardDescription>
                   </div>
+                  {result.hsvr.scatter.bIsTarget ? (
+                    <button
+                      type="button"
+                      aria-pressed={showBlend}
+                      onClick={() => {
+                        setShowBlend((v) => !v);
+                      }}
+                      className={cn(
+                        "ml-auto inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2.5 text-[11px] font-medium transition-colors",
+                        showBlend
+                          ? "border-primary/40 bg-primary/10 text-primary shadow-sm"
+                          : "border-border bg-muted/30 text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                      )}
+                      title="Overlay each cluster's blend weight w(z) — the linear fade from full local weight at the centroid to pure global model at the trust radius (secondary 0–1 axis)"
+                    >
+                      <Activity className="size-3" aria-hidden />
+                      Blend weights
+                    </button>
+                  ) : null}
                 </div>
               </CardHeader>
               <CardContent className="p-3 sm:p-4">
-                <HsvrTrustScatter scatter={result.hsvr.scatter} />
+                <HsvrTrustScatter
+                  scatter={result.hsvr.scatter}
+                  showBlend={showBlend}
+                />
                 <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
                   Each dot is a train row in standardized feature space, coloured by its
                   k-means cluster. Dashed{" "}
@@ -3026,6 +3163,9 @@ export function MlPlayground() {
                   — queries inside it blend the local ridge with the global model, fading
                   linearly to pure global at the edge; beyond it the prediction is the
                   global ridge alone.
+                  {result.hsvr.scatter.bIsTarget
+                    ? " The tent curves are each cluster's blend weight w(z) = 1 − |z − centroid| / R (right axis, 0–1): full local weight at the centroid, the dashed band's edge is exactly where the local voice falls silent — hover any dot for its own w."
+                    : " With two or more features the fade depends on the whole feature vector, so the weight curve is drawn for single-feature models only."}
                 </p>
               </CardContent>
             </Card>

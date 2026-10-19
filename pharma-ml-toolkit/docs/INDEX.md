@@ -116,6 +116,7 @@ after adding new public functions.
 | `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
+| `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
 | `split_features_target` | function | Separate features from the target column. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
