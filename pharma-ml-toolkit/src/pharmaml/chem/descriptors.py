@@ -80,7 +80,7 @@ _LOG = get_logger(__name__)
 
 __all__ = ["compute_descriptors", "compute_fingerprints", "compute_maccs", "require_rdkit"]
 
-FingerprintKind = Literal["morgan", "rdkit", "atom_pair"]
+FingerprintKind = Literal["morgan", "rdkit", "atom_pair", "avalon"]
 
 
 def require_rdkit():
@@ -328,8 +328,11 @@ def compute_fingerprints(
     smiles:
         Iterable of SMILES strings.
     kind:
-        ``'morgan'`` (ECFP-style), ``'rdkit'`` (path-based) or
-        ``'atom_pair'`` fingerprint.
+        ``'morgan'`` (ECFP-style), ``'rdkit'`` (path-based),
+        ``'atom_pair'`` or ``'avalon'`` fingerprint.  Avalon upgrades
+        the rar's ``Descriptor classification.py`` / ``Descriptor
+        regression.py`` feature unions, which folded 512-bit Avalon
+        count fingerprints alongside ECFP/RDKit/Morgan blocks.
     radius:
         Fingerprint radius for Morgan fingerprints.  Must be an integer
         (numpy integers are accepted); bools are rejected -- see Raises.
@@ -337,7 +340,9 @@ def compute_fingerprints(
         Fold length for hashed fingerprints.  Must be an integer in
         ``(0, 65536]`` (numpy integers are accepted); bools are rejected.
     as_counts:
-        Return count fingerprints instead of binary bits (Morgan only).
+        Return count fingerprints instead of binary bits (Morgan and
+        Avalon -- the only two kinds with a count flavour; the rar's
+        Avalon block used counts).
 
     Returns
     -------
@@ -355,9 +360,9 @@ def compute_fingerprints(
     DataValidationError
         If ``smiles`` is a bare string, ``radius`` / ``n_bits`` are not
         integers or are out of range, or ``as_counts=True`` is combined
-        with a ``kind`` other than ``'morgan'`` (the count flavour only
-        exists for Morgan fingerprints -- other kinds would silently
-        return binary bits instead).  bools count as non-integers here by
+        with a ``kind`` that has no count flavour (only ``'morgan'`` and
+        ``'avalon'`` do -- other kinds would silently return binary
+        bits instead).  bools count as non-integers here by
         decision: ``True``/``False`` are nonsense as a radius or bit
         count, so they are rejected instead of being silently read as
         ``1``/``0``.
@@ -380,11 +385,11 @@ def compute_fingerprints(
     n_bits = int(n_bits)
     if not 0 < n_bits <= 65536:
         raise DataValidationError(f"n_bits out of range: {n_bits}")
-    if as_counts and kind != "morgan":
+    if as_counts and kind not in {"morgan", "avalon"}:
         raise DataValidationError(
-            "as_counts=True is only supported for kind='morgan' (count "
-            f"fingerprints); got kind={kind!r} -- pass as_counts=False or "
-            "switch to morgan"
+            "as_counts=True is only supported for count-capable kinds "
+            f"('morgan', 'avalon'); got kind={kind!r} -- pass "
+            "as_counts=False or switch to morgan/avalon"
         )
 
     smiles_list = _as_smiles_list(smiles, "smiles")
@@ -420,6 +425,23 @@ def compute_fingerprints(
             rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect(m, nBits=n_bits)
             for m in molecules
         ]
+    elif kind == "avalon":
+        from rdkit.Avalon import pyAvalonTools
+
+        if as_counts:
+            # GetAvalonCountFP hashes straight into nBits (the rar's
+            # Descriptor scripts folded the default-512 sparse vector
+            # by hand -- the binding does it natively).
+            fps = [
+                pyAvalonTools.GetAvalonCountFP(m, nBits=n_bits) for m in molecules
+            ]
+            matrix = np.zeros((len(fps), n_bits), dtype=np.uint32)
+            for row, fp in enumerate(fps):
+                for idx, value in fp.GetNonzeroElements().items():
+                    matrix[row, idx] = value
+            _LOG.info("Computed %d x %d avalon count fingerprints", *matrix.shape)
+            return matrix, valid_idx
+        fps = [pyAvalonTools.GetAvalonFP(m, nBits=n_bits) for m in molecules]
     else:
         raise DataValidationError(f"Unknown fingerprint kind {kind!r}")
 

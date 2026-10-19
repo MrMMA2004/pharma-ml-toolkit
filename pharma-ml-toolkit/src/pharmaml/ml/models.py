@@ -209,6 +209,31 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         param_grid={"alpha": [0.1, 1.0, 10.0]},
         notes="L2 linear classifier (upgrades Ridge.py)",
     ),
+    "lasso_logistic": ModelSpec(
+        name="lasso_logistic",
+        task="classification",
+        factory=lambda: LogisticRegression(
+            penalty="l1", solver="liblinear", max_iter=5000, random_state=42
+        ),
+        param_grid={"C": [0.01, 0.1, 1.0, 10.0]},
+        notes="L1 sparse logistic classifier (upgrades Classification/Lasso.py)",
+    ),
+    "elastic_net_logistic": ModelSpec(
+        name="elastic_net_logistic",
+        task="classification",
+        factory=lambda: LogisticRegression(
+            penalty="elasticnet",
+            solver="saga",
+            l1_ratio=0.5,
+            max_iter=5000,
+            random_state=42,
+        ),
+        param_grid={"C": [0.01, 0.1, 1.0, 10.0], "l1_ratio": [0.2, 0.5, 0.8]},
+        notes=(
+            "Elastic-net logistic classifier, saga solver "
+            "(upgrades Classification/Elastic net.py)"
+        ),
+    ),
     "lasso": ModelSpec(
         name="lasso",
         task="regression",

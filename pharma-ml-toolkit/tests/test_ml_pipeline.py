@@ -110,6 +110,49 @@ class TestRegistry:
         with pytest.raises(ModelError):
             build_model("huber_regression", "classification")
 
+    def test_penalized_logistic_classifiers_registered(self) -> None:
+        # The rar's Classification/Lasso.py and Classification/Elastic
+        # net.py were penalized LOGISTIC classifiers (l1 / elasticnet
+        # penalties, liblinear / saga solvers) -- the registry long
+        # covered only the regression flavours under those names.
+        lasso_spec = MODEL_REGISTRY["lasso_logistic"]
+        net_spec = MODEL_REGISTRY["elastic_net_logistic"]
+        for spec in (lasso_spec, net_spec):
+            assert spec.task == "classification"
+            assert spec.available  # plain scikit-learn
+        assert "l1_ratio" in net_spec.param_grid
+        assert "penalty" not in net_spec.param_grid  # fixed at the factory
+
+    def test_lasso_logistic_factory_sparsity(self) -> None:
+        model = build_model("lasso_logistic", "classification")
+        assert isinstance(model, LogisticRegression)
+        assert model.penalty == "l1" and model.solver == "liblinear"
+        rng = np.random.default_rng(0)
+        X = rng.normal(size=(60, 8))
+        X[:, 4:] *= 0.05  # four noise columns
+        y = (X[:, 0] + X[:, 1] > 0).astype(int)
+        model.fit(X, y)
+        assert int((model.coef_ == 0).sum()) >= 3  # L1 zeroes the noise
+
+    def test_elastic_net_logistic_factory_and_grid_params(self) -> None:
+        model = build_model(
+            "elastic_net_logistic", "classification", params={"C": 0.1, "l1_ratio": 0.2}
+        )
+        assert model.penalty == "elasticnet"
+        assert model.solver == "saga"
+        assert model.l1_ratio == 0.2
+        rng = np.random.default_rng(1)
+        X = rng.normal(size=(60, 4))
+        y = (X[:, 0] > 0).astype(int)
+        model.fit(X, y)  # saga + elasticnet trains without a ConvergenceError
+        assert set(model.classes_.tolist()) == {0, 1}
+
+    def test_penalized_logistic_task_mismatch(self) -> None:
+        with pytest.raises(ModelError):
+            build_model("lasso_logistic", "regression")
+        with pytest.raises(ModelError):
+            build_model("elastic_net_logistic", "regression")
+
 
 class TestPreprocessing:
     def test_clean_numeric_frame_protects_columns(self, classification_frame) -> None:

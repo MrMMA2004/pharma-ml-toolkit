@@ -1449,8 +1449,36 @@ class TestNotebookArtifacts:
             "dnn_residual",
             "plot_predicted_vs_actual",
             "plot_model_comparison",
+            # §2b replicate variability (100x-71/72)
+            "replicate_variability",
+            "add_cv=True",
+            "LN_IC50_replicate_cv_pct",
         ):
             assert symbol in sources, f"cell-line notebook lost its {symbol} section"
+
+        # The replicate-CV verdict must stay committed: the demo pair
+        # (same median 2.0, ten-fold different noise) is the section's
+        # teaching output, and the shipped duplicate (MCF-7 x
+        # crizotinib, byte-identical rows) collapses with CV 0.0.
+        cv_cell = next(
+            (c for c in code_cells if "replicate_variability(demo_screen)" in c.source),
+            None,
+        )
+        assert cv_cell is not None, "notebook lost its replicate-CV cell"
+        cv_text = "".join(
+            o.get("text", "") for o in cv_cell.get("outputs", [])
+            if o.get("output_type") == "stream"
+        )
+        assert "70.710678" in cv_text, "demo pair A's CV changed"
+        assert "7.071068" in cv_text, "demo pair B's CV changed"
+        assert "MCF-7 crizotinib" in cv_text, "shipped duplicate pair vanished"
+        assert "3.712163" in cv_text, "collapsed median drifted"
+        cv_table = "".join(
+            "".join(o.get("data", {}).get("text/plain", ""))
+            for o in cv_cell.get("outputs", [])
+            if o.get("output_type") == "execute_result"
+        )
+        assert "LN_IC50_replicate_cv_pct" in cv_table, "add_cv companion table lost"
 
         # The biomarker verdict must stay committed: the planted EGFR ->
         # erlotinib association is the notebook's headline result.

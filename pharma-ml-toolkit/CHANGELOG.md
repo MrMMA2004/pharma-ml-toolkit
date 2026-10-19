@@ -10,6 +10,52 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.23] — 2026-10-19
+
+### Added — the one-by-one RAR coverage audit (closes the last two gaps)
+
+- **`docs/COVERAGE.md`**: every one of the 118 recovered files from
+  `کدهای ماشین لرنینگ.rar` audited one by one and mapped to the
+  PharmaML surface that upgrades it — 112 `.py`, 2 `.ipynb`, 1 `.pkl`,
+  3 `.txt`. The audit surfaced exactly two functional gaps, both closed
+  in this release; the remaining deltas are intentional absorptions
+  (dataset-specific weights, literal `.docx`/`.mol2` outputs, the
+  deprecated MGLTools bridge, empty placeholders), each with its
+  reason stated in the matrix.
+- **`lasso_logistic`** (ml registry, classification): the archive's
+  `Classification/Lasso.py` was an *L1-penalized logistic classifier*
+  (`penalty='l1'`, liblinear) — the registry previously covered only
+  the regression flavour under that name. Grid: `C`.
+- **`elastic_net_logistic`** (ml registry, classification): the
+  archive's `Classification/Elastic net.py` was an elastic-net
+  *logistic* classifier (`penalty='elasticnet'`, saga, `l1_ratio`
+  grid) — same story. The registry is now 18 classical + 2 deep
+  families.
+- **Avalon fingerprints** (`chem.compute_fingerprints(kind='avalon')`):
+  the archive's `Descriptor classification.py` / `Descriptor
+  regression.py` feature unions folded 512-bit Avalon fingerprints
+  alongside ECFP/RDKit/Morgan blocks; the kind is now first-class —
+  bit (`GetAvalonFP`) and count (`GetAvalonCountFP`) flavours, the
+  count path hashing straight to `n_bits` where the archive folded by
+  hand. `as_counts=True` is now valid for morgan **and** avalon (the
+  only two count-capable kinds); the rejection message for other kinds
+  names both.
+- The ML notebook §2 demonstrates both additions: the fingerprint cell
+  computes 512-bit Avalon bits + counts and the §2 bullet documents
+  the count-capable kinds.
+
+### Added — replicate variability reaches the cell-line notebook (100x-72, completed)
+
+- `examples/complete_cellline_workflow.ipynb` gains §2b: the
+  `[1.0, 3.0]` vs `[1.9, 2.1]` teaching pair (same median 2.0,
+  ten-fold different noise → `cv_pct` 70.710678 vs 7.071068), the
+  shipped screen's single duplicate (MCF-7 × crizotinib,
+  byte-identical rows → CV 0.0, collapsed median 3.712163), and the
+  `add_cv=True` companion-column table (`LN_IC50_replicate_cv_pct`,
+  NaN for singletons). The §10 recap gains the row. Drift-guard pins
+  hold in `tests/test_viz.py` (source symbols + the five output
+  pins).
+
 ## [1.2.22] — 2026-10-19
 
 ### Added — replicate variability surfaces the noise the median collapse discards (100x-71)

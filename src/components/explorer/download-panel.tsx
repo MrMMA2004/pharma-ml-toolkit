@@ -8,6 +8,7 @@ import {
   FileArchive,
   FileCode2,
   FileDown,
+  FileSearch,
   FileText,
   Loader2,
   NotebookText,
@@ -77,7 +78,7 @@ const INSTALL_STEPS: InstallStep[] = [
   },
   {
     title: "Verify the install",
-    description: "1784 tests should pass and the CLI answers with its version.",
+    description: "1791 tests should pass and the CLI answers with its version.",
     commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
   },
 ];
@@ -223,7 +224,7 @@ const FEATURED_FILES: Array<{
     path: "examples/complete_ml_workflow.ipynb",
     title: "Complete ML workflow (zero → one hundred)",
     description:
-      "Executed Jupyter notebook — the full ML process in structured order: import your own file → SMILES → descriptors & fingerprints (feature calculation) → EDA → pIC50 → split → tuned training → multiclass evaluation → leaderboard → feature importance → save/load → HTML report. 15 figures committed inline.",
+      "Executed Jupyter notebook — the full ML process in structured order: import your own file → SMILES → descriptors & fingerprints (Morgan/RDKit/atom-pair/Avalon, bits and counts — feature calculation) → EDA → pIC50 → split → tuned training → multiclass evaluation → leaderboard → feature importance → save/load → HTML report. 15 figures committed inline.",
     icon: NotebookText,
     badgeClass: "bg-primary/10 text-primary",
   },
@@ -263,7 +264,7 @@ const FEATURED_FILES: Array<{
     path: "examples/complete_cellline_workflow.ipynb",
     title: "Complete cell line analysis workflow (zero → one hundred)",
     description:
-      "Executed Jupyter notebook — the biology path: a GDSC-style response screen import → QC audit → LN_IC50→pIC50 normalization → the cell × compound potency matrix → sensitive-vs-resistant quantile calls → omics feature selection → biomarker discovery → the response model, with dnn and dnn_residual joining the leaderboard. 3 figures committed inline.",
+      "Executed Jupyter notebook — the biology path: a GDSC-style response screen import → QC audit + replicate variability (the CV the median collapse discards) → LN_IC50→pIC50 normalization → the cell × compound potency matrix → sensitive-vs-resistant quantile calls → omics feature selection → biomarker discovery → the response model, with dnn and dnn_residual joining the leaderboard. 3 figures committed inline.",
     icon: NotebookText,
     badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   },
@@ -291,6 +292,14 @@ const FEATURED_FILES: Array<{
     icon: FileText,
     badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
+  {
+    path: "docs/COVERAGE.md",
+    title: "RAR coverage matrix",
+    description:
+      "The one-by-one audit of the original 118-script archive — every file mapped to the PharmaML surface that upgrades it, the two gaps the audit closed (penalized logistic classifiers, Avalon fingerprints) and the intentional absorptions, each with its reason.",
+    icon: FileSearch,
+    badgeClass: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+  },
 ];
 
 function collectDirSummary(
@@ -298,7 +307,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "1784 pytest cases across all domains",
+    tests: "1791 pytest cases across all domains",
     examples: "seven executed notebooks + six no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -501,7 +510,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="1784" label="passing tests" />
+          <StatChip icon={CircleCheck} value="1791" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}

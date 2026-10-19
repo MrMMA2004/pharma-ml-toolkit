@@ -373,6 +373,40 @@ class TestComputeFingerprintsPins:
             assert matrix.shape == (1, 256)
             assert valid == [0]
 
+    def test_avalon_bits_shape_and_pinned_sum(self) -> None:
+        # The rar's Descriptor classification/regression.py feature
+        # unions folded 512-bit Avalon fingerprints -- the binding now
+        # hashes straight to n_bits.
+        matrix, valid = compute_fingerprints(
+            [ETHANOL, BENZENE], kind="avalon", n_bits=512
+        )
+        assert matrix.shape == (2, 512)
+        assert matrix.dtype == np.uint8
+        assert valid == [0, 1]
+        assert matrix.sum(axis=1).tolist() == [8, 8]  # pinned Avalon bits
+        # same popcount, different bits: ethanol vs benzene set none of
+        # the same positions.
+        ethanol_idx = set(np.nonzero(matrix[0])[0].tolist())
+        benzene_idx = set(np.nonzero(matrix[1])[0].tolist())
+        assert ethanol_idx.isdisjoint(benzene_idx)
+
+    def test_avalon_counts_dtype_and_values(self) -> None:
+        # as_counts for Avalon upgrades the rar's get_avalon_count_fp
+        # hand-folded 512-wide dense vector.
+        matrix, valid = compute_fingerprints(
+            [ETHANOL], kind="avalon", n_bits=512, as_counts=True
+        )
+        assert matrix.shape == (1, 512)
+        assert matrix.dtype == np.uint32
+        assert valid == [0]
+        assert int(matrix.sum()) == 7  # ethanol: 7 nonzero count entries
+
+    def test_avalon_bits_differ_between_molecules(self) -> None:
+        ethanol, benzene = compute_fingerprints(
+            [ETHANOL, BENZENE], kind="avalon", n_bits=512
+        )
+        assert not np.array_equal(ethanol, benzene)
+
     def test_maccs_shape(self) -> None:
         matrix, valid = compute_maccs([ETHANOL, BENZENE])
         assert matrix.shape == (2, 167)

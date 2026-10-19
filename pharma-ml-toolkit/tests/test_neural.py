@@ -179,14 +179,14 @@ class TestRegistry:
             assert spec.requires == "torch"
             assert "PyTorch" in spec.notes
 
-    def test_registry_has_eighteen_entries(self) -> None:
+    def test_registry_has_twenty_entries(self) -> None:
         entries = list_models(only_available=False)
-        assert len(entries) == 18
+        assert len(entries) == 20
         dnn_entries = [e for e in entries if e["name"] in {"dnn", "dnn_residual"}]
         assert len(dnn_entries) == 2
         if not all(e["available"] for e in dnn_entries):
             pytest.skip("torch not installed in this environment")
-        assert len(list_models()) == 18
+        assert len(list_models()) == 20
 
     def test_aliases_resolve(self) -> None:
         assert resolve_model_name("deep_mlp") == "dnn"
@@ -225,8 +225,8 @@ class TestRegistry:
         entries = list_models(only_available=False)
         flagged = {e["name"]: e["available"] for e in entries}
         assert flagged["dnn"] is False and flagged["dnn_residual"] is False
-        # only_available=True drops them (16 core/boosting entries remain)
-        assert len(list_models()) == 16
+        # only_available=True drops them (18 core/boosting entries remain)
+        assert len(list_models()) == 18
         with pytest.raises(DependencyError, match="torch"):
             build_model("dnn", "classification")
 

@@ -6,7 +6,7 @@ domains into one coherent package:
 | Domain | What it does |
 |---|---|
 | **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
-| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (16 classical + **2 deep-learning families**), cross-validated training (binary **and multiclass**), evaluation, persistence |
+| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families**), cross-validated training (binary **and multiclass**), evaluation, persistence |
 | **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
 | **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management |
@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1784 tests).
+exceptions, input validation, and pytest coverage** (1791 tests).
 
 ---
 
@@ -218,7 +218,7 @@ pharma-ml-toolkit/
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
-├── tests/                   # 1784 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1791 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -266,7 +266,7 @@ every stage of a QSAR project in the order you would actually run it, with all
 outputs committed (numbers *and* inline figures):
 
 > §1 data entry (your own file) → §2 **feature calculation** (SMILES → 217 RDKit
-> descriptors, Morgan/RDKit/atom-pair fingerprints, MACCS keys, Tanimoto
+> descriptors, Morgan/RDKit/atom-pair/Avalon fingerprints, MACCS keys, Tanimoto
 > similarity heat-map, structures → model demo) → §3 EDA → §4 IC50→pIC50 →
 > §5 split → §6 grid-searched training → §7 evaluation (confusion, ROC) →
 > §8 multiclass → §9 regression (parity, residuals, outlier-robust Huber demo) → §10 leaderboard →
@@ -342,7 +342,9 @@ the screen and the expression matrix ship as `examples/data/cellline_screen.csv`
 and `examples/data/cellline_expression.csv`):
 
 > §1 data entry (GDSC-style response screen, validated on the way in) → §2 QC
-> audit (missing values, duplicate pairs, replicate collapse) → §3 normalization
+> audit (missing values, duplicate pairs, replicate collapse, **§2b replicate
+> variability** — the CV the median discards, `replicate_variability` +
+> `add_cv=True` companion columns) → §3 normalization
 > (LN_IC50 → pIC50, distributions) → §4 the cell × compound potency matrix +
 > per-compound ranking → §5 sensitive/resistant calling by quantiles → §6 omics
 > features (log2 + z, MAD gene selection) → §7 **biomarker discovery**
