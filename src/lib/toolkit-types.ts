@@ -275,6 +275,25 @@ export interface MLTrainResponse {
        *  to the cluster mean. */
       constant: boolean;
     }>;
+    /** The train-row geometry for the trust-radius scatter. dimA is the
+     * first standardized feature; dimB is the target when the model has a
+     * single feature (the radius renders as a horizontal band) or the
+     * second standardized feature (the radius renders as a circle). */
+    scatter?: {
+      dimA: string;
+      dimB: string;
+      /** True when dimB is the (raw) target axis rather than a feature. */
+      bIsTarget: boolean;
+      /** True when the model has >2 features — the circle is a projection
+       *  of the full-space trust sphere onto the first two dims. */
+      projected: boolean;
+      /** One point per train row: plot coords + cluster assignment. */
+      points: Array<{ a: number; b: number; cluster: number }>;
+      /** Cluster centroids in plot coords + their trust radii (the
+       * b-coordinate of a centroid is its cluster's mean target when
+       * bIsTarget, else the second standardized feature). */
+      centroids: Array<{ a: number; b: number; radius: number }>;
+    };
   };
   series: {
     test: Array<{ x: number; y: number; label?: number }>;
@@ -300,8 +319,13 @@ export interface MLTrainResponse {
 export interface MLTuneRequest {
   task: MLTask;
   model: string;
-  /** RandomSearch trial budget (4–40, clamped to the space size). */
+  /** RandomSearch trial budget (4–40, clamped to the space size);
+   *  ignored by the Hyperband schedule (brackets fix the trial count). */
   maxTrials: number;
+  /** Which searcher to run — random (default) or hyperband. */
+  searcher?: "random" | "hyperband";
+  /** Hyperband only: the halving/promotion factor η (2 / 3 / 4). */
+  eta?: 2 | 3 | 4;
   /** CV folds used to score each trial (3 / 5 / 10 — never off). */
   cv: 3 | 5 | 10;
   seed: number;
@@ -319,7 +343,9 @@ export interface MLTuneRequest {
   targetColumn?: string;
 }
 
-/** One RandomSearch trial — a sampled configuration plus its mean CV score. */
+/** One tuner trial — a sampled configuration plus its mean CV score.
+ *  Hyperband trials additionally carry the bracket/rung they ran in and
+ *  the resource budget they were scored at. */
 export interface MLTuneTrial {
   /** 1-based trial number, in the order the configs were drawn. */
   trial: number;
@@ -327,16 +353,30 @@ export interface MLTuneTrial {
   params: Record<string, number>;
   /** Mean score across the CV folds (R² or accuracy). */
   score: number;
+  /** Hyperband only: the bracket the trial ran in (0 = full-budget
+   *  bracket, higher = more exploratory). */
+  bracket?: number;
+  /** Hyperband only: the rung index within the bracket (0 = cheapest). */
+  rung?: number;
+  /** Hyperband only: the resource value the trial was scored at
+   *  (e.g. 200 epochs / 25 estimators). */
+  resource?: number;
+  /** Hyperband only: true when the config survived promotion to the
+   *  next rung. */
+  promoted?: boolean;
 }
 
 export interface MLTuneResponse {
   task: MLTask;
   model: string;
+  /** Which searcher produced the leaderboard. */
+  searcher: "random" | "hyperband";
   /** Scored objective name ("R²" or "Accuracy"). */
   objective: string;
   /** CV folds per trial. */
   cvK: number;
-  /** Requested trial budget. */
+  /** Requested trial budget (random mode; the Hyperband schedule fixes
+   *  its own trial count). */
   maxTrials: number;
   /** Total configurations in the model's discrete search grid. */
   spaceSize: number;
@@ -346,6 +386,22 @@ export interface MLTuneResponse {
   trials: MLTuneTrial[];
   /** The default-configuration CV score, for honest comparison. */
   baseline: { params: Record<string, number>; score: number };
+  /** Hyperband only: the schedule + resource economics. */
+  hyperband?: {
+    /** The halving/promotion factor η. */
+    eta: number;
+    /** The resource hyperparameter's name (e.g. "epochs"). */
+    resourceKey: string;
+    /** The largest resource budget R (top of the ladder). */
+    maxResource: number;
+    /** Distinct rung resources across all brackets, ascending. */
+    ladder: number[];
+    /** Per-bracket summary: how many configs started, at which rungs. */
+    brackets: Array<{ bracket: number; configs: number; rungs: number[] }>;
+    /** Resource economics: what the search spent vs evaluating every
+     *  trial at the full budget. */
+    budget: { spent: number; naive: number; savedPct: number };
+  };
   best: {
     params: Record<string, number>;
     /** Mean CV score of the winning configuration. */

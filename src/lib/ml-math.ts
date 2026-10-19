@@ -1441,6 +1441,26 @@ export interface HsvrClusterInfo {
   constant: boolean;
 }
 
+/** One train row in the trust-radius scatter's plot coordinates. */
+export interface HsvrScatterPoint {
+  /** First standardized feature dim. */
+  a: number;
+  /** Second dim: the raw target (single-feature models) or the second
+   *  standardized feature. */
+  b: number;
+  /** 0-based cluster assignment (the k-means owner). */
+  cluster: number;
+}
+
+/** The trust-radius scatter geometry: train rows + centroids, projected
+ *  onto the scatter's two dims so the UI never recomputes k-means. */
+export interface HsvrScatter {
+  points: HsvrScatterPoint[];
+  /** Centroids in plot coords (b = the cluster's mean target for
+   *  single-feature models) with their trust radii. */
+  centroids: Array<{ a: number; b: number; radius: number }>;
+}
+
 /** The full HSVR model — global ridge + per-cluster local ridges blended
  *  by a linear trust-radius fade. */
 export interface HsvrModel extends RowRegressor {
@@ -1449,6 +1469,8 @@ export interface HsvrModel extends RowRegressor {
   clusters: Array<{ centroid: number[]; radius: number }>;
   /** Honest diagnostics for the learned-parameters card. */
   info: HsvrClusterInfo[];
+  /** The trust-radius scatter geometry (train rows + centroids). */
+  scatter: HsvrScatter;
 }
 
 /**
@@ -1486,6 +1508,10 @@ export function fitHsvr(
   const clusters: Array<{ centroid: number[]; radius: number }> = [];
   const locals: Array<RowRegressor> = [];
   const info: HsvrClusterInfo[] = [];
+  /* Centroids in plot coords for the trust-radius scatter (b = the
+   * cluster's mean target — the local model's constant stand-in). */
+  const scatterCentroids: Array<{ a: number; b: number; radius: number }> = [];
+  const singleFeature = k <= 1;
 
   km.members.forEach((members, c) => {
     const centroid = km.centroids[c]!;
@@ -1502,6 +1528,11 @@ export function fitHsvr(
 
     const localX = members.map((i) => X[i]!);
     const localY = members.map((i) => y[i]!);
+    scatterCentroids.push({
+      a: centroid[0] ?? 0,
+      b: singleFeature ? mean(localY) : (centroid[1] ?? 0),
+      radius,
+    });
     if (localX.length >= k + 2 && localX.length > 0) {
       const m = fitMultivariateRegression(localX, localY, { alpha });
       locals.push({ predict: (xs) => m.predict(xs) });
@@ -1526,10 +1557,23 @@ export function fitHsvr(
     }
   });
 
+  /* The trust-radius scatter: train rows in (z1, target) or (z1, z2)
+   *  coords with their k-means assignments — the geometry the UI plots
+   *  without ever re-running the clustering. */
+  const scatter: HsvrScatter = {
+    points: Z.map((zRow, i) => ({
+      a: zRow[0] ?? 0,
+      b: singleFeature ? (y[i] ?? 0) : (zRow[1] ?? 0),
+      cluster: km.assignments[i] ?? 0,
+    })),
+    centroids: scatterCentroids,
+  };
+
   return {
     std,
     clusters,
     info,
+    scatter,
     predict(xsRaw: number[]) {
       const z = std.transform(xsRaw);
       /* Nearest centroid (ties → lowest index, matching k-means). */

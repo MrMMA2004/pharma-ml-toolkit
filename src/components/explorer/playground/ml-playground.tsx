@@ -6,11 +6,13 @@ import {
   Check,
   ChevronDown,
   ClipboardPaste,
+  Crosshair,
   Download,
   Eraser,
   FileSpreadsheet,
   FileUp,
   History,
+  Layers,
   Loader2,
   Network,
   Play,
@@ -395,6 +397,18 @@ const HP_LABELS: Record<string, string> = {
   radiusFactor: "trust radius ×",
 };
 
+/** Models whose grid contains a resource hyperparameter — the slots
+ *  successive halving can promote rung by rung (mirrors the server's
+ *  TUNE_RESOURCES registry). */
+const HYPERBAND_MODELS = new Set(["mlp", "random_forest", "gradient_boosting"]);
+
+/** The resource slot per Hyperband-capable model (mirrors TUNE_RESOURCES). */
+const RESOURCE_SPECS: Record<string, { key: string; label: string }> = {
+  mlp: { key: "epochs", label: "epochs" },
+  random_forest: { key: "nEstimators", label: "estimators" },
+  gradient_boosting: { key: "rounds", label: "boosting rounds" },
+};
+
 function specOf(task: Task, model: string): ModelSpec | null {
   const list = task === "regression" ? REG_MODELS : CLS_MODELS;
   return list.find((m) => m.id === model) ?? null;
@@ -513,6 +527,300 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+/* ------------------------------------------------------------------ */
+/* HSVR trust-radius scatter                                           */
+/* ------------------------------------------------------------------ */
+
+/** The scatter block of a train response (kept as a type alias so the
+ *  component's contract stays tied to the API payload). */
+type HsvrScatterData = NonNullable<NonNullable<MLTrainResponse["hsvr"]>["scatter"]>;
+
+/** Cluster palette (cycles past five clusters — stone-safe, no blue). */
+const CLUSTER_COLORS = [CHART.emerald, CHART.rose, CHART.amber, CHART.teal, CHART.stone];
+
+/** Cluster colour for index i (cycled). */
+function clusterColor(i: number): string {
+  return CLUSTER_COLORS[i % CLUSTER_COLORS.length]!;
+}
+
+/**
+ * The HSVR trust-radius geometry plot — every train row as a dot coloured
+ * by its k-means cluster, centroid diamonds, and the dashed trust regions
+ * (a vertical band per cluster for single-feature models where dimB is
+ * the target; an axis-scaled ellipse otherwise). Hand-rolled SVG so the
+ * trust geometry renders exactly at data scale.
+ */
+function HsvrTrustScatter({ scatter }: { scatter: HsvrScatterData }) {
+  const W = 560;
+  const H = 300;
+  const pad = { l: 46, r: 14, top: 14, b: 34 };
+  const pw = W - pad.l - pad.r;
+  const ph = H - pad.top - pad.b;
+
+  /* Extents from the points (5% breathing room on both sides). */
+  const as = scatter.points.map((p) => p.a);
+  const bs = scatter.points.map((p) => p.b);
+  let aMin = Math.min(...as, ...scatter.centroids.map((c) => c.a));
+  let aMax = Math.max(...as, ...scatter.centroids.map((c) => c.a));
+  let bMin = Math.min(...bs, ...scatter.centroids.map((c) => c.b));
+  let bMax = Math.max(...bs, ...scatter.centroids.map((c) => c.b));
+  if (!Number.isFinite(aMin) || !Number.isFinite(aMax)) {
+    aMin = 0;
+    aMax = 1;
+  }
+  if (!Number.isFinite(bMin) || !Number.isFinite(bMax)) {
+    bMin = 0;
+    bMax = 1;
+  }
+  if (aMax - aMin < 1e-9) {
+    aMin -= 0.5;
+    aMax += 0.5;
+  }
+  if (bMax - bMin < 1e-9) {
+    bMin -= 0.5;
+    bMax += 0.5;
+  }
+  const aPad = (aMax - aMin) * 0.05;
+  const bPad = (bMax - bMin) * 0.05;
+  aMin -= aPad;
+  aMax += aPad;
+  bMin -= bPad;
+  bMax += bPad;
+
+  const sx = pw / (aMax - aMin);
+  const sy = ph / (bMax - bMin);
+  const px = (a: number) => pad.l + (a - aMin) * sx;
+  const py = (b: number) => pad.top + ph - (b - bMin) * sy;
+
+  /* Four gridlines + tick labels per axis. */
+  const aTicks = Array.from({ length: 5 }, (_, i) => aMin + ((aMax - aMin) * i) / 4);
+  const bTicks = Array.from({ length: 5 }, (_, i) => bMin + ((bMax - bMin) * i) / 4);
+  const nClusters = scatter.centroids.length;
+
+  return (
+    <div className="w-full">
+      <div className="w-full" style={{ aspectRatio: `${W} / ${H}` }}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="h-full w-full overflow-visible"
+          role="img"
+          aria-label={`HSVR trust-radius scatter: ${scatter.points.length} train rows in ${scatter.dimA} × ${scatter.dimB} coordinates, coloured by k-means cluster, with dashed trust regions`}
+        >
+          {/* Grid + ticks */}
+          {aTicks.map((v, i) => (
+            <g key={`ga-${i}`}>
+              <line
+                x1={px(v)}
+                y1={pad.top}
+                x2={px(v)}
+                y2={pad.top + ph}
+                stroke={CHART.gridStroke}
+                strokeOpacity={CHART.gridStrokeOpacity}
+              />
+              <text
+                x={px(v)}
+                y={pad.top + ph + 14}
+                textAnchor="middle"
+                className="fill-muted-foreground"
+                style={{ fontSize: 10, fontFamily: "var(--font-mono, monospace)" }}
+              >
+                {fmtNum(v, 2)}
+              </text>
+            </g>
+          ))}
+          {bTicks.map((v, i) => (
+            <g key={`gb-${i}`}>
+              <line
+                x1={pad.l}
+                y1={py(v)}
+                x2={pad.l + pw}
+                y2={py(v)}
+                stroke={CHART.gridStroke}
+                strokeOpacity={CHART.gridStrokeOpacity}
+              />
+              <text
+                x={pad.l - 6}
+                y={py(v) + 3}
+                textAnchor="end"
+                className="fill-muted-foreground"
+                style={{ fontSize: 10, fontFamily: "var(--font-mono, monospace)" }}
+              >
+                {fmtNum(v, 2)}
+              </text>
+            </g>
+          ))}
+          {/* Frame */}
+          <rect
+            x={pad.l}
+            y={pad.top}
+            width={pw}
+            height={ph}
+            fill="none"
+            stroke={CHART.gridStroke}
+            strokeOpacity={0.4}
+          />
+          {/* Trust regions (clipped to the frame). */}
+          <clipPath id="hsvr-frame">
+            <rect x={pad.l} y={pad.top} width={pw} height={ph} />
+          </clipPath>
+          <g clipPath="url(#hsvr-frame)">
+            {scatter.centroids.map((c, i) => {
+              const color = clusterColor(i);
+              return scatter.bIsTarget ? (
+                /* Single feature: the radius is a 1-D distance → band. */
+                <g key={`trust-${i}`}>
+                  <rect
+                    x={px(c.a - c.radius)}
+                    y={pad.top}
+                    width={Math.max(0, px(c.a + c.radius) - px(c.a - c.radius))}
+                    height={ph}
+                    fill={color}
+                    fillOpacity={0.08}
+                  />
+                  <line
+                    x1={px(c.a - c.radius)}
+                    y1={pad.top}
+                    x2={px(c.a - c.radius)}
+                    y2={pad.top + ph}
+                    stroke={color}
+                    strokeWidth={1}
+                    strokeDasharray="4 3"
+                    strokeOpacity={0.7}
+                  />
+                  <line
+                    x1={px(c.a + c.radius)}
+                    y1={pad.top}
+                    x2={px(c.a + c.radius)}
+                    y2={pad.top + ph}
+                    stroke={color}
+                    strokeWidth={1}
+                    strokeDasharray="4 3"
+                    strokeOpacity={0.7}
+                  />
+                </g>
+              ) : (
+                /* Multi-feature: the Euclidean trust sphere under the
+                 *  axis scaling renders as an ellipse. */
+                <ellipse
+                  key={`trust-${i}`}
+                  cx={px(c.a)}
+                  cy={py(c.b)}
+                  rx={Math.max(0, c.radius * sx)}
+                  ry={Math.max(0, c.radius * sy)}
+                  fill={color}
+                  fillOpacity={0.06}
+                  stroke={color}
+                  strokeWidth={1}
+                  strokeDasharray="4 3"
+                  strokeOpacity={0.7}
+                />
+              );
+            })}
+          </g>
+          {/* Train rows, coloured by cluster. */}
+          {scatter.points.map((p, i) => (
+            <circle
+              key={`pt-${i}`}
+              cx={px(p.a)}
+              cy={py(p.b)}
+              r={2.8}
+              fill={clusterColor(p.cluster)}
+              fillOpacity={0.85}
+              stroke={clusterColor(p.cluster)}
+              strokeWidth={0.5}
+            >
+              <title>{`cluster #${p.cluster + 1} · ${scatter.dimA} ${fmtNum(
+                p.a,
+                3
+              )} · ${scatter.dimB} ${fmtNum(p.b, 3)}`}</title>
+            </circle>
+          ))}
+          {/* Centroid diamonds. */}
+          {scatter.centroids.map((c, i) => (
+            <g key={`cen-${i}`}>
+              <rect
+                x={px(c.a) - 4.5}
+                y={py(c.b) - 4.5}
+                width={9}
+                height={9}
+                transform={`rotate(45 ${px(c.a)} ${py(c.b)})`}
+                fill="var(--background, #fff)"
+                stroke={clusterColor(i)}
+                strokeWidth={1.6}
+              >
+                <title>{`centroid #${i + 1} · trust radius ${fmtNum(c.radius, 3)}`}</title>
+              </rect>
+            </g>
+          ))}
+          {/* Axis labels */}
+          <text
+            x={pad.l + pw / 2}
+            y={H - 6}
+            textAnchor="middle"
+            className="fill-muted-foreground"
+            style={{ fontSize: 10.5 }}
+          >
+            {scatter.dimA}
+          </text>
+          <text
+            x={pad.l - 34}
+            y={pad.top + 4}
+            style={{ fontSize: 10.5 }}
+            className="fill-muted-foreground"
+          >
+            {scatter.dimB.length > 22 ? `${scatter.dimB.slice(0, 21)}…` : scatter.dimB}
+          </text>
+        </svg>
+      </div>
+      {/* Legend */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 px-1">
+        {Array.from({ length: nClusters }, (_, i) => (
+          <span
+            key={`lg-${i}`}
+            className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+          >
+            <span
+              className="size-2 rounded-full"
+              style={{ backgroundColor: clusterColor(i) }}
+              aria-hidden
+            />
+            cluster {i + 1}
+          </span>
+        ))}
+        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
+            <rect
+              x="1.5"
+              y="1.5"
+              width="7"
+              height="7"
+              transform="rotate(45 5 5)"
+              fill="var(--background, #fff)"
+              stroke={CHART.stone}
+              strokeWidth="1.4"
+            />
+          </svg>
+          centroid
+        </span>
+        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <svg width="18" height="8" viewBox="0 0 18 8" aria-hidden>
+            <line
+              x1="1"
+              y1="4"
+              x2="17"
+              y2="4"
+              stroke={CHART.stone}
+              strokeWidth="1"
+              strokeDasharray="4 3"
+            />
+          </svg>
+          trust radius
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function MlPlayground() {
   /* Experiment setup + results live in the store, so the whole playground
    * (config, trained model, dataset preview) survives tab switches. */
@@ -600,14 +908,19 @@ export function MlPlayground() {
   /* X-range zoom on the preview scatter — null = full range. */
   const [xZoom, setXZoom] = useState<[number, number] | null>(null);
 
-  /* RandomSearch tuner state — transient, mirroring ml tune on the server.
-   * maxTrials rides in state so the budget is visible before searching. */
+  /* Tuner state — transient, mirroring ml tune on the server. maxTrials
+   * rides in state so the budget is visible before searching; the searcher
+   * toggle picks RandomSearch vs Hyperband (successive halving). */
   const [tuneStatus, setTuneStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [tuneResult, setTuneResult] = useState<MLTuneResponse | null>(null);
   const [tuneError, setTuneError] = useState<string | null>(null);
   const [maxTrials, setMaxTrials] = useState<string>("12");
+  const [searcher, setSearcher] = useState<"random" | "hyperband">("random");
+  const [etaSel, setEtaSel] = useState<string>("3");
   const tuning = tuneStatus === "running";
   const tuneable = (task === "regression" ? TUNEABLE_REG : TUNEABLE_CLS).has(modelSel);
+  const hyperbandable = HYPERBAND_MODELS.has(modelSel);
+  const resourceSpec = RESOURCE_SPECS[modelSel];
 
   /* Uploaded-CSV state: drag feedback, paste area, hidden file input. */
   const [dragOver, setDragOver] = useState(false);
@@ -967,10 +1280,10 @@ export function MlPlayground() {
     }
   }
 
-  /** Run the RandomSearch tuner over the selected model's discrete search
-   *  grid — the web mirror of `ml tune --searcher random`. Each trial is
-   *  scored with the same k-fold CV the server uses, so the leaderboard is
-   *  directly comparable to the Train metrics. */
+  /** Run the hyperparameter search over the selected model's discrete
+   *  grid — the web mirror of `ml tune --searcher random|hyperband`. Each
+   *  trial is scored with the same k-fold CV the server uses, so the
+   *  leaderboard is directly comparable to the Train metrics. */
   async function runTune() {
     if (source === "synthetic" && !seedValid) {
       setTuneError("Seed must be a non-negative integer (0 – 2147483647).");
@@ -988,6 +1301,12 @@ export function MlPlayground() {
       );
       return;
     }
+    if (searcher === "hyperband" && !hyperbandable) {
+      setTuneError(
+        `Hyperband needs a resource hyperparameter — ${modelSpec.label} has none. Pick the neural net (epochs), random forest (estimators) or gradient boosting (rounds), or switch to RandomSearch.`
+      );
+      return;
+    }
     setTuneStatus("running");
     setTuneError(null);
     const body: MLTuneRequest = {
@@ -996,6 +1315,10 @@ export function MlPlayground() {
       noise,
       model: modelSel,
       maxTrials: Number.parseInt(maxTrials, 10) || 12,
+      searcher,
+      ...(searcher === "hyperband"
+        ? { eta: (Number.parseInt(etaSel, 10) as 2 | 3 | 4) || 3 }
+        : {}),
       /* The tuner always cross-validates; CV=Off falls back to 5-fold. */
       cv: (Number.parseInt(cv, 10) >= 3 ? Number.parseInt(cv, 10) : 5) as 3 | 5 | 10,
       seed: Number.parseInt(seed, 10) || 0,
@@ -1034,15 +1357,25 @@ export function MlPlayground() {
       const payload = data as MLTuneResponse;
       setTuneResult(payload);
       setTuneStatus("done");
-      toast.success("Search complete", {
-        description: `${payload.trials.length} trials · best ${payload.objective} ${fmtNum(
-          payload.best.cvScore,
-          4
-        )} (${payload.best.improvement >= 0 ? "+" : ""}${fmtNum(
-          payload.best.improvement,
-          4
-        )} vs defaults)`,
-      });
+      toast.success(
+        payload.searcher === "hyperband" ? "Hyperband search complete" : "Search complete",
+        {
+          description:
+            payload.searcher === "hyperband" && payload.hyperband
+              ? `${payload.trials.length} trials · η ${payload.hyperband.eta} · ${
+                  payload.hyperband.ladder.length
+                } rungs · best ${payload.objective} ${fmtNum(payload.best.cvScore, 4)} · ${
+                  Math.round(payload.hyperband.budget.savedPct * 100)
+                }% budget saved`
+              : `${payload.trials.length} trials · best ${payload.objective} ${fmtNum(
+                  payload.best.cvScore,
+                  4
+                )} (${payload.best.improvement >= 0 ? "+" : ""}${fmtNum(
+                  payload.best.improvement,
+                  4
+                )} vs defaults)`,
+        }
+      );
     } catch (err) {
       setTuneStatus("error");
       setTuneResult(null);
@@ -1731,33 +2064,85 @@ export function MlPlayground() {
             )}
           </div>
 
-          {/* Hyperparameter search — RandomSearch over the selected model's
-              discrete grid (the ml tune mirror). Only for tunable models. */}
+          {/* Hyperparameter search — RandomSearch or Hyperband (successive
+              halving) over the selected model's discrete grid (the ml tune
+              mirror). Only for tunable models. */}
           {tuneable ? (
             <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
               <div className="flex items-center justify-between gap-2">
-                <Label className="text-xs font-medium" htmlFor="ml-max-trials">
-                  Hyperparameter search
-                </Label>
-                <span className="text-[11px] text-muted-foreground">RandomSearch</span>
+                <Label className="text-xs font-medium">Hyperparameter search</Label>
+                <div
+                  role="group"
+                  aria-label="Searcher"
+                  className="inline-flex shrink-0 rounded-md border bg-background p-0.5"
+                >
+                  {(["random", "hyperband"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={searcher === mode}
+                      onClick={() => {
+                        setSearcher(mode);
+                        setTuneError(null);
+                      }}
+                      className={cn(
+                        "flex h-7 items-center gap-1 rounded-[5px] px-2.5 text-[11px] font-medium transition-colors",
+                        searcher === mode
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title={
+                        mode === "random"
+                          ? "Seeded sampling without replacement over the grid"
+                          : "Successive halving over the resource hyperparameter"
+                      }
+                    >
+                      {mode === "random" ? (
+                        <SlidersHorizontal className="size-3" aria-hidden />
+                      ) : (
+                        <Layers className="size-3" aria-hidden />
+                      )}
+                      {mode === "random" ? "Random" : "Hyperband"}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="flex gap-2">
-                <Select value={maxTrials} onValueChange={setMaxTrials}>
-                  <SelectTrigger
-                    id="ml-max-trials"
-                    className="h-10 w-[104px] shrink-0"
-                    aria-label="RandomSearch trial budget"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[8, 12, 16, 20, 30, 40].map((n) => (
-                      <SelectItem key={n} value={String(n)}>
-                        {n} trials
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {searcher === "random" ? (
+                  <Select value={maxTrials} onValueChange={setMaxTrials}>
+                    <SelectTrigger
+                      id="ml-max-trials"
+                      className="h-10 w-[104px] shrink-0"
+                      aria-label="RandomSearch trial budget"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[8, 12, 16, 20, 30, 40].map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n} trials
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select value={etaSel} onValueChange={setEtaSel}>
+                    <SelectTrigger
+                      id="ml-eta"
+                      className="h-10 w-[104px] shrink-0"
+                      aria-label="Hyperband halving factor η"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[2, 3, 4].map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          η = {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Button
                   variant="secondary"
                   className="h-10 flex-1 gap-2"
@@ -1771,18 +2156,26 @@ export function MlPlayground() {
                     </>
                   ) : (
                     <>
-                      <SlidersHorizontal className="size-4" aria-hidden />
+                      {searcher === "random" ? (
+                        <SlidersHorizontal className="size-4" aria-hidden />
+                      ) : (
+                        <Layers className="size-4" aria-hidden />
+                      )}
                       Tune {modelSpec.label.split(" (")[0]}
                     </>
                   )}
                 </Button>
               </div>
               <p className="text-[11px] leading-snug text-muted-foreground">
-                {cv === "0"
-                  ? "CV is off — trials score with 5-fold CV anyway."
-                  : `Every trial scores ${cv}-fold CV ${
-                      task === "regression" ? "R²" : "accuracy"
-                    }; same seed → same leaderboard.`}
+                {searcher === "random"
+                  ? cv === "0"
+                    ? "CV is off — trials score with 5-fold CV anyway."
+                    : `Every trial scores ${cv}-fold CV ${
+                        task === "regression" ? "R²" : "accuracy"
+                      }; same seed → same leaderboard.`
+                  : hyperbandable && resourceSpec
+                    ? `Successive halving over ${resourceSpec.label}: brackets start many configs at a low budget and promote only the top 1/η per rung. The schedule fixes the trial count; the budget knob is η.`
+                    : `Hyperband needs a resource hyperparameter — the neural net (epochs), random forest (estimators) or gradient boosting (rounds) qualify. Pick one or switch to Random.`}
               </p>
               {tuneError ? (
                 <p className="text-[11px] leading-snug text-destructive">{tuneError}</p>
@@ -1790,7 +2183,7 @@ export function MlPlayground() {
             </div>
           ) : (
             <p className="rounded-md border border-dashed px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-              {modelSpec.label} has no tunable hyperparameters — the RandomSearch card needs a
+              {modelSpec.label} has no tunable hyperparameters — the hyperparameter search needs a
               model with a search space.
             </p>
           )}
@@ -2599,6 +2992,51 @@ export function MlPlayground() {
           </>
         ) : null}
 
+        {/* --------------------- HSVR trust-radius geometry --------------------- */}
+        {result?.hsvr ? (
+          result.hsvr.scatter ? (
+            <Card className="overflow-hidden py-0 shadow-sm">
+              <CardHeader className="border-b bg-muted/30 py-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Crosshair className="size-4.5" aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <CardTitle className="text-base">Trust-radius geometry</CardTitle>
+                    <CardDescription className="text-xs">
+                      {result.hsvr.scatter.points.length} train rows ·{" "}
+                      {result.hsvr.nClusters} k-means clusters · radius factor ×
+                      {result.hsvr.radiusFactor} — hover any row or centroid
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4">
+                <HsvrTrustScatter scatter={result.hsvr.scatter} />
+                <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+                  Each dot is a train row in standardized feature space, coloured by its
+                  k-means cluster. Dashed{" "}
+                  {result.hsvr.scatter.bIsTarget
+                    ? "bands mark the trust radius — a 1-D distance on the feature axis"
+                    : `ellipses mark the trust radius — the cluster's reach${
+                        result.hsvr.scatter.projected
+                          ? " (projected from all features onto these two)"
+                          : ""
+                      }`}{" "}
+                  — queries inside it blend the local ridge with the global model, fading
+                  linearly to pure global at the edge; beyond it the prediction is the
+                  global ridge alone.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <p className="rounded-md border border-dashed px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+              The trust-radius geometry isn&rsquo;t kept in this persisted run — retrain the
+              hierarchical model to view it.
+            </p>
+          )
+        ) : null}
+
         {/* ------------------------------ Tuner results ------------------------------ */}
         {tuning ? (
           <Card className="py-0 shadow-sm">
@@ -2608,11 +3046,19 @@ export function MlPlayground() {
                 Searching {modelSpec.label} hyperparameters…
               </p>
               <p className="max-w-md text-xs text-muted-foreground">
-                {maxTrials} RandomSearch trials, each scored with{" "}
-                {(Number.parseInt(cv, 10) >= 3 ? cv : "5")}-fold CV{" "}
-                {task === "regression" ? "R²" : "accuracy"} on the{" "}
-                {source === "csv" && mlCsv ? mlCsv.fileName : "seeded generator"} data. The
-                leaderboard lands here when the search finishes.
+                {searcher === "hyperband"
+                  ? `Hyperband successive halving over ${
+                      resourceSpec?.label ?? "the resource"
+                    } (η = ${etaSel}) — brackets trade breadth for depth, every rung scored with ${
+                      Number.parseInt(cv, 10) >= 3 ? cv : "5"
+                    }-fold CV ${task === "regression" ? "R²" : "accuracy"} on the ${
+                      source === "csv" && mlCsv ? mlCsv.fileName : "seeded generator"
+                    } data. The leaderboard lands here when the brackets finish.`
+                  : `${maxTrials} RandomSearch trials, each scored with ${
+                      Number.parseInt(cv, 10) >= 3 ? cv : "5"
+                    }-fold CV ${task === "regression" ? "R²" : "accuracy"} on the ${
+                      source === "csv" && mlCsv ? mlCsv.fileName : "seeded generator"
+                    } data. The leaderboard lands here when the search finishes.`}
               </p>
             </CardContent>
           </Card>
@@ -2623,16 +3069,25 @@ export function MlPlayground() {
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/30 py-3">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Trophy className="size-4.5" aria-hidden />
+                  {tuneResult.searcher === "hyperband" ? (
+                    <Layers className="size-4.5" aria-hidden />
+                  ) : (
+                    <Trophy className="size-4.5" aria-hidden />
+                  )}
                 </span>
                 <div className="min-w-0">
                   <CardTitle className="text-base">Hyperparameter search</CardTitle>
                   <CardDescription className="text-xs">
-                    RandomSearch · {tuneResult.model} · {tuneResult.trials.length}{" "}
-                    {tuneResult.exhaustive
-                      ? "trials (full grid)"
-                      : `of ${tuneResult.spaceSize} configs`}{" "}
-                    · {tuneResult.cvK}-fold CV {tuneResult.objective}
+                    {tuneResult.searcher === "hyperband" && tuneResult.hyperband
+                      ? `Hyperband · ${tuneResult.model} · ${tuneResult.trials.length} trials · η ${tuneResult.hyperband.eta} · resource: ${
+                          HP_LABELS[tuneResult.hyperband.resourceKey] ??
+                          tuneResult.hyperband.resourceKey
+                        } · ${tuneResult.cvK}-fold CV ${tuneResult.objective}`
+                      : `RandomSearch · ${tuneResult.model} · ${tuneResult.trials.length} ${
+                          tuneResult.exhaustive
+                            ? "trials (full grid)"
+                            : `of ${tuneResult.spaceSize} configs`
+                        } · ${tuneResult.cvK}-fold CV ${tuneResult.objective}`}
                   </CardDescription>
                 </div>
               </div>
@@ -2664,7 +3119,9 @@ export function MlPlayground() {
                   </p>
                 </div>
                 <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
-                  <p className="text-xs text-muted-foreground">Defaults CV</p>
+                  <p className="text-xs text-muted-foreground">
+                    {tuneResult.searcher === "hyperband" ? "Defaults CV (full budget)" : "Defaults CV"}
+                  </p>
                   <p className="font-mono text-xl font-semibold tabular-nums">
                     {fmtNum(tuneResult.baseline.score, 4)}
                   </p>
@@ -2684,7 +3141,56 @@ export function MlPlayground() {
                 </div>
               </div>
 
-              {/* Leaderboard — best first, winner highlighted. */}
+              {/* Hyperband: the resource ladder + budget economics strip. */}
+              {tuneResult.searcher === "hyperband" && tuneResult.hyperband ? (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border bg-muted/20 px-3 py-2">
+                  <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <Layers className="size-3" aria-hidden />
+                    Resource ladder
+                  </p>
+                  <ol className="flex flex-wrap items-center gap-1" aria-label="Resource ladder">
+                    {tuneResult.hyperband.ladder.map((r, i) => (
+                      <li
+                        key={r}
+                        className="flex items-center gap-1"
+                        aria-label={`rung ${i + 1}: ${r}`}
+                      >
+                        {i > 0 ? (
+                          <TrendingUp className="size-3 text-muted-foreground/60" aria-hidden />
+                        ) : null}
+                        <span
+                          className={cn(
+                            "rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums",
+                            i === tuneResult.hyperband!.ladder.length - 1
+                              ? "border-primary/40 bg-primary/10 text-primary"
+                              : "bg-background text-muted-foreground"
+                          )}
+                        >
+                          {r}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    budget{" "}
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {tuneResult.hyperband.budget.spent.toLocaleString()}
+                    </span>{" "}
+                    of a naive{" "}
+                    <span className="font-semibold tabular-nums">
+                      {tuneResult.hyperband.budget.naive.toLocaleString()}
+                    </span>{" "}
+                    {HP_LABELS[tuneResult.hyperband.resourceKey] ??
+                      tuneResult.hyperband.resourceKey}
+                    <span className="ml-1.5 rounded-sm bg-emerald-500/10 px-1.5 py-0.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                      {Math.round(tuneResult.hyperband.budget.savedPct * 100)}% saved
+                    </span>
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Leaderboard — best first, winner highlighted. Hyperband rows
+                  additionally carry their bracket/rung + resource budget. */}
               <div className="max-h-80 overflow-y-auto thin-scrollbar rounded-lg border">
                 <Table>
                   <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
@@ -2692,6 +3198,9 @@ export function MlPlayground() {
                       <TableHead className="h-9 w-12 text-right">#</TableHead>
                       <TableHead className="h-9">Trial</TableHead>
                       <TableHead className="h-9">Configuration</TableHead>
+                      {tuneResult.searcher === "hyperband" ? (
+                        <TableHead className="h-9 text-right">Resource</TableHead>
+                      ) : null}
                       <TableHead className="h-9 text-right">CV {tuneResult.objective}</TableHead>
                       <TableHead className="h-9 text-right">Δ default</TableHead>
                     </TableRow>
@@ -2700,6 +3209,8 @@ export function MlPlayground() {
                     {tuneResult.trials.map((t, rank) => {
                       const winner = rank === 0;
                       const delta = t.score - tuneResult.baseline.score;
+                      const isHb = tuneResult.searcher === "hyperband";
+                      const resKey = tuneResult.hyperband?.resourceKey;
                       return (
                         <TableRow
                           key={t.trial}
@@ -2710,6 +3221,14 @@ export function MlPlayground() {
                           </TableCell>
                           <TableCell className="py-1.5 font-mono text-xs">
                             {t.trial}
+                            {isHb && t.bracket !== undefined && t.rung !== undefined ? (
+                              <span
+                                className="ml-1.5 rounded-sm border bg-muted/50 px-1 text-[9px] uppercase text-muted-foreground"
+                                title={`bracket ${t.bracket} (0 = full budget), rung ${t.rung} (0 = cheapest)`}
+                              >
+                                b{t.bracket}·r{t.rung}
+                              </span>
+                            ) : null}
                             {winner ? (
                               <Trophy
                                 className="ml-1 inline size-3 text-primary"
@@ -2719,9 +3238,22 @@ export function MlPlayground() {
                           </TableCell>
                           <TableCell className="py-1.5 font-mono text-[11px] text-muted-foreground">
                             {Object.entries(t.params)
+                              .filter(([k]) => !(isHb && k === resKey))
                               .map(([k, v]) => `${HP_LABELS[k] ?? k} ${fmtHp(v)}`)
                               .join(" · ")}
                           </TableCell>
+                          {isHb ? (
+                            <TableCell className="py-1.5 text-right font-mono text-xs tabular-nums">
+                              {t.resource}
+                              {t.promoted ? (
+                                <TrendingUp
+                                  className="ml-1 inline size-3 text-emerald-600 dark:text-emerald-400"
+                                  aria-hidden
+                                  aria-label="promoted to the next rung"
+                                />
+                              ) : null}
+                            </TableCell>
+                          ) : null}
                           <TableCell className="py-1.5 text-right font-mono text-xs font-semibold tabular-nums">
                             {fmtNum(t.score, 4)}
                           </TableCell>
@@ -2743,13 +3275,16 @@ export function MlPlayground() {
               </div>
 
               <p className="text-[11px] leading-snug text-muted-foreground">
-                Same data and folds for every trial — only the parameters vary, so the ranking is
-                a fair comparison. The winner is refit on the train split for the held-out{" "}
-                {tuneResult.best.testMetricName} above.{" "}
-                {tuneResult.exhaustive
-                  ? "The budget covered the whole grid, so this is a full grid search."
-                  : `The ${tuneResult.spaceSize}-configuration grid was sampled without replacement; a larger budget explores more of it.`}{" "}
-                Deterministic: same seed → same leaderboard.
+                {tuneResult.searcher === "hyperband" && tuneResult.hyperband
+                  ? `Every trial is scored on the same ${tuneResult.cvK}-fold folds; the leaderboard mixes resource budgets by design (b = bracket, r = rung, ↑ = promoted). The winner is refit on the train split for the held-out ${tuneResult.best.testMetricName}; defaults are scored at the full ${tuneResult.hyperband.maxResource} ${HP_LABELS[tuneResult.hyperband.resourceKey] ?? tuneResult.hyperband.resourceKey} for a fair comparison. Same seed → same brackets.`
+                  : `Same data and folds for every trial — only the parameters vary, so the ranking is
+                a fair comparison. The winner is refit on the train split for the held-out ${
+                    tuneResult.best.testMetricName
+                  } above. ${
+                    tuneResult.exhaustive
+                      ? "The budget covered the whole grid, so this is a full grid search."
+                      : `The ${tuneResult.spaceSize}-configuration grid was sampled without replacement; a larger budget explores more of it.`
+                  } Deterministic: same seed → same leaderboard.`}
               </p>
             </CardContent>
           </Card>

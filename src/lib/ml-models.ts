@@ -142,12 +142,22 @@ export interface RegFit {
   coefficients?: { intercept: number; coefs: number[]; standardized: boolean };
   featureImportance?: { features: string[]; importance: number[]; measure: "variance" | "gini" };
   modelParams?: Record<string, number>;
-  /** HSVR only: per-cluster geometry + local-fit diagnostics. */
+  /** HSVR only: per-cluster geometry + local-fit diagnostics + the
+   *  train-row scatter geometry for the trust-radius plot. */
   hsvr?: {
     nClusters: number;
     radiusFactor: number;
     alpha: number;
     clusters: HsvrClusterInfo[];
+    /** The trust-radius scatter (train rows + centroids + axis labels). */
+    scatter: {
+      dimA: string;
+      dimB: string;
+      bIsTarget: boolean;
+      projected: boolean;
+      points: Array<{ a: number; b: number; cluster: number }>;
+      centroids: Array<{ a: number; b: number; radius: number }>;
+    };
   };
 }
 
@@ -249,6 +259,10 @@ export function fitRegressionModel(
         alpha: hp.alpha,
         rand,
       });
+      /* Axis labels for the trust-radius scatter: the first standardized
+       *  feature vs the target (single feature) or the second standardized
+       *  feature (a projection when the model has more than two). */
+      const singleFeature = (XTrain[0]?.length ?? 0) <= 1;
       return {
         predict: (xs) => m.predict(xs),
         modelParams: {
@@ -261,6 +275,16 @@ export function fitRegressionModel(
           radiusFactor: hp.radiusFactor,
           alpha: hp.alpha,
           clusters: m.info,
+          scatter: {
+            dimA: `${featureNames[0] ?? "feature"} (standardized)`,
+            dimB: singleFeature
+              ? "target"
+              : `${featureNames[1] ?? "feature"} (standardized)`,
+            bIsTarget: singleFeature,
+            projected: (XTrain[0]?.length ?? 0) > 2,
+            points: m.scatter.points,
+            centroids: m.scatter.centroids,
+          },
         },
       };
     }
@@ -429,6 +453,23 @@ export const CLS_TUNE_SPACES: Record<string, TuneChoice[]> = {
     { key: "epochs", values: [200, 400, 800] },
     { key: "lr", values: [0.02, 0.05, 0.1, 0.2] },
   ],
+};
+
+/* ------------------------------------------------------------------ */
+/* Hyperband resources                                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Models whose search space contains a resource hyperparameter — a slot
+ * whose value scales compute monotonically, which successive halving can
+ * promote rung by rung (the web mirror of `pharmaml.ml.tuner.Hyperband`'s
+ * resource contract). Other models have no resource and are rejected by
+ * the tune route's Hyperband mode with an actionable message.
+ */
+export const TUNE_RESOURCES: Record<string, { key: string; label: string }> = {
+  mlp: { key: "epochs", label: "epochs" },
+  random_forest: { key: "nEstimators", label: "estimators" },
+  gradient_boosting: { key: "rounds", label: "boosting rounds" },
 };
 
 /** Total configurations in a space (product of the per-slot grids). */

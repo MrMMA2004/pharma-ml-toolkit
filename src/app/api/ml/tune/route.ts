@@ -24,6 +24,7 @@ import {
   CLASSIFICATION_MODELS,
   REGRESSION_MODELS,
   REG_TUNE_SPACES,
+  TUNE_RESOURCES,
   decodeTuneIndex,
   fitClassificationModel,
   fitRegressionModel,
@@ -45,6 +46,8 @@ const bodySchema = z
     noise: z.number().min(0).max(2).default(0.4),
     model: z.string().min(1).max(64),
     maxTrials: z.number().int().min(4).max(40).default(12),
+    searcher: z.enum(["random", "hyperband"]).default("random"),
+    eta: z.union([z.literal(2), z.literal(3), z.literal(4)]).default(3),
     cv: z.union([z.literal(3), z.literal(5), z.literal(10)]),
     seed: z.number().int().min(0).max(2_147_483_647).default(42),
     testSize: z.number().min(0.1).max(0.5).default(0.25),
@@ -284,14 +287,197 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    /* Baseline: the default configuration (resolveHyper defaults — exactly
-     * what Train model would use with no overrides). */
+    /* Refit the winning configuration on the train split → honest
+     * held-out test metric (shared by both searchers). */
+    const splitRand = mulberry32((effSeed + 7919) >>> 0);
+    const { train, test } = shuffledSplit(n, req.testSize, splitRand);
+    const refitOnSplit = (params: Record<string, number>): {
+      testMetric: number;
+      testMetricName: string;
+    } => {
+      const hp = resolveHyper(params as HyperSource);
+      if (req.task === "regression") {
+        const fit = fitRegressionModel(
+          req.model,
+          train.map(row),
+          train.map(target),
+          hp,
+          modelRng(effSeed, 0),
+          featureNames
+        );
+        const yTrue = test.map(target);
+        const yPred = test.map((i) => fit.predict(row(i)));
+        return { testMetric: regressionMetrics(yTrue, yPred).r2, testMetricName: "R²" };
+      }
+      const fit = fitClassificationModel(
+        req.model,
+        train.map(row),
+        train.map(target),
+        hp,
+        modelRng(effSeed, 0),
+        featureNames
+      );
+      const yTrue = test.map(target);
+      const yPred = test.map((i) => fit.predict01(row(i)[0] ?? 0, row(i)[1] ?? 0));
+      return { testMetric: classificationMetrics(yTrue, yPred).accuracy, testMetricName: "Accuracy" };
+    };
+
+    /* The default configuration's params on this space. */
     const defaultHp = resolveHyper({});
-    const baselineParams = space.reduce<Record<string, number>>((acc, c) => {
+    const defaultParams = space.reduce<Record<string, number>>((acc, c) => {
       acc[c.key as string] = defaultHp[c.key as keyof typeof defaultHp] as number;
       return acc;
     }, {});
-    const baselineScore = scoreConfig(baselineParams);
+
+    if (req.searcher === "hyperband") {
+      /* -------------------------------------------------------------- */
+      /* Hyperband successive halving (Li et al., 2013) — the web mirror */
+      /* of pharmaml.ml.tuner.Hyperband over the grid's resource slot.   */
+      /* -------------------------------------------------------------- */
+      const resourceSpec = TUNE_RESOURCES[req.model];
+      const resourceChoice = resourceSpec
+        ? space.find((c) => c.key === (resourceSpec.key as keyof HyperSource))
+        : undefined;
+      if (!resourceSpec || !resourceChoice) {
+        return NextResponse.json(
+          {
+            error: `Hyperband needs a resource hyperparameter — ${req.model} has none. Pick mlp (epochs), random_forest (estimators) or gradient_boosting (boosting rounds), or switch to RandomSearch.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      /* The resource ladder: the slot's grid, ascending. Rungs snap onto
+       * it (the largest value ≤ the schedule's target — never above). */
+      const grid = [...new Set(resourceChoice.values)].sort((a, b) => a - b);
+      const R = grid[grid.length - 1] ?? 1;
+      const rMin = grid[0] ?? R;
+      const snap = (target: number): number => {
+        let v = rMin;
+        for (const g of grid) if (g <= target && g > v) v = g;
+        return v;
+      };
+      const eta = req.eta;
+      const sMax =
+        R > rMin && eta > 1 ? Math.floor(Math.log(R / rMin) / Math.log(eta)) : 0;
+
+      /* Configs come from the non-resource slots (the resource is owned
+       * by the schedule). Distinct draws without replacement. */
+      const nonResourceSpace = space.filter((c) => c !== resourceChoice);
+      const nonResourceSize = tuneSpaceSize(nonResourceSpace);
+
+      const trials: MLTuneTrial[] = [];
+      const brackets: Array<{ bracket: number; configs: number; rungs: number[] }> = [];
+      const ladderSet = new Set<number>();
+      let trialCounter = 0;
+
+      /* Most exploratory bracket first (the classic order). */
+      for (let s = sMax; s >= 0; s--) {
+        const want = Math.ceil(((sMax + 1) * Math.pow(eta, s)) / (s + 1));
+        const nConfigs = Math.max(1, Math.min(want, nonResourceSize || 1));
+        const rungs = Array.from({ length: s + 1 }, (_, i) => snap(R / Math.pow(eta, s - i)));
+        rungs.forEach((r) => ladderSet.add(r));
+        brackets.push({ bracket: s, configs: nConfigs, rungs: [...rungs] });
+
+        /* Seeded draws without replacement from the non-resource grid. */
+        const sampler = mulberry32((effSeed + 104729 + 15485863 * (s + 1)) >>> 0);
+        const seen = new Set<number>();
+        let configs: Array<Record<string, number>> = [];
+        let guard = 0;
+        while (configs.length < nConfigs && guard < 1000 * nConfigs) {
+          guard++;
+          const idx = Math.floor(sampler() * nonResourceSize);
+          if (nonResourceSize > 1 && seen.has(idx)) continue;
+          seen.add(idx);
+          configs.push(decodeTuneIndex(nonResourceSpace, idx));
+        }
+
+        for (let rung = 0; rung < rungs.length; rung++) {
+          const resource = rungs[rung]!;
+          const scored: Array<{ score: number; params: Record<string, number>; ref: MLTuneTrial }> =
+            [];
+          for (const base of configs) {
+            const params = { ...base, [resourceSpec.key]: resource };
+            const score = scoreConfig(params as HyperSource);
+            trialCounter += 1;
+            const record: MLTuneTrial = {
+              trial: trialCounter,
+              params,
+              score,
+              bracket: s,
+              rung,
+              resource,
+              promoted: false,
+            };
+            trials.push(record);
+            scored.push({ score, params, ref: record });
+          }
+          if (rung === rungs.length - 1) break;
+          /* Promote the top ceil(n / eta) to the next rung. */
+          scored.sort((a, b) => b.score - a.score);
+          const keep = Math.max(1, Math.ceil(configs.length / eta));
+          const survivors = scored.slice(0, keep);
+          for (const sv of survivors) sv.ref.promoted = true;
+          configs = survivors.map((sv) => {
+            const { [resourceSpec.key]: _resource, ...rest } = sv.params;
+            return rest;
+          });
+        }
+      }
+
+      const ranked = [...trials].sort((a, b) => b.score - a.score || a.trial - b.trial);
+      const winner = ranked[0] ?? trials[0]!;
+      const { testMetric, testMetricName } = refitOnSplit(winner.params);
+
+      /* Baseline: the defaults at the FULL resource — the honest
+       * apples-to-apples comparison (Train model runs at full budget). */
+      const baselineParams = { ...defaultParams, [resourceSpec.key]: R };
+      const baselineScore = scoreConfig(baselineParams as HyperSource);
+
+      /* Resource economics: spent = Σ resource over trials; naive = every
+       * trial at the full budget (the notebook §5 "epoch economics"). */
+      const spent = trials.reduce((acc, t) => acc + (t.resource ?? 0), 0);
+      const naive = trials.length * R;
+      const savedPct = naive > 0 ? Math.max(0, 1 - spent / naive) : 0;
+
+      const response: MLTuneResponse = {
+        task: req.task,
+        model: req.model,
+        searcher: "hyperband",
+        objective,
+        cvK: req.cv,
+        maxTrials: req.maxTrials,
+        spaceSize,
+        exhaustive: false,
+        trials: ranked,
+        baseline: { params: baselineParams, score: baselineScore },
+        hyperband: {
+          eta,
+          resourceKey: resourceSpec.key,
+          maxResource: R,
+          ladder: [...ladderSet].sort((a, b) => a - b),
+          brackets,
+          budget: { spent, naive, savedPct },
+        },
+        best: {
+          params: winner.params,
+          cvScore: winner.score,
+          testMetric,
+          testMetricName,
+          improvement: winner.score - baselineScore,
+        },
+        datasetMeta: {
+          nTotal: n,
+          features,
+          ...(source ? { source } : {}),
+        },
+      };
+      return NextResponse.json(response);
+    }
+
+    /* Baseline: the default configuration (resolveHyper defaults — exactly
+     * what Train model would use with no overrides). */
+    const baselineScore = scoreConfig(defaultParams);
 
     /* Trial indices: budget ≥ spaceSize → the whole grid (deterministic
      * order); otherwise seeded sampling without replacement. */
@@ -322,49 +508,19 @@ export async function POST(request: NextRequest) {
     const winner = ranked[0] ?? trials[0]!;
 
     /* Best-config refit on the train split → honest held-out test metric. */
-    const splitRand = mulberry32((effSeed + 7919) >>> 0);
-    const { train, test } = shuffledSplit(n, req.testSize, splitRand);
-    const bestHp = resolveHyper(winner.params);
-    let testMetric: number;
-    let testMetricName: string;
-    if (req.task === "regression") {
-      const fit = fitRegressionModel(
-        req.model,
-        train.map(row),
-        train.map(target),
-        bestHp,
-        modelRng(effSeed, 0),
-        featureNames
-      );
-      const yTrue = test.map(target);
-      const yPred = test.map((i) => fit.predict(row(i)));
-      testMetric = regressionMetrics(yTrue, yPred).r2;
-      testMetricName = "R²";
-    } else {
-      const fit = fitClassificationModel(
-        req.model,
-        train.map(row),
-        train.map(target),
-        bestHp,
-        modelRng(effSeed, 0),
-        featureNames
-      );
-      const yTrue = test.map(target);
-      const yPred = test.map((i) => fit.predict01(row(i)[0] ?? 0, row(i)[1] ?? 0));
-      testMetric = classificationMetrics(yTrue, yPred).accuracy;
-      testMetricName = "Accuracy";
-    }
+    const { testMetric, testMetricName } = refitOnSplit(winner.params);
 
     const response: MLTuneResponse = {
       task: req.task,
       model: req.model,
+      searcher: "random",
       objective,
       cvK: req.cv,
       maxTrials: req.maxTrials,
       spaceSize,
       exhaustive,
       trials: ranked,
-      baseline: { params: baselineParams, score: baselineScore },
+      baseline: { params: defaultParams, score: baselineScore },
       best: {
         params: winner.params,
         cvScore: winner.score,
