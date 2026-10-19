@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1838 tests).
+exceptions, input validation, and pytest coverage** (1839 tests).
 
 ---
 
@@ -230,7 +230,7 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 1838 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1839 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -309,7 +309,8 @@ data-entry stages (CSV and PDB in), executed end-to-end without a docking engine
 > the shipped 14-folder `examples/data/docking_campaign/` demo) → §7 torsion QA &
 > campaign housekeeping (tree-wide TORSDOF/BRANCH audit with one deliberate
 > mismatch, plus dry-run collect/cleanup/distribute/delete previews) → §8 Vina
-> pose tables → §9 rescoring (ligand efficiency + consensus) → §10
+> pose tables → §9 rescoring (ligand efficiency + consensus + the explainable
+> breakdown — why the top ligand wins) → §10
 > energy-distribution & top-ligand figures → §11 one-click HTML report.
 
 Point `DOCKING_DIR` at your real campaign folder and re-run — parsers, rescoring

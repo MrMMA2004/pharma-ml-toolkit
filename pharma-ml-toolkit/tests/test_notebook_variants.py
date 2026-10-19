@@ -1,6 +1,6 @@
 """Guards for the notebook variants and the no-inline-fabrication contract.
 
-Three guard families live here:
+Five guard families live here:
 
 * ``TestNoOutputVariants`` — the ``*_no_output.ipynb`` twins are derived
   artifacts (scratch/strip_notebook_outputs.py): identical cell sources to
@@ -25,6 +25,12 @@ Three guard families live here:
   ``validate_bundle_input`` on a drifted copy of its own shipped frame;
   the guard pins the committed verdicts so the demo can never silently
   become stale or un-executed.
+* ``test_docking_workflow_consensus_breakdown_is_committed`` — the §9
+  breakdown demo guard (round 100x-83): the docking workflow
+  demonstrates ``consensus_breakdown`` (the introspection twin of
+  ``consensus_rescore`` from 100x-82) on its own rescoring frame; the
+  guard pins the committed driving-evidence verdict so the demo can
+  never silently become stale or un-executed.
 """
 
 from __future__ import annotations
@@ -168,6 +174,49 @@ def test_ml_workflow_persistence_audit_is_committed():
         in outputs
     ), "the drift demo's named extras changed — re-execute the notebook"
     assert "feature columns are in a different order than trained on" in outputs
+
+
+def test_docking_workflow_consensus_breakdown_is_committed():
+    """The §9 consensus-breakdown demo (round 100x-83) must stay executed.
+
+    ``consensus_breakdown`` — the introspection twin of
+    ``consensus_rescore`` from 100x-82 (library + the ``docking rescore``
+    CLI) — is demonstrated in the docking workflow's §9 on the
+    notebook's own rescoring frame: the explainable table (one ``_norm``
+    unit per evidence column next to the consensus) and the
+    driving-evidence verdict for the top-ranked ligand.  The committed
+    outputs are the evidence the demo actually ran: the top ligand's row
+    of 0–1 units and the argmax verdict naming the evidence that carried
+    the rank.  A cell edit nobody re-executed, or a verdict that changed
+    shape, fails here.
+    """
+    nb = _read("complete_docking_workflow")
+    sources = "\n".join(c.source for c in nb.cells if c.cell_type == "code")
+    assert "from pharmaml.docking import consensus_breakdown" in sources, (
+        "complete_docking_workflow lost the §9 breakdown demo"
+    )
+    assert 'breakdown = consensus_breakdown(' in sources
+    assert (
+        'ok, columns=["best_lowest_energy", "best_num_in_cluster",'
+        ' "ligand_efficiency"]' in sources
+    )
+    assert 'driver = top_row.drop("consensus").idxmax()' in sources
+
+    outputs = "\n".join(
+        "".join(out.get("text", []))
+        or "".join(out.get("data", {}).get("text/plain", []))
+        for c in nb.cells
+        if c.cell_type == "code"
+        for out in c.get("outputs", [])
+    )
+    assert "folder  best_lowest_energy_norm  best_num_in_cluster_norm" in (
+        outputs
+    ), "the explainable table is gone — re-execute the notebook"
+    assert "07_metformin tops the table (consensus 0.782):" in outputs
+    assert "  ligand_efficiency_norm     1.000" in outputs
+    assert "driving evidence: ligand_efficiency_norm = 1.000" in outputs, (
+        "the driving-evidence verdict changed — re-execute the notebook"
+    )
 
 
 # The no-inline-fabrication contract (round 24).  Each token below is a

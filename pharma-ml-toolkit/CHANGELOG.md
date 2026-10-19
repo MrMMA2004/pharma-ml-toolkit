@@ -10,6 +10,39 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.32] — 2026-10-19
+
+### Added — the consensus breakdown reaches the executed notebook (§9 demo)
+
+- **`examples/complete_docking_workflow.ipynb` §9** now demonstrates
+  `consensus_breakdown` alongside `consensus_rescore` (the notebook axis
+  of the 1.2.31 round, mirroring how 1.2.28 demonstrated
+  `validate_bundle_input` in the ML workflow): four new cells — the
+  introspection story (the consensus says *who* wins; the breakdown says
+  *why* — one 0–1 `<column>_norm` unit per evidence column next to the
+  score), the explainable table (all 12 ligands, sorted by consensus,
+  computed from the notebook's own §9 rescoring frame), the
+  driving-evidence verdict for the top-ranked ligand (07_metformin tops
+  the table at consensus 0.782 with `ligand_efficiency_norm = 1.000` —
+  not the best energy in the table, which is the point), and the
+  `pharmaml docking rescore` CLI-twin markdown with the recipe line
+  naming every column's direction and weight. Landed via
+  `scratch/patch_docking_notebook_83.py` (nbclient execution, MPLBACKEND
+  popped; committed outputs verified by source pins + output pins + the
+  fabrication gate + an AST audit that the new names bind nowhere else);
+  §9's intro paragraph and the §12 recap's Rescore row now name
+  `consensus_breakdown` too.
+- Tests +1: `test_docking_workflow_consensus_breakdown_is_committed` in
+  `tests/test_notebook_variants.py` (the 100x-78 guard pattern) — pins
+  the demo's source shapes (the import, the `breakdown = …` call with
+  the notebook's own three evidence columns, the per-row argmax) and the
+  committed verdicts (the explainable-table header, the top ligand's row
+  of units, the driving-evidence line); the module docstring's
+  guard-family list gains its fifth bullet.
+- README's docking-notebook tour now names the §9 breakdown demo
+  ("ligand efficiency + consensus + the explainable breakdown — why the
+  top ligand wins"); test counts 1838 → 1839.
+
 ## [1.2.31] — 2026-10-19
 
 ### Added — the consensus ranking becomes explainable (`docking rescore`)
