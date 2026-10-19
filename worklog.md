@@ -3805,3 +3805,25 @@ Stage Summary:
 - Open for 100x-80+ (the streak continues): (a) probe-first candidates: docking/scoring depth (consensus_rescore introspection), viz report generator coverage, the tree API's 60 s TTL no-cache query param (open since 100x-77); (b) the Deep Learning tab could gain Check-CSV too (it has its own run state; the pattern is now twice-established); (c) cron: three disabled jobs, re-check; (d) standing steps after any version bump: reexecute_all_notebooks_64.py + twins, QA chain, tree-API number sync, ZIP download-verify, single-invocation E2E; (e) NEVER ruff format tree-wide; lint solo; (f) shell rule: backtick-bearing check literals must go through heredocs (bash command substitution inside double quotes silently eats them); (g) LOOP-mode = `pytest -o addopts=` (1828), BARE-mode = bare `pytest` (1894) — decode before comparing baselines.
 
 ZIP version: 1.2.29 (pharma-ml-toolkit-v1.2.29.zip, 292 entries, 3,584,500 B).
+
+---
+Task ID: 100x-80
+Agent: Main orchestrator (Z.ai Code)
+Task: Continue the streak (loop-mode request): the tree API's 60 s TTL no-cache escape hatch — the open item (c) from 100x-77/78/79 (the stale-count trap that bit the number-sync step of three consecutive rounds).
+
+Work Log:
+- VERIFICATION per the iron rule: worklog tail re-read (100x-79 = the playground Check CSV at 1.2.29, commit 3207cb5 + worklog 50c38fd); venv INTACT (fifth clean round); git clean; dev server 200.
+- THE CHANGE (web-only, no toolkit-tree delta -> NO version bump, per the iron rule's "changes the shipped tree" test): src/app/api/toolkit/tree/route.ts — `GET` now takes the Request, reads `?fresh=1`, and a fresh call BYPASSES the TTL cache, walks the tree deterministically and REPLACES the cache with the walked data (so normal browsing immediately after serves the same numbers). The cached default path is byte-identical in behavior; the frontend never passes fresh (normal browsing keeps the cheap cache).
+- BEHAVIORAL PROBE (the round's evidence, all live against the dev server): A/B cache-fill then cache-hit -> identical generatedAt (cache proven) · F fresh -> new generatedAt (walk proven) · added zzz-probe.tmp to the toolkit tree -> cached still said 259 (THE STALENESS TRAP, demonstrated) while fresh said 260 (the fix) · probe removed -> fresh back to 259 and the cache now holds the truth. The old ritual (delete smoke artifacts, sleep 61 s, re-query) is now `?fresh=1`.
+- ZIP unchanged by construction: download API rebuilt on demand -> pharma-ml-toolkit-v1.2.29.zip, 292 entries, 3,584,500 B, testzip OK, x-toolkit-version 1.2.29 (the web route is not in the ZIP).
+- QA: bun run lint exit 0 · agent-browser E2E — page renders with v1.2.29 / 259 files / 103,250 LOC / 1826 passing, zero console errors, mobile 360x740 settled scrollWidth == clientWidth == 360; screenshot download/home-r80.png; browser closed, chrome pkilled.
+- CRON: job 467692 + the two older siblings still "Disabled due to exec limits exceeded" (server-side; re-checked this round, nothing actionable).
+- GIT: committed as ee91438 (tree API fresh param).
+
+Stage Summary:
+- The number-sync step is now deterministic: `curl /api/toolkit/tree?fresh=1` after any round's edits — no TTL waiting, no false counts (the trap that produced the fake "259 files after my own smoke" in 100x-75 and forced the 61 s sleeps in 78/79).
+- Deltas: route.ts +~10 lines (request param + bypass + cache replace). No toolkit version change (web-only); ZIP byte-count unchanged.
+- Standing convention honoured: this message ends with the ZIP version line.
+- Open for 100x-81+ (the streak continues): (a) probe-first candidates: docking/scoring depth (consensus_rescore introspection), viz report generator coverage; (b) the Deep Learning tab could gain Check-CSV (its own run state + the twice-established pattern); (c) cron: three disabled jobs, re-check; (d) standing steps after any version bump: reexecute_all_notebooks_64.py + twins, QA chain, tree-API number sync (now `?fresh=1`), ZIP download-verify, single-invocation E2E; (e) NEVER ruff format tree-wide; lint solo; (f) shell rule: backtick-bearing check literals go through heredocs; (g) LOOP-mode = `pytest -o addopts=`, BARE-mode = bare `pytest` — decode before comparing baselines.
+
+ZIP version: 1.2.29 (pharma-ml-toolkit-v1.2.29.zip, 292 entries, 3,584,500 B).
