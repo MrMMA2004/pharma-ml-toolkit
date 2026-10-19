@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (1802 tests).
+exceptions, input validation, and pytest coverage** (1804 tests).
 
 ---
 
@@ -220,7 +220,7 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 1802 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 1804 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + seven executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · walkthrough) + six no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -507,7 +507,9 @@ pharmaml data convert --data ligands.csv --to sdf          # CSV -> 3D-embedded 
 pharmaml data convert --data library.smi --to csv          # streaming .smi -> CSV
 pharmaml ml train  --data my_compounds.csv --target activity --task auto
 pharmaml ml train  --data my_compounds.csv --model rf --plots --keep-categorical
+pharmaml ml train  --data my_compounds.csv --pdf-report          # bundle + report.pdf
 pharmaml ml compare --data my_compounds.csv --target activity --plot
+pharmaml ml compare --data my_compounds.csv --pdf-report        # leaderboard + report.pdf
 ```
 
 `--task auto` (the default) infers classification vs regression from the target column, so
@@ -1116,7 +1118,11 @@ pharmaml generative corpus --out corpus.csv
 `ml train --plots` emits the full visual bundle — `report.html` plus
 confusion matrix, ROC curves, class distribution, CV fold scores and
 feature-importance figures (parity + residual diagnostics for regression)
-— into `<out>/report/`, no Python required. `ml compare --plot` saves the
+— into `<out>/report/`, no Python required. Adding `--pdf-report`
+(implies `--plots`) also writes `report.pdf` — the multi-page document
+with a title/metrics page, one page per table and one page per figure;
+`ml compare --pdf-report` does the same for the leaderboard bundle
+(title + leaderboard + chart, three pages). `ml compare --plot` saves the
 leaderboard bar chart and `--out` exports the table in any of
 csv/tsv/md/json/html; `generative run --adaptive-operators --plot <path>`
 saves the adaptive GA's operator-trajectory figure, and

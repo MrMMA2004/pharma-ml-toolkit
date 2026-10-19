@@ -10,6 +10,24 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.25] — 2026-10-19
+
+### Added — the PDF document reaches the command line
+
+- **`ml train --pdf-report`** and **`ml compare --pdf-report`**: the
+  1.2.24 `save_pdf_report` surface, exposed where users actually meet
+  the toolkit.  The flag *implies* the visual bundle (`--plots` /
+  `--plot`) — `pharmaml ml train --data qsar.csv --pdf-report` writes
+  `report.html` + figures + tables + **`report.pdf`** (title/metrics
+  page, one page per table, one page per figure) into
+  `<out>/report/` without a second flag; the stdout report gains a
+  dedicated `pdf:` line pointing at the document.  Same story for
+  the leaderboard: `ml compare --pdf-report` produces exactly three
+  pages (title + leaderboard table + chart) next to the existing
+  bundle.  Without the flag the output is byte-identical to 1.2.24
+  (pinned by test).  A missing fpdf degrades through the standard
+  CLI error path — `error: ... install 'pharmaml[reports]'`, exit 1.
+
 ## [1.2.24] — 2026-10-19
 
 ### Added — what the ZIP was missing (the follow-up to the coverage audit)

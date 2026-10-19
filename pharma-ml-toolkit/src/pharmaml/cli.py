@@ -6,9 +6,11 @@ training, comparison, splitting, conversion, PK analysis and docking
 scans::
 
     pharmaml ml train    --data qsar.csv --target Target --model rf --plots
+    pharmaml ml train    --data qsar.csv --pdf-report           # bundle + report.pdf
     pharmaml ml train    --data qsar.csv --task auto        # infer classification/regression
     pharmaml ml train    --data qsar.csv --keep-categorical  # one-hot string features
     pharmaml ml compare  --data qsar.csv --target Target --task classification --plot
+    pharmaml ml compare  --data qsar.csv --pdf-report         # leaderboard + report.pdf
     pharmaml data inspect --data qsar.csv                  # audit your own file
     pharmaml data split  --data qsar.csv --test-size 0.2 --val-size 0.1
     pharmaml data convert --data ligands.csv --to sdf      # .smi/.csv/.sdf round-trip
@@ -174,6 +176,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "tables) into <out>/report/ — requires pharmaml[reports]",
     )
     train.add_argument(
+        "--pdf-report", action="store_true",
+        help="with the visual bundle, also write report.pdf — the "
+        "multi-page document (one page per table/figure); implies "
+        "--plots — requires pharmaml[reports]",
+    )
+    train.add_argument(
         "--out", default="artifacts",
         help="plots/report output directory (the trained model itself is "
         "always saved under ./artifacts/)",
@@ -199,6 +207,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--plot", action="store_true",
         help="save the leaderboard bar chart + report bundle into <out-dir>/ "
         "— requires pharmaml[reports]",
+    )
+    compare.add_argument(
+        "--pdf-report", action="store_true",
+        help="with the report bundle, also write report.pdf — the "
+        "multi-page document; implies --plot — requires pharmaml[reports]",
     )
     compare.add_argument(
         "--out-dir", default="reports", help="directory for --plot artifacts"
@@ -992,7 +1005,7 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
     print(f"held-out: {report}")
     print(f"saved:    {model_path}")
 
-    if args.plots:
+    if args.plots or args.pdf_report:
         from pharmaml.viz import save_visual_bundle
 
         figures, tables = _train_figure_bundle(result, report, dataset, X_test, y_test)
@@ -1004,8 +1017,11 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
             out_dir=bundle_dir,
             title=f"pharmaml ml train — {result.name} ({dataset.task})",
             subtitle=str(args.data),
+            pdf_report=args.pdf_report,
         )
         print(f"plots:    {bundle_dir / 'report.html'} (+{len(written) - 1} files)")
+        if args.pdf_report:
+            print(f"pdf:      {bundle_dir / 'report.pdf'}")
     return 0
 
 
@@ -1025,7 +1041,7 @@ def _cmd_ml_compare(args: argparse.Namespace) -> int:
         path = write_table(leaderboard, args.out)
         print(f"\nleaderboard -> {path}")
 
-    if args.plot:
+    if args.plot or args.pdf_report:
         from pharmaml.viz import ml_plots, save_visual_bundle
 
         figure = ml_plots.plot_model_comparison(leaderboard)
@@ -1035,8 +1051,11 @@ def _cmd_ml_compare(args: argparse.Namespace) -> int:
             out_dir=args.out_dir,
             title="pharmaml ml compare",
             subtitle=str(args.data),
+            pdf_report=args.pdf_report,
         )
         print(f"plot:     {Path(args.out_dir) / 'report.html'} (+{len(written) - 1} files)")
+        if args.pdf_report:
+            print(f"pdf:      {Path(args.out_dir) / 'report.pdf'}")
 
     if not args.models:
         unavailable = [e["name"] for e in list_models(only_available=False) if not e["available"]]

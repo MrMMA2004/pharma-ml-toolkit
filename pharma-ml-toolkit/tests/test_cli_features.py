@@ -1,10 +1,11 @@
 """CLI-level tests for the new commands and flags.
 
 Exercises ``pharmaml.data split``, ``ml train --plots/--keep-categorical``,
-``ml compare --out/--plot``, model aliases and the docking campaign
-subcommands (``dpf``/``collect``/``torsion``/``gpf-scan``/``vina-scan``)
-through :func:`pharmaml.cli.main` exactly the way a shell would invoke
-them.
+``ml train --pdf-report`` / ``ml compare --pdf-report`` (the 100x-75 CLI
+surface of the PDF document), ``ml compare --out/--plot``, model aliases
+and the docking campaign subcommands (``dpf``/``collect``/``torsion``/
+``gpf-scan``/``vina-scan``) through :func:`pharmaml.cli.main` exactly the
+way a shell would invoke them.
 """
 
 from __future__ import annotations
@@ -157,6 +158,37 @@ class TestMLTrainCommand:
         assert (bundle / "residuals.png").is_file()
         # regression: no confusion matrix / class distribution
         assert not (bundle / "confusion_matrix.png").exists()
+        # --plots alone never writes the PDF document (100x-75 default pin)
+        assert not (bundle / "report.pdf").exists()
+
+    def test_pdf_report_implies_plots_and_writes_pdf(
+        self, reg_csv, tmp_path, capsys, monkeypatch
+    ):
+        # --pdf-report without --plots: the bundle still ships (the flag
+        # implies it) and report.pdf lands next to report.html.
+        pypdf = pytest.importorskip("pypdf")
+        monkeypatch.chdir(tmp_path)
+        out_dir = tmp_path / "art"
+        code = main([
+            "ml", "train", "--data", reg_csv,
+            "--model", "ridge", "--no-tune", "--cv", "3",
+            "--pdf-report", "--out", str(out_dir),
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "plots:" in out and "report.html" in out  # implied bundle
+        assert "pdf:" in out and "report.pdf" in out
+        bundle = out_dir / "report"
+        assert (bundle / "report.html").is_file()
+        assert (bundle / "report.pdf").is_file()
+        # the document: title page (title + subtitle + metric lines) then
+        # one page per table/figure — at least metrics + 2 figures here.
+        reader = pypdf.PdfReader(str(bundle / "report.pdf"))
+        assert len(reader.pages) >= 4
+        first = reader.pages[0].extract_text()
+        assert "pharmaml ml train" in first
+        assert "ridge" in first
+        assert "rmse" in first.lower()
 
     def test_keep_categorical_flow(self, clf_csv, tmp_path, capsys, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -187,6 +219,31 @@ class TestMLCompareCommand:
         assert (report_dir / "report.html").is_file()
         assert (report_dir / "model_comparison.png").is_file()
         assert (report_dir / "leaderboard.csv").is_file()
+        # --plot alone never writes the PDF document (100x-75 default pin)
+        assert not (report_dir / "report.pdf").exists()
+
+    def test_pdf_report_implies_plot(self, clf_csv, tmp_path, capsys, monkeypatch):
+        # --pdf-report without --plot: leaderboard bundle + report.pdf.
+        pypdf = pytest.importorskip("pypdf")
+        monkeypatch.chdir(tmp_path)
+        out_dir = tmp_path / "board_report"
+        code = main([
+            "ml", "compare", "--data", clf_csv,
+            "--models", "rf", "logistic", "--cv", "3",
+            "--pdf-report", "--out-dir", str(out_dir),
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "plot:" in out and "report.html" in out  # implied bundle
+        assert "pdf:" in out and "report.pdf" in out
+        assert (out_dir / "report.html").is_file()
+        assert (out_dir / "model_comparison.png").is_file()
+        assert (out_dir / "leaderboard.csv").is_file()
+        reader = pypdf.PdfReader(str(out_dir / "report.pdf"))
+        # exactly: title page + leaderboard table page + figure page
+        assert len(reader.pages) == 3
+        assert "pharmaml ml compare" in reader.pages[0].extract_text()
+        assert "random_forest" in reader.pages[1].extract_text()
 
     def test_keep_categorical_compare(self, clf_csv, capsys, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
