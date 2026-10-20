@@ -264,17 +264,20 @@ def test_tuning_workflow_quartet_is_committed():
     # §3 — the regime verdicts.
     assert "global SVR : rmse=" in outputs
     assert "hsvr       : rmse=" in outputs
-    # §4 — the tuner's apples-to-apples gain line.
-    assert "defaults: 0.623 +/- 0.025  ->  best 0.820  (gain +0.197 R2)" in (
+    # §4 — the tuner's apples-to-apples gain line (1.2.46 values: the
+    # clipped assay-window target makes the defaults worse and the tuned
+    # gain bigger -- the story holds, louder).
+    assert "defaults: 0.347 +/- 0.096  ->  best 0.717  (gain +0.370 R2)" in (
         outputs
     ), "the tuner gain line changed — re-execute the notebook"
     # §5 — the resource ladder and the epoch economics.
     assert "epoch budget spent: 783 of a naive 1863 (58% saved)" in outputs, (
         "the Hyperband economics changed — re-execute the notebook"
     )
-    # §6 — the A/B lines.
-    assert "plain      R2 0.941" in outputs
-    assert "batchnorm  R2 0.916" in outputs
+    # §6 — the A/B lines (1.2.46 values on the clipped endpoint; the
+    # verdict -- batchnorm does not help -- is unchanged).
+    assert "plain      R2 0.897" in outputs
+    assert "batchnorm  R2 0.856" in outputs
 
 
 # The no-inline-fabrication contract (round 24).  Each token below is a

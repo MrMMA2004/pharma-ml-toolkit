@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (2116 tests).
+exceptions, input validation, and pytest coverage** (2136 tests).
 
 ---
 
@@ -263,21 +263,22 @@ pharma-ml-toolkit/
 │                            # Tkinter window over every domain (chemistry · PK/PD · cell lines · QSAR · generative);
 │                            # probes its dependencies at launch, degrades gracefully, headlessly
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
-├── VERSION                 # the release version (1.2.0) — `cat VERSION` after extracting
+├── VERSION                 # the release version (1.2.46) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
-├── tests/                   # 2026 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
+├── tests/                   # 2136 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
-│   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
+│   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
 │                            #   regenerate deterministically via scratch/build_example_data.py
 │       ├── qsar_classification.csv        # ML §1      420 × 11 (active 118 / weak 155 / inactive 147)
 │       ├── screening_library.csv          # ML §2       79-row SMILES library (77 valid + 2 planted invalid)
 │       ├── library_with_descriptors.csv   # ML §3       77 × 10 (8 key descriptors + activity)
 │       ├── qsar_multiclass.csv            # ML §8      360 × 21 (inactive 125 / weak 102 / moderate 79 / strong 54)
-│       ├── qsar_regression.csv            # ML §9      260 × 21, continuous pIC50 endpoint
+│       ├── qsar_regression.csv            # ML §9      260 × 21, pIC50 clipped to the assay window [3, 11]
 │       ├── cellline_screen.csv            # cellline §1 185 rows: 23 cell lines × 8 compounds across 11 tissues
 │       │                                  #   (+1 duplicate pair, +1 missing value to audit)
 │       ├── cellline_expression.csv        # cellline §6 23 × 300 expression matrix (EGFR/KRT8 markers planted)
@@ -290,7 +291,7 @@ pharma-ml-toolkit/
 │       │       ├── 10_nicotine/           #   INCOMPLETE case — interrupted before clustering
 │       │       └── ligands.csv            #   14-row (name, SMILES) manifest mapping folders to structures
 │       ├── seed_molecules.csv             # generative §1b  12 named drugs for seeding (443 B, pinned)
-│       ├── walkthrough_compounds.csv      # walkthrough  180 × 8 (active 39 / inactive 88 / weak 53)
+│       ├── walkthrough_compounds.csv      # walkthrough  180 × 8 (active 39 / inactive 88 / weak 53; SMILES = the 12-molecule seed vocab)
 │       ├── walkthrough_classification.csv # walkthrough  300 × 9 binary target
 │       └── walkthrough_multiclass.csv     # walkthrough  300 × 9, 3 classes
 │                            # Provenance: every file is byte-identical to what the corresponding
@@ -1380,7 +1381,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (2026 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (2136 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

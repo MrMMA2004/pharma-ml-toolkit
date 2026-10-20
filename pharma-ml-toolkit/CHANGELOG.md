@@ -10,6 +10,53 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.46] — 2026-10-20
+
+### Fixed — the database audit: two real data errors cured, the whole inventory pinned
+
+The shipped example-data inventory (13 CSVs + the docking campaign + 2 PDB
+structures, 43 files) audited file-by-file with a **526-check independent
+auditor** (`scratch/audit_database_103.py`) — gaps (missing cells, ragged
+rows, coverage holes) and errors (invalid chemistry, impossible values,
+duplicate identities, drifted pins) — plus **20 permanent regression
+guards** (`tests/test_database_audit.py`, `TestStructuralIntegrity` /
+`TestChemicalIntegrity` / `TestSemanticIntegrity` / `TestDockingCampaign` /
+`TestPdbFiles`). Full report: `docs/DATA_AUDIT.md`.
+
+- **`walkthrough_compounds.csv` — one invalid SMILES in all 180 rows,
+  cured.** The metadata column carried the constant string `CCO(C)C` — a
+  trivalent-oxygen structure (chemically impossible: RDKit refuses it) with
+  zero diversity in the very column that demos "a user file's shape". The
+  SMILES column now resamples the toolkit's own **12-molecule seed
+  universe** (aspirin … lidocaine), drawn *after* the activity draw so the
+  descriptor bytes and the label census stay byte-pinned; the builder gains
+  a vocabulary pin (set equality + RDKit validity on every row).
+- **`qsar_regression.csv` — the impossible endpoint, clipped.** The pIC50
+  target ranged **-4.3 .. 14.7** — IC50 from ~21 *molar* to ~20
+  *femtommolar*; 15 rows claimed IC50 above 1 M and 2 below 10 fM.
+  `make_regression_table` now clips to the **assay-plausible window
+  [3, 11]** (IC50 1 mM .. 10 pM), the encoding a real plate produces at its
+  concentration limits ("reported as > max / < min, encoded at the
+  boundary") — 58 rows clipped at 3, 22 at 11; the rationale lives in the
+  generator docstring, and the window is pinned on both the file and the
+  builder. Downstream notebooks re-executed: the ML/tuning/deep-learning
+  regression sections now train on the honest endpoint.
+- **`pk_profile.csv` — the venv-reset repr drift, repaired.** One file on
+  disk had drifted one last-digit from its generator (the standing trap's
+  residue; caught by the idempotent builder's write-if-changed count) —
+  rebuilt byte-identical, AUC pins verified through the package (linear
+  17.9607 / log-trapezoid 17.2536).
+- **Designed quirks documented, not "fixed"** (the notebooks' audit/repair
+  sections demo them; the tests pin their exact counts): the 2 planted
+  invalid SMILES in `screening_library.csv`, the invalid + empty rows in
+  `ligand_library.csv`, the duplicate assay replicate + missing LN_IC50 in
+  `cellline_screen.csv`, the campaign's `08_benzocaine` MISSING_LOG +
+  `10_nicotine` INCOMPLETE cases, and the real sub-100-Da molecules in
+  `library_with_descriptors.csv` (pyrrole 67.09 — not an error).
+- **The SQLite side checked too**: the web app's `db/custom.db` (Prisma
+  scaffold, User/Post, 0 rows) is unused by any route — the playground is
+  client-side by design; no gap, no error, documented here for the record.
+
 ## [1.2.45] — 2026-10-20
 
 ### Added — the 25th family ships with its uncertainty: gaussian_process, VIP readout, the search trajectory

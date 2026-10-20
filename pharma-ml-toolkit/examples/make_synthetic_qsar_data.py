@@ -87,12 +87,23 @@ def make_regression_table(
     n_noise: int = 12,
     seed: int = 42,
 ) -> pd.DataFrame:
-    """Synthetic descriptor table with a continuous ``pIC50`` target."""
+    """Synthetic descriptor table with a continuous ``pIC50`` target.
+
+    The endpoint is clipped to the assay-plausible pIC50 window
+    ``[3, 11]`` (IC50 between 1 mM and 10 pM).  A real screening plate
+    cannot resolve potency beyond its concentration limits: measurements
+    past the bounds are reported as "> max" / "< min" concentration and
+    encoded at the boundary, so synthetic data that respects the assay
+    does the same.  (Pre-1.2.46 the raw linear score shipped un-clipped
+    -- pIC50 from -4.3 to 14.7, i.e. IC50 of ~21 molar to ~20
+    femtomolar, both chemically impossible.)
+    """
     rng = np.random.default_rng(seed)
     informative = rng.normal(size=(n_samples, n_informative))
     noise = rng.normal(scale=2.0, size=(n_samples, n_noise))
     true_weight = rng.normal(scale=1.5, size=n_informative)
     pic50 = 6.0 + informative @ true_weight + rng.normal(scale=0.5, size=n_samples)
+    pic50 = np.clip(pic50, 3.0, 11.0)
 
     data = np.hstack([informative, noise])
     columns = [f"descr_{i:03d}" for i in range(data.shape[1])]

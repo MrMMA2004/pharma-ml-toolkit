@@ -192,7 +192,7 @@ The second audit axis: not "does the toolkit cover the rar" but "do the
 | Surface | Coverage | Guarantee |
 | --- | --- | --- |
 | 25 registry families in `playground.py` | all 25, dynamic | the model combobox lists `list_models(task, only_available=True)` — a new family joins with zero edits (pls appeared the day it landed, gaussian_process the day after) |
-| 25 registry families in the notebooks | all 25 as of 1.2.45 | ML workflow §11 "the full registry tour" walks `list_models()` for both tasks and fits every available family (38 entries) on the notebook's own splits, closing with the cumulative fit-budget row — self-updating, doubles as a full-registry smoke test |
+| 25 registry families in the notebooks | all 25 as of 1.2.46 | ML workflow §11 "the full registry tour" walks `list_models()` for both tasks and fits every available family (38 entries) on the notebook's own splits, closing with the cumulative fit-budget row — self-updating, doubles as a full-registry smoke test |
 | 9 module groups (`chem`, `ml`, `docking`, `pharma`, `biology`, `generative`, `viz`, `utils`, `data`) | each has a dedicated workflow notebook | ml + walkthrough + tuning (ml/chem), docking, pk (pharma), cellline (biology), generative, deep learning (ml.torch) |
 | Ensemble builders (`build_stacking`, `build_voting`) | walkthrough + ml notebook | `compare_models`-adjacent cells |
 | Optional engines (xgboost / lightgbm / catboost / torch) | notebook-conditional + tour-conditional | listed honestly when absent (`requires` in the tour table), fitted when present |

@@ -378,12 +378,36 @@ def build_pk_profile() -> None:
 # ---------------------------------------------------------------------------
 # pharmaml_walkthrough.ipynb -- cells 3 + 5 + 10
 # ---------------------------------------------------------------------------
+# The walkthrough's SMILES metadata column vocabulary: the toolkit's own
+# 12-molecule seed universe (seed_molecules.csv), pinned here so the builder
+# stays order-independent.  The 100x-103 database audit found the previous
+# constant "CCO(C)C" was an invalid SMILES (trivalent oxygen) repeated in all
+# 180 rows -- zero diversity, zero validity.  Resampled from this vocabulary
+# the column finally demos what a real user file's metadata column looks like.
+WALKTHROUGH_SMILES_VOCAB = [
+    "CC(=O)Oc1ccccc1C(=O)O",          # aspirin
+    "CC(=O)Nc1ccc(O)cc1",             # paracetamol
+    "CC(C)Cc1ccc(C(C)C(=O)O)cc1",     # ibuprofen
+    "Cn1c(=O)c2c(ncn2C)n(C)c1=O",     # caffeine
+    "CN(C)C(=N)N=C(N)N",              # metformin
+    "CN1CCCC1c1cccnc1",               # nicotine
+    "CC(=O)CC(c1ccccc1)c1c(O)c2ccccc2oc1=O",  # warfarin
+    "Cn1cnc2c1c(=O)[nH]c(=O)n2C",     # theophylline
+    "O=C(O)Cc1ccccc1Nc1c(Cl)cccc1Cl",  # diclofenac
+    "COc1ccc2cc(C(C)C(=O)O)ccc2c1",   # naproxen
+    "CC(C)NCC(O)COc1cccc2ccccc12",    # propranolol
+    "CCN(CC)CC(=O)Nc1c(C)cccc1C",     # lidocaine
+]
+
+
 def build_walkthrough_tables() -> None:
     # cell 3: descriptors + string target + SMILES metadata column.
     rng = np.random.default_rng(5)
     user = pd.DataFrame(rng.normal(size=(180, 6)), columns=[f"descr_{i}" for i in range(6)])
     user["activity"] = rng.choice(["inactive", "weak", "active"], size=180, p=[0.45, 0.35, 0.20])
-    user["SMILES"] = "CCO(C)C"
+    # Drawn AFTER the activity draw: the descriptor + activity bytes stay
+    # identical to the committed pins; only the metadata column changes.
+    user["SMILES"] = rng.choice(WALKTHROUGH_SMILES_VOCAB, size=180)
     _write_frame(DATA_DIR / "walkthrough_compounds.csv", user, index=False)
 
     # cell 5: binary classification table.
@@ -615,6 +639,11 @@ def verify() -> None:
     reg = read("qsar_regression.csv")
     _check(reg.shape == (260, 21) and "pIC50" in reg.columns,
            f"qsar_regression.csv shape {reg.shape}, columns {list(reg.columns)[:3]}...")
+    # 100x-103 database-audit pin: the endpoint stays inside the
+    # assay-plausible window (pre-103 it ranged -4.3..14.7).
+    _check(reg["pIC50"].between(3.0, 11.0).all(),
+           f"qsar_regression.csv pIC50 outside [3, 11]: "
+           f"min={reg['pIC50'].min():.3f} max={reg['pIC50'].max():.3f}")
 
     lib = read("screening_library.csv")
     _check(len(lib) == 79, f"screening_library.csv has {len(lib)} rows, pinned 79")
@@ -664,6 +693,16 @@ def verify() -> None:
     wcensus = compounds["activity"].value_counts().to_dict()
     _check(wcensus == PIN_WALKTHROUGH_CENSUS,
            f"walkthrough_compounds.csv census {wcensus} != {PIN_WALKTHROUGH_CENSUS}")
+    # 100x-103 database-audit pins: the SMILES metadata column must be the
+    # 12-molecule seed vocabulary, every entry RDKit-valid (the pre-103 file
+    # carried one invalid trivalent-oxygen string in all 180 rows).
+    from rdkit import Chem
+
+    wsmiles = compounds["SMILES"].astype(str).tolist()
+    _check(set(wsmiles) == set(WALKTHROUGH_SMILES_VOCAB),
+           "walkthrough_compounds.csv SMILES vocabulary drifted from the 12-molecule seed set")
+    _check(len(wsmiles) == 180 and all(Chem.MolFromSmiles(s) is not None for s in wsmiles),
+           "walkthrough_compounds.csv contains an invalid SMILES")
     _check(read("walkthrough_classification.csv").shape == (300, 9),
            "walkthrough_classification.csv shape drifted from (300, 9)")
     wm = read("walkthrough_multiclass.csv")
