@@ -392,6 +392,9 @@ export interface MLTuneResponse {
     eta: number;
     /** The resource hyperparameter's name (e.g. "epochs"). */
     resourceKey: string;
+    /** The model-specific resource label ("boosting rounds" vs "trees") —
+     *  preferred over any per-key generic label by the UI. */
+    resourceLabel: string;
     /** The largest resource budget R (top of the ladder). */
     maxResource: number;
     /** Distinct rung resources across all brackets, ascending. */

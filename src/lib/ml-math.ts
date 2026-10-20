@@ -851,6 +851,277 @@ export function fitGradientBoostingRegressor(
 }
 
 /* ------------------------------------------------------------------ */
+/* Huber — iteratively reweighted least squares (robust linear)        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Robust linear regression with the Huber loss, fit by iteratively
+ * reweighted least squares (IRLS) on standardized features — the web
+ * mirror of sklearn's `HuberRegressor` (the library's `huber_regression`
+ * family, the upgrade of the original Huber.py). Points with
+ * |residual| ≤ epsilon contribute their full quadratic (weight 1); the
+ * tails are down-weighted linearly (weight = epsilon/|r|), so a handful
+ * of bad rows cannot drag the plane the way OLS lets them. The final
+ * iteration's weights are surfaced so the fit can report how many train
+ * rows ended up in the robust core vs the linear tail.
+ */
+export function fitHuberRegression(
+  X: number[][],
+  y: number[],
+  opts: { epsilon?: number; sweeps?: number } = {}
+): RowRegressor & {
+  std: Standardizer;
+  w: number[];
+  b: number;
+  nRobust: number;
+  nOutlier: number;
+} {
+  const epsilon = opts.epsilon ?? 1.35;
+  const sweeps = opts.sweeps ?? 60;
+  const n = X.length;
+  const k = X[0]?.length ?? 0;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+
+  const w = new Array<number>(k).fill(0);
+  let b = mean(y);
+  let nRobust = n;
+  let nOutlier = 0;
+  const rowErr = (i: number): number => {
+    let acc = b;
+    for (let j = 0; j < k; j++) acc += w[j]! * (Z[i]![j] ?? 0);
+    return (y[i] ?? 0) - acc;
+  };
+
+  for (let s = 0; s < sweeps; s++) {
+    const weights = new Array<number>(n).fill(1);
+    nRobust = 0;
+    nOutlier = 0;
+    for (let i = 0; i < n; i++) {
+      const r = rowErr(i);
+      if (Math.abs(r) <= epsilon) {
+        nRobust++;
+      } else {
+        weights[i] = epsilon / Math.abs(r);
+        nOutlier++;
+      }
+    }
+    // Weighted intercept: b = Σ w_i y_i / Σ w_i (z is mean-centred, so the
+    // intercept needs no per-sweep re-centring correction).
+    let wSum = 0;
+    let bAcc = 0;
+    for (let i = 0; i < n; i++) {
+      wSum += weights[i]!;
+      bAcc += weights[i]! * (y[i] ?? 0);
+    }
+    const bPrev = b;
+    b = bAcc / (wSum > 1e-12 ? wSum : 1);
+    // Weighted normal equations: (ZᵀWZ) w = ZᵀW(y − b).
+    const Aw = Array.from({ length: k }, () => new Array<number>(k).fill(0));
+    const rhs = new Array<number>(k).fill(0);
+    for (let i = 0; i < n; i++) {
+      const wi = weights[i]!;
+      for (let j = 0; j < k; j++) {
+        rhs[j] = (rhs[j] ?? 0) + wi * (Z[i]![j] ?? 0) * ((y[i] ?? 0) - b);
+        for (let l = 0; l < k; l++) {
+          Aw[j]![l] = (Aw[j]![l] ?? 0) + wi * (Z[i]![j] ?? 0) * (Z[i]![l] ?? 0);
+        }
+      }
+    }
+    const wNew = solveLinearSystem(Aw, rhs);
+    let moved = Math.abs(b - bPrev);
+    for (let j = 0; j < k; j++) moved += Math.abs(wNew[j]! - w[j]!);
+    for (let j = 0; j < k; j++) w[j] = wNew[j]!;
+    if (moved < 1e-10) break; // converged — the weights stopped moving
+  }
+
+  return {
+    std,
+    w,
+    b,
+    nRobust,
+    nOutlier,
+    predict(xsRaw: number[]) {
+      const z = std.transform(xsRaw);
+      let acc = b;
+      for (let j = 0; j < k; j++) acc += w[j]! * (z[j] ?? 0);
+      return acc;
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* AdaBoost.R2 (regression) — Drucker's weighted-median ensemble       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * AdaBoost.R2 regression: rounds of depth-2 CART stumps fit on weighted
+ * bootstrap resamples, each round measuring the weighted loss, shrinking
+ * the weights of well-fit rows (w *= β^(1−loss)) and predicting with the
+ * α-weighted MEDIAN of the surviving stumps — the median (not the mean)
+ * is Drucker's 1997 spec and sklearn's behaviour (the library's
+ * `adaboost` regression family, the upgrade of the original ADAboost.py).
+ * Importance accumulates each stump's variance-reduction gains scaled by
+ * its α weight (sklearn's estimator-weighted convention). Stops early
+ * when a round's weighted error reaches 1/2 (nothing left to learn).
+ */
+export function fitAdaBoostRegressor(
+  X: number[][],
+  y: number[],
+  opts: { nEstimators?: number; learningRate?: number; rand: () => number } = { rand: mulberry32(0) }
+): RowRegressor & { importance: number[] } {
+  const nEstimators = opts.nEstimators ?? 50;
+  const lr = opts.learningRate ?? 0.5;
+  const rand = opts.rand;
+  const n = X.length;
+  const k = X[0]?.length ?? 0;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+  const idx = Array.from({ length: n }, (_, i) => i);
+
+  const stumps: Array<{ root: CartNode; alpha: number }> = [];
+  const gains = new Array<number>(k).fill(0);
+  let w = new Array<number>(n).fill(1 / n);
+
+  for (let t = 0; t < nEstimators; t++) {
+    // Weighted bootstrap resample (cumulative draw, seeded).
+    const cum: number[] = [];
+    let acc = 0;
+    for (let i = 0; i < n; i++) {
+      acc += w[i]!;
+      cum.push(acc);
+    }
+    const sample: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const u = rand() * acc;
+      let lo = 0;
+      let hi = n - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if ((cum[mid] ?? 0) <= u) lo = mid + 1;
+        else hi = mid;
+      }
+      sample.push(lo);
+    }
+    const stumpGains = new Array<number>(k).fill(0);
+    const root = buildRegressionNode(Z, y, sample, 0, 2, stumpGains);
+    // Losses over every train row (not just the resample).
+    const errs = Z.map((zrow, i) => Math.abs((y[i] ?? 0) - predictTreeNode(root, zrow)));
+    const dMax = Math.max(...errs, 1e-12);
+    if (dMax <= 1e-12) {
+      // Perfect round: keep the stump with a dominant weight and stop.
+      stumps.push({ root, alpha: 1 });
+      for (let j = 0; j < k; j++) gains[j] = (gains[j] ?? 0) + stumpGains[j]!;
+      break;
+    }
+    let err = 0;
+    let wSum = 0;
+    for (let i = 0; i < n; i++) {
+      err += w[i]! * (errs[i]! / dMax);
+      wSum += w[i]!;
+    }
+    const errAvg = wSum > 1e-12 ? err / wSum : 1;
+    if (errAvg >= 0.5 - 1e-12) break; // weaker than chance — stop
+    const beta = errAvg / (1 - errAvg);
+    const alpha = lr * Math.log(1 / beta);
+    stumps.push({ root, alpha });
+    for (let j = 0; j < k; j++) gains[j] = (gains[j] ?? 0) + alpha * stumpGains[j]!;
+    // Shrink well-fit rows: w_i *= β^((1 − loss_i)·lr).
+    const next = new Array<number>(n);
+    let nextSum = 0;
+    for (let i = 0; i < n; i++) {
+      next[i] = w[i]! * Math.pow(beta, (1 - errs[i]! / dMax) * lr);
+      nextSum += next[i]!;
+    }
+    w = nextSum > 1e-12 ? next.map((v) => v / nextSum) : next.map(() => 1 / n);
+  }
+
+  const alphaTotal = stumps.reduce((a, s) => a + s.alpha, 0);
+  return {
+    importance: normalizeImportance(gains),
+    predict(xsRaw: number[]) {
+      const z = std.transform(xsRaw);
+      if (stumps.length === 0) return mean(y);
+      if (alphaTotal <= 1e-12) return mean(y);
+      // Weighted median: sort the stump predictions, walk cumulative α.
+      const preds = stumps
+        .map((s) => ({ p: predictTreeNode(s.root, z), a: s.alpha }))
+        .sort((a, b) => a.p - b.p);
+      let cumAlpha = 0;
+      for (const s of preds) {
+        cumAlpha += s.a;
+        if (cumAlpha >= alphaTotal / 2) return s.p;
+      }
+      return preds[preds.length - 1]!.p;
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Kernel ridge regression — RBF kernel, closed-form dual              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * RBF-kernel ridge regression (the least-squares reading of an SVR):
+ * standardize features and target, form the Gaussian kernel
+ * K_ij = exp(−γ‖z_i−z_j‖²), and solve the one-shot dual system
+ * (K + λI)·a = t — no iterations, no local minima, and `alpha` (λ)
+ * means exactly what it means in sklearn's KernelRidge. This is the
+ * web mirror of the library's `svm` regression family (SVR's default
+ * RBF kernel — the upgrade of the original SVM reg.py).
+ */
+export function fitKernelRidgeRbf(
+  X: number[][],
+  y: number[],
+  opts: { gamma?: number; alpha?: number } = {}
+): RowRegressor & { support: number[] } {
+  const gamma = opts.gamma ?? 0.5;
+  const alpha = opts.alpha ?? 1;
+  const n = X.length;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+  const yStats = stats(y);
+  const t = y.map((v) => (v - yStats.mu) / yStats.sigma);
+
+  const K: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i; j < n; j++) {
+      let d2 = 0;
+      for (let c = 0; c < (Z[i]?.length ?? 0); c++) {
+        const dv = (Z[i]![c] ?? 0) - (Z[j]![c] ?? 0);
+        d2 += dv * dv;
+      }
+      const v = Math.exp(-gamma * d2);
+      K[i]![j] = v;
+      K[j]![i] = v;
+    }
+  }
+  const A = K.map((row, i) => row.map((v, j) => v + (i === j ? alpha : 0)));
+  const a = solveLinearSystem(A, [...t]);
+
+  const kernelRow = (z: number[]): number[] =>
+    Z.map((zrow) => {
+      let d2 = 0;
+      for (let c = 0; c < z.length; c++) {
+        const dv = (z[c] ?? 0) - (zrow[c] ?? 0);
+        d2 += dv * dv;
+      }
+      return Math.exp(-gamma * d2);
+    });
+
+  return {
+    support: a,
+    predict(xsRaw: number[]) {
+      const z = std.transform(xsRaw);
+      const row = kernelRow(z);
+      let acc = 0;
+      for (let i = 0; i < n; i++) acc += (a[i] ?? 0) * (row[i] ?? 0);
+      return acc * yStats.sigma + yStats.mu;
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* MLP — one tanh hidden layer (regression + classification)           */
 /* ------------------------------------------------------------------ */
 
@@ -1122,6 +1393,207 @@ export function fitRandomForestClassifier(
     predictProba: proba,
     predict(xsRaw: number[]) {
       return proba(xsRaw) >= 0.5 ? 1 : 0;
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* AdaBoost (SAMME) — α-weighted vote of gini stumps                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Discrete AdaBoost (SAMME) classification: rounds of depth-1 gini
+ * stumps fit on weighted bootstrap resamples; each round's weighted
+ * error e sets the stump's vote α = η·log((1−e)/e) (binary labels —
+ * SAMME reduces to discrete AdaBoost), misclassified rows are boosted
+ * (w *= e^α) and the ensemble's decision is the α-weighted vote. The
+ * probability surface maps the margin to a logistic (Hastie's AdaBoost
+ * population-margin reading) so the boundary plot has a smooth read.
+ * This is the web mirror of the library's `adaboost` classification
+ * family (the upgrade of the original ADAboost.py).
+ */
+export function fitAdaBoostClassifier(
+  X: number[][],
+  labels: number[],
+  opts: { nEstimators?: number; learningRate?: number; rand: () => number } = { rand: mulberry32(0) }
+): RowClassifier & { importance: number[] } {
+  const nEstimators = opts.nEstimators ?? 50;
+  const lr = opts.learningRate ?? 0.5;
+  const rand = opts.rand;
+  const n = X.length;
+  const k = X[0]?.length ?? 0;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+
+  const stumps: Array<{ root: CartNode; alpha: number }> = [];
+  const gains = new Array<number>(k).fill(0);
+  let w = new Array<number>(n).fill(1 / n);
+
+  for (let t = 0; t < nEstimators; t++) {
+    // Weighted bootstrap resample (cumulative draw, seeded).
+    const cum: number[] = [];
+    let acc = 0;
+    for (let i = 0; i < n; i++) {
+      acc += w[i]!;
+      cum.push(acc);
+    }
+    const sample: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const u = rand() * acc;
+      let lo = 0;
+      let hi = n - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if ((cum[mid] ?? 0) <= u) lo = mid + 1;
+        else hi = mid;
+      }
+      sample.push(lo);
+    }
+    const stumpGains = new Array<number>(k).fill(0);
+    const root = buildClassificationNode(Z, labels, sample, 0, 1, stumpGains);
+    const preds = Z.map((zrow) => (predictTreeNode(root, zrow) >= 0.5 ? 1 : 0));
+    // Weighted error over EVERY train row (not just the resample).
+    let err = 0;
+    let wSum = 0;
+    for (let i = 0; i < n; i++) {
+      if (preds[i] !== (labels[i] ?? 0)) err += w[i]!;
+      wSum += w[i]!;
+    }
+    const e = wSum > 1e-12 ? err / wSum : 1;
+    if (e <= 1e-12) {
+      // Perfect stump: keep it with a dominant weight and stop.
+      stumps.push({ root, alpha: 1 });
+      for (let j = 0; j < k; j++) gains[j] = (gains[j] ?? 0) + stumpGains[j]!;
+      break;
+    }
+    if (e >= 0.5 - 1e-12) break; // weaker than chance — stop
+    const alpha = lr * Math.log((1 - e) / e);
+    stumps.push({ root, alpha });
+    for (let j = 0; j < k; j++) gains[j] = (gains[j] ?? 0) + alpha * stumpGains[j]!;
+    // Boost the misclassified rows: w_i *= e^α (correct rows unchanged),
+    // then renormalize (sklearn's SAMME weight update).
+    const next = new Array<number>(n);
+    let nextSum = 0;
+    for (let i = 0; i < n; i++) {
+      next[i] = w[i]! * (preds[i] !== (labels[i] ?? 0) ? Math.exp(alpha) : 1);
+      nextSum += next[i]!;
+    }
+    w = nextSum > 1e-12 ? next.map((v) => v / nextSum) : next.map(() => 1 / n);
+  }
+
+  const alphaTotal = stumps.reduce((a, s) => a + s.alpha, 0);
+  const margin = (xsRaw: number[]): number => {
+    if (stumps.length === 0 || alphaTotal <= 1e-12) return 0;
+    const z = std.transform(xsRaw);
+    let acc = 0;
+    for (const s of stumps) {
+      acc += s.alpha * (predictTreeNode(s.root, z) >= 0.5 ? 1 : -1);
+    }
+    return acc / alphaTotal; // ∈ [−1, 1]
+  };
+  return {
+    importance: normalizeImportance(gains),
+    predictProba(xsRaw: number[]) {
+      // Hastie's population-margin reading: P(class 1) = σ(2·margin·c).
+      return 1 / (1 + Math.exp(-4 * margin(xsRaw)));
+    },
+    predict(xsRaw: number[]) {
+      return margin(xsRaw) >= 0 ? 1 : 0;
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* LS-SVM — RBF-kernel support vector machine (closed-form dual)       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Least-squares support vector machine: the Gaussian-kernel cousin of
+ * the linear SVM the playground already ships. Form K_ij =
+ * exp(−γ‖z_i−z_j‖²) over standardized rows, then solve the one-shot
+ * bias-augmented system
+ *   [ 0   1ᵀ ] [ b ]   [ 0 ]
+ *   [ 1  K+λI ] [ a ] = [ y± ]
+ * — the LS-SVM formulation (Suykens) — and classify by the sign of
+ * b + Σ a_i·K(x, x_i). λ = 1/(2C) so the margin C slider means what it
+ * means for the linear SVM (bigger C = harder margin). This is the web
+ * mirror of the library's `svm` classification family (SVC's default
+ * RBF kernel — the upgrade of the original SVM.py).
+ */
+export function fitRbfSvmClassifier(
+  X: number[][],
+  labels: number[],
+  opts: { C?: number; gamma?: number } = {}
+): RowClassifier & { lambda: number; nSupport: number } {
+  const C = opts.C ?? 1;
+  const gamma = opts.gamma ?? 0.5;
+  const lambda = 1 / (2 * Math.max(C, 1e-6));
+  const n = X.length;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+  const ypm = labels.map((l) => (l === 1 ? 1 : -1));
+
+  const K: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i; j < n; j++) {
+      let d2 = 0;
+      for (let c = 0; c < (Z[i]?.length ?? 0); c++) {
+        const dv = (Z[i]![c] ?? 0) - (Z[j]![c] ?? 0);
+        d2 += dv * dv;
+      }
+      const v = Math.exp(-gamma * d2);
+      K[i]![j] = v;
+      K[j]![i] = v;
+    }
+  }
+
+  // Bias-augmented LS-SVM system, size (n+1)×(n+1).
+  const m = n + 1;
+  const A = Array.from({ length: m }, () => new Array<number>(m).fill(0));
+  const rhs = new Array<number>(m).fill(0);
+  A[0]![0] = 0;
+  for (let i = 0; i < n; i++) {
+    A[0]![i + 1] = 1;
+    A[i + 1]![0] = 1;
+    rhs[i + 1] = ypm[i] ?? 0;
+    for (let j = 0; j < n; j++) {
+      A[i + 1]![j + 1] = (K[i]![j] ?? 0) + (i === j ? lambda : 0);
+    }
+  }
+  const sol = solveLinearSystem(A, rhs);
+  const b = sol[0] ?? 0;
+  const a = sol.slice(1);
+
+  const decision = (xsRaw: number[]): number => {
+    const z = std.transform(xsRaw);
+    let acc = b;
+    for (let i = 0; i < n; i++) {
+      let d2 = 0;
+      for (let c = 0; c < z.length; c++) {
+        const dv = (z[c] ?? 0) - (Z[i]![c] ?? 0);
+        d2 += dv * dv;
+      }
+      acc += (a[i] ?? 0) * Math.exp(-gamma * d2);
+    }
+    return acc;
+  };
+
+  // Rows whose dual coefficient dominates the tail magnitude are
+  // "support-like": |a_i| above a tenth of the max — the honest proxy for
+  // an SVM's support set under the LS formulation (every row participates).
+  let maxAbs = 0;
+  for (const v of a) maxAbs = Math.max(maxAbs, Math.abs(v));
+  const nSupport = a.filter((v) => Math.abs(v) > maxAbs * 0.1).length;
+
+  return {
+    lambda,
+    nSupport,
+    predictProba(xsRaw: number[]) {
+      // Logistic read of the decision value (monotone, for the surface).
+      return 1 / (1 + Math.exp(-decision(xsRaw)));
+    },
+    predict(xsRaw: number[]) {
+      return decision(xsRaw) >= 0 ? 1 : 0;
     },
   };
 }

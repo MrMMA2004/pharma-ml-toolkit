@@ -6,11 +6,15 @@
  */
 
 import {
+  fitAdaBoostClassifier,
+  fitAdaBoostRegressor,
   fitClassificationTree,
   fitElasticNet,
   fitGaussianNB,
   fitGradientBoostingRegressor,
+  fitHuberRegression,
   fitHsvr,
+  fitKernelRidgeRbf,
   fitKnnClassifier,
   fitKnnRegressor,
   fitLinearSvm,
@@ -20,6 +24,7 @@ import {
   fitMultivariateRegression,
   fitRandomForestClassifier,
   fitRandomForestRegressor,
+  fitRbfSvmClassifier,
   fitRegressionTree,
   mulberry32,
   normalizeImportance,
@@ -30,29 +35,37 @@ import {
 /* Registry                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Regression models: 3 legacy (byte-compatible) + 8 (incl. hsvr). */
+/** Regression models: 3 legacy (byte-compatible) + 11 (incl. hsvr, huber,
+ *  ada_boost, svm_rbf — the web mirror of the library's adaboost /
+ *  huber_regression / svm families). */
 export const REGRESSION_MODELS = [
   "linear",
   "polynomial",
   "ridge",
   "lasso",
   "elastic_net",
+  "huber",
   "knn",
   "decision_tree",
   "random_forest",
   "gradient_boosting",
+  "ada_boost",
+  "svm_rbf",
   "mlp",
   "hsvr",
 ] as const;
 
-/** Classification models: legacy logistic + 6 rebuilt. */
+/** Classification models: legacy logistic + 9 (incl. ada_boost and the
+ *  RBF-kernel SVM — the library's adaboost / svm families). */
 export const CLASSIFICATION_MODELS = [
   "logistic",
   "knn",
   "decision_tree",
   "random_forest",
+  "ada_boost",
   "gaussian_nb",
   "svm_linear",
+  "svm_rbf",
   "mlp",
 ] as const;
 
@@ -74,6 +87,10 @@ export interface HyperSource {
   epochs?: number;
   lr?: number;
   C?: number;
+  /** Huber: quadratic-core / linear-tail switch point (target units). */
+  epsilon?: number;
+  /** RBF-kernel models: the Gaussian kernel width γ. */
+  gamma?: number;
   /** HSVR: k-means cluster count. */
   nClusters?: number;
   /** HSVR: trust radius × the cluster's max member distance. */
@@ -94,6 +111,8 @@ export interface Hyper {
   lr: number;
   C: number;
   l2: number;
+  epsilon: number;
+  gamma: number;
   nClusters: number;
   radiusFactor: number;
 }
@@ -116,6 +135,8 @@ export function resolveHyper(req: HyperSource): Hyper {
     lr: num(req.lr, 0.05),
     C: num(req.C, 1),
     l2: num(req.l2, 1),
+    epsilon: num(req.epsilon, 1.35),
+    gamma: num(req.gamma, 0.5),
     nClusters: num(req.nClusters, 3),
     radiusFactor: num(req.radiusFactor, 1.5),
   };
@@ -199,6 +220,46 @@ export function fitRegressionModel(
     case "knn": {
       const m = fitKnnRegressor(XTrain, yTrain, { k: hp.k });
       return { predict: (xs) => m.predict(xs), modelParams: { k: hp.k } };
+    }
+    case "huber": {
+      /* Robust IRLS — the library's huber_regression family. The fit
+       * surfaces how many train rows ended up in the quadratic core vs
+       * the linear tail (the honest robustness diagnostic). */
+      const m = fitHuberRegression(XTrain, yTrain, { epsilon: hp.epsilon });
+      return {
+        predict: (xs) => m.predict(xs),
+        coefficients: { intercept: m.b, coefs: [...m.w], standardized: true },
+        modelParams: {
+          epsilon: hp.epsilon,
+          nRobust: m.nRobust,
+          nOutlier: m.nOutlier,
+        },
+      };
+    }
+    case "ada_boost": {
+      const m = fitAdaBoostRegressor(XTrain, yTrain, {
+        nEstimators: hp.nEstimators,
+        learningRate: hp.learningRate,
+        rand,
+      });
+      return {
+        predict: (xs) => m.predict(xs),
+        featureImportance: {
+          features: featureNames,
+          importance: m.importance,
+          measure: "variance",
+        },
+      };
+    }
+    case "svm_rbf": {
+      const m = fitKernelRidgeRbf(XTrain, yTrain, {
+        gamma: hp.gamma,
+        alpha: hp.alpha,
+      });
+      return {
+        predict: (xs) => m.predict(xs),
+        modelParams: { gamma: hp.gamma, lambda: hp.alpha },
+      };
     }
     case "decision_tree": {
       const m = fitRegressionTree(XTrain, yTrain, { maxDepth: hp.maxDepth });
@@ -370,6 +431,31 @@ export function fitClassificationModel(
         modelParams: { varSmoothing: 1e-9 },
       };
     }
+    case "ada_boost": {
+      const m = fitAdaBoostClassifier(XTrain, labelsTrain, {
+        nEstimators: hp.nEstimators,
+        learningRate: hp.learningRate,
+        rand,
+      });
+      return {
+        predict01: (x, y) => m.predict([x, y]),
+        featureImportance: {
+          features: featureNames,
+          importance: m.importance,
+          measure: "gini",
+        },
+      };
+    }
+    case "svm_rbf": {
+      const m = fitRbfSvmClassifier(XTrain, labelsTrain, {
+        C: hp.C,
+        gamma: hp.gamma,
+      });
+      return {
+        predict01: (x, y) => m.predict([x, y]),
+        modelParams: { C: hp.C, gamma: hp.gamma, lambda: m.lambda, nSupport: m.nSupport },
+      };
+    }
     case "svm_linear": {
       const m = fitLinearSvm(XTrain, labelsTrain, { C: hp.C });
       return {
@@ -417,6 +503,7 @@ export const REG_TUNE_SPACES: Record<string, TuneChoice[]> = {
     { key: "alpha", values: [0.05, 0.1, 0.5, 1, 2] },
     { key: "l1Ratio", values: [0.1, 0.3, 0.5, 0.7, 0.9] },
   ],
+  huber: [{ key: "epsilon", values: [1.05, 1.35, 1.75, 2.2, 3] }],
   knn: [{ key: "k", values: [1, 3, 5, 7, 9, 11, 15, 21] }],
   decision_tree: [{ key: "maxDepth", values: [2, 3, 4, 5, 6, 7, 8, 10] }],
   random_forest: [
@@ -426,6 +513,14 @@ export const REG_TUNE_SPACES: Record<string, TuneChoice[]> = {
   gradient_boosting: [
     { key: "rounds", values: [20, 50, 100, 150] },
     { key: "learningRate", values: [0.02, 0.05, 0.1, 0.2, 0.3] },
+  ],
+  ada_boost: [
+    { key: "nEstimators", values: [10, 25, 50, 100, 150] },
+    { key: "learningRate", values: [0.05, 0.1, 0.2, 0.3, 0.5] },
+  ],
+  svm_rbf: [
+    { key: "gamma", values: [0.05, 0.1, 0.25, 0.5, 1, 2] },
+    { key: "alpha", values: [0.01, 0.1, 1, 10] },
   ],
   mlp: [
     { key: "hidden", values: [4, 8, 16, 32, 48] },
@@ -447,7 +542,15 @@ export const CLS_TUNE_SPACES: Record<string, TuneChoice[]> = {
     { key: "nEstimators", values: [10, 25, 50, 100] },
     { key: "maxDepth", values: [3, 4, 6, 8, 10] },
   ],
+  ada_boost: [
+    { key: "nEstimators", values: [10, 25, 50, 100] },
+    { key: "learningRate", values: [0.05, 0.1, 0.2, 0.3, 0.5] },
+  ],
   svm_linear: [{ key: "C", values: [0.05, 0.1, 0.5, 1, 2, 5, 10] }],
+  svm_rbf: [
+    { key: "gamma", values: [0.05, 0.1, 0.25, 0.5, 1, 2] },
+    { key: "C", values: [0.05, 0.1, 0.5, 1, 2, 5, 10] },
+  ],
   mlp: [
     { key: "hidden", values: [4, 8, 16, 32] },
     { key: "epochs", values: [200, 400, 800] },
@@ -470,6 +573,7 @@ export const TUNE_RESOURCES: Record<string, { key: string; label: string }> = {
   mlp: { key: "epochs", label: "epochs" },
   random_forest: { key: "nEstimators", label: "estimators" },
   gradient_boosting: { key: "rounds", label: "boosting rounds" },
+  ada_boost: { key: "nEstimators", label: "boosting rounds" },
 };
 
 /** Total configurations in a space (product of the per-slot grids). */

@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (2001 tests).
+exceptions, input validation, and pytest coverage** (2009 tests).
 
 ---
 
@@ -53,10 +53,24 @@ exceptions, input validation, and pytest coverage** (2001 tests).
 
 ## Installation
 
-```bash
-# core (ML + pharma + docking parsing/scoring)
-pip install -e .
+**Reproducible route (recommended):** `requirements.txt` pins the exact
+stack the QA chain runs green under — install it first, then the package.
 
+```bash
+# 1. every core library at the verified version
+#    (numpy 1.26.4, pandas 2.2.3, scikit-learn 1.5.2, scipy 1.14.1, ...)
+pip install -r requirements.txt
+
+# 2. the toolkit itself (editable — `import pharmaml` works immediately)
+pip install -e .
+```
+
+Optional feature sets come as commented pinned blocks inside
+`requirements.txt` (cheminformatics, docking prep, boosting, deep
+learning with the torch CPU-wheel index line, reports, dev/QA) —
+uncomment what you need, or use the loose-range extras instead:
+
+```bash
 # with cheminformatics extras (RDKit descriptors/fingerprints/similarity)
 pip install -e ".[chem]"
 
@@ -69,6 +83,10 @@ pip install -e ".[boosting]"
 # development (pytest, mypy, ruff)
 pip install -e ".[dev]"
 ```
+
+Pick one philosophy per environment — the pinned file or the loose
+extras — and don't mix them. `pyproject.toml` stays the compatibility
+contract; `requirements.txt` is the verified snapshot (Python 3.12).
 
 Quick test run (no install needed — `pyproject.toml` maps `src/` onto the import path):
 
@@ -249,7 +267,7 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 2001 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 2009 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);

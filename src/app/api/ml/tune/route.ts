@@ -454,6 +454,10 @@ export async function POST(request: NextRequest) {
         hyperband: {
           eta,
           resourceKey: resourceSpec.key,
+          /* Model-specific label ("boosting rounds" for ada_boost, "trees"
+           * only for forests) — the UI prefers this over the generic
+           * per-key label. */
+          resourceLabel: resourceSpec.label,
           maxResource: R,
           ladder: [...ladderSet].sort((a, b) => a - b),
           brackets,

@@ -99,12 +99,20 @@ type Task = "regression" | "classification";
 /** How the "Learned parameters" card summarizes this model family. */
 type ModelKind = "coefficients" | "importance" | "params";
 
-type ModelGroup = "linear" | "trees" | "instance" | "probabilistic" | "neural" | "hierarchical";
+type ModelGroup =
+  | "linear"
+  | "trees"
+  | "instance"
+  | "kernel"
+  | "probabilistic"
+  | "neural"
+  | "hierarchical";
 
 const GROUP_LABELS: Record<ModelGroup, string> = {
   linear: "Linear family",
   trees: "Trees & ensembles",
   instance: "Instance-based",
+  kernel: "Kernel machines",
   probabilistic: "Probabilistic",
   neural: "Neural",
   hierarchical: "Hierarchical",
@@ -125,6 +133,8 @@ interface HyperSpec {
     | "epochs"
     | "lr"
     | "C"
+    | "epsilon"
+    | "gamma"
     | "nClusters"
     | "radiusFactor";
   label: string;
@@ -192,6 +202,24 @@ const REG_MODELS: ModelSpec[] = [
     ],
   },
   {
+    id: "huber",
+    label: "Huber (robust)",
+    hint: "IRLS — quadratic core, linear tails; outliers down-weighted",
+    group: "linear",
+    kind: "coefficients",
+    hp: [
+      {
+        key: "epsilon",
+        label: "ε switch point",
+        control: "slider",
+        unit: "y units",
+        min: 1.05,
+        max: 4,
+        step: 0.05,
+      },
+    ],
+  },
+  {
     id: "decision_tree",
     label: "Decision tree (CART)",
     hint: "Variance-reduction splits, depth-capped",
@@ -219,6 +247,28 @@ const REG_MODELS: ModelSpec[] = [
     hp: [
       { key: "rounds", label: "rounds", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
       { key: "learningRate", label: "learning rate", control: "slider", unit: "η", min: 0.02, max: 0.5, step: 0.02 },
+    ],
+  },
+  {
+    id: "ada_boost",
+    label: "AdaBoost (R2)",
+    hint: "Drucker's AdaBoost.R2 — weighted median of depth-2 stumps",
+    group: "trees",
+    kind: "importance",
+    hp: [
+      { key: "nEstimators", label: "rounds", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "learningRate", label: "learning rate", control: "slider", unit: "η", min: 0.02, max: 0.5, step: 0.02 },
+    ],
+  },
+  {
+    id: "svm_rbf",
+    label: "SVR · RBF kernel",
+    hint: "Least-squares SVR: the (K+λI)⁻¹ dual in one closed form",
+    group: "kernel",
+    kind: "params",
+    hp: [
+      { key: "gamma", label: "kernel γ", control: "slider", unit: "γ", min: 0.05, max: 2, step: 0.05 },
+      ALPHA_HP,
     ],
   },
   {
@@ -273,6 +323,17 @@ const CLS_MODELS: ModelSpec[] = [
     hp: [{ key: "C", label: "margin C", control: "slider", unit: "C", min: 0.05, max: 10, step: 0.05 }],
   },
   {
+    id: "svm_rbf",
+    label: "SVM · RBF kernel",
+    hint: "LS-SVM: closed-form Gaussian kernel machine, λ = 1/(2C)",
+    group: "kernel",
+    kind: "params",
+    hp: [
+      { key: "C", label: "margin C", control: "slider", unit: "C", min: 0.05, max: 10, step: 0.05 },
+      { key: "gamma", label: "kernel γ", control: "slider", unit: "γ", min: 0.05, max: 2, step: 0.05 },
+    ],
+  },
+  {
     id: "decision_tree",
     label: "Decision tree (gini)",
     hint: "Gini-impurity splits, depth-capped",
@@ -289,6 +350,17 @@ const CLS_MODELS: ModelSpec[] = [
     hp: [
       { key: "nEstimators", label: "trees", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
       { key: "maxDepth", label: "max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 },
+    ],
+  },
+  {
+    id: "ada_boost",
+    label: "AdaBoost (SAMME)",
+    hint: "α-weighted vote of gini stumps — misclassified rows boosted",
+    group: "trees",
+    kind: "importance",
+    hp: [
+      { key: "nEstimators", label: "rounds", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "learningRate", label: "learning rate", control: "slider", unit: "η", min: 0.02, max: 0.5, step: 0.02 },
     ],
   },
   {
@@ -321,7 +393,15 @@ const CLS_MODELS: ModelSpec[] = [
   },
 ];
 
-const MODEL_GROUPS: ModelGroup[] = ["linear", "trees", "instance", "probabilistic", "neural", "hierarchical"];
+const MODEL_GROUPS: ModelGroup[] = [
+  "linear",
+  "trees",
+  "instance",
+  "kernel",
+  "probabilistic",
+  "neural",
+  "hierarchical",
+];
 
 /** Slider hyperparameter defaults (server-side defaults mirrored). */
 const DEFAULT_HP: Record<string, number> = {
@@ -335,6 +415,8 @@ const DEFAULT_HP: Record<string, number> = {
   epochs: 200,
   lr: 0.05,
   C: 1,
+  epsilon: 1.35,
+  gamma: 0.5,
   nClusters: 3,
   radiusFactor: 1.5,
 };
@@ -345,10 +427,13 @@ const TUNEABLE_REG = new Set([
   "ridge",
   "lasso",
   "elastic_net",
+  "huber",
   "knn",
   "decision_tree",
   "random_forest",
   "gradient_boosting",
+  "ada_boost",
+  "svm_rbf",
   "mlp",
   "hsvr",
 ]);
@@ -357,7 +442,9 @@ const TUNEABLE_CLS = new Set([
   "knn",
   "decision_tree",
   "random_forest",
+  "ada_boost",
   "svm_linear",
+  "svm_rbf",
   "mlp",
 ]);
 
@@ -374,6 +461,12 @@ const MODEL_NOTES: Record<string, string> = {
   decision_tree: "CART splits chosen by impurity reduction; the bars are each feature's share of the total reduction.",
   random_forest: "Seeded bootstrap aggregation of depth-capped CART trees; importances are per-tree means, renormalized.",
   gradient_boosting: "Each round fits a depth-3 tree to the current residuals, shrunk by the learning rate.",
+  huber:
+    "Iteratively reweighted least squares: residuals within ε keep weight 1, the tails fade as ε/|r| — the final sweep's robust core / linear tail split is echoed in the parameters.",
+  ada_boost:
+    "Weighted bootstrap rounds of shallow stumps; the ensemble predicts with the α-weighted median (regression) or α-weighted vote (classification). Importances are α-weighted per-stump gains.",
+  svm_rbf:
+    "Gaussian-kernel machine solved in one closed form: (K + λI)⁻¹ (regression) or the bias-augmented LS-SVM system (classification, λ = 1/(2C)).",
   gaussian_nb: "Class-conditional Gaussians (μ, σ per feature) feed the log-posterior; no tunable hyperparameters.",
   mlp: "One tanh hidden layer, full-batch gradient descent, seeded init — a demo-scale network, not production deep learning.",
   hsvr:
@@ -394,6 +487,12 @@ const HP_LABELS: Record<string, string> = {
   nEstimators: "trees",
   rounds: "rounds",
   learningRate: "learning rate",
+  epsilon: "ε (switch point)",
+  gamma: "kernel γ",
+  lambda: "λ (ridge)",
+  nRobust: "robust core",
+  nOutlier: "linear tail",
+  nSupport: "support rows",
   nClusters: "clusters",
   radiusFactor: "trust radius ×",
 };
@@ -401,13 +500,14 @@ const HP_LABELS: Record<string, string> = {
 /** Models whose grid contains a resource hyperparameter — the slots
  *  successive halving can promote rung by rung (mirrors the server's
  *  TUNE_RESOURCES registry). */
-const HYPERBAND_MODELS = new Set(["mlp", "random_forest", "gradient_boosting"]);
+const HYPERBAND_MODELS = new Set(["mlp", "random_forest", "gradient_boosting", "ada_boost"]);
 
 /** The resource slot per Hyperband-capable model (mirrors TUNE_RESOURCES). */
 const RESOURCE_SPECS: Record<string, { key: string; label: string }> = {
   mlp: { key: "epochs", label: "epochs" },
   random_forest: { key: "nEstimators", label: "estimators" },
   gradient_boosting: { key: "rounds", label: "boosting rounds" },
+  ada_boost: { key: "nEstimators", label: "boosting rounds" },
 };
 
 function specOf(task: Task, model: string): ModelSpec | null {
@@ -2684,7 +2784,7 @@ export function MlPlayground() {
               <p className="text-sm font-medium">No results yet</p>
               <p className="max-w-sm text-xs text-muted-foreground">
                 Pick a data source — the seeded server-side generator or your own CSV — pick one of
-                the 11 regression or 7 classification models, then press{" "}
+                the 14 regression or 9 classification models, then press{" "}
                 <strong className="font-semibold text-foreground">Train model</strong>. Every
                 run is deterministic: same seed, same data, same numbers.
               </p>
@@ -3220,6 +3320,7 @@ export function MlPlayground() {
                   <CardDescription className="text-xs">
                     {tuneResult.searcher === "hyperband" && tuneResult.hyperband
                       ? `Hyperband · ${tuneResult.model} · ${tuneResult.trials.length} trials · η ${tuneResult.hyperband.eta} · resource: ${
+                          tuneResult.hyperband.resourceLabel ??
                           HP_LABELS[tuneResult.hyperband.resourceKey] ??
                           tuneResult.hyperband.resourceKey
                         } · ${tuneResult.cvK}-fold CV ${tuneResult.objective}`
@@ -3320,7 +3421,8 @@ export function MlPlayground() {
                     <span className="font-semibold tabular-nums">
                       {tuneResult.hyperband.budget.naive.toLocaleString()}
                     </span>{" "}
-                    {HP_LABELS[tuneResult.hyperband.resourceKey] ??
+                    {tuneResult.hyperband.resourceLabel ??
+                      HP_LABELS[tuneResult.hyperband.resourceKey] ??
                       tuneResult.hyperband.resourceKey}
                     <span className="ml-1.5 rounded-sm bg-emerald-500/10 px-1.5 py-0.5 font-semibold text-emerald-600 dark:text-emerald-400">
                       {Math.round(tuneResult.hyperband.budget.savedPct * 100)}% saved
@@ -3416,7 +3518,7 @@ export function MlPlayground() {
 
               <p className="text-[11px] leading-snug text-muted-foreground">
                 {tuneResult.searcher === "hyperband" && tuneResult.hyperband
-                  ? `Every trial is scored on the same ${tuneResult.cvK}-fold folds; the leaderboard mixes resource budgets by design (b = bracket, r = rung, ↑ = promoted). The winner is refit on the train split for the held-out ${tuneResult.best.testMetricName}; defaults are scored at the full ${tuneResult.hyperband.maxResource} ${HP_LABELS[tuneResult.hyperband.resourceKey] ?? tuneResult.hyperband.resourceKey} for a fair comparison. Same seed → same brackets.`
+                  ? `Every trial is scored on the same ${tuneResult.cvK}-fold folds; the leaderboard mixes resource budgets by design (b = bracket, r = rung, ↑ = promoted). The winner is refit on the train split for the held-out ${tuneResult.best.testMetricName}; defaults are scored at the full ${tuneResult.hyperband.maxResource} ${tuneResult.hyperband.resourceLabel ?? HP_LABELS[tuneResult.hyperband.resourceKey] ?? tuneResult.hyperband.resourceKey} for a fair comparison. Same seed → same brackets.`
                   : `Same data and folds for every trial — only the parameters vary, so the ranking is
                 a fair comparison. The winner is refit on the train split for the held-out ${
                     tuneResult.best.testMetricName

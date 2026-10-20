@@ -12,6 +12,7 @@ import {
   FileText,
   Loader2,
   NotebookText,
+  Package,
   RefreshCw,
   Scale,
   ShieldCheck,
@@ -61,9 +62,10 @@ const INSTALL_STEPS: InstallStep[] = [
     commands: ["unzip {ZIP_NAME} -d pharmaml && cd pharmaml"],
   },
   {
-    title: "Install the package",
-    description: "Editable core install — ML, pharma math, and docking parsing/scoring.",
-    commands: ["pip install -e ."],
+    title: "Install the dependencies at the verified versions",
+    description:
+      "requirements.txt pins the exact stack the QA chain runs green under (numpy 1.26.4, pandas 2.2.3, scikit-learn 1.5.2, …) — the reproducible route. The editable package install then maps pharmaml onto your Python.",
+    commands: ["pip install -r requirements.txt", "pip install -e ."],
     extras: [
       { name: ".[chem]", note: "cheminformatics (RDKit)" },
       { name: ".[docking]", note: "docking prep (RDKit + Meeko)" },
@@ -78,7 +80,7 @@ const INSTALL_STEPS: InstallStep[] = [
   },
   {
     title: "Verify the install",
-    description: "2001 tests should pass and the CLI answers with its version.",
+    description: "2009 tests should pass and the CLI answers with its version.",
     commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
   },
 ];
@@ -307,7 +309,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "2001 pytest cases across all domains",
+    tests: "2009 pytest cases across all domains",
     examples: "eight executed notebooks + seven no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -510,7 +512,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="2001" label="passing tests" />
+          <StatChip icon={CircleCheck} value="2009" label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}
@@ -777,6 +779,115 @@ export function DownloadPanel() {
                 </li>
               ))}
             </ol>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* --------------------- Pinned dependency stack --------------------- */}
+      <section aria-labelledby="pinstack-title" className="space-y-3">
+        <h2 id="pinstack-title" className="flex items-center gap-2 text-lg font-semibold">
+          <Package className="size-5 text-primary" aria-hidden />
+          Every library at the verified version
+        </h2>
+        <Card className="overflow-hidden py-0 shadow-sm">
+          <CardHeader className="border-b bg-muted/30 py-3">
+            <CardTitle className="text-base">The pinned stack, layer by layer</CardTitle>
+            <CardDescription className="text-xs">
+              requirements.txt in the archive pins the exact environment the QA chain runs green
+              under (Python 3.12) — pyproject.toml keeps the loose ranges, this is the reproducible
+              snapshot. Copy any layer you need; the core block is the only required one.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3.5 py-4">
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-sm font-medium">Core — always required</p>
+                <p className="text-[11px] text-muted-foreground">numpy · pandas · scikit-learn · scipy · joblib · openpyxl · tqdm</p>
+              </div>
+              <CommandStrip
+                context="terminal · core (verified under Python 3.12)"
+                command="pip install numpy==1.26.4 pandas==2.2.3 scikit-learn==1.5.2 scipy==1.14.1 joblib==1.5.3 openpyxl==3.1.5 tqdm==4.67.1"
+                hint="or simply: pip install -r requirements.txt (the same pins, pre-written)"
+              />
+            </div>
+            <div className="grid gap-2.5 lg:grid-cols-2">
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium">Cheminformatics</p>
+                  <p className="text-[11px] text-muted-foreground">descriptors · fingerprints · Tanimoto</p>
+                </div>
+                <CommandStrip
+                  context="terminal · extras"
+                  command="pip install rdkit==2026.09.1 mordred==1.2.0"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium">Docking preparation</p>
+                  <p className="text-[11px] text-muted-foreground">SMILES → PDBQT · receptor grids</p>
+                </div>
+                <CommandStrip
+                  context="terminal · extras"
+                  command="pip install rdkit==2026.09.1 meeko==0.8.0 gemmi==0.7.5"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium">Gradient boosting</p>
+                  <p className="text-[11px] text-muted-foreground">xgboost / lightgbm / catboost families</p>
+                </div>
+                <CommandStrip
+                  context="terminal · extras"
+                  command="pip install xgboost==2.1.3 lightgbm==4.5.0 catboost==1.2.8"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium">Deep learning (CPU)</p>
+                  <p className="text-[11px] text-muted-foreground">dnn estimators · generative RNN/RL</p>
+                </div>
+                <CommandStrip
+                  context="terminal · torch CPU wheel"
+                  command="pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu"
+                  hint="drop the --index-url for the CUDA build of the same version"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium">Reports &amp; plots</p>
+                  <p className="text-[11px] text-muted-foreground">PDF/DOCX · matplotlib figures</p>
+                </div>
+                <CommandStrip
+                  context="terminal · extras"
+                  command="pip install matplotlib==3.9.2 seaborn==0.13.2 fpdf2==2.8.5 python-docx==1.2.0"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium">Development / QA</p>
+                  <p className="text-[11px] text-muted-foreground">the stack the test suite runs under</p>
+                </div>
+                <CommandStrip
+                  context="terminal · dev"
+                  command="pip install pytest==9.0.2 pytest-cov==7.0.0 mypy==2.4.0 ruff==0.17.1"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                <span className="font-medium text-foreground">Why exact versions?</span> Every pin above is
+                the environment the 2,009-test pytest suite, ruff, mypy and the executed notebooks
+                actually run green under — installing the same numbers removes an entire class of
+                &quot;works on my machine&quot; before it starts (the numpy 1.26.4 pin in particular: mordred
+                resolves against it).
+              </p>
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                The loose ranges in <code className="font-mono">pyproject.toml</code> remain the
+                compatibility contract; the extras chips above (<code className="font-mono">.[chem]</code>,{" "}
+                <code className="font-mono">.[docking]</code>, …) install the newest versions inside
+                those ranges instead — pick one philosophy per environment, don&apos;t mix.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </section>

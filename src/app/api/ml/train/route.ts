@@ -58,6 +58,12 @@ const hyperSchema = {
   epochs: z.number().int().min(10).max(2000).optional(),
   lr: z.number().min(0.001).max(1).optional(),
   C: z.number().min(0.01).max(100).optional(),
+  /* Huber (robust regression): quadratic-core / linear-tail switch point
+   * in TARGET units — CSV pIC50-scale targets legitimately want larger
+   * values than the toy data's default 1.35. */
+  epsilon: z.number().min(1.01).max(20).optional(),
+  /* RBF-kernel models (svm_rbf): the Gaussian kernel width γ. */
+  gamma: z.number().min(0.005).max(10).optional(),
   /* HSVR */
   nClusters: z.number().int().min(2).max(8).optional(),
   radiusFactor: z.number().min(0.25).max(6).optional(),
@@ -128,6 +134,8 @@ type TrainBody = {
   epochs?: number;
   lr?: number;
   C?: number;
+  epsilon?: number;
+  gamma?: number;
   nClusters?: number;
   radiusFactor?: number;
 };

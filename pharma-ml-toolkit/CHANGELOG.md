@@ -10,6 +10,37 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.40] — 2026-10-21
+
+### Added — the verified-stack `requirements.txt` (install every library at the version the QA chain actually runs)
+
+- **`requirements.txt` is now a pinned snapshot of the verified stack** —
+  every core dependency ships as `name==exact.version` (numpy 1.26.4,
+  pandas 2.2.3, scikit-learn 1.5.2, scipy 1.14.1, joblib 1.5.3, openpyxl
+  3.1.5, tqdm 4.67.1), and every optional feature set is a commented
+  block of exact pins: cheminformatics (rdkit 2026.09.1, mordred 1.2.0),
+  docking preparation (meeko 0.8.0, gemmi 0.7.5), gradient boosting
+  (xgboost 2.1.3, lightgbm 4.5.0, catboost 1.2.8), deep learning
+  (torch 2.14.1, with the `--index-url https://download.pytorch.org/whl/cpu`
+  line for the CPU wheel spelled out inline), reports (matplotlib 3.9.2,
+  seaborn 0.13.2, fpdf2 2.8.5, python-docx 1.2.0) and the dev/QA stack
+  (pytest 9.0.2, pytest-cov 7.0.0, mypy 2.4.0, ruff 0.17.1). The header
+  explains the contract: `pyproject.toml` keeps the loose compatibility
+  ranges, `requirements.txt` is the exact environment the 2,0xx-test QA
+  chain runs green under (verified under Python 3.12).
+- **`tests/test_requirements.py` (new)** — the pin file can never silently
+  drift from the package metadata again: the core block is parsed and
+  checked to (a) pin every dependency declared in `pyproject.toml` (and
+  declare nothing extra), (b) satisfy each declared range, and (c) use
+  `==` pins only. The optional blocks are checked to map one-to-one onto
+  the `[project.optional-dependencies]` extras (every extra's pinned
+  names cover its declared names).
+- **README** — the installation section now leads with the pinned-stack
+  recipe (`pip install -r requirements.txt` before/instead of the bare
+  editable install for reproducible environments) and the download panel
+  on the web explorer mirrors the same layered commands with the version
+  numbers.
+
 ## [1.2.39] — 2026-10-20
 
 ### Added — the desktop Tune card speaks Hyperband too: the resource ladder from the family's own grid

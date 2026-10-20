@@ -1,25 +1,53 @@
-# Core dependencies (required).
-numpy>=1.24
-pandas>=2.0
-scikit-learn>=1.3
-scipy>=1.11
-joblib>=1.3
-openpyxl>=3.1
-tqdm>=4.65
+# PharmaML toolkit — pinned dependency stack.
+#
+# Every version below is the EXACT stack the toolkit's QA chain runs
+# green under (the full pytest suite, ruff, mypy and the executed
+# notebooks — see CHANGELOG). `pip install -r requirements.txt` gives
+# you that same environment; the loose ranges in pyproject.toml stay
+# the compatibility contract, this file is the verified snapshot.
+#
+# Python: 3.10+ (verified under 3.12).
 
-# Optional feature sets -- uncomment what you need:
-# --- cheminformatics (descriptors, fingerprints, similarity scan) ---
-# rdkit-pypi>=2023.9
-# mordred>=1.2
-# --- gradient-boosting model families ---
-# xgboost>=2.0
-# lightgbm>=4.0
-# catboost>=1.2
-# --- deep learning (PyTorch: 'dnn' / 'dnn_residual' estimators + generative RNN/RL) ---
-# torch>=2.0
-# --- plotting / PDF report generation ---
-# matplotlib>=3.7
-# seaborn>=0.13
-# fpdf>=1.7
-# --- docking preparation ---
-# meeko>=0.5
+# ---- Core (required) -------------------------------------------------
+numpy==1.26.4
+pandas==2.2.3
+scikit-learn==1.5.2
+scipy==1.14.1
+joblib==1.5.3
+openpyxl==3.1.5
+tqdm==4.67.1
+
+# ---- Optional feature sets (uncomment what you need) -----------------
+
+# Cheminformatics (descriptors, fingerprints, Tanimoto scan):
+# rdkit==2026.9.1
+# mordred==1.2.0
+
+# Docking preparation (SMILES -> PDBQT, receptor grids):
+# rdkit==2026.9.1
+# meeko==0.8.0
+# gemmi==0.7.5
+
+# Gradient-boosting model families (xgboost / lightgbm / catboost
+# estimators in pharmaml.ml):
+# xgboost==2.1.3
+# lightgbm==4.5.0
+# catboost==1.2.8
+
+# Deep learning (torch 'dnn' / 'dnn_residual' estimators + generative
+# RNN/RL). CPU wheel — install with:
+#   pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+# (or drop the --index-url for the CUDA build of the same version)
+# torch==2.14.1
+
+# Plotting / PDF+DOCX report generation:
+# matplotlib==3.9.2
+# seaborn==0.13.2
+# fpdf2==2.8.5
+# python-docx==1.2.0
+
+# ---- Development / QA ------------------------------------------------
+# pytest==9.0.2
+# pytest-cov==7.0.0
+# mypy==2.4.0
+# ruff==0.17.1
