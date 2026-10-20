@@ -30,7 +30,14 @@ A tabbed graphical interface opens with every calculation domain of the
   parity/confusion figure, cross-validate a model leaderboard, write
   the whole run as a report bundle -- ``report.html`` + figures +
   tables (+ the multi-page ``report.pdf`` when ticked), the CLI
-  ``--plots``/``--pdf-report`` story, mouse edition -- run a
+  ``--plots``/``--pdf-report`` story, mouse edition -- edit the selected
+  model's registry knobs by hand in the Manual hyperparameters card
+  (blank keeps the estimator default, pinned keys are excluded from the
+  grid search, values persist per model with the session, Apply best
+  prefills the winner, the cv-folds spinner sets the fold count), watch
+  every long job as a determinate progress bar with a live
+  remaining-time estimate (a search's trials, a network's epochs, a
+  leaderboard's models), run a
   keras-tuner-style hyperparameter search (``ml tune``'s RandomSearch
   over the ann / dnn / hsvr families, or Hyperband successive halving
   over the resource budget -- ann's ``max_iter``, dnn's ``epochs`` --
@@ -121,6 +128,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import csv
+import inspect
 import json
 import math
 import queue
@@ -128,6 +136,7 @@ import re
 import shutil
 import sys
 import threading
+import time
 import traceback
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
@@ -555,6 +564,106 @@ def parse_int(
     if maximum is not None and value > maximum:
         raise ValueError(f"{field}: {value} is above the maximum {maximum}")
     return value
+
+
+def parse_typed_value(raw: str, default: Any) -> Any:
+    """Parse one manual-hyperparameter field against its default's type.
+
+    The manual-hyperparameter card (100x-106) edits registry grid knobs
+    whose defaults come from the estimator itself, so the string in the
+    entry box is converted by the *type of the default*: bool fields
+    accept ``true/false/yes/no/1/0`` (case-insensitive), int and float
+    fields go through :class:`int`/:class:`float` (``ValueError``
+    propagates with the raw text in it), string fields pass through
+    unchanged, tuple fields (a forest's ``hidden_layer_sizes``) parse
+    ``"128, 64"`` / ``"(128, 64)``"`` into the tuple itself, and
+    ``None`` defaults (e.g. ``max_depth``) accept ``none``/``null``
+    verbatim or any literal int/float, falling back to the raw string.
+    A blank raw value never reaches this helper — the caller keeps
+    the default instead.
+    """
+    text = str(raw).strip()
+    if not text:
+        return default
+    if isinstance(default, bool):  # before int: bool IS an int subclass
+        lowered = text.lower()
+        if lowered in ("true", "yes", "1"):
+            return True
+        if lowered in ("false", "no", "0"):
+            return False
+        raise ValueError(f"{text!r} is not a true/false value")
+    if isinstance(default, int):
+        return int(text)
+    if isinstance(default, float):
+        return float(text)
+    if isinstance(default, tuple):
+        cleaned = text.strip("()[] ")
+        parts = [part for part in cleaned.replace(",", " ").split() if part]
+        if not parts:
+            raise ValueError(f"{text!r} is not a comma-separated width list")
+        members = []
+        for part in parts:
+            try:
+                members.append(int(part))
+            except ValueError as exc:
+                raise ValueError(
+                    f"{text!r} mixes non-integer widths ({part!r})"
+                ) from exc
+        return tuple(members)
+    if default is None:
+        lowered = text.lower()
+        if lowered in ("none", "null"):
+            return None
+        for cast in (int, float):
+            try:
+                return cast(text)
+            except ValueError:
+                continue
+        return text
+    return text
+
+
+def _fmt_duration(seconds: float) -> str:
+    """Compact human duration for the progress bar's ETA readout.
+
+    ``42 s`` → ``3 min 05 s`` → ``1 h 04 min``: one consistent format
+    per magnitude, always from a clamped non-negative input (a fresh
+    job's sub-second elapsed time must never render as ``-0 s``).
+    """
+    total = max(0, round(float(seconds)))
+    if total < 60:
+        return f"{total} s"
+    minutes, seconds_left = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes} min {seconds_left:02d} s"
+    hours, minutes_left = divmod(minutes, 60)
+    return f"{hours} h {minutes_left:02d} min"
+
+
+def _accepts_progress_argument(work: Callable[..., Any]) -> bool:
+    """True when ``work`` wants the progress reporter injected.
+
+    A zero-argument ``work`` (every historical job) is called as
+    ``work()``; a one-argument ``work`` receives the reporter callable
+    — the signature decides, so no call site has to change.
+    """
+    try:
+        parameters = list(inspect.signature(work).parameters.values())
+    except (TypeError, ValueError):  # builtins / C callables -- no report
+        return False
+    return any(
+        parameter.kind in (inspect.Parameter.POSITIONAL_ONLY,
+                           inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                           inspect.Parameter.VAR_POSITIONAL)
+        for parameter in parameters
+    )
+
+
+def _call_work(work: Callable[..., Any], report: Callable[..., None]) -> Any:
+    """Invoke ``work`` with the reporter only when it accepts one."""
+    if _accepts_progress_argument(work):
+        return work(report)
+    return work()
 
 
 def _split_triple(raw: str) -> list[str]:
@@ -1233,6 +1342,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._jobs: queue.Queue[tuple[str, Any, Any]] = queue.Queue()
         self._busy = False
         self._on_done: Callable[[Any], None] | None = None
+        # -- progress + ETA plumbing (100x-106) ----------------------- #
+        # Worker threads push (done, total, note) tuples here; the
+        # ``_poll_progress`` after-loop drains them onto the status bar
+        # (determinate progressbar + "~ 42 s left" in the job label).
+        # Updates arriving while no job runs are dropped.
+        self._progress_updates: queue.Queue[tuple[int, int | None, str]] = queue.Queue()
+        self._job_started = 0.0
+        self._job_label_base = ""
         self._action_buttons: list[Any] = []
         self._last_figure: Any = None
         self._ml_frame: Any = None
@@ -1330,6 +1447,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self.attributes("-topmost", True)
         self.after(250, lambda: self.attributes("-topmost", False))
         self.after(80, self._poll_jobs)
+        self.after(150, self._poll_progress)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # -- plumbing -------------------------------------------------------- #
@@ -1666,9 +1784,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         messagebox.showerror("pharmaml not loaded", _PHARMAML_HINT)
         return False
 
-    def _start_job(self, label: str, work: Callable[[], Any],
+    def _start_job(self, label: str, work: Callable[..., Any],
                    on_done: Callable[[Any], None] | None = None) -> None:
-        """Run ``work`` in a worker thread; render via ``on_done``."""
+        """Run ``work`` in a worker thread; render via ``on_done``.
+
+        Progress (100x-106): a ``work`` that *accepts an argument*
+        receives a reporter callable to push ``(done, total, note)``
+        updates -- the status bar then switches from the marquee to a
+        determinate bar carrying the fraction and a live "~ x left"
+        ETA (see :meth:`_poll_progress`).  Zero-argument ``work``
+        functions keep the historical indeterminate marquee.
+        """
         if self._busy:
             messagebox.showinfo(
                 "Busy",
@@ -1680,16 +1806,71 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         for button in self._action_buttons:
             if button.winfo_exists():
                 button.state(["disabled"])
+        self._job_label_base = label
+        self._job_started = time.monotonic()
+        with contextlib.suppress(queue.Empty):
+            while True:  # stale updates from a previous job never leak
+                self._progress_updates.get_nowait()
         self._progress.start(12)
         self._job_label.configure(text=label)
 
         def runner() -> None:
             try:
-                self._jobs.put((work(), None))
+                self._jobs.put(
+                    (_call_work(work, self._report_progress), None)
+                )
             except BaseException as exc:  # noqa: BLE001 - surfaced in the UI
                 self._jobs.put((None, exc))
 
         threading.Thread(target=runner, name="playground-job", daemon=True).start()
+
+    def _report_progress(self, done: int, total: int | None = None,
+                         note: str = "") -> None:
+        """Worker-thread progress feed (thread-safe: queue → poller).
+
+        Called from inside ``work`` for every completed unit -- a tuner
+        trial, a training epoch, a leaderboard model -- with the unit
+        count, the total (``None`` for open-ended work) and an optional
+        note rendered after the fraction.  Only the latest update is
+        shown; the poller coalesces bursts.
+        """
+        self._progress_updates.put((int(done), total, note))
+
+    def _poll_progress(self) -> None:
+        """Drain progress updates into the status bar (bar + ETA).
+
+        Coalesces everything queued into the newest update, then
+        renders it: a determinate bar at ``done / total`` and a job
+        label like ``tuning ann (regression) — 3/8 · ~45 s left · best
+        0.712``.  The ETA extrapolates the elapsed/fraction ratio;
+        total-less updates degrade to a plain counter.  Updates that
+        arrive while no job is running (late stragglers) are dropped.
+        """
+        latest: tuple[int, int | None, str] | None = None
+        with contextlib.suppress(queue.Empty):
+            while True:
+                latest = self._progress_updates.get_nowait()
+        if latest is not None and self._busy:
+            done, total, note = latest
+            elapsed = max(time.monotonic() - self._job_started, 1e-9)
+            text = self._job_label_base
+            if total is not None and total > 0:
+                fraction = min(done / total, 1.0)
+                with contextlib.suppress(tk.TclError):
+                    self._progress.stop()
+                    self._progress.configure(mode="determinate", maximum=total)
+                    self._progress["value"] = done
+                text += f" — {done}/{total}"
+                if fraction > 0.0:
+                    remaining = elapsed * (1.0 - fraction) / fraction
+                    text += f" · ~{_fmt_duration(remaining)} left"
+            else:
+                text += f" — {done}"
+            if note:
+                text += f" · {note}"
+            with contextlib.suppress(tk.TclError):
+                self._job_label.configure(text=text)
+        self.after(150, self._poll_progress)
 
     def _poll_jobs(self) -> None:
         try:
@@ -1699,6 +1880,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         self._busy = False
         self._progress.stop()
+        with contextlib.suppress(tk.TclError):
+            # back to the launch-time marquee for the next job: the
+            # determinate mode a progress-reporting job switched to is
+            # per-job state, never a permanent UI change.
+            self._progress.configure(mode="indeterminate")
+            self._progress["value"] = 0
+        with contextlib.suppress(queue.Empty):
+            while True:  # late progress stragglers never leak either
+                self._progress_updates.get_nowait()
         self._job_label.configure(text="idle")
         for button in self._action_buttons:
             if button.winfo_exists():
@@ -2039,6 +2229,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         widget.insert(0, str(value))
                 applied += 1
         label = self._book.tab(index, "text")
+        # the ML tab owns one DYNAMIC input -- the manual-hyperparameter
+        # card.  Its JSON variable was reset with the others above; the
+        # panel itself must be rebuilt to show it (100x-106).
+        if label.strip() == "Data & ML":
+            self._ml_params_var.set("{}")
+            with contextlib.suppress(Exception):  # best effort
+                self._ml_refresh_hyperparam_panel()
         self._job_label.configure(
             text=f"{label.lower()} tab reset · {applied} inputs back to defaults")
 
@@ -2199,6 +2396,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if session["variables"] or session["texts"]:
             self._job_label.configure(
                 text="session restored · File ▸ Clear saved session resets")
+        # the ML tab's manual-hyperparameter card is DYNAMIC (rebuilt
+        # per model selection, values carried by the JSON variable the
+        # loop above already restored) -- rebuild it once, after the
+        # comboboxes hold their restored selections (100x-106).
+        with contextlib.suppress(Exception):  # never block restore
+            self._ml_refresh_hyperparam_panel()
         return restored_geometry
 
     def _on_close(self) -> None:
@@ -5391,6 +5594,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                                          values=("auto",))
         self._model_combo.set("auto")
         form_row(config, "model", self._model_combo)
+        # manual model settings (100x-106): the CV fold count the
+        # Train button threads into train_model (tune on) and the
+        # leaderboard button's own 3-fold convention stays untouched.
+        self._ml_cv_spin = ttk.Spinbox(config, from_=2, to=10, increment=1,
+                                       width=10)
+        self._ml_cv_spin.set("5")
+        Tooltip(self._ml_cv_spin,
+                "Cross-validation folds for Train & evaluate with the tune "
+                "tick on (and the CV columns of the saved report). The "
+                "leaderboard button keeps its own 3-fold convention.")
+        form_row(config, "cv folds", self._ml_cv_spin)
         self._tune_var = tk.BooleanVar(value=False)
         tune_check = ttk.Checkbutton(config, text="tune hyperparameters (grid search, slower)",
                                      variable=self._tune_var)
@@ -5429,8 +5643,45 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "automatically when present).")
         check_btn.pack(side="left", padx=(10, 0))
 
+        # picking a concrete task re-lists the models for it, and any
+        # model selection rebuilds the manual-hyperparameter card
+        # (100x-106): programmatic set() never fires <<ComboboxSelected>>,
+        # so every code path that moves these combos calls the refresh
+        # itself (load, apply-best, restore, reset).
+        self._task_combo.bind("<<ComboboxSelected>>", self._ml_task_changed)
+        self._model_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self._ml_refresh_hyperparam_panel(),
+        )
+
+        manual = make_card(
+            page.grid, "Manual hyperparameters", span=2, row=3, column=0,
+            subtitle="The selected model's registry knobs, editable by hand "
+                     "— each field starts at the estimator's own default; "
+                     "blank keeps that default. Pinned keys are excluded "
+                     "from the grid search, so tick 'tune' to search only "
+                     "the slots you leave blank. Per-model values persist "
+                     "with the session.",
+        )
+        self._ml_params_var = tk.StringVar(value="{}")
+        self._ml_params_host = ttk.Frame(manual, style="Card.TFrame")
+        grid_append(manual, self._ml_params_host, sticky="ew")
+        self._ml_param_entries: dict[str, ttk.Entry] = {}
+        self._ml_params_status = ttk.Label(
+            manual, text="pick a model to edit its hyperparameters",
+            style="CardMuted.TLabel", wraplength=620, justify="left")
+        grid_append(manual, self._ml_params_status, sticky="w", pady=(6, 0))
+        manual_buttons = ttk.Frame(manual, style="Card.TFrame")
+        grid_append(manual, manual_buttons, sticky="w", pady=(8, 0))
+        reset_params_btn = self._action_button(
+            manual_buttons, "Reset to defaults", self._ml_params_reset,
+            tooltip="Clear every field back to the estimator's own "
+                    "defaults (the blank state — nothing is pinned, the "
+                    "grid search gets all its slots back).")
+        reset_params_btn.pack(side="left")
+
         tuner = make_card(
-            page.grid, "Hyperparameter search", span=2, row=3, column=0,
+            page.grid, "Hyperparameter search", span=2, row=4, column=0,
             subtitle="The ml tune story, mouse edition: a keras-tuner-style "
                      "search over a whole estimator family (not the "
                      "per-model grid search above). RandomSearch samples "
@@ -5513,7 +5764,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             style="CardMuted.TLabel", wraplength=620, justify="left")
         grid_append(tuner, self._tune_summary, sticky="w", pady=(6, 0))
 
-        results = make_card(page.grid, "Results", span=2, row=4, column=0)
+        results = make_card(page.grid, "Results", span=2, row=5, column=0)
         self._ml_metrics = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, self._ml_metrics, sticky="ew")
         ttk.Label(self._ml_metrics, text="train a model to see metrics",
@@ -5521,7 +5772,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._ml_host = self._figure_host(results, height=330)
 
         board = make_card(
-            page.grid, "Leaderboard", span=2, row=5, column=0,
+            page.grid, "Leaderboard", span=2, row=6, column=0,
             subtitle="Compare models fills it with the cross-validated "
                      "registry ranking; a hyperparameter search fills it "
                      "with the trial ranking, best first."
@@ -5618,6 +5869,170 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             names = ["ridge"] if task == "regression" else ["logistic_regression"]
         self._model_combo["values"] = ["auto"] + names
         self._model_combo.set("auto")
+        self._ml_refresh_hyperparam_panel()
+
+    def _ml_task_changed(self, _event: Any = None) -> None:
+        """A concrete task pick re-lists its models and the manual knobs."""
+        task = self._task_combo.get()
+        if task != "auto":
+            self._refresh_model_choices(task)
+        self._ml_refresh_hyperparam_panel()
+
+    def _ml_params_saved(self) -> dict[str, dict[str, str]]:
+        """The persisted per-model manual values (``{model: {param: raw}}``).
+        One JSON string variable (``_ml_params_var``) carries every
+        model's manual values, so the session machinery saves and
+        restores them with zero extra plumbing — and switching models
+        back and forth never loses an edit.
+        """
+        try:
+            payload = json.loads(self._ml_params_var.get() or "{}")
+        except ValueError:
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return {
+            str(model): {str(key): str(value) for key, value in values.items()}
+            for model, values in payload.items()
+            if isinstance(values, dict)
+        }
+
+    def _ml_sync_params_var(self) -> None:
+        """Persist the CURRENT model's fields into the JSON variable."""
+        payload = self._ml_params_saved()
+        model = self._model_combo.get()
+        values = {
+            key: entry.get().strip()
+            for key, entry in getattr(self, "_ml_param_entries", {}).items()
+            if entry.get().strip()
+        }
+        if values:
+            payload[model] = values
+        else:
+            payload.pop(model, None)
+        self._ml_params_var.set(json.dumps(payload, sort_keys=True))
+
+    def _ml_refresh_hyperparam_panel(self) -> None:
+        """Rebuild the manual-hyperparameter rows for the selected model.
+
+        The registry's own ``param_grid`` decides WHICH knobs are
+        editable (the toolkit's curated tunable set), and the freshly
+        built estimator supplies each default — so the card can never
+        drift from the models it configures.  A model with an empty
+        grid says so instead of pretending.
+        """
+        host = getattr(self, "_ml_params_host", None)
+        if host is None:  # built before the ML tab exists (safety)
+            return
+        for child in host.winfo_children():
+            child.destroy()
+        self._ml_param_entries = {}
+        selection = self._model_combo.get()
+        task = self._task_combo.get()
+        if task == "auto" and self._ml_frame is not None:
+            target = self._target_combo.get()
+            if target in [str(column) for column in self._ml_frame.columns]:
+                task = self._infer_task(target)
+        if selection == "auto" or task not in ("regression", "classification"):
+            self._ml_params_status.configure(
+                text="pick a model to edit its hyperparameters"
+                     + ("" if selection != "auto"
+                        else " (the model combobox above)"))
+            return
+        try:
+            from pharmaml.ml.models import (
+                MODEL_REGISTRY,
+                build_model,
+                resolve_model_name,
+            )
+
+            spec = MODEL_REGISTRY[resolve_model_name(selection)]
+            defaults = build_model(selection, task).get_params()
+            grid = dict(spec.param_grid)
+        except Exception as exc:  # noqa: BLE001 - unusable model, say so
+            self._ml_params_status.configure(
+                text=f"{selection} could not be built here ({exc}) — "
+                     "its defaults are used as-is")
+            return
+        if not grid:
+            self._ml_params_status.configure(
+                text=f"{spec.name} exposes no registry search grid — its "
+                     "estimator defaults are used as-is")
+            return
+        saved = self._ml_params_saved().get(selection, {})
+        for index, key in enumerate(grid):
+            row = ttk.Frame(host, style="Card.TFrame")
+            row.grid(row=index, column=0, sticky="ew", pady=(0, 4))
+            ttk.Label(row, text=key, style="Field.TLabel").grid(
+                row=0, column=0, sticky="w")
+            entry = ttk.Entry(row, width=16)
+            entry.grid(row=0, column=1, sticky="w", padx=(10, 0))
+            # BLANK means "keep the estimator's default" — the hint
+            # label names that default, so the field itself stays empty
+            # unless the user pins something (only edited keys pin, and
+            # only unpinned keys keep their grid-search slots).
+            prefill = saved.get(key, "")
+            if prefill:
+                entry.insert(0, prefill)
+            entry.bind("<KeyRelease>", lambda _e: self._ml_sync_params_var())
+            self._ml_param_entries[key] = entry
+            grid_hint = " · ".join(_cell_text(value, limit=14) for value in grid[key])
+            default_text = _cell_text(defaults.get(key, ""), limit=14)
+            ttk.Label(
+                row,
+                text=f"default {default_text} · grid {grid_hint}",
+                style="CardMuted.TLabel", wraplength=430, justify="left",
+            ).grid(row=0, column=2, sticky="w", padx=(10, 0))
+        pinned = sum(1 for key, entry in self._ml_param_entries.items()
+                     if entry.get().strip())
+        self._ml_params_status.configure(
+            text=f"{spec.name} · {len(grid)} knob(s) · blank = default · "
+                 f"{pinned} pinned · pinned keys are excluded from the "
+                 "grid search")
+
+    def _ml_params_reset(self) -> None:
+        """The manual card's own reset — every field back to default.
+
+        Drops the current model's saved values from the JSON variable
+        and rebuilds the panel, which prefills each field with the
+        estimator's own default — the exact state a fresh selection
+        shows (never blank-with-hidden-values).
+        """
+        payload = self._ml_params_saved()
+        payload.pop(self._model_combo.get(), None)
+        self._ml_params_var.set(json.dumps(payload, sort_keys=True))
+        self._ml_refresh_hyperparam_panel()
+        if getattr(self, "_ml_param_entries", {}):
+            self._ml_params_status.configure(
+                text="manual values cleared — estimator defaults in effect")
+
+    def _ml_manual_params(self, model_name: str, task: str) -> dict[str, Any] | None:
+        """Parse the manual fields into ``train_model``'s pinned values.
+
+        Blank fields keep their default and are simply not pinned; a
+        field that fails its type parse raises :class:`ValueError`
+        naming the parameter — the pre-flight convention every other
+        input on the tab follows.
+        """
+        entries = getattr(self, "_ml_param_entries", {})
+        if not entries or model_name == "auto":
+            return None
+        try:
+            from pharmaml.ml.models import build_model
+
+            defaults = build_model(model_name, task).get_params()
+        except Exception:  # noqa: BLE001 - degrade to defaults, never block
+            return None
+        params: dict[str, Any] = {}
+        for key, entry in entries.items():
+            raw = entry.get().strip()
+            if not raw:
+                continue
+            try:
+                params[key] = parse_typed_value(raw, defaults.get(key))
+            except ValueError as exc:
+                raise ValueError(f"{key}: {exc}") from None
+        return params or None
 
     def _ml_train(self) -> None:
         if not self._require_pharmaml():
@@ -5652,6 +6067,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if model_name == "auto":
             model_name = "ridge" if task == "regression" else "logistic_regression"
         tune = bool(self._tune_var.get())
+        # manual hyperparameters + cv folds (100x-106): parsed BEFORE
+        # the job starts, naming the offending field -- the tab's
+        # pre-flight convention.
+        try:
+            model_params = self._ml_manual_params(model_name, task)
+            cv = parse_int(self._ml_cv_spin.get(), "cv folds",
+                           minimum=2, maximum=10)
+        except ValueError as exc:
+            messagebox.showwarning("Check the manual settings", str(exc))
+            return
 
         def work() -> Any:
             from pharmaml.ml import evaluate_model, train_model
@@ -5664,7 +6089,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 frame[numeric], y, random_state=42
             )
             trained = train_model(
-                model_name, task, x_train, y_train, tune=tune, cv=5, n_jobs=1
+                model_name, task, x_train, y_train, tune=tune, cv=cv, n_jobs=1,
+                model_params=model_params,
             )
             report = evaluate_model(
                 trained.model, x_test, y_test, task,
@@ -6055,7 +6481,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showwarning("Check the search settings", str(exc))
             return
 
-        def work() -> Any:
+        def work(report: Any) -> Any:
             from sklearn.model_selection import cross_val_score
 
             import pharmaml.ml.tuner as tuner_module
@@ -6068,6 +6494,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 make_cv_splitter,
                 resource_bounds,
             )
+
+            def on_trial(info: dict[str, Any]) -> None:
+                # the status bar's heartbeat (100x-106): trial/total
+                # drive the determinate bar + ETA, best-so-far rides
+                # along as the note.
+                note = ""
+                if info.get("best_score") is not None:
+                    note = f"best {info['best_score']:.3f}"
+                if info.get("error") is not None:
+                    note = (note + " · " if note else "") + "trial failed"
+                report(info["trial"], info.get("total"), note)
 
             hypermodel = getattr(tuner_module, hypermodel_name)
             objective = "r2" if task == "regression" else "accuracy"
@@ -6087,12 +6524,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 tuner: Any = Hyperband(
                     hypermodel, objective=objective, resource=resource or "epochs",
                     max_resource=r_max, min_resource=r_min, eta=eta,
-                    cv=cv, task=task, seed=42,
+                    cv=cv, task=task, seed=42, on_trial=on_trial,
                 )
             else:
                 tuner = RandomSearch(
                     hypermodel, objective=objective, max_trials=max_trials,
-                    cv=cv, task=task, seed=42,
+                    cv=cv, task=task, seed=42, on_trial=on_trial,
                 )
             results = tuner.search(x_train, y_train)
             # the baseline: the hypermodel's defaults under the tuner's
@@ -6229,11 +6666,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._task_combo.set(task)
         self._refresh_model_choices(task)
         self._model_combo.set(estimator)
+        self._ml_refresh_hyperparam_panel()
+        # carry the winning configuration into the manual card too
+        # (100x-106): every winner key that is a registry knob of the
+        # family gets pinned, so the very next Train runs the winner
+        # instead of the defaults.
+        entries = getattr(self, "_ml_param_entries", {})
+        filled = 0
+        for key, entry in entries.items():
+            if key in params:
+                entry.delete(0, "end")
+                entry.insert(0, str(params[key]))
+                filled += 1
+        self._ml_sync_params_var()
+        self._ml_params_status.configure(
+            text=f"{len(entries)} knob(s) · {filled} pinned from the winning "
+                 "configuration · hit Train & evaluate to refit at these values"
+        )
         self._tune_summary.configure(
             text=f"applied — model set to {estimator}; hit Train & evaluate "
-                 "for the full report pipeline (the registry's own "
-                 "defaults; the winning config: "
-                 + tune_config_text(params) + ")"
+                 "for the full report pipeline (the winning config: "
+                 + tune_config_text(params)
+                 + "; the manual hyperparameters card carries it)"
         )
 
     def _ml_tune_save_trials(self) -> None:
@@ -6301,13 +6755,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if task == "auto":
             task = self._infer_task(target)
 
-        def work() -> Any:
+        def work(report: Any) -> Any:
             from pharmaml.ml import compare_models
 
             frame = self._ml_frame
             y = frame[target]
             numeric, _dropped = numeric_feature_columns(frame, target)
-            return compare_models(frame[numeric], y, task, cv=3, n_jobs=1)
+
+            def on_model(info: dict[str, Any]) -> None:
+                # one heartbeat per leaderboard row (100x-106): the
+                # model name is the note, index/total the fraction.
+                report(info["index"], info["total"], info["model"])
+
+            return compare_models(frame[numeric], y, task, cv=3, n_jobs=1,
+                                  on_model=on_model)
 
         def render(board: Any) -> None:
             self._board_tree.delete(*self._board_tree.get_children())
@@ -6588,11 +7049,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         activation = self._dl_activation_combo.get()
         estimator_name = deep_estimator_name(architecture, task)
 
-        def work() -> Any:
+        def work(notify: Any) -> Any:
             import time as _time
 
             from pharmaml.ml import evaluate_model, neural
             from pharmaml.ml.preprocessing import make_train_test_split
+
+            def on_epoch(info: dict[str, Any]) -> None:
+                # epoch/epochs drive the bar + ETA (100x-106); the
+                # validation loss rides along once it exists.
+                # (``notify`` -- not ``report`` -- because this work
+                # function's own evaluation payload is named report.)
+                if info.get("val_loss") is not None:
+                    note = f"val_loss {info['val_loss']:.3g}"
+                else:
+                    note = f"train_loss {info['train_loss']:.3g}"
+                notify(info["epoch"], info["epochs"], note)
 
             frame = self._dl_frame
             y = frame[target]
@@ -6608,7 +7080,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 batchnorm=batchnorm, random_state=seed,
             )
             started = _time.perf_counter()
-            network.fit(x_train, y_train)
+            network.fit(x_train, y_train, on_epoch=on_epoch)
             seconds = _time.perf_counter() - started
             report = evaluate_model(
                 network, x_test, y_test, task,
@@ -7397,7 +7869,11 @@ def self_test() -> int:
 
     The build is fully deterministic: ``persist_session=False`` keeps
     the run from reading -- and, worse, re-writing -- the developer's
-    real ``~/.pharmaml/playground-session.json``.
+    real ``~/.pharmaml/playground-session.json``.  Since 100x-106 the
+    self-test also exercises the manual-hyperparameter card end to end
+    (dataset load → model pick → panel build → typed parse → JSON
+    persistence) and the progress plumbing (report → poll → determinate
+    bar + ETA label), asserting loudly instead of trusting the build.
     """
     app = PlaygroundApp(persist_session=False)
     for _ in range(4):
@@ -7407,8 +7883,69 @@ def self_test() -> int:
         app._book.select(index)
         app.update()
     app.update()
+
+    # -- manual hyperparameters (100x-106) ---------------------------- #
+    app._ml_load_example()                       # qsar_regression.csv
+    assert app._model_combo.get() == "auto", "a fresh load resets the model"
+    app._model_combo.set("ridge")
+    app._ml_refresh_hyperparam_panel()
+    entries = getattr(app, "_ml_param_entries", {})
+    assert list(entries) == ["alpha"], f"ridge's grid knobs: {list(entries)}"
+    assert entries["alpha"].get().strip() == "", "blank field = estimator default"
+    entries["alpha"].delete(0, "end")
+    entries["alpha"].insert(0, "0.5")
+    app._ml_sync_params_var()
+    assert json.loads(app._ml_params_var.get()) == {"ridge": {"alpha": "0.5"}}, (
+        "per-model JSON persistence"
+    )
+    parsed = app._ml_manual_params("ridge", "regression")
+    assert parsed == {"alpha": 0.5}, f"typed parse: {parsed!r}"
+    entries["alpha"].delete(0, "end")
+    entries["alpha"].insert(0, "not-a-number")
+    try:
+        app._ml_manual_params("ridge", "regression")
+        raise AssertionError("a bad float must raise with the field named")
+    except ValueError as exc:
+        assert "alpha" in str(exc)
+    entries["alpha"].delete(0, "end")
+    entries["alpha"].insert(0, "0.5")            # leave a pinned value
+    app._ml_params_reset()
+    assert app._ml_params_var.get() == "{}", "reset clears the JSON"
+    assert app._ml_manual_params("ridge", "regression") is None
+
+    # -- progress + ETA plumbing (100x-106) --------------------------- #
+    assert _fmt_duration(0) == "0 s" and _fmt_duration(42.4) == "42 s"
+    assert _fmt_duration(192) == "3 min 12 s" and _fmt_duration(3720) == "1 h 02 min"
+    assert _fmt_duration(-5) == "0 s", "negative ETAs clamp to zero"
+    assert parse_typed_value("true", False) is True
+    assert parse_typed_value("0", True) is False
+    assert parse_typed_value("7", None) == 7 and parse_typed_value("none", None) is None
+    assert parse_typed_value("0.25", 1.0) == 0.25 and parse_typed_value("l1", "l2") == "l1"
+    assert parse_typed_value("(128, 64)", (100,)) == (128, 64)
+    assert _accepts_progress_argument(lambda report: None) is True
+    assert _accepts_progress_argument(lambda: None) is False
+    app._busy = True
+    app._job_label_base = "probe"
+    app._job_started = time.monotonic() - 4.0    # 4 s "elapsed"
+    app._report_progress(3, 10, "best 0.71")
+    app._poll_progress()
+    assert str(app._progress.cget("mode")) == "determinate"
+    assert int(app._progress["value"]) == 3 and int(app._progress.cget("maximum")) == 10
+    label = app._job_label.cget("text")
+    assert label.startswith("probe — 3/10 · ~") and label.endswith("left · best 0.71"), (
+        f"progress label: {label!r}"
+    )
+    app._report_progress(2, None, "")            # total-less degradation
+    app._poll_progress()
+    assert app._job_label.cget("text") == "probe — 2"
+    app._busy = False
+    app._report_progress(9, 10, "straggler")     # dropped when idle
+    app._poll_progress()
+    assert app._job_label.cget("text") == "probe — 2"
+
     app.destroy()
-    print("self-test: UI built, every tab visited, no errors")
+    print("self-test: UI built, every tab visited, manual hyperparameters "
+          "+ progress/ETA verified, no errors")
     return 0
 
 

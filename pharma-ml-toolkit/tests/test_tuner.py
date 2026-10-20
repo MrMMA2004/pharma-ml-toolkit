@@ -10,6 +10,8 @@ protocol + ``resource_bounds`` ladder helper.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -23,6 +25,7 @@ from pharmaml.ml.tuner import (
     HyperParameters,
     RandomSearch,
     TunerResults,
+    _hyperband_total_trials,
     build_ann_classifier,
     build_ann_regressor,
     build_hsvr,
@@ -277,6 +280,26 @@ class TestRandomSearch:
         assert results.objective == "accuracy"
         assert results.best_score > 0.5
 
+    def test_on_trial_progress_payloads(self) -> None:
+        # 100x-106: one callback per trial, in order, carrying the
+        # progress-bar contract (trial/total) plus the running best.
+        X, y = linear_data(60)
+        events: list[dict[str, Any]] = []
+        tuner = RandomSearch(
+            build_ann_regressor, objective="r2", max_trials=3, cv=2, seed=11,
+            on_trial=events.append,
+        )
+        results = tuner.search(X, y)
+        assert len(events) == 3 == len(results.trials)
+        assert [event["trial"] for event in events] == [1, 2, 3]
+        assert all(event["total"] == 3 for event in events)
+        assert all(set(event) == {
+            "trial", "total", "score", "best_score", "error",
+            "hyperparameters",
+        } for event in events)
+        assert events[0]["best_score"] is not None  # trial 1 set the best
+        assert events[-1]["best_score"] == pytest.approx(results.best_score)
+
 
 # ---------------------------------------------------------------------------
 # Hyperband
@@ -333,6 +356,32 @@ class TestHyperband:
         X, y = linear_data(20)
         with pytest.raises(ModelError, match=fragment):
             Hyperband(build_ann_regressor, **kwargs).search(X, y)
+
+    def test_on_trial_total_matches_the_real_trial_count(self) -> None:
+        # 100x-106: the schedule mirror must equal the run's own
+        # evaluation count exactly -- the ETA fraction depends on it.
+        X, y = linear_data(60)
+        events: list[dict[str, Any]] = []
+        tuner = Hyperband(
+            build_ann_regressor, resource="max_iter", max_resource=9,
+            min_resource=1, eta=3, cv=2, seed=5, on_trial=events.append,
+        )
+        results = tuner.search(X, y)
+        assert len(events) == len(results.trials)
+        total = events[0]["total"]
+        assert total == _hyperband_total_trials(3, 9, 1)
+        assert [event["trial"] for event in events] == list(range(1, total + 1))
+        assert events[-1]["trial"] == total
+        assert all(set(event) == {
+            "trial", "total", "score", "best_score", "error", "resource",
+        } for event in events)
+
+    def test_hyperband_total_trials_schedule_mirror(self) -> None:
+        # the classic textbook grid: eta=3, R=81, r_min=3 -> 70 trials
+        assert _hyperband_total_trials(3, 81, 3) == 70
+        assert _hyperband_total_trials(3, 27, 3) == 23
+        assert _hyperband_total_trials(2, 8, 8) == 1  # degenerate: one rung
+        assert _hyperband_total_trials(4, 4, 1) == 7  # s_max=1: (2) + (4+1)
 
 
 # ---------------------------------------------------------------------------

@@ -10,6 +10,60 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.48] — 2026-10-21
+
+### Added — manual hyperparameters + live progress/ETA: hands on the knobs, eyes on the clock
+
+The playground's Data & ML tab trained every model at its registry
+defaults, and every long job (a hyperparameter search, a leaderboard
+sweep, a deep-network fit) showed the same silent marquee. Both gaps
+close together — the feature the user asked for and the visibility it
+needs:
+
+- **`train_model(model_params=...)`** — manual hyperparameters, pinned
+  as-is on the estimator before anything is fitted. Keys are raw
+  estimator parameter names; an unknown key raises `ModelError` naming
+  the valid ones. **Pinned keys are excluded from any grid search**, so
+  `tune=True` searches only the slots the user left blank — pin
+  `alpha`, search `l1_ratio` around it — and with every slot pinned the
+  search degrades gracefully to a single fit at the pinned values
+  (`best_params` reports exactly what was fitted, pinned and found).
+- **Playground — the "Manual hyperparameters" card**: pick a concrete
+  model and its *registry grid knobs* appear as editable fields
+  (defaults from the freshly built estimator, the searched grid shown
+  beside each). **Blank keeps the default** — only edited keys pin —
+  and the values persist per model with the session (one JSON
+  variable, so switching back and forth never loses an edit). A
+  pre-flight parse names the offending field before any job starts,
+  tuple slots (`hidden_layer_sizes`) parse `(128, 64)` properly, and
+  **Apply best** now prefills the card with the search winner. A "cv
+  folds" spinner joins the train card (2–10, the fold count Train
+  threads into `train_model`).
+- **Progress + ETA plumbing**: a `work` function that accepts an
+  argument now receives a progress reporter — the status bar switches
+  from the marquee to a **determinate bar** with a live
+  **"~ 42 s left"** ETA (elapsed/fraction extrapolation) and a note
+  (`tuning ann — 3/8 · ~45 s left · best 0.712`). Three library hooks
+  feed it: **`RandomSearch`/`Hyperband` `on_trial`** (one payload per
+  trial; Hyperband's `total` is the exact bracket-schedule count,
+  mirrored by `_hyperband_total_trials`), **`DeepMLP*.fit(on_epoch=...)`**
+  (keyword-only, one payload per epoch — early stopping ends the stream
+  early; not a hyperparameter, so `clone`/`get_params` never see it),
+  and **`compare_models(on_model=...)`** (one call per leaderboard row,
+  the longest job in the tab). Zero-argument jobs keep the historical
+  marquee; the bar resets to it when the job ends.
+- **Tests**: 25 new cases — 6 on the pin contract (untuned pin, unknown
+  key, search-around-the-pin, all-slots-pinned degradation, `None`
+  parity, compare's per-row callback), 3 on the tuner callbacks
+  (payload shape, Hyperband total == real count, the schedule mirror),
+  2 on the epoch stream (ordering/keys/early-stop parity, clone
+  cleanliness), 14 on the playground (typed parsing incl. tuples,
+  duration formatting, the injection rule, the panel's
+  build/pin/switch/reset/bad-value flows, determinate-bar + ETA
+  rendering, post-job reset, a live tune search reporting progress,
+  Apply-best prefill). The `--self-test` now asserts all of it
+  headlessly too.
+
 ## [1.2.47] — 2026-10-20
 
 ### Added — gaussian_process_classifier: the Laplace GP classifier, the 26th registry family

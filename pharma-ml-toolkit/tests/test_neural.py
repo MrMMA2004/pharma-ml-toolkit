@@ -358,6 +358,43 @@ class TestQuality:
         assert model.n_features_in_ == X_train.shape[1]
         assert model.history_[-1]["val_loss"] is not None  # val split active
 
+    def test_on_epoch_progress_stream(self, binary_data: tuple) -> None:
+        # 100x-106: the GUI progress hook. One payload per epoch, in
+        # order, ending exactly when training ends (early stopping
+        # included); the fraction epoch/epochs is an honest ETA input.
+        X_train, _, y_train, _ = binary_data
+        events: list[dict[str, Any]] = []
+        model = fast_classifier(epochs=6, val_split=0.2)
+        model.fit(X_train, y_train, on_epoch=events.append)
+        assert [event["epoch"] for event in events] == list(range(1, 7))
+        assert all(event["epochs"] == 6 for event in events)
+        assert len(events) == len(model.history_) == model.n_iter_
+        assert all(set(event) == {
+            "epoch", "epochs", "train_loss", "val_loss", "best_val", "stale",
+        } for event in events)
+        assert all(
+            event["val_loss"] is not None and event["best_val"] is not None
+            for event in events
+        )  # the split is active
+        assert events[0]["stale"] == 0  # the first epoch always improves
+
+    def test_on_epoch_absent_keeps_clone_and_get_params_clean(
+        self, binary_data: tuple
+    ) -> None:
+        # the callback is a transient fit argument, NOT a hyperparameter:
+        # clone/get_params must never see it, and a fit without it stays
+        # bit-identical to the pre-100x-106 behaviour.
+        from sklearn.base import clone
+
+        X_train, _, y_train, _ = binary_data
+        model = fast_classifier(epochs=3, val_split=0.2)
+        assert "on_epoch" not in model.get_params()
+        clone(model).fit(X_train, y_train)  # positional fit stays valid
+        quiet = fast_classifier(epochs=3, val_split=0.2).fit(X_train, y_train)
+        loud = fast_classifier(epochs=3, val_split=0.2)
+        loud.fit(X_train, y_train, on_epoch=lambda info: None)
+        assert len(quiet.history_) == len(loud.history_)
+
     def test_val_split_zero_disables_early_stopping(self, binary_data: tuple) -> None:
         X_train, X_test, y_train, _ = binary_data
         model = fast_classifier(epochs=5, val_split=0.0).fit(X_train, y_train)

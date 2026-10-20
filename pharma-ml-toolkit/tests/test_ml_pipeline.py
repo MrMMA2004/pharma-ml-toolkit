@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -1663,6 +1664,92 @@ class TestLeakageGuards:
         # sanity: the mutated rows really are extreme, the assertion above
         # is therefore non-vacuous
         assert mutated.iloc[0, 0] != X_test.iloc[0, 0]
+
+
+class TestManualHyperparameters:
+    """100x-106 — ``train_model(model_params=...)``: pinned knobs.
+
+    The manual contract, three ways: an untuned fit lands exactly at
+    the pinned values (and reports them as ``best_params``); an unknown
+    key fails up front naming the valid parameters; and a *tuned* fit
+    keeps the pinned keys fixed while the grid search tunes only the
+    remaining slots around them.
+    """
+
+    @staticmethod
+    def _frame(n: int = 40) -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(7)
+        X = pd.DataFrame(rng.normal(size=(n, 3)), columns=["a", "b", "c"])
+        y = pd.Series(X["a"] * 2.0 - X["b"] + rng.normal(scale=0.05, size=n))
+        return X, y
+
+    def test_untuned_pins_estimator_and_reports_params(self) -> None:
+        X, y = self._frame()
+        result = train_model(
+            "ridge", "regression", X, y, tune=False,
+            model_params={"alpha": 0.5},
+        )
+        assert result.best_params == {"alpha": 0.5}
+        assert result.model.named_steps["reg"].alpha == pytest.approx(0.5)
+        assert result.cv_scores is None  # no search ran
+
+    def test_unknown_key_raises_model_error_naming_valid_parameters(self) -> None:
+        X, y = self._frame()
+        with pytest.raises(ModelError) as excinfo:
+            train_model(
+                "ridge", "regression", X, y, tune=False,
+                model_params={"definitely_not_a_param": 1},
+            )
+        message = str(excinfo.value)
+        assert "definitely_not_a_param" in message
+        assert "alpha" in message  # the valid parameter list is named
+
+    def test_tuned_search_pins_and_tunes_around_the_pin(self) -> None:
+        X, y = self._frame()
+        # elastic_net's registry grid is alpha x l1_ratio; pinning alpha
+        # leaves l1_ratio as the only searchable slot.
+        result = train_model(
+            "elastic_net", "regression", X, y, tune=True, cv=3,
+            model_params={"alpha": 0.1},
+        )
+        assert result.cv_scores is not None and len(result.cv_scores) == 3
+        assert result.best_params["alpha"] == pytest.approx(0.1)  # pinned
+        assert "l1_ratio" in result.best_params  # searched around it
+        assert result.model.named_steps["reg"].alpha == pytest.approx(0.1)
+
+    def test_pin_every_slot_disables_the_search_gracefully(self) -> None:
+        X, y = self._frame()
+        # ridge's grid is alpha-only: pinning it empties the grid, so the
+        # tune request degrades to a single fit at the pinned value.
+        result = train_model(
+            "ridge", "regression", X, y, tune=True, cv=3,
+            model_params={"alpha": 0.25},
+        )
+        assert result.best_params == {"alpha": 0.25}
+        assert result.cv_scores is None
+        assert result.model.named_steps["reg"].alpha == pytest.approx(0.25)
+
+    def test_none_keeps_the_historical_behaviour(self) -> None:
+        X, y = self._frame()
+        plain = train_model("ridge", "regression", X, y, tune=False)
+        empty = train_model("ridge", "regression", X, y, tune=False,
+                            model_params={})
+        assert plain.best_params == {} and empty.best_params == {}
+        assert plain.model.named_steps["reg"].alpha == \
+            empty.model.named_steps["reg"].alpha
+
+    def test_compare_models_reports_one_call_per_row(self) -> None:
+        X, y = self._frame()
+        calls: list[dict[str, Any]] = []
+        board = compare_models(
+            X, y, task="regression", models=["ridge", "linear_regression"],
+            cv=2, on_model=calls.append,
+        )
+        assert len(board) == 2
+        assert calls == [
+            {"model": "ridge", "index": 1, "total": 2},
+            {"model": "linear_regression", "index": 2, "total": 2},
+        ]
 
 
 class TestXgboostStringLabels:

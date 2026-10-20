@@ -214,6 +214,76 @@ class TestPureHelpers:
 
 
 # --------------------------------------------------------------------- #
+# the manual-hyperparameter + progress helpers (100x-106)
+# --------------------------------------------------------------------- #
+class TestManualHyperparameterHelpers:
+    def test_parse_typed_value_follows_the_default_type(
+        self, playground: Any
+    ) -> None:
+        parse = playground.parse_typed_value
+        assert parse("0.5", 1.0) == 0.5          # float default
+        assert parse("300", 100) == 300          # int default
+        assert parse("scale", "auto") == "scale"  # string default
+        assert parse("true", False) is True      # bool before int
+        assert parse("NO", True) is False
+        assert parse("", 7.5) == 7.5             # blank keeps the default
+
+    def test_parse_typed_value_none_and_tuple_defaults(
+        self, playground: Any
+    ) -> None:
+        parse = playground.parse_typed_value
+        assert parse("none", None) is None       # explicit None slot
+        assert parse("null", None) is None
+        assert parse("7", None) == 7             # numeric fallback
+        assert parse("auto-ish", None) == "auto-ish"
+        assert parse("(128, 64)", (100,)) == (128, 64)
+        assert parse("128, 64", (100,)) == (128, 64)
+        assert parse("16", (100,)) == (16,)
+
+    def test_parse_typed_value_rejects_rubbish_with_field_context(
+        self, playground: Any
+    ) -> None:
+        parse = playground.parse_typed_value
+        with pytest.raises(ValueError, match="true/false"):
+            parse("maybe", False)
+        with pytest.raises(ValueError):
+            parse("abc", 1.0)                     # float slot, float jargon
+        with pytest.raises(ValueError, match="width"):
+            parse("(128, sixty-four)", (100,))
+
+    def test_fmt_duration_formats_every_magnitude(self, playground: Any) -> None:
+        fmt = playground._fmt_duration
+        assert fmt(0) == "0 s"
+        assert fmt(41.9) == "42 s"
+        assert fmt(-3.0) == "0 s"                # clamped, never negative
+        assert fmt(192) == "3 min 12 s"
+        assert fmt(599.6) == "10 min 00 s"
+        assert fmt(3720) == "1 h 02 min"
+
+    def test_accepts_progress_argument_signature_rule(
+        self, playground: Any
+    ) -> None:
+        accepts = playground._accepts_progress_argument
+        assert accepts(lambda report: None) is True
+        assert accepts(lambda: None) is False
+        assert accepts(lambda *args: None) is True
+        assert accepts(lambda x=None, *, y=1: None) is True  # x is positional
+        assert accepts(lambda *, y=1: None) is False  # keyword-only is no
+
+    def test_call_work_injects_the_reporter_conditionally(
+        self, playground: Any
+    ) -> None:
+        call = playground._call_work
+        seen: list[object] = []
+        assert call(lambda: 1, seen.append) == 1
+        assert seen == []  # the zero-arg callable never sees the reporter
+        assert call(lambda report: report("x"), seen.append) is None
+        assert seen == ["x"]  # the one-arg callable received it
+        assert call(lambda report: report("y") or 2, seen.append) == 2
+        assert seen == ["x", "y"]
+
+
+# --------------------------------------------------------------------- #
 # the Docking tab's pure helpers (npts / centre / size tuples, engines)
 # --------------------------------------------------------------------- #
 class TestDockingHelpers:
@@ -805,6 +875,158 @@ class TestGuiUnderXvfb:
         assert values[3] == "2.363e-13"  # BH-corrected fdr
         assert values[4] == "Yes"
         assert "more sensitive" in values[5]  # negative rho, LN_IC50 direction
+        assert quiet_dialogs == []
+
+    # -- the Data & ML tab's manual hyperparameters + progress (100x-106) -- #
+    def test_ml_example_load_lists_models_and_clears_panel(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        assert app._model_combo.get() == "auto"
+        assert "ridge" in list(app._model_combo["values"])
+        # "auto" selection keeps the panel at its placeholder
+        assert app._ml_param_entries == {}
+        assert "pick a model" in app._ml_params_status.cget("text")
+        assert quiet_dialogs == []
+
+    def test_manual_hyperparam_panel_builds_and_pins(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        entries = app._ml_param_entries
+        assert list(entries) == ["alpha"]  # ridge's registry grid
+        assert entries["alpha"].get() == ""  # blank = estimator default
+        assert "ridge · 1 knob(s)" in app._ml_params_status.cget("text")
+        # typing pins; the per-model JSON persistence carries it
+        entries["alpha"].insert(0, "0.5")
+        app._ml_sync_params_var()
+        assert json.loads(app._ml_params_var.get()) == {
+            "ridge": {"alpha": "0.5"},
+        }
+        assert app._ml_manual_params("ridge", "regression") == {"alpha": 0.5}
+        # switching models keeps ridge's values; switching back restores
+        app._model_combo.set("elastic_net")
+        app._ml_refresh_hyperparam_panel()
+        assert set(app._ml_param_entries) == {"alpha", "l1_ratio"}
+        assert json.loads(app._ml_params_var.get())["ridge"] == {"alpha": "0.5"}
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        assert app._ml_param_entries["alpha"].get() == "0.5"
+        assert quiet_dialogs == []
+
+    def test_manual_hyperparam_bad_value_fails_pre_flight(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_param_entries["alpha"].insert(0, "banana")
+        with pytest.raises(ValueError, match="alpha"):
+            app._ml_manual_params("ridge", "regression")
+        assert quiet_dialogs == []
+
+    def test_manual_hyperparam_reset_rebuilds_defaults(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_param_entries["alpha"].insert(0, "9.9")
+        app._ml_sync_params_var()
+        app._ml_params_reset()
+        assert app._ml_param_entries["alpha"].get() == ""
+        assert app._ml_params_var.get() == "{}"
+        assert app._ml_manual_params("ridge", "regression") is None
+        assert quiet_dialogs == []
+
+    def test_progress_report_drives_determinate_bar_and_eta(
+        self, app: Any
+    ) -> None:
+        import time as _time
+
+        app._busy = True
+        app._job_label_base = "probe job"
+        app._job_started = _time.monotonic() - 4.0  # 4 s elapsed
+        app._report_progress(1, 8, "best 0.70")
+        app._poll_progress()
+        assert str(app._progress.cget("mode")) == "determinate"
+        assert int(app._progress.cget("maximum")) == 8
+        assert int(app._progress["value"]) == 1
+        label = app._job_label.cget("text")
+        assert label.startswith("probe job — 1/8 · ~") and " left" in label
+        assert label.endswith("best 0.70")
+        # the ETA shrinks as the fraction grows
+        app._report_progress(4, 8, "")
+        app._poll_progress()
+        later = app._job_label.cget("text")
+        assert later.startswith("probe job — 4/8 · ~")
+        # total-less updates degrade to a plain counter
+        app._report_progress(7, None, "")
+        app._poll_progress()
+        assert app._job_label.cget("text") == "probe job — 7"
+
+    def test_progress_resets_when_the_job_ends(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_param_entries["alpha"].insert(0, "0.5")
+        app._ml_train()
+        assert app._busy, "the train job started"
+        assert self._drain_jobs(app), "train job hung"
+        trained = app._ml_last_run[0]
+        assert trained.model.named_steps["reg"].alpha == 0.5  # pinned
+        assert trained.best_params == {"alpha": 0.5}
+        # the status bar returned to launch state
+        assert app._job_label.cget("text") == "idle"
+        assert str(app._progress.cget("mode")) == "indeterminate"
+        assert quiet_dialogs == []
+
+    def test_tune_search_reports_progress_with_eta(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._tune_trials.set("4")
+        app._ml_tune()
+        saw_fraction = False
+        saw_eta = False
+        import time as _time
+
+        deadline = _time.time() + 120.0
+        while app._busy and _time.time() < deadline:
+            app.update()
+            label = app._job_label.cget("text")
+            if "/4" in label:
+                saw_fraction = True
+            if " left" in label:
+                saw_eta = True
+            _time.sleep(0.02)
+        assert not app._busy, "tune job hung"
+        assert saw_fraction and saw_eta, "the search never reported progress"
+        assert len(app._tune_last[0].trials) == 4
+        assert app._job_label.cget("text") == "idle"
+        assert quiet_dialogs == []
+
+    def test_apply_best_prefills_the_manual_panel(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._tune_trials.set("4")
+        app._ml_tune()
+        assert self._drain_jobs(app, timeout=150.0), "tune job hung"
+        results, estimator, task, _target = app._tune_last
+        app._ml_tune_apply()
+        assert app._model_combo.get() == estimator
+        # the winner's alpha (a registry knob of ann) landed in the panel
+        if "alpha" in app._ml_param_entries:
+            assert app._ml_param_entries["alpha"].get() == str(
+                results.best_params["alpha"]
+            )
+        pinned = app._ml_manual_params(estimator, task)
+        assert pinned is None or "alpha" in pinned  # parseable end-to-end
         assert quiet_dialogs == []
 
 

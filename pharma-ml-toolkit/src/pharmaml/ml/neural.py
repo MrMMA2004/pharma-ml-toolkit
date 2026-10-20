@@ -80,6 +80,7 @@ True
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
@@ -434,7 +435,9 @@ class _BaseDeepEstimator(BaseEstimator):
             )
 
     # -- fit ------------------------------------------------------------
-    def fit(self, X: Any, y: Any) -> _BaseDeepEstimator:
+    def fit(
+        self, X: Any, y: Any, *, on_epoch: Callable[[dict[str, Any]], None] | None = None
+    ) -> _BaseDeepEstimator:
         """Train the network on ``(X, y)`` with early stopping.
 
         Parameters
@@ -446,6 +449,16 @@ class _BaseDeepEstimator(BaseEstimator):
         y:
             Targets — class labels (any hashable, e.g. strings or ints)
             for the classifiers, numeric values for the regressors.
+        on_epoch:
+            Optional keyword-only progress callback invoked after every
+            training epoch with the payload ``{'epoch': e, 'epochs':
+            total, 'train_loss', 'val_loss', 'best_val', 'stale'}`` —
+            ``val_loss``/``best_val`` are ``None`` when no validation
+            split runs, and the stream ends early when early stopping
+            fires.  Designed for GUI progress bars and ETA displays
+            (``epoch / epochs`` is an honest fraction); it must never
+            raise.  Not a constructor hyperparameter, so ``clone`` and
+            ``get_params`` are untouched.
 
         Returns
         -------
@@ -591,7 +604,8 @@ class _BaseDeepEstimator(BaseEstimator):
         rng_state = torch.get_rng_state()
         try:
             self._train_torch(
-                X_scaled, y_enc, n_out, device, hidden, train_idx, val_idx, rng
+                X_scaled, y_enc, n_out, device, hidden, train_idx, val_idx, rng,
+                on_epoch=on_epoch,
             )
         finally:
             torch.set_rng_state(rng_state)
@@ -661,6 +675,7 @@ class _BaseDeepEstimator(BaseEstimator):
         train_idx: np.ndarray,
         val_idx: np.ndarray | None,
         rng: np.random.Generator,
+        on_epoch: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         """Run the minibatch Adam training loop with early stopping.
 
@@ -774,6 +789,15 @@ class _BaseDeepEstimator(BaseEstimator):
                     stale += 1
 
             history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+            if on_epoch is not None:
+                on_epoch({
+                    "epoch": epoch,
+                    "epochs": epochs,
+                    "train_loss": train_loss,
+                    "val_loss": val_loss,
+                    "best_val": best_val if best_val != float("inf") else None,
+                    "stale": stale,
+                })
             _LOG.debug(
                 "epoch %03d train_loss %.3f val_loss %s",
                 epoch,

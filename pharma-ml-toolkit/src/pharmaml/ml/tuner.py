@@ -672,6 +672,13 @@ class RandomSearch:
         ``'regression'`` or ``'classification'``.
     seed:
         Integer seed for the value sampler and the fold shuffle.
+    on_trial:
+        Optional progress callback invoked after every trial with the
+        payload ``{'trial': i, 'total': max_trials, 'score',
+        'best_score', 'error', 'hyperparameters'}`` — one call per
+        sampled trial, in trial order (``best_score`` is ``None``
+        until a trial succeeds).  Designed for GUI progress bars and
+        ETA displays; it must never raise.
 
     Raises
     ------
@@ -689,6 +696,7 @@ class RandomSearch:
         cv: int = 3,
         task: str = "auto",
         seed: int = 42,
+        on_trial: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.hypermodel = hypermodel
         self.objective = objective
@@ -696,6 +704,7 @@ class RandomSearch:
         self.cv = cv
         self.task = task
         self.seed = seed
+        self.on_trial = on_trial
 
     def _validate(self) -> None:
         if (
@@ -747,6 +756,15 @@ class RandomSearch:
             )
             if error is None and np.isfinite(score) and (best is None or score > best[0]):
                 best = (score, values)
+            if self.on_trial is not None:
+                self.on_trial({
+                    "trial": trial_id,
+                    "total": int(self.max_trials),
+                    "score": score,
+                    "best_score": best[0] if best is not None else None,
+                    "error": error,
+                    "hyperparameters": values,
+                })
 
         results = TunerResults(trials, objective_label)
         if best is not None:
@@ -759,6 +777,32 @@ class RandomSearch:
 # ---------------------------------------------------------------------------
 # Hyperband
 # ---------------------------------------------------------------------------
+def _hyperband_total_trials(eta: int, r_max: int, r_min: int) -> int:
+    """Exact evaluation count of the full Hyperband bracket schedule.
+
+    Mirrors :meth:`Hyperband.search`'s own arithmetic (bracket widths
+    and the ``ceil(n / eta)`` rung shrink) without touching a
+    hypermodel, so progress consumers can show ``trial / total`` and
+    an ETA before the first trial finishes::
+
+        >>> from pharmaml.ml.tuner import _hyperband_total_trials
+        >>> _hyperband_total_trials(3, 81, 3)   # the classic textbook grid
+        70
+
+    The count assumes no bracket aborts early (every rung producing
+    at least one scored config); a doomed bracket stops short and the
+    real trial count lands below this figure.
+    """
+    s_max = math.floor(math.log(r_max / r_min, eta)) if r_max > r_min else 0
+    total = 0
+    for bracket in range(s_max + 1):
+        configs = math.ceil((s_max + 1) * eta**bracket / (bracket + 1))
+        for _rung in range(bracket + 1):
+            total += configs
+            configs = math.ceil(configs / eta)
+    return total
+
+
 class Hyperband:
     """Hyperband successive halving over a resource hyperparameter.
 
@@ -785,6 +829,16 @@ class Hyperband:
         Halving/promotion factor (>= 2).
     objective, cv, task, seed:
         Same contract as :class:`RandomSearch`.
+    on_trial:
+        Optional progress callback invoked after every rung evaluation
+        with the payload ``{'trial': i, 'total': n, 'score',
+        'best_score', 'error', 'resource'}`` — ``total`` is the exact
+        evaluation count of the full bracket schedule (mirrored by
+        :func:`_hyperband_total_trials`), so ``i / total`` is a honest
+        progress fraction for ETA displays.  A rung where every config
+        fails ends its bracket early, leaving ``total`` an overestimate
+        for that (already doomed) search.  The callback must never
+        raise.
 
     Raises
     ------
@@ -811,6 +865,7 @@ class Hyperband:
         cv: int = 3,
         task: str = "auto",
         seed: int = 42,
+        on_trial: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.hypermodel = hypermodel
         self.objective = objective
@@ -821,6 +876,7 @@ class Hyperband:
         self.cv = cv
         self.task = task
         self.seed = seed
+        self.on_trial = on_trial
 
     def _validate(self) -> None:
         for name, value in (("max_resource", self.max_resource),
@@ -856,6 +912,7 @@ class Hyperband:
         splitter = make_cv_splitter(self.task, y, int(self.cv))
         rng = np.random.default_rng(int(self.seed))
         eta, r_max, r_min = int(self.eta), int(self.max_resource), int(self.min_resource)
+        total_trials = _hyperband_total_trials(eta, r_max, r_min)
 
         def clamp(value: int) -> int:
             return int(min(max(value, r_min), r_max))
@@ -898,6 +955,15 @@ class Hyperband:
                         scored.append((score, values))
                         if best is None or score > best[0]:
                             best = (score, values)
+                    if self.on_trial is not None:
+                        self.on_trial({
+                            "trial": trial_counter,
+                            "total": total_trials,
+                            "score": score,
+                            "best_score": best[0] if best is not None else None,
+                            "error": error,
+                            "resource": float(rung_resource),
+                        })
                 if not scored:
                     break  # every config failed at this rung
                 scored.sort(key=lambda pair: pair[0], reverse=True)

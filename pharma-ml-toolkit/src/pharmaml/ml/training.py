@@ -49,6 +49,7 @@ True
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -148,6 +149,7 @@ def train_model(
     n_jobs: int = -1,
     preprocess: bool = True,
     random_state: int = 42,
+    model_params: dict[str, Any] | None = None,
 ) -> TrainingResult:
     """Train (and optionally grid-search) one registry model.
 
@@ -175,6 +177,16 @@ def train_model(
     random_state:
         Reproducibility seed (kept for interface symmetry; estimators
         already receive it from the registry factories).
+    model_params:
+        Manual hyperparameters, pinned as-is on the estimator before
+        anything is fitted (keys are raw estimator parameter names —
+        unknown keys raise :class:`~pharmaml.exceptions.ModelError`
+        naming the valid ones).  Pinned keys are *excluded* from any
+        grid search, so ``tune=True`` searches only the remaining
+        grid slots around the user's fixed choices; with ``tune=False``
+        the estimator is fitted exactly at these values and they are
+        reported back as ``best_params``.  ``None``/empty keeps the
+        historical behaviour untouched.
 
     Returns
     -------
@@ -217,6 +229,16 @@ def train_model(
         raise ModelError(f"cv must be >= 2 folds, got {cv}")
 
     estimator = build_model(name, task)
+    if model_params:
+        valid = set(estimator.get_params())
+        unknown = sorted(set(model_params) - valid)
+        if unknown:
+            raise ModelError(
+                f"model_params for {name!r} name unknown parameter(s) "
+                f"{', '.join(unknown)}; valid parameters: "
+                f"{', '.join(sorted(valid))}"
+            )
+        estimator.set_params(**model_params)
     key = resolve_model_name(name)
     spec = MODEL_REGISTRY[key]
 
@@ -233,6 +255,10 @@ def train_model(
     pipeline = Pipeline(steps + [(step_name, estimator)])
 
     grid = param_grid if param_grid is not None else spec.param_grid
+    if model_params:
+        # Manual values pin their slots: a running grid search tunes
+        # only the keys the user left at their defaults.
+        grid = {k: v for k, v in grid.items() if k not in model_params}
     prefixed = {f"{step_name}__{k}": v for k, v in grid.items()}
 
     started = time.perf_counter()
@@ -261,6 +287,10 @@ def train_model(
         search.fit(X_train, y_train)
         fitted = search.best_estimator_
         best_params = {k.removeprefix(f"{step_name}__"): v for k, v in search.best_params_.items()}
+        if model_params:
+            # the winner carries the pinned values too — report the
+            # estimator's ACTUAL parameters, search-found and pinned.
+            best_params.update(model_params)
         # Per-fold scores of the winning combination.
         best_index = search.best_index_
         cv_scores = np.array(
@@ -269,7 +299,7 @@ def train_model(
     else:
         pipeline.fit(X_train, y_train)
         fitted = pipeline
-        best_params = {}
+        best_params = dict(model_params) if model_params else {}
         cv_scores = None
     elapsed = time.perf_counter() - started
 
@@ -313,6 +343,7 @@ def compare_models(
     cv: int = 5,
     n_jobs: int = 1,
     scoring: str | None = None,
+    on_model: Callable[[dict[str, Any]], None] | None = None,
 ) -> pd.DataFrame:
     """Cross-validated leaderboard over (a subset of) the registry.
 
@@ -343,6 +374,12 @@ def compare_models(
         undefined on single-sample folds (``r2`` under leave-one-out
         ``cv == n_samples``) yield NaN rows — sklearn's own
         ``UndefinedMetricWarning`` contract, kept as-is.
+    on_model:
+        Optional progress callback invoked after each model finishes
+        cross-validating (successfully or not) with the payload
+        ``{'model': name, 'index': i, 'total': n}`` — one call per
+        leaderboard row, in comparison order.  Designed for GUI
+        progress bars and ETA displays; it must never raise.
 
     Returns
     -------
@@ -454,7 +491,7 @@ def compare_models(
         )
 
     rows: list[dict[str, Any]] = []
-    for name in models:
+    for position, name in enumerate(models, start=1):
         pipeline = pipelines[name]
         try:
             result = cross_validate(
@@ -484,6 +521,10 @@ def compare_models(
         except Exception as exc:  # noqa: BLE001 — keep the leaderboard alive on failures
             _LOG.warning("Model %s failed during comparison: %s", name, exc)
             rows.append({"model": name, f"{metric}_mean": np.nan, "folds": cv})
+        if on_model is not None:
+            # one call per completed row (success or failure) — the
+            # progress-bar heartbeat for the longest job in the tab.
+            on_model({"model": name, "index": position, "total": len(models)})
 
     frame = pd.DataFrame(rows)
     column = f"{metric}_mean"
