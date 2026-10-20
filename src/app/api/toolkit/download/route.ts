@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import { Readable } from "stream";
 import { promises as fs } from "fs";
 import { NextResponse } from "next/server";
-import { TOOLKIT_ROOT, readToolkitVersion } from "@/lib/toolkit-fs";
+import { TOOLKIT_ROOT, ZIP_EXCLUDE_ARGS, readToolkitVersion } from "@/lib/toolkit-fs";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,7 +14,9 @@ export const runtime = "nodejs";
  * the filename embeds the toolkit's release version (pharma-ml-toolkit-v<version>.zip)
  * and X-Toolkit-Version exposes it to tooling without a download. Generated
  * cache artifacts (.pytest_cache, __pycache__) are excluded — matching the
- * explorer tree and the package's .gitignore.
+ * explorer tree and the package's .gitignore. The exclusion list lives in
+ * toolkit-fs.ts (ZIP_EXCLUDE_ARGS) so /api/toolkit/zip-size measures the
+ * exact bytes this route streams.
  */
 export async function GET() {
   try {
@@ -29,49 +31,7 @@ export async function GET() {
 
     const child = spawn(
       "zip",
-      [
-        "-r",
-        "-q",
-        "-",
-        ".",
-        "-x",
-        ".pytest_cache/*",
-        "*/.pytest_cache/*",
-        "__pycache__/*",
-        "*/__pycache__/*",
-        "*.pyc",
-        "catboost_info/*",
-        "*/catboost_info/*",
-        // Generated example output (leaderboards etc.) — .gitignored on the
-        // Python side, excluded here so the archive ships source only.
-        "artifacts/*",
-        "*/artifacts/*",
-        "*.egg-info",
-        "*.egg-info/*",
-        "*/src/*.egg-info/*",
-        "*.egg-info",
-        "*.egg-info/*",
-        // Local virtualenvs / tool caches must never ship — a stray `uv venv`
-        // inside the toolkit once added 265 MB to the archive.
-        ".venv/*",
-        "*/.venv/*",
-        "venv/*",
-        "*/venv/*",
-        "env/*",
-        "*/env/*",
-        ".git/*",
-        "*/.git/*",
-        ".ruff_cache/*",
-        "*/.ruff_cache/*",
-        ".mypy_cache/*",
-        "*/.mypy_cache/*",
-        ".tox/*",
-        "*/.tox/*",
-        ".idea/*",
-        "*/.idea/*",
-        ".vscode/*",
-        "*/.vscode/*",
-      ],
+      ["-r", "-q", "-", ".", "-x", ...ZIP_EXCLUDE_ARGS],
       { cwd: TOOLKIT_ROOT }
     );
 

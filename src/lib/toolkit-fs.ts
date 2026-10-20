@@ -3,6 +3,7 @@
  * Python package. Shared by the /api/toolkit/* routes.
  */
 
+import { spawn } from "child_process";
 import { createReadStream, promises as fs } from "fs";
 import path from "path";
 import { isTreeDataNode } from "@/lib/data-file";
@@ -34,6 +35,47 @@ export const EXCLUDED_DIRS = new Set([
   ".vscode",
   ".cache",
 ]);
+
+/** Exclusion arguments shared by the ZIP streamer (/api/toolkit/download)
+ *  and the archive-size measurement — ONE list so the measured number is
+ *  always the byte count the client actually receives. Order mirrors the
+ *  `zip -x` convention: each pattern applies at every archive depth. */
+export const ZIP_EXCLUDE_ARGS: readonly string[] = [
+  ".pytest_cache/*",
+  "*/.pytest_cache/*",
+  "__pycache__/*",
+  "*/__pycache__/*",
+  "*.pyc",
+  "catboost_info/*",
+  "*/catboost_info/*",
+  // Generated example output (leaderboards etc.) — .gitignored on the
+  // Python side, excluded here so the archive ships source only.
+  "artifacts/*",
+  "*/artifacts/*",
+  "*.egg-info",
+  "*.egg-info/*",
+  "*/src/*.egg-info/*",
+  // Local virtualenvs / tool caches must never ship — a stray `uv venv`
+  // inside the toolkit once added 265 MB to the archive.
+  ".venv/*",
+  "*/.venv/*",
+  "venv/*",
+  "*/venv/*",
+  "env/*",
+  "*/env/*",
+  ".git/*",
+  "*/.git/*",
+  ".ruff_cache/*",
+  "*/.ruff_cache/*",
+  ".mypy_cache/*",
+  "*/.mypy_cache/*",
+  ".tox/*",
+  "*/.tox/*",
+  ".idea/*",
+  "*/.idea/*",
+  ".vscode/*",
+  "*/.vscode/*",
+];
 
 const ALLOWED_EXTENSIONS = new Set([
   ".py",
@@ -194,6 +236,61 @@ async function readProjectVersion(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Archive size measurement                                            */
+/* ------------------------------------------------------------------ */
+
+/** How long a successful ZIP-size measurement stays fresh (10 min). */
+const ZIP_SIZE_TTL_MS = 10 * 60_000;
+/** Backoff after a failed measurement (utility missing, non-zero exit) —
+ *  short enough that the next visitor retries, long enough that a broken
+ *  environment does not re-spawn `zip` on every request. */
+const ZIP_SIZE_FAILURE_TTL_MS = 60_000;
+
+let zipSizeCache: { bytes: number; expiresAt: number } | null = null;
+let zipSizeFailureUntil = 0;
+let zipSizeInFlight: Promise<number | null> | null = null;
+
+/** Byte size of the archive /api/toolkit/download would stream right now —
+ *  the SAME `zip` invocation with the SAME exclusion list, stdout counted
+ *  in-process (nothing written to disk). Results are cached 10 minutes and
+ *  concurrent callers share a single measurement; resolves null when the
+ *  utility is unavailable or exits non-zero. */
+export function measureZipBytes(): Promise<number | null> {
+  const now = Date.now();
+  if (zipSizeCache && zipSizeCache.expiresAt > now) return Promise.resolve(zipSizeCache.bytes);
+  if (now < zipSizeFailureUntil) return Promise.resolve(null);
+  if (zipSizeInFlight) return zipSizeInFlight;
+
+  zipSizeInFlight = new Promise<number | null>((resolve) => {
+    let total = 0;
+    let settled = false;
+    const child = spawn(
+      "zip",
+      ["-r", "-q", "-", ".", "-x", ...ZIP_EXCLUDE_ARGS],
+      { cwd: TOOLKIT_ROOT, stdio: ["ignore", "pipe", "pipe"] }
+    );
+    const finish = (value: number | null) => {
+      if (settled) return;
+      settled = true;
+      zipSizeInFlight = null;
+      const at = Date.now();
+      if (value !== null) {
+        zipSizeCache = { bytes: value, expiresAt: at + ZIP_SIZE_TTL_MS };
+      } else {
+        zipSizeFailureUntil = at + ZIP_SIZE_FAILURE_TTL_MS;
+      }
+      resolve(value);
+    };
+    child.stdout?.on("data", (chunk: Buffer) => {
+      total += chunk.length;
+    });
+    child.once("error", () => finish(null));
+    child.once("close", (code) => finish(code === 0 ? total : null));
+  });
+  return zipSizeInFlight;
 }
 
 /** Recursively build the toolkit file tree plus aggregate stats. */

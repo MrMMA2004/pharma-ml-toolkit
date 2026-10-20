@@ -184,7 +184,7 @@ const DOMAINS: DomainCardSpec[] = [
     tagline: "pharmaml.ml — QSAR end-to-end",
     bullets: [
       "Cross-validated training with optional grid-search tuning",
-      "25-entry model registry: sklearn core + optional XGBoost / LightGBM / CatBoost + 2 PyTorch deep families",
+      "26-entry model registry: sklearn core (incl. the GP regressor and its Laplace-approximated classifier) + optional XGBoost / LightGBM / CatBoost + 2 PyTorch deep families",
       "Metrics, comparison leaderboards & joblib persistence",
     ],
     apis: ["train_model()", "compare_models()", "list_models()"],
@@ -285,7 +285,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "2136 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards)",
+    after: "2143 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards)",
   },
   {
     aspect: "Interface",
@@ -343,8 +343,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "279";
-  const loc = stats ? fmtInt(stats.totalLines) : "117,415";
+  const fileCount = stats ? fmtInt(stats.files) : "281";
+  const loc = stats ? fmtInt(stats.totalLines) : "117,862";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -430,17 +430,17 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="2136"
-                countTo={2136}
+                value="2143"
+                countTo={2143}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
               <StatChip
                 icon={Brain}
-                value="25"
-                countTo={25}
+                value="26"
+                countTo={26}
                 label="registry models"
-                hint="23 sklearn + 2 PyTorch deep families"
+                hint="24 sklearn + 2 PyTorch deep families"
               />
             </motion.div>
 

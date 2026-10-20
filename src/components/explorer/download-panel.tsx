@@ -80,7 +80,7 @@ const INSTALL_STEPS: InstallStep[] = [
   },
   {
     title: "Verify the install",
-    description: "2136 tests should pass and the CLI answers with its version.",
+    description: "2143 tests should pass and the CLI answers with its version.",
     commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
   },
 ];
@@ -309,7 +309,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "2136 pytest cases across all domains",
+    tests: "2143 pytest cases across all domains",
     examples: "eight executed notebooks + seven no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -353,6 +353,12 @@ export function DownloadPanel() {
   const [downloading, setDownloading] = useState(false);
   /** Path of the featured file currently being fetched (spinner state). */
   const [fileBusy, setFileBusy] = useState<string | null>(null);
+  /** Byte size of the ZIP the download route would stream — measured
+   *  server-side with the same zip invocation (/api/toolkit/zip-size,
+   *  10-min cache). Null until the first measurement lands; the button's
+   *  size badge shows a quiet pulse placeholder while it resolves. The
+   *  UNCOMPRESSED tree size stays a separate, clearly-labelled chip. */
+  const [zipBytes, setZipBytes] = useState<number | null>(null);
 
   /** Archive version — live from the tree stats when loaded, else the shipped
    *  one; the download route stamps the same value into the filename and the
@@ -364,6 +370,33 @@ export function DownloadPanel() {
   useEffect(() => {
     void ensureTree();
   }, [ensureTree]);
+
+  /* The honest archive size: deflate-compressed, not the uncompressed
+   * tree total. Fetched once per mount; a failure just leaves the badge
+   * in its measuring state (never a wrong number). */
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/toolkit/zip-size")
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data: unknown = await res.json();
+        if (
+          !cancelled &&
+          typeof data === "object" &&
+          data !== null &&
+          "zipBytes" in data &&
+          typeof (data as { zipBytes: unknown }).zipBytes === "number"
+        ) {
+          setZipBytes((data as { zipBytes: number }).zipBytes);
+        }
+      })
+      .catch(() => {
+        /* measuring is best-effort — the badge simply stays "…" */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const dirSummary = useMemo(() => (tree ? collectDirSummary(tree) : []), [tree]);
 
@@ -497,22 +530,32 @@ export function DownloadPanel() {
                   <span className="ml-1 rounded-full bg-primary-foreground/15 px-2 py-0.5 font-mono text-xs font-normal tabular-nums">
                     v{version}
                   </span>
-                  {stats ? (
+                  {zipBytes !== null ? (
                     <span className="ml-1 rounded-full bg-primary-foreground/15 px-2 py-0.5 font-mono text-xs font-normal tabular-nums">
-                      ≈ {fmtBytes(stats.totalBytes)}
+                      ≈ {fmtBytes(zipBytes)}
                     </span>
-                  ) : null}
+                  ) : (
+                    <span
+                      className="ml-1 rounded-full bg-primary-foreground/15 px-2 py-0.5 font-mono text-xs font-normal tabular-nums animate-pulse"
+                      aria-label="measuring archive size"
+                    >
+                      ≈ …
+                    </span>
+                  )}
                 </>
               )}
             </Button>
             <p className="text-xs text-muted-foreground">
               Generated on the fly from the server copy — always in sync with the explorer.
+              {stats && zipBytes !== null
+                ? ` ${fmtBytes(stats.totalBytes)} of source in a ${fmtBytes(zipBytes)} archive.`
+                : ""}
             </p>
           </div>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="2136" label="passing tests" />
+          <StatChip icon={CircleCheck} value="2143" countTo={2143} label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}
