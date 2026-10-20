@@ -113,7 +113,8 @@ type ModelGroup =
   | "kernel"
   | "probabilistic"
   | "neural"
-  | "hierarchical";
+  | "hierarchical"
+  | "ensemble";
 
 const GROUP_LABELS: Record<ModelGroup, string> = {
   linear: "Linear family",
@@ -123,6 +124,7 @@ const GROUP_LABELS: Record<ModelGroup, string> = {
   probabilistic: "Probabilistic",
   neural: "Neural",
   hierarchical: "Hierarchical",
+  ensemble: "Meta-ensembles",
 };
 
 /** One contextual hyperparameter control. */
@@ -347,6 +349,34 @@ const REG_MODELS: ModelSpec[] = [
       ALPHA_HP,
     ],
   },
+  {
+    id: "voting",
+    label: "Voting ensemble",
+    hint: "Weighted average of RF + RBF-SVM + kNN — the sklearn VotingRegressor mirror",
+    group: "ensemble",
+    kind: "params",
+    hp: [
+      { key: "nEstimators", label: "RF · trees", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "maxDepth", label: "RF · max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 },
+      { key: "gamma", label: "SVM · kernel γ", control: "slider", unit: "γ", min: 0.05, max: 2, step: 0.05 },
+      { key: "alpha", label: "SVM · ridge α", control: "input" },
+      { key: "k", label: "kNN · neighbours", control: "slider", unit: "k", min: 1, max: 25, step: 2 },
+    ],
+  },
+  {
+    id: "stacking",
+    label: "Stacking ensemble",
+    hint: "RF + RBF-SVM + kNN level-0, 5-fold OOF features, ridge meta-learner level-1",
+    group: "ensemble",
+    kind: "params",
+    hp: [
+      { key: "nEstimators", label: "RF · trees", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "maxDepth", label: "RF · max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 },
+      { key: "gamma", label: "SVM · kernel γ", control: "slider", unit: "γ", min: 0.05, max: 2, step: 0.05 },
+      { key: "alpha", label: "SVM · ridge α", control: "input" },
+      { key: "k", label: "kNN · neighbours", control: "slider", unit: "k", min: 1, max: 25, step: 2 },
+    ],
+  },
 ];
 
 const CLS_MODELS: ModelSpec[] = [
@@ -457,6 +487,34 @@ const CLS_MODELS: ModelSpec[] = [
       { key: "lr", label: "learning rate", control: "slider", unit: "η", min: 0.005, max: 0.5, step: 0.005 },
     ],
   },
+  {
+    id: "voting",
+    label: "Voting ensemble (soft)",
+    hint: "Averaged class-1 probabilities of RF + RBF-SVM + kNN — the sklearn soft VotingClassifier mirror",
+    group: "ensemble",
+    kind: "params",
+    hp: [
+      { key: "nEstimators", label: "RF · trees", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "maxDepth", label: "RF · max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 },
+      { key: "C", label: "SVM · margin C", control: "slider", unit: "C", min: 0.05, max: 10, step: 0.05 },
+      { key: "gamma", label: "SVM · kernel γ", control: "slider", unit: "γ", min: 0.05, max: 2, step: 0.05 },
+      { key: "k", label: "kNN · neighbours", control: "slider", unit: "k", min: 1, max: 25, step: 2 },
+    ],
+  },
+  {
+    id: "stacking",
+    label: "Stacking ensemble",
+    hint: "RF + RBF-SVM + kNN level-0, 5-fold OOF probabilities, logistic meta-learner level-1",
+    group: "ensemble",
+    kind: "params",
+    hp: [
+      { key: "nEstimators", label: "RF · trees", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "maxDepth", label: "RF · max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 },
+      { key: "C", label: "SVM · margin C", control: "slider", unit: "C", min: 0.05, max: 10, step: 0.05 },
+      { key: "gamma", label: "SVM · kernel γ", control: "slider", unit: "γ", min: 0.05, max: 2, step: 0.05 },
+      { key: "k", label: "kNN · neighbours", control: "slider", unit: "k", min: 1, max: 25, step: 2 },
+    ],
+  },
 ];
 
 const MODEL_GROUPS: ModelGroup[] = [
@@ -467,6 +525,7 @@ const MODEL_GROUPS: ModelGroup[] = [
   "probabilistic",
   "neural",
   "hierarchical",
+  "ensemble",
 ];
 
 /** Slider hyperparameter defaults (server-side defaults mirrored). */
@@ -554,6 +613,14 @@ const MODEL_NOTES: Record<string, string> = {
   mlp: "One tanh hidden layer, full-batch gradient descent, seeded init — a demo-scale network, not production deep learning.",
   hsvr:
     "Seeded k-means splits the standardized train rows; each cluster keeps its own ridge fit, blended with the global ridge by a linear trust radius (full local weight at the centroid, zero at radius × the cluster's reach; farther queries fall back to the global model). Clusters too small for ridge predict their mean.",
+  voting:
+    "VotingRegressor's rule: the equal-weight mean of the three level-0 predictions (random forest · RBF kernel ridge · kNN), each member reading its own hyperparameter slots from the sliders above. The member table scores every base model on the same held-out rows as the blend — the honest “did the ensemble help” comparison.",
+  voting_cls:
+    "VotingClassifier with voting='soft' (the library's classification default): the class-1 probabilities of random forest · LS-SVM · kNN are averaged — RF by leaf fractions, SVM by the logistic read of the decision value, kNN by neighbour fractions — and the boundary fades by |p − 0.5|. ROC AUC / log-loss / Brier come from the blended probabilities on the held-out rows.",
+  stacking:
+    "sklearn's StackingRegressor contract, mirrored: 5-fold out-of-fold predictions of the RF · SVM · kNN trio build the meta-learner's training matrix (cv = 5, the library's build_stacking pin), a ridge blend is fit on it, the members are refit on the full train rows, and prediction stacks fresh member outputs through the meta. The OOF table shows each member's cross-validated R² on exactly the matrix the blender trained on; the meta weights show which member it actually trusts.",
+  stacking_cls:
+    "sklearn's StackingClassifier contract, mirrored: 5-fold out-of-fold class-1 probabilities of the RF · LS-SVM · kNN trio train a multivariate logistic meta-learner (batch GD, L2 bias-exempt — the row-based sibling of the 2-feature logistic above), the members are refit on the full train rows, and prediction stacks their fresh probabilities through the meta. The OOF table shows each member's cross-validated accuracy on exactly the matrix the blender trained on; the meta weights show which member it actually trusts.",
 };
 
 /** Pretty labels for echoed modelParams keys. */
@@ -583,15 +650,20 @@ const HP_LABELS: Record<string, string> = {
   signalStd: "signal σf",
   noiseStd: "noise σn",
   newtonIterations: "Newton iterations",
+  nMembers: "level-0 members",
+  oofFolds: "OOF folds",
 };
 
-/** Task-aware footer-note lookup — gaussian_process lives on BOTH sides
- *  of the playground now (regression = kriging; classification = Laplace
- *  classifier), so the id alone is ambiguous and the classification
- *  entry reads its own note (gaussian_process_cls). */
+/** Task-aware footer-note lookup — gaussian_process, voting and
+ *  stacking all live on BOTH sides of the playground (regression =
+ *  averaging / ridge meta; classification = soft vote / logistic
+ *  meta), so the id alone is ambiguous and each classification entry
+ *  reads its own note. */
 function modelNote(task: Task, model: string): string | undefined {
-  if (task === "classification" && model === "gaussian_process") {
-    return MODEL_NOTES.gaussian_process_cls;
+  if (task === "classification") {
+    if (model === "gaussian_process") return MODEL_NOTES.gaussian_process_cls;
+    if (model === "voting") return MODEL_NOTES.voting_cls;
+    if (model === "stacking") return MODEL_NOTES.stacking_cls;
   }
   return MODEL_NOTES[model];
 }
@@ -2404,6 +2476,14 @@ export function MlPlayground() {
 
   const running = status === "running";
 
+  /* Boundary confidence fade: GP classification and the soft-rule
+   *  ensembles both carry calibrated per-cell probabilities (|p − 0.5|
+   *  → dot opacity) — the legend and the dot shape follow it. */
+  const probaFade =
+    !!result &&
+    result.task === "classification" &&
+    (!!result.gpCls || result.ensemble?.rule === "soft");
+
   /* Chart series (memoized splits so recharts gets stable references). */
   const clsSeries = useMemo(() => {
     if (!result || result.task !== "classification") return null;
@@ -3736,7 +3816,8 @@ export function MlPlayground() {
               <p className="text-sm font-medium">No results yet</p>
               <p className="max-w-sm text-xs text-muted-foreground">
                 Pick a data source — the seeded server-side generator or your own CSV — pick one of
-                the 16 regression or 10 classification models, then press{" "}
+                the {REG_MODELS.length} regression or {CLS_MODELS.length} classification models,
+                then press{" "}
                 <strong className="font-semibold text-foreground">Train model</strong>. Every
                 run is deterministic: same seed, same data, same numbers.
               </p>
@@ -4003,19 +4084,19 @@ export function MlPlayground() {
                         <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
                         {clsSeries ? (
                           <Scatter
-                            name={result.gpCls ? "boundary: class 0 (opacity = |p − 0.5|)" : "boundary: class 0"}
+                            name={probaFade ? "boundary: class 0 (opacity = |p − 0.5|)" : "boundary: class 0"}
                             data={clsSeries.grid0}
                             fill={CHART.teal}
-                            shape={result.gpCls ? GpClsDot(CHART.teal) : TinyDot(CHART.teal)}
+                            shape={probaFade ? GpClsDot(CHART.teal) : TinyDot(CHART.teal)}
                             isAnimationActive={false}
                           />
                         ) : null}
                         {clsSeries ? (
                           <Scatter
-                            name={result.gpCls ? "boundary: class 1 (opacity = |p − 0.5|)" : "boundary: class 1"}
+                            name={probaFade ? "boundary: class 1 (opacity = |p − 0.5|)" : "boundary: class 1"}
                             data={clsSeries.grid1}
                             fill={CHART.amber}
-                            shape={result.gpCls ? GpClsDot(CHART.amber) : TinyDot(CHART.amber)}
+                            shape={probaFade ? GpClsDot(CHART.amber) : TinyDot(CHART.amber)}
                             isAnimationActive={false}
                           />
                         ) : null}
@@ -4405,6 +4486,172 @@ export function MlPlayground() {
                         clusters kept too few rows for a ridge fit and predict their mean.
                         Queries beyond a cluster&rsquo;s radius fall back to the global ridge.
                       </p>
+                    </div>
+                  ) : null}
+
+                  {/* Meta-ensembles: the member blend + the honest
+                   *  "did the ensemble actually help?" table (every
+                   *  level-0 member scored on the same held-out rows as
+                   *  the blend), plus the OOF/meta-learner readouts. */}
+                  {result.ensemble ? (
+                    <div className="mt-3 space-y-2.5">
+                      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        <Layers className="size-3" aria-hidden />
+                        {result.ensemble.kind === "voting" ? "Voting ensemble" : "Stacking ensemble"} ·{" "}
+                        {result.ensemble.rule === "soft" ? "soft vote (mean probability)" : "mean of predictions"}
+                      </p>
+                      <div className="overflow-hidden rounded-lg border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="h-8">
+                                {result.task === "classification" ? "Member (held-out accuracy)" : "Member (held-out R²)"}
+                              </TableHead>
+                              <TableHead className="h-8 text-right">Score</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {result.ensemble.memberScores.map((m) => {
+                              const isBlend = m.name === "ensemble";
+                              const scores = result.ensemble!.memberScores.map((s) => s.score);
+                              const best = Math.max(...scores);
+                              const scale = Math.max(best, 1e-9);
+                              const width = Math.max((Math.max(m.score, 0) / scale) * 100, 0.5);
+                              return (
+                                <TableRow key={m.name} className={isBlend ? "bg-primary/5 hover:bg-primary/5" : undefined}>
+                                  <TableCell className="py-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`font-mono text-xs ${isBlend ? "font-semibold text-primary" : ""}`}>
+                                        {isBlend
+                                          ? (specOf(result.task, result.model)?.label ?? result.model)
+                                          : (specOf(result.task, m.name)?.label ?? m.name)}
+                                      </span>
+                                      {isBlend ? (
+                                        <span className="rounded-sm border bg-primary/10 px-1 text-[9px] font-medium uppercase tracking-wide text-primary">
+                                          this model
+                                        </span>
+                                      ) : null}
+                                      {m.score >= best - 1e-12 ? (
+                                        <span className="rounded-sm border bg-muted/60 px-1 text-[9px] uppercase text-muted-foreground" title="Best score in the table">
+                                          best
+                                        </span>
+                                      ) : null}
+                                      <span className="hidden h-1.5 flex-1 overflow-hidden rounded-full bg-muted sm:block" role="presentation">
+                                        <span
+                                          className={`h-full rounded-full ${isBlend ? "bg-primary" : "bg-primary/50"}`}
+                                          style={{ width: `${width}%` }}
+                                        />
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell
+                                    className={`py-1.5 text-right font-mono text-xs tabular-nums ${
+                                      isBlend ? "font-semibold text-primary" : ""
+                                    }`}
+                                  >
+                                    {fmtNum(m.score, 4)}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Stacking: the level-0 OOF scores (the exact matrix
+                       *  the meta-learner trained on) + the blender's
+                       *  weights — which member it actually trusts. */}
+                      {result.ensemble.oof && result.ensemble.oof.length > 0 ? (
+                        <div className="space-y-1.5 rounded-lg border bg-muted/20 p-2.5">
+                          <p className="text-[11px] font-medium text-muted-foreground">
+                            {result.ensemble.oofFolds}-fold out-of-fold ·{" "}
+                            {result.task === "classification" ? "accuracy" : "R²"} per member
+                            {result.ensemble.metaModel ? (
+                              <>
+                                {" "}· meta-learner: <span className="font-mono">{result.ensemble.metaModel === "logistic" ? "logistic regression" : "ridge"}</span>
+                              </>
+                            ) : null}
+                          </p>
+                          <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1" aria-label="Out-of-fold member scores">
+                            {result.ensemble.oof.map((o) => (
+                              <div key={o.name} className="col-span-2 grid grid-cols-subgrid items-baseline">
+                                <dt className="truncate font-mono text-xs text-muted-foreground">
+                                  {specOf(result.task, o.name)?.label ?? o.name}
+                                </dt>
+                                <dd className="text-right font-mono text-xs tabular-nums">
+                                  {fmtNum(o.score, 4)}
+                                </dd>
+                              </div>
+                            ))}
+                            {result.ensemble.metaCoefs ? (
+                              <div className="col-span-2 mt-1 border-t pt-1.5" />
+                            ) : null}
+                            {result.ensemble.metaCoefs
+                              ? result.ensemble.metaCoefs.coefs.map((coef, i) => (
+                                  <div key={result.ensemble!.members[i] ?? i} className="col-span-2 grid grid-cols-subgrid items-baseline">
+                                    <dt className="truncate font-mono text-xs text-muted-foreground">
+                                      meta weight · {specOf(result.task, result.ensemble!.members[i] ?? "")?.label ?? result.ensemble!.members[i]}
+                                    </dt>
+                                    <dd
+                                      className={`text-right font-mono text-xs font-semibold tabular-nums ${
+                                        coef >= 0 ? "" : "text-destructive"
+                                      }`}
+                                    >
+                                      {fmtNum(coef, 4)}
+                                    </dd>
+                                  </div>
+                                ))
+                              : null}
+                            {result.ensemble.metaCoefs ? (
+                              <div className="col-span-2 grid grid-cols-subgrid items-baseline">
+                                <dt className="truncate font-mono text-xs text-muted-foreground">meta weight · intercept</dt>
+                                <dd className="text-right font-mono text-xs tabular-nums">
+                                  {fmtNum(result.ensemble.metaCoefs.intercept, 4)}
+                                </dd>
+                              </div>
+                            ) : null}
+                          </dl>
+                          <p className="text-[11px] leading-snug text-muted-foreground">
+                            OOF scores are cross-validated on the training rows — the honest quality of each base model
+                            exactly as the blender saw it; meta weights live in standardized OOF space, so their sign and
+                            relative size (not raw magnitude) say whom the blend leans on.
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {/* Soft-rule classification ensembles: the honest
+                       *  probabilistic scores from the blended
+                       *  probabilities (the gpCls card's readout). */}
+                      {result.ensemble.rocAuc !== undefined ? (
+                        <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1" aria-label="Ensemble probabilistic scores">
+                          {(
+                            [
+                              ["ROC AUC (test)", result.ensemble.rocAuc],
+                              ["log-loss (test)", result.ensemble.logLoss],
+                              ["Brier score (test)", result.ensemble.brier],
+                            ] as Array<[string, number | undefined]>
+                          ).map(([label, value]) => (
+                            <div key={label} className="col-span-2 grid grid-cols-subgrid items-baseline">
+                              <dt className="truncate font-mono text-xs text-muted-foreground" title={label}>
+                                {label}
+                              </dt>
+                              <dd
+                                className={`text-right font-mono text-xs font-semibold tabular-nums ${
+                                  label.startsWith("ROC")
+                                    ? (result.ensemble!.rocAuc ?? 0) >= 0.9
+                                      ? "text-primary"
+                                      : (result.ensemble!.rocAuc ?? 0) >= 0.75
+                                        ? "text-amber-600"
+                                        : "text-destructive"
+                                    : ""
+                                }`}
+                              >
+                                {value === undefined ? "—" : fmtNum(value, 4)}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : null}
                     </div>
                   ) : null}
 

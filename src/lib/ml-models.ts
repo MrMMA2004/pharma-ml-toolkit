@@ -25,14 +25,17 @@ import {
   fitLogisticRegression,
   fitMlpClassifier,
   fitMlpRegressor,
+  fitMultivariateLogistic,
   fitMultivariateRegression,
   fitPlsRegression,
   fitRandomForestClassifier,
   fitRandomForestRegressor,
   fitRbfSvmClassifier,
   fitRegressionTree,
+  kFoldSplit,
   mulberry32,
   normalizeImportance,
+  regressionMetrics,
   type HsvrClusterInfo,
 } from "@/lib/ml-math";
 
@@ -43,7 +46,9 @@ import {
 /** Regression models: 3 legacy (byte-compatible) + 14 (incl. hsvr, huber,
  *  ada_boost, svm_rbf, extra_trees, pls, gaussian_process — the web
  *  mirror of the library's adaboost / huber_regression / svm /
- *  extra_trees / pls / gaussian_process families). */
+ *  extra_trees / pls / gaussian_process families) + the voting and
+ *  stacking meta-ensembles (RF + SVM + KNN level-0 — the mirror of the
+ *  library's `build_voting` / `build_stacking` registrations). */
 export const REGRESSION_MODELS = [
   "linear",
   "polynomial",
@@ -62,12 +67,16 @@ export const REGRESSION_MODELS = [
   "gaussian_process",
   "mlp",
   "hsvr",
+  "voting",
+  "stacking",
 ] as const;
 
 /** Classification models: legacy logistic + 10 (incl. ada_boost,
  *  extra_trees, the RBF-kernel SVM and gaussian_process — the library's
  *  adaboost / extra_trees / svm / gaussian_process_classifier
- *  families; the web id is task-scoped like svm_rbf). */
+ *  families; the web id is task-scoped like svm_rbf) + the voting and
+ *  stacking meta-ensembles (soft voting / OOF stacking over the same
+ *  RF + SVM + KNN trio). */
 export const CLASSIFICATION_MODELS = [
   "logistic",
   "knn",
@@ -80,6 +89,8 @@ export const CLASSIFICATION_MODELS = [
   "svm_rbf",
   "gaussian_process",
   "mlp",
+  "voting",
+  "stacking",
 ] as const;
 
 /* ------------------------------------------------------------------ */
@@ -180,6 +191,66 @@ export function modelRng(effSeed: number, slot: number): () => number {
 }
 
 /* ------------------------------------------------------------------ */
+/* Meta-ensembles (voting / stacking)                                  */
+/* ------------------------------------------------------------------ */
+
+/** The level-0 trio the library's `_ENSEMBLE_BASE_MODELS` registers —
+ *  RF + SVM + KNN, the same members the rar's own Voting.py /
+ *  Stacking.py stacked. Member hyperparameters are read from the flat
+ *  `Hyper` slots each family already owns (nEstimators/maxDepth → RF,
+ *  gamma/α-or-C → SVM, k → KNN). */
+export const ENSEMBLE_MEMBERS = ["random_forest", "svm_rbf", "knn"] as const;
+
+/** Equal member weights — the library's VotingClassifier default
+ *  (weights=None) and the (1, 1, 1) first grid entry. */
+export const ENSEMBLE_WEIGHTS = [1, 1, 1] as const;
+
+/** Out-of-fold count for the stacking meta-learner's training matrix —
+ *  the library's `build_stacking` pins cv=5. */
+export const ENSEMBLE_OOF_FOLDS = 5;
+
+/** Serializable ensemble readout — what the train route echoes so the
+ *  UI can answer "did the ensemble actually help?" */
+export interface EnsembleReadout {
+  kind: "voting" | "stacking";
+  /** How members combine: mean (regression both kinds) or averaged
+   *  probability (classification, sklearn's soft voting). */
+  rule: "average" | "soft";
+  /** Registry ids of the level-0 members, blend order. */
+  members: string[];
+  /** Blend weight per member (equal by default). */
+  weights: number[];
+  /** Stacking only: the level-1 learner (ridge for regression,
+   *  logistic for classification — the library defaults). */
+  metaModel?: "ridge" | "logistic";
+  /** Stacking only: folds that built the OOF matrix. */
+  oofFolds?: number;
+  /** Stacking only: cross-validated score per level-0 member on the
+   *  OOF predictions the meta-learner was trained against (R² for
+   *  regression, accuracy for classification). */
+  oof?: { name: string; score: number }[];
+  /** Stacking only: the meta-learner's weights on the (standardized)
+   *  OOF columns — which base model the blender actually trusts. */
+  metaCoefs?: { intercept: number; coefs: number[] };
+}
+
+/** ------------------------------------------------------------------
+ * Ensemble internals: deterministic per-member RNG streams derived
+ * from the fit's own stream (drawn once, then split per member so
+ * bagging seeds stay stable when members are added). */
+function memberRngs(rand: () => number, count: number): Array<() => number> {
+  const seed = Math.floor(rand() * 2 ** 31) >>> 0;
+  return Array.from({ length: count }, (_, i) => mulberry32((seed + 7919 * (i + 1)) >>> 0));
+}
+
+/** Deterministic OOF fold split for stacking (independent of the route's
+ *  CV shuffle — drawn from the same per-fit stream). */
+function ensembleFoldRand(rand: () => number): () => number {
+  const seed = Math.floor(rand() * 2 ** 31) >>> 0;
+  return mulberry32((seed + 104729) >>> 0);
+}
+
+/* ------------------------------------------------------------------ */
 /* Regression fits                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -226,6 +297,13 @@ export interface RegFit {
       centroids: Array<{ a: number; b: number; radius: number }>;
     };
   };
+  /** Voting / stacking only: the meta-model readout (members, rule,
+   *  OOF scores, meta weights — everything except the predictors). */
+  ensemble?: EnsembleReadout;
+  /** Voting / stacking only: each level-0 member's own predictor so
+   *  the route can score every member on the held-out rows next to
+   *  the ensemble itself (the "did it help" comparison). */
+  memberPredict?: { name: string; predict(xsRaw: number[]): number }[];
 }
 
 /** Extra fitting directives shared by the train route's main fit and its
@@ -474,9 +552,147 @@ export function fitRegressionModel(
         },
       };
     }
+    case "voting":
+    case "stacking":
+      /* Meta-ensembles: RF + SVM + KNN level-0, blended by the weighted
+       * mean (voting) or a ridge meta-learner over the 5-fold OOF
+       * matrix (stacking) — the web mirror of the library's
+       * build_voting / build_stacking registrations. */
+      return fitRegressionEnsemble(model, XTrain, yTrain, hp, rand);
     default:
       throw new Error(`Unknown regression model "${model}".`);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Ensemble member fits (regression)                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Fit the level-0 trio over raw rows — RF (bagged, seeded), RBF kernel
+ * ridge (the svm_rbf family), and kNN. Each member reads only its own
+ * `Hyper` slots, so one flat hyperparameter request configures the whole
+ * stack exactly like the library's `build_voting` / `build_stacking`
+ * over their default member factories.
+ */
+function fitRegressionMembers(
+  XTrain: number[][],
+  yTrain: number[],
+  hp: Hyper,
+  rand: () => number
+): { name: string; predict(xsRaw: number[]): number }[] {
+  const rngs = memberRngs(rand, ENSEMBLE_MEMBERS.length);
+  const rf = fitRandomForestRegressor(XTrain, yTrain, {
+    nEstimators: hp.nEstimators,
+    maxDepth: hp.maxDepth,
+    rand: rngs[0]!,
+  });
+  const svm = fitKernelRidgeRbf(XTrain, yTrain, { gamma: hp.gamma, alpha: hp.alpha });
+  const knn = fitKnnRegressor(XTrain, yTrain, { k: hp.k });
+  return [
+    { name: ENSEMBLE_MEMBERS[0]!, predict: (xs) => rf.predict(xs) },
+    { name: ENSEMBLE_MEMBERS[1]!, predict: (xs) => svm.predict(xs) },
+    { name: ENSEMBLE_MEMBERS[2]!, predict: (xs) => knn.predict(xs) },
+  ];
+}
+
+/** Weighted mean of the member predictions (VotingRegressor's rule). */
+function blendPredictions(
+  members: { name: string; predict(xsRaw: number[]): number }[],
+  weights: number[]
+): (xsRaw: number[]) => number {
+  const wSum = weights.reduce((a, b) => a + b, 0) || 1;
+  return (xs) => {
+    let acc = 0;
+    for (let i = 0; i < members.length; i++) {
+      acc += (weights[i] ?? 1) * (members[i]?.predict(xs) ?? 0);
+    }
+    return acc / wSum;
+  };
+}
+
+/** Fit the voting / stacking regression ensembles over raw rows. */
+function fitRegressionEnsemble(
+  kind: "voting" | "stacking",
+  XTrain: number[][],
+  yTrain: number[],
+  hp: Hyper,
+  rand: () => number
+): RegFit {
+  const weights = [...ENSEMBLE_WEIGHTS];
+  if (kind === "voting") {
+    /* VotingRegressor: the weighted mean of the level-0 predictions —
+     * the voting rule is ignored for regression in the library too. */
+    const members = fitRegressionMembers(XTrain, yTrain, hp, rand);
+    return {
+      predict: blendPredictions(members, weights),
+      modelParams: { nMembers: members.length },
+      ensemble: {
+        kind: "voting",
+        rule: "average",
+        members: [...ENSEMBLE_MEMBERS],
+        weights,
+      },
+      memberPredict: members.map((m) => ({ name: m.name, predict: m.predict })),
+    };
+  }
+
+  /* StackingRegressor: build the level-0 out-of-fold matrix (cv = 5,
+   * the library's build_stacking pin), fit the ridge meta-learner on
+   * it, then refit every member on the full train rows. Prediction =
+   * meta over the members' fresh predictions — sklearn's stack
+   * contract, mirrored. */
+  const n = XTrain.length;
+  const foldRand = ensembleFoldRand(rand);
+  const folds = kFoldSplit(n, ENSEMBLE_OOF_FOLDS, foldRand);
+  const oof: number[][] = XTrain.map(() => new Array<number>(ENSEMBLE_MEMBERS.length).fill(0));
+  for (const fold of folds) {
+    const foldSet = new Set(fold);
+    const trainIdx = Array.from({ length: n }, (_, j) => j).filter((j) => !foldSet.has(j));
+    const Xf = trainIdx.map((i) => XTrain[i] ?? []);
+    const yf = trainIdx.map((i) => yTrain[i] ?? 0);
+    /* Per-fold member fits: fresh deterministic streams derived from
+     * the fold's own index arithmetic (no reuse of the main stream —
+     * the OOF machinery must not perturb the full-train seeds). */
+    const foldSeed = (Math.floor(rand() * 2 ** 31) + fold.length * 31) >>> 0;
+    const rf = fitRandomForestRegressor(Xf, yf, {
+      nEstimators: hp.nEstimators,
+      maxDepth: hp.maxDepth,
+      rand: mulberry32(foldSeed),
+    });
+    const svm = fitKernelRidgeRbf(Xf, yf, { gamma: hp.gamma, alpha: hp.alpha });
+    const knn = fitKnnRegressor(Xf, yf, { k: hp.k });
+    const foldMembers = [rf, svm, knn];
+    for (const i of fold) {
+      for (let c = 0; c < foldMembers.length; c++) {
+        oof[i]![c] = foldMembers[c]!.predict(XTrain[i] ?? []);
+      }
+    }
+  }
+  /* The honest level-0 readout: each member's OOF R² on the exact
+   * matrix the meta-learner trains against. */
+  const oofScores = ENSEMBLE_MEMBERS.map((name, c) => ({
+    name,
+    score: regressionMetrics(yTrain, oof.map((row) => row[c] ?? 0)).r2,
+  }));
+
+  const meta = fitMultivariateRegression(oof, yTrain, { alpha: 1 });
+  const members = fitRegressionMembers(XTrain, yTrain, hp, rand);
+  return {
+    predict: (xs) => meta.predict(members.map((m) => m.predict(xs))),
+    modelParams: { nMembers: members.length, oofFolds: ENSEMBLE_OOF_FOLDS },
+    ensemble: {
+      kind: "stacking",
+      rule: "average",
+      members: [...ENSEMBLE_MEMBERS],
+      weights,
+      metaModel: "ridge",
+      oofFolds: ENSEMBLE_OOF_FOLDS,
+      oof: oofScores,
+      metaCoefs: { intercept: meta.w[0] ?? 0, coefs: meta.w.slice(1) },
+    },
+    memberPredict: members.map((m) => ({ name: m.name, predict: m.predict })),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -500,6 +716,13 @@ export interface ClsFit {
     logMarginalLikelihood: number;
     kernelTuned: boolean;
   };
+  /** Voting / stacking only: the meta-model readout (members, rule,
+   *  OOF scores, meta weights — everything except the predictors). */
+  ensemble?: EnsembleReadout;
+  /** Voting / stacking only: each level-0 member's own hard classifier
+   *  so the route can score every member on the held-out rows next to
+   *  the ensemble itself. */
+  memberPredict01?: { name: string; predict01(xRaw: number, yRaw: number): 0 | 1 }[];
 }
 
 /** Fit any classification model over raw (unstandardized) 2-feature rows. */
@@ -655,9 +878,163 @@ export function fitClassificationModel(
         modelParams: { hidden: hp.hidden, epochs: hp.epochs, lr: hp.lr },
       };
     }
+    case "voting":
+    case "stacking":
+      /* Meta-ensembles: soft vote (voting) or the OOF-stacked logistic
+       * meta-learner (stacking) over the RF + SVM + KNN trio — the
+       * mirror of the library's build_voting(voting="soft") /
+       * build_stacking classification registrations. */
+      return fitClassificationEnsemble(model, XTrain, labelsTrain, hp, rand);
     default:
       throw new Error(`Unknown classification model "${model}".`);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Ensemble member fits (classification)                               */
+/* ------------------------------------------------------------------ */
+
+/** A level-0 classification member: hard vote + class-1 probability
+ *  over raw (x, y) feature pairs. Every member of the trio exposes a
+ *  probability (RF leaf fractions, LS-SVM logistic decision read, kNN
+ *  neighbour fractions), so sklearn's soft voting is available — the
+ *  library's classification default. */
+interface ClsMember {
+  name: string;
+  proba(xRaw: number, yRaw: number): number;
+  predict01(xRaw: number, yRaw: number): 0 | 1;
+}
+
+function fitClassificationMembers(
+  XTrain: number[][],
+  labelsTrain: number[],
+  hp: Hyper,
+  rand: () => number
+): ClsMember[] {
+  const rngs = memberRngs(rand, ENSEMBLE_MEMBERS.length);
+  const rf = fitRandomForestClassifier(XTrain, labelsTrain, {
+    nEstimators: hp.nEstimators,
+    maxDepth: hp.maxDepth,
+    rand: rngs[0]!,
+  });
+  const svm = fitRbfSvmClassifier(XTrain, labelsTrain, { C: hp.C, gamma: hp.gamma });
+  const knn = fitKnnClassifier(XTrain, labelsTrain, { k: hp.k });
+  return [
+    {
+      name: ENSEMBLE_MEMBERS[0]!,
+      proba: (x, y) => rf.predictProba?.([x, y]) ?? (rf.predict([x, y]) as number),
+      predict01: (x, y) => rf.predict([x, y]),
+    },
+    {
+      name: ENSEMBLE_MEMBERS[1]!,
+      proba: (x, y) => svm.predictProba?.([x, y]) ?? (svm.predict([x, y]) as number),
+      predict01: (x, y) => svm.predict([x, y]),
+    },
+    {
+      name: ENSEMBLE_MEMBERS[2]!,
+      proba: (x, y) => knn.predictProba?.([x, y]) ?? (knn.predict([x, y]) as number),
+      predict01: (x, y) => knn.predict([x, y]),
+    },
+  ];
+}
+
+/** Fit the voting / stacking classification ensembles over raw rows. */
+function fitClassificationEnsemble(
+  kind: "voting" | "stacking",
+  XTrain: number[][],
+  labelsTrain: number[],
+  hp: Hyper,
+  rand: () => number
+): ClsFit {
+  const weights = [...ENSEMBLE_WEIGHTS];
+  if (kind === "voting") {
+    /* VotingClassifier with voting="soft": the weighted mean of the
+     * members' class-1 probabilities (the library's classification
+     * default). The averaged probability rides along as predictProba —
+     * the boundary fade and the honest probabilistic scores come free. */
+    const members = fitClassificationMembers(XTrain, labelsTrain, hp, rand);
+    const wSum = weights.reduce((a, b) => a + b, 0) || 1;
+    const proba = (x: number, y: number): number => {
+      let acc = 0;
+      for (let i = 0; i < members.length; i++) {
+        acc += (weights[i] ?? 1) * (members[i]?.proba(x, y) ?? 0.5);
+      }
+      return acc / wSum;
+    };
+    return {
+      predict01: (x, y) => (proba(x, y) >= 0.5 ? 1 : 0),
+      predictProba: proba,
+      modelParams: { nMembers: members.length },
+      ensemble: {
+        kind: "voting",
+        rule: "soft",
+        members: [...ENSEMBLE_MEMBERS],
+        weights,
+      },
+      memberPredict01: members.map((m) => ({ name: m.name, predict01: m.predict01 })),
+    };
+  }
+
+  /* StackingClassifier: the level-0 OOF probability matrix (cv = 5)
+   * trains the multivariate logistic meta-learner; members are then
+   * refit on the full train rows and the meta predicts from their
+   * fresh probabilities — sklearn's stack contract, mirrored. */
+  const n = XTrain.length;
+  const foldRand = ensembleFoldRand(rand);
+  const folds = kFoldSplit(n, ENSEMBLE_OOF_FOLDS, foldRand);
+  const oof: number[][] = XTrain.map(() => new Array<number>(ENSEMBLE_MEMBERS.length).fill(0.5));
+  for (const fold of folds) {
+    const foldSet = new Set(fold);
+    const trainIdx = Array.from({ length: n }, (_, j) => j).filter((j) => !foldSet.has(j));
+    const Xf = trainIdx.map((i) => XTrain[i] ?? []);
+    const lf = trainIdx.map((i) => labelsTrain[i] ?? 0);
+    const foldSeed = (Math.floor(rand() * 2 ** 31) + fold.length * 31) >>> 0;
+    const rf = fitRandomForestClassifier(Xf, lf, {
+      nEstimators: hp.nEstimators,
+      maxDepth: hp.maxDepth,
+      rand: mulberry32(foldSeed),
+    });
+    const svm = fitRbfSvmClassifier(Xf, lf, { C: hp.C, gamma: hp.gamma });
+    const knn = fitKnnClassifier(Xf, lf, { k: hp.k });
+    const foldMembers = [rf, svm, knn];
+    for (const i of fold) {
+      const row = XTrain[i] ?? [];
+      for (let c = 0; c < foldMembers.length; c++) {
+        oof[i]![c] = foldMembers[c]!.predictProba?.(row) ?? 0.5;
+      }
+    }
+  }
+  /* The honest level-0 readout: each member's OOF accuracy (hard vote
+   * of its OOF probabilities) on the exact matrix the meta trains on. */
+  const oofScores = ENSEMBLE_MEMBERS.map((name, c) => {
+    let correct = 0;
+    for (let i = 0; i < n; i++) {
+      const pred = (oof[i]?.[c] ?? 0.5) >= 0.5 ? 1 : 0;
+      if (pred === (labelsTrain[i] ?? 0)) correct++;
+    }
+    return { name, score: correct / Math.max(n, 1) };
+  });
+
+  const meta = fitMultivariateLogistic(oof, labelsTrain, { l2: 1, lr: 0.1, epochs: 800 });
+  const members = fitClassificationMembers(XTrain, labelsTrain, hp, rand);
+  const proba = (x: number, y: number): number =>
+    meta.predictProba(members.map((m) => m.proba(x, y)));
+  return {
+    predict01: (x, y) => (proba(x, y) >= 0.5 ? 1 : 0),
+    predictProba: proba,
+    modelParams: { nMembers: members.length, oofFolds: ENSEMBLE_OOF_FOLDS },
+    ensemble: {
+      kind: "stacking",
+      rule: "soft",
+      members: [...ENSEMBLE_MEMBERS],
+      weights,
+      metaModel: "logistic",
+      oofFolds: ENSEMBLE_OOF_FOLDS,
+      oof: oofScores,
+      metaCoefs: { intercept: meta.bias, coefs: [...meta.w] },
+    },
+    memberPredict01: members.map((m) => ({ name: m.name, predict01: m.predict01 })),
+  };
 }
 
 /* ------------------------------------------------------------------ */

@@ -347,6 +347,41 @@ export interface MLTrainResponse {
       centroids: Array<{ a: number; b: number; radius: number }>;
     };
   };
+  /** Voting / stacking ensembles only: the honest meta-model readout —
+   *  members, the blending rule, the level-0 OOF scores and the
+   *  meta-learner's weights (stacking), and every member's held-out
+   *  score next to the ensemble's own — the "did the ensemble actually
+   *  help?" answer in one object. */
+  ensemble?: {
+    kind: "voting" | "stacking";
+    /** How members combine: weighted mean (regression) or averaged
+     *  probability (classification — sklearn's soft voting). */
+    rule: "average" | "soft";
+    /** Registry ids of the level-0 members, blend order. */
+    members: string[];
+    /** Blend weight per member. */
+    weights: number[];
+    /** Stacking only: the level-1 learner (ridge / logistic). */
+    metaModel?: "ridge" | "logistic";
+    /** Stacking only: folds that built the OOF training matrix. */
+    oofFolds?: number;
+    /** Stacking only: cross-validated score per level-0 member on the
+     *  OOF predictions the meta-learner was trained against. */
+    oof?: { name: string; score: number }[];
+    /** Stacking only: the meta-learner's weights on the (standardized)
+     *  OOF columns — which base model the blender actually trusts. */
+    metaCoefs?: { intercept: number; coefs: number[] };
+    /** Held-out (test) score per level-0 member plus the ensemble
+     *  itself (last row, name "ensemble") — R² for regression,
+     *  accuracy for classification. */
+    memberScores: { name: string; score: number }[];
+    /** Soft-rule classification ensembles: the honest held-out
+     *  probabilistic scores from the blended probabilities (the same
+     *  readout the GP classification card shows). */
+    rocAuc?: number;
+    logLoss?: number;
+    brier?: number;
+  };
   series: {
     test: Array<{ x: number; y: number; label?: number; err?: number }>;
     curve?: Array<{ x: number; yhat: number; lo?: number; hi?: number }>;

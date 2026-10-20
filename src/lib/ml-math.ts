@@ -442,6 +442,83 @@ export interface ClassificationMetrics {
   f1: number;
 }
 
+/* ------------------------------------------------------------------ */
+/* Multivariate logistic — the stacking meta-learner                   */
+/* ------------------------------------------------------------------ */
+
+export interface MultivariateLogisticModel {
+  /** Column μ/σ (raw feature space) the model standardizes with. */
+  mus: number[];
+  sigmas: number[];
+  /** Standardized-space weights (one per feature column). */
+  w: number[];
+  bias: number;
+  /** Class-1 probability at one raw feature row. */
+  predictProba(xsRaw: number[]): number;
+  /** Hard class at one raw feature row. */
+  predict01(xsRaw: number[]): 0 | 1;
+}
+
+/**
+ * Multivariate logistic regression — the row-based sibling of the
+ * 2-feature `fitLogisticRegression` above (identical trainer contract:
+ * column standardization on train statistics, batch gradient descent,
+ * L2 with the bias exempt). This is the level-1 meta-learner of the
+ * web mirror's stacking ensemble: its features are the level-0 members'
+ * out-of-fold class-1 probabilities, one column per member — the web
+ * mirror of sklearn's `StackingClassifier(final_estimator=LogisticRegression())`
+ * default in the library's `build_stacking`.
+ */
+export function fitMultivariateLogistic(
+  X: number[][],
+  labels: number[],
+  opts: { l2?: number; lr?: number; epochs?: number } = {}
+): MultivariateLogisticModel {
+  const l2 = opts.l2 ?? 1;
+  const lr = opts.lr ?? 0.1;
+  const epochs = opts.epochs ?? 800;
+  const n = X.length;
+  const k = X[0]?.length ?? 0;
+  if (n < k + 2 || k === 0) {
+    throw new Error(`Not enough samples to fit the meta-learner (${n} rows, ${k} features).`);
+  }
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+
+  const w = new Array<number>(k).fill(0);
+  let bias = 0;
+  for (let e = 0; e < epochs; e++) {
+    const gw = new Array<number>(k).fill(0);
+    let gb = 0;
+    for (let i = 0; i < n; i++) {
+      let z = bias;
+      for (let c = 0; c < k; c++) z += w[c]! * (Z[i]?.[c] ?? 0);
+      const p = 1 / (1 + Math.exp(-z));
+      const err = p - (labels[i] ?? 0);
+      gb += err;
+      for (let c = 0; c < k; c++) gw[c] = (gw[c] ?? 0) + err * (Z[i]?.[c] ?? 0);
+    }
+    bias -= (lr * gb) / n;
+    for (let c = 0; c < k; c++) w[c]! -= lr * ((gw[c] ?? 0) / n + l2 * w[c]!);
+  }
+
+  const probaAt = (xsRaw: number[]): number => {
+    const z = std.transform(xsRaw);
+    let acc = bias;
+    for (let c = 0; c < k; c++) acc += w[c]! * (z[c] ?? 0);
+    return 1 / (1 + Math.exp(-acc));
+  };
+
+  return {
+    mus: [...std.mus],
+    sigmas: [...std.sigmas],
+    w: [...w],
+    bias,
+    predictProba: probaAt,
+    predict01: (xsRaw) => (probaAt(xsRaw) >= 0.5 ? 1 : 0),
+  };
+}
+
 /** ROC AUC via the rank (Mann-Whitney) statistic: sort score-index
  *  pairs, average tie ranks, AUC = (Σ ranks of positives − n₊(n₊+1)/2) /
  *  (n₊·n₋). Deterministic, O(n log n), ties split evenly — the honest

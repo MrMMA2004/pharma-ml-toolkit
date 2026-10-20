@@ -31,6 +31,7 @@ import {
   fitRegressionModel,
   modelRng,
   resolveHyper,
+  type ClsFit,
   type FitDirectives,
   type RegFit,
 } from "@/lib/ml-models";
@@ -317,6 +318,65 @@ function gpSummary(
   };
 }
 
+/** Ensemble summary (regression): the fit's serializable readout plus
+ *  every level-0 member's held-out R² next to the ensemble's own — the
+ *  "did the ensemble actually help?" table. */
+function ensembleSummaryReg(
+  fit: RegFit,
+  yTrue: number[],
+  testRows: number[][],
+  ensembleR2: number
+): MLTrainResponse["ensemble"] {
+  if (!fit.ensemble || !fit.memberPredict) return undefined;
+  const memberScores = fit.memberPredict.map((m) => ({
+    name: m.name,
+    score: regressionMetrics(yTrue, testRows.map((row) => m.predict(row))).r2,
+  }));
+  memberScores.push({ name: "ensemble", score: ensembleR2 });
+  return { ...fit.ensemble, memberScores };
+}
+
+/** Ensemble summary (classification): member held-out accuracies plus,
+ *  for soft-rule ensembles, the honest probabilistic scores from the
+ *  blended probabilities (ROC AUC / log-loss / Brier — the same
+ *  readout the GP classification card shows). */
+function ensembleSummaryCls(
+  fit: ClsFit,
+  pts: Array<{ x: number; y: number; label: number }>,
+  test: number[],
+  ensembleAccuracy: number
+): MLTrainResponse["ensemble"] {
+  if (!fit.ensemble || !fit.memberPredict01) return undefined;
+  const memberScores = fit.memberPredict01.map((m) => {
+    let correct = 0;
+    for (const i of test) {
+      const p = pts[i] ?? { x: 0, y: 0, label: 0 };
+      if (m.predict01(p.x, p.y) === p.label) correct++;
+    }
+    return { name: m.name, score: correct / Math.max(test.length, 1) };
+  });
+  memberScores.push({ name: "ensemble", score: ensembleAccuracy });
+  const out: MLTrainResponse["ensemble"] = { ...fit.ensemble, memberScores };
+  if (fit.predictProba) {
+    const probas = test.map((i) => fit.predictProba!(pts[i]?.x ?? 0, pts[i]?.y ?? 0));
+    const yTrue = test.map((i) => pts[i]?.label ?? 0);
+    out.rocAuc = rankAuc(yTrue, probas);
+    out.logLoss =
+      -yTrue.reduce(
+        (acc, y, i) =>
+          acc +
+          (y === 1
+            ? Math.log(Math.max(probas[i] ?? 0.5, 1e-12))
+            : Math.log(Math.max(1 - (probas[i] ?? 0.5), 1e-12))),
+        0
+      ) / Math.max(yTrue.length, 1);
+    out.brier =
+      yTrue.reduce((acc, y, i) => acc + (y - (probas[i] ?? 0.5)) ** 2, 0) /
+      Math.max(yTrue.length, 1);
+  }
+  return out;
+}
+
 function runRegression(
   req: TrainBody,
   csv?: CsvRegressionData,
@@ -410,6 +470,13 @@ function runRegression(
   const gp = hasStd
     ? gpSummary(fit, yTrue, yPred, (i) => fit.predictStd!([xs[i] ?? 0]))
     : undefined;
+  /* Meta-ensembles: per-member held-out R² next to the blend's own. */
+  const ensemble = ensembleSummaryReg(
+    fit,
+    yTrue,
+    test.map((i) => [xs[i] ?? 0]),
+    metrics.r2
+  );
 
   // Smooth fitted curve across the full observed x range; GP runs carry
   // the ±1.96σ band the uncertainty chart fills.
@@ -458,6 +525,7 @@ function runRegression(
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),
     ...(fit.vip ? { vip: { ...fit.vip, threshold: 1 } } : {}),
     ...(gp ? { gp } : {}),
+    ...(ensemble ? { ensemble } : {}),
     ...(fit.hsvr ? { hsvr: fit.hsvr } : {}),
     series: {
       test: test.map((i) => {
@@ -526,6 +594,13 @@ function runMultiRegression(
   const gp = hasStd
     ? gpSummary(fit, yTrue, yPred, (i) => fit.predictStd!(csv.X[i] ?? []))
     : undefined;
+  /* Meta-ensembles: per-member held-out R² next to the blend's own. */
+  const ensemble = ensembleSummaryReg(
+    fit,
+    yTrue,
+    test.map((i) => csv.X[i] ?? []),
+    metrics.r2
+  );
 
   /* Perfect-prediction identity line over the combined ŷ/y extent. */
   const all = [...yTrue, ...yPred];
@@ -571,6 +646,7 @@ function runMultiRegression(
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),
     ...(fit.vip ? { vip: { ...fit.vip, threshold: 1 } } : {}),
     ...(gp ? { gp } : {}),
+    ...(ensemble ? { ensemble } : {}),
     ...(fit.hsvr ? { hsvr: fit.hsvr } : {}),
     series: {
       /* ŷ ± 1.96σ rides on each test point as `err` — the whiskers the
@@ -666,6 +742,10 @@ function runClassification(
   const yPred = test.map((i) => fit.predict01(pts[i]?.x ?? 0, pts[i]?.y ?? 0));
   const metrics = classificationMetrics(yTrue, yPred);
 
+  /* Meta-ensembles: per-member held-out accuracy next to the blend's
+   *  own, plus the honest probabilistic scores for soft rules. */
+  const ensemble = ensembleSummaryCls(fit, pts, test, metrics.accuracy);
+
   /* GP classification: the honest probabilistic readout — ROC AUC (rank
    *  statistic over the predicted probabilities), log-loss and Brier on
    *  the held-out rows, plus the mean latent σ the 5-erf integral saw. */
@@ -740,6 +820,7 @@ function runClassification(
     ...(fit.featureImportance ? { featureImportance: fit.featureImportance } : {}),
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),
     ...(gpCls ? { gpCls } : {}),
+    ...(ensemble ? { ensemble } : {}),
     series: {
       test: test.map((i) => ({
         x: pts[i]?.x ?? 0,

@@ -1,0 +1,802 @@
+     1→/**
+     2→ * Shared ML model registry — the single source of truth for the
+     3→ * `/api/ml/train` and `/api/ml/tune` routes (and the UI's mirrored model
+     4→ * list). Fitting logic, hyperparameter resolution, and the RandomSearch
+     5→ * tuning grids all live here so the two routes can never drift apart.
+     6→ */
+     7→
+     8→import {
+     9→  fitAdaBoostClassifier,
+    10→  fitAdaBoostRegressor,
+    11→  fitClassificationTree,
+    12→  fitElasticNet,
+    13→  fitExtraTreesClassifier,
+    14→  fitExtraTreesRegressor,
+    15→  fitGaussianNB,
+    16→  fitGaussianProcess,
+    17→  fitGaussianProcessClassification,
+    18→  fitGradientBoostingRegressor,
+    19→  fitHuberRegression,
+    20→  fitHsvr,
+    21→  fitKernelRidgeRbf,
+    22→  fitKnnClassifier,
+    23→  fitKnnRegressor,
+    24→  fitLinearSvm,
+    25→  fitLogisticRegression,
+    26→  fitMlpClassifier,
+    27→  fitMlpRegressor,
+    28→  fitMultivariateRegression,
+    29→  fitPlsRegression,
+    30→  fitRandomForestClassifier,
+    31→  fitRandomForestRegressor,
+    32→  fitRbfSvmClassifier,
+    33→  fitRegressionTree,
+    34→  mulberry32,
+    35→  normalizeImportance,
+    36→  type HsvrClusterInfo,
+    37→} from "@/lib/ml-math";
+    38→
+    39→/* ------------------------------------------------------------------ */
+    40→/* Registry                                                            */
+    41→/* ------------------------------------------------------------------ */
+    42→
+    43→/** Regression models: 3 legacy (byte-compatible) + 14 (incl. hsvr, huber,
+    44→ *  ada_boost, svm_rbf, extra_trees, pls, gaussian_process — the web
+    45→ *  mirror of the library's adaboost / huber_regression / svm /
+    46→ *  extra_trees / pls / gaussian_process families). */
+    47→export const REGRESSION_MODELS = [
+    48→  "linear",
+    49→  "polynomial",
+    50→  "ridge",
+    51→  "lasso",
+    52→  "elastic_net",
+    53→  "huber",
+    54→  "pls",
+    55→  "knn",
+    56→  "decision_tree",
+    57→  "random_forest",
+    58→  "extra_trees",
+    59→  "gradient_boosting",
+    60→  "ada_boost",
+    61→  "svm_rbf",
+    62→  "gaussian_process",
+    63→  "mlp",
+    64→  "hsvr",
+    65→] as const;
+    66→
+    67→/** Classification models: legacy logistic + 10 (incl. ada_boost,
+    68→ *  extra_trees, the RBF-kernel SVM and gaussian_process — the library's
+    69→ *  adaboost / extra_trees / svm / gaussian_process_classifier
+    70→ *  families; the web id is task-scoped like svm_rbf). */
+    71→export const CLASSIFICATION_MODELS = [
+    72→  "logistic",
+    73→  "knn",
+    74→  "decision_tree",
+    75→  "random_forest",
+    76→  "extra_trees",
+    77→  "ada_boost",
+    78→  "gaussian_nb",
+    79→  "svm_linear",
+    80→  "svm_rbf",
+    81→  "gaussian_process",
+    82→  "mlp",
+    83→] as const;
+    84→
+    85→/* ------------------------------------------------------------------ */
+    86→/* Hyperparameters                                                     */
+    87→/* ------------------------------------------------------------------ */
+    88→
+    89→/** Hyperparameter source (a parsed request body — all fields optional). */
+    90→export interface HyperSource {
+    91→  alpha?: number;
+    92→  l1Ratio?: number;
+    93→  l2?: number;
+    94→  k?: number;
+    95→  maxDepth?: number;
+    96→  nEstimators?: number;
+    97→  rounds?: number;
+    98→  learningRate?: number;
+    99→  hidden?: number;
+   100→  epochs?: number;
+   101→  lr?: number;
+   102→  C?: number;
+   103→  /** Huber: quadratic-core / linear-tail switch point (target units). */
+   104→  epsilon?: number;
+   105→  /** RBF-kernel models: the Gaussian kernel width γ. */
+   106→  gamma?: number;
+   107→  /** HSVR: k-means cluster count. */
+   108→  nClusters?: number;
+   109→  /** HSVR: trust radius × the cluster's max member distance. */
+   110→  radiusFactor?: number;
+   111→  /** PLS: latent component count (rank-capped at extraction). */
+   112→  nComponents?: number;
+   113→  /** GP: RBF length scale ℓ (standardized-feature units). */
+   114→  lengthScale?: number;
+   115→  /** GP: signal amplitude σf (raw target units). */
+   116→  signalStd?: number;
+   117→  /** GP: white-noise observation std σn (raw target units). */
+   118→  noiseStd?: number;
+   119→}
+   120→
+   121→/** Hyperparameters with per-model defaults applied. */
+   122→export interface Hyper {
+   123→  alpha: number;
+   124→  l1Ratio: number;
+   125→  k: number;
+   126→  maxDepth: number;
+   127→  nEstimators: number;
+   128→  rounds: number;
+   129→  learningRate: number;
+   130→  hidden: number;
+   131→  epochs: number;
+   132→  lr: number;
+   133→  C: number;
+   134→  l2: number;
+   135→  epsilon: number;
+   136→  gamma: number;
+   137→  nClusters: number;
+   138→  radiusFactor: number;
+   139→  nComponents: number;
+   140→  lengthScale: number;
+   141→  signalStd: number;
+   142→  noiseStd: number;
+   143→}
+   144→
+   145→function num(value: number | undefined, fallback: number): number {
+   146→  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+   147→}
+   148→
+   149→export function resolveHyper(req: HyperSource): Hyper {
+   150→  return {
+   151→    alpha: num(req.alpha, 1),
+   152→    l1Ratio: num(req.l1Ratio, 0.5),
+   153→    k: num(req.k, 5),
+   154→    maxDepth: num(req.maxDepth, 4),
+   155→    nEstimators: num(req.nEstimators, 50),
+   156→    rounds: num(req.rounds, 50),
+   157→    learningRate: num(req.learningRate, 0.1),
+   158→    hidden: num(req.hidden, 16),
+   159→    epochs: num(req.epochs, 200),
+   160→    lr: num(req.lr, 0.05),
+   161→    C: num(req.C, 1),
+   162→    l2: num(req.l2, 1),
+   163→    epsilon: num(req.epsilon, 1.35),
+   164→    gamma: num(req.gamma, 0.5),
+   165→    nClusters: num(req.nClusters, 3),
+   166→    radiusFactor: num(req.radiusFactor, 1.5),
+   167→    nComponents: num(req.nComponents, 2),
+   168→    lengthScale: num(req.lengthScale, 1),
+   169→    signalStd: num(req.signalStd, 1),
+   170→    noiseStd: num(req.noiseStd, 0.1),
+   171→  };
+   172→}
+   173→
+   174→/** Deterministic RNG stream for model internals (bagging / MLP init /
+   175→ *  k-means). Slot 0 = the main run, slots 1..k = the CV folds — every
+   176→ *  training run gets its own stream so identical requests stay
+   177→ *  byte-identical. */
+   178→export function modelRng(effSeed: number, slot: number): () => number {
+   179→  return mulberry32((effSeed + 104729 + 6151 * slot) >>> 0);
+   180→}
+   181→
+   182→/* ------------------------------------------------------------------ */
+   183→/* Regression fits                                                     */
+   184→/* ------------------------------------------------------------------ */
+   185→
+   186→/** What every regression fit produces: a row predictor plus the honest
+   187→ *  parameter summary for the model family (coefficients for the linear
+   188→ *  family, normalized impurity-reduction importances for trees/ensembles,
+   189→ *  echoed hyperparameters for kNN/MLP/HSVR). */
+   190→export interface RegFit {
+   191→  predict(xsRaw: number[]): number;
+   192→  coefficients?: { intercept: number; coefs: number[]; standardized: boolean };
+   193→  featureImportance?: { features: string[]; importance: number[]; measure: "variance" | "gini" };
+   194→  modelParams?: Record<string, number>;
+   195→  /** GP only: predictive standard deviation in raw target units —
+   196→   *  the ±1.96σ band the chart draws. */
+   197→  predictStd?: (xsRaw: number[]) => number;
+   198→  /** PLS only: VIP scores (VIP > 1 marks an influential descriptor —
+   199→   *  the classic QSAR readout the coefficients card never showed). */
+   200→  vip?: { features: string[]; values: number[] };
+   201→  /** GP only: the kernel readout — hyperparameters (learned by the
+   202→   *  deterministic LML grid search when the request left them unset)
+   203→   *  plus the log marginal likelihood of the train targets under them. */
+   204→  gp?: {
+   205→    lengthScale: number;
+   206→    signalStd: number;
+   207→    noiseStd: number;
+   208→    logMarginalLikelihood: number;
+   209→    nSupport: number;
+   210→    kernelTuned: boolean;
+   211→  };
+   212→  /** HSVR only: per-cluster geometry + local-fit diagnostics + the
+   213→   *  train-row scatter geometry for the trust-radius plot. */
+   214→  hsvr?: {
+   215→    nClusters: number;
+   216→    radiusFactor: number;
+   217→    alpha: number;
+   218→    clusters: HsvrClusterInfo[];
+   219→    /** The trust-radius scatter (train rows + centroids + axis labels). */
+   220→    scatter: {
+   221→      dimA: string;
+   222→      dimB: string;
+   223→      bIsTarget: boolean;
+   224→      projected: boolean;
+   225→      points: Array<{ a: number; b: number; cluster: number }>;
+   226→      centroids: Array<{ a: number; b: number; radius: number }>;
+   227→    };
+   228→  };
+   229→}
+   230→
+   231→/** Extra fitting directives shared by the train route's main fit and its
+   232→ *  CV folds (the tune/compare routes keep the default fixed-kernel
+   233→ *  behaviour — their trials always carry explicit hyperparameters). */
+   234→export interface FitDirectives {
+   235→  /** GP: learn the kernel (lengthScale/signalStd/noiseStd) by the
+   236→   *  deterministic marginal-likelihood grid search instead of using
+   237→   *  the request's (default-filled) values — the web mirror of the
+   238→   *  library's LML-tuned kernel. */
+   239→  learnGpKernel?: boolean;
+   240→  /** GP classification: learn (lengthScale/signalStd) by the Laplace-
+   241→   *  lml grid search (the classification twin of learnGpKernel — no
+   242→   *  noise slot: the logistic likelihood absorbs what a WhiteKernel
+   243→   *  would model). */
+   244→  learnGpClsKernel?: boolean;
+   245→}
+   246→
+   247→/** Fit any regression model over a raw (unstandardized) feature matrix. */
+   248→export function fitRegressionModel(
+   249→  model: string,
+   250→  XTrain: number[][],
+   251→  yTrain: number[],
+   252→  hp: Hyper,
+   253→  rand: () => number,
+   254→  featureNames: string[],
+   255→  directives: FitDirectives = {}
+   256→): RegFit {
+   257→  switch (model) {
+   258→    case "linear":
+   259→    case "polynomial":
+   260→    case "ridge": {
+   261→      /* Multivariate closed-form path (degree is 1 here; the single-feature
+   262→       * polynomial case is handled by the caller). */
+   263→      const effAlpha = model === "ridge" ? hp.alpha : 0;
+   264→      const m = fitMultivariateRegression(XTrain, yTrain, { alpha: effAlpha });
+   265→      return {
+   266→        predict: (xs) => m.predict(xs),
+   267→        coefficients: { intercept: m.w[0] ?? 0, coefs: m.w.slice(1), standardized: true },
+   268→      };
+   269→    }
+   270→    case "lasso":
+   271→    case "elastic_net": {
+   272→      const l1Ratio = model === "lasso" ? 1 : hp.l1Ratio;
+   273→      const m = fitElasticNet(XTrain, yTrain, { alpha: hp.alpha, l1Ratio });
+   274→      return {
+   275→        predict: (xs) => m.predict(xs),
+   276→        coefficients: { intercept: m.b, coefs: [...m.w], standardized: true },
+   277→        modelParams:
+   278→          model === "elastic_net"
+   279→            ? { alpha: hp.alpha, l1Ratio }
+   280→            : { alpha: hp.alpha },
+   281→      };
+   282→    }
+   283→    case "knn": {
+   284→      const m = fitKnnRegressor(XTrain, yTrain, { k: hp.k });
+   285→      return { predict: (xs) => m.predict(xs), modelParams: { k: hp.k } };
+   286→    }
+   287→    case "huber": {
+   288→      /* Robust IRLS — the library's huber_regression family. The fit
+   289→       * surfaces how many train rows ended up in the quadratic core vs
+   290→       * the linear tail (the honest robustness diagnostic). */
+   291→      const m = fitHuberRegression(XTrain, yTrain, { epsilon: hp.epsilon });
+   292→      return {
+   293→        predict: (xs) => m.predict(xs),
+   294→        coefficients: { intercept: m.b, coefs: [...m.w], standardized: true },
+   295→        modelParams: {
+   296→          epsilon: hp.epsilon,
+   297→          nRobust: m.nRobust,
+   298→          nOutlier: m.nOutlier,
+   299→        },
+   300→      };
+   301→    }
+   302→    case "ada_boost": {
+   303→      const m = fitAdaBoostRegressor(XTrain, yTrain, {
+   304→        nEstimators: hp.nEstimators,
+   305→        learningRate: hp.learningRate,
+   306→        rand,
+   307→      });
+   308→      return {
+   309→        predict: (xs) => m.predict(xs),
+   310→        featureImportance: {
+   311→          features: featureNames,
+   312→          importance: m.importance,
+   313→          measure: "variance",
+   314→        },
+   315→      };
+   316→    }
+   317→    case "pls": {
+   318→      /* NIPALS PLS1 — the library's `pls` family. The fit surfaces the
+   319→       * component count actually extracted (rank-limited) alongside the
+   320→       * standardized-space weights; PLS is linear once the latent space
+   321→       * is chosen, so the coefficients card is the honest summary. The
+   322→       * VIP scores ride along too — VIP > 1 marks an influential
+   323→       * descriptor (the classic QSAR readout, previously computed and
+   324→       * dropped). */
+   325→      const m = fitPlsRegression(XTrain, yTrain, { nComponents: hp.nComponents });
+   326→      return {
+   327→        predict: (xs) => m.predict(xs),
+   328→        coefficients: { intercept: m.intercept, coefs: [...m.coefs], standardized: true },
+   329→        modelParams: { nComponents: m.nUsed },
+   330→        vip: { features: featureNames, values: [...m.vip] },
+   331→      };
+   332→    }
+   333→    case "gaussian_process": {
+   334→      /* Kriging — the library's `gaussian_process` family. With the learn
+   335→       * directive (the request left the kernel hyperparameters unset) the
+   336→       * deterministic LML grid search picks them — the web mirror of
+   337→       * sklearn's marginal-likelihood-tuned kernel; explicit values fix
+   338→       * the kernel. Predictive mean + per-point σ via the Cholesky solve. */
+   339→      const m = fitGaussianProcess(
+   340→        XTrain,
+   341→        yTrain,
+   342→        directives.learnGpKernel
+   343→          ? {}
+   344→          : { lengthScale: hp.lengthScale, signalStd: hp.signalStd, noiseStd: hp.noiseStd }
+   345→      );
+   346→      return {
+   347→        predict: (xs) => m.predict(xs),
+   348→        predictStd: (xs) => m.predictStd(xs),
+   349→        modelParams: {
+   350→          lengthScale: m.lengthScale,
+   351→          signalStd: m.signalStd,
+   352→          noiseStd: m.noiseStd,
+   353→        },
+   354→        gp: {
+   355→          lengthScale: m.lengthScale,
+   356→          signalStd: m.signalStd,
+   357→          noiseStd: m.noiseStd,
+   358→          logMarginalLikelihood: m.logMarginalLikelihood,
+   359→          nSupport: m.nSupport,
+   360→          kernelTuned: m.kernelTuned,
+   361→        },
+   362→      };
+   363→    }
+   364→    case "svm_rbf": {
+   365→      const m = fitKernelRidgeRbf(XTrain, yTrain, {
+   366→        gamma: hp.gamma,
+   367→        alpha: hp.alpha,
+   368→      });
+   369→      return {
+   370→        predict: (xs) => m.predict(xs),
+   371→        modelParams: { gamma: hp.gamma, lambda: hp.alpha },
+   372→      };
+   373→    }
+   374→    case "decision_tree": {
+   375→      const m = fitRegressionTree(XTrain, yTrain, { maxDepth: hp.maxDepth });
+   376→      return {
+   377→        predict: (xs) => m.predict(xs),
+   378→        featureImportance: {
+   379→          features: featureNames,
+   380→          importance: normalizeImportance(m.rawImportance),
+   381→          measure: "variance",
+   382→        },
+   383→      };
+   384→    }
+   385→    case "random_forest": {
+   386→      const m = fitRandomForestRegressor(XTrain, yTrain, {
+   387→        nEstimators: hp.nEstimators,
+   388→        maxDepth: hp.maxDepth,
+   389→        rand,
+   390→      });
+   391→      return {
+   392→        predict: (xs) => m.predict(xs),
+   393→        featureImportance: {
+   394→          features: featureNames,
+   395→          importance: m.importance,
+   396→          measure: "variance",
+   397→        },
+   398→      };
+   399→    }
+   400→    case "extra_trees": {
+   401→      const m = fitExtraTreesRegressor(XTrain, yTrain, {
+   402→        nEstimators: hp.nEstimators,
+   403→        maxDepth: hp.maxDepth,
+   404→        rand,
+   405→      });
+   406→      return {
+   407→        predict: (xs) => m.predict(xs),
+   408→        featureImportance: {
+   409→          features: featureNames,
+   410→          importance: m.importance,
+   411→          measure: "variance",
+   412→        },
+   413→      };
+   414→    }
+   415→    case "gradient_boosting": {
+   416→      const m = fitGradientBoostingRegressor(XTrain, yTrain, {
+   417→        rounds: hp.rounds,
+   418→        learningRate: hp.learningRate,
+   419→      });
+   420→      return {
+   421→        predict: (xs) => m.predict(xs),
+   422→        featureImportance: {
+   423→          features: featureNames,
+   424→          importance: m.importance,
+   425→          measure: "variance",
+   426→        },
+   427→      };
+   428→    }
+   429→    case "mlp": {
+   430→      const m = fitMlpRegressor(XTrain, yTrain, {
+   431→        hidden: hp.hidden,
+   432→        epochs: hp.epochs,
+   433→        lr: hp.lr,
+   434→        rand,
+   435→      });
+   436→      return {
+   437→        predict: (xs) => m.predict(xs),
+   438→        modelParams: { hidden: hp.hidden, epochs: hp.epochs, lr: hp.lr },
+   439→      };
+   440→    }
+   441→    case "hsvr": {
+   442→      const m = fitHsvr(XTrain, yTrain, {
+   443→        nClusters: hp.nClusters,
+   444→        radiusFactor: hp.radiusFactor,
+   445→        alpha: hp.alpha,
+   446→        rand,
+   447→      });
+   448→      /* Axis labels for the trust-radius scatter: the first standardized
+   449→       *  feature vs the target (single feature) or the second standardized
+   450→       *  feature (a projection when the model has more than two). */
+   451→      const singleFeature = (XTrain[0]?.length ?? 0) <= 1;
+   452→      return {
+   453→        predict: (xs) => m.predict(xs),
+   454→        modelParams: {
+   455→          nClusters: hp.nClusters,
+   456→          radiusFactor: hp.radiusFactor,
+   457→          alpha: hp.alpha,
+   458→        },
+   459→        hsvr: {
+   460→          nClusters: hp.nClusters,
+   461→          radiusFactor: hp.radiusFactor,
+   462→          alpha: hp.alpha,
+   463→          clusters: m.info,
+   464→          scatter: {
+   465→            dimA: `${featureNames[0] ?? "feature"} (standardized)`,
+   466→            dimB: singleFeature
+   467→              ? "target"
+   468→              : `${featureNames[1] ?? "feature"} (standardized)`,
+   469→            bIsTarget: singleFeature,
+   470→            projected: (XTrain[0]?.length ?? 0) > 2,
+   471→            points: m.scatter.points,
+   472→            centroids: m.scatter.centroids,
+   473→          },
+   474→        },
+   475→      };
+   476→    }
+   477→    default:
+   478→      throw new Error(`Unknown regression model "${model}".`);
+   479→  }
+   480→}
+   481→
+   482→/* ------------------------------------------------------------------ */
+   483→/* Classification fits                                                 */
+   484→/* ------------------------------------------------------------------ */
+   485→
+   486→/** What every classifier produces: a hard 0/1 prediction over raw feature
+   487→ *  pairs plus the honest parameter summary for the model family. */
+   488→export interface ClsFit {
+   489→  predict01(xRaw: number, yRaw: number): 0 | 1;
+   490→  coefficients?: { intercept: number; coefs: number[]; standardized: boolean };
+   491→  featureImportance?: { features: string[]; importance: number[]; measure: "variance" | "gini" };
+   492→  modelParams?: Record<string, number>;
+   493→  /** GP classification: calibrated class-1 probability at a raw row. */
+   494→  predictProba?: (xRaw: number, yRaw: number) => number;
+   495→  /** GP classification only: the Laplace posterior readout. */
+   496→  gpCls?: {
+   497→    lengthScale: number;
+   498→    signalStd: number;
+   499→    newtonIterations: number;
+   500→    logMarginalLikelihood: number;
+   501→    kernelTuned: boolean;
+   502→  };
+   503→}
+   504→
+   505→/** Fit any classification model over raw (unstandardized) 2-feature rows. */
+   506→export function fitClassificationModel(
+   507→  model: string,
+   508→  XTrain: number[][],
+   509→  labelsTrain: number[],
+   510→  hp: Hyper,
+   511→  rand: () => number,
+   512→  featureNames: string[],
+   513→  directives: FitDirectives = {}
+   514→): ClsFit {
+   515→  switch (model) {
+   516→    case "logistic": {
+   517→      /* Legacy path: identical trainer invocation (batch GD, lr 0.1,
+   518→       * 800 epochs, L2 with bias exempt) for byte compatibility. */
+   519→      const pts = XTrain.map((row, i) => ({
+   520→        x: row[0] ?? 0,
+   521→        y: row[1] ?? 0,
+   522→        label: labelsTrain[i] ?? 0,
+   523→      }));
+   524→      const m = fitLogisticRegression(pts, { l2: hp.l2, lr: 0.1, epochs: 800 });
+   525→      return {
+   526→        predict01: (x, y) => (m.predict(x, y) >= 0.5 ? 1 : 0),
+   527→        coefficients: { intercept: m.bias, coefs: [...m.w], standardized: true },
+   528→      };
+   529→    }
+   530→    case "knn": {
+   531→      const m = fitKnnClassifier(XTrain, labelsTrain, { k: hp.k });
+   532→      return {
+   533→        predict01: (x, y) => m.predict([x, y]),
+   534→        modelParams: { k: hp.k },
+   535→      };
+   536→    }
+   537→    case "decision_tree": {
+   538→      const m = fitClassificationTree(XTrain, labelsTrain, { maxDepth: hp.maxDepth });
+   539→      return {
+   540→        predict01: (x, y) => m.predict([x, y]),
+   541→        featureImportance: {
+   542→          features: featureNames,
+   543→          importance: normalizeImportance(m.rawImportance),
+   544→          measure: "gini",
+   545→        },
+   546→      };
+   547→    }
+   548→    case "random_forest": {
+   549→      const m = fitRandomForestClassifier(XTrain, labelsTrain, {
+   550→        nEstimators: hp.nEstimators,
+   551→        maxDepth: hp.maxDepth,
+   552→        rand,
+   553→      });
+   554→      return {
+   555→        predict01: (x, y) => m.predict([x, y]),
+   556→        featureImportance: {
+   557→          features: featureNames,
+   558→          importance: m.importance,
+   559→          measure: "gini",
+   560→        },
+   561→      };
+   562→    }
+   563→    case "gaussian_nb": {
+   564→      const m = fitGaussianNB(XTrain, labelsTrain);
+   565→      return {
+   566→        predict01: (x, y) => m.predict([x, y]),
+   567→        modelParams: { varSmoothing: 1e-9 },
+   568→      };
+   569→    }
+   570→    case "extra_trees": {
+   571→      const m = fitExtraTreesClassifier(XTrain, labelsTrain, {
+   572→        nEstimators: hp.nEstimators,
+   573→        maxDepth: hp.maxDepth,
+   574→        rand,
+   575→      });
+   576→      return {
+   577→        predict01: (x, y) => m.predict([x, y]),
+   578→        featureImportance: {
+   579→          features: featureNames,
+   580→          importance: m.importance,
+   581→          measure: "gini",
+   582→        },
+   583→      };
+   584→    }
+   585→    case "ada_boost": {
+   586→      const m = fitAdaBoostClassifier(XTrain, labelsTrain, {
+   587→        nEstimators: hp.nEstimators,
+   588→        learningRate: hp.learningRate,
+   589→        rand,
+   590→      });
+   591→      return {
+   592→        predict01: (x, y) => m.predict([x, y]),
+   593→        featureImportance: {
+   594→          features: featureNames,
+   595→          importance: m.importance,
+   596→          measure: "gini",
+   597→        },
+   598→      };
+   599→    }
+   600→    case "svm_rbf": {
+   601→      const m = fitRbfSvmClassifier(XTrain, labelsTrain, {
+   602→        C: hp.C,
+   603→        gamma: hp.gamma,
+   604→      });
+   605→      return {
+   606→        predict01: (x, y) => m.predict([x, y]),
+   607→        modelParams: { C: hp.C, gamma: hp.gamma, lambda: m.lambda, nSupport: m.nSupport },
+   608→      };
+   609→    }
+   610→    case "gaussian_process": {
+   611→      /* The classification half of the GP family — the web mirror of
+   612→       *  the library's gaussian_process_classifier (Laplace posterior:
+   613→       *  Newton mode + 5-erf predictive probabilities, verified against
+   614→       *  sklearn by scratch/verify_gpc_parity.{py,ts}). With the learn
+   615→       *  directive (request left ℓ / σf unset) the Laplace-lml grid
+   616→       *  search picks the kernel. */
+   617→      const m = fitGaussianProcessClassification(
+   618→        XTrain,
+   619→        labelsTrain,
+   620→        directives.learnGpClsKernel ? {} : { lengthScale: hp.lengthScale, signalStd: hp.signalStd }
+   621→      );
+   622→      return {
+   623→        predict01: (x, y) => m.predict01([x, y]),
+   624→        predictProba: (x, y) => m.predictProba([x, y]),
+   625→        modelParams: {
+   626→          lengthScale: m.lengthScale,
+   627→          signalStd: m.signalStd,
+   628→          newtonIterations: m.newtonIterations,
+   629→        },
+   630→        gpCls: {
+   631→          lengthScale: m.lengthScale,
+   632→          signalStd: m.signalStd,
+   633→          newtonIterations: m.newtonIterations,
+   634→          logMarginalLikelihood: m.logMarginalLikelihood,
+   635→          kernelTuned: m.kernelTuned,
+   636→        },
+   637→      };
+   638→    }
+   639→    case "svm_linear": {
+   640→      const m = fitLinearSvm(XTrain, labelsTrain, { C: hp.C });
+   641→      return {
+   642→        predict01: (x, y) => m.predict([x, y]),
+   643→        modelParams: { C: hp.C },
+   644→      };
+   645→    }
+   646→    case "mlp": {
+   647→      const m = fitMlpClassifier(XTrain, labelsTrain, {
+   648→        hidden: hp.hidden,
+   649→        epochs: hp.epochs,
+   650→        lr: hp.lr,
+   651→        rand,
+   652→      });
+   653→      return {
+   654→        predict01: (x, y) => m.predict([x, y]),
+   655→        modelParams: { hidden: hp.hidden, epochs: hp.epochs, lr: hp.lr },
+   656→      };
+   657→    }
+   658→    default:
+   659→      throw new Error(`Unknown classification model "${model}".`);
+   660→  }
+   661→}
+   662→
+   663→/* ------------------------------------------------------------------ */
+   664→/* RandomSearch tuning spaces (keras-tuner-style Choice grids)         */
+   665→/* ------------------------------------------------------------------ */
+   666→
+   667→/** One searchable hyperparameter slot with its discrete value grid. */
+   668→export interface TuneChoice {
+   669→  key: keyof HyperSource;
+   670→  values: number[];
+   671→}
+   672→
+   673→/**
+   674→ * Per-model discrete search grids — the web mirror of the library's
+   675→ * `pharmaml.ml.tuner` RandomSearch spaces (Choice slots sampled by a seeded
+   676→ * stream). Models with no tunable hyperparameters (linear, polynomial,
+   677→ * gaussian_nb) are absent / empty and are rejected by the tune route.
+   678→ */
+   679→export const REG_TUNE_SPACES: Record<string, TuneChoice[]> = {
+   680→  ridge: [{ key: "alpha", values: [0.01, 0.1, 0.5, 1, 2, 5, 10] }],
+   681→  lasso: [{ key: "alpha", values: [0.01, 0.05, 0.1, 0.5, 1, 2] }],
+   682→  elastic_net: [
+   683→    { key: "alpha", values: [0.05, 0.1, 0.5, 1, 2] },
+   684→    { key: "l1Ratio", values: [0.1, 0.3, 0.5, 0.7, 0.9] },
+   685→  ],
+   686→  huber: [{ key: "epsilon", values: [1.05, 1.35, 1.75, 2.2, 3] }],
+   687→  pls: [{ key: "nComponents", values: [1, 2, 3, 4, 5, 6] }],
+   688→  knn: [{ key: "k", values: [1, 3, 5, 7, 9, 11, 15, 21] }],
+   689→  decision_tree: [{ key: "maxDepth", values: [2, 3, 4, 5, 6, 7, 8, 10] }],
+   690→  random_forest: [
+   691→    { key: "nEstimators", values: [10, 25, 50, 100, 150] },
+   692→    { key: "maxDepth", values: [3, 4, 6, 8, 10] },
+   693→  ],
+   694→  extra_trees: [
+   695→    { key: "nEstimators", values: [10, 25, 50, 100, 150] },
+   696→    { key: "maxDepth", values: [3, 4, 6, 8, 10] },
+   697→  ],
+   698→  gradient_boosting: [
+   699→    { key: "rounds", values: [20, 50, 100, 150] },
+   700→    { key: "learningRate", values: [0.02, 0.05, 0.1, 0.2, 0.3] },
+   701→  ],
+   702→  ada_boost: [
+   703→    { key: "nEstimators", values: [10, 25, 50, 100, 150] },
+   704→    { key: "learningRate", values: [0.05, 0.1, 0.2, 0.3, 0.5] },
+   705→  ],
+   706→  svm_rbf: [
+   707→    { key: "gamma", values: [0.05, 0.1, 0.25, 0.5, 1, 2] },
+   708→    { key: "alpha", values: [0.01, 0.1, 1, 10] },
+   709→  ],
+   710→  gaussian_process: [
+   711→    { key: "lengthScale", values: [0.25, 0.5, 1, 2, 4] },
+   712→    { key: "signalStd", values: [0.5, 1, 2] },
+   713→    { key: "noiseStd", values: [0.01, 0.05, 0.2, 0.5] },
+   714→  ],
+   715→  mlp: [
+   716→    { key: "hidden", values: [4, 8, 16, 32, 48] },
+   717→    { key: "epochs", values: [100, 200, 400, 800] },
+   718→    { key: "lr", values: [0.01, 0.02, 0.05, 0.1, 0.2] },
+   719→  ],
+   720→  hsvr: [
+   721→    { key: "nClusters", values: [2, 3, 4, 5, 6, 8] },
+   722→    { key: "radiusFactor", values: [0.5, 1, 1.5, 2, 3] },
+   723→    { key: "alpha", values: [0.01, 0.1, 1, 10] },
+   724→  ],
+   725→};
+   726→
+   727→export const CLS_TUNE_SPACES: Record<string, TuneChoice[]> = {
+   728→  logistic: [{ key: "l2", values: [0.01, 0.1, 0.5, 1, 2, 5, 10] }],
+   729→  knn: [{ key: "k", values: [1, 3, 5, 7, 9, 11, 15, 21] }],
+   730→  decision_tree: [{ key: "maxDepth", values: [2, 3, 4, 5, 6, 7, 8, 10] }],
+   731→  random_forest: [
+   732→    { key: "nEstimators", values: [10, 25, 50, 100] },
+   733→    { key: "maxDepth", values: [3, 4, 6, 8, 10] },
+   734→  ],
+   735→  extra_trees: [
+   736→    { key: "nEstimators", values: [10, 25, 50, 100] },
+   737→    { key: "maxDepth", values: [3, 4, 6, 8, 10] },
+   738→  ],
+   739→  ada_boost: [
+   740→    { key: "nEstimators", values: [10, 25, 50, 100] },
+   741→    { key: "learningRate", values: [0.05, 0.1, 0.2, 0.3, 0.5] },
+   742→  ],
+   743→  svm_linear: [{ key: "C", values: [0.05, 0.1, 0.5, 1, 2, 5, 10] }],
+   744→  svm_rbf: [
+   745→    { key: "gamma", values: [0.05, 0.1, 0.25, 0.5, 1, 2] },
+   746→    { key: "C", values: [0.05, 0.1, 0.5, 1, 2, 5, 10] },
+   747→  ],
+   748→  gaussian_process: [
+   749→    { key: "lengthScale", values: [0.25, 0.5, 1, 2, 4] },
+   750→    { key: "signalStd", values: [0.5, 1, 2] },
+   751→  ],
+   752→  mlp: [
+   753→    { key: "hidden", values: [4, 8, 16, 32] },
+   754→    { key: "epochs", values: [200, 400, 800] },
+   755→    { key: "lr", values: [0.02, 0.05, 0.1, 0.2] },
+   756→  ],
+   757→};
+   758→
+   759→/* ------------------------------------------------------------------ */
+   760→/* Hyperband resources                                                 */
+   761→/* ------------------------------------------------------------------ */
+   762→
+   763→/**
+   764→ * Models whose search space contains a resource hyperparameter — a slot
+   765→ * whose value scales compute monotonically, which successive halving can
+   766→ * promote rung by rung (the web mirror of `pharmaml.ml.tuner.Hyperband`'s
+   767→ * resource contract). Other models have no resource and are rejected by
+   768→ * the tune route's Hyperband mode with an actionable message.
+   769→ */
+   770→export const TUNE_RESOURCES: Record<string, { key: string; label: string }> = {
+   771→  mlp: { key: "epochs", label: "epochs" },
+   772→  random_forest: { key: "nEstimators", label: "estimators" },
+   773→  extra_trees: { key: "nEstimators", label: "estimators" },
+   774→  gradient_boosting: { key: "rounds", label: "boosting rounds" },
+   775→  ada_boost: { key: "nEstimators", label: "boosting rounds" },
+   776→};
+   777→
+   778→/** Total configurations in a space (product of the per-slot grids). */
+   779→export function tuneSpaceSize(choices: TuneChoice[]): number {
+   780→  return choices.reduce((acc, c) => acc * Math.max(c.values.length, 1), 1);
+   781→}
+   782→
+   783→/**
+   784→ * Decode a flat index in [0, spaceSize) into a parameter assignment
+   785→ * (mixed-radix digits — the deterministic inverse of the grid layout).
+   786→ */
+   787→export function decodeTuneIndex(
+   788→  choices: TuneChoice[],
+   789→  index: number
+   790→): Record<string, number> {
+   791→  const params: Record<string, number> = {};
+   792→  let rest = index;
+   793→  for (let i = choices.length - 1; i >= 0; i--) {
+   794→    const c = choices[i]!;
+   795→    const radix = Math.max(c.values.length, 1);
+   796→    const digit = rest % radix;
+   797→    rest = Math.floor(rest / radix);
+   798→    params[c.key] = c.values[digit] ?? c.values[c.values.length - 1] ?? 0;
+   799→  }
+   800→  return params;
+   801→}
+   802→
