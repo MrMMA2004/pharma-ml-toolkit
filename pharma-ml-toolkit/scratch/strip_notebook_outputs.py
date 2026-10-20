@@ -18,7 +18,7 @@ variant's cell sources stay identical to the executed original's
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/strip_notebook_outputs.py
+    python scratch/strip_notebook_outputs.py
 """
 
 from __future__ import annotations

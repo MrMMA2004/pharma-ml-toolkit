@@ -14,7 +14,7 @@ Docking Workflow (Zero to One Hundred)":
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/build_docking_notebook.py
+    python scratch/build_docking_notebook.py
 """
 
 from __future__ import annotations

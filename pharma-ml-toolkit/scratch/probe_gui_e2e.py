@@ -6,7 +6,7 @@ import tempfile
 import time
 from pathlib import Path
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 import tkinter.filedialog as fd
 import tkinter.messagebox as mb
 
@@ -80,7 +80,7 @@ assert pump_until_idle(), "emax job hung"
 assert len(app._pd_host.winfo_children()) == 1, "Emax figure not embedded"
 print("emax:", app._pd_result.cget("text")[:64])
 
-app._ml_load_path(Path("/home/z/my-project/pharma-ml-toolkit/examples/data/qsar_regression.csv"))
+app._ml_load_path(Path("examples/data/qsar_regression.csv"))
 print("ml info:", app._ml_info.cget("text"))
 assert "rows" in app._ml_info.cget("text")
 

@@ -20,7 +20,7 @@ with nbformat and executed end-to-end with nbclient so all outputs
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/build_pk_notebook.py
+    python scratch/build_pk_notebook.py
 """
 
 from __future__ import annotations

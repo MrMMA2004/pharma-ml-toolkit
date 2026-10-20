@@ -17,7 +17,7 @@ from rdkit import Chem
 from rdkit.Chem.QED import qed
 
 _spec = importlib.util.spec_from_file_location(
-    "probe_rnn", "/home/z/my-project/pharma-ml-toolkit/scratch/probe_generative_rnn.py"
+    "probe_rnn", "scratch/probe_generative_rnn.py"
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)

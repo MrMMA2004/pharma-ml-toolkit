@@ -10,7 +10,7 @@ used, and compares the headline metrics.
 
 Run (dev server on :3000 must be up):
 
-    /home/z/.venv/bin/python pharma-ml-toolkit/scratch/probe_playground_models_26.py
+    python pharma-ml-toolkit/scratch/probe_playground_models_26.py
 
 Agreement expectations (documented, not asserted):
   ~exact   lasso, elastic_net, knn (reg+cls), decision_tree (reg+cls),

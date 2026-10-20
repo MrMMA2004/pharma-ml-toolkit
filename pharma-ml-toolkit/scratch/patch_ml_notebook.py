@@ -21,7 +21,7 @@ the drift-guard test.
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/patch_ml_notebook.py
+    python scratch/patch_ml_notebook.py
 """
 
 from __future__ import annotations

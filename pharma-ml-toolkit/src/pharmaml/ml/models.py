@@ -31,6 +31,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from sklearn.base import ClassifierMixin
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.ensemble import (
     AdaBoostClassifier,
@@ -160,7 +161,85 @@ def _mlp_reg() -> MLPRegressor:
 def _xgb_cls():
     from xgboost import XGBClassifier
 
-    return XGBClassifier(random_state=42, eval_metric="logloss", n_jobs=-1)
+    # XGBClassifier is the one registry family that refuses string class
+    # labels ("Expected: [0 1], got: ['active' 'inactive']") -- every
+    # other family takes any label dtype. The wrapper encodes y at fit
+    # time (a sorted LabelEncoder) and decodes predictions back to the
+    # original label space, so string targets flow through
+    # train_model/evaluate_model/persistence unchanged. Parameter
+    # routing is transparent: ``clf__n_estimators`` keeps working
+    # because get_params/set_params forward to the wrapped estimator;
+    # ClassifierMixin marks the pipeline as a classifier so the ROC-AUC
+    # scorer and predict_proba routing recognise it.
+    return _IntegerLabelClassifier(
+        XGBClassifier(random_state=42, eval_metric="logloss", n_jobs=-1)
+    )
+
+
+class _IntegerLabelClassifier(ClassifierMixin):
+    """Wrap classifiers that require integer class labels (xgboost).
+
+    Fits a :class:`~sklearn.preprocessing.LabelEncoder` on ``y``, fits
+    the wrapped estimator on the encoded labels, and decodes
+    ``predict`` output back to the original label space. Hyperparameter
+    grids address the wrapped estimator directly (``clf__n_estimators``
+    keeps working) because ``get_params`` / ``set_params`` forward
+    transparently::
+
+        >>> from pharmaml.ml.models import _IntegerLabelClassifier
+        >>> from sklearn.linear_model import LogisticRegression
+        >>> import pandas as pd
+        >>> w = _IntegerLabelClassifier(LogisticRegression())
+        >>> X = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]})
+        >>> w.fit(X, ["lo", "lo", "lo", "hi", "hi", "hi"]).classes_.tolist()
+        ['hi', 'lo']
+        >>> w.predict(X).tolist()
+        ['lo', 'lo', 'lo', 'hi', 'hi', 'hi']
+        >>> w.get_params()["penalty"]
+        'l2'
+    """
+
+    def __init__(self, estimator: Any) -> None:
+        self.estimator = estimator
+        self._encoder: Any = None
+        self._inner: Any = None
+        self.classes_: Any = None
+
+    # -- sklearn parameter plumbing (transparent forwarding) ----------
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
+        params: dict[str, Any] = {"estimator": self.estimator}
+        if deep and hasattr(self.estimator, "get_params"):
+            params.update(self.estimator.get_params(deep=True))
+        return params
+
+    def set_params(self, **params: Any) -> _IntegerLabelClassifier:
+        if "estimator" in params:
+            self.estimator = params.pop("estimator")
+        if params and hasattr(self.estimator, "set_params"):
+            self.estimator.set_params(**params)
+        return self
+
+    # -- the ClassifierMixin surface ---------------------------------
+    def fit(self, X: Any, y: Any) -> _IntegerLabelClassifier:
+        from sklearn.base import clone
+        from sklearn.preprocessing import LabelEncoder
+
+        self._encoder = LabelEncoder().fit(y)
+        self._inner = clone(self.estimator)
+        self._inner.fit(X, self._encoder.transform(y))
+        # decoded label space, sorted -- predict_proba columns follow it
+        self.classes_ = self._encoder.classes_
+        return self
+
+    def predict(self, X: Any) -> Any:
+        encoded = self._inner.predict(X).ravel()
+        return self._encoder.inverse_transform(encoded)
+
+    def predict_proba(self, X: Any) -> Any:
+        return self._inner.predict_proba(X)
+
+    def __sklearn_is_fitted__(self) -> bool:
+        return self._inner is not None and hasattr(self._inner, "classes_")
 
 
 def _xgb_reg():

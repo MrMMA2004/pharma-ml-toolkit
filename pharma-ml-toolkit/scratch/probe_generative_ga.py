@@ -10,7 +10,7 @@ from rdkit import Chem
 import importlib.util
 
 _spec = importlib.util.spec_from_file_location(
-    "probe_corpus", "/home/z/my-project/pharma-ml-toolkit/scratch/probe_corpus_list.py"
+    "probe_corpus", "scratch/probe_corpus_list.py"
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)

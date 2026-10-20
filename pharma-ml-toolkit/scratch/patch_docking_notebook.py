@@ -14,7 +14,7 @@ This patch instead:
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/patch_docking_notebook.py
+    python scratch/patch_docking_notebook.py
 """
 
 from __future__ import annotations

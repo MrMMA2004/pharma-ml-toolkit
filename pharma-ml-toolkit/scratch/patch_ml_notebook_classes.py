@@ -23,7 +23,7 @@ class count:
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/patch_ml_notebook_classes.py
+    python scratch/patch_ml_notebook_classes.py
 """
 
 from __future__ import annotations

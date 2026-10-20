@@ -6,9 +6,14 @@
  * CSV→matrix / generator→points plumbing.
  *
  * The train route deliberately keeps its own resolution: its legacy
- * single-feature path (linear/polynomial/ridge) must stay byte-compatible
- * with the original demo responses, and its csvData is consumed by the
- * run* functions in a different shape.
+ * single-feature path (linear/polynomial/ridge) keeps its own call shape,
+ * and its csvData is consumed by the run* functions differently.
+ *
+ * LEAKAGE RULE (100x-101): resolved rows are in RAW feature units. The
+ * model fitters (ml-math.ts / ml-models.ts) standardize on the statistics
+ * of the rows they are GIVEN — the train split or the CV fold's train
+ * part — never on the full column. Scaling here would fold held-out rows
+ * into the kNN metric / RBF kernel geometry: train/test leakage.
  */
 
 import {
@@ -18,7 +23,6 @@ import {
   resolveClassification,
   resolveMultiRegression,
   resolveRegression,
-  zscore,
 } from "@/lib/csv";
 import { makeMoons, makeRegressionData, mulberry32 } from "@/lib/ml-math";
 import type { CsvSourceMeta } from "@/lib/toolkit-types";
@@ -47,7 +51,7 @@ export interface ResolvedMlDataset {
   n: number;
   row(i: number): number[];
   target(i: number): number;
-  /** Display labels (with the "(standardized)" suffix where applied). */
+  /** Display labels (raw column names — features stay in raw units). */
   features: string[];
   /** Raw column names (feature-importance keys). */
   featureNames: string[];
@@ -97,7 +101,7 @@ export function resolveMlDataset(req: DatasetRequest): DatasetResult {
           const csv = resolveMultiRegression(table, req.featureColumns, req.targetColumn);
           rows = csv.X;
           ys = csv.y;
-          features = csv.features.map((f) => `${f} (standardized)`);
+          features = csv.features;
           featureNames = csv.features;
           source = {
             kind: "csv",
@@ -114,10 +118,13 @@ export function resolveMlDataset(req: DatasetRequest): DatasetResult {
             req.featureColumn ?? req.featureColumns?.[0],
             req.targetColumn
           );
-          const xs = zscore(csv.x); // standardized so coefficients stay comparable
-          rows = xs.map((x) => [x]);
+          /* Raw units — the fitters standardize on the rows they are
+           * given (the train folds / train split), never on the full
+           * column. Pre-zscoring here was train/test leakage (the rar's
+           * signature bug, audited out). */
+          rows = csv.x.map((x) => [x]);
           ys = csv.y; // target kept in original units
-          features = [`${csv.feature} (standardized)`];
+          features = [csv.feature];
           featureNames = [csv.feature];
           source = {
             kind: "csv",
@@ -136,10 +143,11 @@ export function resolveMlDataset(req: DatasetRequest): DatasetResult {
           req.featureColumn2,
           req.targetColumn
         );
-        const sx1 = zscore(csv.x1);
-        const sx2 = zscore(csv.x2);
-        pts = sx1.map((x, i) => ({ x, y: sx2[i] ?? 0, label: csv.label[i] ?? 0 }));
-        features = [`${csv.feature1} (standardized)`, `${csv.feature2} (standardized)`];
+        /* Raw units — same leakage rule as the regression paths: the
+         * fitters standardize on their train rows internally. */
+        const { x1, x2, label } = csv;
+        pts = x1.map((x, i) => ({ x, y: x2[i] ?? 0, label: label[i] ?? 0 }));
+        features = [csv.feature1, csv.feature2];
         featureNames = [csv.feature1, csv.feature2];
         source = {
           kind: "csv",
@@ -166,12 +174,12 @@ export function resolveMlDataset(req: DatasetRequest): DatasetResult {
     const { xs, ys: y } = makeRegressionData(req.samples ?? 300, req.noise ?? 0.4, rand);
     rows = xs.map((x) => [x]);
     ys = y;
-    features = ["x (standardized)"];
+    features = ["x"];
     featureNames = ["x"];
   } else {
     const rand = mulberry32(req.seed);
     pts = makeMoons(req.samples ?? 300, req.noise ?? 0.4, rand);
-    features = ["x1 (standardized)", "x2 (standardized)"];
+    features = ["x1", "x2"];
     featureNames = ["x1", "x2"];
   }
 

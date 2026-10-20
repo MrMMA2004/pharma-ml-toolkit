@@ -7,7 +7,6 @@ import {
   resolveClassification,
   resolveMultiRegression,
   resolveRegression,
-  zscore,
   type CsvClassificationData,
   type CsvMultiRegressionData,
   type CsvRegressionData,
@@ -292,7 +291,14 @@ function runRegression(
   let features: string[];
   let featureNames: string[];
   if (csv) {
-    xs = zscore(csv.x); // standardized so coefficients stay comparable
+    /* Raw feature units — NO full-column standardization here. Every
+     * fitter (fitLinearRegression, fitRegressionModel, ...) standardizes
+     * internally on the statistics of the rows it is given, i.e. the
+     * TRAIN split only. Pre-scaling with mean/std of the whole column
+     * would push held-out test rows into the feature geometry (the
+     * train/test leakage this toolkit's audit found in the original
+     * rar scripts — scaler.fit_transform before train_test_split). */
+    xs = csv.x;
     ys = csv.y; // target kept in original units
     source = {
       kind: "csv",
@@ -303,12 +309,12 @@ function runRegression(
       nRows: csv.x.length,
       droppedRows: csv.droppedRows,
     };
-    features = [`${csv.feature} (standardized)`];
+    features = [csv.feature];
     featureNames = [csv.feature];
   } else {
     const rand = mulberry32(req.seed);
     ({ xs, ys } = makeRegressionData(req.samples, req.noise, rand));
-    features = ["x (standardized)"];
+    features = ["x"];
     featureNames = ["x"];
   }
   const effSeed = splitSeed ?? req.seed;
@@ -486,7 +492,7 @@ function runMultiRegression(
       nTest: test.length,
       noise: 0,
       seed: 0,
-      features: csv.features.map((f) => `${f} (standardized)`),
+      features: csv.features,
       source,
     },
   };
@@ -507,11 +513,13 @@ function runClassification(
   let features: string[];
   let featureNames: string[];
   if (csv) {
-    // Standardize both features (same space the logistic trainer expects).
+    /* Raw feature units — the classification fitters standardize on
+     * train statistics internally (fitLogisticRegression,
+     * fitKnnClassifier, ...), so scaling the full column here would
+     * leak held-out rows into the kNN metric / RBF kernel geometry
+     * (the same train/test contamination audited out of the rar). */
     const { x1, x2, label } = csv;
-    const sx1 = zscore(x1);
-    const sx2 = zscore(x2);
-    pts = sx1.map((x, i) => ({ x, y: sx2[i] ?? 0, label: label[i] ?? 0 }));
+    pts = x1.map((x, i) => ({ x, y: x2[i] ?? 0, label: label[i] ?? 0 }));
     source = {
       kind: "csv",
       fileName: csvName,
@@ -522,12 +530,12 @@ function runClassification(
       droppedRows: csv.droppedRows,
       labelMap: csv.labelMap,
     };
-    features = [`${csv.feature1} (standardized)`, `${csv.feature2} (standardized)`];
+    features = [csv.feature1, csv.feature2];
     featureNames = [csv.feature1, csv.feature2];
   } else {
     const genRand = mulberry32(req.seed);
     pts = makeMoons(req.samples, req.noise, genRand);
-    features = ["x1 (standardized)", "x2 (standardized)"];
+    features = ["x1", "x2"];
     featureNames = ["x1", "x2"];
   }
   const effSeed = splitSeed ?? req.seed;

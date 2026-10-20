@@ -1,7 +1,7 @@
 """Round 100x-20-a adversarial probes for pharmaml.pharma (pk/pd/units/dosage/approvals).
 
 Every suspicion is exercised EMPIRICALLY before any source edit.
-Run: /home/z/.venv/bin/python scratch/probe_pharma_pkpd_1.py
+Run: python scratch/probe_pharma_pkpd_1.py
 """
 
 from __future__ import annotations

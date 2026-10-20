@@ -77,7 +77,7 @@ the outputs were committed — re-execution refreshes them honestly):
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/reexecute_notebooks_26.py
+    python scratch/reexecute_notebooks_26.py
 """
 
 from __future__ import annotations

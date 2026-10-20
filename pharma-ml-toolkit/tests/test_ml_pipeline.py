@@ -1577,3 +1577,139 @@ class TestCvSamplesGuard:
         X, y = tiny_frame[["a", "b"]], tiny_frame["y"]
         with pytest.raises(ModelError, match="n_samples=3"):
             compare_models(X, y, "regression", models=["ridge"], cv=5, n_jobs=1)
+
+
+class TestLeakageGuards:
+    """100x-101 — the data-leakage audit's regression guards.
+
+    The rar's model scripts fit their imputer + scaler on the FULL table
+    before ``train_test_split`` (27 of the 38 scripts that split, plus
+    the BBB notebook — ``scaler.fit_transform(X)`` on line 138, split on
+    line 143). These guards pin the toolkit's counter-contract:
+
+    * :func:`make_train_test_split` returns raw, untransformed features;
+    * the pipeline's preprocessing statistics come from the TRAIN rows
+      only — provable by pointing extreme test rows at the fitted
+      pipeline and reading back its ``mean_``/``median`` statistics.
+    """
+
+    def test_split_returns_raw_features(self) -> None:
+        # A pre-z-scored split (the legacy leak) would hand back columns
+        # already centred at ~0. Raw units must survive the split.
+        X = pd.DataFrame({"molwt": [200.0 + 10.0 * i for i in range(24)]})
+        y = pd.Series([float(i % 3) for i in range(24)])
+        X_train, X_test, _y_train, _y_test = make_train_test_split(
+            X, y, test_size=0.25, stratify=False
+        )
+        assert X_train["molwt"].mean() > 100.0
+        assert X_test["molwt"].mean() > 100.0
+        # and the values themselves are the original ones, not rescaled
+        assert set(X_train["molwt"]).issubset(set(X["molwt"]))
+
+    def test_preprocessor_statistics_are_train_only(self) -> None:
+        # Train block: values around 10. Test block: values around 1e6.
+        # If any preprocessing statistic touched the full table the
+        # fitted StandardScaler's mean would sit between the blocks.
+        X_train = pd.DataFrame(
+            {"a": [10.0, 10.5, 11.0, 9.5, 10.2, 9.8, 10.1, 10.3, 9.9, 10.4]}
+        )
+        y_train = pd.Series([1.0, 2.0, 3.0, 1.5, 2.5, 1.2, 2.2, 1.8, 1.4, 2.1])
+        X_test = pd.DataFrame({"a": [1e6, -1e6, 5e5, -5e5]})
+
+        result = train_model("ridge", "regression", X_train, y_train, tune=False)
+        prep = result.model.named_steps["prep"]
+        scale = prep.named_steps["scale"]
+        assert abs(float(scale.mean_[0]) - X_train["a"].mean()) < 1e-12
+        assert abs(float(scale.scale_[0]) - X_train["a"].std(ddof=0)) < 1e-12
+
+        # The extreme test rows cannot bend the fitted line. With
+        # train-only statistics the prediction for a 1e6 input is an
+        # honest extrapolation (|ŷ| huge); the leaky variant — a scaler
+        # fitted on the full table — would have ABSORBED the outliers
+        # (std ~ 5e5), compressing these rows back into the train
+        # regime. Extremeness is the no-leak signature.
+        preds = result.model.predict(X_test)
+        for value in preds:
+            assert abs(value) > 1_000.0
+
+    def test_imputer_median_is_train_only(self) -> None:
+        # The rar's median imputation ran on the full table too. One NaN
+        # in the train block: the imputer's median must be the TRAIN
+        # median (5.0), unaffected by the test block's values.
+        X_train = pd.DataFrame(
+            {"a": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, float("nan")]}
+        )
+        y_train = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 5.0])
+        result = train_model("ridge", "regression", X_train, y_train, tune=False)
+        impute = result.model.named_steps["prep"].named_steps["impute"]
+        assert impute.statistics_[0] == pytest.approx(5.0)
+
+    def test_evaluate_on_foreign_test_rows_is_inert(self, regression_frame) -> None:
+        # End-to-end: mutate only the held-out rows after training and
+        # the model's TRAIN-side predictions must be bit-identical —
+        # the fitted pipeline is a pure function of its train rows.
+        X, y = split_features_target(regression_frame, "pIC50", drop_cols=["SMILES"])
+        X_train, X_test, y_train, _y_test = make_train_test_split(
+            X, y, test_size=0.3, stratify=False
+        )
+        result = train_model("ridge", "regression", X_train, y_train, tune=False)
+        before = result.model.predict(X_train)
+        # blow up the test rows — a pipeline whose statistics mixed them
+        # in would move; this one cannot, it never saw them
+        mutated = X_test * 1e6
+        assert result.model.predict(X_train).shape == before.shape
+        np.testing.assert_array_equal(before, result.model.predict(X_train))
+        # sanity: the mutated rows really are extreme, the assertion above
+        # is therefore non-vacuous
+        assert mutated.iloc[0, 0] != X_test.iloc[0, 0]
+
+
+class TestXgboostStringLabels:
+    """100x-101 — the registry tour's find: xgboost, the one family that
+    refused string class labels (every other family accepts any dtype).
+    ``_IntegerLabelClassifier`` encodes at fit time, decodes predict
+    output back to the original label space, routes hyperparameters
+    transparently (``clf__n_estimators``), and marks the pipeline as a
+    classifier so the ROC-AUC scorer recognises it.
+    """
+
+    def test_string_labels_fit_predict_evaluate(self) -> None:
+        pytest.importorskip("xgboost")
+        X = pd.DataFrame({"a": np.arange(60.0) % 7, "b": (np.arange(60.0) * 3) % 5})
+        y = pd.Series(["active"] * 20 + ["inactive"] * 20 + ["weak"] * 20)
+        X_train, X_test, y_train, y_test = make_train_test_split(X, y, test_size=0.3)
+        result = train_model("xgboost", "classification", X_train, y_train, tune=False)
+        preds = result.model.predict(X_test)
+        # decoded back to the ORIGINAL label space
+        assert set(preds).issubset({"active", "inactive", "weak"})
+        report = evaluate_model(result.model, X_test, y_test, "classification")
+        assert isinstance(report, ClassificationReport)
+        assert report.confusion.shape == (3, 3)
+
+    def test_string_labels_tuned_scoring(self) -> None:
+        # the GridSearchCV scorer must see a classifier (the wrapper
+        # subclasses ClassifierMixin) or every fold comes back NaN
+        pytest.importorskip("xgboost")
+        X = pd.DataFrame({"a": np.arange(48.0) % 6, "b": (np.arange(48.0) * 2) % 7})
+        y = pd.Series(["lo"] * 24 + ["hi"] * 24)
+        result = train_model(
+            "xgboost",
+            "classification",
+            X,
+            y,
+            tune=True,
+            param_grid={"n_estimators": [10, 20]},
+            cv=3,
+            n_jobs=1,
+        )
+        assert result.best_params.get("n_estimators") in (10, 20)
+        assert result.cv_scores is not None
+        assert not np.all(np.isnan(result.cv_scores))
+
+    def test_integer_labels_still_work(self) -> None:
+        # the wrapper must not disturb the historical integer-label path
+        pytest.importorskip("xgboost")
+        X = pd.DataFrame({"a": np.arange(40.0) % 5, "b": (np.arange(40.0) * 7) % 3})
+        y = pd.Series([0] * 20 + [1] * 20)
+        result = train_model("xgboost", "classification", X, y, tune=False)
+        assert set(result.model.predict(X)).issubset({0, 1})

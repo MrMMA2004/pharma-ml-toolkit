@@ -3,7 +3,7 @@
 100x-18-b review of ml/neural.py — demonstrates (or refutes) suspected
 defects BEFORE any code change. Run:
 
-  LOKY_MAX_CPU_COUNT=1 OMP_NUM_THREADS=1 /home/z/.venv/bin/python scratch/probe_neural_1_earlystop.py
+  LOKY_MAX_CPU_COUNT=1 OMP_NUM_THREADS=1 python scratch/probe_neural_1_earlystop.py
 """
 from __future__ import annotations
 

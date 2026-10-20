@@ -17,7 +17,7 @@ hundred, executed end to end with committed outputs on a laptop CPU:
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/build_generative_notebook.py
+    python scratch/build_generative_notebook.py
 
 Re-running the script rebuilds and re-executes the notebook from scratch
 (every generative run pins seed=42, so the committed outputs are

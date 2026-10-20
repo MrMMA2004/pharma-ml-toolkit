@@ -10,6 +10,118 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.44] — 2026-10-20
+
+### Added — the data-leakage audit: guards, docs, and the registry tour
+
+- **`docs/LEAKAGE_AUDIT.md`** — the one-by-one audit of every
+  machine-learning file in the original rar (112 `.py` + 2 `.ipynb`):
+  **27 scripts + the BBB notebook leak** (imputer + scaler
+  `fit_transform` on the full table *before* `train_test_split` —
+  `Classification/RF.py` lines 36–51 vs 54–60 is the representative
+  anatomy), 11 scripts are clean (the archive's own pipeline-based
+  best practice: `Huber.py`, `Lasso.py`, the `*-class.py` wrappers),
+  and the BBB `.pkl` embeds no training rows (pickle disassembled) but
+  never persisted its scaler — the deployment gap cell 6 patches by
+  refitting "on the original training data". The doc also records the
+  toolkit's immunity (pipeline fitted on train rows only) and the web
+  mirror's fix (below).
+- **`tests/test_ml_pipeline.py :: TestLeakageGuards`** — 4 regression
+  tests pinning the no-leak contract: the split returns raw features;
+  the fitted `StandardScaler.mean_` equals the train mean to 1e-12
+  while extreme test rows (±1e6) produce honest extreme extrapolations
+  (a leaky scaler would have absorbed the outliers — extremeness is
+  the no-leak signature); the imputer's median is the train median;
+  and blowing up the test rows after training cannot move the model's
+  train predictions by a bit.
+- **ML workflow §11 "The full registry — every family, one tour"** —
+  the notebook-coverage fix the audit demanded: 13 of 24 registry
+  families had no notebook demonstration (adaboost, catboost,
+  elastic_net_logistic, extra_trees, gradient_boosting, lasso,
+  lasso_logistic, lightgbm, pls, ridge, ridge_classifier, svm,
+  xgboost). The tour walks `list_models(task, only_available=False)`
+  for **both tasks**, fits every available family (37 entries) on the
+  notebook's own §5/§9 splits via `train_model(..., tune=False)` (~7 s
+  total), scores each on the same held-out rows, and lists unavailable
+  families with their missing requirement — nothing vanishes silently.
+  Self-updating: a family added tomorrow joins the tour without an
+  edit; it doubles as a full-registry smoke test inside the executed
+  notebook. Downstream sections renumbered (Interpret→§12 …
+  Recap→§15), ToC and recap table updated.
+- **`docs/COVERAGE.md`** gains the second audit axis — "do the
+  notebooks and playground.py cover the toolkit": the playground's
+  model combobox lists `list_models(task, only_available=True)`
+  dynamically (all 24 families, zero maintenance), and the notebooks'
+  family coverage is the §11 tour's guarantee.
+
+### Fixed — xgboost refused string class labels (the registry tour's find)
+
+- Fitting `train_model('xgboost', 'classification', ...)` on string
+  targets (`'active'/'inactive'/'weak'`) died inside XGBClassifier with
+  `Invalid classes inferred from unique values of y` — xgboost is the
+  ONE registry family that requires integer labels (lightgbm, catboost
+  and every sklearn family accept any dtype). The notebook §11 tour
+  found it on its first execution: the demo classification table uses
+  string labels.
+- **The fix**: `_xgb_cls()` now wraps XGBClassifier in
+  `_IntegerLabelClassifier` — a ClassifierMixin that fits a sorted
+  LabelEncoder on y, fits the wrapped estimator on the encoded labels,
+  and decodes `predict` output back to the ORIGINAL label space (so
+  `evaluate_model`, reports and persistence see real labels).
+  Hyperparameter grids address the wrapped estimator directly
+  (`clf__n_estimators` keeps working — get_params/set_params forward
+  transparently), and the mixin marks the pipeline as a classifier so
+  the ROC-AUC scorer recognises it (without it every tuned fold scored
+  NaN). 3 new tests: string-label fit/evaluate with decoded
+  predictions, tuned scoring without NaN folds, and the historical
+  integer-label path untouched. `docs/COVERAGE.md`'s stale
+  "LabelEncoder handling inside make_train_test_split" claim is
+  corrected to name the real mechanism.
+
+### Fixed — web mirror: the rar's signature leak, removed from the CSV paths
+
+- The browser playground's CSV paths pre-scaled features with
+  **full-column** z-scores before the split
+  (`train/route.ts` `runRegression`/`runClassification`,
+  `ml-data.ts` for tune + compare) — the same train/test contamination
+  the audit found in the rar, inherited into the mirror. Every fitter
+  already standardizes internally on the rows it is given
+  (`fitStandardizer(X)`), so the outside transform's only effect was
+  contamination: kNN distances and RBF kernels lived in a space whose
+  per-axis scale was set by full-data statistics — held-out rows
+  literally resized the kernel.
+- **The fix**: the outside z-score calls are deleted; CSV features
+  reach the fitters in raw units, exactly like the generator paths
+  always did. Generator-data responses are **bit-identical** (pinned:
+  PLS R² 0.9121 / RMSE 0.4103 / CV 0.92 ± 0.0132); CSV responses
+  change honestly — charts plot the raw column units,
+  `datasetMeta.features` drops the `(standardized)` suffix (the
+  coefficient cards keep `x̂ = standardized x`, truer than ever), and
+  every CV fold now standardizes on its own training part (per-fold
+  rigor a precomputed transform cannot express). The LEAKAGE RULE is
+  documented at the top of `ml-data.ts` for future surfaces.
+
+### Fixed — the downloadable ZIP is now build-machine-clean
+
+- The one-by-one archive scan (every text entry of the 305-entry ZIP)
+  found one leakage channel: **absolute build-machine paths**. Library
+  deprecation warnings inside the executed notebooks' committed outputs
+  printed their source as
+  `/home/z/.venv/lib/python3.12/site-packages/...`, and 20 `scratch/`
+  driver scripts carried `/home/z/...` run instructions. The scratch
+  hints are now portable (`python scratch/foo.py`), the notebook
+  outputs rewrite the site-packages prefix to the neutral
+  `site-packages/`, and `reexecute_all_notebooks_64.py` performs the
+  same rewrite automatically after every execution (the prefix computed
+  from `sysconfig`, never hardcoded). A full-archive regex for
+  `/home/<user>/` now returns zero matches.
+
+### Changed
+
+- Version carriers bumped to **1.2.44** (VERSION, pyproject,
+  `pharmaml.__version__`, web `toolkit-version.ts`); all 8 executed
+  notebooks re-executed and print 1.2.44; twins regenerated.
+
 ## [1.2.43] — 2026-10-20
 
 ### Added — `pls`: partial least squares regression, the QSAR staple the registry was missing

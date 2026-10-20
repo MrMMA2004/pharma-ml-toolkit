@@ -20,7 +20,7 @@ scratch/strip_notebook_outputs.py, NOT here.
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/build_deep_learning_notebook_63.py
+    python scratch/build_deep_learning_notebook_63.py
 """
 
 from __future__ import annotations

@@ -22,7 +22,7 @@ folder) is the point of the upgrade: one registry, one pipeline.
 | --- | --- | --- |
 | `RF.py` | `ml.build_model('random_forest')` + `train_model` (GridSearchCV, stratified split) + `evaluate_model` + `ml.persistence.save_model`; viz: `plot_confusion_matrix`, `plot_roc_curves`; the fpdf PDF report → `viz.save_pdf_report` (title + metrics, one page per table, one page per figure; `save_visual_bundle(..., pdf_report=True)`); CLI `ml train` | ✅ |
 | `SVM.py` | `ml.build_model('svm')` (probability=True path pinned by tests) | ✅ |
-| `XGboost.py` | `ml.build_model('xgboost')` (optional-gated) + LabelEncoder handling inside `make_train_test_split` | ✅ |
+| `XGboost.py` | `ml.build_model('xgboost')` (optional-gated; string class labels handled by the `_IntegerLabelClassifier` wrapper since 1.2.44 — the registry tour found xgboost was the one family refusing them) | ✅ |
 | `LightGBM.py` | `ml.build_model('lightgbm')` | ✅ |
 | `CATboost.py` | `ml.build_model('catboost')` (verbose=0) | ✅ |
 | `ADAboost.py` | `ml.build_model('adaboost')` (determinism pinned) | ✅ |
@@ -180,3 +180,25 @@ folder) is the point of the upgrade: one registry, one pipeline.
   verified against sklearn to machine epsilon (predictions 2.2e-15,
   coefficients 1.1e-15) — the first family to arrive on both sides
   on the same day, with no mirror gap.
+
+---
+
+## Notebook & playground coverage (100x-101)
+
+The second audit axis: not "does the toolkit cover the rar" but "do the
+**notebooks and playground.py** cover the **toolkit**". Full matrix in
+`docs/LEAKAGE_AUDIT.md` §E; the summary:
+
+| Surface | Coverage | Guarantee |
+| --- | --- | --- |
+| 24 registry families in `playground.py` | all 24, dynamic | the model combobox lists `list_models(task, only_available=True)` — a new family joins with zero edits (pls appeared the day it landed) |
+| 24 registry families in the notebooks | all 24 as of 1.2.44 | ML workflow §11 "the full registry tour" walks `list_models()` for both tasks and fits every available family (37 entries) on the notebook's own splits — self-updating, doubles as a full-registry smoke test |
+| 9 module groups (`chem`, `ml`, `docking`, `pharma`, `biology`, `generative`, `viz`, `utils`, `data`) | each has a dedicated workflow notebook | ml + walkthrough + tuning (ml/chem), docking, pk (pharma), cellline (biology), generative, deep learning (ml.torch) |
+| Ensemble builders (`build_stacking`, `build_voting`) | walkthrough + ml notebook | `compare_models`-adjacent cells |
+| Optional engines (xgboost / lightgbm / catboost / torch) | notebook-conditional + tour-conditional | listed honestly when absent (`requires` in the tour table), fitted when present |
+
+The 13 families that had **no** notebook demonstration before this
+round (adaboost, catboost, elastic_net_logistic, extra_trees,
+gradient_boosting, lasso, lasso_logistic, lightgbm, pls, ridge,
+ridge_classifier, svm, xgboost) are all in §11's tour now — fitted,
+scored on held-out rows, timed.

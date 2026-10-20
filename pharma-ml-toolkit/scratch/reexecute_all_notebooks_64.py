@@ -12,7 +12,7 @@ no-output twins via scratch/strip_notebook_outputs.py.
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/reexecute_all_notebooks_64.py
+    python scratch/reexecute_all_notebooks_64.py
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import sysconfig
 import time
 from pathlib import Path
 
@@ -33,6 +34,9 @@ from nbclient import NotebookClient
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
+#: This interpreter's site-packages prefix (the path library warnings
+#: print from) -- computed so the scrub carries no absolute literal.
+_SITE_PACKAGES = sysconfig.get_paths()["purelib"]
 
 NOTEBOOKS = (
     "complete_ml_workflow.ipynb",
@@ -63,6 +67,18 @@ def main() -> int:
             resources={"metadata": {"path": str(EXAMPLES)}},
         )
         client.execute()
+        # 100x-101: the executed outputs must not leak the build machine's
+        # absolute venv paths (library deprecation warnings print their
+        # source file). Rewrite the interpreter's own site-packages prefix
+        # (computed, never hardcoded) to a neutral one BEFORE writing, so
+        # the committed outputs stay portable on any machine.
+        for cell in nb.cells:
+            for output in cell.get("outputs", []):
+                if output.get("output_type") == "stream":
+                    output["text"] = [
+                        t.replace(_SITE_PACKAGES + "/", "site-packages/")
+                        for t in output.get("text", [])
+                    ]
         nbformat.write(nb, path)
 
         code_cells = [c for c in nb.cells if c.cell_type == "code"]

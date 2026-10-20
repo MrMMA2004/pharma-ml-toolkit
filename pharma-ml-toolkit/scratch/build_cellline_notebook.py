@@ -24,7 +24,7 @@ so the §2 audit has something honest to report.
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/build_cellline_notebook.py
+    python scratch/build_cellline_notebook.py
 """
 
 from __future__ import annotations

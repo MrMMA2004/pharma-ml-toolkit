@@ -267,7 +267,8 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 2022 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
+├── tests/                   # 2026 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -319,8 +320,10 @@ outputs committed (numbers *and* inline figures):
 > similarity heat-map, structures → model demo) → §3 EDA → §4 IC50→pIC50 →
 > §5 split → §6 grid-searched training → §7 evaluation (confusion, ROC) →
 > §8 multiclass → §9 regression (parity, residuals, outlier-robust Huber demo) → §10 leaderboard →
-> §11 feature importance → §12 save/load & scoring new compounds → §13
-> one-click HTML report + png/svg/pdf + csv/md/json.
+> §11 **the full registry tour** (all 24 families fitted on the same splits, held-out
+> scores, unavailable engines listed with their missing requirement — the
+> self-updating coverage guarantee) → §12 feature importance → §13 save/load &
+> scoring new compounds → §14 one-click HTML report + png/svg/pdf + csv/md/json.
 
 Open it, replace the demo file with your own CSV (and the §2 library with your
 own SMILES column), and re-run all cells. §2 needs RDKit —
@@ -1374,13 +1377,16 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (1539 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (2026 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```
 
 The suite covers: PK/PD/dosage math (against hand-computed references), unit conversion
-round-trips, ML pipeline behaviour (splits, metrics, persistence round-trip), **user-data
+round-trips, ML pipeline behaviour (splits, metrics, persistence round-trip, **the
+no-leakage guards — the split returns raw features and the fitted preprocessor's
+statistics provably come from the train rows only**; see
+`docs/LEAKAGE_AUDIT.md`), **user-data
 loading (CSV/Excel, delimiter sniffing, target auto-detection, multiclass and regression
 inference)**, **multiclass end-to-end flows (3–4 classes, scorer fallbacks, ensembles)**,
 **every plotting function / export format / HTML report path (headless Agg CI proof,

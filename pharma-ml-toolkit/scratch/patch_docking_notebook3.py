@@ -30,7 +30,7 @@ the drift-guard test.
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/patch_docking_notebook3.py
+    python scratch/patch_docking_notebook3.py
 """
 
 from __future__ import annotations

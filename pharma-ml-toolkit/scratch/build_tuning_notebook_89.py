@@ -19,7 +19,7 @@ scratch/strip_notebook_outputs.py, NOT here.
 
 Run from the toolkit root:
 
-    /home/z/.venv/bin/python scratch/build_tuning_notebook_89.py
+    python scratch/build_tuning_notebook_89.py
 """
 
 from __future__ import annotations
