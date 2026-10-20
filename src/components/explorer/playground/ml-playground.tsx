@@ -78,12 +78,13 @@ import {
   numericColumnNames,
   parseCsv,
 } from "@/lib/csv";
-import { fmtBytes, fmtNum, fmtTick } from "@/lib/format";
+import { fmtBytes, fmtNum, fmtTick, fmtDelta } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { DEFAULT_ML_CONFIG, useToolkitStore, type MlRunRecord } from "@/lib/store";
 import type {
   DatasetPreviewResponse,
+  MLCompareEntry,
   MLCompareRequest,
   MLCompareResponse,
   MLTrainResponse,
@@ -1083,6 +1084,152 @@ function HsvrTrustScatter({
   );
 }
 
+/** CV mean ± std bars — the leaderboard's VISUAL form: the exact numbers
+ *  the table tabulates, drawn as zero-axis bars (a negative CV R² reads
+ *  honestly leftwards) with a ± std whisker per fold spread. Hand-rolled
+ *  SVG in the house style of HsvrTrustScatter; deterministic like every
+ *  other card (same seed → same bars). */
+function CompareCvBars({
+  entries,
+  selectedModel,
+}: {
+  entries: MLCompareEntry[];
+  selectedModel: string;
+}) {
+  const W = 560;
+  const ROW = 26;
+  const AXIS = 22;
+  const LABEL_W = 122;
+  const PAD_R = 52;
+  const H = entries.length * ROW + AXIS;
+
+  /* Domain: every mean and every whisker end must fit; a hair of
+   * headroom so the value labels clear the frame. */
+  const ends = entries.flatMap((e) => [e.cvMean - e.cvStd, e.cvMean + e.cvStd]);
+  const lo = Math.min(0, ...ends) - 0.015;
+  let hi = Math.max(0.02, ...ends) + 0.015;
+  if (hi - lo < 0.05) hi = lo + 0.05;
+  const x = (v: number) => LABEL_W + ((v - lo) / (hi - lo)) * (W - LABEL_W - PAD_R);
+  const zeroX = x(0);
+
+  const span = hi - lo;
+  const step = span <= 0.25 ? 0.05 : span <= 0.5 ? 0.1 : span <= 1.05 ? 0.25 : 0.5;
+  const ticks: number[] = [];
+  for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) {
+    ticks.push(Math.round(t * 100) / 100);
+  }
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="h-auto w-full"
+      role="img"
+      aria-label={`Comparison bars: ${entries.length} families ranked by CV ${entries[0]?.metricName ?? "score"} mean, whiskers show ± std across the shared folds`}
+    >
+      {/* Gridlines + axis ticks */}
+      {ticks.map((t) => (
+        <g key={`t-${t}`}>
+          <line
+            x1={x(t)}
+            y1={4}
+            x2={x(t)}
+            y2={entries.length * ROW + 4}
+            stroke={t === 0 ? "currentColor" : "currentColor"}
+            strokeOpacity={t === 0 ? 0.35 : 0.12}
+            strokeDasharray={t === 0 ? undefined : "2 3"}
+          />
+          <text
+            x={x(t)}
+            y={H - 6}
+            textAnchor="middle"
+            className="fill-muted-foreground font-mono text-[9px] tabular-nums"
+          >
+            {t.toFixed(2)}
+          </text>
+        </g>
+      ))}
+      {entries.map((e, i) => {
+        const label = specOf("regression", e.model)?.label ?? specOf("classification", e.model)?.label ?? e.model;
+        const short = label.length > 17 ? `${label.slice(0, 16)}…` : label;
+        const y = i * ROW + 7;
+        const midY = y + 6;
+        const barX = Math.min(zeroX, x(e.cvMean));
+        const barW = Math.max(1.5, Math.abs(x(e.cvMean) - zeroX));
+        const whiskA = x(e.cvMean - e.cvStd);
+        const whiskB = x(e.cvMean + e.cvStd);
+        const isSelected = e.model === selectedModel;
+        const isWinner = e.rank === 1;
+        return (
+          <g key={e.model}>
+            <text
+              x={LABEL_W - 10}
+              y={midY + 3.5}
+              textAnchor="end"
+              className={`text-[10px] ${isSelected ? "fill-foreground font-semibold" : "fill-muted-foreground"}`}
+            >
+              {isWinner ? "★ " : ""}
+              {short}
+            </text>
+            {/* The bar: from the zero axis; negative means extend left. */}
+            <rect
+              x={barX}
+              y={y}
+              width={barW}
+              height={12}
+              rx={2}
+              className={cn(
+                "transition-[fill] duration-300",
+                isWinner
+                  ? "fill-primary"
+                  : isSelected
+                    ? "fill-primary/55"
+                    : "fill-muted-foreground/30",
+              )}
+            />
+            {/* ± std whisker with end caps — the fold spread the ± column
+             *  tabulates, drawn over the bar's mean end. */}
+            <line
+              x1={whiskA}
+              y1={midY}
+              x2={whiskB}
+              y2={midY}
+              stroke="currentColor"
+              strokeOpacity={0.55}
+              strokeWidth={1.5}
+            />
+            <line
+              x1={whiskA}
+              y1={midY - 4}
+              x2={whiskA}
+              y2={midY + 4}
+              stroke="currentColor"
+              strokeOpacity={0.55}
+              strokeWidth={1.5}
+            />
+            <line
+              x1={whiskB}
+              y1={midY - 4}
+              x2={whiskB}
+              y2={midY + 4}
+              stroke="currentColor"
+              strokeOpacity={0.55}
+              strokeWidth={1.5}
+            />
+            <text
+              x={e.cvMean >= 0 ? Math.max(whiskB, x(e.cvMean)) + 5 : Math.min(whiskA, x(e.cvMean)) - 5}
+              y={midY + 3.5}
+              textAnchor={e.cvMean >= 0 ? "start" : "end"}
+              className="fill-foreground/80 font-mono text-[9px] tabular-nums"
+            >
+              {fmtNum(e.cvMean, 3)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function MlPlayground() {
   /* Experiment setup + results live in the store, so the whole playground
    * (config, trained model, dataset preview) survives tab switches. */
@@ -1653,10 +1800,7 @@ export function MlPlayground() {
               : `${payload.trials.length} trials · best ${payload.objective} ${fmtNum(
                   payload.best.cvScore,
                   4
-                )} (${payload.best.improvement >= 0 ? "+" : ""}${fmtNum(
-                  payload.best.improvement,
-                  4
-                )} vs defaults)`,
+                )} (${fmtDelta(payload.best.improvement)} vs defaults)`,
         }
       );
     } catch (err) {
@@ -2731,6 +2875,20 @@ export function MlPlayground() {
               </Button>
             </CardHeader>
             <CardContent className="p-0">
+              {/* The visual form of the leaderboard — bars before the
+               *  table: the eye gets the ranking, the table the digits. */}
+              <div className="px-4 pb-2 pt-3">
+                <CompareCvBars
+                  entries={compareResult.entries}
+                  selectedModel={modelSel}
+                />
+                <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                  Bars: CV {compareResult.objective} mean from the zero axis — a negative
+                  bar reads honestly leftwards. Whisker: ± std across the{" "}
+                  {compareResult.cvK} shared folds (the same folds every family
+                  scored, so bar edges are comparable). ★ marks the winner.
+                </p>
+              </div>
               <div className="thin-scrollbar overflow-x-auto">
                 <Table className="data-table">
                   <TableHeader>
@@ -2778,11 +2936,10 @@ export function MlPlayground() {
                             {fmtNum(entry.testMetric, 4)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {/* toFixed, never exponential: a near-tie reads as
-                             *  -0.0000 ("essentially tied"), not -7.3e-6. */}
-                            {entry.rank === 1
-                              ? "—"
-                              : `${entry.delta >= 0 ? "+" : ""}${entry.delta.toFixed(4)}`}
+                            {/* fmtDelta: fixed decimals, never exponential —
+                             *  a near-tie reads as -0.0000 ("essentially
+                             *  tied"), not -7.3e-6. */}
+                            {entry.rank === 1 ? "—" : fmtDelta(entry.delta)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {entry.fitMs < 10
@@ -3716,8 +3873,7 @@ export function MlPlayground() {
                         : "text-destructive"
                     }`}
                   >
-                    {tuneResult.best.improvement >= 0 ? "+" : ""}
-                    {fmtNum(tuneResult.best.improvement, 4)}
+                    {fmtDelta(tuneResult.best.improvement)}
                   </p>
                 </div>
               </div>

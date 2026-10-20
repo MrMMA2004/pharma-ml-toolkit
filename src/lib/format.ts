@@ -26,6 +26,17 @@ export function fmtBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+/** Format a signed metric delta (gain vs baseline, Δ vs #1) with FIXED
+ *  decimals — never scientific notation: fmtNum's <1e-4 branch would
+ *  render a +0.0000231 improvement as "+2.31e-5", while the honest
+ *  display is "+0.0000" ("essentially tied"). Sign always explicit. */
+export function fmtDelta(value: number | null | undefined, digits = 4): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  if (!Number.isFinite(value)) return value > 0 ? "+∞" : "-∞";
+  const d = Math.min(Math.max(Math.round(digits), 0), 20);
+  return `${value >= 0 ? "+" : "-"}${Math.abs(value).toFixed(d)}`;
+}
+
 /** Integer with thousands separators. */
 export function fmtInt(value: number): string {
   return Math.round(value).toLocaleString("en-US");

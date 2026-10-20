@@ -32,8 +32,11 @@ named `pharma-ml-toolkit-v<version>.zip`.
   always been.
 - Tests: 4 new cases in `tests/test_ml_pipeline.py` (registry wiring,
   seeded factories + Friedman defaults, fit quality on a nonlinear
-  target, aliases + param passthrough + the `gbm`→lightgbm guard) and
-  the registry-count guard moved 22 → 23 in `tests/test_neural.py`.
+  target, aliases + param passthrough + the `gbm`→lightgbm guard), the
+  registry-count guard moved 22 → 23 in `tests/test_neural.py`, and a
+  `compare_models` determinism pin (two identical calls → byte-identical
+  metric columns and ordering; only `fit_time_s` — wall-clock — may
+  differ; the same contract the web route pins for its JS mirror).
 
 ## [1.2.41] — 2026-10-20
 

@@ -369,6 +369,27 @@ class TestTraining:
         assert board[metric_col].notna().all()
         assert board[metric_col].is_monotonic_decreasing
 
+    def test_compare_models_deterministic_with_gradient_boosting(
+        self, regression_frame
+    ) -> None:
+        # Two identical compare_models calls must produce byte-identical
+        # leaderboards (the same determinism contract the web
+        # /api/ml/compare route pins for its JS mirror); the 23rd
+        # family rides along so it stays covered by the guard.
+        X, y = split_features_target(regression_frame, "pIC50", drop_cols=["SMILES"])
+        models = ["gradient_boosting", "ridge", "extra_trees"]
+        first = compare_models(X, y, "regression", models=models, cv=3)
+        second = compare_models(X, y, "regression", models=models, cv=3)
+        # fit_time_s is wall-clock (honest non-determinism); the metric
+        # columns and the row ordering must be byte-identical.
+        pd.testing.assert_frame_equal(
+            first.drop(columns=["fit_time_s"]),
+            second.drop(columns=["fit_time_s"]),
+        )
+        metric_col = next(c for c in first.columns if c.endswith("_mean"))
+        assert first[metric_col].is_monotonic_decreasing
+        assert set(first["model"]) == set(models)
+
     def test_compare_rejects_unavailable_model(self, classification_frame) -> None:
         X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
         with pytest.raises(ModelError):
