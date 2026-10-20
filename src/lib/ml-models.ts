@@ -10,6 +10,8 @@ import {
   fitAdaBoostRegressor,
   fitClassificationTree,
   fitElasticNet,
+  fitExtraTreesClassifier,
+  fitExtraTreesRegressor,
   fitGaussianNB,
   fitGradientBoostingRegressor,
   fitHuberRegression,
@@ -35,9 +37,9 @@ import {
 /* Registry                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Regression models: 3 legacy (byte-compatible) + 11 (incl. hsvr, huber,
- *  ada_boost, svm_rbf — the web mirror of the library's adaboost /
- *  huber_regression / svm families). */
+/** Regression models: 3 legacy (byte-compatible) + 12 (incl. hsvr, huber,
+ *  ada_boost, svm_rbf, extra_trees — the web mirror of the library's
+ *  adaboost / huber_regression / svm / extra_trees families). */
 export const REGRESSION_MODELS = [
   "linear",
   "polynomial",
@@ -48,6 +50,7 @@ export const REGRESSION_MODELS = [
   "knn",
   "decision_tree",
   "random_forest",
+  "extra_trees",
   "gradient_boosting",
   "ada_boost",
   "svm_rbf",
@@ -55,13 +58,15 @@ export const REGRESSION_MODELS = [
   "hsvr",
 ] as const;
 
-/** Classification models: legacy logistic + 9 (incl. ada_boost and the
- *  RBF-kernel SVM — the library's adaboost / svm families). */
+/** Classification models: legacy logistic + 10 (incl. ada_boost,
+ *  extra_trees and the RBF-kernel SVM — the library's adaboost /
+ *  extra_trees / svm families). */
 export const CLASSIFICATION_MODELS = [
   "logistic",
   "knn",
   "decision_tree",
   "random_forest",
+  "extra_trees",
   "ada_boost",
   "gaussian_nb",
   "svm_linear",
@@ -287,6 +292,21 @@ export function fitRegressionModel(
         },
       };
     }
+    case "extra_trees": {
+      const m = fitExtraTreesRegressor(XTrain, yTrain, {
+        nEstimators: hp.nEstimators,
+        maxDepth: hp.maxDepth,
+        rand,
+      });
+      return {
+        predict: (xs) => m.predict(xs),
+        featureImportance: {
+          features: featureNames,
+          importance: m.importance,
+          measure: "variance",
+        },
+      };
+    }
     case "gradient_boosting": {
       const m = fitGradientBoostingRegressor(XTrain, yTrain, {
         rounds: hp.rounds,
@@ -431,6 +451,21 @@ export function fitClassificationModel(
         modelParams: { varSmoothing: 1e-9 },
       };
     }
+    case "extra_trees": {
+      const m = fitExtraTreesClassifier(XTrain, labelsTrain, {
+        nEstimators: hp.nEstimators,
+        maxDepth: hp.maxDepth,
+        rand,
+      });
+      return {
+        predict01: (x, y) => m.predict([x, y]),
+        featureImportance: {
+          features: featureNames,
+          importance: m.importance,
+          measure: "gini",
+        },
+      };
+    }
     case "ada_boost": {
       const m = fitAdaBoostClassifier(XTrain, labelsTrain, {
         nEstimators: hp.nEstimators,
@@ -510,6 +545,10 @@ export const REG_TUNE_SPACES: Record<string, TuneChoice[]> = {
     { key: "nEstimators", values: [10, 25, 50, 100, 150] },
     { key: "maxDepth", values: [3, 4, 6, 8, 10] },
   ],
+  extra_trees: [
+    { key: "nEstimators", values: [10, 25, 50, 100, 150] },
+    { key: "maxDepth", values: [3, 4, 6, 8, 10] },
+  ],
   gradient_boosting: [
     { key: "rounds", values: [20, 50, 100, 150] },
     { key: "learningRate", values: [0.02, 0.05, 0.1, 0.2, 0.3] },
@@ -539,6 +578,10 @@ export const CLS_TUNE_SPACES: Record<string, TuneChoice[]> = {
   knn: [{ key: "k", values: [1, 3, 5, 7, 9, 11, 15, 21] }],
   decision_tree: [{ key: "maxDepth", values: [2, 3, 4, 5, 6, 7, 8, 10] }],
   random_forest: [
+    { key: "nEstimators", values: [10, 25, 50, 100] },
+    { key: "maxDepth", values: [3, 4, 6, 8, 10] },
+  ],
+  extra_trees: [
     { key: "nEstimators", values: [10, 25, 50, 100] },
     { key: "maxDepth", values: [3, 4, 6, 8, 10] },
   ],
@@ -572,6 +615,7 @@ export const CLS_TUNE_SPACES: Record<string, TuneChoice[]> = {
 export const TUNE_RESOURCES: Record<string, { key: string; label: string }> = {
   mlp: { key: "epochs", label: "epochs" },
   random_forest: { key: "nEstimators", label: "estimators" },
+  extra_trees: { key: "nEstimators", label: "estimators" },
   gradient_boosting: { key: "rounds", label: "boosting rounds" },
   ada_boost: { key: "nEstimators", label: "boosting rounds" },
 };

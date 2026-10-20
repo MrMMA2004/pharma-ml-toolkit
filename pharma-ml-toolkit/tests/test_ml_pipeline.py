@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
 from sklearn.linear_model import HuberRegressor, LogisticRegression
 from sklearn.metrics import roc_auc_score
 
@@ -115,6 +116,40 @@ class TestRegistry:
         assert resolve_model_name("huber") == "huber_regression"
         with pytest.raises(ModelError):
             build_model("huber_regression", "classification")
+
+    def test_extra_trees_registered_and_available(self) -> None:
+        spec = MODEL_REGISTRY["extra_trees"]
+        assert spec.task == "both"
+        assert spec.available  # plain scikit-learn -- no optional backend
+        assert set(spec.param_grid) == {"n_estimators", "max_depth", "min_samples_split"}
+        assert "random" in spec.notes  # the extremely-randomized signature
+
+    def test_extra_trees_factories_seed_and_skip_bootstrap(self) -> None:
+        # sklearn's ExtraTrees defaults: random thresholds on the FULL
+        # sample (bootstrap=False) -- the deliberate contrast with RF's
+        # bagged resamples.
+        cls = build_model("extra_trees", "classification")
+        reg = build_model("extra_trees", "regression")
+        assert isinstance(cls, ExtraTreesClassifier)
+        assert isinstance(reg, ExtraTreesRegressor)
+        assert cls.random_state == 42 and reg.random_state == 42
+        assert cls.bootstrap is False and reg.bootstrap is False
+
+    def test_extra_trees_fit_beats_bagging_plateau(self) -> None:
+        rng = np.random.default_rng(0)
+        X = rng.normal(size=(80, 4))
+        # A high-frequency target: bagged RF's averaged, depth-capped
+        # trees underfit; ET's random thresholds carve finer leaves.
+        y = np.sin(6.0 * X[:, 0]) + 0.1 * rng.normal(size=80)
+        reg = build_model("extra_trees", "regression", params={"n_estimators": 200})
+        reg.fit(X, y)
+        assert reg.score(X, y) > 0.9
+
+    def test_extra_trees_aliases_and_param_passthrough(self) -> None:
+        for alias in ("et", "extratrees", "ert", "extremely_randomized_trees"):
+            assert resolve_model_name(alias) == "extra_trees"
+        model = build_model("ET", "classification", params={"n_estimators": 10})
+        assert model.n_estimators == 10
 
     def test_penalized_logistic_classifiers_registered(self) -> None:
         # The rar's Classification/Lasso.py and Classification/Elastic

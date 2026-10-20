@@ -34,6 +34,8 @@ from typing import Any, Literal
 from sklearn.ensemble import (
     AdaBoostClassifier,
     AdaBoostRegressor,
+    ExtraTreesClassifier,
+    ExtraTreesRegressor,
     RandomForestClassifier,
     RandomForestRegressor,
     StackingClassifier,
@@ -109,6 +111,14 @@ def _rf_cls() -> RandomForestClassifier:
 
 def _rf_reg() -> RandomForestRegressor:
     return RandomForestRegressor(random_state=42, n_jobs=-1)
+
+
+def _et_cls() -> ExtraTreesClassifier:
+    return ExtraTreesClassifier(random_state=42, n_jobs=-1)
+
+
+def _et_reg() -> ExtraTreesRegressor:
+    return ExtraTreesRegressor(random_state=42, n_jobs=-1)
 
 
 def _svm_cls() -> SVC:
@@ -300,6 +310,21 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         },
         notes="Bagged ensemble (upgrades RF.py)",
     ),
+    "extra_trees": ModelSpec(
+        name="extra_trees",
+        task="both",
+        factory=None,
+        param_grid={
+            "n_estimators": [100, 200, 300],
+            "max_depth": [None, 10, 20],
+            "min_samples_split": [2, 5, 10],
+        },
+        notes=(
+            "extremely randomized trees — random thresholds on the full "
+            "sample (bootstrap=False): the extra variance reduction when "
+            "bagging alone plateaus"
+        ),
+    ),
     "svm": ModelSpec(
         name="svm",
         task="both",
@@ -406,6 +431,10 @@ MODEL_ALIASES: dict[str, str] = {
     "logreg": "logistic_regression",
     "rf": "random_forest",
     "randomforest": "random_forest",
+    "et": "extra_trees",
+    "extratrees": "extra_trees",
+    "ert": "extra_trees",
+    "extremely_randomized_trees": "extra_trees",
     "dt": "decision_tree",
     "tree": "decision_tree",
     "gbm": "lightgbm",
@@ -478,6 +507,10 @@ _TASK_FACTORIES: dict[str, dict[str, Callable[[], Any]]] = {
     "random_forest": {
         "classification": _rf_cls,
         "regression": _rf_reg,
+    },
+    "extra_trees": {
+        "classification": _et_cls,
+        "regression": _et_reg,
     },
     "svm": {
         "classification": _svm_cls,

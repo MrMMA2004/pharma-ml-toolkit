@@ -239,6 +239,17 @@ const REG_MODELS: ModelSpec[] = [
     ],
   },
   {
+    id: "extra_trees",
+    label: "Extra trees (ET)",
+    hint: "Extremely randomized trees — random thresholds, full sample (no bagging)",
+    group: "trees",
+    kind: "importance",
+    hp: [
+      { key: "nEstimators", label: "trees", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "maxDepth", label: "max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 },
+    ],
+  },
+  {
     id: "gradient_boosting",
     label: "Gradient boosting",
     hint: "Depth-3 stumps fit the residuals, learning-rate scaled",
@@ -353,6 +364,17 @@ const CLS_MODELS: ModelSpec[] = [
     ],
   },
   {
+    id: "extra_trees",
+    label: "Extra trees (ET)",
+    hint: "Extremely randomized trees — random thresholds, full sample (no bagging)",
+    group: "trees",
+    kind: "importance",
+    hp: [
+      { key: "nEstimators", label: "trees", control: "slider", unit: "n", min: 5, max: 200, step: 5 },
+      { key: "maxDepth", label: "max depth", control: "slider", unit: "levels", min: 1, max: 12, step: 1 },
+    ],
+  },
+  {
     id: "ada_boost",
     label: "AdaBoost (SAMME)",
     hint: "α-weighted vote of gini stumps — misclassified rows boosted",
@@ -431,6 +453,7 @@ const TUNEABLE_REG = new Set([
   "knn",
   "decision_tree",
   "random_forest",
+  "extra_trees",
   "gradient_boosting",
   "ada_boost",
   "svm_rbf",
@@ -442,6 +465,7 @@ const TUNEABLE_CLS = new Set([
   "knn",
   "decision_tree",
   "random_forest",
+  "extra_trees",
   "ada_boost",
   "svm_linear",
   "svm_rbf",
@@ -460,6 +484,8 @@ const MODEL_NOTES: Record<string, string> = {
   knn: "No closed-form coefficients — predictions come from the stored train points; k is echoed instead.",
   decision_tree: "CART splits chosen by impurity reduction; the bars are each feature's share of the total reduction.",
   random_forest: "Seeded bootstrap aggregation of depth-capped CART trees; importances are per-tree means, renormalized.",
+  extra_trees:
+    "Extremely randomized trees: every tree sees the full standardized sample (no bootstrap resamples — sklearn's bootstrap=False), and every split draws one random threshold per feature, keeping the best-gain candidate. The extra threshold randomness carves finer leaves than bagging alone; importances are per-tree means, renormalized.",
   gradient_boosting: "Each round fits a depth-3 tree to the current residuals, shrunk by the learning rate.",
   huber:
     "Iteratively reweighted least squares: residuals within ε keep weight 1, the tails fade as ε/|r| — the final sweep's robust core / linear tail split is echoed in the parameters.",
@@ -500,12 +526,13 @@ const HP_LABELS: Record<string, string> = {
 /** Models whose grid contains a resource hyperparameter — the slots
  *  successive halving can promote rung by rung (mirrors the server's
  *  TUNE_RESOURCES registry). */
-const HYPERBAND_MODELS = new Set(["mlp", "random_forest", "gradient_boosting", "ada_boost"]);
+const HYPERBAND_MODELS = new Set(["mlp", "random_forest", "extra_trees", "gradient_boosting", "ada_boost"]);
 
 /** The resource slot per Hyperband-capable model (mirrors TUNE_RESOURCES). */
 const RESOURCE_SPECS: Record<string, { key: string; label: string }> = {
   mlp: { key: "epochs", label: "epochs" },
   random_forest: { key: "nEstimators", label: "estimators" },
+  extra_trees: { key: "nEstimators", label: "estimators" },
   gradient_boosting: { key: "rounds", label: "boosting rounds" },
   ada_boost: { key: "nEstimators", label: "boosting rounds" },
 };
@@ -2784,7 +2811,7 @@ export function MlPlayground() {
               <p className="text-sm font-medium">No results yet</p>
               <p className="max-w-sm text-xs text-muted-foreground">
                 Pick a data source — the seeded server-side generator or your own CSV — pick one of
-                the 14 regression or 9 classification models, then press{" "}
+                the 15 regression or 10 classification models, then press{" "}
                 <strong className="font-semibold text-foreground">Train model</strong>. Every
                 run is deterministic: same seed, same data, same numbers.
               </p>

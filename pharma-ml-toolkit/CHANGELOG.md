@@ -10,6 +10,39 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.41] — 2026-10-22
+
+### Added — `extra_trees`: extremely randomized trees, the classic tree family the rar never shipped
+
+- **A 22nd registry family** (`extra_trees`, aliases `et` / `ert` /
+  `extratrees` / `extremely_randomized_trees`): sklearn's
+  `ExtraTreesClassifier` / `ExtraTreesRegressor` with
+  `random_state=42, n_jobs=-1` — random thresholds on the FULL sample
+  (`bootstrap=False`), classification **and** regression, the same
+  registry/tuning/persistence pipeline as every other family
+  (`train_model('et', ...)` works through the alias). Param grid
+  mirrors the forest's (`n_estimators` / `max_depth` /
+  `min_samples_split`). It is deliberately NOT an "upgrade" of any rar
+  file — the coverage matrix marks it as the one classic ensemble the
+  original collection was missing; bagging (RF), boosting (AdaBoost)
+  and randomization (ET) are now all three shippable from one
+  registry.
+- **The web playground mirrors it on both tabs**: a 15th regression
+  and 10th classification family, fitter included in
+  `src/lib/ml-math.ts` (seeded `randomVarianceSplit` /
+  `randomGiniSplit`: one uniform random threshold per feature, best-gain
+  candidate wins — the honest mirror of sklearn's RandomSplitter),
+  `extra_trees` tune grids in both RandomSearch spaces, and an
+  Hyperband resource slot (`nEstimators`, "estimators") so successive
+  halving can promote ET rung by rung. Verified live: reg R² 0.904 /
+  CV 0.918 on the toy seed 7, cls acc 0.76 / CV 0.817; Hyperband
+  ladder 10→50→150 trees.
+- Tests: 4 new cases (registry wiring, bootstrap=False signature,
+  fit quality, aliases + param passthrough) and the registry-count guards
+  moved 21→22 (20 without torch); the suite is now 2,013 passed + 2
+  skipped. Coverage matrix summary updated (22 registry models); README
+  registry list mentions the family and its aliases.
+
 ## [1.2.40] — 2026-10-21
 
 ### Added — the verified-stack `requirements.txt` (install every library at the version the QA chain actually runs)

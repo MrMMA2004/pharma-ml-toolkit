@@ -671,8 +671,11 @@ A fully **executed Jupyter notebook** covering all four domains lives at
 top-to-bottom to see training metrics, NCA results and docking tables).
 
 Registry models: `logistic_regression`, `ridge_classifier`, `svm`, `knn`, `decision_tree`,
-`random_forest`, `adaboost`, `ann`, `lasso`, `ridge`, `elastic_net`, `linear_regression`,
-`huber_regression` (outlier-robust), `hsvr` (**hierarchical SVR** — k-means local
+`random_forest`, `extra_trees` (**extremely randomized trees** — random thresholds on the
+full sample, `bootstrap=False`: the extra variance reduction when bagging alone plateaus;
+aliases `et` / `ert`), `adaboost`, `ann`, `lasso`, `ridge`, `elastic_net`,
+`linear_regression`, `huber_regression` (outlier-robust), `hsvr` (**hierarchical SVR** —
+k-means local
 specialists blended with a global SVR, regression only), plus `xgboost` / `lightgbm` /
 `catboost` when the optional packages are installed — and two **deep-learning families**:
 `dnn` (deep feed-forward MLP) and `dnn_residual` (residual net with learned skip

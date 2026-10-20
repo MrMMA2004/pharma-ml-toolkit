@@ -151,5 +151,11 @@ folder) is the point of the upgrade: one registry, one pipeline.
   MGLTools bridge; plus the empty placeholders, which contain nothing)
   — each with the reason stated in its row.
 - The near-duplicate explosion (≈30 model scripts × 2 tasks + folder
-  copies) collapses into **20 registry models + 2 ensemble builders**
+  copies) collapses into **22 registry models + 2 ensemble builders**
   with one training/evaluation/persistence pipeline.
+- **One family beyond the rar arrived in 1.2.41**: `extra_trees` —
+  extremely randomized trees (random thresholds on the full sample,
+  `bootstrap=False`), classification **and** regression, aliases
+  `et` / `ert` / `extratrees`. It has no rar original; it is the
+  classic tree ensemble the rar never shipped, and it slots into the
+  same registry/tuning/persistence pipeline unchanged.

@@ -808,6 +808,158 @@ export function fitRandomForestRegressor(
 }
 
 /* ------------------------------------------------------------------ */
+/* Extremely randomized trees (regression)                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Extra-trees split: ONE random threshold per feature, drawn uniformly
+ * between that feature's node min and max (sklearn's RandomSplitter with
+ * max_features = all features); the best-gain candidate wins. Returns
+ * null when no positive-gain candidate exists — the leaf case.
+ */
+function randomVarianceSplit(
+  X: number[][],
+  y: number[],
+  idx: number[],
+  rand: () => number
+): { feature: number; threshold: number; gain: number } | null {
+  const n = idx.length;
+  const k = X[0]?.length ?? 0;
+  let sumAll = 0;
+  let sqAll = 0;
+  for (const i of idx) {
+    const v = y[i] ?? 0;
+    sumAll += v;
+    sqAll += v * v;
+  }
+  const sseP = sqAll - (sumAll * sumAll) / n;
+  let bestFeature = -1;
+  let bestThreshold = 0;
+  let bestGain = 1e-12; // strictly positive improvement required
+  for (let j = 0; j < k; j++) {
+    let minJ = Infinity;
+    let maxJ = -Infinity;
+    for (const i of idx) {
+      const v = X[i]![j] ?? 0;
+      if (v < minJ) minJ = v;
+      if (v > maxJ) maxJ = v;
+    }
+    if (maxJ <= minJ) continue; // constant feature: no threshold to draw
+    const threshold = minJ + rand() * (maxJ - minJ);
+    let sumL = 0;
+    let sqL = 0;
+    let nL = 0;
+    for (const i of idx) {
+      if ((X[i]![j] ?? 0) <= threshold) {
+        const v = y[i] ?? 0;
+        sumL += v;
+        sqL += v * v;
+        nL++;
+      }
+    }
+    const nR = n - nL;
+    if (nL === 0 || nR === 0) continue; // degenerate draw for this feature
+    const sseL = sqL - (sumL * sumL) / nL;
+    const sumR = sumAll - sumL;
+    const sqR = sqAll - sqL;
+    const sseR = sqR - (sumR * sumR) / nR;
+    const gain = sseP - sseL - sseR;
+    if (gain > bestGain) {
+      bestGain = gain;
+      bestFeature = j;
+      bestThreshold = threshold;
+    }
+  }
+  return bestFeature >= 0
+    ? { feature: bestFeature, threshold: bestThreshold, gain: bestGain }
+    : null;
+}
+
+/** Extra-trees regression subtree over `idx` (z-space rows): full-sample
+ *  nodes, random-threshold splits, gains[j] accumulating the sklearn
+ *  feature-importance convention (SSE reduction / N per split). */
+function buildExtraRegressionNode(
+  X: number[][],
+  y: number[],
+  idx: number[],
+  depth: number,
+  maxDepth: number,
+  gains: number[],
+  rand: () => number
+): CartNode {
+  const { sse, mean: value } = sseOf(y, idx);
+  const node: CartNode = { n: idx.length };
+  if (depth >= maxDepth || idx.length < 2 || sse <= 1e-12) {
+    node.value = value;
+    return node;
+  }
+  const split = randomVarianceSplit(X, y, idx, rand);
+  if (!split) {
+    node.value = value;
+    return node;
+  }
+  const leftIdx: number[] = [];
+  const rightIdx: number[] = [];
+  for (const i of idx) {
+    if ((X[i]![split.feature] ?? 0) <= split.threshold) leftIdx.push(i);
+    else rightIdx.push(i);
+  }
+  if (leftIdx.length === 0 || rightIdx.length === 0) {
+    node.value = value;
+    return node;
+  }
+  gains[split.feature] = (gains[split.feature] ?? 0) + split.gain / y.length;
+  node.feature = split.feature;
+  node.threshold = split.threshold;
+  node.left = buildExtraRegressionNode(X, y, leftIdx, depth + 1, maxDepth, gains, rand);
+  node.right = buildExtraRegressionNode(X, y, rightIdx, depth + 1, maxDepth, gains, rand);
+  return node;
+}
+
+/**
+ * Extremely randomized trees regression: seeded ensemble of depth-capped
+ * trees over the FULL standardized train set — no bootstrap resamples
+ * (sklearn's `ExtraTreesRegressor(bootstrap=False)` default); every split
+ * draws one random threshold per feature and keeps the best-gain
+ * candidate. Importance = mean of per-tree normalized importances,
+ * renormalized (the same convention as the forest). This is the web
+ * mirror of the library's `extra_trees` regression family.
+ */
+export function fitExtraTreesRegressor(
+  X: number[][],
+  y: number[],
+  opts: { nEstimators?: number; maxDepth?: number; rand: () => number } = { rand: mulberry32(0) }
+): RowRegressor & { importance: number[] } {
+  const nEstimators = opts.nEstimators ?? 50;
+  const maxDepth = opts.maxDepth ?? 6;
+  const rand = opts.rand;
+  const k = X[0]?.length ?? 0;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+  const idx = Array.from({ length: X.length }, (_, i) => i); // full sample, no bootstrap
+  const trees: CartNode[] = [];
+  const perTreeImportance: number[][] = [];
+  for (let t = 0; t < nEstimators; t++) {
+    const gains = new Array<number>(k).fill(0);
+    trees.push(buildExtraRegressionNode(Z, y, idx, 0, maxDepth, gains, rand));
+    perTreeImportance.push(normalizeImportance(gains));
+  }
+  const importance = normalizeImportance(
+    perTreeImportance.reduce(
+      (acc, imp) => acc.map((v, j) => v + (imp[j] ?? 0)),
+      new Array<number>(k).fill(0)
+    )
+  );
+  return {
+    importance,
+    predict(xsRaw: number[]) {
+      const z = std.transform(xsRaw);
+      return mean(trees.map((root) => predictTreeNode(root, z)));
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Gradient boosting (regression)                                      */
 /* ------------------------------------------------------------------ */
 
@@ -1376,6 +1528,154 @@ export function fitRandomForestClassifier(
     for (let i = 0; i < n; i++) boot.push(Math.floor(rand() * n));
     const gains = new Array<number>(k).fill(0);
     trees.push(buildClassificationNode(Z, labels, boot, 0, maxDepth, gains));
+    perTreeImportance.push(normalizeImportance(gains));
+  }
+  const importance = normalizeImportance(
+    perTreeImportance.reduce(
+      (acc, imp) => acc.map((v, j) => v + (imp[j] ?? 0)),
+      new Array<number>(k).fill(0)
+    )
+  );
+  const proba = (xsRaw: number[]): number => {
+    const z = std.transform(xsRaw);
+    return mean(trees.map((root) => predictTreeNode(root, z)));
+  };
+  return {
+    importance,
+    predictProba: proba,
+    predict(xsRaw: number[]) {
+      return proba(xsRaw) >= 0.5 ? 1 : 0;
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Extremely randomized trees (classification)                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Extra-trees gini split: ONE random threshold per feature, drawn
+ * uniformly between that feature's node min and max; the best-gain
+ * candidate wins (gain = n·gini_p − n_l·gini_l − n_r·gini_r). The
+ * classification twin of randomVarianceSplit.
+ */
+function randomGiniSplit(
+  X: number[][],
+  labels: number[],
+  idx: number[],
+  rand: () => number
+): { feature: number; threshold: number; gain: number } | null {
+  const n = idx.length;
+  const k = X[0]?.length ?? 0;
+  const giniP = giniOf(labels, idx);
+  let onesAll = 0;
+  for (const i of idx) if ((labels[i] ?? 0) === 1) onesAll++;
+  let bestFeature = -1;
+  let bestThreshold = 0;
+  let bestGain = 1e-12;
+  for (let j = 0; j < k; j++) {
+    let minJ = Infinity;
+    let maxJ = -Infinity;
+    for (const i of idx) {
+      const v = X[i]![j] ?? 0;
+      if (v < minJ) minJ = v;
+      if (v > maxJ) maxJ = v;
+    }
+    if (maxJ <= minJ) continue; // constant feature: no threshold to draw
+    const threshold = minJ + rand() * (maxJ - minJ);
+    let onesL = 0;
+    let nL = 0;
+    for (const i of idx) {
+      if ((X[i]![j] ?? 0) <= threshold) {
+        nL++;
+        if ((labels[i] ?? 0) === 1) onesL++;
+      }
+    }
+    const nR = n - nL;
+    if (nL === 0 || nR === 0) continue; // degenerate draw for this feature
+    const pL = onesL / nL;
+    const giniL = 1 - pL * pL - (1 - pL) * (1 - pL);
+    const onesR = onesAll - onesL;
+    const pR = onesR / nR;
+    const giniR = 1 - pR * pR - (1 - pR) * (1 - pR);
+    const gain = n * giniP - nL * giniL - nR * giniR;
+    if (gain > bestGain) {
+      bestGain = gain;
+      bestFeature = j;
+      bestThreshold = threshold;
+    }
+  }
+  return bestFeature >= 0
+    ? { feature: bestFeature, threshold: bestThreshold, gain: bestGain }
+    : null;
+}
+
+/** Extra-trees classification subtree: full-sample rows, random-threshold
+ *  gini splits, gains[j] accumulating gain / N per split. */
+function buildExtraClassificationNode(
+  X: number[][],
+  labels: number[],
+  idx: number[],
+  depth: number,
+  maxDepth: number,
+  gains: number[],
+  rand: () => number
+): CartNode {
+  const ones = countOnes(labels, idx);
+  const value = ones / idx.length;
+  const node: CartNode = { n: idx.length };
+  if (depth >= maxDepth || idx.length < 2 || value === 0 || value === 1) {
+    node.value = value;
+    return node;
+  }
+  const split = randomGiniSplit(X, labels, idx, rand);
+  if (!split) {
+    node.value = value;
+    return node;
+  }
+  const leftIdx: number[] = [];
+  const rightIdx: number[] = [];
+  for (const i of idx) {
+    if ((X[i]![split.feature] ?? 0) <= split.threshold) leftIdx.push(i);
+    else rightIdx.push(i);
+  }
+  if (leftIdx.length === 0 || rightIdx.length === 0) {
+    node.value = value;
+    return node;
+  }
+  gains[split.feature] = (gains[split.feature] ?? 0) + split.gain / labels.length;
+  node.feature = split.feature;
+  node.threshold = split.threshold;
+  node.left = buildExtraClassificationNode(X, labels, leftIdx, depth + 1, maxDepth, gains, rand);
+  node.right = buildExtraClassificationNode(X, labels, rightIdx, depth + 1, maxDepth, gains, rand);
+  return node;
+}
+
+/**
+ * Extremely randomized trees classifier: seeded ensemble of depth-capped
+ * gini trees over the FULL standardized train set (no bootstrap —
+ * sklearn's `ExtraTreesClassifier(bootstrap=False)` default), each split
+ * drawing one random threshold per feature and keeping the best-gain
+ * candidate; probability = mean of per-tree leaf class fractions. The web
+ * mirror of the library's `extra_trees` classification family.
+ */
+export function fitExtraTreesClassifier(
+  X: number[][],
+  labels: number[],
+  opts: { nEstimators?: number; maxDepth?: number; rand: () => number } = { rand: mulberry32(0) }
+): RowClassifier & { importance: number[] } {
+  const nEstimators = opts.nEstimators ?? 50;
+  const maxDepth = opts.maxDepth ?? 6;
+  const rand = opts.rand;
+  const k = X[0]?.length ?? 0;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+  const idx = Array.from({ length: X.length }, (_, i) => i); // full sample, no bootstrap
+  const trees: CartNode[] = [];
+  const perTreeImportance: number[][] = [];
+  for (let t = 0; t < nEstimators; t++) {
+    const gains = new Array<number>(k).fill(0);
+    trees.push(buildExtraClassificationNode(Z, labels, idx, 0, maxDepth, gains, rand));
     perTreeImportance.push(normalizeImportance(gains));
   }
   const importance = normalizeImportance(
