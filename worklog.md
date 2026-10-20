@@ -4283,3 +4283,64 @@ Stage Summary:
 - Deltas: +lib/ml-data.ts (~170), +api/ml/compare/route.ts (~250), toolkit-types +~80, ml-playground +~200 (state/effect/handlers + chips + leaderboard card); tune route −~90 (the extraction); LOC pin 113,971 → 113,977.
 - Open for 100x-97+: honest candidates: (a) the compare leaderboard could grow a bar chart (CV mean ± std bars) — the metrics cards have chart precedents; (b) a library-side test pinning compare_models parity numbers (the web numbers are deterministic — seed 7 reg winner huber 0.9247 CV); (c) the desktop playground (playground.py) already has compare via the library — no gap; (d) the tune card's improvement near-zero display has the same fmtNum exponential quirk the Δ column just lost (cosmetic, one-line fix if it ever bites).
 - ZIP version: 1.2.41 (pharma-ml-toolkit-v1.2.41.zip, 303 entries, 3,925,659 B).
+
+---
+Task ID: 100x-97
+Agent: Main orchestrator (Z.ai Code)
+Task: The user's ask, restated: add the remaining good ML models (FOCUS ON THE ZIP = the library side), review/troubleshoot, several consecutive improvement runs. Round 1: close the gradient_boosting mirror gap.
+
+Work Log:
+- VERIFICATION per the iron rule: worklog tail re-read — the log ended at 100x-96 (the compare leaderboard); git had one UUID-message commit cc50929 = the 100x-96 worklog append only. Dev server 200; venv INTACT this time (numpy 1.26.4 / sklearn 1.5.2 / rdkit importable — no repair needed).
+- THE AUDIT (the "good models left" question, ZIP side): library registry listed 22 families; cross-checked against the web ml-models registry → the ONE classic family the web speaks but the library does not: **gradient_boosting** (the web has had its JS fitter, tune grids and Hyperband resource since early rounds; the library's boosting set was adaboost + the three engineered optional backends only). Other candidates (PLS, Gaussian Process) are missing on BOTH sides — noted as future honest candidates, not this round.
+- LIBRARY: models.py — GradientBoostingClassifier/Regressor imports, _gb_cls/_gb_reg factories (random_state=42 only — n_jobs is not a GBM param, fit is sequential by construction), the gradient_boosting registry entry (task="both", grid n_estimators [100,200,300] / learning_rate [0.05,0.1] / max_depth [2,3,4], the Friedman note), _TASK_FACTORIES wiring, aliases gb/gradientboosting/friedman_gbm/sk_gbm — 'gbm' stays lightgbm's (long-standing alias, guarded by test).
+- TESTS: 4 new cases in test_ml_pipeline.py (registry wiring, seeded factories + depth-3/0.1 Friedman defaults, nonlinear fit quality, aliases + passthrough + gbm→lightgbm guard); test_neural.py registry guards 22→23 (test_registry_has_twenty_three_entries) AND the hidden third guard the round initially missed: test_unavailable_simulation_flags_and_excludes expected 20 available-without-torch → now 21 (caught by the full run, fixed).
+- DOCS: README registry list gains the Friedman entry; COVERAGE.md "22 registry models" → 23 + the second beyond-the-rar bullet; CHANGELOG [1.2.42] (also corrected 1.2.41's wrong 2026-10-22 date to 2026-10-20 — every commit that round was the 20th); VERSION/pyproject/__init__/toolkit-version.ts bumped 1.2.41 → 1.2.42.
+- API SMOKE (deterministic): train cls cv 0.9156, reg/tune via the 'gb' alias, compare_models vs RF/ET all green; the full pipeline (train_model/tune=True/compare_models) verified.
+- VERSION CHAIN (the standing steps, all honoured): notebooks re-executed in the FOREGROUND (182 s, dev server survived — the r93 lesson) — all 8 print 1.2.42; ruff "All checks passed!"; mypy "Success: no issues found in 63 source files"; LOOP-mode pytest 2017 passed + 2 skipped in 173 s; playground --self-test green; bun run lint exit 0; tsc clean for project files.
+- WEB PINS: overview StatChip 22→23 ("21 sklearn + 2 PyTorch deep families"), test counts 2013→2017 (page.tsx, download-panel ×3, overview ×3), README ×2, LOC 113,977→114,121 after tree ?fresh=1.
+- THE REVIEW FIND the E2E caught: overview's ML domain card still said "16-entry model registry" — stale for MANY rounds (pre-dating even the r95 "18→22" fix, a different StatChip). Fixed to "23-entry model registry: sklearn core + optional XGBoost / LightGBM / CatBoost + 2 PyTorch deep families".
+- ZIP + E2E: download → 303 entries (270 files + 33 dirs), 3,927,131 B, testzip OK, 8/8 content pins (VERSION/pyproject/__init__ 1.2.42, CHANGELOG [1.2.42], models.py gradient_boosting, the new test, COVERAGE 23, README Friedman) + every executed notebook prints 1.2.42. agent-browser: hero pins live; ML tab → Gradient boosting (keyboard path: combobox → 9× ArrowDown → Enter — the covered-ref lesson holds) → Train → R² 0.8946 / CV 0.9103 ± 0.014 / "Depth-3 stumps fit the residuals, learning-rate scaled"; Compare 4 models → leaderboard Huber 0.92 / Linear 0.92 (Δ -0.0000) / RF 0.9139 / GB 0.9103 (selected badge, CV exactly matching the Train route — the same-folds guarantee); Download tab → v1.2.42 / 270 / 2017; ZERO console errors; mobile 360×740 no overflow, footer pushed (gapBelow=0). Screenshots: home-r97.png, home-r97-mobile.png.
+- GIT: 7e79365.
+
+Stage Summary:
+- The 23rd registry family ships in the ZIP: Friedman's classic GBM, classification + regression, aliases gb/friedman_gbm/sk_gbm, grid-searchable, CLI-complete (pharmaml ml train --model gb verified end-to-end later in 100x-99). The library↔web boosting mirror is now symmetric: adaptive + gradient + three engineered implementations on both sides. Plus one genuinely stale stat killed (the 16-entry bullet).
+- Baselines: loop 2013→2017 passed (+2 skipped), tree 270/114,121, ZIP 303 entries/3,927,131 B, version 1.2.42.
+- Open for 100x-98: (a) compare-leaderboard CV bars (the r96 open item); (b) the tune-card fmtNum exponential quirk (the r96 cosmetic); (c) a library-side compare determinism pin.
+
+---
+Task ID: 100x-98
+Agent: Main orchestrator (Z.ai Code)
+Task: Round 2 of the streak — review/troubleshoot + the two r96 open items: the leaderboard's visual form (CV mean ± std bars) and the fmtNum exponential quirk; plus a library-side compare determinism pin.
+
+Work Log:
+- fmtDelta HELPER (src/lib/format.ts): a signed fixed-decimal delta formatter that NEVER switches to scientific notation (fmtNum's |x|<1e-4 branch renders +0.0000231 as "+2.31e-5"; the honest display is "+0.0000"). Wired at all THREE improvement sites: the tune card's "Gain vs defaults" (was fmtNum), the tune toast description (was fmtNum), and the compare table's Δ column (was an inline toFixed — now unified on the helper).
+- CompareCvBars COMPONENT (ml-playground.tsx, ~145 lines, the HsvrTrustScatter hand-rolled-SVG precedent): the leaderboard's visual form ABOVE the table — zero-axis horizontal bars (a negative CV R² reads honestly leftwards), ± std whisker with end caps per family (the fold spread the ± column tabulates), ★ on the winner, the selected family at fill-primary/55 with a semibold label, nice tick step selection (0.05/0.1/0.25/0.5 by span), rank order = table order, full aria-label + a caption explaining bars/whisker/zero-axis/★.
+- DISPLAY ARTIFACT LEARNED (worth recording): the Bash tool output can EAT "[m"/"[h" sequences (ANSI reset/home) — sed/rg showed `odelSel`/`const p, setHp]` and looked like file corruption, but od -c proved the bytes intact. Always hex-dump before "fixing" phantom corruption; lint/tsc/dev-server agreement is the truth.
+- E2E GEOMETRY VERIFIED programmatically: regression bars 368.7/368.7/366.2 px (0.92/0.92/0.9142 — the near-tie honest picture the zero axis shows; a truncated axis would lie), 3 whiskers, ticks 0.00–0.75, labels "★ Huber (robust)"/"Linear regression"/values 0.92; classification bars 350/346/318 px (0.87/0.86/0.79 — properly differentiated), "Logistic regress…" truncation working. fmtDelta live: Tune Logistic → Best 0.8067 / Defaults 0.7333 / Gain "+0.0167". Mobile 360×740: svg scales to 294 px, no overflow.
+- LIBRARY: tests/test_ml_pipeline.py +test_compare_models_deterministic_with_gradient_boosting — two identical compare_models calls → assert_frame_equal after dropping fit_time_s (wall-clock honest non-determinism; the FIRST version asserting the whole frame failed on exactly that column — the test taught the contract), monotonic-decreasing metric, set membership incl. the 23rd family. CHANGELOG 1.2.42 Tests bullet extended with the determinism pin.
+- NO VERSION BUMP (the 100x-88 web+test-only convention — zero library behaviour change): ZIP re-verified 303 entries / 3,927,502 B / testzip OK / the determinism test + CHANGELOG bullet in the archive / VERSION still 1.2.42.
+- NUMBERS: LOOP-mode 2018 passed + 2 skipped (177 s); pins 2017→2018 in page.tsx, download-panel ×3, overview ×3, README ×2; tree ?fresh=1 → 270 files / 114,145 LOC (CHANGELOG+test growth) → fallback pins synced; ruff/mypy/lint/tsc all green; console zero errors.
+- GIT: b09ede7.
+
+Stage Summary:
+- The r96 open list is now EMPTY: the leaderboard shows the geometry its table only tabulated, every delta display in the ML playground speaks fixed decimals, and the library pins compare determinism the way the web route does. Round 2 produced a feature, a fix, and a guard.
+- Open for 100x-99: final verification round — the desktop playground + CLI gradient_boosting pickup, the download-page install story re-verify, worklog, cron.
+
+---
+Task ID: 100x-99
+Agent: Main orchestrator (Z.ai Code)
+Task: Round 3 of the streak — the closing verification round: every surface that should speak gradient_boosting does, the download story intact, pins final, worklog + cron.
+
+Work Log:
+- DESKTOP PLAYGROUND: playground.py lists models dynamically via list_models(task) — gradient_boosting appears in BOTH tasks (19 regression / 17 classification options), zero Tk code touched. The dynamic-listing design (r94/r95) paid off again.
+- CLI: `pharmaml --version` → 1.2.42; `pharmaml models list` shows gradient_boosting (both/yes/the Friedman note); `pharmaml ml train --data … --target y --model gb` end-to-end: resolves the alias, GridSearch picks {learning_rate 0.1, max_depth 2, n_estimators 300}, held-out r2 0.9648, persists artifacts/gradient_boosting_regression.joblib (artifact cleaned up after; git clean).
+- DOWNLOAD PAGE (the standing user ask): the pinned-install story verified intact live — "pip install -r requirements.txt" leads step 2, the 7 layered copy strips (core + chem/docking/boosting/deep-CPU/reports/dev), the "Every library at the verified version" section, the numpy 1.26.4 ↔ mordred coupling note; test_requirements.py guards ran green inside the 2018.
+- FINAL PINS: hero verified LIVE — 1.2.42 / 114,145 LOC / 2,018 tests / 23 registry models / the fixed "23-entry" domain bullet; console zero errors; lint exit 0.
+- CRON: the standing webDevReview jobs remain server-side disabled ('exec limits exceeded'); a fresh job created per the mandate.
+
+Stage Summary:
+- The three-round streak is complete: round 1 shipped the 23rd registry family in the ZIP (the mirror-gap closure the user's "focus on the zip file" pointed at), round 2 gave the leaderboard its visual form + killed the last exponential-notation quirk + pinned library determinism, round 3 verified every surface (web, desktop, CLI, ZIP, download page) speaks the same story.
+- Final baselines: version 1.2.42, 23 registry families (21 sklearn + 2 PyTorch), 2018 passed + 2 skipped, tree 270 files / 114,145 LOC, ZIP 303 entries / 3,927,502 B, dev server healthy, git clean after commit.
+- Open for 100x-100+ (honest candidates, in priority order): (a) PLS regression — the QSAR staple (both sides missing; the classic for descriptor-block collinearity); (b) Gaussian Process regression with uncertainty — the active-learning workhorse (both sides missing; pairs with the existing HSVR trust story); (c) the web tune card could grow per-trial scatter for RandomSearch (Hyperband has its ladder, RandomSearch has none); (d) the venv-reset trap and the silent-background-notebook-death trap both stood down this session — the recipes are in 100x-93's entry if they return.
+
+ZIP version: 1.2.42 (pharma-ml-toolkit-v1.2.42.zip, 303 entries, 3,927,502 B).
