@@ -115,6 +115,7 @@ after adding new public functions.
 | `load_model` | function | Load a model bundle saved by :func:`save_model`. |
 | `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
+| `predict_with_uncertainty` | function | Predictive mean and per-row standard deviation of a GP model. |
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
@@ -292,6 +293,7 @@ after adding new public functions.
 | `plot_dose_accumulation` | function | One-compartment superposition of an intermittent IV regimen. |
 | `plot_energy_distribution` | function | Histogram of per-ligand best binding energies (kcal/mol). |
 | `plot_feature_importance` | function | Top-N feature importances as horizontal bars. |
+| `plot_gp_uncertainty` | function | Parity scatter with ``± z·σ`` error bars — the GP's honest readout. |
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |

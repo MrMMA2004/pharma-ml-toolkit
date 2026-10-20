@@ -184,7 +184,7 @@ const DOMAINS: DomainCardSpec[] = [
     tagline: "pharmaml.ml — QSAR end-to-end",
     bullets: [
       "Cross-validated training with optional grid-search tuning",
-      "24-entry model registry: sklearn core + optional XGBoost / LightGBM / CatBoost + 2 PyTorch deep families",
+      "25-entry model registry: sklearn core + optional XGBoost / LightGBM / CatBoost + 2 PyTorch deep families",
       "Metrics, comparison leaderboards & joblib persistence",
     ],
     apis: ["train_model()", "compare_models()", "list_models()"],
@@ -285,7 +285,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "2101 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage regression guards)",
+    after: "2116 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage regression guards)",
   },
   {
     aspect: "Interface",
@@ -344,7 +344,7 @@ export function Overview() {
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
   const fileCount = stats ? fmtInt(stats.files) : "270";
-  const loc = stats ? fmtInt(stats.totalLines) : "115,563";
+  const loc = stats ? fmtInt(stats.totalLines) : "116,193";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -430,17 +430,17 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="2101"
-                countTo={2101}
+                value="2116"
+                countTo={2116}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
               <StatChip
                 icon={Brain}
-                value="24"
-                countTo={24}
+                value="25"
+                countTo={25}
                 label="registry models"
-                hint="22 sklearn + 2 PyTorch deep families"
+                hint="23 sklearn + 2 PyTorch deep families"
               />
             </motion.div>
 

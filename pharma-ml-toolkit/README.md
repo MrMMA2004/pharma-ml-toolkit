@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (2022 tests).
+exceptions, input validation, and pytest coverage** (2116 tests).
 
 ---
 
@@ -320,7 +320,7 @@ outputs committed (numbers *and* inline figures):
 > similarity heat-map, structures → model demo) → §3 EDA → §4 IC50→pIC50 →
 > §5 split → §6 grid-searched training → §7 evaluation (confusion, ROC) →
 > §8 multiclass → §9 regression (parity, residuals, outlier-robust Huber demo) → §10 leaderboard →
-> §11 **the full registry tour** (all 24 families fitted on the same splits, held-out
+> §11 **the full registry tour** (all 25 families fitted on the same splits, held-out
 > scores, unavailable engines listed with their missing requirement — the
 > self-updating coverage guarantee) → §12 feature importance → §13 save/load &
 > scoring new compounds → §14 one-click HTML report + png/svg/pdf + csv/md/json.
@@ -683,8 +683,11 @@ remains lightgbm's short name), `ann`, `lasso`, `ridge`, `elastic_net`,
 `linear_regression`, `huber_regression` (outlier-robust), `pls` (**partial least squares
 regression** — NIPALS latent directions that maximize X–y covariance, the QSAR staple for
 wide, collinear descriptor blocks with few observations; regression only, aliases
-`plsr` / `partial_least_squares`), `hsvr` (**hierarchical SVR** —
-k-means local
+`plsr` / `partial_least_squares`), `gaussian_process` (**kriging** — a
+kernel-likelihood surrogate whose every prediction carries its own σ
+(`predict_with_uncertainty`), the active-learning workhorse for scarce
+observations; regression only, aliases `gp` / `gpr` / `kriging`), `hsvr`
+(**hierarchical SVR** — k-means local
 specialists blended with a global SVR, regression only), plus `xgboost` / `lightgbm` /
 `catboost` when the optional packages are installed — and two **deep-learning families**:
 `dnn` (deep feed-forward MLP) and `dnn_residual` (residual net with learned skip

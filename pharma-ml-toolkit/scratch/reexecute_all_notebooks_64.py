@@ -72,13 +72,21 @@ def main() -> int:
         # source file). Rewrite the interpreter's own site-packages prefix
         # (computed, never hardcoded) to a neutral one BEFORE writing, so
         # the committed outputs stay portable on any machine.
+        # 102 fix: nbclient delivers stream text as EITHER a str (one
+        # iopub message) or a list of str chunks — iterating a bare str
+        # would char-split it (the 1.2.45 regression), so normalise both
+        # forms to the nbformat convention: a list of line chunks.
         for cell in nb.cells:
             for output in cell.get("outputs", []):
                 if output.get("output_type") == "stream":
-                    output["text"] = [
+                    raw = output.get("text", "")
+                    if isinstance(raw, str):
+                        raw = [raw]
+                    joined = "".join(
                         t.replace(_SITE_PACKAGES + "/", "site-packages/")
-                        for t in output.get("text", [])
-                    ]
+                        for t in raw
+                    )
+                    output["text"] = joined.splitlines(keepends=True)
         nbformat.write(nb, path)
 
         code_cells = [c for c in nb.cells if c.cell_type == "code"]

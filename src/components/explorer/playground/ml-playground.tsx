@@ -35,6 +35,7 @@ import {
   ErrorBar,
   Legend,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
@@ -93,6 +94,7 @@ import type {
   MLTrainRequest,
   MLTuneRequest,
   MLTuneResponse,
+  MLTuneTrial,
 } from "@/lib/toolkit-types";
 
 type Task = "regression" | "classification";
@@ -1302,6 +1304,263 @@ function CompareCvBars({
         );
       })}
     </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* RandomSearch per-trial trajectory                                   */
+/* ------------------------------------------------------------------ */
+
+/** One row of the search-trajectory chart: the trial in draw order, its
+ *  CV score, the best score seen up to that trial (the step line), the
+ *  delta versus the default configuration, and the human-readable
+ *  parameter assignment for the tooltip. */
+interface TrajectoryPoint {
+  trial: number;
+  score: number;
+  bestSoFar: number;
+  delta: number;
+  isWinner: boolean;
+  config: string;
+}
+
+/** Custom tooltip for the search trajectory — trial, score, best-so-far,
+ *  Δ versus defaults and the configuration in one compact card (the
+ *  default ComposedChart tooltip would list the raw series keys). */
+function TrajectoryTooltip({
+  active,
+  payload,
+  objective,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: TrajectoryPoint }>;
+  objective: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0]?.payload;
+  if (!p) return null;
+  return (
+    <div className="rounded-md border bg-background/95 px-2.5 py-1.5 text-xs shadow-sm">
+      <p className="font-mono tabular-nums">
+        trial {p.trial}
+        {p.isWinner ? " · best" : ""}
+      </p>
+      <p className="font-mono tabular-nums">
+        {objective} = {fmtNum(p.score, 4)}
+      </p>
+      <p className="font-mono tabular-nums text-muted-foreground">
+        best so far = {fmtNum(p.bestSoFar, 4)}
+      </p>
+      <p
+        className={`font-mono tabular-nums ${
+          p.delta >= 0
+            ? "text-emerald-600 dark:text-emerald-400"
+            : "text-destructive"
+        }`}
+      >
+        Δ defaults {p.delta >= 0 ? "+" : ""}
+        {fmtNum(p.delta, 4)}
+      </p>
+      <p className="max-w-56 truncate font-mono text-[10px] text-muted-foreground">
+        {p.config}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The RandomSearch per-trial scatter — the trajectory view the leaderboard
+ * table cannot show: every drawn configuration as a dot (x = trial number
+ * in draw order, y = its mean CV score), the running-best step line in
+ * emerald (how fast the sampling converges on good configurations), the
+ * overall winner emphasised, and the default-configuration score as a
+ * dashed amber reference line (the honest bar every trial is judged
+ * against). Deterministic like every chart in the house: no animation.
+ */
+
+/** Module-scope pure builder for the trajectory rows — the running best
+ *  is a fold over the draw-ordered trials.  Kept OUT of the component
+ *  body so the React compiler never sees an accumulator reassigned
+ *  during render (react-hooks/immutability). */
+function buildTrajectoryPoints(
+  trials: MLTuneTrial[],
+  baselineScore: number
+): TrajectoryPoint[] {
+  const ordered = [...trials].sort((a, b) => a.trial - b.trial);
+  const winner = ordered.reduce(
+    (best, t) => (t.score > best.score ? t : best),
+    ordered[0]!
+  );
+  let running = -Infinity;
+  return ordered.map((t) => {
+    running = Math.max(running, t.score);
+    return {
+      trial: t.trial,
+      score: t.score,
+      bestSoFar: running,
+      delta: t.score - baselineScore,
+      isWinner: t.trial === winner.trial,
+      config:
+        Object.entries(t.params)
+          .map(([k, v]) => `${HP_LABELS[k] ?? k} ${fmtHp(v)}`)
+          .join(" · ") || "defaults",
+    };
+  });
+}
+
+function RandomSearchTrajectory({
+  trials,
+  baselineScore,
+  objective,
+}: {
+  trials: MLTuneTrial[];
+  baselineScore: number;
+  objective: string;
+}) {
+  const points = buildTrajectoryPoints(trials, baselineScore);
+  const winnerPoint = points.find((p) => p.isWinner);
+
+  /* Y extents across both series plus the baseline, padded 8% so the
+   * reference line and the step line never kiss the frame. */
+  const scores = points.map((p) => p.score);
+  let yMin = Math.min(...scores, baselineScore);
+  let yMax = Math.max(...scores, baselineScore);
+  if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) {
+    yMin = 0;
+    yMax = 1;
+  }
+  if (yMax - yMin < 1e-9) {
+    yMin -= 0.05;
+    yMax += 0.05;
+  }
+  const yPad = (yMax - yMin) * 0.08;
+  yMin -= yPad;
+  yMax += yPad;
+  const maxTrial = points.length ? points[points.length - 1]!.trial : 1;
+
+  return (
+    <div className="w-full">
+      <div className="h-56 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={points} margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+            <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+            <XAxis
+              type="number"
+              dataKey="trial"
+              domain={[1, Math.max(1, maxTrial)]}
+              allowDuplicatedCategory={false}
+              tick={CHART.axisTick}
+              tickLine={false}
+              axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+              label={{
+                value: "trial (draw order)",
+                position: "insideBottomRight",
+                offset: -2,
+                fill: "#78716c",
+                fontSize: 11,
+              }}
+            />
+            <YAxis
+              type="number"
+              dataKey="score"
+              width={52}
+              domain={[yMin, yMax]}
+              tick={CHART.axisTick}
+              tickFormatter={(v: number) => fmtNum(v, 2)}
+              tickLine={false}
+              axisLine={false}
+              label={{
+                value: `CV ${objective}`,
+                angle: -90,
+                position: "insideLeft",
+                offset: 16,
+                fill: "#78716c",
+                fontSize: 11,
+              }}
+            />
+            <Tooltip
+              cursor={{ strokeDasharray: "3 3" }}
+              content={<TrajectoryTooltip objective={objective} />}
+            />
+            <ReferenceLine
+              y={baselineScore}
+              stroke={CHART.amber}
+              strokeDasharray="6 3"
+              strokeWidth={1.5}
+              label={{
+                value: "defaults",
+                position: "insideTopLeft",
+                fill: CHART.amber,
+                fontSize: 10,
+              }}
+            />
+            <Scatter
+              name="trial score"
+              dataKey="score"
+              fill={CHART.stone}
+              fillOpacity={0.7}
+              isAnimationActive={false}
+            />
+            {winnerPoint ? (
+              <Scatter
+                name="winner"
+                data={[winnerPoint]}
+                dataKey="score"
+                fill={CHART.emerald}
+                fillOpacity={0.95}
+                isAnimationActive={false}
+              />
+            ) : null}
+            <Line
+              name="best so far"
+              dataKey="bestSoFar"
+              type="stepAfter"
+              stroke={CHART.emeraldDark}
+              strokeWidth={2}
+              dot={false}
+              activeDot={false}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span
+            className="size-2 rounded-full"
+            style={{ backgroundColor: CHART.stone, opacity: 0.7 }}
+            aria-hidden
+          />
+          trial score
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="size-2 rounded-full"
+            style={{ backgroundColor: CHART.emerald }}
+            aria-hidden
+          />
+          winner
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="inline-block h-0.5 w-4"
+            style={{ backgroundColor: CHART.emeraldDark }}
+            aria-hidden
+          />
+          best so far
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="inline-block h-0.5 w-4"
+            style={{
+              backgroundImage: `repeating-linear-gradient(to right, ${CHART.amber} 0 4px, transparent 4px 7px)`,
+            }}
+            aria-hidden
+          />
+          defaults CV
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -3655,7 +3914,6 @@ export function MlPlayground() {
                                 strokeWidth={1.2}
                                 stroke={CHART.emerald}
                                 strokeOpacity={0.65}
-                                isAnimationActive={false}
                               />
                             ) : null}
                           </Scatter>
@@ -4219,6 +4477,23 @@ export function MlPlayground() {
                   </p>
                 </div>
               </div>
+
+              {/* RandomSearch: the per-trial trajectory scatter — every drawn
+                  configuration as a dot, the running-best step line, and the
+                  defaults CV as the dashed reference bar. */}
+              {tuneResult.searcher === "random" ? (
+                <div className="space-y-1.5">
+                  <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <TrendingUp className="size-3" aria-hidden />
+                    Search trajectory — every trial, draw order
+                  </p>
+                  <RandomSearchTrajectory
+                    trials={tuneResult.trials}
+                    baselineScore={tuneResult.baseline.score}
+                    objective={tuneResult.objective}
+                  />
+                </div>
+              ) : null}
 
               {/* Hyperband: the resource ladder + budget economics strip. */}
               {tuneResult.searcher === "hyperband" && tuneResult.hyperband ? (

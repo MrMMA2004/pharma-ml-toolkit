@@ -15,7 +15,7 @@ from sklearn.ensemble import (
     GradientBoostingClassifier,
     GradientBoostingRegressor,
 )
-from sklearn.gaussian_process.kernels import Matern, RBF, WhiteKernel
+from sklearn.gaussian_process.kernels import RBF, Matern, WhiteKernel
 from sklearn.linear_model import HuberRegressor, LogisticRegression
 from sklearn.metrics import roc_auc_score
 

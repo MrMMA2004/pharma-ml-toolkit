@@ -10,6 +10,77 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.45] — 2026-10-20
+
+### Added — the 25th family ships with its uncertainty: gaussian_process, VIP readout, the search trajectory
+
+- **`gaussian_process` (kriging) — the active-learning workhorse, both
+  sides on the same day.** Library: `ConstantKernel·RBF + WhiteKernel`
+  start kernel, hyperparameters tuned by marginal likelihood at fit
+  time (one deterministic optimiser run, `n_restarts_optimizer=0`,
+  `normalize_y=True`), `param_grid` offering the Matérn ν=1.5 and
+  RationalQuadratic alternatives, aliases `gp` / `gpr` / `kriging`,
+  regression-only by contract (the classification request fails with
+  the house `ModelError`). **`predict_with_uncertainty`**
+  (`pharmaml.ml.evaluation`) — the mean **and a per-row σ** for the GP
+  (and any estimator whose `predict` accepts `return_std=True`); σ
+  grows away from the training data, the honest extrapolation readout
+  no point estimator can give. **`plot_gp_uncertainty`** (`pharmaml.viz`)
+  — the parity scatter with ±1.96σ error bars and the band-coverage
+  annotation; the desktop playground routes GP runs to it
+  automatically. Web: `fitGaussianProcess` in `ml-math.ts` — the
+  train-set standardisation, a hand-rolled Cholesky solve, the
+  posterior mean and σ **with the observation-noise floor**
+  (`Var(y*) = Var(f*) + σn²`), the log marginal likelihood, and a
+  deterministic mini LML grid search when the request leaves the
+  kernel hyperparameters unset (the mirror of sklearn's
+  marginal-likelihood tuning); the train response gains a `gp` block
+  (tuned `lengthScale`/`signalStd`/`noiseStd`, `logMarginalLikelihood`,
+  `nSupport`, `kernelTuned`, `coverage95`, `medianSigma`); the fit
+  chart becomes an **uncertainty band** (stacked-area ±1.96σ, custom
+  tooltip), multivariate runs get ŷ ± 1.96σ whiskers on the parity
+  chart. **Numerical gate vs sklearn** (fixed kernel, same spaces):
+  predictions Δ 8.1e-10, σ Δ 4.8e-10, LML Δ 4.9e-8 — all within
+  sklearn's default `alpha=1e-10` jitter (`scratch/verify_gp_parity.ts`
+  + `.py`; the direct-numpy posterior agrees with the web fitter to
+  1e-15). 14 new tests (`TestGaussianProcessFamily` — registry wiring,
+  aliases, the classification guard, determinism, σ-grows-away-from-data,
+  coverage calibration, non-GP rejection; `TestGaussianProcessUncertaintyPlot`
+  — the viz block).
+- **VIP scores surface** — the classic QSAR readout: the PLS fitter
+  has computed VIP (mean-square-1 convention, VIP > 1 = influential
+  descriptor) since 1.2.43, but the train route dropped them. The
+  response now carries `vip { features, values, threshold: 1 }` and
+  the importance card renders every descriptor's VIP bar with the
+  **VIP > 1 threshold line** and influential/weak colouring.
+- **RandomSearch per-trial trajectory** (the tune panel's missing
+  visual): every drawn configuration as a dot (x = trial number in
+  draw order, y = its mean CV score), the **running-best step line**
+  in emerald (how fast the sampling converges), the winner emphasised,
+  and the default-configuration CV as a dashed amber reference line —
+  the honest bar every trial is judged against. Custom tooltip: trial,
+  score, best-so-far, Δ defaults, the configuration. Hyperband keeps
+  its ladder; RandomSearch finally has its form.
+- **§11 registry-tour cumulative budget** — the ML workflow's tour
+  gains a `cum fit_s` running column and one `(total)` row, with the
+  economics print: the tour's 13.5 s fit budget, what a 5-fold CV
+  sweep of the same families would spend (~68 s), and the pointer to
+  the tuning notebook's Hyperband ladder as the machinery that cuts
+  such multi-config budgets. The tour itself grew to **38 registry
+  entries** (gaussian_process joined with zero edits — the
+  self-updating guarantee holding for the third release running).
+
+### Fixed
+
+- Registry count guards caught up with the 25th family
+  (`test_neural.py`: 24→25 entries, torch-hidden available count
+  22→23) — they were the honest tripwire that flagged the interrupted
+  landing.
+- Two recharts typing drifts in the playground: the trajectory step
+  line uses `type="stepAfter"` (this recharts version's prop), and the
+  GP parity `ErrorBar` drops `isAnimationActive` (not in this
+  version's typings).
+
 ## [1.2.44] — 2026-10-20
 
 ### Added — the data-leakage audit: guards, docs, and the registry tour
@@ -107,8 +178,8 @@ named `pharma-ml-toolkit-v<version>.zip`.
   found one leakage channel: **absolute build-machine paths**. Library
   deprecation warnings inside the executed notebooks' committed outputs
   printed their source as
-  `/home/z/.venv/lib/python3.12/site-packages/...`, and 20 `scratch/`
-  driver scripts carried `/home/z/...` run instructions. The scratch
+  `~/.venv/lib/python3.12/site-packages/...`, and 20 `scratch/`
+  driver scripts carried `~/...` run instructions. The scratch
   hints are now portable (`python scratch/foo.py`), the notebook
   outputs rewrite the site-packages prefix to the neutral
   `site-packages/`, and `reexecute_all_notebooks_64.py` performs the
