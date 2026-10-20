@@ -4242,3 +4242,44 @@ Stage Summary:
 - Deltas: models.py +~40, ml-math.ts +~210 (2 splitters, 2 builders, 2 fitters), ml-models.ts +~40, ml-playground.tsx +~35; tests +4 (2013 passed + 2 skipped); tree 270/113,971; ZIP 303 entries / 3,925,458 B; version 1.2.41.
 - Open for 100x-95 (the review/troubleshoot run the user asked for): (a) pin `extend-exclude = ["scratch"]` in pyproject [tool.ruff] so bare `ruff check .` is green (200 scratch errors today); (b) the 33 excluded-dirs/allowed-exts contract in toolkit-fs.ts vs a real review pass over the train/tune routes for drift; (c) standing steps after any version bump: foreground notebook re-run, QA chain, tree ?fresh=1 sync, ZIP verify, agent-browser E2E.
 - ZIP version: 1.2.41 (pharma-ml-toolkit-v1.2.41.zip, 303 entries, 3,925,458 B).
+
+---
+Task ID: 100x-95
+Agent: Main orchestrator (Z.ai Code)
+Task: Review the current codebase and implementation, troubleshoot potential issues — round 2 of the streak.
+
+Work Log:
+- Pinned `extend-exclude = ["scratch"]` in pyproject [tool.ruff]: bare `ruff check .` had been reporting ~200 pre-existing probe-history findings and hiding the signal (the green convention was `--exclude scratch`); the plain command is now green by default.
+- FOUND + FIXED a real drift bug: the Hyperband "no resource hyperparameter" roster was hard-coded in THREE places (tune route 400-message, playground tune-error path, playground static hint under the Tune card) and had drifted behind the registry TWICE (ada_boost landed in r93, extra_trees in r94 — the message still said "mlp, random_forest or gradient_boosting"). All three now generate from TUNE_RESOURCES / RESOURCE_SPECS (+ the model lists for human labels) via a shared hyperbandRoster() helper — structurally impossible to drift again. Verified live: knn+Hyperband now lists "MLP (1 hidden layer) (epochs), Random forest (estimators), Extra trees (ET) (estimators), Gradient boosting (boosting rounds), AdaBoost (R2) (boosting rounds)".
+- FOUND + FIXED a stale stat pin: overview.tsx StatChip said "18 registry models / 16 classical + 2 PyTorch deep" — stale since the hsvr/dnn_residual rounds; now "22 / 20 sklearn + 2 PyTorch deep families" (verified live in the browser).
+- Review sweep otherwise CLEAN: every tune-grid value satisfies the train route's zod bounds (all 24 spaces cross-checked); the RandomSearch sampler has no infinite-loop path (exhaustive when budget ≥ space; Hyperband's bracket sampler guards nonResourceSize ≤ 1); docs INDEX regenerates byte-identical; the desktop playground lists extra_trees dynamically (list_models-driven combobox); extra_trees API determinism pinned (two identical requests → identical R² 0.9143920808497257 / CV 0.9141953535170726); Hyperband E2E re-verified post-refactor (ladder 10/50/150, "budget 1,300 of a naive 2,700 estimators 52% saved", resource: estimators).
+- QA: lint exit 0, tsc clean for project files, zero console/page errors in the browser, dev log clean.
+- GIT: bff0f40.
+
+Stage Summary:
+- Two genuine defects killed (three-copy roster drift, stale registry-models stat) + one tooling-convention pin (bare ruff green). The review round produced real fixes, not just checks.
+- agent-browser lesson refined: Radix option refs can be COVERED at their click point (the click lands one row off or on a sibling); scrollIntoView the combobox BEFORE opening, then click the option ref; keyboard (ArrowDown×n + Enter) is the reliable fallback; Escape re-renders refs — always re-snapshot.
+- Open for 100x-96: the compare_models web mirror (the identified next feature) or further polish.
+- ZIP version: 1.2.41 (pharma-ml-toolkit-v1.2.41.zip, 303 entries).
+
+---
+Task ID: 100x-96
+Agent: Main orchestrator (Z.ai Code)
+Task: Continue improving the engineering details — round 3: the /api/ml/compare model-comparison leaderboard (the web mirror of the library's compare_models, the rar's signature workflow).
+
+Work Log:
+- EXTRACTED the dataset resolution into src/lib/ml-data.ts (resolveMlDataset): the CSV→matrix / generator→points / content-hash-split-seed plumbing that the tune route had already duplicated from the train route (~90 lines). The tune route now consumes the shared resolver — verified BYTE-COMPATIBLE (extra_trees random-search best CV 0.9211359753333239, identical before/after; nTotal 300; features ["x (standardized)"]). The train route deliberately keeps its own path (legacy single-feature byte-compat).
+- NEW ROUTE /api/ml/compare: 2–6 models at default hyperparameters, the SAME k-fold folds for every entry (fold derivation identical to the tune route — verified: extra_trees CV 0.9142 ± 0.00779 in the leaderboard EXACTLY matches the Train route's CV), honest held-out refit metric + wall-clock fit time, ranked leaderboard (shared ranks on exact ties, Δ vs #1). zod: array min 2 / max 6, dedupe, per-task registry membership with one actionable message, CV 3/5/10 (never off), the full CSV field set.
+- TYPES: MLCompareRequest / MLCompareEntry / MLCompareResponse in toolkit-types.ts (documented in the house style).
+- PLAYGROUND UI: "Compare models" section in the setup column (toggleable family chips with aria-pressed, the n/6 counter, the same CSV/seed guards as tune, Compare button with running state); the leaderboard card at the top of the results column (rank, model, CV ± std, held-out, Δ vs #1, fit ms, the "selected" badge on the explored model, Dismiss, the honest same-folds footer note). Selection behavior: anchors on the explored model (switching a model inserts it at the head, cap 6), rebuilds per task switch (defaults: current + huber/RF for regression, current + SVM·RBF/RF for classification), resets with Reset.
+- POLISH during E2E: the near-tie delta rendered as -7.31e-6 (fmtNum's exponential branch) — switched the Δ column to toFixed(4) so a near-tie reads "-0.0000" ("essentially tied"), never scientific notation.
+- E2E (agent-browser): 3-model default compare (Huber #1 0.92 ± 0.0132, Linear near-tie Δ -0.0000 with the selected badge, RF #3); chip toggling → "Compare 5 models" → Huber 0.92 / Linear 0.92 (Δ -0.0000) / extra_trees 0.9142 ± 0.00779 / RF 0.9139 / GB 0.9103; classification tab → RF 0.87 ± 0.0581 #1 / SVM·RBF 0.86 #2 / Logistic 0.79 #3; zero console/page errors. Screenshots: ml-compare-r96.png, ml-compare-5models-r96.png, ml-compare-cls-r96.png.
+- NUMBERS: tree ?fresh=1 → 270 files / 113,977 LOC (the ruff-config round added pyproject lines; the two new web files are NOT in the toolkit tree) — web pins synced; ZIP re-verified: 303 entries, 3,925,659 B, testzip OK, ruff pin + VERSION 1.2.41 in the archive.
+- QA: lint exit 0, tsc clean for project files, dev log clean.
+- GIT: f4ea95e (feature) + 5a024b4 (LOC pin sync).
+
+Stage Summary:
+- The web playground now covers the rar's full model workflow: train → tune (RandomSearch/Hyperband) → COMPARE (2–6 families side by side on shared folds). The library↔web mirror is complete for the ML domain.
+- Deltas: +lib/ml-data.ts (~170), +api/ml/compare/route.ts (~250), toolkit-types +~80, ml-playground +~200 (state/effect/handlers + chips + leaderboard card); tune route −~90 (the extraction); LOC pin 113,971 → 113,977.
+- Open for 100x-97+: honest candidates: (a) the compare leaderboard could grow a bar chart (CV mean ± std bars) — the metrics cards have chart precedents; (b) a library-side test pinning compare_models parity numbers (the web numbers are deterministic — seed 7 reg winner huber 0.9247 CV); (c) the desktop playground (playground.py) already has compare via the library — no gap; (d) the tune card's improvement near-zero display has the same fmtNum exponential quirk the Δ column just lost (cosmetic, one-line fix if it ever bites).
+- ZIP version: 1.2.41 (pharma-ml-toolkit-v1.2.41.zip, 303 entries, 3,925,659 B).
