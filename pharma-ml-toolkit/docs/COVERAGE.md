@@ -151,7 +151,7 @@ folder) is the point of the upgrade: one registry, one pipeline.
   MGLTools bridge; plus the empty placeholders, which contain nothing)
   — each with the reason stated in its row.
 - The near-duplicate explosion (≈30 model scripts × 2 tasks + folder
-  copies) collapses into **23 registry models + 2 ensemble builders**
+  copies) collapses into **24 registry models + 2 ensemble builders**
   with one training/evaluation/persistence pipeline.
 - **One family beyond the rar arrived in 1.2.41**: `extra_trees` —
   extremely randomized trees (random thresholds on the full sample,
@@ -168,3 +168,15 @@ folder) is the point of the upgrade: one registry, one pipeline.
   (`XGboost.py` / `LightGBM.py`); the sklearn ancestor — the ancestor
   the web playground has mirrored all along — was missing from the
   registry until now. The `gbm` alias stays lightgbm's.
+- **A third family beyond the rar arrived in 1.2.43**: `pls` —
+  partial least squares regression (sklearn's `PLSRegression`,
+  NIPALS, aliases `plsr` / `pls_regression` /
+  `partial_least_squares`), **regression only** — the registry
+  refuses the classification side with the standard typed error.
+  It has no rar original, yet no QSAR toolkit ships without it:
+  latent directions that maximize descriptor–target covariance are
+  the classic answer to wide, collinear descriptor blocks with few
+  observations. The web playground's hand-rolled NIPALS mirror was
+  verified against sklearn to machine epsilon (predictions 2.2e-15,
+  coefficients 1.1e-15) — the first family to arrive on both sides
+  on the same day, with no mirror gap.

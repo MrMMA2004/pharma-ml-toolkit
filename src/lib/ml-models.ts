@@ -24,6 +24,7 @@ import {
   fitMlpClassifier,
   fitMlpRegressor,
   fitMultivariateRegression,
+  fitPlsRegression,
   fitRandomForestClassifier,
   fitRandomForestRegressor,
   fitRbfSvmClassifier,
@@ -37,9 +38,9 @@ import {
 /* Registry                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Regression models: 3 legacy (byte-compatible) + 12 (incl. hsvr, huber,
- *  ada_boost, svm_rbf, extra_trees — the web mirror of the library's
- *  adaboost / huber_regression / svm / extra_trees families). */
+/** Regression models: 3 legacy (byte-compatible) + 13 (incl. hsvr, huber,
+ *  ada_boost, svm_rbf, extra_trees, pls — the web mirror of the library's
+ *  adaboost / huber_regression / svm / extra_trees / pls families). */
 export const REGRESSION_MODELS = [
   "linear",
   "polynomial",
@@ -47,6 +48,7 @@ export const REGRESSION_MODELS = [
   "lasso",
   "elastic_net",
   "huber",
+  "pls",
   "knn",
   "decision_tree",
   "random_forest",
@@ -100,6 +102,8 @@ export interface HyperSource {
   nClusters?: number;
   /** HSVR: trust radius × the cluster's max member distance. */
   radiusFactor?: number;
+  /** PLS: latent component count (rank-capped at extraction). */
+  nComponents?: number;
 }
 
 /** Hyperparameters with per-model defaults applied. */
@@ -120,6 +124,7 @@ export interface Hyper {
   gamma: number;
   nClusters: number;
   radiusFactor: number;
+  nComponents: number;
 }
 
 function num(value: number | undefined, fallback: number): number {
@@ -144,6 +149,7 @@ export function resolveHyper(req: HyperSource): Hyper {
     gamma: num(req.gamma, 0.5),
     nClusters: num(req.nClusters, 3),
     radiusFactor: num(req.radiusFactor, 1.5),
+    nComponents: num(req.nComponents, 2),
   };
 }
 
@@ -254,6 +260,18 @@ export function fitRegressionModel(
           importance: m.importance,
           measure: "variance",
         },
+      };
+    }
+    case "pls": {
+      /* NIPALS PLS1 — the library's `pls` family. The fit surfaces the
+       * component count actually extracted (rank-limited) alongside the
+       * standardized-space weights; PLS is linear once the latent space
+       * is chosen, so the coefficients card is the honest summary. */
+      const m = fitPlsRegression(XTrain, yTrain, { nComponents: hp.nComponents });
+      return {
+        predict: (xs) => m.predict(xs),
+        coefficients: { intercept: m.intercept, coefs: [...m.coefs], standardized: true },
+        modelParams: { nComponents: m.nUsed },
       };
     }
     case "svm_rbf": {
@@ -539,6 +557,7 @@ export const REG_TUNE_SPACES: Record<string, TuneChoice[]> = {
     { key: "l1Ratio", values: [0.1, 0.3, 0.5, 0.7, 0.9] },
   ],
   huber: [{ key: "epsilon", values: [1.05, 1.35, 1.75, 2.2, 3] }],
+  pls: [{ key: "nComponents", values: [1, 2, 3, 4, 5, 6] }],
   knn: [{ key: "k", values: [1, 3, 5, 7, 9, 11, 15, 21] }],
   decision_tree: [{ key: "maxDepth", values: [2, 3, 4, 5, 6, 7, 8, 10] }],
   random_forest: [

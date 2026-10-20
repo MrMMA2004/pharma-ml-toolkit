@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (2018 tests).
+exceptions, input validation, and pytest coverage** (2022 tests).
 
 ---
 
@@ -267,7 +267,7 @@ pharma-ml-toolkit/
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
-├── tests/                   # 2018 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 2022 pytest cases across all domains (incl. test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~718 KB, every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -677,7 +677,10 @@ aliases `et` / `ert`), `adaboost`, `gradient_boosting` (**Friedman's classic GBM
 shallow depth-3 trees fit the residual gradient, learning-rate shrunk; the sklearn
 ancestor behind `XGboost.py` / `LightGBM.py`; aliases `gb` / `sk_gbm`, while `gbm`
 remains lightgbm's short name), `ann`, `lasso`, `ridge`, `elastic_net`,
-`linear_regression`, `huber_regression` (outlier-robust), `hsvr` (**hierarchical SVR** —
+`linear_regression`, `huber_regression` (outlier-robust), `pls` (**partial least squares
+regression** — NIPALS latent directions that maximize X–y covariance, the QSAR staple for
+wide, collinear descriptor blocks with few observations; regression only, aliases
+`plsr` / `partial_least_squares`), `hsvr` (**hierarchical SVR** —
 k-means local
 specialists blended with a global SVR, regression only), plus `xgboost` / `lightgbm` /
 `catboost` when the optional packages are installed — and two **deep-learning families**:

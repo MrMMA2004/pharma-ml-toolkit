@@ -31,6 +31,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from sklearn.cross_decomposition import PLSRegression
 from sklearn.ensemble import (
     AdaBoostClassifier,
     AdaBoostRegressor,
@@ -133,6 +134,15 @@ def _gb_cls() -> GradientBoostingClassifier:
 
 def _gb_reg() -> GradientBoostingRegressor:
     return GradientBoostingRegressor(random_state=42)
+
+
+def _pls_reg() -> PLSRegression:
+    # PLS1 defaults: two latent components over internally z-scored
+    # columns (scale=True, its default) -- mirroring the standardisation
+    # the web playground applies before its own NIPALS solve. The
+    # regression-only habitat: PLSRegression predicts continuous targets
+    # (sklearn retired its PLS discriminant flavour decades ago).
+    return PLSRegression(n_components=2)
 
 
 def _svm_cls() -> SVC:
@@ -298,6 +308,19 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         factory=lambda: HuberRegressor(),
         param_grid={"epsilon": [1.1, 1.35, 1.75, 2.0], "alpha": [0.0001, 0.001, 0.01]},
         notes="Robust regression with Huber loss (upgrades Huber.py)",
+    ),
+    "pls": ModelSpec(
+        name="pls",
+        task="regression",
+        factory=lambda: _pls_reg(),
+        param_grid={"n_components": [1, 2, 3, 5, 8]},
+        notes=(
+            "partial least squares regression (projection to latent "
+            "structures, NIPALS): latent directions chosen to maximise "
+            "X-y covariance rather than X variance alone -- the QSAR "
+            "staple for wide, collinear descriptor blocks where OLS "
+            "strains and observations are scarce"
+        ),
     ),
     "knn": ModelSpec(
         name="knn",
@@ -504,6 +527,10 @@ MODEL_ALIASES: dict[str, str] = {
     "hierarchical_svr": "hsvr",
     "hierarchicalsvr": "hsvr",
     "h_svr": "hsvr",
+    "pls": "pls",
+    "pls_regression": "pls",
+    "plsr": "pls",
+    "partial_least_squares": "pls",
 }
 
 

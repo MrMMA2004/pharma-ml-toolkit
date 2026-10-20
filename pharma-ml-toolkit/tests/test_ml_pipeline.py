@@ -190,6 +190,55 @@ class TestRegistry:
         # 'gbm' remains lightgbm's short name (long-standing alias).
         assert resolve_model_name("gbm") == "lightgbm"
 
+    def test_pls_registered_and_available(self) -> None:
+        spec = MODEL_REGISTRY["pls"]
+        assert spec.task == "regression"  # PLSRegression is regression-only
+        assert spec.available  # plain scikit-learn -- no optional backend
+        assert set(spec.param_grid) == {"n_components"}
+        assert "QSAR" in spec.notes  # the descriptor-block habitat
+
+    def test_pls_factory_defaults_and_scale(self) -> None:
+        from sklearn.cross_decomposition import PLSRegression
+
+        model = build_model("pls", "regression")
+        assert isinstance(model, PLSRegression)
+        assert model.n_components == 2  # the classic QSAR default
+        assert model.scale is True  # internal z-scoring, web-mirror parity
+
+    def test_pls_fit_beats_ols_on_collinear_block(self) -> None:
+        rng = np.random.default_rng(0)
+        base = rng.normal(size=(60, 2))
+        # A wide, collinear descriptor block (the PLS habitat): two
+        # near-duplicate pairs + two noise columns, 60 rows.
+        X = np.column_stack(
+            [
+                base[:, 0],
+                base[:, 0] * 1.1 + 0.02 * rng.normal(size=60),
+                base[:, 1],
+                base[:, 1] * 0.9 + 0.03 * rng.normal(size=60),
+                rng.normal(size=(60, 2)),
+            ]
+        )
+        y = 2.0 * X[:, 0] - 1.5 * X[:, 2] + 0.1 * rng.normal(size=60)
+        pls = build_model("pls", "regression", params={"n_components": 2})
+        pls.fit(X, y)
+        assert pls.score(X, y) > 0.9
+        # And the target really is 2-dimensional in descriptor space --
+        # a 1-component model must already explain nearly all of it.
+        pls1 = build_model("PLS", "regression", params={"n_components": 1})
+        pls1.fit(X, y)
+        assert pls1.score(X, y) > 0.85
+
+    def test_pls_aliases_param_passthrough_and_task_guard(self) -> None:
+        for alias in ("pls", "plsr", "pls_regression", "partial_least_squares"):
+            assert resolve_model_name(alias) == "pls"
+        model = build_model("PLS-regression", "regression", params={"n_components": 3})
+        assert model.n_components == 3
+        # PLSRegression is regression-only -- the registry must refuse the
+        # classification side instead of failing inside fit/predict.
+        with pytest.raises(ModelError, match="supports 'regression'"):
+            build_model("pls", "classification")
+
     def test_penalized_logistic_classifiers_registered(self) -> None:
         # The rar's Classification/Lasso.py and Classification/Elastic
         # net.py were penalized LOGISTIC classifiers (l1 / elasticnet

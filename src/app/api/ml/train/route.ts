@@ -67,6 +67,9 @@ const hyperSchema = {
   /* HSVR */
   nClusters: z.number().int().min(2).max(8).optional(),
   radiusFactor: z.number().min(0.25).max(6).optional(),
+  /* PLS (regression): latent component count — capped at the matrix
+   * rank at fit time, so a wide request never breaks a narrow dataset. */
+  nComponents: z.number().int().min(1).max(8).optional(),
 };
 
 const bodySchema = z
@@ -138,6 +141,7 @@ type TrainBody = {
   gamma?: number;
   nClusters?: number;
   radiusFactor?: number;
+  nComponents?: number;
 };
 
 /** Min/max via loop — safe for very large CSVs (spread would overflow). */

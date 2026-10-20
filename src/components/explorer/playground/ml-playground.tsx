@@ -139,7 +139,8 @@ interface HyperSpec {
     | "epsilon"
     | "gamma"
     | "nClusters"
-    | "radiusFactor";
+    | "radiusFactor"
+    | "nComponents";
   label: string;
   control: "input" | "slider";
   unit?: string;
@@ -220,6 +221,16 @@ const REG_MODELS: ModelSpec[] = [
         max: 4,
         step: 0.05,
       },
+    ],
+  },
+  {
+    id: "pls",
+    label: "PLS regression",
+    hint: "NIPALS latent directions maximize X–y covariance — the QSAR staple for collinear descriptors",
+    group: "linear",
+    kind: "coefficients",
+    hp: [
+      { key: "nComponents", label: "components", control: "slider", unit: "n", min: 1, max: 8, step: 1 },
     ],
   },
   {
@@ -444,6 +455,7 @@ const DEFAULT_HP: Record<string, number> = {
   gamma: 0.5,
   nClusters: 3,
   radiusFactor: 1.5,
+  nComponents: 2,
 };
 
 /** Models with a RandomSearch tuning space on the server (the honest
@@ -453,6 +465,7 @@ const TUNEABLE_REG = new Set([
   "lasso",
   "elastic_net",
   "huber",
+  "pls",
   "knn",
   "decision_tree",
   "random_forest",
@@ -492,6 +505,8 @@ const MODEL_NOTES: Record<string, string> = {
   gradient_boosting: "Each round fits a depth-3 tree to the current residuals, shrunk by the learning rate.",
   huber:
     "Iteratively reweighted least squares: residuals within ε keep weight 1, the tails fade as ε/|r| — the final sweep's robust core / linear tail split is echoed in the parameters.",
+  pls:
+    "Partial least squares (NIPALS deflation): each latent direction w ∝ Zᵀy maximizes descriptor–target covariance — not descriptor variance alone — so wide, collinear blocks compress into a few predictive components. Linear once the latent space is chosen; the component count actually extracted (rank-capped) is echoed in the parameters.",
   ada_boost:
     "Weighted bootstrap rounds of shallow stumps; the ensemble predicts with the α-weighted median (regression) or α-weighted vote (classification). Importances are α-weighted per-stump gains.",
   svm_rbf:
@@ -524,6 +539,7 @@ const HP_LABELS: Record<string, string> = {
   nSupport: "support rows",
   nClusters: "clusters",
   radiusFactor: "trust radius ×",
+  nComponents: "components (used)",
 };
 
 /** Models whose grid contains a resource hyperparameter — the slots

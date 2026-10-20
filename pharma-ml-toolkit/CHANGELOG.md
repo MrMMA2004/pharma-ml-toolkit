@@ -10,6 +10,46 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.43] — 2026-10-20
+
+### Added — `pls`: partial least squares regression, the QSAR staple the registry was missing
+
+- **A 24th registry family** (`pls`, aliases `plsr` / `pls_regression` /
+  `partial_least_squares`): sklearn's `PLSRegression` (NIPALS),
+  **regression only** — the registry refuses the classification side
+  with the standard typed error instead of failing inside fit/predict.
+  Latent directions are chosen to maximize X–y *covariance* (not X
+  variance alone — the difference from PCA regression), which is
+  exactly why PLS is the classic first model for wide, collinear
+  descriptor blocks with few observations, where OLS strains and even
+  ridge only regularizes what PCA regression would mis-rotate. Param
+  grid: `n_components` `[1, 2, 3, 5, 8]`; factory default 2 components
+  with sklearn's internal `scale=True` z-scoring (mirrored by the web
+  playground, which standardizes before its own NIPALS solve). The same
+  registry/tuning/persistence pipeline as every other family
+  (`train_model('pls', ...)`, `compare_models(models=[..., 'pls'])`,
+  `pharmaml ml train --model pls` all work through the alias).
+- **The web playground gains the mirror on the same day** (no mirror
+  gap this time): a 16th regression family `fitPlsRegression` in
+  `src/lib/ml-math.ts` — hand-rolled NIPALS PLS1 with rank-safe early
+  stop, coefficients recovered exactly by evaluating the (linear)
+  sequential score projection on the basis vectors, VIP scores
+  computed for the record, `nComponents` slider + RandomSearch grid
+  `[1..6]` + the honest "components (used)" echo (the count actually
+  extracted — a single-feature matrix caps at one). **Verified
+  numerically against sklearn on a shared collinear dataset:
+  predictions match to 2.2e-15, coefficients (converted to the same
+  space) to 1.1e-15.** PLS stays out of Hyperband deliberately —
+  `n_components` is not a monotone resource slot — so the tune route
+  rejects Hyperband mode for it with the same actionable message as
+  every other resource-less family.
+- Tests: 4 new cases in `tests/test_ml_pipeline.py` (registry wiring +
+  notes, factory defaults + `scale=True`, fit quality on a collinear
+  block where a 1-component model must already explain ≥ 0.85, aliases
+  + param passthrough + the classification task guard); the
+  registry-count guards moved 23 → 24 (`test_neural.py`, both the
+  full-count and the torch-hidden available-count 21 → 22).
+
 ## [1.2.42] — 2026-10-20
 
 ### Added — `gradient_boosting`: Friedman's classic GBM, the mirror-gap closer

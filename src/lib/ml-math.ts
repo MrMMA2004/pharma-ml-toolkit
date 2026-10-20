@@ -1003,6 +1003,147 @@ export function fitGradientBoostingRegressor(
 }
 
 /* ------------------------------------------------------------------ */
+/* Partial least squares (regression, NIPALS PLS1)                     */
+/* ------------------------------------------------------------------ */
+
+/** What a PLS fit surfaces: the standardized-space regression weights
+ *  (PLS is linear once the latent space is chosen), how many components
+ *  were actually extracted (rank-limited — a single-feature matrix can
+ *  only ever yield one), each component's share of the target variance,
+ *  and the VIP scores (VIP > 1 marks an influential descriptor — the
+ *  classic QSAR readout of a PLS model). */
+export interface PlsFit {
+  coefs: number[];
+  intercept: number;
+  nUsed: number;
+  explained: number[];
+  vip: number[];
+}
+
+/**
+ * Partial least squares regression (projection to latent structures),
+ * fit by NIPALS deflation — the web mirror of sklearn's
+ * `PLSRegression` (the library's `pls` family). Features are
+ * standardized and the target centred; each component extracts the
+ * weight direction `w ∝ Zᵀy` that MAXIMIZES X–y covariance (not X
+ * variance alone — the difference from PCA regression, and the reason
+ * PLS is the QSAR staple for wide, collinear descriptor blocks), then
+ * deflates both blocks by its rank-1 reconstruction. The sequential
+ * score projection `t₁ → deflate → t₂ → …` is an exact linear map, so
+ * the coefficients are recovered by evaluating it on the basis vectors
+ * — no normal-equation solve to go singular on collinear inputs.
+ */
+export function fitPlsRegression(
+  X: number[][],
+  y: number[],
+  opts: { nComponents?: number } = {}
+): RowRegressor & PlsFit {
+  const nComp = opts.nComponents ?? 2;
+  const n = X.length;
+  const k = X[0]?.length ?? 0;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+  const intercept = mean(y);
+  let yc = y.map((v) => v - intercept);
+  const ssyTotal = yc.reduce((acc, v) => acc + v * v, 0);
+
+  const W: number[][] = [];
+  const P: number[][] = [];
+  const Q: number[] = [];
+  const ssy: number[] = [];
+  let Zc = Z.map((row) => [...row]);
+
+  for (let a = 0; a < nComp; a++) {
+    /* w ∝ Zᵀy — the covariance direction between the residual feature
+     * block and the residual target. */
+    const w = new Array<number>(k).fill(0);
+    for (let i = 0; i < n; i++) {
+      const yi = yc[i] ?? 0;
+      if (yi === 0) continue;
+      const row = Zc[i]!;
+      for (let j = 0; j < k; j++) w[j] = (w[j] ?? 0) + (row[j] ?? 0) * yi;
+    }
+    let wNorm = 0;
+    for (let j = 0; j < k; j++) wNorm += (w[j] ?? 0) ** 2;
+    wNorm = Math.sqrt(wNorm);
+    if (wNorm < 1e-10) break; // residual covariance exhausted — rank limit
+    for (let j = 0; j < k; j++) w[j] = (w[j] ?? 0) / wNorm;
+
+    /* t = Zw (scores), p = Zᵀt/tᵀt (X-loadings), q = yᵀt/tᵀt (y-loading). */
+    const t = Zc.map((row) => {
+      let acc = 0;
+      for (let j = 0; j < k; j++) acc += (w[j] ?? 0) * (row[j] ?? 0);
+      return acc;
+    });
+    let tt = 0;
+    for (let i = 0; i < n; i++) tt += (t[i] ?? 0) ** 2;
+    if (tt < 1e-12) break;
+    const p = new Array<number>(k).fill(0);
+    let q = 0;
+    for (let i = 0; i < n; i++) {
+      const ti = t[i] ?? 0;
+      q += ti * (yc[i] ?? 0);
+      const row = Zc[i]!;
+      for (let j = 0; j < k; j++) p[j] = (p[j] ?? 0) + ti * (row[j] ?? 0);
+    }
+    q /= tt;
+    for (let j = 0; j < k; j++) p[j] = (p[j] ?? 0) / tt;
+
+    /* Deflate: Z ← Z − tpᵀ, y ← y − qt (NIPALS rank-1 peel). */
+    Zc = Zc.map((row, i) => row.map((v, j) => v - (t[i] ?? 0) * (p[j] ?? 0)));
+    yc = yc.map((v, i) => v - q * (t[i] ?? 0));
+    W.push(w);
+    P.push(p);
+    Q.push(q);
+    ssy.push(q * q * tt);
+  }
+  const A = W.length;
+
+  /* The sequential projection is linear through the origin, so the j-th
+   * standardized coefficient is exactly f(e_j) — evaluated component by
+   * component with the running deflation, mirroring predict(). */
+  const project = (z: number[]): number => {
+    let acc = 0;
+    const x = [...z];
+    for (let a = 0; a < A; a++) {
+      const w = W[a]!;
+      let t = 0;
+      for (let j = 0; j < k; j++) t += (w[j] ?? 0) * (x[j] ?? 0);
+      acc += (Q[a] ?? 0) * t;
+      const p = P[a]!;
+      for (let j = 0; j < k; j++) x[j] = (x[j] ?? 0) - t * (p[j] ?? 0);
+    }
+    return acc;
+  };
+  const coefs = Array.from({ length: k }, (_, j) => {
+    const e = new Array<number>(k).fill(0);
+    e[j] = 1;
+    return project(e);
+  });
+
+  /* VIP: sqrt(k · Σ_a SSY_a·w²_ja / Σ_a SSY_a) — mean square 1 across
+   * features, so VIP > 1 marks an influential descriptor. */
+  const ssySum = ssy.reduce((acc, v) => acc + v, 0);
+  const vip = Array.from({ length: k }, (_, j) => {
+    if (ssySum <= 1e-12 || A === 0) return 0;
+    let acc = 0;
+    for (let a = 0; a < A; a++) acc += (ssy[a] ?? 0) * ((W[a]?.[j] ?? 0) ** 2);
+    return Math.sqrt((k * acc) / ssySum);
+  });
+
+  return {
+    coefs,
+    intercept,
+    nUsed: A,
+    explained: ssy.map((v) => (ssyTotal > 1e-12 ? v / ssyTotal : 0)),
+    vip,
+    predict(xsRaw: number[]) {
+      return intercept + project(std.transform(xsRaw));
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Huber — iteratively reweighted least squares (robust linear)        */
 /* ------------------------------------------------------------------ */
 
