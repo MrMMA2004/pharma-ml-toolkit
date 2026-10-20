@@ -10,6 +10,49 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.47] — 2026-10-20
+
+### Added — gaussian_process_classifier: the Laplace GP classifier, the 26th registry family
+
+The classification half of the GP family ships one day after the
+regression half closed its own release: a latent **σf²·RBF(ℓ) GP squashed
+through the logistic likelihood**, posterior approximated by **Laplace's
+method** (Newton mode-finding on the B = I + W^(1/2)KW^(1/2) Cholesky —
+GPML Algorithm 3.1, sklearn-exact down to the iteration structure), and
+predictive probabilities by the **Williams–Barber 5-erf sigmoid integral**.
+No white-noise term: the logistic likelihood already absorbs the label
+noise a WhiteKernel would model on the regression side.
+
+- **Registry**: `gaussian_process_classifier` (task=`classification`,
+  aliases `gpc` / `gp_classifier` / `gp_classification`), kernel-shape grid
+  (RBF / Matern / RationalQuadratic) for tuning, binary labels on the
+  single latent + sklearn's internal one-vs-rest for multiclass.
+  `gaussian_process` itself stays regression-only (pinned by test).
+- **Web mirror, numerically gated**: `fitGaussianProcessClassification`
+  in `ml-math.ts` — the Newton loop is **bit-exact against sklearn**
+  (Laplace lml Δ 0.0 on the parity dataset; the numpy reference itself
+  matches sklearn to 0.0 in `scratch/verify_gpc_parity.py`), and the
+  predictive probabilities land within **6.3e-8** of sklearn
+  (`scratch/verify_gpc_parity.ts` + `verify_gpc_parity_ts.py`), the gap
+  being erf's own A&S 7.1.26 approximation (|ε| ≤ 1.5e-7). Two subtle
+  traps the gate caught: the predictive variance needs a **forward
+  substitution only** (Σv² = rhsᵀB⁻¹rhs — cho_solve there squares the
+  B⁻¹), and the parity harness must standardize features on train
+  statistics before fitting sklearn (the web fitter's no-leakage
+  contract puts ℓ in standardized-feature units).
+- **Web playground**: GP classification in the model picker (kernel
+  group), the task-aware **Learn kernel (Laplace lml)** toggle (grid
+  search over (ℓ, σf) when the request leaves them unset), the honest
+  probabilistic scores on the results card — **ROC AUC / log-loss /
+  Brier** from the 5-erf probabilities — and a decision-boundary chart
+  whose **dot opacity carries |p − 0.5|**: the classifier's own
+  uncertainty surface, fading exactly where it hesitates.
+- **Tests**: 7 new cases (registry wiring + regression refusal + the
+  gaussian_process regression-only contract re-pinned, accuracy/AUC on a
+  deterministic binary set, predict_proba well-formedness, deterministic
+  refit, far-from-data hedging toward 0.5, kernel-grid tuning);
+  registry count guards 25 → 26 (torch-hidden 23 → 24).
+
 ## [1.2.46] — 2026-10-20
 
 ### Fixed — the database audit: two real data errors cured, the whole inventory pinned

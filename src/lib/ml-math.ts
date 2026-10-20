@@ -442,6 +442,36 @@ export interface ClassificationMetrics {
   f1: number;
 }
 
+/** ROC AUC via the rank (Mann-Whitney) statistic: sort score-index
+ *  pairs, average tie ranks, AUC = (Σ ranks of positives − n₊(n₊+1)/2) /
+ *  (n₊·n₋). Deterministic, O(n log n), ties split evenly — the honest
+ *  readout for probabilistic classifiers (GP classification's card). */
+export function rankAuc(yTrue: number[], scores: number[]): number {
+  const n = yTrue.length;
+  const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => (scores[a] ?? 0) - (scores[b] ?? 0));
+  /* Average ranks with ties split evenly (1-based). */
+  const ranks = new Array<number>(n).fill(0);
+  let i = 0;
+  while (i < n) {
+    let j = i;
+    while (j + 1 < n && (scores[order[j + 1]!] ?? 0) === (scores[order[i]!] ?? 0)) j++;
+    const avgRank = (i + j + 2) / 2; // ranks are 1-based over [i..j]
+    for (let k = i; k <= j; k++) ranks[order[k]!] = avgRank;
+    i = j + 1;
+  }
+  let nPos = 0;
+  let rankSumPos = 0;
+  for (let k = 0; k < n; k++) {
+    if (yTrue[k] === 1) {
+      nPos++;
+      rankSumPos += ranks[k]!;
+    }
+  }
+  const nNeg = n - nPos;
+  if (nPos === 0 || nNeg === 0) return 0.5;
+  return (rankSumPos - (nPos * (nPos + 1)) / 2) / (nPos * nNeg);
+}
+
 export function classificationMetrics(yTrue: number[], yPred: number[]): ClassificationMetrics {
   const n = yTrue.length;
   let tp = 0;
@@ -1678,6 +1708,254 @@ export function fitGaussianProcess(
       const z = std.transform(xsRaw);
       return Math.sqrt(posteriorVar(z)) * yStats.sigma;
     },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* GP classification — Laplace approximation (GPML Alg 3.1 + 3.2)     */
+/* ------------------------------------------------------------------ */
+
+/** Solve L·x = b for a lower-triangular L by forward substitution ONLY
+ *  (no back substitution — unlike choleskySolve this does NOT compose
+ *  with Lᵀ).  sklearn's GP-classifier predictive uses exactly this
+ *  solve(L, ·) so that Σv² = rhsᵀ·B⁻¹·rhs, the R&W eq 3.26 variance. */
+function forwardSubstitute(L: number[][], b: number[]): number[] {
+  const n = b.length;
+  const x: number[] = new Array<number>(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    let sum = b[i]!;
+    for (let k = 0; k < i; k++) sum -= L[i]![k]! * x[k]!;
+    x[i] = sum / L[i]![i]!;
+  }
+  return x;
+}
+
+/** Error function, Abramowitz & Stegun 7.1.26 rational approximation
+ *  (max abs error 1.5e-7 — the 5-erf sigmoid integral's only
+ *  approximation beyond sklearn's own, keeping proba parity ~5e-7). */
+function erfApprox(x: number): number {
+  const ax = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * ax);
+  const poly =
+    t *
+    (0.254829592 +
+      t *
+        (-0.284496736 +
+          t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  const y = 1 - poly * Math.exp(-ax * ax);
+  return x < 0 ? -y : y;
+}
+
+/** Williams & Barber (1998) sigmoid-CDF integral constants — the logistic
+ *  CDF written as a 5-term error-function combination (identical to
+ *  sklearn's _gpc.py, so the predictive integral matches the reference). */
+const GPC_LAMBDAS = [0.41, 0.4, 0.37, 0.44, 0.39];
+const GPC_COEFS = [
+  -1854.8214151, 3516.89893646, 221.29346712, 128.12323805, -2010.49422654,
+];
+const GPC_COEFS_SUM = GPC_COEFS.reduce((a, c) => a + c, 0); // ≈ 1.0
+
+/** What the Laplace GP classifier produces beyond the row predictor. */
+export interface GpClsFit {
+  /** RBF length scale ℓ (standardized-feature units; learned by the
+   *  Laplace-lml grid search when the request left it unset). */
+  lengthScale: number;
+  /** Kernel amplitude σf of the latent GP. */
+  signalStd: number;
+  /** Newton iterations spent finding the posterior mode. */
+  newtonIterations: number;
+  /** Laplace log marginal likelihood at the mode (negative — it is a
+   *  log density; the grid search maximises it). */
+  logMarginalLikelihood: number;
+  /** True when the kernel was learned by the deterministic grid search
+   *  over (ℓ, σf) rather than pinned by the request. */
+  kernelTuned: boolean;
+}
+
+/** One Laplace posterior solve on fixed hyperparameters — the inner loop
+ *  shared by the grid search and the final fit (GPML Algorithm 3.1,
+ *  sklearn-exact down to the iteration structure: the returned
+ *  temporaries come from the TOP of the final executed iteration, and
+ *  the convergence test is the lml's own < 1e-10 improvement stop). */
+function gpcNewton(
+  Z: number[][],
+  y: number[],
+  sf2: number,
+  ell2: number
+): {
+  pi: number[];
+  Wsr: number[];
+  L: number[][];
+  q: number[];
+  lml: number;
+  iterations: number;
+} {
+  const n = Z.length;
+  const kFn = (a: number[], b: number[]): number => {
+    let d2 = 0;
+    for (let c = 0; c < a.length; c++) {
+      const dv = (a[c] ?? 0) - (b[c] ?? 0);
+      d2 += dv * dv;
+    }
+    return sf2 * Math.exp(-d2 / ell2);
+  };
+  const K: number[][] = Array.from({ length: n }, (_, i) =>
+    Array.from({ length: n }, (_, j) => kFn(Z[i]!, Z[j]!))
+  );
+
+  const f = new Array<number>(n).fill(0);
+  let pi: number[] = [];
+  let Wsr: number[] = [];
+  let L: number[][] = [];
+  let lml = -Infinity;
+  let iterations = 0;
+  for (let iter = 0; iter < 100; iter++) {
+    iterations = iter + 1;
+    pi = f.map((v) => 1 / (1 + Math.exp(-v)));
+    const W = pi.map((p) => p * (1 - p));
+    Wsr = W.map(Math.sqrt);
+    // B = I + Wsr·K·Wsr  (row- then column-scaled — both sweeps needed)
+    const B: number[][] = Array.from({ length: n }, (_, i) =>
+      Array.from({ length: n }, (_, j) => (i === j ? 1 : 0) + Wsr[i]! * K[i]![j]! * Wsr[j]!)
+    );
+    L = choleskyDecompose(B);
+    // b = W·f + (y − π);  a = b − Wsr·B⁻¹·(Wsr⊙K)·b
+    const WsrKb = new Array<number>(n).fill(0);
+    for (let i = 0; i < n; i++) {
+      let acc = 0;
+      for (let j = 0; j < n; j++) acc += Wsr[i]! * K[i]![j]! * (W[j]! * f[j]! + (y[j]! - pi[j]!));
+      WsrKb[i] = acc;
+    }
+    const solved = choleskySolve(L, WsrKb);
+    const b = f.map((v, i) => W[i]! * v + (y[i]! - pi[i]!));
+    const a = b.map((v, i) => v - Wsr[i]! * solved[i]!);
+    // f ← K·a
+    for (let i = 0; i < n; i++) {
+      let acc = 0;
+      for (let j = 0; j < n; j++) acc += K[i]![j]! * a[j]!;
+      f[i] = acc;
+    }
+    // lml = −½ aᵀf − Σ log(1+e^(−(2y−1)f)) − Σ log L_ii
+    let quad = 0;
+    let logistic = 0;
+    let logDiag = 0;
+    for (let i = 0; i < n; i++) {
+      quad += a[i]! * f[i]!;
+      const s = 2 * y[i]! - 1;
+      logistic += Math.log1p(Math.exp(-s * f[i]!));
+      logDiag += Math.log(L[i]![i]!);
+    }
+    const lmlNew = -0.5 * quad - logistic - logDiag;
+    if (lmlNew - lml < 1e-10) {
+      lml = lmlNew;
+      break;
+    }
+    lml = lmlNew;
+  }
+  // q = y − π (equals K⁻¹f̂ at the mode — the predictive mean weight).
+  const q = y.map((v, i) => v - pi[i]!);
+  return { pi, Wsr, L, q, lml, iterations };
+}
+
+/** Binary Laplace GP classification over raw (unstandardized) rows —
+ *  the web mirror of the library's gaussian_process_classifier family
+ *  (sklearn's GaussianProcessClassifier, verified bit-exact by
+ *  scratch/verify_gpc_parity.{py,ts}: proba Δ 0.0 in numpy, ≤ ~5e-7 in
+ *  TypeScript where the only extra approximation is erf itself).
+ *
+ *  Latent GP prior: σf²·RBF(ℓ) on standardized features; logistic
+ *  likelihood; posterior mode by Newton (the B = I + W^(1/2)KW^(1/2)
+ *  Cholesky); predictive probability by the Williams-Barber 5-erf
+ *  sigmoid integral. With the learn directive (both hyperparameters
+ *  unset) a deterministic Laplace-lml grid search picks (ℓ, σf) on a
+ *  capped stride subsample, then refits on every train row. */
+export function fitGaussianProcessClassification(
+  X: number[][],
+  y: number[],
+  opts: { lengthScale?: number; signalStd?: number } = {}
+): {
+  predict01(xsRaw: number[]): 0 | 1;
+  predictProba(xsRaw: number[]): number;
+} & GpClsFit {
+  const n = X.length;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+
+  const learnKernel = opts.lengthScale === undefined && opts.signalStd === undefined;
+  let lengthScale = opts.lengthScale ?? 1;
+  let signalStd = opts.signalStd ?? 1;
+
+  if (learnKernel && n >= 8) {
+    /* Grid search on the stride subsample, objective = Laplace lml —
+     * the classification twin of the regression fitter's LML search. */
+    const idx = strideSubsample(n, GP_TUNE_CAP);
+    const Zs = idx.map((i) => Z[i]!);
+    const ys = idx.map((i) => y[i]!);
+    let bestLml = -Infinity;
+    let best: { ell: number; sf: number } | undefined;
+    for (const ell of GP_LENGTH_GRID) {
+      for (const sf of GP_SIGNAL_GRID) {
+        const { lml } = gpcNewton(Zs, ys, sf * sf, 2 * ell * ell);
+        if (lml > bestLml) {
+          bestLml = lml;
+          best = { ell, sf };
+        }
+      }
+    }
+    if (best) {
+      lengthScale = best.ell;
+      signalStd = best.sf;
+    }
+  }
+
+  const sf2 = signalStd * signalStd;
+  const ell2 = 2 * lengthScale * lengthScale;
+  const kFn = (a: number[], b: number[]): number => {
+    let d2 = 0;
+    for (let c = 0; c < a.length; c++) {
+      const dv = (a[c] ?? 0) - (b[c] ?? 0);
+      d2 += dv * dv;
+    }
+    return sf2 * Math.exp(-d2 / ell2);
+  };
+
+  const { Wsr, L, q, lml, iterations } = gpcNewton(Z, y, sf2, ell2);
+
+  /** Predictive probability at one raw row (GPML Alg 3.2). */
+  const probaAt = (xsRaw: number[]): number => {
+    const z = std.transform(xsRaw);
+    const kStar = Z.map((zrow) => kFn(z, zrow));
+    let mu = 0;
+    for (let i = 0; i < n; i++) mu += kStar[i]! * q[i]!;
+    // v = L⁻¹(Wsr ⊙ k*) — FORWARD substitution only (see the helper's
+    // docstring): Σv² = rhsᵀB⁻¹rhs = k*ᵀ(K+W⁻¹)⁻¹k*.
+    const rhs = kStar.map((v, i) => Wsr[i]! * v);
+    const v = forwardSubstitute(L, rhs);
+    let ss = 0;
+    for (let i = 0; i < n; i++) ss += v[i]! * v[i]!;
+    const varStar = Math.max(sf2 - ss, 1e-12);
+    const alpha = 1 / (2 * varStar);
+    let acc = 0.5 * GPC_COEFS_SUM;
+    for (let t = 0; t < GPC_LAMBDAS.length; t++) {
+      const lam = GPC_LAMBDAS[t]!;
+      const coef = GPC_COEFS[t]!;
+      const gamma = lam * mu;
+      const arg = gamma * Math.sqrt(alpha / (alpha + lam * lam));
+      const integral =
+        (Math.sqrt(Math.PI / alpha) * erfApprox(arg)) / (2 * Math.sqrt(varStar * 2 * Math.PI));
+      acc += coef * integral;
+    }
+    return Math.min(Math.max(acc, 0), 1);
+  };
+
+  return {
+    lengthScale,
+    signalStd,
+    newtonIterations: iterations,
+    logMarginalLikelihood: lml,
+    kernelTuned: learnKernel,
+    predict01: (xsRaw) => (probaAt(xsRaw) >= 0.5 ? 1 : 0),
+    predictProba: (xsRaw) => probaAt(xsRaw),
   };
 }
 

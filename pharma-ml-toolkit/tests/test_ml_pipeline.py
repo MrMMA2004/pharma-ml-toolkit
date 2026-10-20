@@ -1826,3 +1826,109 @@ class TestGaussianProcessFamily:
         )
         assert result.cv_scores is not None
         assert not np.all(np.isnan(result.cv_scores))
+
+
+class TestGaussianProcessClassifierFamily:
+    """100x-105 — the classification half of the GP family:
+    gaussian_process_classifier (Laplace approximation).  A latent GP
+    squashed through the logistic likelihood, posterior mode found by
+    Newton iteration (GPML Algorithm 3.1), predictive probabilities by
+    the Williams-Barber 5-erf integral — sklearn's
+    GaussianProcessClassifier, itself verified bit-exact against a
+    hand-rolled numpy Laplace in scratch/verify_gpc_parity.py.
+    """
+
+    @staticmethod
+    def _cls_data() -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(7)
+        n = 120
+        a = rng.normal(0.0, 1.0, n)
+        b = rng.normal(0.0, 1.0, n)
+        label = (b + 0.8 * np.sin(a) > 0.0).astype(int)
+        return pd.DataFrame({"a": a, "b": b}), pd.Series(label)
+
+    def test_registry_entry(self) -> None:
+        spec = MODEL_REGISTRY["gaussian_process_classifier"]
+        assert spec.task == "classification"
+        assert spec.available  # sklearn-backed: no optional dependency
+        assert set(spec.param_grid) == {"kernel"}  # kernel SHAPE grid
+        assert "Laplace" in spec.notes
+        cls_names = {entry["name"] for entry in list_models("classification")}
+        assert "gaussian_process_classifier" in cls_names
+        reg_names = {entry["name"] for entry in list_models("regression")}
+        assert "gaussian_process_classifier" not in reg_names
+        # friendly aliases resolve anywhere a registry key is expected
+        assert resolve_model_name("gpc") == "gaussian_process_classifier"
+        assert resolve_model_name("GP-Classifier") == "gaussian_process_classifier"
+
+    def test_train_and_evaluate_beats_chance(self) -> None:
+        from sklearn.gaussian_process import GaussianProcessClassifier
+
+        x, y = self._cls_data()
+        result = train_model("gpc", "classification", x, y, tune=False)
+        assert isinstance(result.model.steps[-1][1], GaussianProcessClassifier)
+        report = evaluate_model(result.model, x, y, "classification")
+        assert isinstance(report, ClassificationReport)
+        assert report.accuracy > 0.9
+        assert report.roc_auc is not None and report.roc_auc > 0.95
+        # predict_proba is well-formed: rows sum to 1
+        proba = result.model.predict_proba(x)
+        np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-12)
+        # the probabilities actually rank the labels (AUC >= accuracy
+        # band: a calibrated Laplace posterior orders held-out rows)
+        auc = roc_auc_score(y, proba[:, 1])
+        assert auc > 0.95
+
+    def test_regression_request_refused(self) -> None:
+        x, y = self._cls_data()
+        y_cont = pd.Series(y.astype(float) * 2.5)
+        with pytest.raises(ModelError, match="supports 'classification'"):
+            train_model("gaussian_process_classifier", "regression", x, y_cont, tune=False)
+
+    def test_gaussian_process_stays_regression_only(self) -> None:
+        # the two halves are separate contracts: gaussian_process
+        # (regression) must keep refusing classification even now that
+        # the family has a classifier of its own.
+        x, y = self._cls_data()
+        with pytest.raises(ModelError, match="supports 'regression'"):
+            train_model("gaussian_process", "classification", x, y, tune=False)
+
+    def test_deterministic_refit(self) -> None:
+        x, y = self._cls_data()
+        first = train_model("gpc", "classification", x, y, tune=False)
+        second = train_model("gpc", "classification", x, y, tune=False)
+        np.testing.assert_array_equal(
+            first.model.predict_proba(x), second.model.predict_proba(x)
+        )
+
+    def test_probabilities_hedge_away_from_data(self) -> None:
+        # the honest-uncertainty signature: far from every train row the
+        # posterior probability collapses toward 0.5 (the prior), while
+        # in-data points commit.  A point classifier cannot do this.
+        x, y = self._cls_data()
+        result = train_model("gpc", "classification", x, y, tune=False)
+        far = pd.DataFrame({"a": [25.0, -25.0], "b": [25.0, -25.0]})
+        far_proba = result.model.predict_proba(far)[:, 1]
+        assert float(np.max(np.abs(far_proba - 0.5))) < 0.15
+
+    def test_kernel_grid_tuning(self) -> None:
+        from sklearn.gaussian_process.kernels import ConstantKernel, RationalQuadratic
+
+        x, y = self._cls_data()
+        result = train_model(
+            "gaussian_process_classifier",
+            "classification",
+            x,
+            y,
+            tune=True,
+            param_grid={
+                "kernel": [
+                    ConstantKernel(1.0) * RBF(length_scale=1.0),
+                    ConstantKernel(1.0) * RationalQuadratic(length_scale=1.0, alpha=0.2),
+                ]
+            },
+            cv=3,
+            n_jobs=1,
+        )
+        assert result.cv_scores is not None
+        assert not np.all(np.isnan(result.cv_scores))

@@ -378,6 +378,17 @@ const CLS_MODELS: ModelSpec[] = [
     ],
   },
   {
+    id: "gaussian_process",
+    label: "GP classification",
+    hint: "Laplace posterior: Newton mode, calibrated 5-erf probabilities",
+    group: "kernel",
+    kind: "params",
+    hp: [
+      { key: "lengthScale", label: "length scale", control: "slider", unit: "ℓ", min: 0.25, max: 4, step: 0.25 },
+      { key: "signalStd", label: "signal σf", control: "slider", unit: "σf", min: 0.25, max: 3, step: 0.25 },
+    ],
+  },
+  {
     id: "decision_tree",
     label: "Decision tree (gini)",
     hint: "Gini-impurity splits, depth-capped",
@@ -508,6 +519,7 @@ const TUNEABLE_CLS = new Set([
   "ada_boost",
   "svm_linear",
   "svm_rbf",
+  "gaussian_process",
   "mlp",
 ]);
 
@@ -536,6 +548,8 @@ const MODEL_NOTES: Record<string, string> = {
     "Gaussian-kernel machine solved in one closed form: (K + λI)⁻¹ (regression) or the bias-augmented LS-SVM system (classification, λ = 1/(2C)).",
   gaussian_process:
     "Kriging with an RBF + white kernel: with Learn kernel on, a deterministic marginal-likelihood grid search picks ℓ / σf / σn (the web mirror of sklearn's LML-tuned kernel) and the σ you see is the prediction interval — latent posterior σ plus the learned σn. Untick it to pin the kernel at the sliders' values.",
+  gaussian_process_cls:
+    "Laplace GP classification (the library's gaussian_process_classifier): a latent σf²·RBF(ℓ) GP squashed through the logistic likelihood; Newton iteration finds the posterior mode and the Williams–Barber 5-erf integral turns the latent mean/variance into a calibrated probability. With Learn kernel on, a Laplace-lml grid search picks (ℓ, σf); boundary-dot opacity tracks |p − 0.5| — the classifier's own uncertainty surface.",
   gaussian_nb: "Class-conditional Gaussians (μ, σ per feature) feed the log-posterior; no tunable hyperparameters.",
   mlp: "One tanh hidden layer, full-batch gradient descent, seeded init — a demo-scale network, not production deep learning.",
   hsvr:
@@ -568,7 +582,19 @@ const HP_LABELS: Record<string, string> = {
   lengthScale: "length scale ℓ",
   signalStd: "signal σf",
   noiseStd: "noise σn",
+  newtonIterations: "Newton iterations",
 };
+
+/** Task-aware footer-note lookup — gaussian_process lives on BOTH sides
+ *  of the playground now (regression = kriging; classification = Laplace
+ *  classifier), so the id alone is ambiguous and the classification
+ *  entry reads its own note (gaussian_process_cls). */
+function modelNote(task: Task, model: string): string | undefined {
+  if (task === "classification" && model === "gaussian_process") {
+    return MODEL_NOTES.gaussian_process_cls;
+  }
+  return MODEL_NOTES[model];
+}
 
 /** Models whose grid contains a resource hyperparameter — the slots
  *  successive halving can promote rung by rung (mirrors the server's
@@ -692,6 +718,21 @@ function TinyDot(color: string) {
     const { cx, cy } = props as { cx?: number; cy?: number };
     if (cx === undefined || cy === undefined) return <g />;
     return <circle cx={cx} cy={cy} r={1.5} fill={color} fillOpacity={0.3} />;
+  };
+}
+
+/** GP classification: boundary dot whose OPACITY carries the calibrated
+ *  probability — confident cells (|p − 0.5| → 1) render strong, cells near
+ *  the decision boundary fade out. The classifier's own uncertainty
+ *  surface, drawn by the posterior itself. */
+function GpClsDot(color: string) {
+  return function renderGpClsDot(props: unknown) {
+    const { cx, cy, payload } = props as { cx?: number; cy?: number; payload?: { proba?: number } };
+    if (cx === undefined || cy === undefined) return <g />;
+    const proba = typeof payload?.proba === "number" ? payload.proba : 0.5;
+    const confidence = Math.abs(proba - 0.5) * 2; // 0 at the boundary, 1 at the poles
+    const opacity = 0.1 + 0.6 * confidence;
+    return <circle cx={cx} cy={cy} r={1.5} fill={color} fillOpacity={opacity} />;
   };
 }
 
@@ -2019,13 +2060,20 @@ export function MlPlayground() {
       setStatus("done");
       /* Learned GP kernel: park the sliders at the values the LML grid
        *  search picked so the panel shows what actually ran (they stay
-       *  disabled while Learn kernel is on — the next auto run re-learns). */
+       *  disabled while Learn kernel is on — the next auto run re-learns).
+       *  Classification parks only (ℓ, σf) — no noise slot exists there. */
       if (payload.gp?.kernelTuned) {
         setHp((prev) => ({
           ...prev,
           lengthScale: payload.gp!.lengthScale,
           signalStd: payload.gp!.signalStd,
           noiseStd: payload.gp!.noiseStd,
+        }));
+      } else if (payload.gpCls?.kernelTuned) {
+        setHp((prev) => ({
+          ...prev,
+          lengthScale: payload.gpCls!.lengthScale,
+          signalStd: payload.gpCls!.signalStd,
         }));
       }
       /* Record the completed run in the history strip (restorable). */
@@ -2855,7 +2903,8 @@ export function MlPlayground() {
                 {modelSpec.label} parameters
               </Label>
               {/* GP: the kernel learn/auto toggle — LML grid search on the
-               *  server vs pinned slider values. */}
+               *  server vs pinned slider values (classification searches
+               *  (ℓ, σf) by the Laplace lml — no noise slot exists). */}
               {modelSpec.id === "gaussian_process" ? (
                 <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
                   <input
@@ -2866,11 +2915,17 @@ export function MlPlayground() {
                     aria-label="Learn the GP kernel by marginal likelihood"
                   />
                   <span className="space-y-0.5">
-                    <span className="block text-xs font-medium">Learn kernel (marginal likelihood)</span>
+                    <span className="block text-xs font-medium">
+                      Learn kernel {task === "classification" ? "(Laplace lml)" : "(marginal likelihood)"}
+                    </span>
                     <span className="block text-[11px] leading-snug text-muted-foreground">
-                      {gpLearn
-                        ? "The server grid-searches ℓ / σf / σn by log marginal likelihood and pins the sliders at the winners — untick to set them yourself."
-                        : "Kernel pinned at the sliders — sweep them and watch the reported log marginal likelihood respond."}
+                      {task === "classification"
+                        ? gpLearn
+                          ? "The server grid-searches ℓ / σf by the Laplace log marginal likelihood and pins the sliders at the winners — untick to set them yourself."
+                          : "Kernel pinned at the sliders — sweep them and watch the reported Laplace lml respond."
+                        : gpLearn
+                          ? "The server grid-searches ℓ / σf / σn by log marginal likelihood and pins the sliders at the winners — untick to set them yourself."
+                          : "Kernel pinned at the sliders — sweep them and watch the reported log marginal likelihood respond."}
                     </span>
                   </span>
                 </label>
@@ -3948,19 +4003,19 @@ export function MlPlayground() {
                         <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
                         {clsSeries ? (
                           <Scatter
-                            name="boundary: class 0"
+                            name={result.gpCls ? "boundary: class 0 (opacity = |p − 0.5|)" : "boundary: class 0"}
                             data={clsSeries.grid0}
                             fill={CHART.teal}
-                            shape={TinyDot(CHART.teal)}
+                            shape={result.gpCls ? GpClsDot(CHART.teal) : TinyDot(CHART.teal)}
                             isAnimationActive={false}
                           />
                         ) : null}
                         {clsSeries ? (
                           <Scatter
-                            name="boundary: class 1"
+                            name={result.gpCls ? "boundary: class 1 (opacity = |p − 0.5|)" : "boundary: class 1"}
                             data={clsSeries.grid1}
                             fill={CHART.amber}
-                            shape={TinyDot(CHART.amber)}
+                            shape={result.gpCls ? GpClsDot(CHART.amber) : TinyDot(CHART.amber)}
                             isAnimationActive={false}
                           />
                         ) : null}
@@ -4119,7 +4174,7 @@ export function MlPlayground() {
                       </dl>
                     ) : (
                       <p className="rounded-md border border-dashed px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-                        This model reports no hyperparameters — {MODEL_NOTES[result.model] ?? "see the model hint."}
+                        This model reports no hyperparameters — {modelNote(result.task, result.model) ?? "see the model hint."}
                       </p>
                     )
                   ) : null}
@@ -4240,6 +4295,69 @@ export function MlPlayground() {
                     </div>
                   ) : null}
 
+                  {/* GP classification: the Laplace posterior + honest
+                   *  probabilistic scores (AUC / log-loss / Brier). */}
+                  {result.gpCls ? (
+                    <div className="mt-3 space-y-1.5">
+                      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        <Sigma className="size-3" aria-hidden />
+                        GP classifier · Laplace posterior
+                      </p>
+                      <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1" aria-label="GP classifier readout">
+                        {(
+                          [
+                            [result.gpCls.kernelTuned ? "kernel (learned by Laplace lml)" : "kernel (pinned)", null],
+                            ["Laplace log marginal likelihood", result.gpCls.logMarginalLikelihood],
+                            ["Newton iterations to mode", result.gpCls.newtonIterations],
+                            ["ROC AUC (test)", result.gpCls.rocAuc],
+                            ["log-loss (test)", result.gpCls.logLoss],
+                            ["Brier score (test)", result.gpCls.brier],
+                          ] as Array<[string, number | null]>
+                        ).map(([label, value]) =>
+                          value === null ? (
+                            <div key={label} className="col-span-2">
+                              <dt className="text-[11px] font-medium text-muted-foreground">
+                                {label} — ℓ {fmtNum(result.gpCls!.lengthScale, 3)} · σf{" "}
+                                {fmtNum(result.gpCls!.signalStd, 3)}
+                              </dt>
+                            </div>
+                          ) : (
+                            <div key={label} className="col-span-2 grid grid-cols-subgrid items-baseline">
+                              <dt className="truncate font-mono text-xs text-muted-foreground" title={label}>
+                                {label}
+                              </dt>
+                              <dd
+                                className={`text-right font-mono text-xs font-semibold tabular-nums ${
+                                  label.startsWith("ROC")
+                                    ? result.gpCls!.rocAuc >= 0.9
+                                      ? "text-primary"
+                                      : result.gpCls!.rocAuc >= 0.75
+                                        ? "text-amber-600"
+                                        : "text-destructive"
+                                    : ""
+                                }`}
+                              >
+                                {label.startsWith("ROC")
+                                  ? fmtNum(result.gpCls!.rocAuc, 4)
+                                  : label.startsWith("Newton")
+                                    ? String(result.gpCls!.newtonIterations)
+                                    : fmtNum(value, 4)}
+                              </dd>
+                            </div>
+                          )
+                        )}
+                      </dl>
+                      <p className="text-[11px] leading-snug text-muted-foreground">
+                        {result.gpCls.kernelTuned
+                          ? "Kernel picked by the deterministic Laplace-lml grid search (ℓ / σf), posterior refit on every train row — the lml scores how well the latent GP explains the labels."
+                          : "Kernel pinned at the sliders — sweep ℓ / σf and watch the Laplace lml respond."}{" "}
+                        ROC AUC ranks the held-out probabilities (1 = perfect ordering); log-loss and Brier
+                        grade their calibration — boundary-dot opacity draws the same |p − 0.5| uncertainty
+                        surface, fading exactly where the classifier hesitates.
+                      </p>
+                    </div>
+                  ) : null}
+
                   {/* HSVR: per-cluster geometry + local-fit diagnostics. */}
                   {result.hsvr ? (
                     <div className="mt-3 space-y-1.5">
@@ -4291,7 +4409,7 @@ export function MlPlayground() {
                   ) : null}
 
                   <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-                    {MODEL_NOTES[result.model] ??
+                    {modelNote(result.task, result.model) ??
                       (result.task === "regression"
                         ? predActual
                           ? "Multivariate least squares: k features standardized on train statistics, solved in closed form via normal equations; ridge adds α to the diagonal, skipping the intercept."

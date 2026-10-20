@@ -20,6 +20,7 @@ import {
   mean,
   mulberry32,
   populationStd,
+  rankAuc,
   regressionMetrics,
   shuffledSplit,
 } from "@/lib/ml-math";
@@ -30,6 +31,7 @@ import {
   fitRegressionModel,
   modelRng,
   resolveHyper,
+  type FitDirectives,
   type RegFit,
 } from "@/lib/ml-models";
 import type { CVFold, CsvSourceMeta, MLTrainResponse } from "@/lib/toolkit-types";
@@ -641,6 +643,13 @@ function runClassification(
   const { train, test } = shuffledSplit(n, req.testSize, rand);
 
   const hp = resolveHyper(req);
+  /* GP classification: when the request leaves both kernel slots unset,
+   *  the fit LEARNS (ℓ, σf) by the Laplace-lml grid search (the
+   *  classification twin of the regression GP's learn directive). */
+  const directives: FitDirectives =
+    req.lengthScale === undefined && req.signalStd === undefined
+      ? { learnGpClsKernel: true }
+      : {};
   const trainX = train.map((i) => [pts[i]?.x ?? 0, pts[i]?.y ?? 0]);
   const trainLabels = train.map((i) => pts[i]?.label ?? 0);
   const fit = fitClassificationModel(
@@ -649,26 +658,52 @@ function runClassification(
     trainLabels,
     hp,
     modelRng(effSeed, 0),
-    featureNames
+    featureNames,
+    directives
   );
 
   const yTrue = test.map((i) => pts[i]?.label ?? 0);
   const yPred = test.map((i) => fit.predict01(pts[i]?.x ?? 0, pts[i]?.y ?? 0));
   const metrics = classificationMetrics(yTrue, yPred);
 
+  /* GP classification: the honest probabilistic readout — ROC AUC (rank
+   *  statistic over the predicted probabilities), log-loss and Brier on
+   *  the held-out rows, plus the mean latent σ the 5-erf integral saw. */
+  let gpCls: MLTrainResponse["gpCls"];
+  if (fit.gpCls && fit.predictProba) {
+    const probas = test.map((i) => fit.predictProba!(pts[i]?.x ?? 0, pts[i]?.y ?? 0));
+    gpCls = {
+      ...fit.gpCls,
+      rocAuc: rankAuc(yTrue, probas),
+      logLoss:
+        -yTrue.reduce(
+          (acc, y, i) =>
+            acc +
+            (y === 1 ? Math.log(Math.max(probas[i] ?? 0.5, 1e-12)) : Math.log(Math.max(1 - (probas[i] ?? 0.5), 1e-12))),
+          0
+        ) / Math.max(yTrue.length, 1),
+      brier: yTrue.reduce((acc, y, i) => acc + (y - (probas[i] ?? 0.5)) ** 2, 0) / Math.max(yTrue.length, 1),
+    };
+  }
+
   // Decision boundary: dense grid classified by the trained model.
+  // GP classification also carries the calibrated probability so the
+  // chart can fade boundary dots by confidence (|p − 0.5|).
   const xs = pts.map((p) => p.x);
   const ys = pts.map((p) => p.y);
   const [xMin, xMax] = extent(xs);
   const [yMin, yMax] = extent(ys);
   const G = 60;
-  const boundary: Array<{ x: number; y: number; pred: number }> = [];
+  const boundary: Array<{ x: number; y: number; pred: number; proba?: number }> = [];
   for (let gi = 0; gi < G; gi++) {
     for (let gj = 0; gj < G; gj++) {
       const x = (xMin - 0.5) + ((xMax + 0.5 - (xMin - 0.5)) * gi) / (G - 1);
       const y = (yMin - 0.5) + ((yMax + 0.5 - (yMin - 0.5)) * gj) / (G - 1);
       boundary.push({ x, y, pred: fit.predict01(x, y) });
     }
+  }
+  if (fit.predictProba) {
+    for (const p of boundary) p.proba = fit.predictProba(p.x, p.y);
   }
 
   // k-fold CV (accuracy per fold).
@@ -679,7 +714,8 @@ function runClassification(
       trainIdx.map((i) => pts[i]?.label ?? 0),
       hp,
       modelRng(effSeed, slot),
-      featureNames
+      featureNames,
+      directives
     );
     let correct = 0;
     for (const i of fold) {
@@ -703,6 +739,7 @@ function runClassification(
     ...(fit.coefficients ? { coefficients: fit.coefficients } : {}),
     ...(fit.featureImportance ? { featureImportance: fit.featureImportance } : {}),
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),
+    ...(gpCls ? { gpCls } : {}),
     series: {
       test: test.map((i) => ({
         x: pts[i]?.x ?? 0,

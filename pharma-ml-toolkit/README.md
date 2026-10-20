@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (2136 tests).
+exceptions, input validation, and pytest coverage** (2143 tests).
 
 ---
 
@@ -269,7 +269,7 @@ pharma-ml-toolkit/
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
 ├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
-├── tests/                   # 2136 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
+├── tests/                   # 2143 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -321,7 +321,7 @@ outputs committed (numbers *and* inline figures):
 > similarity heat-map, structures → model demo) → §3 EDA → §4 IC50→pIC50 →
 > §5 split → §6 grid-searched training → §7 evaluation (confusion, ROC) →
 > §8 multiclass → §9 regression (parity, residuals, outlier-robust Huber demo) → §10 leaderboard →
-> §11 **the full registry tour** (all 25 families fitted on the same splits, held-out
+> §11 **the full registry tour** (all 26 families fitted on the same splits, held-out
 > scores, unavailable engines listed with their missing requirement — the
 > self-updating coverage guarantee) → §12 feature importance → §13 save/load &
 > scoring new compounds → §14 one-click HTML report + png/svg/pdf + csv/md/json.
@@ -687,7 +687,11 @@ wide, collinear descriptor blocks with few observations; regression only, aliase
 `plsr` / `partial_least_squares`), `gaussian_process` (**kriging** — a
 kernel-likelihood surrogate whose every prediction carries its own σ
 (`predict_with_uncertainty`), the active-learning workhorse for scarce
-observations; regression only, aliases `gp` / `gpr` / `kriging`), `hsvr`
+observations; regression only, aliases `gp` / `gpr` / `kriging`),
+`gaussian_process_classifier` (**Laplace GP classifier** — a latent GP
+squashed through the logistic likelihood, Newton-mode posterior, calibrated
+5-erf probabilities that hedge toward 0.5 away from the data; aliases
+`gpc` / `gp_classifier`), `hsvr`
 (**hierarchical SVR** — k-means local
 specialists blended with a global SVR, regression only), plus `xgboost` / `lightgbm` /
 `catboost` when the optional packages are installed — and two **deep-learning families**:
@@ -1381,7 +1385,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (2136 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (2143 tests incl. doctests, skips RDKit-only tests if absent)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

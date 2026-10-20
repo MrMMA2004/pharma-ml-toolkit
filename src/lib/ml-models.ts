@@ -14,6 +14,7 @@ import {
   fitExtraTreesRegressor,
   fitGaussianNB,
   fitGaussianProcess,
+  fitGaussianProcessClassification,
   fitGradientBoostingRegressor,
   fitHuberRegression,
   fitHsvr,
@@ -64,8 +65,9 @@ export const REGRESSION_MODELS = [
 ] as const;
 
 /** Classification models: legacy logistic + 10 (incl. ada_boost,
- *  extra_trees and the RBF-kernel SVM — the library's adaboost /
- *  extra_trees / svm families). */
+ *  extra_trees, the RBF-kernel SVM and gaussian_process — the library's
+ *  adaboost / extra_trees / svm / gaussian_process_classifier
+ *  families; the web id is task-scoped like svm_rbf). */
 export const CLASSIFICATION_MODELS = [
   "logistic",
   "knn",
@@ -76,6 +78,7 @@ export const CLASSIFICATION_MODELS = [
   "gaussian_nb",
   "svm_linear",
   "svm_rbf",
+  "gaussian_process",
   "mlp",
 ] as const;
 
@@ -234,6 +237,11 @@ export interface FitDirectives {
    *  the request's (default-filled) values — the web mirror of the
    *  library's LML-tuned kernel. */
   learnGpKernel?: boolean;
+  /** GP classification: learn (lengthScale/signalStd) by the Laplace-
+   *  lml grid search (the classification twin of learnGpKernel — no
+   *  noise slot: the logistic likelihood absorbs what a WhiteKernel
+   *  would model). */
+  learnGpClsKernel?: boolean;
 }
 
 /** Fit any regression model over a raw (unstandardized) feature matrix. */
@@ -482,6 +490,16 @@ export interface ClsFit {
   coefficients?: { intercept: number; coefs: number[]; standardized: boolean };
   featureImportance?: { features: string[]; importance: number[]; measure: "variance" | "gini" };
   modelParams?: Record<string, number>;
+  /** GP classification: calibrated class-1 probability at a raw row. */
+  predictProba?: (xRaw: number, yRaw: number) => number;
+  /** GP classification only: the Laplace posterior readout. */
+  gpCls?: {
+    lengthScale: number;
+    signalStd: number;
+    newtonIterations: number;
+    logMarginalLikelihood: number;
+    kernelTuned: boolean;
+  };
 }
 
 /** Fit any classification model over raw (unstandardized) 2-feature rows. */
@@ -491,7 +509,8 @@ export function fitClassificationModel(
   labelsTrain: number[],
   hp: Hyper,
   rand: () => number,
-  featureNames: string[]
+  featureNames: string[],
+  directives: FitDirectives = {}
 ): ClsFit {
   switch (model) {
     case "logistic": {
@@ -586,6 +605,35 @@ export function fitClassificationModel(
       return {
         predict01: (x, y) => m.predict([x, y]),
         modelParams: { C: hp.C, gamma: hp.gamma, lambda: m.lambda, nSupport: m.nSupport },
+      };
+    }
+    case "gaussian_process": {
+      /* The classification half of the GP family — the web mirror of
+       *  the library's gaussian_process_classifier (Laplace posterior:
+       *  Newton mode + 5-erf predictive probabilities, verified against
+       *  sklearn by scratch/verify_gpc_parity.{py,ts}). With the learn
+       *  directive (request left ℓ / σf unset) the Laplace-lml grid
+       *  search picks the kernel. */
+      const m = fitGaussianProcessClassification(
+        XTrain,
+        labelsTrain,
+        directives.learnGpClsKernel ? {} : { lengthScale: hp.lengthScale, signalStd: hp.signalStd }
+      );
+      return {
+        predict01: (x, y) => m.predict01([x, y]),
+        predictProba: (x, y) => m.predictProba([x, y]),
+        modelParams: {
+          lengthScale: m.lengthScale,
+          signalStd: m.signalStd,
+          newtonIterations: m.newtonIterations,
+        },
+        gpCls: {
+          lengthScale: m.lengthScale,
+          signalStd: m.signalStd,
+          newtonIterations: m.newtonIterations,
+          logMarginalLikelihood: m.logMarginalLikelihood,
+          kernelTuned: m.kernelTuned,
+        },
       };
     }
     case "svm_linear": {
@@ -696,6 +744,10 @@ export const CLS_TUNE_SPACES: Record<string, TuneChoice[]> = {
   svm_rbf: [
     { key: "gamma", values: [0.05, 0.1, 0.25, 0.5, 1, 2] },
     { key: "C", values: [0.05, 0.1, 0.5, 1, 2, 5, 10] },
+  ],
+  gaussian_process: [
+    { key: "lengthScale", values: [0.25, 0.5, 1, 2, 4] },
+    { key: "signalStd", values: [0.5, 1, 2] },
   ],
   mlp: [
     { key: "hidden", values: [4, 8, 16, 32] },

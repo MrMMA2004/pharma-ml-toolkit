@@ -290,6 +290,27 @@ export interface MLTrainResponse {
     /** Median test-set predictive σ (raw target units). */
     medianSigma: number;
   };
+  /** GP classification only: the Laplace posterior readout plus the
+   *  honest held-out probabilistic scores (ROC AUC / log-loss / Brier
+   *  from the 5-erf predictive probabilities). */
+  gpCls?: {
+    /** RBF length scale ℓ (standardized-feature units). */
+    lengthScale: number;
+    /** Latent-kernel amplitude σf. */
+    signalStd: number;
+    /** Newton iterations spent finding the posterior mode. */
+    newtonIterations: number;
+    /** Laplace log marginal likelihood at the mode. */
+    logMarginalLikelihood: number;
+    /** True when (ℓ, σf) were learned by the Laplace-lml grid search. */
+    kernelTuned: boolean;
+    /** Test-set ROC AUC over the predictive probabilities. */
+    rocAuc: number;
+    /** Test-set log-loss (natural log, clamped at 1e-12). */
+    logLoss: number;
+    /** Test-set Brier score (mean squared probability error). */
+    brier: number;
+  };
   /** HSVR only: per-cluster geometry + local-fit diagnostics. */
   hsvr?: {
     nClusters: number;
@@ -329,7 +350,7 @@ export interface MLTrainResponse {
   series: {
     test: Array<{ x: number; y: number; label?: number; err?: number }>;
     curve?: Array<{ x: number; yhat: number; lo?: number; hi?: number }>;
-    boundary?: Array<{ x: number; y: number; pred: number }>;
+    boundary?: Array<{ x: number; y: number; pred: number; proba?: number }>;
   };
   datasetMeta: {
     nTotal: number;

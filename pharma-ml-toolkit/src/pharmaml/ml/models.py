@@ -47,7 +47,7 @@ from sklearn.ensemble import (
     VotingClassifier,
     VotingRegressor,
 )
-from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process import GaussianProcessClassifier, GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import (
     RBF,
     ConstantKernel,
@@ -320,6 +320,20 @@ def _gp_reg() -> GaussianProcessRegressor:
     )
 
 
+def _gp_cls() -> GaussianProcessClassifier:
+    # The classification half of the GP family: a latent GP squashed
+    # through the logistic likelihood, posterior approximated by
+    # Laplace's method (Newton mode-finding, exactly GPML algorithm
+    # 3.1).  Binary labels use the single latent; multiclass falls back
+    # to sklearn's internal one-vs-rest ensemble of binary Laplace GPs.
+    # No white-noise term: the logistic likelihood already absorbs the
+    # label noise a WhiteKernel would model on the regression side.
+    kernel = ConstantKernel(1.0) * RBF(length_scale=1.0)
+    return GaussianProcessClassifier(
+        kernel=kernel, random_state=42, n_restarts_optimizer=0
+    )
+
+
 def _hsvr():
     from pharmaml.ml.hierarchical import HierarchicalSVR
 
@@ -443,6 +457,25 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
             "tuned by marginal likelihood at fit time, every prediction "
             "carrying its own sigma (predict_with_uncertainty) -- the "
             "surrogate standard for scarce observations and active learning"
+        ),
+    ),
+    "gaussian_process_classifier": ModelSpec(
+        name="gaussian_process_classifier",
+        task="classification",
+        factory=lambda: _gp_cls(),
+        param_grid={
+            "kernel": [
+                ConstantKernel(1.0) * RBF(length_scale=1.0),
+                ConstantKernel(1.0) * Matern(length_scale=1.0, nu=1.5),
+                ConstantKernel(1.0) * RationalQuadratic(length_scale=1.0, alpha=0.2),
+            ]
+        },
+        notes=(
+            "Gaussian process classification (Laplace approximation): a "
+            "latent GP squashed through the logistic likelihood, posterior "
+            "mode found by Newton iteration -- calibrated probabilities "
+            "with honest uncertainty away from the data, the active-"
+            "learning classifier that knows what it does not know"
         ),
     ),
     "knn": ModelSpec(
@@ -658,6 +691,10 @@ MODEL_ALIASES: dict[str, str] = {
     "gpr": "gaussian_process",
     "gaussianprocess": "gaussian_process",
     "kriging": "gaussian_process",
+    "gpc": "gaussian_process_classifier",
+    "gp_classifier": "gaussian_process_classifier",
+    "gp_classification": "gaussian_process_classifier",
+    "gaussianprocessclassifier": "gaussian_process_classifier",
 }
 
 
