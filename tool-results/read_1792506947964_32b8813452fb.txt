@@ -1,0 +1,954 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useMemo, useState } from "react";
+     4→import {
+     5→  Check,
+     6→  CircleCheck,
+     7→  Copy,
+     8→  FileArchive,
+     9→  FileCode2,
+    10→  FileDown,
+    11→  FileSearch,
+    12→  FileText,
+    13→  Loader2,
+    14→  NotebookText,
+    15→  Package,
+    16→  RefreshCw,
+    17→  Scale,
+    18→  ShieldCheck,
+    19→  TerminalSquare,
+    20→  TriangleAlert,
+    21→} from "lucide-react";
+    22→import { Button } from "@/components/ui/button";
+    23→import {
+    24→  Card,
+    25→  CardContent,
+    26→  CardDescription,
+    27→  CardHeader,
+    28→  CardTitle,
+    29→} from "@/components/ui/card";
+    30→import { StatChip } from "@/components/explorer/stat-chip";
+    31→import { useToolkitStore } from "@/lib/store";
+    32→import { cn } from "@/lib/utils";
+    33→import { copyToClipboard, fmtBytes, fmtInt } from "@/lib/format";
+    34→import type { FileContentResponse, TreeNode } from "@/lib/toolkit-types";
+    35→import { SHIPPED_TOOLKIT_VERSION } from "@/lib/toolkit-version";
+    36→import { toast } from "sonner";
+    37→import type { LucideIcon } from "lucide-react";
+    38→
+    39→/** One numbered step of the install guide. */
+    40→interface InstallStep {
+    41→  title: string;
+    42→  description: string;
+    43→  commands: string[];
+    44→  /** Optional pip extras — each chip copies its own install command. */
+    45→  extras?: Array<{ name: string; note: string }>;
+    46→}
+    47→
+    48→/** Placeholder inside INSTALL_STEPS commands for the versioned archive name —
+    49→ *  substituted at render time so the static guide always shows the live
+    50→ *  version (the file downloads as pharma-ml-toolkit-v<version>.zip). */
+    51→const ZIP_NAME_TOKEN = "{ZIP_NAME}";
+    52→
+    53→/** Version this panel shipped with — the fallback when live tree stats have
+    54→ *  not loaded yet (or the tree API is unreachable); re-exported from
+    55→ *  @/lib/toolkit-version so the header badge and this panel agree. */
+    56→const SHIPPED_VERSION = SHIPPED_TOOLKIT_VERSION as string;
+    57→
+    58→const INSTALL_STEPS: InstallStep[] = [
+    59→  {
+    60→    title: "Unpack the archive",
+    61→    description: "Creates a pharmaml/ working copy and moves the terminal into it.",
+    62→    commands: ["unzip {ZIP_NAME} -d pharmaml && cd pharmaml"],
+    63→  },
+    64→  {
+    65→    title: "Install the dependencies at the verified versions",
+    66→    description:
+    67→      "requirements.txt pins the exact stack the QA chain runs green under (numpy 1.26.4, pandas 2.2.3, scikit-learn 1.5.2, …) — the reproducible route. The editable package install then maps pharmaml onto your Python.",
+    68→    commands: ["pip install -r requirements.txt", "pip install -e ."],
+    69→    extras: [
+    70→      { name: ".[chem]", note: "cheminformatics (RDKit)" },
+    71→      { name: ".[docking]", note: "docking prep (RDKit + Meeko)" },
+    72→      { name: ".[boosting]", note: "gradient-boosting model families" },
+    73→    ],
+    74→  },
+    75→  {
+    76→    title: "Open the playground",
+    77→    description:
+    78→      "A tabbed Tkinter GUI over every domain — chemistry, PK/PD dosing, ML on your CSVs, and the generative GA. Every trained model ships as a one-click report bundle (report.html + figures + tables, optional report.pdf — the CLI --plots/--pdf-report story, mouse edition), and Check CSV… audits any new dataset against the last model before you predict — in both the Data & ML tab and the Deep Learning tab (the ml check story, mouse edition). No terminal needed; works straight after unzipping.",
+    79→    commands: ["python playground.py"],
+    80→  },
+    81→  {
+    82→    title: "Verify the install",
+    83→    description: "2136 tests should pass and the CLI answers with its version.",
+    84→    commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
+    85→  },
+    86→];
+    87→
+    88→/**
+    89→ * Compact terminal command strip: a header row naming the command context
+    90→ * ("terminal", "terminal · macOS", …) with an icon-only copy button, then the
+    91→ * command itself behind a `$` prompt in monospace. Copy feedback swaps the
+    92→ * icon to a check, flips aria-pressed and announces itself via a live region.
+    93→ */
+    94→function CommandStrip({
+    95→  command,
+    96→  context = "terminal",
+    97→  hint,
+    98→  className,
+    99→}: {
+   100→  command: string;
+   101→  context?: string;
+   102→  hint?: string;
+   103→  className?: string;
+   104→}) {
+   105→  const [copied, setCopied] = useState(false);
+   106→
+   107→  async function copy() {
+   108→    const ok = await copyToClipboard(command);
+   109→    if (ok) {
+   110→      setCopied(true);
+   111→      toast.success("Command copied", { description: command });
+   112→      window.setTimeout(() => setCopied(false), 1600);
+   113→    } else {
+   114→      toast.error("Could not copy — your browser blocked clipboard access");
+   115→    }
+   116→  }
+   117→
+   118→  return (
+   119→    <div className={cn("overflow-hidden rounded-lg border bg-card text-left", className)}>
+   120→      <div className="flex items-center justify-between gap-2 border-b bg-muted/40 py-1 pl-2.5 pr-1.5">
+   121→        <span className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+   122→          <TerminalSquare className="size-3 shrink-0 text-primary" aria-hidden />
+   123→          <span className="truncate">{context}</span>
+   124→        </span>
+   125→        <button
+   126→          type="button"
+   127→          onClick={() => void copy()}
+   128→          aria-label={`Copy command to clipboard: ${command}`}
+   129→          aria-pressed={copied}
+   130→          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+   131→        >
+   132→          {copied ? (
+   133→            <Check className="size-3.5 text-primary" aria-hidden />
+   134→          ) : (
+   135→            <Copy className="size-3.5" aria-hidden />
+   136→          )}
+   137→          <span aria-live="polite" className="sr-only">
+   138→            {copied ? "Copied to clipboard" : ""}
+   139→          </span>
+   140→        </button>
+   141→      </div>
+   142→      <div className="flex items-baseline gap-2 px-2.5 py-2">
+   143→        <span
+   144→          aria-hidden
+   145→          className="shrink-0 select-none font-mono text-[13px] leading-6 text-muted-foreground/60"
+   146→        >
+   147→          $
+   148→        </span>
+   149→        <code className="min-w-0 flex-1 break-all font-mono text-[13px] leading-6">{command}</code>
+   150→      </div>
+   151→      {hint ? (
+   152→        <p className="border-t bg-muted/20 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground">
+   153→          {hint}
+   154→        </p>
+   155→      ) : null}
+   156→    </div>
+   157→  );
+   158→}
+   159→
+   160→/**
+   161→ * A pip extra rendered as a copy-to-clipboard chip (e.g. `.[chem]`) — the
+   162→ * full `pip install -e "…"` command is copied, the chip label stays compact.
+   163→ */
+   164→function ExtraChip({ name, note }: { name: string; note: string }) {
+   165→  const [copied, setCopied] = useState(false);
+   166→  const command = `pip install -e "${name}"`;
+   167→
+   168→  async function copy() {
+   169→    const ok = await copyToClipboard(command);
+   170→    if (ok) {
+   171→      setCopied(true);
+   172→      toast.success("Command copied", { description: command });
+   173→      window.setTimeout(() => setCopied(false), 1600);
+   174→    } else {
+   175→      toast.error("Could not copy — your browser blocked clipboard access");
+   176→    }
+   177→  }
+   178→
+   179→  return (
+   180→    <button
+   181→      type="button"
+   182→      onClick={() => void copy()}
+   183→      aria-label={`Copy install command for the ${note} extra: ${command}`}
+   184→      aria-pressed={copied}
+   185→      title={`${note} — copies ${command}`}
+   186→      className={cn(
+   187→        "inline-flex items-center gap-1 rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+   188→        copied && "border-primary/40 bg-primary/5 text-foreground"
+   189→      )}
+   190→    >
+   191→      {name}
+   192→      {copied ? (
+   193→        <Check className="size-3 text-primary" aria-hidden />
+   194→      ) : (
+   195→        <Copy className="size-3 opacity-50" aria-hidden />
+   196→      )}
+   197→    </button>
+   198→  );
+   199→}
+   200→
+   201→function countFiles(node: TreeNode): number {
+   202→  if (node.type === "file") return 1;
+   203→  return (node.children ?? []).reduce((acc, child) => acc + countFiles(child), 0);
+   204→}
+   205→
+   206→/** Look up a node in the tree by its toolkit-relative path. */
+   207→function findNode(node: TreeNode, path: string): TreeNode | null {
+   208→  if (node.path === path) return node;
+   209→  for (const child of node.children ?? []) {
+   210→    const hit = findNode(child, path);
+   211→    if (hit) return hit;
+   212→  }
+   213→  return null;
+   214→}
+   215→
+   216→/** Hand-picked highlights of the archive, with live tree metadata. */
+   217→const FEATURED_FILES: Array<{
+   218→  path: string;
+   219→  title: string;
+   220→  description: string;
+   221→  icon: LucideIcon;
+   222→  /** Tailwind tint classes for the icon badge. */
+   223→  badgeClass: string;
+   224→}> = [
+   225→  {
+   226→    path: "examples/complete_ml_workflow.ipynb",
+   227→    title: "Complete ML workflow (zero → one hundred)",
+   228→    description:
+   229→      "Executed Jupyter notebook — the full ML process in structured order: import your own file → SMILES → descriptors & fingerprints (Morgan/RDKit/atom-pair/Avalon, bits and counts — feature calculation) → EDA → pIC50 → split → tuned training → multiclass evaluation → leaderboard → feature importance → save/load → one-click HTML + PDF report. 15 figures committed inline. The same PDF ships from the terminal: ml train --pdf-report (implies --plots).",
+   230→    icon: NotebookText,
+   231→    badgeClass: "bg-primary/10 text-primary",
+   232→  },
+   233→  {
+   234→    path: "examples/complete_docking_workflow.ipynb",
+   235→    title: "Complete docking workflow (zero → one hundred)",
+   236→    description:
+   237→      "Executed Jupyter notebook — starts from a ligands.csv and a real lysozyme PDB: library import with failed-SMILES accounting, receptor cleaning/typing via Meeko, then the full grid/engine/parse/rescore/report workflow. Runs without a docking engine.",
+   238→    icon: NotebookText,
+   239→    badgeClass: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
+   240→  },
+   241→  {
+   242→    path: "examples/complete_pk_workflow.ipynb",
+   243→    title: "Complete PK/PD workflow (zero → one hundred)",
+   244→    description:
+   245→      "Executed Jupyter notebook — the pharma walkthrough the legacy archive never had: import your concentration–time file, NCA (AUC/t½/Cmax), derived CL & Vd, IV routes, accumulation to steady state, Emax PD, dosage design, renal & TDM adjustments, one-click HTML report. 3 figures committed inline.",
+   246→    icon: NotebookText,
+   247→    badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+   248→  },
+   249→  {
+   250→    path: "examples/complete_deep_learning_workflow.ipynb",
+   251→    title: "Complete deep learning workflow (zero → one hundred)",
+   252→    description:
+   253→      "Executed Jupyter notebook — the PyTorch path end to end: DeepMLPRegressor with early stopping on a held-out validation fraction, the training-history verdict, parity + residual diagnostics, the plain-vs-residual architecture A/B, and the registry route train_model('dnn', …). 6 figures committed inline.",
+   254→    icon: NotebookText,
+   255→    badgeClass: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+   256→  },
+   257→  {
+   258→    path: "examples/complete_generative_workflow.ipynb",
+   259→    title: "Complete molecule generation workflow (zero → one hundred)",
+   260→    description:
+   261→      "Executed Jupyter notebook — the generative chemistry tour: corpus → objective library → multi-objective blend → GA de novo + Pareto front + crowding shortlist → seeded generation → lead optimisation → scaffold hopping (ring / linker / fused-ring / topology cuts) → adaptive operators → RL with a prior SMILES policy → novelty → GA-vs-RL head-to-head. 7 figures committed inline.",
+   262→    icon: NotebookText,
+   263→    badgeClass: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+   264→  },
+   265→  {
+   266→    path: "examples/complete_cellline_workflow.ipynb",
+   267→    title: "Complete cell line analysis workflow (zero → one hundred)",
+   268→    description:
+   269→      "Executed Jupyter notebook — the biology path: a GDSC-style response screen import → QC audit + replicate variability (the CV the median collapse discards) → LN_IC50→pIC50 normalization → the cell × compound potency matrix → sensitive-vs-resistant quantile calls → omics feature selection → biomarker discovery → the response model, with dnn and dnn_residual joining the leaderboard. 3 figures committed inline.",
+   270→    icon: NotebookText,
+   271→    badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+   272→  },
+   273→  {
+   274→    path: "examples/complete_ml_workflow_no_output.ipynb",
+   275→    title: "No-output notebook twins (lightweight)",
+   276→    description:
+   277→      "Bandwidth-friendly twins of every executed notebook — identical cells, every output stripped: ML 42 KB (4% of the executed original), docking 56 KB, PK/PD 41 KB, cell line 23 KB, generative 78 KB, deep learning 23 KB. Open the full notebook to read results, run the twin to produce them yourself.",
+   278→    icon: NotebookText,
+   279→    badgeClass: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
+   280→  },
+   281→  {
+   282→    path: "examples/pharmaml_walkthrough.ipynb",
+   283→    title: "Interactive walkthrough",
+   284→    description:
+   285→      "Executed Jupyter notebook — an every-domain tour of the package on synthetic data: ML, PK/PD dosage, docking rescoring and endpoint conversion.",
+   286→    icon: NotebookText,
+   287→    badgeClass: "bg-primary/10 text-primary",
+   288→  },
+   289→  {
+   290→    path: "docs/INDEX.md",
+   291→    title: "Public API index",
+   292→    description:
+   293→      "Auto-generated module index — every public symbol with a one-line summary, kept in sync by the docs drift-guard tests.",
+   294→    icon: FileText,
+   295→    badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+   296→  },
+   297→  {
+   298→    path: "docs/COVERAGE.md",
+   299→    title: "RAR coverage matrix",
+   300→    description:
+   301→      "The one-by-one audit of the original 118-script archive — every file mapped to the PharmaML surface that upgrades it, the two gaps the audit closed (penalized logistic classifiers, Avalon fingerprints) and the intentional absorptions, each with its reason.",
+   302→    icon: FileSearch,
+   303→    badgeClass: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+   304→  },
+   305→];
+   306→
+   307→function collectDirSummary(
+   308→  root: TreeNode
+   309→): Array<{ name: string; files: number; size: number; note: string }> {
+   310→  const notes: Record<string, string> = {
+   311→    src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
+   312→    tests: "2136 pytest cases across all domains",
+   313→    examples: "eight executed notebooks + seven no-output twins + runnable demos",
+   314→    ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
+   315→    docs: "module index — auto-generated API reference",
+   316→    scratch: "idempotent build & patch scripts (notebooks, docs index)",
+   317→  };
+   318→  const out: Array<{ name: string; files: number; size: number; note: string }> = [];
+   319→  let rootFiles = 0;
+   320→  let rootBytes = 0;
+   321→  for (const child of root.children ?? []) {
+   322→    if (child.type === "dir") {
+   323→      out.push({
+   324→        name: child.name,
+   325→        files: countFiles(child),
+   326→        size: child.size,
+   327→        note: notes[child.name] ?? "",
+   328→      });
+   329→    } else {
+   330→      rootFiles++;
+   331→      rootBytes += child.size;
+   332→    }
+   333→  }
+   334→  if (rootFiles > 0) {
+   335→    out.push({
+   336→      name: "(root)",
+   337→      files: rootFiles,
+   338→      size: rootBytes,
+   339→      note: "README, CHANGELOG, VERSION, playground.py, pyproject.toml, Dockerfile, requirements.txt",
+   340→    });
+   341→  }
+   342→  return out;
+   343→}
+   344→
+   345→export function DownloadPanel() {
+   346→  const ensureTree = useToolkitStore((s) => s.ensureTree);
+   347→  const tree = useToolkitStore((s) => s.tree);
+   348→  const stats = useToolkitStore((s) => s.stats);
+   349→  const treeStatus = useToolkitStore((s) => s.treeStatus);
+   350→  const setTab = useToolkitStore((s) => s.setTab);
+   351→  const openFileAtLine = useToolkitStore((s) => s.openFileAtLine);
+   352→
+   353→  const [downloading, setDownloading] = useState(false);
+   354→  /** Path of the featured file currently being fetched (spinner state). */
+   355→  const [fileBusy, setFileBusy] = useState<string | null>(null);
+   356→
+   357→  /** Archive version — live from the tree stats when loaded, else the shipped
+   358→   *  one; the download route stamps the same value into the filename and the
+   359→   *  X-Toolkit-Version response header. */
+   360→  const version = stats?.version ?? SHIPPED_VERSION;
+   361→  /** Versioned archive name — shown (and saved) everywhere the ZIP is named. */
+   362→  const zipName = `pharma-ml-toolkit-v${version}.zip`;
+   363→
+   364→  useEffect(() => {
+   365→    void ensureTree();
+   366→  }, [ensureTree]);
+   367→
+   368→  const dirSummary = useMemo(() => (tree ? collectDirSummary(tree) : []), [tree]);
+   369→
+   370→  /** Total files across the top-level folders — denominator for the share bars. */
+   371→  const totalFiles = useMemo(
+   372→    () => dirSummary.reduce((acc, d) => acc + d.files, 0),
+   373→    [dirSummary]
+   374→  );
+   375→
+   376→  /** Live metadata (size / lines) for each featured file, from the tree. */
+   377→  const featuredMeta = useMemo(() => {
+   378→    const map = new Map<string, TreeNode | null>();
+   379→    for (const f of FEATURED_FILES) {
+   380→      map.set(f.path, tree ? findNode(tree, f.path) : null);
+   381→    }
+   382→    return map;
+   383→  }, [tree]);
+   384→
+   385→  async function download() {
+   386→    setDownloading(true);
+   387→    try {
+   388→      const res = await fetch("/api/toolkit/download");
+   389→      if (!res.ok) {
+   390→        let message = `HTTP ${res.status}`;
+   391→        try {
+   392→          const data: unknown = await res.json();
+   393→          if (typeof data === "object" && data !== null && "error" in data) {
+   394→            message = String((data as { error: unknown }).error);
+   395→          }
+   396→        } catch {
+   397→          /* body wasn't JSON — keep the status message */
+   398→        }
+   399→        throw new Error(message);
+   400→      }
+   401→      const blob = await res.blob();
+   402→      if (blob.size < 1024) {
+   403→        throw new Error("The archive came back suspiciously small — try again.");
+   404→      }
+   405→      const url = URL.createObjectURL(blob);
+   406→      const anchor = document.createElement("a");
+   407→      anchor.href = url;
+   408→      anchor.download = zipName;
+   409→      document.body.appendChild(anchor);
+   410→      anchor.click();
+   411→      document.body.removeChild(anchor);
+   412→      URL.revokeObjectURL(url);
+   413→      toast.success("Download started", {
+   414→        description: `${zipName} · ${fmtBytes(blob.size)}`,
+   415→      });
+   416→    } catch (err) {
+   417→      toast.error("Download failed", {
+   418→        description: err instanceof Error ? err.message : "Unknown error.",
+   419→      });
+   420→    } finally {
+   421→      setDownloading(false);
+   422→    }
+   423→  }
+   424→
+   425→  /** Deep link a featured file into the Code Explorer. */
+   426→  function viewFeatured(path: string, title: string) {
+   427→    openFileAtLine(path, null);
+   428→    setTab("explorer");
+   429→    toast(`Opened ${title} in the Code Explorer`, { description: path });
+   430→  }
+   431→
+   432→  /** Fetch a single toolkit file and save it locally as a text blob. */
+   433→  async function downloadSingleFile(path: string) {
+   434→    setFileBusy(path);
+   435→    try {
+   436→      const res = await fetch(`/api/toolkit/file?path=${encodeURIComponent(path)}`);
+   437→      const body: unknown = await res.json();
+   438→      if (!res.ok) {
+   439→        const message =
+   440→          typeof body === "object" && body !== null && "error" in body
+   441→            ? String((body as { error: unknown }).error)
+   442→            : `HTTP ${res.status}`;
+   443→        throw new Error(message);
+   444→      }
+   445→      const payload = body as FileContentResponse;
+   446→      const blob = new Blob([payload.content], { type: "text/plain;charset=utf-8" });
+   447→      const fileName = path.split("/").pop() ?? "file.txt";
+   448→      const url = URL.createObjectURL(blob);
+   449→      const anchor = document.createElement("a");
+   450→      anchor.href = url;
+   451→      anchor.download = fileName;
+   452→      document.body.appendChild(anchor);
+   453→      anchor.click();
+   454→      anchor.remove();
+   455→      URL.revokeObjectURL(url);
+   456→      toast.success("Download started", { description: `${fileName} · ${fmtBytes(blob.size)}` });
+   457→    } catch (err) {
+   458→      toast.error("Download failed", {
+   459→        description: err instanceof Error ? err.message : "Unknown error.",
+   460→      });
+   461→    } finally {
+   462→      setFileBusy(null);
+   463→    }
+   464→  }
+   465→
+   466→  return (
+   467→    <div className="mx-auto max-w-3xl space-y-6">
+   468→      {/* ------------------------------ CTA ------------------------------ */}
+   469→      <Card className="overflow-hidden py-0 shadow-sm">
+   470→        <CardHeader className="dot-grid border-b bg-gradient-to-br from-primary/10 via-transparent to-amber-500/10 py-6">
+   471→          <div className="flex flex-col items-center gap-4 text-center">
+   472→            <span className="flex size-14 items-center justify-center rounded-xl bg-primary/15 text-primary">
+   473→              <FileArchive className="size-7" aria-hidden />
+   474→            </span>
+   475→            <div className="space-y-1">
+   476→              <CardTitle className="text-xl">Download {zipName}</CardTitle>
+   477→              <CardDescription>
+   478→                The complete Python package — source, tests, examples, Dockerfile and CI.
+   479→                Versioned archive — updates in place, no uninstall needed.
+   480→              </CardDescription>
+   481→            </div>
+   482→            <Button
+   483→              size="lg"
+   484→              className="h-12 gap-2 px-8 text-base"
+   485→              onClick={() => void download()}
+   486→              disabled={downloading}
+   487→            >
+   488→              {downloading ? (
+   489→                <>
+   490→                  <Loader2 className="size-5 animate-spin" aria-hidden />
+   491→                  Packaging…
+   492→                </>
+   493→              ) : (
+   494→                <>
+   495→                  <FileArchive className="size-5" aria-hidden />
+   496→                  Download ZIP
+   497→                  <span className="ml-1 rounded-full bg-primary-foreground/15 px-2 py-0.5 font-mono text-xs font-normal tabular-nums">
+   498→                    v{version}
+   499→                  </span>
+   500→                  {stats ? (
+   501→                    <span className="ml-1 rounded-full bg-primary-foreground/15 px-2 py-0.5 font-mono text-xs font-normal tabular-nums">
+   502→                      ≈ {fmtBytes(stats.totalBytes)}
+   503→                    </span>
+   504→                  ) : null}
+   505→                </>
+   506→              )}
+   507→            </Button>
+   508→            <p className="text-xs text-muted-foreground">
+   509→              Generated on the fly from the server copy — always in sync with the explorer.
+   510→            </p>
+   511→          </div>
+   512→        </CardHeader>
+   513→        <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
+   514→          <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
+   515→          <StatChip icon={CircleCheck} value="2136" label="passing tests" />
+   516→          <StatChip icon={Scale} value="MIT" label="license" />
+   517→          <StatChip
+   518→            icon={FileArchive}
+   519→            value={stats ? fmtBytes(stats.totalBytes) : "…"}
+   520→            label="uncompressed"
+   521→          />
+   522→        </CardContent>
+   523→      </Card>
+   524→
+   525→      {/* --------------------------- Featured files --------------------------- */}
+   526→      <section aria-labelledby="featured-title" className="space-y-3">
+   527→        <h2 id="featured-title" className="flex items-center gap-2 text-lg font-semibold">
+   528→          <FileDown className="size-5 text-primary" aria-hidden />
+   529→          Featured files
+   530→        </h2>
+   531→        <div className="grid gap-4 sm:grid-cols-2">
+   532→          {FEATURED_FILES.map((f) => {
+   533→            const meta = featuredMeta.get(f.path) ?? null;
+   534→            const busy = fileBusy === f.path;
+   535→            const Icon = f.icon;
+   536→            return (
+   537→              <Card key={f.path} className="featured-card overflow-hidden py-0 shadow-sm">
+   538→                <CardHeader className="border-b bg-muted/30 py-3">
+   539→                  <div className="flex items-start gap-2.5">
+   540→                    <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${f.badgeClass}`}>
+   541→                      <Icon className="size-4.5" aria-hidden />
+   542→                    </span>
+   543→                    <div className="min-w-0">
+   544→                      <CardTitle className="text-sm">{f.title}</CardTitle>
+   545→                      <p className="mt-0.5 break-all font-mono text-[11px] leading-snug text-muted-foreground">
+   546→                        {f.path}
+   547→                      </p>
+   548→                    </div>
+   549→                  </div>
+   550→                </CardHeader>
+   551→                <CardContent className="space-y-3 py-3">
+   552→                  <p className="text-xs leading-relaxed text-muted-foreground">{f.description}</p>
+   553→                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   554→                    <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono tabular-nums">
+   555→                      {meta ? fmtBytes(meta.size) : "…"}
+   556→                    </span>
+   557→                    {typeof meta?.lines === "number" ? (
+   558→                      <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono tabular-nums">
+   559→                        {fmtInt(meta.lines)} lines
+   560→                      </span>
+   561→                    ) : null}
+   562→                  </div>
+   563→                  <div className="flex gap-2">
+   564→                    <Button
+   565→                      variant="outline"
+   566→                      size="sm"
+   567→                      className="h-8 flex-1 gap-1.5 text-xs"
+   568→                      onClick={() => viewFeatured(f.path, f.title)}
+   569→                    >
+   570→                      <FileCode2 className="size-3.5" aria-hidden />
+   571→                      View
+   572→                    </Button>
+   573→                    <Button
+   574→                      variant="outline"
+   575→                      size="sm"
+   576→                      className="h-8 flex-1 gap-1.5 text-xs"
+   577→                      onClick={() => void downloadSingleFile(f.path)}
+   578→                      disabled={busy}
+   579→                    >
+   580→                      {busy ? (
+   581→                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+   582→                      ) : (
+   583→                        <FileDown className="size-3.5" aria-hidden />
+   584→                      )}
+   585→                      Download
+   586→                    </Button>
+   587→                  </div>
+   588→                </CardContent>
+   589→              </Card>
+   590→            );
+   591→          })}
+   592→        </div>
+   593→      </section>
+   594→
+   595→      {/* ------------------------------ Contents ------------------------------ */}
+   596→      <Card className="overflow-hidden py-0 shadow-sm">
+   597→        <CardHeader className="border-b bg-muted/30 py-3">
+   598→          <CardTitle className="text-base">What&apos;s inside</CardTitle>
+   599→          <CardDescription className="text-xs">
+   600→            {treeStatus === "loading"
+   601→              ? "Counting files…"
+   602→              : treeStatus === "error"
+   603→                ? "Tree unavailable — using the documented layout."
+   604→                : "File counts computed live from the server file tree."}
+   605→          </CardDescription>
+   606→        </CardHeader>
+   607→        <CardContent className="pb-4 pt-3">
+   608→          {treeStatus === "loading" ? (
+   609→            <div className="space-y-2">
+   610→              {Array.from({ length: 5 }).map((_, i) => (
+   611→                <div key={i} className="h-6 animate-pulse rounded bg-muted" />
+   612→              ))}
+   613→            </div>
+   614→          ) : dirSummary.length > 0 ? (
+   615→            <ul className="divide-y divide-border">
+   616→              {dirSummary.map((d) => {
+   617→                const share = Math.round((d.files / Math.max(1, totalFiles)) * 100);
+   618→                return (
+   619→                  <li
+   620→                    key={d.name}
+   621→                    className="py-2 transition-colors hover:bg-muted/40"
+   622→                  >
+   623→                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+   624→                      <code className="font-mono text-sm font-medium">
+   625→                        {d.name === "(root)" ? d.name : `${d.name}/`}
+   626→                      </code>
+   627→                      <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono text-xs tabular-nums text-muted-foreground">
+   628→                        {fmtInt(d.files)} {d.files === 1 ? "file" : "files"}
+   629→                      </span>
+   630→                      <span className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono text-xs tabular-nums text-muted-foreground">
+   631→                        {fmtBytes(d.size)}
+   632→                      </span>
+   633→                      <span
+   634→                        className="font-mono text-[10px] tabular-nums text-muted-foreground/70"
+   635→                        title={`${fmtInt(d.files)} of ${fmtInt(totalFiles)} files`}
+   636→                      >
+   637→                        {fmtInt(share)}%
+   638→                      </span>
+   639→                      {d.note ? (
+   640→                        <span className="w-full text-xs text-muted-foreground/80 sm:w-auto">
+   641→                          — {d.note}
+   642→                        </span>
+   643→                      ) : null}
+   644→                    </div>
+   645→                    {/* File-count share of the whole archive (decorative). */}
+   646→                    <div
+   647→                      aria-hidden
+   648→                      className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted"
+   649→                    >
+   650→                      <div
+   651→                        className="h-full rounded-full bg-primary/35"
+   652→                        style={{ width: `${Math.max(share, 2)}%` }}
+   653→                      />
+   654→                    </div>
+   655→                  </li>
+   656→                );
+   657→              })}
+   658→            </ul>
+   659→          ) : (
+   660→            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+   661→              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" aria-hidden />
+   662→              <span>
+   663→                src/ (chem, ml, pharma, docking, viz, utils), tests/, examples/, .github/, Dockerfile,
+   664→                pyproject.toml, requirements.txt.
+   665→              </span>
+   666→            </div>
+   667→          )}
+   668→        </CardContent>
+   669→      </Card>
+   670→
+   671→      {/* ------------------------------ Verify ------------------------------ */}
+   672→      <Card className="overflow-hidden py-0 shadow-sm">
+   673→        <CardHeader className="border-b bg-muted/30 py-3">
+   674→          <CardTitle className="flex items-center gap-2 text-base">
+   675→            <ShieldCheck className="size-4 text-primary" aria-hidden />
+   676→            Verify the archive
+   677→          </CardTitle>
+   678→          <CardDescription className="text-xs">
+   679→            The ZIP is rebuilt on the fly from the live tree — check your copy landed intact.
+   680→          </CardDescription>
+   681→        </CardHeader>
+   682→        <CardContent className="space-y-3 py-3">
+   683→          <CommandStrip
+   684→            command={`unzip -t ${zipName}`}
+   685→            hint="Tests the CRC-32 checksum of every entry — a healthy archive reports “No errors detected”."
+   686→          />
+   687→          <div className="grid gap-2 sm:grid-cols-2">
+   688→            <CommandStrip
+   689→              command={`shasum -a 256 ${zipName}`}
+   690→              context="terminal · macOS"
+   691→            />
+   692→            <CommandStrip
+   693→              command={`sha256sum ${zipName}`}
+   694→              context="terminal · linux"
+   695→            />
+   696→          </div>
+   697→          {/* Expected contents — counted client-side from the existing tree API. */}
+   698→          <div className="flex flex-wrap items-end gap-x-8 gap-y-3 rounded-lg border bg-muted/20 px-3 py-2.5">
+   699→            {[
+   700→              { label: "entries", value: stats ? fmtInt(stats.files + stats.dirs) : "…" },
+   701→              { label: "files", value: stats ? fmtInt(stats.files) : "…" },
+   702→              { label: "folders", value: stats ? fmtInt(stats.dirs) : "…" },
+   703→            ].map((s) => (
+   704→              <div key={s.label}>
+   705→                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</p>
+   706→                <p className="font-mono text-lg font-semibold leading-tight tabular-nums">{s.value}</p>
+   707→              </div>
+   708→            ))}
+   709→            <p className="w-full text-[11px] leading-snug text-muted-foreground/80 sm:ml-auto sm:w-auto sm:text-right">
+   710→              expected contents, counted live from the server tree — mirrors “What’s inside” above.
+   711→            </p>
+   712→          </div>
+   713→          <p className="text-[11px] leading-snug text-muted-foreground">
+   714→            Because the archive is regenerated per request, its SHA-256 differs between downloads — hash your own
+   715→            copy to re-verify it later or share it with a colleague.
+   716→          </p>
+   717→        </CardContent>
+   718→      </Card>
+   719→
+   720→      {/* ------------------------------ Install ------------------------------ */}
+   721→      <section aria-labelledby="install-title" className="space-y-3">
+   722→        <h2 id="install-title" className="flex items-center gap-2 text-lg font-semibold">
+   723→          <TerminalSquare className="size-5 text-primary" aria-hidden />
+   724→          Install &amp; verify
+   725→        </h2>
+   726→        <Card className="py-0 shadow-sm">
+   727→          <CardContent className="py-4">
+   728→            <ol>
+   729→              {INSTALL_STEPS.map((step, i) => (
+   730→                <li key={step.title} className="flex gap-3.5 sm:gap-4">
+   731→                  {/* Self-numbering circle + connector line down to the next step. */}
+   732→                  <div className="flex flex-col items-center">
+   733→                    <span
+   734→                      aria-hidden
+   735→                      className="flex size-6 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 font-mono text-[11px] font-semibold text-primary tabular-nums"
+   736→                    >
+   737→                      {i + 1}
+   738→                    </span>
+   739→                    {i < INSTALL_STEPS.length - 1 ? (
+   740→                      <span aria-hidden className="mt-1 w-px flex-1 bg-border" />
+   741→                    ) : null}
+   742→                  </div>
+   743→                  <div
+   744→                    className={cn(
+   745→                      "min-w-0 flex-1 space-y-2",
+   746→                      i < INSTALL_STEPS.length - 1 && "pb-5"
+   747→                    )}
+   748→                  >
+   749→                    <div>
+   750→                      <p className="text-sm font-medium leading-6">{step.title}</p>
+   751→                      <p className="text-xs leading-snug text-muted-foreground">{step.description}</p>
+   752→                    </div>
+   753→                    <div
+   754→                      className={cn("grid gap-2", step.commands.length > 1 && "sm:grid-cols-2")}
+   755→                    >
+   756→                      {step.commands.map((command) => (
+   757→                        <CommandStrip
+   758→                          key={command}
+   759→                          command={command.replaceAll(ZIP_NAME_TOKEN, zipName)}
+   760→                          hint={
+   761→                            command.includes(ZIP_NAME_TOKEN)
+   762→                              ? `the file downloads as ${zipName}`
+   763→                              : undefined
+   764→                          }
+   765→                        />
+   766→                      ))}
+   767→                    </div>
+   768→                    {step.extras ? (
+   769→                      <div className="flex flex-wrap items-center gap-1.5">
+   770→                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+   771→                          extras
+   772→                        </span>
+   773→                        {step.extras.map((extra) => (
+   774→                          <ExtraChip key={extra.name} name={extra.name} note={extra.note} />
+   775→                        ))}
+   776→                      </div>
+   777→                    ) : null}
+   778→                  </div>
+   779→                </li>
+   780→              ))}
+   781→            </ol>
+   782→          </CardContent>
+   783→        </Card>
+   784→      </section>
+   785→
+   786→      {/* --------------------- Pinned dependency stack --------------------- */}
+   787→      <section aria-labelledby="pinstack-title" className="space-y-3">
+   788→        <h2 id="pinstack-title" className="flex items-center gap-2 text-lg font-semibold">
+   789→          <Package className="size-5 text-primary" aria-hidden />
+   790→          Every library at the verified version
+   791→        </h2>
+   792→        <Card className="overflow-hidden py-0 shadow-sm">
+   793→          <CardHeader className="border-b bg-muted/30 py-3">
+   794→            <CardTitle className="text-base">The pinned stack, layer by layer</CardTitle>
+   795→            <CardDescription className="text-xs">
+   796→              requirements.txt in the archive pins the exact environment the QA chain runs green
+   797→              under (Python 3.12) — pyproject.toml keeps the loose ranges, this is the reproducible
+   798→              snapshot. Copy any layer you need; the core block is the only required one.
+   799→            </CardDescription>
+   800→          </CardHeader>
+   801→          <CardContent className="space-y-3.5 py-4">
+   802→            <div className="space-y-2">
+   803→              <div className="flex items-baseline justify-between gap-2">
+   804→                <p className="text-sm font-medium">Core — always required</p>
+   805→                <p className="text-[11px] text-muted-foreground">numpy · pandas · scikit-learn · scipy · joblib · openpyxl · tqdm</p>
+   806→              </div>
+   807→              <CommandStrip
+   808→                context="terminal · core (verified under Python 3.12)"
+   809→                command="pip install numpy==1.26.4 pandas==2.2.3 scikit-learn==1.5.2 scipy==1.14.1 joblib==1.5.3 openpyxl==3.1.5 tqdm==4.67.1"
+   810→                hint="or simply: pip install -r requirements.txt (the same pins, pre-written)"
+   811→              />
+   812→            </div>
+   813→            <div className="grid gap-2.5 lg:grid-cols-2">
+   814→              <div className="space-y-2">
+   815→                <div className="flex items-baseline justify-between gap-2">
+   816→                  <p className="text-sm font-medium">Cheminformatics</p>
+   817→                  <p className="text-[11px] text-muted-foreground">descriptors · fingerprints · Tanimoto</p>
+   818→                </div>
+   819→                <CommandStrip
+   820→                  context="terminal · extras"
+   821→                  command="pip install rdkit==2026.09.1 mordred==1.2.0"
+   822→                />
+   823→              </div>
+   824→              <div className="space-y-2">
+   825→                <div className="flex items-baseline justify-between gap-2">
+   826→                  <p className="text-sm font-medium">Docking preparation</p>
+   827→                  <p className="text-[11px] text-muted-foreground">SMILES → PDBQT · receptor grids</p>
+   828→                </div>
+   829→                <CommandStrip
+   830→                  context="terminal · extras"
+   831→                  command="pip install rdkit==2026.09.1 meeko==0.8.0 gemmi==0.7.5"
+   832→                />
+   833→              </div>
+   834→              <div className="space-y-2">
+   835→                <div className="flex items-baseline justify-between gap-2">
+   836→                  <p className="text-sm font-medium">Gradient boosting</p>
+   837→                  <p className="text-[11px] text-muted-foreground">xgboost / lightgbm / catboost families</p>
+   838→                </div>
+   839→                <CommandStrip
+   840→                  context="terminal · extras"
+   841→                  command="pip install xgboost==2.1.3 lightgbm==4.5.0 catboost==1.2.8"
+   842→                />
+   843→              </div>
+   844→              <div className="space-y-2">
+   845→                <div className="flex items-baseline justify-between gap-2">
+   846→                  <p className="text-sm font-medium">Deep learning (CPU)</p>
+   847→                  <p className="text-[11px] text-muted-foreground">dnn estimators · generative RNN/RL</p>
+   848→                </div>
+   849→                <CommandStrip
+   850→                  context="terminal · torch CPU wheel"
+   851→                  command="pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu"
+   852→                  hint="drop the --index-url for the CUDA build of the same version"
+   853→                />
+   854→              </div>
+   855→              <div className="space-y-2">
+   856→                <div className="flex items-baseline justify-between gap-2">
+   857→                  <p className="text-sm font-medium">Reports &amp; plots</p>
+   858→                  <p className="text-[11px] text-muted-foreground">PDF/DOCX · matplotlib figures</p>
+   859→                </div>
+   860→                <CommandStrip
+   861→                  context="terminal · extras"
+   862→                  command="pip install matplotlib==3.9.2 seaborn==0.13.2 fpdf2==2.8.5 python-docx==1.2.0"
+   863→                />
+   864→              </div>
+   865→              <div className="space-y-2">
+   866→                <div className="flex items-baseline justify-between gap-2">
+   867→                  <p className="text-sm font-medium">Development / QA</p>
+   868→                  <p className="text-[11px] text-muted-foreground">the stack the test suite runs under</p>
+   869→                </div>
+   870→                <CommandStrip
+   871→                  context="terminal · dev"
+   872→                  command="pip install pytest==9.0.2 pytest-cov==7.0.0 mypy==2.4.0 ruff==0.17.1"
+   873→                />
+   874→              </div>
+   875→            </div>
+   876→            <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
+   877→              <p className="text-[11px] leading-snug text-muted-foreground">
+   878→                <span className="font-medium text-foreground">Why exact versions?</span> Every pin above is
+   879→                the environment the 2,009-test pytest suite, ruff, mypy and the executed notebooks
+   880→                actually run green under — installing the same numbers removes an entire class of
+   881→                &quot;works on my machine&quot; before it starts (the numpy 1.26.4 pin in particular: mordred
+   882→                resolves against it).
+   883→              </p>
+   884→              <p className="text-[11px] leading-snug text-muted-foreground">
+   885→                The loose ranges in <code className="font-mono">pyproject.toml</code> remain the
+   886→                compatibility contract; the extras chips above (<code className="font-mono">.[chem]</code>,{" "}
+   887→                <code className="font-mono">.[docking]</code>, …) install the newest versions inside
+   888→                those ranges instead — pick one philosophy per environment, don&apos;t mix.
+   889→              </p>
+   890→            </div>
+   891→          </CardContent>
+   892→        </Card>
+   893→      </section>
+   894→
+   895→      {/* --------------------------- Update in place --------------------------- */}
+   896→      <Card className="overflow-hidden py-0 shadow-sm">
+   897→        <CardHeader className="border-b bg-muted/30 py-3">
+   898→          <CardTitle className="flex items-center gap-2 text-base">
+   899→            <RefreshCw className="size-4 text-primary" aria-hidden />
+   900→            Updating an existing copy
+   901→          </CardTitle>
+   902→          <CardDescription className="text-xs">
+   903→            New version, no uninstall: the archive extracts over your existing folder and the
+   904→            editable install picks up the new files immediately.
+   905→          </CardDescription>
+   906→        </CardHeader>
+   907→        <CardContent className="space-y-3 py-3">
+   908→          <CommandStrip
+   909→            command={`unzip -o ${zipName} -d pharmaml`}
+   910→            context="terminal · update in place"
+   911→            hint="extract into the SAME folder you installed into (any name) — -o overwrites; nothing to uninstall first"
+   912→          />
+   913→          <CommandStrip
+   914→            command="cat VERSION"
+   915→            hint="what you have now — or python playground.py --version"
+   916→          />
+   917→          <div className="space-y-1.5">
+   918→            <p className="text-[11px] leading-snug text-muted-foreground">
+   919→              Because the install is editable (<code className="font-mono">pip install -e .</code>),
+   920→              Python picks up the replaced files on the next run — reinstall only if{" "}
+   921→              <code className="font-mono">pyproject.toml</code> gained dependencies.
+   922→            </p>
+   923→            <p className="text-[11px] leading-snug text-muted-foreground">
+   924→              Files removed between versions are left behind (harmless); delete the folder first
+   925→              only if you want a truly clean slate.
+   926→            </p>
+   927→            <p className="text-[11px] leading-snug text-muted-foreground">
+   928→              What changed: <code className="font-mono">CHANGELOG.md</code> in the archive root.
+   929→            </p>
+   930→          </div>
+   931→        </CardContent>
+   932→      </Card>
+   933→
+   934→      {/* ------------------------------ License ------------------------------ */}
+   935→      <Card className="border py-0 shadow-sm">
+   936→        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+   937→          <div className="flex items-center gap-3">
+   938→            <Scale className="size-5 text-muted-foreground" aria-hidden />
+   939→            <div>
+   940→              <p className="text-sm font-medium">MIT License</p>
+   941→              <p className="text-xs text-muted-foreground">
+   942→                Free for research and education — attribution appreciated.
+   943→              </p>
+   944→            </div>
+   945→          </div>
+   946→          <p className="text-xs text-muted-foreground">
+   947→            Research &amp; education only — not medical advice.
+   948→          </p>
+   949→        </CardContent>
+   950→      </Card>
+   951→    </div>
+   952→  );
+   953→}
+   954→
