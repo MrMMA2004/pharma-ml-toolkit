@@ -10,7 +10,32 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
-## [1.2.41] — 2026-10-22
+## [1.2.42] — 2026-10-20
+
+### Added — `gradient_boosting`: Friedman's classic GBM, the mirror-gap closer
+
+- **A 23rd registry family** (`gradient_boosting`, aliases `gb` /
+  `gradientboosting` / `friedman_gbm` / `sk_gbm`): sklearn's
+  `GradientBoostingClassifier` / `GradientBoostingRegressor` with
+  `random_state=42` — shallow depth-3 trees fit the residual gradient,
+  learning-rate shrunk, one stage at a time. Classification **and**
+  regression, the same registry/tuning/persistence pipeline as every
+  other family (`train_model('gb', ...)` works through the alias).
+  Param grid: `n_estimators` / `learning_rate` / `max_depth`. The
+  **web playground has spoken this family since its earliest rounds**
+  (the JS fitter, the tune grids, the Hyperband "boosting rounds"
+  resource) — the LIBRARY side was the gap; with 1.2.42 the
+  mirror closes and the boosting set is complete on both sides:
+  adaptive (AdaBoost, reweighted stumps) + gradient (this family) +
+  the three engineered implementations (xgboost / lightgbm / catboost
+  when installed). The `gbm` alias remains lightgbm's, as it has
+  always been.
+- Tests: 4 new cases in `tests/test_ml_pipeline.py` (registry wiring,
+  seeded factories + Friedman defaults, fit quality on a nonlinear
+  target, aliases + param passthrough + the `gbm`→lightgbm guard) and
+  the registry-count guard moved 22 → 23 in `tests/test_neural.py`.
+
+## [1.2.41] — 2026-10-20
 
 ### Added — `extra_trees`: extremely randomized trees, the classic tree family the rar never shipped
 

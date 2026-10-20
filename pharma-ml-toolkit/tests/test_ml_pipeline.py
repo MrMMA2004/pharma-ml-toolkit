@@ -9,7 +9,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
+from sklearn.ensemble import (
+    ExtraTreesClassifier,
+    ExtraTreesRegressor,
+    GradientBoostingClassifier,
+    GradientBoostingRegressor,
+)
 from sklearn.linear_model import HuberRegressor, LogisticRegression
 from sklearn.metrics import roc_auc_score
 
@@ -150,6 +155,40 @@ class TestRegistry:
             assert resolve_model_name(alias) == "extra_trees"
         model = build_model("ET", "classification", params={"n_estimators": 10})
         assert model.n_estimators == 10
+
+    def test_gradient_boosting_registered_and_available(self) -> None:
+        spec = MODEL_REGISTRY["gradient_boosting"]
+        assert spec.task == "both"
+        assert spec.available  # plain scikit-learn -- no optional backend
+        assert set(spec.param_grid) == {"n_estimators", "learning_rate", "max_depth"}
+        assert "residual gradient" in spec.notes  # the Friedman signature
+
+    def test_gradient_boosting_factories_seed_defaults(self) -> None:
+        cls = build_model("gradient_boosting", "classification")
+        reg = build_model("gradient_boosting", "regression")
+        assert isinstance(cls, GradientBoostingClassifier)
+        assert isinstance(reg, GradientBoostingRegressor)
+        assert cls.random_state == 42 and reg.random_state == 42
+        # sklearn's Friedman defaults: depth-3 shallow learners, 100 stages,
+        # 0.1 shrinkage -- the habitat where boosting theory lives.
+        assert cls.max_depth == 3 and reg.max_depth == 3
+        assert cls.learning_rate == 0.1 and reg.learning_rate == 0.1
+
+    def test_gradient_boosting_fit_learns_nonlinear_target(self) -> None:
+        rng = np.random.default_rng(0)
+        X = rng.normal(size=(80, 4))
+        y = np.sin(4.0 * X[:, 0]) * X[:, 1] + 0.1 * rng.normal(size=80)
+        reg = build_model("gb", "regression", params={"n_estimators": 150, "max_depth": 3})
+        reg.fit(X, y)
+        assert reg.score(X, y) > 0.9
+
+    def test_gradient_boosting_aliases_and_param_passthrough(self) -> None:
+        for alias in ("gb", "gradientboosting", "friedman_gbm", "sk_gbm"):
+            assert resolve_model_name(alias) == "gradient_boosting"
+        model = build_model("Gradient-Boosting", "classification", params={"n_estimators": 25})
+        assert model.n_estimators == 25
+        # 'gbm' remains lightgbm's short name (long-standing alias).
+        assert resolve_model_name("gbm") == "lightgbm"
 
     def test_penalized_logistic_classifiers_registered(self) -> None:
         # The rar's Classification/Lasso.py and Classification/Elastic

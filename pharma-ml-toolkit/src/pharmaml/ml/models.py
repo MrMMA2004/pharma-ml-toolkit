@@ -36,6 +36,8 @@ from sklearn.ensemble import (
     AdaBoostRegressor,
     ExtraTreesClassifier,
     ExtraTreesRegressor,
+    GradientBoostingClassifier,
+    GradientBoostingRegressor,
     RandomForestClassifier,
     RandomForestRegressor,
     StackingClassifier,
@@ -119,6 +121,18 @@ def _et_cls() -> ExtraTreesClassifier:
 
 def _et_reg() -> ExtraTreesRegressor:
     return ExtraTreesRegressor(random_state=42, n_jobs=-1)
+
+
+def _gb_cls() -> GradientBoostingClassifier:
+    # Friedman's classic: shallow depth-3 trees fit the residual
+    # gradient, one learning_rate-shrunk contribution at a time.
+    # n_jobs is not a GradientBoosting* parameter (fit is sequential
+    # by construction) -- only random_state is pinned.
+    return GradientBoostingClassifier(random_state=42)
+
+
+def _gb_reg() -> GradientBoostingRegressor:
+    return GradientBoostingRegressor(random_state=42)
 
 
 def _svm_cls() -> SVC:
@@ -339,6 +353,21 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         param_grid={"n_estimators": [50, 100, 200], "learning_rate": [0.05, 0.1, 1.0]},
         notes="Boosted stumps (upgrades ADAboost.py)",
     ),
+    "gradient_boosting": ModelSpec(
+        name="gradient_boosting",
+        task="both",
+        factory=None,
+        param_grid={
+            "n_estimators": [100, 200, 300],
+            "learning_rate": [0.05, 0.1],
+            "max_depth": [2, 3, 4],
+        },
+        notes=(
+            "Friedman gradient boosting (the sklearn classic behind "
+            "XGboost.py / LightGBM.py): shallow depth-3 trees fit the "
+            "residual gradient, learning-rate shrunk"
+        ),
+    ),
     "ann": ModelSpec(
         name="ann",
         task="both",
@@ -453,6 +482,10 @@ MODEL_ALIASES: dict[str, str] = {
     "neural_net": "ann",
     "ada": "adaboost",
     "adaboost": "adaboost",
+    "gb": "gradient_boosting",
+    "gradientboosting": "gradient_boosting",
+    "friedman_gbm": "gradient_boosting",
+    "sk_gbm": "gradient_boosting",
     "linreg": "linear_regression",
     "ols": "linear_regression",
     "huber": "huber_regression",
@@ -519,6 +552,10 @@ _TASK_FACTORIES: dict[str, dict[str, Callable[[], Any]]] = {
     "adaboost": {
         "classification": lambda: AdaBoostClassifier(random_state=42),
         "regression": lambda: AdaBoostRegressor(random_state=42),
+    },
+    "gradient_boosting": {
+        "classification": _gb_cls,
+        "regression": _gb_reg,
     },
     "ann": {
         "classification": _mlp_cls,

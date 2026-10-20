@@ -184,7 +184,7 @@ const DOMAINS: DomainCardSpec[] = [
     tagline: "pharmaml.ml — QSAR end-to-end",
     bullets: [
       "Cross-validated training with optional grid-search tuning",
-      "16-entry model registry: sklearn core + optional XGBoost / LightGBM / CatBoost",
+      "23-entry model registry: sklearn core + optional XGBoost / LightGBM / CatBoost + 2 PyTorch deep families",
       "Metrics, comparison leaderboards & joblib persistence",
     ],
     apis: ["train_model()", "compare_models()", "list_models()"],
@@ -285,7 +285,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "2013 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
+    after: "2017 passing pytest cases across every domain (incl. viz, notebook & CLI guards)",
   },
   {
     aspect: "Interface",
@@ -344,7 +344,7 @@ export function Overview() {
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
   const fileCount = stats ? fmtInt(stats.files) : "270";
-  const loc = stats ? fmtInt(stats.totalLines) : "113,977";
+  const loc = stats ? fmtInt(stats.totalLines) : "114,121";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -430,17 +430,17 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="2013"
-                countTo={2013}
+                value="2017"
+                countTo={2017}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
               <StatChip
                 icon={Brain}
-                value="22"
-                countTo={22}
+                value="23"
+                countTo={23}
                 label="registry models"
-                hint="20 sklearn + 2 PyTorch deep families"
+                hint="21 sklearn + 2 PyTorch deep families"
               />
             </motion.div>
 
