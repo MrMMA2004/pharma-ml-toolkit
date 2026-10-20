@@ -99,6 +99,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
@@ -125,7 +126,12 @@ _LOG = get_logger(__name__)
 #: ValueError from deep inside the metric calls (100x-36).
 _NUMERIC_KINDS = frozenset("iufb")
 
-__all__ = ["ClassificationReport", "RegressionReport", "evaluate_model"]
+__all__ = [
+    "ClassificationReport",
+    "RegressionReport",
+    "evaluate_model",
+    "predict_with_uncertainty",
+]
 
 
 @dataclass(slots=True)
@@ -404,3 +410,110 @@ def evaluate_model(
         )
 
     raise ModelError(f"task must be 'classification' or 'regression', got {task!r}")
+
+
+def _gp_noise_std(gp: GaussianProcessRegressor) -> float:
+    """White-noise std of a fitted GP, in RAW target units.
+
+    Every ``noise_level`` in the fitted kernel (WhiteKernel variances,
+    normalised-y space) is summed and un-scaled by the estimator's own
+    ``_y_train_std`` (1.0 when ``normalize_y=False``). Kernels without a
+    white component honestly report 0.0.
+    """
+    try:
+        params = gp.kernel_.get_params(deep=True)
+        noise_var = sum(
+            float(v)
+            for key, v in params.items()
+            if key.endswith("noise_level") and not key.endswith("noise_level_bounds")
+        )
+        y_std = float(np.ravel(gp._y_train_std)[0])
+        return float(np.sqrt(noise_var) * y_std)
+    except Exception:  # noqa: BLE001 - exotic kernels: latent sigma only
+        return 0.0
+
+
+def predict_with_uncertainty(
+    model: Any,
+    X: pd.DataFrame | np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Predictive mean and per-row standard deviation of a GP model.
+
+    The uncertainty readout for the registry's ``gaussian_process``
+    family (and any other estimator whose ``predict`` accepts
+    ``return_std=True``): the pipeline's preprocessing steps transform
+    ``X`` and the final estimator returns ``(mean, sigma)`` in the
+    ORIGINAL target units -- no manual unwrapping of ``named_steps``.
+
+    Parameters
+    ----------
+    model:
+        A fitted ``gaussian_process`` pipeline (as returned by
+        :func:`~pharmaml.ml.training.train_model`) or a bare fitted
+        :class:`~sklearn.gaussian_process.GaussianProcessRegressor`.
+    X:
+        Feature rows to predict (raw, unpreprocessed -- the pipeline's
+        own impute/scale steps run first).
+
+    Returns
+    -------
+    tuple of np.ndarray
+        ``(y_mean, y_sigma)`` — the predictive mean and its per-row
+        standard deviation, both shaped ``(n_rows,)``. ``y_sigma`` is the
+        PREDICTION interval for a new observation — the latent posterior
+        std plus the kernel's learned white-noise std (``Var(y*) =
+        Var(f*) + σn²``), the uncertainty a QSAR readout actually wants;
+        a GP whose kernel carries no white component reports the latent
+        std alone.
+
+    Raises
+    ------
+    ModelError
+        When ``model``'s final estimator is not a
+        ``GaussianProcessRegressor`` — every other family predicts a
+        point estimate only, and pretending otherwise would fabricate
+        uncertainty.
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> from pharmaml.ml import train_model, predict_with_uncertainty
+    >>> rng = np.random.default_rng(7)
+    >>> x = pd.DataFrame({"a": np.linspace(0.0, 10.0, 40)})
+    >>> y = pd.Series(2.0 * x["a"] + rng.normal(0.0, 0.2, 40))
+    >>> trained = train_model("gaussian_process", "regression", x, y, tune=False, cv=2)
+    >>> mean, sigma = predict_with_uncertainty(trained.model, x)
+    >>> mean.shape == sigma.shape == (40,)
+    True
+    >>> bool((sigma >= 0.0).all())          # a std is never negative
+    True
+    >>> far = pd.DataFrame({"a": [100.0]})   # extrapolation: sigma grows
+    >>> bool(predict_with_uncertainty(trained.model, far)[1][0] > sigma.min())
+    True
+    >>> from pharmaml.ml import train_model as tm
+    >>> ridge = tm("ridge", "regression", x, y, tune=False, cv=2)
+    >>> predict_with_uncertainty(ridge.model, x)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: predict_with_uncertainty needs a GaussianProcessRegressor as the final step (the model's final step is Ridge) — only the gaussian_process family carries predictive sigma
+    """
+    estimator = model
+    X_used: Any = X
+    if hasattr(model, "steps"):  # a fitted sklearn Pipeline (prep + reg)
+        prep = model[:-1]
+        X_used = prep.transform(X) if len(prep.steps) else X
+        estimator = model.steps[-1][1]
+    if not isinstance(estimator, GaussianProcessRegressor):
+        final_name = type(estimator).__name__
+        raise ModelError(
+            "predict_with_uncertainty needs a GaussianProcessRegressor as "
+            f"the final step (the model's final step is {final_name}) — only "
+            "the gaussian_process family carries predictive sigma"
+        )
+    mean, sigma = estimator.predict(X_used, return_std=True)
+    mean = np.asarray(mean)
+    sigma = np.asarray(sigma)
+    noise = _gp_noise_std(estimator)
+    if noise > 0.0:
+        sigma = np.sqrt(sigma**2 + noise**2)
+    return mean, sigma

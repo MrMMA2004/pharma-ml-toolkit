@@ -29,8 +29,10 @@ import {
   ZoomIn,
 } from "lucide-react";
 import {
+  Area,
   CartesianGrid,
   ComposedChart,
+  ErrorBar,
   Legend,
   Line,
   ResponsiveContainer,
@@ -140,7 +142,10 @@ interface HyperSpec {
     | "gamma"
     | "nClusters"
     | "radiusFactor"
-    | "nComponents";
+    | "nComponents"
+    | "lengthScale"
+    | "signalStd"
+    | "noiseStd";
   label: string;
   control: "input" | "slider";
   unit?: string;
@@ -294,6 +299,18 @@ const REG_MODELS: ModelSpec[] = [
     hp: [
       { key: "gamma", label: "kernel γ", control: "slider", unit: "γ", min: 0.05, max: 2, step: 0.05 },
       ALPHA_HP,
+    ],
+  },
+  {
+    id: "gaussian_process",
+    label: "Gaussian process (GP)",
+    hint: "RBF + white kernel, σ learned by marginal likelihood — every prediction carries its own band",
+    group: "kernel",
+    kind: "params",
+    hp: [
+      { key: "lengthScale", label: "length scale", control: "slider", unit: "ℓ", min: 0.25, max: 4, step: 0.25 },
+      { key: "signalStd", label: "signal σf", control: "slider", unit: "σf", min: 0.25, max: 3, step: 0.25 },
+      { key: "noiseStd", label: "noise σn", control: "slider", unit: "σn", min: 0.01, max: 1, step: 0.01 },
     ],
   },
   {
@@ -456,6 +473,9 @@ const DEFAULT_HP: Record<string, number> = {
   nClusters: 3,
   radiusFactor: 1.5,
   nComponents: 2,
+  lengthScale: 1,
+  signalStd: 1,
+  noiseStd: 0.1,
 };
 
 /** Models with a RandomSearch tuning space on the server (the honest
@@ -473,6 +493,7 @@ const TUNEABLE_REG = new Set([
   "gradient_boosting",
   "ada_boost",
   "svm_rbf",
+  "gaussian_process",
   "mlp",
   "hsvr",
 ]);
@@ -511,6 +532,8 @@ const MODEL_NOTES: Record<string, string> = {
     "Weighted bootstrap rounds of shallow stumps; the ensemble predicts with the α-weighted median (regression) or α-weighted vote (classification). Importances are α-weighted per-stump gains.",
   svm_rbf:
     "Gaussian-kernel machine solved in one closed form: (K + λI)⁻¹ (regression) or the bias-augmented LS-SVM system (classification, λ = 1/(2C)).",
+  gaussian_process:
+    "Kriging with an RBF + white kernel: with Learn kernel on, a deterministic marginal-likelihood grid search picks ℓ / σf / σn (the web mirror of sklearn's LML-tuned kernel) and the σ you see is the prediction interval — latent posterior σ plus the learned σn. Untick it to pin the kernel at the sliders' values.",
   gaussian_nb: "Class-conditional Gaussians (μ, σ per feature) feed the log-posterior; no tunable hyperparameters.",
   mlp: "One tanh hidden layer, full-batch gradient descent, seeded init — a demo-scale network, not production deep learning.",
   hsvr:
@@ -540,6 +563,9 @@ const HP_LABELS: Record<string, string> = {
   nClusters: "clusters",
   radiusFactor: "trust radius ×",
   nComponents: "components (used)",
+  lengthScale: "length scale ℓ",
+  signalStd: "signal σf",
+  noiseStd: "noise σn",
 };
 
 /** Models whose grid contains a resource hyperparameter — the slots
@@ -674,6 +700,39 @@ function MoonDot(color: string) {
     if (cx === undefined || cy === undefined) return <g />;
     return <circle cx={cx} cy={cy} r={3.2} fill={color} fillOpacity={0.9} stroke={color} strokeWidth={0.6} />;
   };
+}
+
+/** One curve row prepared for the GP band chart (stacked-area recipe:
+ *  the invisible bandBase + the filled bandSpan stack to lo→hi). */
+interface GpBandPoint {
+  x: number;
+  yhat: number;
+  bandBase: number;
+  bandSpan: number;
+}
+
+/** Custom tooltip for the GP band chart — x, ŷ and the band edges in one
+ *  compact card (the default ComposedChart tooltip would list the stacked
+ *  bandBase/bandSpan internals). */
+function GpBandTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: GpBandPoint }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0]?.payload;
+  if (!p) return null;
+  return (
+    <div className="rounded-md border bg-background/95 px-2.5 py-1.5 text-xs shadow-sm">
+      <p className="font-mono tabular-nums">x = {fmtNum(p.x, 3)}</p>
+      <p className="font-mono tabular-nums">ŷ = {fmtNum(p.yhat, 4)}</p>
+      <p className="font-mono tabular-nums text-muted-foreground">
+        ±1.96σ band = [{fmtNum(p.bandBase, 3)}, {fmtNum(p.bandBase + p.bandSpan, 3)}]
+      </p>
+    </div>
+  );
 }
 
 /** Qualitative label for a Pearson correlation coefficient. */
@@ -1332,6 +1391,10 @@ export function MlPlayground() {
 
   /* X-range zoom on the preview scatter — null = full range. */
   const [xZoom, setXZoom] = useState<[number, number] | null>(null);
+  /** GP only: when on, the kernel hyperparameters are LEARNED server-side
+   *  by the deterministic LML grid search (the sliders stay disabled at
+   *  the learned values); unticking pins the kernel at the sliders. */
+  const [gpLearn, setGpLearn] = useState(true);
 
   /* Tuner state — transient, mirroring ml tune on the server. maxTrials
    * rides in state so the budget is visible before searching; the searcher
@@ -1649,12 +1712,15 @@ export function MlPlayground() {
       seed: Number.parseInt(seed, 10) || 0,
     };
     /* Contextual hyperparameters: α/λ come from the legacy input fields,
-     * everything else from the slider state. */
+     * everything else from the slider state. GP exception: with Learn
+     * kernel on, the three kernel slots are NOT sent — the request leaves
+     * them unset and the server's LML grid search picks them. */
+    const gpAuto = modelSel === "gaussian_process" && gpLearn;
     for (const h of modelSpec.hp) {
       if (h.control === "input") {
         if (h.key === "alpha") body.alpha = Number.parseFloat(alpha);
         else if (h.key === "l2") body.l2 = Number.parseFloat(l2);
-      } else {
+      } else if (!(gpAuto && (h.key === "lengthScale" || h.key === "signalStd" || h.key === "noiseStd"))) {
         assignHp(body, h.key, hp[h.key] ?? DEFAULT_HP[h.key] ?? 0);
       }
     }
@@ -1692,6 +1758,17 @@ export function MlPlayground() {
       const payload = data as MLTrainResponse;
       setResult(payload);
       setStatus("done");
+      /* Learned GP kernel: park the sliders at the values the LML grid
+       *  search picked so the panel shows what actually ran (they stay
+       *  disabled while Learn kernel is on — the next auto run re-learns). */
+      if (payload.gp?.kernelTuned) {
+        setHp((prev) => ({
+          ...prev,
+          lengthScale: payload.gp!.lengthScale,
+          signalStd: payload.gp!.signalStd,
+          noiseStd: payload.gp!.noiseStd,
+        }));
+      }
       /* Record the completed run in the history strip (restorable). */
       const key = payload.task === "regression" ? "r2" : "accuracy";
       const keyValue = payload.metrics[key];
@@ -2070,6 +2147,28 @@ export function MlPlayground() {
     }
     return { kind: "params" as const, data: result.modelParams ?? null };
   }, [result, resultSpec]);
+
+  /** GP band chart data: the curve points with their ±1.96σ band, shaped
+   *  for the stacked-area recipe (bandBase + bandSpan). Only the
+   *  single-feature x↔y chart renders the band; multivariate predicted-
+   *  vs-actual draws per-point whiskers instead. */
+  const bandCurve = useMemo(() => {
+    const curve = result?.series.curve;
+    if (!result || !curve || curve.length === 0 || predActual) return null;
+    if (curve[0]?.lo === undefined || curve[0]?.hi === undefined) return null;
+    return curve.map((p) => ({
+      x: p.x,
+      yhat: p.yhat,
+      bandBase: p.lo ?? p.yhat,
+      bandSpan: Math.max((p.hi ?? p.yhat) - (p.lo ?? p.yhat), 0),
+    }));
+  }, [result, predActual]);
+
+  /** GP on the predicted-vs-actual chart: ŷ whiskers per test point. */
+  const hasTestErr = useMemo(
+    () => (result?.series.test.some((p) => p.err !== undefined) ?? false) && predActual,
+    [result, predActual]
+  );
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
@@ -2496,6 +2595,27 @@ export function MlPlayground() {
               <Label className="text-xs font-medium">
                 {modelSpec.label} parameters
               </Label>
+              {/* GP: the kernel learn/auto toggle — LML grid search on the
+               *  server vs pinned slider values. */}
+              {modelSpec.id === "gaussian_process" ? (
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={gpLearn}
+                    onChange={(e) => setGpLearn(e.target.checked)}
+                    className="mt-0.5 size-4 accent-primary"
+                    aria-label="Learn the GP kernel by marginal likelihood"
+                  />
+                  <span className="space-y-0.5">
+                    <span className="block text-xs font-medium">Learn kernel (marginal likelihood)</span>
+                    <span className="block text-[11px] leading-snug text-muted-foreground">
+                      {gpLearn
+                        ? "The server grid-searches ℓ / σf / σn by log marginal likelihood and pins the sliders at the winners — untick to set them yourself."
+                        : "Kernel pinned at the sliders — sweep them and watch the reported log marginal likelihood respond."}
+                    </span>
+                  </span>
+                </label>
+              ) : null}
               {modelSpec.hp.map((h) =>
                 h.control === "input" ? (
                   <div key={h.key} className="space-y-1.5">
@@ -2530,6 +2650,11 @@ export function MlPlayground() {
                     value={hp[h.key] ?? DEFAULT_HP[h.key] ?? 0}
                     onChange={(v) => setHp((prev) => ({ ...prev, [h.key]: v }))}
                     format={fmtHp}
+                    disabled={
+                      modelSpec.id === "gaussian_process" &&
+                      gpLearn &&
+                      (h.key === "lengthScale" || h.key === "signalStd" || h.key === "noiseStd")
+                    }
                   />
                 )
               )}
@@ -3297,7 +3422,7 @@ export function MlPlayground() {
               <p className="text-sm font-medium">No results yet</p>
               <p className="max-w-sm text-xs text-muted-foreground">
                 Pick a data source — the seeded server-side generator or your own CSV — pick one of
-                the 15 regression or 10 classification models, then press{" "}
+                the 16 regression or 10 classification models, then press{" "}
                 <strong className="font-semibold text-foreground">Train model</strong>. Every
                 run is deterministic: same seed, same data, same numbers.
               </p>
@@ -3348,9 +3473,11 @@ export function MlPlayground() {
               <CardHeader className="border-b bg-muted/30 py-3">
                 <CardTitle className="text-sm">
                   {result.task === "regression"
-                    ? predActual
-                      ? "Predicted vs actual (test set)"
-                      : "Test points & fitted curve"
+                    ? bandCurve
+                      ? "GP mean & 95% predictive band"
+                      : predActual
+                        ? "Predicted vs actual (test set)"
+                        : "Test points & fitted curve"
                     : result.datasetMeta.source
                       ? "Test points & decision boundary"
                       : "Two moons & decision boundary"}
@@ -3377,9 +3504,11 @@ export function MlPlayground() {
                   role="img"
                   aria-label={
                     result.task === "regression"
-                      ? predActual
-                        ? "Scatter plot of model predictions versus actual values on the test set, with the perfect-prediction reference line"
-                        : "Scatter plot of test points with the fitted regression curve"
+                      ? bandCurve
+                        ? "Scatter plot of test points with the Gaussian process posterior mean and its shaded 95 percent predictive band"
+                        : predActual
+                          ? "Scatter plot of model predictions versus actual values on the test set, with the perfect-prediction reference line"
+                          : "Scatter plot of test points with the fitted regression curve"
                       : result.datasetMeta.source
                         ? "Scatter plot of the uploaded-data test classes with the model decision boundary"
                         : "Scatter plot of the two moon classes with model decision boundary"
@@ -3387,70 +3516,151 @@ export function MlPlayground() {
                 >
                   <ResponsiveContainer width="100%" height="100%">
                     {result.task === "regression" ? (
-                      <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
-                        <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
-                        <XAxis
-                          type="number"
-                          dataKey="x"
-                          domain={["auto", "auto"]}
-                          tick={CHART.axisTick}
-                          tickFormatter={fmtTick}
-                          tickLine={false}
-                          axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
-                          label={{
-                            value: predActual
-                              ? "ŷ (predicted)"
-                              : result.datasetMeta.source?.featureColumns[0] ?? "x",
-                            position: "insideBottomRight",
-                            offset: -2,
-                            fill: "#78716c",
-                            fontSize: 11,
-                          }}
-                        />
-                        <YAxis
-                          type="number"
-                          dataKey="y"
-                          width={44}
-                          tick={CHART.axisTick}
-                          tickFormatter={fmtTick}
-                          tickLine={false}
-                          axisLine={false}
-                          label={
-                            predActual
-                              ? {
-                                  value: result.datasetMeta.source?.targetColumn ?? "y (actual)",
-                                  angle: -90,
-                                  position: "insideBottomLeft",
-                                  offset: 18,
-                                  fill: "#78716c",
-                                  fontSize: 11,
-                                }
-                              : undefined
-                          }
-                        />
-                        <Tooltip
-                          cursor={{ strokeDasharray: "3 3" }}
-                          contentStyle={CHART.tooltipStyle}
-                          formatter={(value) => fmtNum(Number(value), 4)}
-                        />
-                        <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
-                        <Scatter
-                          name={predActual ? "perfect prediction (ŷ = y)" : "fitted curve"}
-                          data={result.series.curve ?? []}
-                          line={{ stroke: CHART.emerald, strokeWidth: 2.5 }}
-                          shape="square"
-                          fill={CHART.emerald}
-                          fillOpacity={0.5}
-                          isAnimationActive={false}
-                        />
-                        <Scatter
-                          name={predActual ? "test predictions" : "test points"}
-                          data={result.series.test}
-                          fill={CHART.stone}
-                          fillOpacity={0.8}
-                          isAnimationActive={false}
-                        />
-                      </ScatterChart>
+                      bandCurve ? (
+                        /* GP: filled ±1.96σ band (stacked areas — the
+                         * invisible bandBase + the tinted bandSpan) under
+                         * the posterior-mean line, test points on top. */
+                        <ComposedChart data={bandCurve} margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+                          <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+                          <XAxis
+                            type="number"
+                            dataKey="x"
+                            domain={["auto", "auto"]}
+                            tick={CHART.axisTick}
+                            tickFormatter={fmtTick}
+                            tickLine={false}
+                            axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+                            label={{
+                              value: result.datasetMeta.source?.featureColumns[0] ?? "x",
+                              position: "insideBottomRight",
+                              offset: -2,
+                              fill: "#78716c",
+                              fontSize: 11,
+                            }}
+                          />
+                          <YAxis
+                            type="number"
+                            width={44}
+                            tick={CHART.axisTick}
+                            tickFormatter={fmtTick}
+                            tickLine={false}
+                            axisLine={false}
+                          />
+                          <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<GpBandTooltip />} />
+                          <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                          <Area
+                            dataKey="bandBase"
+                            stackId="gpBand"
+                            stroke="none"
+                            fill="transparent"
+                            legendType="none"
+                            isAnimationActive={false}
+                          />
+                          <Area
+                            dataKey="bandSpan"
+                            stackId="gpBand"
+                            stroke="none"
+                            fill={CHART.emerald}
+                            fillOpacity={0.16}
+                            name="95% band (ŷ ± 1.96σ)"
+                            isAnimationActive={false}
+                          />
+                          <Line
+                            dataKey="yhat"
+                            stroke={CHART.emerald}
+                            strokeWidth={2.5}
+                            dot={false}
+                            name="GP mean (ŷ)"
+                            isAnimationActive={false}
+                          />
+                          <Scatter
+                            data={result.series.test}
+                            fill={CHART.stone}
+                            fillOpacity={0.8}
+                            name="test points"
+                            isAnimationActive={false}
+                          />
+                        </ComposedChart>
+                      ) : (
+                        <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+                          <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+                          <XAxis
+                            type="number"
+                            dataKey="x"
+                            domain={["auto", "auto"]}
+                            tick={CHART.axisTick}
+                            tickFormatter={fmtTick}
+                            tickLine={false}
+                            axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+                            label={{
+                              value: predActual
+                                ? "ŷ (predicted)"
+                                : result.datasetMeta.source?.featureColumns[0] ?? "x",
+                              position: "insideBottomRight",
+                              offset: -2,
+                              fill: "#78716c",
+                              fontSize: 11,
+                            }}
+                          />
+                          <YAxis
+                            type="number"
+                            dataKey="y"
+                            width={44}
+                            tick={CHART.axisTick}
+                            tickFormatter={fmtTick}
+                            tickLine={false}
+                            axisLine={false}
+                            label={
+                              predActual
+                                ? {
+                                    value: result.datasetMeta.source?.targetColumn ?? "y (actual)",
+                                    angle: -90,
+                                    position: "insideBottomLeft",
+                                    offset: 18,
+                                    fill: "#78716c",
+                                    fontSize: 11,
+                                  }
+                                : undefined
+                            }
+                          />
+                          <Tooltip
+                            cursor={{ strokeDasharray: "3 3" }}
+                            contentStyle={CHART.tooltipStyle}
+                            formatter={(value) => fmtNum(Number(value), 4)}
+                          />
+                          <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                          <Scatter
+                            name={predActual ? "perfect prediction (ŷ = y)" : "fitted curve"}
+                            data={result.series.curve ?? []}
+                            line={{ stroke: CHART.emerald, strokeWidth: 2.5 }}
+                            shape="square"
+                            fill={CHART.emerald}
+                            fillOpacity={0.5}
+                            isAnimationActive={false}
+                          />
+                          <Scatter
+                            name={predActual ? "test predictions" : "test points"}
+                            data={result.series.test}
+                            fill={CHART.stone}
+                            fillOpacity={0.8}
+                            isAnimationActive={false}
+                          >
+                            {/* GP multivariate: ŷ ± 1.96σ whiskers on the
+                             * prediction axis of the parity chart. */}
+                            {hasTestErr ? (
+                              <ErrorBar
+                                dataKey="err"
+                                direction="x"
+                                width={4}
+                                strokeWidth={1.2}
+                                stroke={CHART.emerald}
+                                strokeOpacity={0.65}
+                                isAnimationActive={false}
+                              />
+                            ) : null}
+                          </Scatter>
+                        </ScatterChart>
+                      )
                     ) : (
                       <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
                         <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
@@ -3654,6 +3864,122 @@ export function MlPlayground() {
                         This model reports no hyperparameters — {MODEL_NOTES[result.model] ?? "see the model hint."}
                       </p>
                     )
+                  ) : null}
+
+                  {/* PLS: VIP scores — the classic QSAR descriptor-influence
+                   *  readout (VIP > 1 marks an influential descriptor; the
+                   *  dashed line is the threshold). */}
+                  {result.vip ? (
+                    <div className="mt-3 space-y-1.5">
+                      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        <Sigma className="size-3" aria-hidden />
+                        VIP scores (threshold 1)
+                      </p>
+                      <ul className="space-y-2" aria-label="PLS VIP scores">
+                        {result.vip.features.map((f, i) => {
+                          const v = result.vip!.values[i] ?? 0;
+                          const scale = Math.max(...result.vip!.values, result.vip!.threshold, 1e-9);
+                          const width = Math.max((v / scale) * 100, 0.5);
+                          const thresholdLeft = Math.min((result.vip!.threshold / scale) * 100, 99.5);
+                          const influential = v >= result.vip!.threshold;
+                          return (
+                            <li key={f} className="space-y-1">
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span className="truncate font-mono text-xs font-medium" title={f}>
+                                  {f}
+                                </span>
+                                <span
+                                  className={`font-mono text-xs tabular-nums ${
+                                    influential ? "font-semibold text-primary" : "text-muted-foreground"
+                                  }`}
+                                >
+                                  {fmtNum(v, 4)}
+                                  {influential ? " · influential" : ""}
+                                </span>
+                              </div>
+                              <div
+                                className="relative h-2 overflow-hidden rounded-full bg-muted"
+                                role="presentation"
+                              >
+                                <div
+                                  className={`h-full rounded-full ${
+                                    influential ? "bg-primary/75" : "bg-muted-foreground/35"
+                                  }`}
+                                  style={{ width: `${width}%` }}
+                                />
+                                <div
+                                  className="absolute inset-y-0 border-l border-dashed border-primary/60"
+                                  style={{ left: `${thresholdLeft}%` }}
+                                  aria-hidden
+                                />
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <p className="text-[11px] leading-snug text-muted-foreground">
+                        VIP &gt; 1 marks an influential descriptor (scores mean-square to 1 — the dashed
+                        line); the classic PLS readout of which columns actually drive the model.
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {/* GP: kernel readout + the honest held-out uncertainty stats. */}
+                  {result.gp ? (
+                    <div className="mt-3 space-y-1.5">
+                      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        <Sigma className="size-3" aria-hidden />
+                        GP kernel &amp; predictive uncertainty
+                      </p>
+                      <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1" aria-label="GP kernel readout">
+                        {(
+                          [
+                            [result.gp.kernelTuned ? "kernel (learned by LML)" : "kernel (pinned)", null],
+                            ["log marginal likelihood", result.gp.logMarginalLikelihood],
+                            ["support rows", result.gp.nSupport],
+                            ["95% band coverage (test)", result.gp.coverage95],
+                            ["median σ (test)", result.gp.medianSigma],
+                          ] as Array<[string, number | null]>
+                        ).map(([label, value]) =>
+                          value === null ? (
+                            <div key={label} className="col-span-2">
+                              <dt className="text-[11px] font-medium text-muted-foreground">
+                                {label} — ℓ {fmtNum(result.gp!.lengthScale, 3)} · σf{" "}
+                                {fmtNum(result.gp!.signalStd, 3)} · σn {fmtNum(result.gp!.noiseStd, 3)}
+                              </dt>
+                            </div>
+                          ) : (
+                            <div key={label} className="col-span-2 grid grid-cols-subgrid items-baseline">
+                              <dt className="truncate font-mono text-xs text-muted-foreground" title={label}>
+                                {label}
+                              </dt>
+                              <dd
+                                className={`text-right font-mono text-xs font-semibold tabular-nums ${
+                                  label.startsWith("95%")
+                                    ? result.gp!.coverage95 >= 0.85
+                                      ? "text-primary"
+                                      : result.gp!.coverage95 >= 0.7
+                                        ? "text-amber-600"
+                                        : "text-destructive"
+                                    : ""
+                                }`}
+                              >
+                                {label.startsWith("95%")
+                                  ? `${fmtNum(result.gp!.coverage95 * 100, 1)}%`
+                                  : fmtNum(value, 4)}
+                              </dd>
+                            </div>
+                          )
+                        )}
+                      </dl>
+                      <p className="text-[11px] leading-snug text-muted-foreground">
+                        {result.gp.kernelTuned
+                          ? "Kernel picked by the deterministic marginal-likelihood grid search (ℓ / σf / σn), refit on every train row; the LML says how well the kernel explains the training targets."
+                          : "Kernel pinned at the request's values — sweep the sliders and watch the LML respond."}{" "}
+                        A calibrated GP straddles ≈95% of held-out truth with its ±1.96σ band; σ grows away
+                        from the training data (the extrapolation warning no point estimator gives).
+                      </p>
+                    </div>
                   ) : null}
 
                   {/* HSVR: per-cluster geometry + local-fit diagnostics. */}

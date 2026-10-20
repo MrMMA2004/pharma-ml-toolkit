@@ -98,6 +98,9 @@ interface ParamSliderProps {
   value: number;
   onChange: (v: number) => void;
   format?: (v: number) => string;
+  /** Grays the row out and blocks input (e.g. GP sliders while the
+   *  kernel is being learned by the server). */
+  disabled?: boolean;
 }
 
 /** Labelled slider row with a mono value pill — the shared control atom
@@ -112,9 +115,10 @@ export function ParamSlider({
   value,
   onChange,
   format,
+  disabled = false,
 }: ParamSliderProps) {
   return (
-    <div className="space-y-2">
+    <div className={`space-y-2 ${disabled ? "opacity-60" : ""}`}>
       <div className="flex items-baseline justify-between gap-2">
         <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">
           {label}
@@ -131,6 +135,7 @@ export function ParamSlider({
         step={step}
         value={[value]}
         onValueChange={(vals) => onChange(vals[0] ?? value)}
+        disabled={disabled}
         aria-label={`${label} in ${unit}`}
         className="py-1"
       />

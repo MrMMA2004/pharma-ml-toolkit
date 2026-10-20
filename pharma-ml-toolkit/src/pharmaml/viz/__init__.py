@@ -89,6 +89,7 @@ from pharmaml.viz.ml_plots import (
     plot_confusion_matrix,
     plot_cv_scores,
     plot_feature_importance,
+    plot_gp_uncertainty,
     plot_learning_curve,
     plot_model_comparison,
     plot_predicted_vs_actual,
@@ -137,6 +138,7 @@ __all__ = [
     "plot_dose_accumulation",
     "plot_energy_distribution",
     "plot_feature_importance",
+    "plot_gp_uncertainty",
     "plot_learning_curve",
     "plot_model_comparison",
     # generative figures

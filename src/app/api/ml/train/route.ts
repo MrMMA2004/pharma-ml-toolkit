@@ -69,6 +69,13 @@ const hyperSchema = {
   /* PLS (regression): latent component count — capped at the matrix
    * rank at fit time, so a wide request never breaks a narrow dataset. */
   nComponents: z.number().int().min(1).max(8).optional(),
+  /* GP (regression): RBF length scale ℓ in standardized-feature units. */
+  lengthScale: z.number().min(0.05).max(10).optional(),
+  /* GP (regression): signal amplitude σf in raw target units. */
+  signalStd: z.number().min(0.05).max(20).optional(),
+  /* GP (regression): white-noise observation std σn in raw target units
+   *  (floor 0.005 keeps the kernel matrix safely positive definite). */
+  noiseStd: z.number().min(0.005).max(5).optional(),
 };
 
 const bodySchema = z
@@ -141,6 +148,9 @@ type TrainBody = {
   nClusters?: number;
   radiusFactor?: number;
   nComponents?: number;
+  lengthScale?: number;
+  signalStd?: number;
+  noiseStd?: number;
 };
 
 /** Min/max via loop — safe for very large CSVs (spread would overflow). */
@@ -279,6 +289,32 @@ export async function POST(request: NextRequest) {
 /* Regression                                                          */
 /* ------------------------------------------------------------------ */
 
+/** GP diagnostic summary: the kernel readout plus the honest held-out
+ *  uncertainty stats (coverage of the ±1.96σ band and the median σ). */
+function gpSummary(
+  fit: RegFit,
+  yTrue: number[],
+  yPred: number[],
+  sigmaAt: (i: number) => number
+): MLTrainResponse["gp"] {
+  if (!fit.gp || !fit.predictStd) return undefined;
+  const sigmas = yTrue.map((_, i) => sigmaAt(i));
+  let covered = 0;
+  for (let i = 0; i < yTrue.length; i++) {
+    if (Math.abs(yTrue[i] - yPred[i]) <= 1.96 * (sigmas[i] ?? 0)) covered++;
+  }
+  const sorted = [...sigmas].sort((a, b) => a - b);
+  const mid = Math.floor((sorted.length - 1) / 2);
+  const medianSigma = sorted.length
+    ? (sorted[mid]! + sorted[Math.ceil((sorted.length - 1) / 2)]!) / 2
+    : 0;
+  return {
+    ...fit.gp,
+    coverage95: yTrue.length ? covered / yTrue.length : 0,
+    medianSigma,
+  };
+}
+
 function runRegression(
   req: TrainBody,
   csv?: CsvRegressionData,
@@ -323,6 +359,13 @@ function runRegression(
   const { train, test } = shuffledSplit(n, req.testSize, rand);
 
   const hp = resolveHyper(req);
+  /* GP: when the request leaves all three kernel hyperparameters unset,
+   *  the fit LEARNS them by the deterministic LML grid search (the web
+   *  mirror of the library's marginal-likelihood-tuned kernel). */
+  const directives =
+    req.lengthScale === undefined && req.signalStd === undefined && req.noiseStd === undefined
+      ? { learnGpKernel: true }
+      : {};
   const isLegacy = req.model === "linear" || req.model === "polynomial" || req.model === "ridge";
   /* Legacy single-feature models keep the exact original call (degree for
    * polynomial, ridge alpha on the diagonal) so responses stay
@@ -348,17 +391,33 @@ function runRegression(
           },
         };
       })()
-    : fitRegressionModel(req.model, trainX, trainY, hp, modelRng(effSeed, 0), featureNames);
+    : fitRegressionModel(
+        req.model,
+        trainX,
+        trainY,
+        hp,
+        modelRng(effSeed, 0),
+        featureNames,
+        directives
+      );
 
   const yTrue = test.map((i) => ys[i] ?? 0);
   const yPred = test.map((i) => fit.predict([xs[i] ?? 0]));
   const metrics = regressionMetrics(yTrue, yPred);
+  const hasStd = typeof fit.predictStd === "function";
+  const gp = hasStd
+    ? gpSummary(fit, yTrue, yPred, (i) => fit.predictStd!([xs[i] ?? 0]))
+    : undefined;
 
-  // Smooth fitted curve across the full observed x range.
+  // Smooth fitted curve across the full observed x range; GP runs carry
+  // the ±1.96σ band the uncertainty chart fills.
   const [xMin, xMax] = extent(xs);
   const curve = Array.from({ length: 100 }, (_, i) => {
     const x = xMin + ((xMax - xMin) * i) / 99;
-    return { x, yhat: fit.predict([x]) };
+    const yhat = fit.predict([x]);
+    if (!hasStd) return { x, yhat };
+    const s = fit.predictStd!([x]);
+    return { x, yhat, lo: yhat - 1.96 * s, hi: yhat + 1.96 * s };
   });
 
   // k-fold CV (R² per fold) with an independent, seeded shuffle.
@@ -379,7 +438,8 @@ function runRegression(
       trainIdx.map((i) => ys[i] ?? 0),
       hp,
       modelRng(effSeed, slot),
-      featureNames
+      featureNames,
+      directives
     );
     const fTrue = fold.map((i) => ys[i] ?? 0);
     const fPred = fold.map((i) => foldFit.predict([xs[i] ?? 0]));
@@ -394,9 +454,18 @@ function runRegression(
     ...(fit.coefficients ? { coefficients: fit.coefficients } : {}),
     ...(fit.featureImportance ? { featureImportance: fit.featureImportance } : {}),
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),
+    ...(fit.vip ? { vip: { ...fit.vip, threshold: 1 } } : {}),
+    ...(gp ? { gp } : {}),
     ...(fit.hsvr ? { hsvr: fit.hsvr } : {}),
     series: {
-      test: test.map((i) => ({ x: xs[i] ?? 0, y: ys[i] ?? 0 })),
+      test: test.map((i) => {
+        const point: { x: number; y: number; err?: number } = {
+          x: xs[i] ?? 0,
+          y: ys[i] ?? 0,
+        };
+        if (hasStd) point.err = 1.96 * fit.predictStd!([xs[i] ?? 0]);
+        return point;
+      }),
       curve,
     },
     datasetMeta: {
@@ -432,13 +501,29 @@ function runMultiRegression(
   const { train, test } = shuffledSplit(n, req.testSize, rand);
 
   const hp = resolveHyper(req);
+  const directives =
+    req.lengthScale === undefined && req.signalStd === undefined && req.noiseStd === undefined
+      ? { learnGpKernel: true }
+      : {};
   const trainX = train.map((i) => csv.X[i] ?? []);
   const trainY = train.map((i) => csv.y[i] ?? 0);
-  const fit = fitRegressionModel(req.model, trainX, trainY, hp, modelRng(effSeed, 0), csv.features);
+  const fit = fitRegressionModel(
+    req.model,
+    trainX,
+    trainY,
+    hp,
+    modelRng(effSeed, 0),
+    csv.features,
+    directives
+  );
 
   const yTrue = test.map((i) => csv.y[i] ?? 0);
   const yPred = test.map((i) => fit.predict(csv.X[i] ?? []));
   const metrics = regressionMetrics(yTrue, yPred);
+  const hasStd = typeof fit.predictStd === "function";
+  const gp = hasStd
+    ? gpSummary(fit, yTrue, yPred, (i) => fit.predictStd!(csv.X[i] ?? []))
+    : undefined;
 
   /* Perfect-prediction identity line over the combined ŷ/y extent. */
   const all = [...yTrue, ...yPred];
@@ -466,7 +551,8 @@ function runMultiRegression(
       trainIdx.map((i) => csv.y[i] ?? 0),
       hp,
       modelRng(effSeed, slot),
-      csv.features
+      csv.features,
+      directives
     );
     const fTrue = fold.map((i) => csv.y[i] ?? 0);
     const fPred = fold.map((i) => foldFit.predict(csv.X[i] ?? []));
@@ -481,9 +567,20 @@ function runMultiRegression(
     ...(fit.coefficients ? { coefficients: fit.coefficients } : {}),
     ...(fit.featureImportance ? { featureImportance: fit.featureImportance } : {}),
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),
+    ...(fit.vip ? { vip: { ...fit.vip, threshold: 1 } } : {}),
+    ...(gp ? { gp } : {}),
     ...(fit.hsvr ? { hsvr: fit.hsvr } : {}),
     series: {
-      test: yPred.map((yhat, i) => ({ x: yhat, y: yTrue[i] ?? 0 })),
+      /* ŷ ± 1.96σ rides on each test point as `err` — the whiskers the
+       * predicted-vs-actual chart draws on the ŷ axis. */
+      test: yPred.map((yhat, i) => {
+        const point: { x: number; y: number; err?: number } = {
+          x: yhat,
+          y: yTrue[i] ?? 0,
+        };
+        if (hasStd) point.err = 1.96 * fit.predictStd!(csv.X[i] ?? []);
+        return point;
+      }),
       curve,
     },
     datasetMeta: {

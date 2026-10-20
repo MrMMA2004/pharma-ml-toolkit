@@ -43,6 +43,7 @@ from pharmaml.viz import (
     plot_dose_accumulation,
     plot_energy_distribution,
     plot_feature_importance,
+    plot_gp_uncertainty,
     plot_learning_curve,
     plot_model_comparison,
     plot_operator_trajectory,
@@ -360,6 +361,66 @@ class TestRegressionPlots:
             report.predictions, report.predictions, title="self-check"
         )
         assert "self-check" in fig.axes[0].get_title()
+
+
+class TestGaussianProcessUncertaintyPlot:
+    """100x-102 — plot_gp_uncertainty: the GP parity twin with ±z·σ
+    error bars and the coverage annotation.
+    """
+
+    def test_basic_figure_and_labels(self, close_all):
+        fig = plot_gp_uncertainty(
+            [1.0, 2.0, 3.0], [1.1, 1.9, 3.2], [0.1, 0.2, 0.3]
+        )
+        ax = fig.axes[0]
+        assert ax.get_xlabel() == "actual"
+        assert ax.get_ylabel() == "predicted (ŷ)"
+        # one errorbar container + one scatter + the identity line
+        assert len(ax.collections) >= 1
+        assert len(ax.lines) >= 1
+
+    def test_coverage_annotation_text(self, close_all):
+        fig = plot_gp_uncertainty(
+            [1.0, 2.0, 3.0], [1.1, 1.9, 3.2], [0.1, 0.2, 0.3]
+        )
+        # all three points straddle -> the box reports 100.0% coverage
+        texts = [t.get_text() for t in fig.axes[0].texts]
+        assert any("coverage" in t and "100.0%" in t for t in texts)
+
+    def test_sigma_shape_mismatch(self, close_all):
+        with pytest.raises(DataValidationError, match="must match"):
+            plot_gp_uncertainty([1.0, 2.0], [1.0], [0.1, 0.1])
+
+    def test_negative_sigma_raises_typed(self, close_all):
+        with pytest.raises(DataValidationError, match="non-negative"):
+            plot_gp_uncertainty([1.0], [1.0], [-0.1])
+
+    def test_empty_raises_typed(self, close_all):
+        with pytest.raises(DataValidationError, match="empty y_true/y_pred"):
+            plot_gp_uncertainty([], [], [])
+
+    def test_non_positive_z_raises_typed(self, close_all):
+        with pytest.raises(DataValidationError, match="z must be positive"):
+            plot_gp_uncertainty([1.0], [1.0], [0.1], z=0.0)
+
+    def test_end_to_end_from_trained_gp(self, regression_frame, close_all):
+        from pharmaml.ml.evaluation import predict_with_uncertainty
+
+        ds = load_dataset(
+            _write_csv(regression_frame, "gp_fixture.csv"), target="pIC50"
+        )
+        X_train, X_test, y_train, y_test = make_train_test_split(
+            ds.X, ds.y, test_size=0.25, random_state=42
+        )
+        result = train_model(
+            "gaussian_process", "regression", X_train, y_train, tune=False
+        )
+        mean, sigma = predict_with_uncertainty(result.model, X_test)
+        fig = plot_gp_uncertainty(y_test, mean, sigma, metrics={"R2": 0.9})
+        assert fig is not None
+        # metrics ride along in the annotation box
+        texts = [t.get_text() for t in fig.axes[0].texts]
+        assert any("R2=0.9" in t for t in texts)
 
 
 class TestLeaderboardAndDiagnostics:

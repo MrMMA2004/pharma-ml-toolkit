@@ -259,6 +259,37 @@ export interface MLTrainResponse {
   /** kNN / MLP / Naive Bayes / SVM: echoed hyperparameters (the honest
    *  "learned parameters" card content for hyperparameter-driven models). */
   modelParams?: Record<string, number>;
+  /** PLS only: VIP scores — VIP > 1 marks an influential descriptor
+   *  (the classic QSAR readout the NIPALS fit always computed and the
+   *  response previously dropped). */
+  vip?: {
+    features: string[];
+    /** VIP score per feature, same order as `features`. */
+    values: number[];
+    /** The influence threshold (1 — VIP scores mean-square to 1). */
+    threshold: number;
+  };
+  /** GP only: the kernel readout plus the honest held-out uncertainty
+   *  stats — coverage of the ±1.96σ band and the median σ. */
+  gp?: {
+    /** RBF length scale ℓ (standardized-feature units). */
+    lengthScale: number;
+    /** Signal amplitude σf (raw target units). */
+    signalStd: number;
+    /** White-noise observation std σn (raw target units). */
+    noiseStd: number;
+    /** Log marginal likelihood of the train targets under the kernel. */
+    logMarginalLikelihood: number;
+    /** Train rows in the GP's support set (all of them). */
+    nSupport: number;
+    /** True when the kernel hyperparameters were learned by the
+     *  deterministic LML grid search (request left them unset). */
+    kernelTuned: boolean;
+    /** Share of test points inside ŷ ± 1.96σ (a calibrated GP ≈ 0.95). */
+    coverage95: number;
+    /** Median test-set predictive σ (raw target units). */
+    medianSigma: number;
+  };
   /** HSVR only: per-cluster geometry + local-fit diagnostics. */
   hsvr?: {
     nClusters: number;
@@ -296,8 +327,8 @@ export interface MLTrainResponse {
     };
   };
   series: {
-    test: Array<{ x: number; y: number; label?: number }>;
-    curve?: Array<{ x: number; yhat: number }>;
+    test: Array<{ x: number; y: number; label?: number; err?: number }>;
+    curve?: Array<{ x: number; yhat: number; lo?: number; hi?: number }>;
     boundary?: Array<{ x: number; y: number; pred: number }>;
   };
   datasetMeta: {

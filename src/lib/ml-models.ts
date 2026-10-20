@@ -13,6 +13,7 @@ import {
   fitExtraTreesClassifier,
   fitExtraTreesRegressor,
   fitGaussianNB,
+  fitGaussianProcess,
   fitGradientBoostingRegressor,
   fitHuberRegression,
   fitHsvr,
@@ -38,9 +39,10 @@ import {
 /* Registry                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Regression models: 3 legacy (byte-compatible) + 13 (incl. hsvr, huber,
- *  ada_boost, svm_rbf, extra_trees, pls — the web mirror of the library's
- *  adaboost / huber_regression / svm / extra_trees / pls families). */
+/** Regression models: 3 legacy (byte-compatible) + 14 (incl. hsvr, huber,
+ *  ada_boost, svm_rbf, extra_trees, pls, gaussian_process — the web
+ *  mirror of the library's adaboost / huber_regression / svm /
+ *  extra_trees / pls / gaussian_process families). */
 export const REGRESSION_MODELS = [
   "linear",
   "polynomial",
@@ -56,6 +58,7 @@ export const REGRESSION_MODELS = [
   "gradient_boosting",
   "ada_boost",
   "svm_rbf",
+  "gaussian_process",
   "mlp",
   "hsvr",
 ] as const;
@@ -104,6 +107,12 @@ export interface HyperSource {
   radiusFactor?: number;
   /** PLS: latent component count (rank-capped at extraction). */
   nComponents?: number;
+  /** GP: RBF length scale ℓ (standardized-feature units). */
+  lengthScale?: number;
+  /** GP: signal amplitude σf (raw target units). */
+  signalStd?: number;
+  /** GP: white-noise observation std σn (raw target units). */
+  noiseStd?: number;
 }
 
 /** Hyperparameters with per-model defaults applied. */
@@ -125,6 +134,9 @@ export interface Hyper {
   nClusters: number;
   radiusFactor: number;
   nComponents: number;
+  lengthScale: number;
+  signalStd: number;
+  noiseStd: number;
 }
 
 function num(value: number | undefined, fallback: number): number {
@@ -150,6 +162,9 @@ export function resolveHyper(req: HyperSource): Hyper {
     nClusters: num(req.nClusters, 3),
     radiusFactor: num(req.radiusFactor, 1.5),
     nComponents: num(req.nComponents, 2),
+    lengthScale: num(req.lengthScale, 1),
+    signalStd: num(req.signalStd, 1),
+    noiseStd: num(req.noiseStd, 0.1),
   };
 }
 
@@ -174,6 +189,23 @@ export interface RegFit {
   coefficients?: { intercept: number; coefs: number[]; standardized: boolean };
   featureImportance?: { features: string[]; importance: number[]; measure: "variance" | "gini" };
   modelParams?: Record<string, number>;
+  /** GP only: predictive standard deviation in raw target units —
+   *  the ±1.96σ band the chart draws. */
+  predictStd?: (xsRaw: number[]) => number;
+  /** PLS only: VIP scores (VIP > 1 marks an influential descriptor —
+   *  the classic QSAR readout the coefficients card never showed). */
+  vip?: { features: string[]; values: number[] };
+  /** GP only: the kernel readout — hyperparameters (learned by the
+   *  deterministic LML grid search when the request left them unset)
+   *  plus the log marginal likelihood of the train targets under them. */
+  gp?: {
+    lengthScale: number;
+    signalStd: number;
+    noiseStd: number;
+    logMarginalLikelihood: number;
+    nSupport: number;
+    kernelTuned: boolean;
+  };
   /** HSVR only: per-cluster geometry + local-fit diagnostics + the
    *  train-row scatter geometry for the trust-radius plot. */
   hsvr?: {
@@ -193,6 +225,17 @@ export interface RegFit {
   };
 }
 
+/** Extra fitting directives shared by the train route's main fit and its
+ *  CV folds (the tune/compare routes keep the default fixed-kernel
+ *  behaviour — their trials always carry explicit hyperparameters). */
+export interface FitDirectives {
+  /** GP: learn the kernel (lengthScale/signalStd/noiseStd) by the
+   *  deterministic marginal-likelihood grid search instead of using
+   *  the request's (default-filled) values — the web mirror of the
+   *  library's LML-tuned kernel. */
+  learnGpKernel?: boolean;
+}
+
 /** Fit any regression model over a raw (unstandardized) feature matrix. */
 export function fitRegressionModel(
   model: string,
@@ -200,7 +243,8 @@ export function fitRegressionModel(
   yTrain: number[],
   hp: Hyper,
   rand: () => number,
-  featureNames: string[]
+  featureNames: string[],
+  directives: FitDirectives = {}
 ): RegFit {
   switch (model) {
     case "linear":
@@ -266,12 +310,47 @@ export function fitRegressionModel(
       /* NIPALS PLS1 — the library's `pls` family. The fit surfaces the
        * component count actually extracted (rank-limited) alongside the
        * standardized-space weights; PLS is linear once the latent space
-       * is chosen, so the coefficients card is the honest summary. */
+       * is chosen, so the coefficients card is the honest summary. The
+       * VIP scores ride along too — VIP > 1 marks an influential
+       * descriptor (the classic QSAR readout, previously computed and
+       * dropped). */
       const m = fitPlsRegression(XTrain, yTrain, { nComponents: hp.nComponents });
       return {
         predict: (xs) => m.predict(xs),
         coefficients: { intercept: m.intercept, coefs: [...m.coefs], standardized: true },
         modelParams: { nComponents: m.nUsed },
+        vip: { features: featureNames, values: [...m.vip] },
+      };
+    }
+    case "gaussian_process": {
+      /* Kriging — the library's `gaussian_process` family. With the learn
+       * directive (the request left the kernel hyperparameters unset) the
+       * deterministic LML grid search picks them — the web mirror of
+       * sklearn's marginal-likelihood-tuned kernel; explicit values fix
+       * the kernel. Predictive mean + per-point σ via the Cholesky solve. */
+      const m = fitGaussianProcess(
+        XTrain,
+        yTrain,
+        directives.learnGpKernel
+          ? {}
+          : { lengthScale: hp.lengthScale, signalStd: hp.signalStd, noiseStd: hp.noiseStd }
+      );
+      return {
+        predict: (xs) => m.predict(xs),
+        predictStd: (xs) => m.predictStd(xs),
+        modelParams: {
+          lengthScale: m.lengthScale,
+          signalStd: m.signalStd,
+          noiseStd: m.noiseStd,
+        },
+        gp: {
+          lengthScale: m.lengthScale,
+          signalStd: m.signalStd,
+          noiseStd: m.noiseStd,
+          logMarginalLikelihood: m.logMarginalLikelihood,
+          nSupport: m.nSupport,
+          kernelTuned: m.kernelTuned,
+        },
       };
     }
     case "svm_rbf": {
@@ -579,6 +658,11 @@ export const REG_TUNE_SPACES: Record<string, TuneChoice[]> = {
   svm_rbf: [
     { key: "gamma", values: [0.05, 0.1, 0.25, 0.5, 1, 2] },
     { key: "alpha", values: [0.01, 0.1, 1, 10] },
+  ],
+  gaussian_process: [
+    { key: "lengthScale", values: [0.25, 0.5, 1, 2, 4] },
+    { key: "signalStd", values: [0.5, 1, 2] },
+    { key: "noiseStd", values: [0.01, 0.05, 0.2, 0.5] },
   ],
   mlp: [
     { key: "hidden", values: [4, 8, 16, 32, 48] },

@@ -69,6 +69,20 @@ Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: top_n must be a positive integer or None, got 0
 
+>>> from pharmaml.viz.ml_plots import plot_gp_uncertainty
+>>> fig = plot_gp_uncertainty([1.0, 2.0, 3.0], [1.1, 1.9, 3.2], [0.1, 0.2, 0.3])
+>>> fig.axes[0].get_xlabel(), fig.axes[0].get_ylabel()
+('actual', 'predicted (ŷ)')
+>>> close_figure(fig)
+>>> plot_gp_uncertainty([1.0], [1.0], [-0.1])   # a std can never be negative
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: y_sigma must be non-negative (found min -0.1) — a predictive std can never be negative
+>>> plot_gp_uncertainty([1.0, 2.0], [1.0], [0.1, 0.1])
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: y_true (2,), y_pred (1,) and y_sigma (2,) must match
+
 >>> from pharmaml.viz.ml_plots import plot_training_history
 >>> history = [
 ...     {"epoch": 1, "train_loss": 0.9, "val_loss": 1.0},
@@ -115,6 +129,7 @@ __all__ = [
     "plot_confusion_matrix",
     "plot_cv_scores",
     "plot_feature_importance",
+    "plot_gp_uncertainty",
     "plot_learning_curve",
     "plot_model_comparison",
     "plot_predicted_vs_actual",
@@ -647,6 +662,106 @@ def plot_predicted_vs_actual(
         ax.text(0.03, 0.97, text, transform=ax.transAxes, va="top", ha="left", fontsize=9,
                 bbox={"boxstyle": "round,pad=0.35", "facecolor": "white",
                       "edgecolor": "#D1D5DB", "alpha": 0.9})
+    ax.legend(loc="lower right", fontsize=9)
+    return fig
+
+
+def plot_gp_uncertainty(
+    y_true: np.ndarray | pd.Series | list,
+    y_pred: np.ndarray | list,
+    y_sigma: np.ndarray | list,
+    z: float = 1.96,
+    metrics: Mapping[str, float] | None = None,
+    title: str = "Gaussian process predictions with uncertainty",
+) -> Any:
+    """Parity scatter with ``± z·σ`` error bars — the GP's honest readout.
+
+    The companion to :func:`plot_predicted_vs_actual` for models that
+    know what they do not know: every prediction is drawn with its
+    ``z``-sigma error bar (``z=1.96`` — the two-sided 95% band), and
+    the coverage statistic — the share of test points whose bar
+    actually straddles the truth — is annotated, because a calibrated
+    GP straddles ~95% of them and an over-confident one visibly less.
+
+    Parameters
+    ----------
+    y_true, y_pred:
+        Held-out targets and the GP's predictive means.
+    y_sigma:
+        The GP's per-point predictive standard deviation (e.g. from
+        :func:`pharmaml.ml.predict_with_uncertainty`), same length as
+        ``y_true``.
+    z:
+        Error-bar width in sigmas (default 1.96 — the 95% band).
+    metrics:
+        Optional summary box content, same contract as
+        :func:`plot_predicted_vs_actual`.
+
+    Raises
+    ------
+    DataValidationError
+        On length mismatches, empty input or a negative sigma.
+    """
+    truth = np.asarray(y_true, dtype=float)
+    prediction = np.asarray(y_pred, dtype=float)
+    sigma = np.asarray(y_sigma, dtype=float)
+    if truth.shape != prediction.shape or truth.shape != sigma.shape:
+        raise DataValidationError(
+            f"y_true {truth.shape}, y_pred {prediction.shape} and y_sigma "
+            f"{sigma.shape} must match"
+        )
+    if truth.size == 0:
+        raise DataValidationError("no values to plot (empty y_true/y_pred)")
+    if float(sigma.min()) < 0.0:
+        raise DataValidationError(
+            f"y_sigma must be non-negative (found min {sigma.min():.4g}) — "
+            "a predictive std can never be negative"
+        )
+    if not z > 0.0:
+        raise DataValidationError(f"z must be positive, got {z!r}")
+
+    fig, ax = new_figure(figsize=(6.4, 6.0))
+    low = float(min(truth.min(), prediction.min()) - z * float(sigma.max()))
+    high = float(max(truth.max(), prediction.max()) + z * float(sigma.max()))
+    pad = 0.05 * (high - low or 1.0)
+    limits = (low - pad, high + pad)
+    ax.plot(limits, limits, linestyle="--", color="#9CA3AF", label="perfect prediction (ŷ = y)")
+    covered = np.abs(truth - prediction) <= z * sigma
+    coverage = float(covered.mean())
+    ax.errorbar(
+        truth,
+        prediction,
+        yerr=z * sigma,
+        fmt="none",
+        ecolor=PALETTE[2],
+        elinewidth=1.2,
+        capsize=2.5,
+        alpha=0.85,
+        label=f"±{z:g}·σ error bar",
+    )
+    ax.scatter(truth, prediction, s=28, alpha=0.9, color=PALETTE[0],
+               edgecolor="white", linewidth=0.4, zorder=3,
+               label="test predictions")
+    ax.set_xlim(*limits)
+    ax.set_ylim(*limits)
+    ax.set_xlabel("actual")
+    ax.set_ylabel("predicted (ŷ)")
+    ax.set_title(title)
+
+    lines = [f"coverage ±{z:g}·σ = {coverage * 100:.1f}%"]
+    if metrics:
+        lines.append("  ".join(f"{key}={value:.4g}" for key, value in metrics.items()))
+    ax.text(
+        0.03,
+        0.97,
+        "\n".join(lines),
+        transform=ax.transAxes,
+        va="top",
+        ha="left",
+        fontsize=9,
+        bbox={"boxstyle": "round,pad=0.35", "facecolor": "white",
+              "edgecolor": "#D1D5DB", "alpha": 0.9},
+    )
     ax.legend(loc="lower right", fontsize=9)
     return fig
 

@@ -15,6 +15,7 @@ from sklearn.ensemble import (
     GradientBoostingClassifier,
     GradientBoostingRegressor,
 )
+from sklearn.gaussian_process.kernels import Matern, RBF, WhiteKernel
 from sklearn.linear_model import HuberRegressor, LogisticRegression
 from sklearn.metrics import roc_auc_score
 
@@ -1713,3 +1714,115 @@ class TestXgboostStringLabels:
         y = pd.Series([0] * 20 + [1] * 20)
         result = train_model("xgboost", "classification", X, y, tune=False)
         assert set(result.model.predict(X)).issubset({0, 1})
+
+
+class TestGaussianProcessFamily:
+    """100x-102 — the registry's uncertainty carrier: gaussian_process
+    (regression only).  Kernel hyperparameters are tuned by marginal
+    likelihood at fit time (one deterministic optimiser run), every
+    prediction carries its own sigma via
+    ``predict_with_uncertainty``, and sigma grows away from the
+    training data — the honest extrapolation readout no point
+    estimator can give.
+    """
+
+    @staticmethod
+    def _gp_data() -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(7)
+        x = pd.DataFrame({"a": np.linspace(0.0, 10.0, 60)})
+        y = pd.Series(2.0 * x["a"] + rng.normal(0.0, 0.2, 60))
+        return x, y
+
+    def test_registry_entry(self) -> None:
+        spec = MODEL_REGISTRY["gaussian_process"]
+        assert spec.task == "regression"
+        assert spec.available  # sklearn-backed: no optional dependency
+        reg_names = {entry["name"] for entry in list_models("regression")}
+        assert "gaussian_process" in reg_names
+        cls_names = {entry["name"] for entry in list_models("classification")}
+        assert "gaussian_process" not in cls_names
+        # friendly aliases resolve anywhere a registry key is expected
+        assert resolve_model_name("gp") == "gaussian_process"
+        assert resolve_model_name("kriging") == "gaussian_process"
+        assert resolve_model_name("Gaussian-Process") == "gaussian_process"
+
+    def test_train_predict_with_uncertainty(self) -> None:
+        from pharmaml.ml.evaluation import predict_with_uncertainty
+
+        x, y = self._gp_data()
+        result = train_model("gaussian_process", "regression", x, y, tune=False)
+        mean, sigma = predict_with_uncertainty(result.model, x)
+        assert mean.shape == sigma.shape == (60,)
+        assert (sigma >= 0.0).all()
+        # the mean is exactly what pipeline.predict reports
+        np.testing.assert_allclose(mean, result.model.predict(x), rtol=1e-12)
+        # classification requests are rejected with the house error
+        with pytest.raises(ModelError, match="supports 'regression'"):
+            train_model("gaussian_process", "classification", x, y, tune=False)
+
+    def test_sigma_grows_away_from_data(self) -> None:
+        from pharmaml.ml.evaluation import predict_with_uncertainty
+
+        x, y = self._gp_data()
+        result = train_model("gaussian_process", "regression", x, y, tune=False)
+        _, sigma = predict_with_uncertainty(result.model, x)
+        far = pd.DataFrame({"a": [100.0]})
+        sigma_far = float(predict_with_uncertainty(result.model, far)[1][0])
+        assert sigma_far > 10.0 * float(sigma.min())
+        assert sigma_far > float(sigma.max())
+
+    def test_deterministic_refit(self) -> None:
+        from pharmaml.ml.evaluation import predict_with_uncertainty
+
+        x, y = self._gp_data()
+        first = train_model("gaussian_process", "regression", x, y, tune=False)
+        second = train_model("gaussian_process", "regression", x, y, tune=False)
+        m1, s1 = predict_with_uncertainty(first.model, x)
+        m2, s2 = predict_with_uncertainty(second.model, x)
+        np.testing.assert_array_equal(m1, m2)
+        np.testing.assert_array_equal(s1, s2)
+
+    def test_non_gp_model_is_rejected(self) -> None:
+        from pharmaml.ml.evaluation import predict_with_uncertainty
+
+        x, y = self._gp_data()
+        result = train_model("ridge", "regression", x, y, tune=False)
+        with pytest.raises(ModelError, match="GaussianProcessRegressor"):
+            predict_with_uncertainty(result.model, x)
+
+    def test_coverage_calibration(self) -> None:
+        # a GP fit on iid noise should straddle most of the held-out
+        # truth with its ±1.96 sigma band (calibration sanity — not a
+        # pin of any exact value, which would be overfit to the seed)
+        from pharmaml.ml.evaluation import predict_with_uncertainty
+
+        rng = np.random.default_rng(11)
+        x = pd.DataFrame({"a": rng.uniform(0.0, 10.0, 120)})
+        y = pd.Series(np.sin(x["a"]) + rng.normal(0.0, 0.3, 120))
+        x_train, x_test, y_train, y_test = make_train_test_split(
+            x, y, test_size=0.3, random_state=42
+        )
+        result = train_model(
+            "gaussian_process", "regression", x_train, y_train, tune=False
+        )
+        mean, sigma = predict_with_uncertainty(result.model, x_test)
+        covered = float(np.mean(np.abs(y_test.to_numpy() - mean) <= 1.96 * sigma))
+        assert covered >= 0.7
+
+    def test_kernel_grid_tuning(self) -> None:
+        # the registry grid searches kernel SHAPES (RBF vs Matern vs
+        # RationalQuadratic); the marginal-likelihood optimiser tunes each
+        # kernel's own hyperparameters from its fixed starting point
+        x, y = self._gp_data()
+        result = train_model(
+            "gaussian_process",
+            "regression",
+            x,
+            y,
+            tune=True,
+            param_grid={"kernel": [RBF(1.0) + WhiteKernel(0.1), Matern(1.0, nu=1.5)]},
+            cv=3,
+            n_jobs=1,
+        )
+        assert result.cv_scores is not None
+        assert not np.all(np.isnan(result.cv_scores))

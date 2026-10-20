@@ -71,8 +71,7 @@ export function kFoldSplit(n: number, k: number, rand: () => number): number[][]
 /* Linear algebra                                                      */
 /* ------------------------------------------------------------------ */
 
-/**
- * Solve A·x = b via Gaussian elimination with partial pivoting.
+/** Solve A·x = b via Gaussian elimination with partial pivoting.
  * @throws Error when the system is (numerically) singular.
  */
 export function solveLinearSystem(A: number[][], b: number[]): number[] {
@@ -99,6 +98,48 @@ export function solveLinearSystem(A: number[][], b: number[]): number[] {
     }
   }
   return M.map((row, i) => row[n] / row[i]);
+}
+
+/** Lower-triangular Cholesky factor L (A = L·Lᵀ) of a symmetric
+ *  positive-definite matrix. @throws Error when a pivot collapses
+ *  (numerically not positive definite). */
+function choleskyDecompose(A: number[][]): number[][] {
+  const n = A.length;
+  const L: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j <= i; j++) {
+      let sum = A[i]![j]!;
+      for (let k = 0; k < j; k++) sum -= L[i]![k]! * L[j]![k]!;
+      if (i === j) {
+        if (!(sum > 1e-12)) {
+          throw new Error("Cholesky pivot collapsed — matrix not positive definite.");
+        }
+        L[i]![j] = Math.sqrt(sum);
+      } else {
+        L[i]![j] = sum / L[j]![j]!;
+      }
+    }
+  }
+  return L;
+}
+
+/** Solve A·x = b given A's Cholesky factor L (A = L·Lᵀ): forward
+ *  substitution for L·z = b, then back substitution for Lᵀ·x = z. */
+function choleskySolve(L: number[][], b: number[]): number[] {
+  const n = b.length;
+  const z: number[] = new Array<number>(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    let sum = b[i]!;
+    for (let k = 0; k < i; k++) sum -= L[i]![k]! * z[k]!;
+    z[i] = sum / L[i]![i]!;
+  }
+  const x: number[] = new Array<number>(n).fill(0);
+  for (let i = n - 1; i >= 0; i--) {
+    let sum = z[i]!;
+    for (let k = i + 1; k < n; k++) sum -= L[k]![i]! * x[k]!;
+    x[i] = sum / L[i]![i]!;
+  }
+  return x;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1410,6 +1451,232 @@ export function fitKernelRidgeRbf(
       let acc = 0;
       for (let i = 0; i < n; i++) acc += (a[i] ?? 0) * (row[i] ?? 0);
       return acc * yStats.sigma + yStats.mu;
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Gaussian process regression — mean + predictive sigma               */
+/* ------------------------------------------------------------------ */
+
+/** What a GP fit surfaces: the kernel hyperparameters in force (learned
+ *  by the deterministic marginal-likelihood grid search when the caller
+ *  left them unspecified — the web mirror of the library's LML-tuned
+ *  kernel — or the caller's fixed values), the log marginal likelihood
+ *  of the train targets under them, and the train-row count the GP
+ *  memorised (every one of them). */
+export interface GpFit {
+  /** RBF length scale ℓ (standardized-feature-space units). */
+  lengthScale: number;
+  /** Signal amplitude σf (raw target units). */
+  signalStd: number;
+  /** White-noise observation std σn (raw target units). */
+  noiseStd: number;
+  /** Log marginal likelihood of the train targets under the kernel. */
+  logMarginalLikelihood: number;
+  /** Train rows in the GP's support set (all of them). */
+  nSupport: number;
+  /** True when the three kernel hyperparameters were LEARNED by the
+   *  marginal-likelihood grid search rather than taken from the request. */
+  kernelTuned: boolean;
+}
+
+/** Grid the mini marginal-likelihood search walks when the caller leaves
+ *  the kernel hyperparameters unspecified (ℓ in standardized-feature
+ *  units; σf and σn as fractions of the train-target std). */
+const GP_LENGTH_GRID = [0.25, 0.5, 1, 2, 4];
+const GP_SIGNAL_GRID = [0.5, 1, 2];
+const GP_NOISE_GRID = [0.02, 0.1, 0.2, 0.4, 0.8];
+/** Row cap for the search (deterministic stride subsample) — the LML
+ *  comparison needs the same kernel math as the full fit, so dense
+ *  datasets select on a capped subsample and the winner is refit on
+ *  every train row. */
+const GP_TUNE_CAP = 150;
+
+/** Log marginal likelihood of t under the RBF+white kernel with the given
+ *  (scaled-space) hyperparameters — the grid search's objective. */
+function gpLogMarginalLikelihood(
+  Z: number[][],
+  t: number[],
+  sf2: number,
+  sn: number,
+  ell2: number
+): number {
+  const n = Z.length;
+  const A: number[][] = Array.from({ length: n }, (_, i) =>
+    Array.from({ length: n }, (_, j) => {
+      if (i !== j) {
+        let d2 = 0;
+        for (let c = 0; c < Z[i]!.length; c++) {
+          const dv = (Z[i]![c] ?? 0) - (Z[j]![c] ?? 0);
+          d2 += dv * dv;
+        }
+        return sf2 * Math.exp(-d2 / ell2);
+      }
+      return sf2 + sn * sn;
+    })
+  );
+  try {
+    const L = choleskyDecompose(A);
+    const alpha = choleskySolve(L, [...t]);
+    let logDet = 0;
+    for (let i = 0; i < n; i++) logDet += Math.log(L[i]![i]!);
+    const quad = t.reduce((acc, v, i) => acc + v * (alpha[i] ?? 0), 0);
+    return -0.5 * quad - logDet - (n / 2) * Math.log(2 * Math.PI);
+  } catch {
+    return -Infinity;
+  }
+}
+
+/** Deterministic stride subsample of ≤ cap rows (the LML search set). */
+function strideSubsample(n: number, cap: number): number[] {
+  if (n <= cap) return Array.from({ length: n }, (_, i) => i);
+  const idx: number[] = [];
+  const stride = n / cap;
+  for (let s = 0; s < cap; s++) idx.push(Math.floor(s * stride));
+  return idx;
+}
+
+/**
+ * Gaussian process regression (kriging) — the web mirror of the library's
+ * `gaussian_process` family. Kernel: σf²·exp(−‖z−z′‖²/(2ℓ²)) + σn²·δ over
+ * train-standardized features (the leak-free rule: the standardizer sees
+ * TRAIN rows only), target centred and scaled. The posterior mean comes
+ * from the Cholesky solve, the predictive sigma from the
+ * σf² − k*ᵀ(K+σn²I)⁻¹k* quadratic form plus the σn² observation floor —
+ * the PREDICTION interval for a new observation, the uncertainty a QSAR
+ * readout actually wants — and it GROWS away from the training data, the
+ * extrapolation warning no point estimator gives.
+ *
+ * Hyperparameters: when `opts` leaves all three unspecified, the kernel is
+ * LEARNED by the deterministic marginal-likelihood grid search above
+ * (evaluated on a ≤ GP_TUNE_CAP-row stride subsample, winner refit on
+ * every train row) — the web mirror of the library's LML-tuned kernel,
+ * one deterministic pass, no random restarts. Any explicit value fixes
+ * the kernel at the caller's settings.
+ */
+export function fitGaussianProcess(
+  X: number[][],
+  y: number[],
+  opts: { lengthScale?: number; signalStd?: number; noiseStd?: number } = {}
+): RowRegressor & GpFit & { predictStd(xsRaw: number[]): number } {
+  const n = X.length;
+  const std = fitStandardizer(X);
+  const Z = X.map((row) => std.transform(row));
+  const yStats = stats(y);
+  const t = y.map((v) => (v - yStats.mu) / yStats.sigma);
+
+  const learnKernel =
+    opts.lengthScale === undefined &&
+    opts.signalStd === undefined &&
+    opts.noiseStd === undefined;
+
+  let lengthScale = opts.lengthScale ?? 1;
+  let signalStd = opts.signalStd ?? 1;
+  let noiseStd = opts.noiseStd ?? 0.1;
+
+  if (learnKernel && n >= 8) {
+    /* The mini LML search: every grid combo in scaled-y units, objective
+     * evaluated on the stride subsample, winner reported in raw units. */
+    const idx = strideSubsample(n, GP_TUNE_CAP);
+    const Zs = idx.map((i) => Z[i]!);
+    const ts = idx.map((i) => t[i]!);
+    let bestLml = -Infinity;
+    let best: { ell: number; sf: number; sn: number } | undefined;
+    for (const ell of GP_LENGTH_GRID) {
+      const ell2 = 2 * ell * ell;
+      for (const sfFrac of GP_SIGNAL_GRID) {
+        const sf2 = sfFrac * sfFrac;
+        for (const snFrac of GP_NOISE_GRID) {
+          const lml = gpLogMarginalLikelihood(Zs, ts, sf2, snFrac, ell2);
+          if (lml > bestLml) {
+            bestLml = lml;
+            best = { ell, sf: sfFrac, sn: snFrac };
+          }
+        }
+      }
+    }
+    if (best) {
+      lengthScale = best.ell;
+      signalStd = best.sf * yStats.sigma;
+      noiseStd = Math.max(best.sn * yStats.sigma, 0.005);
+    }
+  }
+
+  /* Kernel hyperparameters live in scaled-target units internally. */
+  const sf = signalStd / yStats.sigma;
+  const sn = Math.max(noiseStd / yStats.sigma, 1e-8);
+  const sf2 = sf * sf;
+  const ell2 = 2 * lengthScale * lengthScale;
+  const kFn = (a: number[], b: number[]): number => {
+    let d2 = 0;
+    for (let c = 0; c < a.length; c++) {
+      const dv = (a[c] ?? 0) - (b[c] ?? 0);
+      d2 += dv * dv;
+    }
+    return sf2 * Math.exp(-d2 / ell2);
+  };
+
+  /* K + σn²I — symmetric positive definite by construction; the jitter
+   * retry only fires for pathologically collinear train rows. */
+  const gram = (): number[][] =>
+    Array.from({ length: n }, (_, i) =>
+      Array.from({ length: n }, (_, j) =>
+        i === j ? kFn(Z[i]!, Z[i]!) + sn * sn : kFn(Z[i]!, Z[j]!)
+      )
+    );
+  let L: number[][] = [];
+  let jitter = 0;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      L = choleskyDecompose(gram().map((row, i) => row.map((v, j) => (i === j ? v + jitter : v))));
+      break;
+    } catch {
+      jitter = jitter === 0 ? 1e-9 : jitter * 100;
+    }
+  }
+  if (L.length === 0) {
+    throw new Error("Gaussian process kernel matrix is not solvable — try a larger noise σn.");
+  }
+
+  const alpha = choleskySolve(L, [...t]);
+
+  /* LML = −½ tᵀ(K+σn²I)⁻¹t − Σ log L_ii − n/2·log(2π) (scaled space). */
+  let logDet = 0;
+  for (let i = 0; i < n; i++) logDet += Math.log(L[i]![i]!);
+  const quad = t.reduce((acc, v, i) => acc + v * (alpha[i] ?? 0), 0);
+  const logMarginalLikelihood = -0.5 * quad - logDet - (n / 2) * Math.log(2 * Math.PI);
+
+  const kernelRow = (z: number[]): number[] => Z.map((zrow) => kFn(z, zrow));
+
+  /* Prediction interval: latent posterior variance + the σn² observation
+   * floor (Var(y*) = Var(f*) + σn²) — the honest readout for "how wrong
+   * might THIS prediction be", not just how uncertain the mean is. */
+  const posteriorVar = (z: number[]): number => {
+    const row = kernelRow(z);
+    const solved = choleskySolve(L, [...row]);
+    let v = sf2; // k(z, z) = σf² on the diagonal (z is standardized)
+    for (let i = 0; i < n; i++) v -= (row[i] ?? 0) * (solved[i] ?? 0);
+    return Math.max(v, 0) + sn * sn;
+  };
+
+  return {
+    lengthScale,
+    signalStd,
+    noiseStd,
+    logMarginalLikelihood,
+    nSupport: n,
+    kernelTuned: learnKernel,
+    predict(xsRaw: number[]) {
+      const z = std.transform(xsRaw);
+      const row = kernelRow(z);
+      let acc = 0;
+      for (let i = 0; i < n; i++) acc += (alpha[i] ?? 0) * (row[i] ?? 0);
+      return acc * yStats.sigma + yStats.mu;
+    },
+    predictStd(xsRaw: number[]) {
+      const z = std.transform(xsRaw);
+      return Math.sqrt(posteriorVar(z)) * yStats.sigma;
     },
   };
 }

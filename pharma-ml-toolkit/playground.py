@@ -5678,22 +5678,42 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # the Check-CSV button audits new data against it (the training
             # target rides along as the automatic --target drop).
             self._ml_last_run = (trained, report, task, x_test, y_test, target)
-            self._fill_ml_metrics(trained, report, task, dropped)
+            gp = self._ml_gp_sigma(trained, x_test)
+            self._fill_ml_metrics(trained, report, task, dropped, gp=gp)
             if not self.deps.get("matplotlib"):
                 return
             try:
-                from pharmaml.viz import plot_confusion_matrix, plot_predicted_vs_actual
+                from pharmaml.viz import (
+                    plot_confusion_matrix,
+                    plot_gp_uncertainty,
+                    plot_predicted_vs_actual,
+                )
 
                 if task == "regression":
-                    figure = plot_predicted_vs_actual(
-                        y_test,
-                        report.predictions,
-                        metrics={
-                            "R²": report.r2,
-                            "RMSE": report.rmse,
-                            "MAE": report.mae,
-                        },
-                    )
+                    if gp is not None:
+                        # GP runs get their own honest readout: the parity
+                        # scatter with ±1.96·σ error bars and the coverage
+                        # annotation (plot_gp_uncertainty draws both).
+                        figure = plot_gp_uncertainty(
+                            y_test,
+                            gp[0],
+                            gp[1],
+                            metrics={
+                                "R²": report.r2,
+                                "RMSE": report.rmse,
+                                "MAE": report.mae,
+                            },
+                        )
+                    else:
+                        figure = plot_predicted_vs_actual(
+                            y_test,
+                            report.predictions,
+                            metrics={
+                                "R²": report.r2,
+                                "RMSE": report.rmse,
+                                "MAE": report.mae,
+                            },
+                        )
                 else:
                     figure = plot_confusion_matrix(
                         report.confusion, labels=report.labels
@@ -5703,6 +5723,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._show_error("Plot failed", exc)
 
         self._start_job(f"training {model_name} ({task})", work, render)
+
+    def _ml_gp_sigma(self, trained: Any, x_test: Any) -> tuple[Any, Any] | None:
+        """Predictive ``(mean, sigma)`` when the run's model is a GP.
+
+        ``predict_with_uncertainty`` raises its typed ModelError for
+        every non-GP family -- that error IS the probe, caught locally
+        so ordinary runs never pay anything for the check.  Returns
+        ``None`` when pharmaml (or the GP itself) is unavailable.
+        """
+        try:
+            from pharmaml.exceptions import ModelError
+            from pharmaml.ml.evaluation import predict_with_uncertainty
+        except Exception:  # noqa: BLE001 - pharmaml missing or older
+            return None
+        try:
+            return predict_with_uncertainty(trained.model, x_test)
+        except ModelError:
+            return None
 
     def _ml_save_report(self) -> None:
         """Write the last training run as the one-click visual bundle.
@@ -5775,6 +5813,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     y_test, y_pred, metrics=report.as_dict()
                 )
                 figures["residuals"] = ml_plots.plot_residuals(y_test, y_pred)
+                gp = self._ml_gp_sigma(trained, x_test)
+                if gp is not None:
+                    # the GP twin: parity with ±1.96·σ error bars plus
+                    # the coverage annotation (the figure the GUI shows).
+                    figures["gp_uncertainty"] = ml_plots.plot_gp_uncertainty(
+                        y_test, gp[0], gp[1], metrics=report.as_dict()
+                    )
             if trained.cv_scores is not None:
                 figures["cv_scores"] = ml_plots.plot_cv_scores(trained)
             try:
@@ -5881,7 +5926,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._start_job(f"auditing {path.name}", work, render)
 
     def _fill_ml_metrics(self, trained: Any, report: Any, task: str,
-                         dropped: list[str]) -> None:
+                         dropped: list[str],
+                         gp: tuple[Any, Any] | None = None) -> None:
         for child in self._ml_metrics.winfo_children():
             child.destroy()
         cv_line = "no CV"
@@ -5897,6 +5943,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 ("CV score", cv_line),
                 ("fit time", f"{trained.fit_seconds:.2f} s"),
             ]
+            if gp is not None:
+                # the GP's honest uncertainty line: the median predictive
+                # sigma across the held-out set (the error-bar scale the
+                # figure draws at ±1.96σ).
+                import numpy as _np
+
+                sigma = _np.asarray(gp[1], dtype=float)
+                pairs.append(
+                    ("predictive σ (median)", format_number(float(_np.median(sigma))))
+                )
         else:
             auc = getattr(report, "roc_auc", None)
             pairs = [

@@ -1,7 +1,7 @@
 """QSAR machine learning: preprocessing, training, evaluation, persistence,
 hyperparameter tuning."""
 
-from pharmaml.ml.evaluation import evaluate_model
+from pharmaml.ml.evaluation import evaluate_model, predict_with_uncertainty
 from pharmaml.ml.hierarchical import HierarchicalSVR
 from pharmaml.ml.models import (
     MODEL_ALIASES,
@@ -74,6 +74,7 @@ __all__ = [
     "load_model",
     "make_cv_splitter",
     "make_train_test_split",
+    "predict_with_uncertainty",
     "resolve_model_name",
     "resource_bounds",
     "save_model",

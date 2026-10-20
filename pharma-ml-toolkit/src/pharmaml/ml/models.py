@@ -47,6 +47,14 @@ from sklearn.ensemble import (
     VotingClassifier,
     VotingRegressor,
 )
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import (
+    RBF,
+    ConstantKernel,
+    Matern,
+    RationalQuadratic,
+    WhiteKernel,
+)
 from sklearn.linear_model import (
     ElasticNet,
     HuberRegressor,
@@ -296,6 +304,22 @@ def _res_dnn_reg():
     return ResidualMLPRegressor(random_state=42)
 
 
+def _gp_reg() -> GaussianProcessRegressor:
+    # The classic QSAR surrogate kernel: amplitude-scaled RBF smoothness
+    # plus white observation noise.  The marginal-likelihood gradient
+    # ascent tunes length_scale / amplitude / noise_level at fit time
+    # (ONE deterministic optimiser run from these starting points --
+    # n_restarts_optimizer=0), and normalize_y=True recentres/rescales
+    # the target so the kernel hyperparameters live on a sane scale for
+    # raw pIC50-style columns.  Predictions come with their own sigma
+    # via predict(..., return_std=True) -- surfaced by
+    # pharmaml.ml.predict_with_uncertainty.
+    kernel = ConstantKernel(1.0) * RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)
+    return GaussianProcessRegressor(
+        kernel=kernel, normalize_y=True, random_state=42, n_restarts_optimizer=0
+    )
+
+
 def _hsvr():
     from pharmaml.ml.hierarchical import HierarchicalSVR
 
@@ -399,6 +423,26 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
             "X-y covariance rather than X variance alone -- the QSAR "
             "staple for wide, collinear descriptor blocks where OLS "
             "strains and observations are scarce"
+        ),
+    ),
+    "gaussian_process": ModelSpec(
+        name="gaussian_process",
+        task="regression",
+        factory=lambda: _gp_reg(),
+        param_grid={
+            "kernel": [
+                ConstantKernel(1.0) * RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1),
+                ConstantKernel(1.0) * Matern(length_scale=1.0, nu=1.5)
+                + WhiteKernel(noise_level=0.1),
+                ConstantKernel(1.0) * RationalQuadratic(length_scale=1.0, alpha=0.2)
+                + WhiteKernel(noise_level=0.1),
+            ]
+        },
+        notes=(
+            "Gaussian process regression (kriging): kernel hyperparameters "
+            "tuned by marginal likelihood at fit time, every prediction "
+            "carrying its own sigma (predict_with_uncertainty) -- the "
+            "surrogate standard for scarce observations and active learning"
         ),
     ),
     "knn": ModelSpec(
@@ -610,6 +654,10 @@ MODEL_ALIASES: dict[str, str] = {
     "pls_regression": "pls",
     "plsr": "pls",
     "partial_least_squares": "pls",
+    "gp": "gaussian_process",
+    "gpr": "gaussian_process",
+    "gaussianprocess": "gaussian_process",
+    "kriging": "gaussian_process",
 }
 
 
