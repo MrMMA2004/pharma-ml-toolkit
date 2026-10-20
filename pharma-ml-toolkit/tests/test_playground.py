@@ -1072,7 +1072,7 @@ class TestDockingGuiUnderXvfb:
         titles = [app._book.tab(tab, "text").strip() for tab in app._book.tabs()]
         assert titles == [
             "Home", "Chemistry", "PK / PD", "Cell Lines", "Docking",
-            "Data & ML", "Deep Learning", "Generative",
+            "Data & ML", "Deep Learning", "Generative", "Utilities",
         ]
 
     def test_docking_example_library_loads(

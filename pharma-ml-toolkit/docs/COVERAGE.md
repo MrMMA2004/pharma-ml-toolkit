@@ -204,3 +204,65 @@ round (adaboost, catboost, elastic_net_logistic, extra_trees,
 gradient_boosting, lasso, lasso_logistic, lightgbm, pls, ridge,
 ridge_classifier, svm, xgboost) are all in §11's tour now — fitted,
 scored on held-out rows, timed.
+
+---
+
+## Playground coverage (100x-110) — the standing guarantee
+
+The third audit axis, asked for by the user and now a standing
+contract: **every file of the rar must have a GUI surface in
+`playground.py`**, not just a library/CLI one. The 118-file matrix
+above maps rar → toolkit; this matrix maps toolkit → playground tab.
+It is the checklist future rounds re-run whenever the playground
+gains or moves a card.
+
+| Rar workflow family (files) | playground.py surface since 1.2.50 |
+| --- | --- |
+| ~30 model scripts × 2 tasks (Classification/ + Regression/) | Data & ML → *Train a model* (26-family registry combobox, dynamic) + *Manual hyperparameters* + *Tuner* + *Results* + *Leaderboard* |
+| `Stacking.py` (×5) | Data & ML → *Ensemble builder* (`build_stacking`) |
+| `Voting.py` (×5) | Data & ML → *Ensemble builder* (`build_voting`, soft/hard + weights) |
+| every `reuse.py` / `class done.py` (×8) | Data & ML → *Model persistence* (save bundle / load / audit / predict) |
+| every model script's PDF report | Data & ML → *Save report…* + `include report.pdf` (`save_pdf_report` via the visual bundle) |
+| `Descriptor *.py` (×7) + `others/Ml/*calculator*.py` (×6) | Chemistry → *Feature factory* (descriptor sets + fingerprint kinds, top-K ranking) |
+| `BBB_Prediction_model.ipynb` | Data & ML end-to-end: load → train → tune → save |
+| `Convert IC50(nM) to pIC50.py` | Chemistry → *Affinity conversion* (single value) **and** *Structure & table converters* → `append pIC50 column` (batch, censored-honest) |
+| `Convert CSV to SDF.py` | Chemistry → *Structure & table converters* → `CSV table → 3D SDF` |
+| `Convert SMI to CSV.py` (×2) | same card → `.smi list → CSV` |
+| `others/Ml/Sdf reading.ipynb` | same card → `SDF → table` (+ `table → .smi list` inverse) |
+| `Tanimoto calculator.py` (×2) | Chemistry → *Library similarity scan* → `matrix: references × library` |
+| `Tanimoto-edited.py` (×2) | same card → `scan: pairs ≥ threshold` (and `top-k`) |
+| `Non-numerical data remover.py` | Data & ML → *Drop non-numeric columns* + *Save cleaned CSV…* |
+| `Split CSV file.py` (×2) | Utilities → *Table merge & split* → `split into chunks` |
+| `CSV_merger.py` | same card → `merge picked files` (first-columns contract) |
+| `filemerger.py` | same card → `merge whole folder` |
+| `common_between_two_excel.py` + `notcommon.py` | Utilities → *Table compare & annotate* → `compare a column` |
+| `smilesgetter.py` | same card → `annotate names with SMILES` |
+| `approved.py` | Utilities → *Approved drugs → report* (CSV + `export_docx`) |
+| `extaacter.py` / `dlg_extracter.py` / `ligand_pdbqt_extracter.py` | Utilities → *Campaign file tools* → `collect files` (name ∪ pattern) |
+| `Nameextracter.py` | same card → `list file names` |
+| `adder.py` | same card → `distribute files into folders` (and Docking → receptor card's *distribute*) |
+| `deleter.py` | same card → `delete named files` |
+| `delete.py` | same card → `cleanup tree (keep list)` |
+| `Prettier_extracted_dlgs.py` (×3) | Utilities → *Reindex by number* |
+| `others/General/reader_at_same_folder.py` (×2) + all `reader*.py` | Docking → *Docking results* (campaign scan / DLG cluster table / Vina table) |
+| `main.py` (×2) | Docking → *Campaign runner* (`batch_run_directories`, autogrid4 + autodock4) |
+| `checker.py` | Docking → *Grid, torsion & completion audit* → `folder: completion check` |
+| `gpfer.py` / `gpferreceptorni.py` / `dpfer.py` (×4) | Docking → *Grid box & docking configs* (`write_gpf` + `write_dpf`) |
+| `gpfreader.py` | *Grid, torsion & completion audit* → `GPF file → parameters` **and** `folder: ligand_types per sub-dir` |
+| `niggamatch.py` / `mismatch2.py` | same card → `folder: torsion consistency` |
+| `smilestopdbqt.py` / `smiqt.py` | Docking → *SMILES → PDBQT (single ligand)*; the array card + *Ligand library* cover the batch paths |
+| `ligand_preparation_autodock4.py` (×2) | Docking → *Ligand library → PDBQT* (`prepare_ligand_library`) |
+| `smiles array docking` (the 100x-108 request) | Docking → *SMILES array docking* (`dock_smiles_array`, both engines, simultaneous) |
+| `vinar.py` | Docking → *Campaign runner* → `Vina single ligand` (`run_vina`) |
+| `vinar_multiple.py` | Docking → *Vina config batch* (`run_vina_batch`, simultaneous workers) |
+| `vina_reader.py` | Docking → *Docking results* → Vina mode (`parse_vina_output` / `scan_vina_directory`) |
+| `others/Readme.txt` | `README.md` + the home tab's *What lives where* guide |
+| `New Text Document.txt` (×2) | empty placeholders — nothing to cover |
+| `tuned_random_forest_bbb_prediction_model.pkl` | ⚠ dataset-specific weights are not shipped (the *save bundle* card writes fresh ones) |
+| `ligand generation/nigga*.py` MGLTools/`.mol2` paths | ⚠ deprecated tooling absorbed by the Meeko paths (see rows above) |
+
+Audit method: the rar re-extracted to a clean tree (118 files, `unrar
+x`), each file opened, its calls matched against
+`grep -n "<library function>" playground.py`; every zero-hit family
+in the table above gained its card in 1.2.50. Re-run the grep audit
+whenever a card moves — the matrix is the contract.

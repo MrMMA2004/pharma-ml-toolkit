@@ -10,6 +10,94 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.50] — 2026-10-21
+
+### Added — full RAR coverage in playground.py: the Utilities tab and five closing cards
+
+The one-by-one coverage audit of the original `کدهای ماشین لرنینگ.rar`
+(118 files) had verified the **library/CLI** surface, but the **GUI**
+still hid ten workflow families behind no card at all. This release
+closes the gap — every script of the archive now has a playground
+surface, and `docs/COVERAGE.md` gains the standing per-file playground
+matrix so future rounds keep the guarantee:
+
+- **Utilities tab** (new, five cards):
+  - *Table merge & split* — `merge_tables` (the `CSV_merger.py`
+    column-ordering contract), `merge_table_folder`
+    (`filemerger.py`, always-write) and `split_table_into_chunks`
+    (`Split CSV file.py`, streaming, flat memory).
+  - *Table compare & annotate* — `compare_tables` (the
+    `common_between_two_excel.py` / `notcommon.py` three-way
+    reconciliation, name-normalised) and `annotate_with_smiles`
+    (`smilesgetter.py`, `<column>_SMILES` companions).
+  - *Approved drugs → report* — `filter_approved_drugs` over picked
+    TSV/CSV exports with the CSV **and** `export_docx` Word report
+    (the rar's `approved.py` bare .docx name list, upgraded to a
+    bordered grid table; python-docx probed with an install hint).
+  - *Campaign file tools* — `collect_files` (name ∪ pattern union,
+    folder-named destinations), `list_file_names`, `distribute_files`
+    (the `adder.py` bin/receptor push), `delete_named_files` and
+    `cleanup_tree` (keep-list ∪ keep-pattern allowlist) — every
+    destructive path dry-run by default with a counted confirmation
+    before the real pass.
+  - *Reindex by number* — `reindex_by_number` (all three
+    `Prettier_extracted_dlgs.py` copies): sparse per-ligand rows
+    left-joined onto the dense number range, gaps visible.
+- **Chemistry tab**:
+  - *Structure & table converters* — `table_to_sdf` (3D embed + UFF,
+    every column an SD tag), `smi_to_csv`, `sdf_to_table`,
+    `table_to_smi` and the batch `add_pic50_column` (censored
+    `<10`-style entries respected, never fabricated) — the rar's five
+    converter scripts in one combobox card.
+  - *Library similarity scan* — the `Tanimoto calculator.py` /
+    `Tanimoto-edited.py` pair as three modes: the reference × library
+    matrix (`tanimoto_matrix`), the pairs-above-threshold scan
+    (`similarity_scan`) and top-k (`top_matches`); pasted or
+    CSV-loaded library, four fingerprint kinds.
+- **Docking tab**:
+  - *Grid, torsion & completion audit* — `read_gpf` (typed
+    parameters of one GPF), `scan_gpf_ligand_types`
+    (`gpfreader.py`), `scan_torsion_consistency` (`niggamatch.py` /
+    `mismatch2.py`: TORSDOF vs active REMARKs vs BRANCH counts) and
+    `check_docking_completion` (`checker.py`: OK / INCOMPLETE /
+    MISSING_LOG per folder).
+  - *Vina config batch* — `run_vina_batch` (the `vinar_multiple.py`
+    story): one config docks every `.pdbqt` under a tree
+    simultaneously across workers, per-ligand results table.
+  - *SMILES → PDBQT (single ligand)* — `smiles_to_pdbqt`
+    (`smilestopdbqt.py` / `smiqt.py`) with the ETKDG + MMFF + Meeko
+    path and AD4 atom-type repair.
+- **Data & ML tab** — *Drop non-numeric columns* + *Save cleaned
+  CSV…* (`clean_numeric_frame`, the rar's `Non-numerical data
+  remover.py`): target + keep-list survive, dropped names reported,
+  one confirmation makes the cleaned frame the active dataset.
+
+### Fixed
+
+- **`chem.similarity_scan` / `chem.top_matches` are now exported from
+  `pharmaml.chem`** — the functions existed (and were documented as
+  `chem.*`) but the package `__init__` never re-exported them; the
+  playground's new scan card found the gap.
+- **The invalid naproxen SMILES** (`COc1cc2nc(...)`, unkekulizable)
+  in the playground's default arrays and the docking trivial-name
+  table is now the correct `COc1ccc2cc(ccc2c1)C(C)C(=O)O` — the
+  SMILES-array default silently dropped one of its five drugs and the
+  similarity-scan library one of its seven entries.
+
+### Verified
+
+- `playground.py --self-test` under Xvfb :99 — 10 tabs, no errors.
+- `scratch/probe_coverage_110.py` — headless mouse-path E2E over
+  every new card: 26 checks, all PASS (merge 5 rows + reorder, split
+  3 parts, compare 1/2/1, annotate, approved 2 names, collect
+  union 3, dry-run safety, distribute 3 copies, cleanup allowlist,
+  reindex dense 4, SDF 3355 B round-trip, .smi BOM CSV, SDF→table 3
+  rows, pIC50 2/3 censored-honest, matrix (2, 8) with the identity
+  cell at 1.0, threshold scan 2 identity pairs, top-k sorted, GPF 9
+  params, torsion 1 ligand, completion INCOMPLETE/OK/MISSING_LOG,
+  single PDBQT written, fake-vina batch 2 outs + 2 rows, clean frame
+  keeping SMILES).
+
 ## [1.2.49] — 2026-10-21
 
 ### Added — the playground round the screenshot asked for: SMILES-array docking, RISM-KH, ensembles, model bundles

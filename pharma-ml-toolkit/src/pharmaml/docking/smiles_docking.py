@@ -80,7 +80,7 @@ _TRIVIAL_NAMES: dict[str, str] = {
     "CN1C=NC2=C1C(=O)N(C)C(=O)N2C": "caffeine",
     "CC(=O)Nc1ccc(O)cc1": "paracetamol",
     "CC(C)Cc1ccc(cc1)C(C)C(=O)O": "ibuprofen",
-    "COc1cc2nc(CC(C)C)sc2c(O)cc1": "naproxen",
+    "COc1ccc2cc(ccc2c1)C(C)C(=O)O": "naproxen",
     "Cc1c(O)c(C(=O)O)c(O)nc1N": "theophylline",
     "O=C(NCc1ccc(O)cc1)NCCN": "metformin",
     "COc1ccc(cc1OC)C(C)C(=O)OC": "propranolol",

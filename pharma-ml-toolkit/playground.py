@@ -88,6 +88,29 @@ A tabbed graphical interface opens with every calculation domain of the
   Pareto front card: the audit line, the non-dominated table (with the
   crowding-distance column and the deepest hidden trade-off rank), the
   objective-pair scatter and a CSV export of the front.
+* **Utilities**     -- the original archive's own file & table
+  operations, the coverage audit's closing move (100x-110): merge
+  picked tables or a whole folder (``CSV_merger`` / ``filemerger``),
+  split one big CSV into parts (``Split CSV file``), reconcile a
+  ligand column across two tables or annotate names with SMILES
+  (``common_between_two_excel`` / ``notcommon`` / ``smilesgetter``),
+  filter approved drugs into a CSV or a Word report (``approved.py``
+  + ``export_docx``), the campaign file tools -- collect, list,
+  distribute, delete strays, cleanup with a keep-list, dry-run first
+  (``extaacter`` / ``dlg_extracter`` / ``ligand_pdbqt_extracter`` /
+  ``Nameextracter`` / ``adder`` / ``deleter`` / ``delete``) -- and the
+  reindex-by-number table (``Prettier_extracted_dlgs``).  The
+  Chemistry tab gained the structure & table converters (``Convert
+  CSV to SDF``, ``Convert SMI to CSV``, the SDF-reading notebook,
+  ``Convert IC50(nM) to pIC50`` as a batch column) and the library
+  similarity scan (``Tanimoto calculator``'s matrix,
+  ``Tanimoto-edited``'s threshold scan, top-k); the Docking tab
+  gained the grid / torsion / completion audit (``gpfreader`` /
+  ``checker`` / ``niggamatch`` / ``mismatch2``), the Vina config
+  batch (``vinar_multiple``) and the single-ligand SMILES → PDBQT
+  (``smilestopdbqt`` / ``smiqt``); the Data & ML tab gained the
+  non-numeric column remover (``Non-numerical data remover``) -- every
+  script of the original rar now has a GUI surface.
 
 Design notes
 ------------
@@ -739,6 +762,78 @@ _DOCK_ENGINES = ("AutoDock4 campaign", "Vina single ligand")
 #: The SMILES-array card's engines (dock_smiles_array tokens).
 _SMILES_DOCK_ENGINES = ("vina", "autodock4")
 
+#: Utilities tab -- the table merge & split card's modes (the rar's
+#: CSV_merger / filemerger / Split CSV file trio, one combobox).
+_UTIL_MERGE_MODES = (
+    "merge picked files",
+    "merge whole folder",
+    "split into chunks",
+)
+
+#: Utilities tab -- the compare & annotate card's modes
+#: (common_between_two_excel / notcommon vs smilesgetter).
+_UTIL_COMPARE_MODES = (
+    "compare a column (A vs B)",
+    "annotate names with SMILES",
+)
+
+#: Utilities tab -- the campaign file tools card's modes (extaacter /
+#: dlg_extracter / ligand_pdbqt_extracter / Nameextracter / adder /
+#: deleter / delete, one combobox; destructive modes dry-run first).
+_UTIL_TOOL_MODES = (
+    "collect files (name/pattern)",
+    "list file names",
+    "distribute files into folders",
+    "delete named files",
+    "cleanup tree (keep list)",
+)
+
+#: Chemistry tab -- the structure & table converter card's modes (the
+#: rar's Convert CSV to SDF / Convert SMI to CSV / Sdf reading notebook /
+#: Convert IC50(nM) to pIC50 scripts, one combobox).
+_CONVERTER_MODES = (
+    "CSV table → 3D SDF",
+    ".smi list → CSV",
+    "SDF → table",
+    "table → .smi list",
+    "append pIC50 column",
+)
+
+#: Chemistry tab -- the library similarity scan card's modes (the rar's
+#: Tanimoto calculator matrix / Tanimoto-edited threshold scan / top-k).
+_SCAN_MODES = (
+    "matrix: references × library",
+    "scan: pairs ≥ threshold",
+    "top-k: nearest of first reference",
+)
+
+#: Docking tab -- the audit card's modes (the rar's gpfreader /
+#: checker.py / niggamatch.py + mismatch2.py scripts, one combobox).
+_DOCK_AUDIT_MODES = (
+    "GPF file → parameters",
+    "folder: ligand_types per sub-dir",
+    "folder: torsion consistency",
+    "folder: completion check",
+)
+
+#: The similarity scan card's default reference / query molecules.
+_SCAN_DEFAULT_REFS = (
+    "CC(=O)Oc1ccccc1C(=O)O",          # aspirin
+    "CC(=O)Nc1ccc(O)cc1",             # paracetamol
+)
+
+#: The similarity scan card's default pasted library (the trivial-name
+#: drugs the example campaign ships, plus two decoys).
+_SCAN_DEFAULT_LIB = (
+    "CC(=O)Oc1ccccc1C(=O)O",          # aspirin
+    "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",   # caffeine
+    "CC(=O)Nc1ccc(O)cc1",             # paracetamol
+    "CC(C)Cc1ccc(cc1)C(C)C(=O)O",     # ibuprofen
+    "COc1ccc2cc(ccc2c1)C(C)C(=O)O",    # naproxen
+    "CCCCNC(=O)c1ccccc1",             # lidocaine-ish decoy
+    "c1ccccc1",                       # benzene decoy
+)
+
 #: The SMILES-array card's default pasted array: the trivial-name drugs
 #: the example campaign ships (matched to folder names by the library's
 #: own trivial-name table).
@@ -747,7 +842,7 @@ _DOCK_SMILES_DEFAULTS = (
     "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",   # caffeine
     "CC(=O)Nc1ccc(O)cc1",             # paracetamol
     "CC(C)Cc1ccc(cc1)C(C)C(=O)O",     # ibuprofen
-    "COc1cc2nc(CC(C)C)sc2c(O)cc1",    # naproxen
+    "COc1ccc2cc(ccc2c1)C(C)C(=O)O",    # naproxen
 )
 
 # Canonical evidence columns for the consensus rescore card, in
@@ -1801,6 +1896,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_ml_tab()
         self._build_dl_tab()
         self._build_generative_tab()
+        self._build_utilities_tab()
 
     def _new_page(self, title: str, reset: bool = True) -> Any:
         page = ScrollFrame(self._book)
@@ -2345,7 +2441,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         text_widgets = {"pasted": self._feat_pasted_text,
                         "corpus": self._corpus_text,
                         "smiles": getattr(self, "_dock_smiles_text", None),
-                        "rism": getattr(self, "_rism_text", None)}
+                        "rism": getattr(self, "_rism_text", None),
+                        "scan_refs": getattr(self, "_scan_ref_text", None),
+                        "scan_lib": getattr(self, "_scan_lib_text", None)}
         variables: dict[str, Any] = {}
         families: dict[str, bool] = {}
         texts: dict[str, str] = {}
@@ -2627,9 +2725,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "Chemistry",
                 ("IC50/Ki → pIC50/pKi, molar mass, the 200+ descriptor table for "
                  "any SMILES, Tanimoto similarity, the RISM-KH solvation "
-                 "card (ten solvation-theory descriptors), and the feature "
+                 "card (ten solvation-theory descriptors), the feature "
                  "factory: 10,000+ descriptor/fingerprint columns ranked to "
-                 "a top-K."),
+                 "a top-K, the structure & table converters (CSV → 3D SDF, "
+                 "SMI ↔ CSV, SDF → table, batch pIC50) and the library "
+                 "similarity scan (matrix / threshold / top-k)."),
                 "RDKit + pandas",
             ),
             (
@@ -2648,17 +2748,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "Docking",
                 ("Ligand library and receptor preparation into PDBQT (bad "
                  "residues auto-removed), the grid box with GPF/DPF "
-                 "configs, DLG / Vina result parsing, batch campaign runs "
-                 "-- and the SMILES array card: paste a list, dock every "
-                 "molecule simultaneously with Vina or AutoDock4."),
+                 "configs, DLG / Vina result parsing, batch campaign runs, "
+                 "the SMILES array card: paste a list, dock every molecule "
+                 "simultaneously with Vina or AutoDock4 -- plus the audit "
+                 "card (GPF parameters, ligand_types, torsion consistency, "
+                 "completion), the Vina config batch and one-ligand "
+                 "SMILES → PDBQT."),
                 "RDKit + pandas",
             ),
             (
                 "Data & ML",
-                ("Open a CSV (or a bundled example), train a model, read the metrics, "
-                 "browse the cross-validation leaderboard, build voting / "
-                 "stacking ensembles by hand, and save the trained model as "
-                 "a bundle you can load back and predict with."),
+                ("Open a CSV (or a bundled example), drop the non-numeric "
+                 "columns, train a model, read the metrics, browse the "
+                 "cross-validation leaderboard, build voting / stacking "
+                 "ensembles by hand, and save the trained model as a bundle "
+                 "you can load back and predict with (PDF report included)."),
                 "pandas + sklearn",
             ),
             (
@@ -2668,6 +2772,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                  "operator-mix learning curve, RL runs the prior-drift "
                  "introspection."),
                 "RDKit (+ torch for RL)",
+            ),
+            (
+                "Utilities",
+                ("The archive's own file & table operations: merge or split "
+                 "tables, compare / annotate ligand columns, filter "
+                 "approved drugs into a CSV or Word report, the campaign "
+                 "file tools (collect / list / distribute / delete / "
+                 "cleanup, dry-run first) and the reindex-by-number table."),
+                "pandas",
             ),
         ]
         for name, blurb, needs in entries:
@@ -3018,6 +3131,192 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._rism_tree.pack(side="left", fill="both", expand=True)
         rism_bar.pack(side="right", fill="y")
 
+        # -- structure & table converters (100x-110) --------------------- #
+        # The rar's Convert CSV to SDF / Convert SMI to CSV / Sdf reading
+        # notebook / Convert IC50(nM) to pIC50 -- one card, five modes.
+        convert = make_card(
+            page.grid, "Structure & table converters", row=4, column=0,
+            span=2,
+            subtitle="The rar's converter scripts, one card: a SMILES "
+                     "table becomes a 3D SDF (AddHs → ETKDG → UFF, every "
+                     "column an SD tag), a .smi list becomes CSV, an SDF "
+                     "becomes a table back, a table becomes .smi, or a "
+                     "measurement column gains pIC50 (censored '<100' "
+                     "entries handled, never fabricated).",
+        )
+        self._conv_mode = ttk.Combobox(
+            convert, state="readonly", width=30, values=_CONVERTER_MODES)
+        self._conv_mode.set(_CONVERTER_MODES[0])
+        form_row(convert, "mode", self._conv_mode)
+        conv_pick = ttk.Frame(convert, style="Card.TFrame")
+        grid_append(convert, conv_pick, sticky="w")
+        for label, command in (
+                ("Input…", self._conv_pick_input),
+                ("Output…", self._conv_pick_output)):
+            button = self._action_button(conv_pick, label, command)
+            button.pack(side="left")
+        self._conv_input: Path | None = None
+        self._conv_output: Path | None = None
+        self._conv_info = ttk.Label(
+            convert, text="pick an input (and an output for the file modes)",
+            style="CardMuted.TLabel", wraplength=620, justify="left")
+        grid_append(convert, self._conv_info, sticky="w", pady=(4, 0))
+        conv_opts = ttk.Frame(convert, style="Card.TFrame")
+        grid_append(convert, conv_opts, sticky="w")
+        conv_opts.columnconfigure(1, weight=1)
+        self._conv_smiles_col = ttk.Entry(conv_opts, width=18)
+        self._conv_smiles_col.insert(0, "SMILES")
+        form_row(conv_opts, "SMILES column", self._conv_smiles_col)
+        self._conv_name_col = ttk.Entry(conv_opts, width=18)
+        self._conv_name_col.insert(0, "")
+        Tooltip(self._conv_name_col,
+                "Optional name/title column (SDF titles and .smi names); "
+                "blank uses the SMILES or the row index.")
+        form_row(conv_opts, "name column", self._conv_name_col)
+        self._conv_source_col = ttk.Entry(conv_opts, width=18)
+        self._conv_source_col.insert(0, "IC50 (nM)")
+        Tooltip(self._conv_source_col,
+                "pIC50 mode: the measurement column to convert "
+                "(qualifiers like '<' / '>' are respected).")
+        form_row(conv_opts, "measure column (pIC50)", self._conv_source_col)
+        self._conv_unit = ttk.Combobox(
+            conv_opts, state="readonly", width=8,
+            values=("nM", "uM", "µM", "mM", "M", "pM"))
+        self._conv_unit.set("nM")
+        form_row(conv_opts, "unit (pIC50)", self._conv_unit)
+        self._conv_embed_var = tk.BooleanVar(value=True)
+        embed_check = ttk.Checkbutton(
+            conv_opts, text="embed 3D + UFF (SDF)", variable=self._conv_embed_var)
+        form_row(conv_opts, "geometry", embed_check)
+        conv_run_row = ttk.Frame(convert, style="Card.TFrame")
+        grid_append(convert, conv_run_row, sticky="w", pady=(6, 0))
+        conv_run_btn = self._action_button(
+            conv_run_row, "Convert", self._conv_run, primary=True,
+            tooltip="Runs in a worker thread; invalid SMILES are counted "
+                    "(never abort the batch) and the report names every "
+                    "non-fatal note.")
+        conv_run_btn.pack(side="left")
+        self._conv_summary = ttk.Label(
+            conv_run_row, text="—", style="CardMuted.TLabel",
+            wraplength=520, justify="left")
+        self._conv_summary.pack(side="left", padx=(10, 0))
+        conv_save_btn = self._action_button(
+            conv_run_row, "Save table CSV…", self._conv_save_table,
+            tooltip="Writes the last table-shaped result (SDF→table or "
+                    "pIC50) as CSV.")
+        conv_save_btn.pack(side="left", padx=(10, 0))
+        conv_tree_frame = ttk.Frame(convert, style="Card.TFrame")
+        grid_append(convert, conv_tree_frame, sticky="nsew", pady=(6, 0),
+                    weight=True)
+        self._conv_tree = ttk.Treeview(conv_tree_frame, show="headings",
+                                       height=6)
+        conv_bar = ttk.Scrollbar(conv_tree_frame, orient="vertical",
+                                 command=self._conv_tree.yview)
+        conv_bar_x = ttk.Scrollbar(conv_tree_frame, orient="horizontal",
+                                   command=self._conv_tree.xview)
+        self._conv_tree.configure(yscrollcommand=conv_bar.set,
+                                  xscrollcommand=conv_bar_x.set)
+        self._conv_tree.pack(side="left", fill="both", expand=True)
+        conv_bar.pack(side="right", fill="y")
+        conv_bar_x.pack(side="bottom", fill="x")
+        self._conv_frame: Any = None
+
+        # -- library similarity scan (100x-110) -------------------------- #
+        # The rar's Tanimoto calculator / Tanimoto-edited pair: the
+        # reference × library matrix, the threshold scan and top-k.
+        scan = make_card(
+            page.grid, "Library similarity scan", row=5, column=0, span=2,
+            subtitle="The rar's Tanimoto calculator & Tanimoto-edited: "
+                     "paste references on the left and a library on the "
+                     "right (or load one from a CSV) -- the all-vs-all "
+                     "Tanimoto matrix, the pairs-above-threshold scan, "
+                     "or the top-k nearest neighbours of one query.",
+        )
+        scan.columnconfigure(0, weight=1)
+        scan.columnconfigure(1, weight=1)
+        scan_left = ttk.Frame(scan, style="Card.TFrame")
+        scan_left.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+        ttk.Label(scan_left, text="references / query (one SMILES per line)",
+                  style="CardMuted.TLabel").pack(anchor="w")
+        self._scan_ref_text = _grid_text(scan_left, height=5, mono=self._mono)
+        self._scan_ref_text.insert("1.0", "\n".join(_SCAN_DEFAULT_REFS))
+        self._scan_ref_text.pack(fill="both", expand=True, pady=(4, 0))
+        scan_right = ttk.Frame(scan, style="Card.TFrame")
+        scan_right.grid(row=0, column=1, sticky="nsew")
+        ttk.Label(scan_right, text="library (SMILES per line, or pick a CSV)",
+                  style="CardMuted.TLabel").pack(anchor="w")
+        self._scan_lib_text = _grid_text(scan_right, height=5, mono=self._mono)
+        self._scan_lib_text.insert("1.0", "\n".join(_SCAN_DEFAULT_LIB))
+        self._scan_lib_text.pack(fill="both", expand=True, pady=(4, 0))
+        scan_lib_pick = self._action_button(
+            scan_right, "Load library CSV…", self._scan_pick_library,
+            tooltip="A CSV with a SMILES column (auto-detected); it "
+                    "replaces the pasted library.")
+        scan_lib_pick.pack(anchor="w", pady=(6, 0))
+        self._scan_lib_info = ttk.Label(
+            scan_right, text="", style="CardMuted.TLabel",
+            wraplength=300, justify="left")
+        self._scan_lib_info.pack(anchor="w")
+        scan_controls = ttk.Frame(scan, style="Card.TFrame")
+        grid_append(scan, scan_controls, sticky="ew", pady=(8, 0))
+        scan_controls.columnconfigure(1, weight=1)
+        self._scan_mode = ttk.Combobox(
+            scan_controls, state="readonly", width=28, values=_SCAN_MODES)
+        self._scan_mode.set(_SCAN_MODES[0])
+        Tooltip(self._scan_mode,
+                "matrix: every reference × every library (the Tanimoto "
+                "calculator table); scan: the pairs at or above the "
+                "threshold (Tanimoto-edited); top-k: the nearest library "
+                "entries of the FIRST reference.")
+        form_row(scan_controls, "mode", self._scan_mode)
+        self._scan_threshold = ttk.Entry(scan_controls, width=10)
+        self._scan_threshold.insert(0, "0.9")
+        form_row(scan_controls, "threshold (scan)", self._scan_threshold)
+        self._scan_k = ttk.Entry(scan_controls, width=10)
+        self._scan_k.insert(0, "10")
+        form_row(scan_controls, "k (top matches)", self._scan_k)
+        self._scan_kind = ttk.Combobox(
+            scan_controls, state="readonly", width=16,
+            values=("rdkit", "morgan", "atom_pair", "avalon"))
+        self._scan_kind.set("rdkit")
+        form_row(scan_controls, "fingerprint", self._scan_kind)
+        self._scan_bits = ttk.Entry(scan_controls, width=10)
+        self._scan_bits.insert(0, "2048")
+        form_row(scan_controls, "bits", self._scan_bits)
+        self._scan_radius = ttk.Entry(scan_controls, width=10)
+        self._scan_radius.insert(0, "2")
+        form_row(scan_controls, "radius (morgan)", self._scan_radius)
+        scan_run_row = ttk.Frame(scan, style="Card.TFrame")
+        grid_append(scan, scan_run_row, sticky="w", pady=(6, 0))
+        scan_run_btn = self._action_button(
+            scan_run_row, "Scan", self._scan_run, primary=True,
+            tooltip="Fingerprints both sides with the chosen kind and "
+                    "computes the Tanimoto relation in a worker thread.")
+        scan_run_btn.pack(side="left")
+        self._scan_summary = ttk.Label(
+            scan_run_row, text="—", style="CardMuted.TLabel",
+            wraplength=520, justify="left")
+        self._scan_summary.pack(side="left", padx=(10, 0))
+        scan_save_btn = self._action_button(
+            scan_run_row, "Save result CSV…", self._scan_save,
+            tooltip="The last scan/matrix/top-k table.")
+        scan_save_btn.pack(side="left", padx=(10, 0))
+        scan_tree_frame = ttk.Frame(scan, style="Card.TFrame")
+        grid_append(scan, scan_tree_frame, sticky="nsew", pady=(6, 0),
+                    weight=True)
+        self._scan_tree = ttk.Treeview(scan_tree_frame, show="headings",
+                                       height=7)
+        scan_bar = ttk.Scrollbar(scan_tree_frame, orient="vertical",
+                                 command=self._scan_tree.yview)
+        scan_bar_x = ttk.Scrollbar(scan_tree_frame, orient="horizontal",
+                                   command=self._scan_tree.xview)
+        self._scan_tree.configure(yscrollcommand=scan_bar.set,
+                                  xscrollcommand=scan_bar_x.set)
+        self._scan_tree.pack(side="left", fill="both", expand=True)
+        scan_bar.pack(side="right", fill="y")
+        scan_bar_x.pack(side="bottom", fill="x")
+        self._scan_frame: Any = None
+
     def _rism_run(self) -> None:
         """Compute the RISM-KH solvation descriptors for the pasted array."""
         if not self._require_pharmaml() or not self._require(
@@ -3087,6 +3386,349 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Saved", f"RISM-KH table written to\n{path}")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save", exc)
+
+    # -- structure & table converters (100x-110) ------------------------ #
+    def _conv_pick_input(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Pick the converter input",
+            filetypes=[("Tables & structures", "*.csv *.tsv *.xlsx *.sdf *.smi"),
+                       ("All files", "*.*")],
+        )
+        if not path:
+            return
+        self._conv_input = Path(path)
+        out = self._conv_output.name if self._conv_output else "—"
+        self._conv_info.configure(text=f"input: {path}\noutput: {out}")
+
+    def _conv_pick_output(self) -> None:
+        mode = self._conv_mode.get()
+        if mode.startswith("append pIC50"):
+            messagebox.showinfo(
+                "pIC50 mode",
+                "The pIC50 mode keeps everything in memory -- use the "
+                "'Save table CSV…' button after the run instead of an "
+                "output file.")
+            return
+        extension = ".sdf" if "SDF" in mode and mode.startswith("CSV") else (
+            ".csv" if "CSV" in mode else ".smi")
+        path = filedialog.asksaveasfilename(
+            title="Pick the converter output", defaultextension=extension,
+            filetypes=[("Output file", f"*{extension}"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        self._conv_output = Path(path)
+        inp = self._conv_input.name if self._conv_input else "—"
+        self._conv_info.configure(text=f"input: {inp}\noutput: {path}")
+
+    def _conv_run(self) -> None:
+        """Run the selected structure/table conversion (worker thread)."""
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "structure conversion"):
+            return
+        mode = self._conv_mode.get()
+        if self._conv_input is None:
+            messagebox.showwarning("No input", "Pick the input file first.")
+            return
+        input_path = self._conv_input
+        smiles_col = self._conv_smiles_col.get().strip() or "SMILES"
+        name_col = self._conv_name_col.get().strip() or None
+        embed_uff = bool(self._conv_embed_var.get())
+
+        if mode.startswith("append pIC50"):
+            source_col = self._conv_source_col.get().strip() or "IC50 (nM)"
+            unit = self._conv_unit.get()
+
+            def work() -> Any:
+                from pharmaml.chem import add_pic50_column
+                from pharmaml.utils.io import read_table
+
+                frame = read_table(input_path)
+                return add_pic50_column(frame, source_col=source_col,
+                                        out_col="pIC50", unit=unit,
+                                        drop_invalid=False)
+
+            def render(frame: Any) -> None:
+                self._conv_frame = frame
+                self._fill_dynamic_tree(self._conv_tree, frame)
+                valid = int(frame["pIC50"].notna().sum()) if "pIC50" in frame else 0
+                self._conv_summary.configure(
+                    text=(f"{len(frame):,} rows · {valid} pIC50 value(s) · "
+                          f"{len(frame) - valid} unconvertible (kept as NaN, "
+                          f"never fabricated)"), style="Field.TLabel")
+
+            self._start_job(f"appending pIC50 to {input_path.name}", work, render)
+            return
+
+        if self._conv_output is None:
+            messagebox.showwarning(
+                "No output", "Pick the output file for this mode first.")
+            return
+        output_path = self._conv_output
+
+        if mode.startswith("CSV"):
+            if not self._require("rdkit", "3D SDF embedding"):
+                return
+
+            def work() -> Any:
+                from pharmaml.chem import table_to_sdf
+
+                return table_to_sdf(input_path, output_path,
+                                    smiles_col=smiles_col, name_col=name_col,
+                                    embed3d=embed_uff, uff=embed_uff)
+
+            def render(report: Any) -> None:
+                self._conv_frame = None
+                tree = self._conv_tree
+                tree.delete(*tree.get_children())
+                tree["columns"] = ("report",)
+                tree.heading("report", text="report")
+                tree.column("report", width=340, stretch=True)
+                for line in (
+                        f"written: {report.output_sdf}",
+                        f"molecules: {report.molecules}",
+                        f"invalid SMILES rows: {report.failures}",
+                        f"3D-embedded: {report.embedded_3d}",
+                        *(f"note: {note}" for note in report.notes[:6]),
+                ):
+                    tree.insert("", "end", values=(line,))
+                self._conv_summary.configure(
+                    text=(f"{report.molecules} molecule(s) → "
+                          f"{Path(report.output_sdf).name} · "
+                          f"{report.failures} invalid · "
+                          f"{report.embedded_3d} embedded"),
+                    style="Field.TLabel")
+
+            self._start_job(f"writing {output_path.name}", work, render)
+            return
+
+        if mode.startswith(".smi"):
+
+            def work() -> Any:
+                from pharmaml.chem import smi_to_csv
+
+                return smi_to_csv(input_path, output_path)
+
+            def render(written: Any) -> None:
+                self._conv_frame = None
+                tree = self._conv_tree
+                tree.delete(*tree.get_children())
+                tree["columns"] = ("report",)
+                tree.heading("report", text="report")
+                tree.column("report", width=340, stretch=True)
+                tree.insert("", "end", values=(f"written: {written}",))
+                self._conv_summary.configure(
+                    text=f"SMILES list converted to {Path(written).name}",
+                    style="Field.TLabel")
+
+            self._start_job(f"converting {input_path.name}", work, render)
+            return
+
+        if mode.startswith("SDF"):
+
+            def work() -> Any:
+                from pharmaml.chem import sdf_to_table
+
+                return sdf_to_table(input_path, smiles_col=smiles_col)
+
+            def render(frame: Any) -> None:
+                self._conv_frame = frame
+                self._fill_dynamic_tree(self._conv_tree, frame)
+                self._conv_summary.configure(
+                    text=(f"{len(frame):,} record(s) → table · "
+                          f"{len(frame.columns)} columns (tags + SMILES + "
+                          f"name)"), style="Field.TLabel")
+
+            self._start_job(f"reading {input_path.name}", work, render)
+            return
+
+        # table -> .smi
+        def work() -> Any:
+            from pharmaml.chem import table_to_smi
+
+            return table_to_smi(input_path, output_path,
+                                smiles_col=smiles_col, name_col=name_col)
+
+        def render(written: Any) -> None:
+            self._conv_frame = None
+            tree = self._conv_tree
+            tree.delete(*tree.get_children())
+            tree["columns"] = ("report",)
+            tree.heading("report", text="report")
+            tree.column("report", width=340, stretch=True)
+            tree.insert("", "end", values=(f"written: {written}",))
+            self._conv_summary.configure(
+                text=f"table exported as {Path(written).name}",
+                style="Field.TLabel")
+
+        self._start_job(f"writing {output_path.name}", work, render)
+
+    def _conv_save_table(self) -> None:
+        frame = getattr(self, "_conv_frame", None)
+        if frame is None:
+            messagebox.showinfo(
+                "Nothing to save",
+                "The last conversion produced no in-memory table (file "
+                "modes write directly; SDF→table and pIC50 do).")
+            return
+        self._save_frame_dialog(frame, "Save the converted table",
+                                "converted.csv")
+
+    # -- library similarity scan (100x-110) ------------------------------ #
+    def _scan_pick_library(self) -> None:
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "library loading"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open the library CSV",
+            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+
+        def work() -> Any:
+            from pharmaml.utils.io import read_table
+
+            frame = read_table(path)
+            column = detect_smiles_column(frame)
+            if column is None:
+                raise ValueError(
+                    "no SMILES column found -- expected a column named "
+                    "SMILES/smiles/canonical_smiles holding molecules")
+            return frame[column].astype(str).tolist()
+
+        def render(smiles: Any) -> None:
+            self._scan_lib_text.delete("1.0", "end")
+            self._scan_lib_text.insert("1.0", "\n".join(smiles))
+            self._scan_lib_info.configure(
+                text=f"{len(smiles)} SMILES loaded from {Path(path).name}")
+
+        self._start_job(f"loading {Path(path).name}", work, render)
+
+    def _scan_run(self) -> None:
+        """Compute the chosen Tanimoto relation (matrix / scan / top-k)."""
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "similarity scan") or not self._require(
+                "rdkit", "similarity scan"):
+            return
+        references = parse_smiles_lines(self._scan_ref_text.get("1.0", "end"))
+        library = parse_smiles_lines(self._scan_lib_text.get("1.0", "end"))
+        if not references or not library:
+            messagebox.showwarning(
+                "Empty input",
+                "Paste reference SMILES and a library (or load a CSV).")
+            return
+        mode = self._scan_mode.get()
+        kind = self._scan_kind.get()
+        try:
+            n_bits = parse_int(self._scan_bits.get(), "bits", minimum=32,
+                               maximum=65536)
+            radius = parse_int(self._scan_radius.get(), "radius", minimum=0,
+                               maximum=16)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        if mode.startswith("top-k"):
+            try:
+                k = parse_int(self._scan_k.get(), "k", minimum=1, maximum=1000)
+            except ValueError as exc:
+                messagebox.showerror("Input", str(exc))
+                return
+            query = references[0]
+
+            def work() -> Any:
+                from pharmaml.chem import top_matches
+
+                return top_matches(query, library, k=k, fingerprint=kind,
+                                   n_bits=n_bits, radius=radius)
+
+            def render(frame: Any) -> None:
+                self._scan_frame = frame
+                self._fill_dynamic_tree(self._scan_tree, frame,
+                                        widths={"target": 200,
+                                                "similarity": 90})
+                best = frame["similarity"].max() if len(frame) else float("nan")
+                self._scan_summary.configure(
+                    text=(f"top {len(frame)} of the library for the first "
+                          f"reference · best Tanimoto {best:.3f} "
+                          f"({kind}, {n_bits}-bit)"), style="Field.TLabel")
+
+            self._start_job("scanning top matches", work, render)
+            return
+
+        if mode.startswith("scan"):
+            try:
+                threshold = parse_float(self._scan_threshold.get(),
+                                        "threshold")
+                if not 0.0 <= threshold <= 1.0:
+                    raise ValueError("threshold must be within 0..1")
+            except ValueError as exc:
+                messagebox.showerror("Input", str(exc))
+                return
+
+            def work() -> Any:
+                from pharmaml.chem import similarity_scan
+
+                return similarity_scan(references, library,
+                                       threshold=threshold, fingerprint=kind,
+                                       n_bits=n_bits, radius=radius)
+
+            def render(frame: Any) -> None:
+                self._scan_frame = frame
+                self._fill_dynamic_tree(self._scan_tree, frame,
+                                        widths={"reference": 180,
+                                                "target": 180})
+                self._scan_summary.configure(
+                    text=(f"{len(frame)} pair(s) ≥ {threshold:.2f} "
+                          f"({len(references)} refs × {len(library)} "
+                          f"library, {kind})"), style="Field.TLabel")
+
+            self._start_job(f"scanning pairs ≥ {threshold:.2f}", work, render)
+            return
+
+        # matrix mode
+        def work() -> Any:
+            import numpy as np
+
+            from pharmaml.chem import compute_fingerprints, tanimoto_matrix
+
+            ref_bits, ref_ok = compute_fingerprints(
+                references, kind=kind, radius=radius, n_bits=n_bits)
+            lib_bits, lib_ok = compute_fingerprints(
+                library, kind=kind, radius=radius, n_bits=n_bits)
+            matrix = tanimoto_matrix(ref_bits, lib_bits)
+            frame = np.round(matrix, 4)
+            return frame, [references[i] for i in ref_ok], [
+                library[i] for i in lib_ok]
+
+        def render(result: Any) -> None:
+            import pandas as pd
+
+            matrix, refs, libs = result
+            frame = pd.DataFrame(
+                matrix,
+                index=[f"ref {i + 1}: {s[:20]}" for i, s in enumerate(refs)],
+                columns=[f"lib {i + 1}: {s[:16]}" for i, s in enumerate(libs)],
+            ).reset_index().rename(columns={"index": "reference"})
+            self._scan_frame = frame
+            self._fill_dynamic_tree(self._scan_tree, frame)
+            flat = matrix.reshape(-1)
+            self._scan_summary.configure(
+                text=(f"{len(refs)} ref × {len(libs)} library matrix · "
+                      f"min {flat.min():.3f} · mean {flat.mean():.3f} · "
+                      f"max {flat.max():.3f} ({kind}, {n_bits}-bit)"),
+                style="Field.TLabel")
+
+        self._start_job("computing the similarity matrix", work, render)
+
+    def _scan_save(self) -> None:
+        frame = getattr(self, "_scan_frame", None)
+        if frame is None:
+            messagebox.showinfo("Nothing to save", "Run a scan first.")
+            return
+        self._save_frame_dialog(frame, "Save the similarity result",
+                                "similarity.csv")
 
     def _convert_affinity(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "conversion"):
@@ -4919,6 +5561,171 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         self._dock_smiles_summary.pack(side="left", padx=(10, 0))
 
+        # -- audit card (100x-110): gpfreader / checker / niggamatch --- #
+        # The rar's GPF reader, the campaign completion checker and the
+        # torsion-consistency auditor, one card.
+        audit = make_card(
+            page.grid, "Grid, torsion & completion audit", row=4, column=0,
+            subtitle="gpfreader / checker / niggamatch / mismatch2: parse "
+                     "one GPF into its typed parameters, list every "
+                     "sub-folder's ligand_types, audit TORSDOF vs active "
+                     "REMARKs vs BRANCH counts of prepared ligands, or "
+                     "check a campaign tree for missing / incomplete "
+                     "AutoDock4 runs.",
+        )
+        self._dock_audit_mode = ttk.Combobox(
+            audit, state="readonly", width=30, values=_DOCK_AUDIT_MODES)
+        self._dock_audit_mode.set(_DOCK_AUDIT_MODES[0])
+        form_row(audit, "mode", self._dock_audit_mode)
+        audit_pick = ttk.Frame(audit, style="Card.TFrame")
+        grid_append(audit, audit_pick, sticky="w")
+        audit_gpf_btn = self._action_button(audit_pick, "GPF file…",
+                                            self._dock_audit_pick_gpf)
+        audit_gpf_btn.pack(side="left")
+        audit_folder_btn = self._action_button(audit_pick, "Folder…",
+                                               self._dock_audit_pick_folder)
+        audit_folder_btn.pack(side="left", padx=(10, 0))
+        self._dock_audit_gpf: Path | None = None
+        self._dock_audit_folder: Path | None = None
+        self._dock_audit_info = ttk.Label(
+            audit, text="pick a GPF file (parameters mode) or a campaign "
+                        "folder (the scan modes)",
+            style="CardMuted.TLabel", wraplength=300, justify="left")
+        grid_append(audit, self._dock_audit_info, sticky="w", pady=(4, 0))
+        self._dock_audit_log = ttk.Entry(audit, width=16)
+        self._dock_audit_log.insert(0, "r.dlg")
+        Tooltip(self._dock_audit_log,
+                "Completion mode: the log file each sub-folder must carry "
+                "(AutoDock4's r.dlg by default).")
+        form_row(audit, "log name (completion)", self._dock_audit_log)
+        audit_run_row = ttk.Frame(audit, style="Card.TFrame")
+        grid_append(audit, audit_run_row, sticky="w", pady=(6, 0))
+        audit_run_btn = self._action_button(
+            audit_run_row, "Audit", self._dock_audit_run, primary=True,
+            tooltip="Reads the GPF or walks the tree in a worker thread; "
+                    "the typed parameter list or the per-folder status "
+                    "table lands below and Save CSV… writes it.")
+        audit_run_btn.pack(side="left")
+        self._dock_audit_summary = ttk.Label(
+            audit_run_row, text="—", style="CardMuted.TLabel",
+            wraplength=300, justify="left")
+        self._dock_audit_summary.pack(side="left", padx=(8, 0))
+        audit_save_btn = self._action_button(
+            audit_run_row, "Save CSV…", self._dock_audit_save)
+        audit_save_btn.pack(side="left", padx=(8, 0))
+        audit_tree_frame = ttk.Frame(audit, style="Card.TFrame")
+        grid_append(audit, audit_tree_frame, sticky="nsew", pady=(6, 0),
+                    weight=True)
+        self._dock_audit_tree = ttk.Treeview(
+            audit_tree_frame, show="headings", height=7)
+        audit_bar = ttk.Scrollbar(audit_tree_frame, orient="vertical",
+                                  command=self._dock_audit_tree.yview)
+        self._dock_audit_tree.configure(yscrollcommand=audit_bar.set)
+        self._dock_audit_tree.pack(side="left", fill="both", expand=True)
+        audit_bar.pack(side="right", fill="y")
+        self._dock_audit_frame: Any = None
+
+        # -- vina config batch (100x-110): vinar_multiple.py ---------- #
+        vbatch = make_card(
+            page.grid, "Vina config batch", row=4, column=1,
+            subtitle="vinar_multiple.py: one Vina config file docks "
+                     "every .pdbqt under a ligand tree (recursively, "
+                     "the receptor resolved relative to the config), "
+                     "several engine processes running simultaneously.",
+        )
+        vbatch_pick = ttk.Frame(vbatch, style="Card.TFrame")
+        grid_append(vbatch, vbatch_pick, sticky="w")
+        vbatch_conf_btn = self._action_button(vbatch_pick, "Config…",
+                                              self._dock_vbatch_pick_conf)
+        vbatch_conf_btn.pack(side="left")
+        vbatch_lig_btn = self._action_button(vbatch_pick, "Ligands folder…",
+                                             self._dock_vbatch_pick_ligands)
+        vbatch_lig_btn.pack(side="left", padx=(10, 0))
+        vbatch_out_btn = self._action_button(vbatch_pick, "Output…",
+                                             self._dock_vbatch_pick_out)
+        vbatch_out_btn.pack(side="left", padx=(10, 0))
+        self._dock_vbatch_conf: Path | None = None
+        self._dock_vbatch_ligands: Path | None = None
+        self._dock_vbatch_out: Path | None = None
+        self._dock_vbatch_info = ttk.Label(
+            vbatch, text="pick a Vina config (with receptor = ...), a "
+                         "ligand tree and an output folder",
+            style="CardMuted.TLabel", wraplength=300, justify="left")
+        grid_append(vbatch, self._dock_vbatch_info, sticky="w", pady=(4, 0))
+        self._dock_vbatch_workers = ttk.Entry(vbatch, width=10)
+        self._dock_vbatch_workers.insert(0, "2")
+        Tooltip(self._dock_vbatch_workers,
+                "Engine subprocesses running simultaneously (real docking "
+                "takes minutes per ligand).")
+        form_row(vbatch, "workers", self._dock_vbatch_workers)
+        vbatch_run_row = ttk.Frame(vbatch, style="Card.TFrame")
+        grid_append(vbatch, vbatch_run_row, sticky="w", pady=(6, 0))
+        vbatch_run_btn = self._action_button(
+            vbatch_run_row, "Dock the batch", self._dock_vbatch_run,
+            primary=True,
+            tooltip="Every ligand PDBQT found under the tree is docked "
+                    "with the config itself (--config); outputs and logs "
+                    "land in the output folder and the per-ligand table "
+                    "below.")
+        vbatch_run_btn.pack(side="left")
+        self._dock_vbatch_summary = ttk.Label(
+            vbatch_run_row, text="—", style="CardMuted.TLabel",
+            wraplength=300, justify="left")
+        self._dock_vbatch_summary.pack(side="left", padx=(8, 0))
+        vbatch_tree_frame = ttk.Frame(vbatch, style="Card.TFrame")
+        grid_append(vbatch, vbatch_tree_frame, sticky="nsew", pady=(6, 0),
+                    weight=True)
+        self._dock_vbatch_tree = ttk.Treeview(
+            vbatch_tree_frame, show="headings", height=7)
+        vbatch_bar = ttk.Scrollbar(vbatch_tree_frame, orient="vertical",
+                                   command=self._dock_vbatch_tree.yview)
+        self._dock_vbatch_tree.configure(yscrollcommand=vbatch_bar.set)
+        self._dock_vbatch_tree.pack(side="left", fill="both", expand=True)
+        vbatch_bar.pack(side="right", fill="y")
+        self._dock_vbatch_frame: Any = None
+
+        # -- single SMILES -> PDBQT (100x-110): smilestopdbqt/smiqt --- #
+        smi_pdbqt = make_card(
+            page.grid, "SMILES → PDBQT (single ligand)", row=5, column=0,
+            span=2,
+            subtitle="smilestopdbqt.py / smiqt.py: one SMILES embedded in "
+                     "3D (ETKDG + MMFF), written as a docking-ready "
+                     "PDBQT with Meeko and repaired to AD4 atom types.",
+        )
+        smi_pdbqt.columnconfigure(1, weight=1)
+        self._dock_smi_entry = ttk.Entry(smi_pdbqt, width=34)
+        self._dock_smi_entry.insert(0, "CC(=O)Oc1ccccc1C(=O)O")
+        form_row(smi_pdbqt, "SMILES", self._dock_smi_entry)
+        self._dock_smi_name = ttk.Entry(smi_pdbqt, width=18)
+        self._dock_smi_name.insert(0, "ligand")
+        Tooltip(self._dock_smi_name,
+                "Base filename (ligand.pdbqt); blank uses a safe SMILES "
+                "slug.")
+        form_row(smi_pdbqt, "name", self._dock_smi_name)
+        smi_out_row = ttk.Frame(smi_pdbqt, style="Card.TFrame")
+        grid_append(smi_pdbqt, smi_out_row, sticky="w")
+        smi_out_btn = self._action_button(smi_out_row, "Output folder…",
+                                          self._dock_smi_pick_out)
+        smi_out_btn.pack(side="left")
+        self._dock_smi_info = ttk.Label(
+            smi_out_row, text="no output folder chosen",
+            style="CardMuted.TLabel", wraplength=380, justify="left")
+        self._dock_smi_info.pack(side="left", padx=(10, 0))
+        self._dock_smi_out: Path | None = None
+        smi_run_row = ttk.Frame(smi_pdbqt, style="Card.TFrame")
+        grid_append(smi_pdbqt, smi_run_row, sticky="w", pady=(6, 0))
+        smi_run_btn = self._action_button(
+            smi_run_row, "Prepare ligand", self._dock_smi_run, primary=True,
+            tooltip="Embeds with a fixed seed, MMFF-optimises and writes "
+                    "the PDBQT (needs Meeko, part of pharmaml's docking "
+                    "extras); the torsion report follows the file name.")
+        smi_run_btn.pack(side="left")
+        self._dock_smi_summary = ttk.Label(
+            smi_run_row, text="—", style="CardMuted.TLabel",
+            wraplength=380, justify="left")
+        self._dock_smi_summary.pack(side="left", padx=(10, 0))
+        bind_enter(self._dock_smi_entry, smi_run_btn)
+
     # -- ligand library card ------------------------------------------- #
     def _dock_open_csv(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas",
@@ -5823,6 +6630,272 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
         messagebox.showinfo("Docking engine not installed", hint)
 
+    # -- audit / vina-batch / single-pdbqt cards (100x-110) -------------- #
+    def _dock_audit_pick_gpf(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open the GPF file",
+            filetypes=[("AutoDock grid parameter file", "*.gpf"),
+                       ("All files", "*.*")],
+        )
+        if not path:
+            return
+        self._dock_audit_gpf = Path(path)
+        self._dock_audit_info.configure(
+            text=f"GPF: {path}" + (
+                f"\nfolder: {self._dock_audit_folder}"
+                if self._dock_audit_folder else ""))
+
+    def _dock_audit_pick_folder(self) -> None:
+        path = filedialog.askdirectory(title="Pick the campaign folder")
+        if not path:
+            return
+        self._dock_audit_folder = Path(path)
+        self._dock_audit_info.configure(
+            text=f"folder: {path}" + (
+                f"\nGPF: {self._dock_audit_gpf}"
+                if self._dock_audit_gpf else ""))
+
+    def _dock_audit_run(self) -> None:
+        """Run the selected audit (GPF params / scans / completion)."""
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "the docking audit"):
+            return
+        mode = self._dock_audit_mode.get()
+
+        if mode.startswith("GPF"):
+            if self._dock_audit_gpf is None:
+                messagebox.showwarning("No GPF", "Pick a GPF file first.")
+                return
+            gpf_path = self._dock_audit_gpf
+
+            def work() -> Any:
+                from pharmaml.docking import read_gpf
+
+                params = read_gpf(gpf_path)
+                rows = [
+                    ("ligand_types", " ".join(params["ligand_types"])),
+                    ("receptor_types", " ".join(params["receptor_types"])),
+                    ("npts", " ".join(str(n) for n in params["npts"])),
+                    ("spacing", str(params["spacing"])),
+                    ("gridcenter", (
+                        " ".join(f"{v:g}" for v in params["gridcenter"])
+                        if params["gridcenter"] is not None else "absent")),
+                    ("receptor", str(params["receptor"])),
+                    ("maps", " ".join(params["maps"])),
+                    ("smooth", str(params["smooth"])),
+                    ("dielectric", str(params["dielectric"])),
+                ]
+                return _frame_from_records(("parameter", "value"), rows)
+
+            def render(frame: Any) -> None:
+                self._dock_audit_frame = frame
+                tree = self._dock_audit_tree
+                tree.delete(*tree.get_children())
+                tree["columns"] = ("parameter", "value")
+                for column, width in (("parameter", 120), ("value", 220)):
+                    tree.heading(column, text=column)
+                    tree.column(column, width=width, stretch=(column == "value"))
+                for _, row in frame.iterrows():
+                    tree.insert("", "end", values=(
+                        str(row["parameter"]), _cell_text(row["value"], limit=48)))
+                self._dock_audit_summary.configure(
+                    text=f"{gpf_path.name} parsed ({len(frame)} parameters)",
+                    style="Field.TLabel")
+
+            self._start_job(f"reading {gpf_path.name}", work, render)
+            return
+
+        if self._dock_audit_folder is None:
+            messagebox.showwarning(
+                "No folder", "Pick the campaign folder for the scan modes.")
+            return
+        folder = self._dock_audit_folder
+
+        if mode.startswith("folder: ligand_types"):
+            def work() -> Any:
+                from pharmaml.docking import scan_gpf_ligand_types
+
+                return scan_gpf_ligand_types(folder)
+
+            def render(frame: Any) -> None:
+                self._dock_audit_frame = frame
+                self._fill_dynamic_tree(self._dock_audit_tree, frame,
+                                        widths={"folder": 120,
+                                                "ligand_types": 200})
+                found = int(frame["ligand_types"].astype(
+                    str).ne("not found").sum()) if len(frame) else 0
+                self._dock_audit_summary.configure(
+                    text=(f"{len(frame)} sub-folder(s) · {found} with a "
+                          f"parsed r.gpf"), style="Field.TLabel")
+
+            self._start_job("scanning ligand_types", work, render)
+            return
+
+        if mode.startswith("folder: torsion"):
+            def work() -> Any:
+                from pharmaml.docking import scan_torsion_consistency
+
+                return scan_torsion_consistency(folder)
+
+            def render(frame: Any) -> None:
+                self._dock_audit_frame = frame
+                self._fill_dynamic_tree(self._dock_audit_tree, frame,
+                                        widths={"ligand": 200})
+                ok = int((frame["status"] == "OK").sum()) if len(frame) else 0
+                self._dock_audit_summary.configure(
+                    text=(f"{len(frame)} ligand(s) audited · {ok} "
+                          f"consistent · {len(frame) - ok} mismatch"),
+                    style="Field.TLabel")
+
+            self._start_job("auditing torsion consistency", work, render)
+            return
+
+        # completion check
+        log_name = self._dock_audit_log.get().strip() or "r.dlg"
+
+        def work() -> Any:
+            from pharmaml.docking import check_docking_completion
+
+            return check_docking_completion(folder, log_name=log_name)
+
+        def render(frame: Any) -> None:
+            self._dock_audit_frame = frame
+            self._fill_dynamic_tree(self._dock_audit_tree, frame,
+                                    widths={"folder": 200, "status": 110})
+            ok = int((frame["status"] == "OK").sum()) if len(frame) else 0
+            self._dock_audit_summary.configure(
+                text=(f"{len(frame)} sub-folder(s) · {ok} OK · "
+                      f"{len(frame) - ok} incomplete / missing "
+                      f"'{log_name}'"), style="Field.TLabel")
+
+        self._start_job("checking completion", work, render)
+
+    def _dock_audit_save(self) -> None:
+        frame = getattr(self, "_dock_audit_frame", None)
+        if frame is None:
+            messagebox.showinfo("Nothing to save", "Run an audit first.")
+            return
+        self._save_frame_dialog(frame, "Save the audit table", "audit.csv")
+
+    def _dock_vbatch_pick_conf(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open the Vina config",
+            filetypes=[("Vina config", "*.conf *.txt"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        self._dock_vbatch_conf = Path(path)
+        self._dock_vbatch_refresh_info()
+
+    def _dock_vbatch_pick_ligands(self) -> None:
+        path = filedialog.askdirectory(title="Pick the ligand tree")
+        if path:
+            self._dock_vbatch_ligands = Path(path)
+            self._dock_vbatch_refresh_info()
+
+    def _dock_vbatch_pick_out(self) -> None:
+        path = filedialog.askdirectory(title="Pick the output folder")
+        if path:
+            self._dock_vbatch_out = Path(path)
+            self._dock_vbatch_refresh_info()
+
+    def _dock_vbatch_refresh_info(self) -> None:
+        conf = self._dock_vbatch_conf.name if self._dock_vbatch_conf else "—"
+        lig = (self._dock_vbatch_ligands.name
+               if self._dock_vbatch_ligands else "—")
+        out = self._dock_vbatch_out.name if self._dock_vbatch_out else "—"
+        self._dock_vbatch_info.configure(
+            text=f"config: {conf}\nligands: {lig}\noutput: {out}")
+
+    def _dock_vbatch_run(self) -> None:
+        """Dock every PDBQT under the ligand tree with one Vina config."""
+        if not self._require_pharmaml():
+            return
+        if (self._dock_vbatch_conf is None
+                or self._dock_vbatch_ligands is None
+                or self._dock_vbatch_out is None):
+            messagebox.showwarning(
+                "Missing paths",
+                "Pick the Vina config, the ligand folder and the output "
+                "folder first.")
+            return
+        if shutil.which("vina") is None:
+            self._dock_missing_engine_dialog("vina")
+            return
+        try:
+            workers = parse_int(self._dock_vbatch_workers.get(), "workers",
+                                minimum=1, maximum=64)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        conf, ligands, out = (self._dock_vbatch_conf,
+                              self._dock_vbatch_ligands, self._dock_vbatch_out)
+
+        def work() -> Any:
+            from pharmaml.docking import run_vina_batch
+
+            return run_vina_batch(conf, ligands, out_dir=out,
+                                  max_parallel=workers)
+
+        def render(results: Any) -> None:
+            rows = [
+                (Path(r.directory).name, "OK" if r.ok else "FAILED",
+                 f"{r.seconds:.1f}s",
+                 _cell_text(Path(r.log_file).name if r.log_file else
+                            (r.error or ""), limit=28))
+                for r in results
+            ]
+            frame = _frame_from_records(
+                ("ligand", "status", "time", "log / error"), rows)
+            self._dock_vbatch_frame = frame
+            self._fill_dynamic_tree(self._dock_vbatch_tree, frame,
+                                    widths={"ligand": 150, "status": 70,
+                                            "time": 60, "log / error": 150})
+            ok = sum(1 for r in results if r.ok)
+            self._dock_vbatch_summary.configure(
+                text=(f"{ok}/{len(results)} ligand(s) docked into "
+                      f"{out.name}"), style="Field.TLabel")
+
+        self._start_job(f"vina batch ({workers} workers)", work, render)
+
+    def _dock_smi_pick_out(self) -> None:
+        path = filedialog.askdirectory(
+            title="Pick the PDBQT output folder")
+        if path:
+            self._dock_smi_out = Path(path)
+            self._dock_smi_info.configure(text=f"output: {path}")
+
+    def _dock_smi_run(self) -> None:
+        """Prepare one SMILES as a docking-ready PDBQT ligand."""
+        if not self._require_pharmaml() or not self._require(
+                "rdkit", "ligand preparation"):
+            return
+        smiles = self._dock_smi_entry.get().strip()
+        if not smiles:
+            messagebox.showwarning("Empty SMILES", "Type a SMILES first.")
+            return
+        if self._dock_smi_out is None:
+            messagebox.showwarning(
+                "No output folder", "Pick the output folder first.")
+            return
+        name = self._dock_smi_name.get().strip() or None
+        out_dir = self._dock_smi_out
+
+        def work() -> Any:
+            from pharmaml.docking import smiles_to_pdbqt
+
+            return smiles_to_pdbqt(smiles, out_dir, name=name)
+
+        def render(written: Any) -> None:
+            size_kb = Path(written).stat().st_size / 1024 if Path(
+                written).exists() else 0.0
+            self._dock_smi_summary.configure(
+                text=(f"written {Path(written).name} "
+                      f"({size_kb:.1f} KB) in {out_dir.name}"),
+                style="Field.TLabel")
+
+        self._start_job("preparing the ligand", work, render)
+
     def _dock_run(self) -> None:
         if not self._require_pharmaml():
             return
@@ -6063,6 +7136,32 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         load_btn.grid(row=0, column=2, sticky="w", padx=(12, 0))
         self._ml_info = ttk.Label(data, text="no dataset loaded", style="CardMuted.TLabel")
         self._ml_info.grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        # non-numerical data remover (100x-110): the rar's own script as
+        # one button -- drop every non-numeric column except the target
+        # and the keep list, with the dropped names reported, then export.
+        clean_row = ttk.Frame(data, style="Card.TFrame")
+        clean_row.grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        self._ml_keep_entry = ttk.Entry(clean_row, width=30)
+        self._ml_keep_entry.insert(0, "SMILES,name,Ligand")
+        Tooltip(self._ml_keep_entry,
+                "Comma-separated metadata columns that survive the numeric "
+                "cleanup (case-insensitive; missing ones are simply "
+                "ignored) -- the SMILES column belongs in a QSAR table "
+                "even though it is not a feature.")
+        self._ml_keep_entry.pack(side="left")
+        clean_btn = self._action_button(
+            clean_row, "Drop non-numeric columns", self._ml_clean_frame,
+            tooltip="The rar's 'Non-numerical data remover.py': every "
+                    "non-numeric column except the target and the keep "
+                    "list is dropped (names reported in the status line); "
+                    "'Save cleaned CSV…' then writes the numeric frame.")
+        clean_btn.pack(side="left", padx=(10, 0))
+        clean_save_btn = self._action_button(
+            clean_row, "Save cleaned CSV…", self._ml_clean_save,
+            tooltip="The last cleaned frame (train immediately, or keep "
+                    "it as the numeric dataset).")
+        clean_save_btn.pack(side="left", padx=(10, 0))
+        self._ml_cleaned_frame: Any = None
 
         preview = make_card(page.grid, "Preview (first 12 rows)", span=2, row=1,
                             column=0)
@@ -6450,6 +7549,79 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         if path:
             self._ml_load_path(Path(path))
+
+    def _ml_clean_frame(self) -> None:
+        """Drop non-numeric columns (the rar's own remover script).
+
+        The target column and the keep list survive; everything else
+        non-numeric is dropped with its name reported -- and the cleaned
+        frame can become the active dataset with one confirmation, so
+        the next Train run uses exactly what the rar script produced.
+        """
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "the numeric cleanup"):
+            return
+        if getattr(self, "_ml_frame", None) is None:
+            messagebox.showwarning("No dataset", "Load a dataset first.")
+            return
+        frame = self._ml_frame
+        keep_raw = [token.strip() for token in
+                    self._ml_keep_entry.get().split(",") if token.strip()]
+        lower_map = {str(column).lower(): column
+                     for column in frame.columns}
+        keep_cols = [lower_map[token.lower()] for token in keep_raw
+                     if token.lower() in lower_map]
+        target = self._target_combo.get() or None
+
+        def work() -> Any:
+            from pharmaml.ml import clean_numeric_frame
+
+            return clean_numeric_frame(frame, target_col=target,
+                                       keep_cols=keep_cols)
+
+        def render(cleaned: Any) -> None:
+            self._ml_cleaned_frame = cleaned
+            dropped = [str(column) for column in frame.columns
+                       if column not in list(cleaned.columns)]
+            self._ml_info.configure(
+                text=(f"cleaned: {len(cleaned):,} rows × "
+                      f"{len(cleaned.columns)} numeric columns · dropped "
+                      f"{len(dropped)}"
+                      + (f": {', '.join(dropped[:8])}"
+                         + (" …" if len(dropped) > 8 else "")
+                         if dropped else " (already numeric)")))
+            if dropped and messagebox.askyesno(
+                    "Use the cleaned frame?",
+                    f"Dropped {len(dropped)} non-numeric column(s).\n\n"
+                    "Make the cleaned numeric frame the active dataset\n"
+                    "(the next Train / leaderboard run uses it)?"):
+                self._ml_frame = cleaned
+                columns = [str(column) for column in cleaned.columns]
+                self._preview_tree.delete(*self._preview_tree.get_children())
+                self._preview_tree["columns"] = columns
+                for column in columns:
+                    self._preview_tree.heading(column, text=column)
+                    self._preview_tree.column(column, width=96, minwidth=64,
+                                              stretch=True)
+                for _, row in cleaned.head(12).iterrows():
+                    self._preview_tree.insert(
+                        "", "end",
+                        values=[_cell_text(value) for value in row.tolist()])
+                chosen = default_target_column(cleaned) or columns[-1]
+                self._target_combo["values"] = columns
+                self._target_combo.set(chosen)
+                self._refresh_model_choices(self._infer_task(chosen, cleaned))
+
+        self._start_job("dropping non-numeric columns", work, render)
+
+    def _ml_clean_save(self) -> None:
+        frame = getattr(self, "_ml_cleaned_frame", None)
+        if frame is None:
+            messagebox.showinfo(
+                "Nothing to save", "Run the numeric cleanup first.")
+            return
+        self._save_frame_dialog(frame, "Save the cleaned dataset",
+                                "cleaned_dataset.csv")
 
     def _ml_load_example(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
@@ -8756,6 +9928,1061 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Saved", f"Pareto front written to\n{written}")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save", exc)
+
+    # ------------------------------------------------------------------ #
+    # Utilities tab -- the rar's own file & table operations, one by one
+    # (100x-110: the coverage audit found these scripts covered by the
+    # library/CLI but missing from the playground's GUI surface)
+    # ------------------------------------------------------------------ #
+    def _build_utilities_tab(self) -> None:
+        """The ``others/General`` scripts of the archive, mouse edition.
+
+        Five cards, one per rar workflow family:
+
+        * **Table merge & split** -- ``CSV_merger.py``, ``filemerger.py``
+          and ``Split CSV file.py`` (both copies): stack tables, merge a
+          folder, or stream one big CSV into parts.
+        * **Table compare & annotate** -- ``common_between_two_excel.py``,
+          ``notcommon.py`` and ``smilesgetter.py``: set reconciliation
+          of a ligand column, or SMILES lookup onto name columns.
+        * **Approved drugs → report** -- ``approved.py``: filter a
+          regulatory-approval column and export the names (CSV or the
+          rar's .docx, now a real bordered Word table).
+        * **Campaign file tools** -- ``extaacter.py``,
+          ``dlg_extracter.py``, ``ligand_pdbqt_extracter.py``,
+          ``Nameextracter.py``, ``adder.py``, ``deleter.py`` and
+          ``delete.py``: collect / list / distribute / delete / cleanup,
+          dry-run by default on every destructive path.
+        * **Reindex by number** -- ``Prettier_extracted_dlgs.py`` (all
+          three copies): align sparse per-ligand rows onto a dense
+          0..N index so missing runs show as gaps, not silence.
+        """
+        page = self._new_page("Utilities")
+
+        # -- card 1: table merge & split -------------------------------- #
+        merge = make_card(
+            page.grid, "Table merge & split", span=2, row=0, column=0,
+            subtitle="The rar's CSV_merger / filemerger / Split CSV file "
+                     "trio: stack several tables into one (named columns "
+                     "first, the rest sorted), merge every table in a "
+                     "folder, or stream one big CSV into fixed-size parts.",
+        )
+        self._util_merge_mode = ttk.Combobox(
+            merge, state="readonly", width=24, values=_UTIL_MERGE_MODES)
+        self._util_merge_mode.set(_UTIL_MERGE_MODES[0])
+        self._util_merge_files: list[Path] = []
+        self._util_merge_folder: Path | None = None
+        self._util_merge_split_file: Path | None = None
+        self._util_merge_mode.bind(
+            "<<ComboboxSelected>>", lambda _e: self._util_merge_mode_changed())
+        form_row(merge, "mode", self._util_merge_mode)
+        merge_pick = ttk.Frame(merge, style="Card.TFrame")
+        grid_append(merge, merge_pick, sticky="w")
+        for label, command in (
+                ("Pick tables…", self._util_merge_pick_files),
+                ("Pick folder…", self._util_merge_pick_folder),
+                ("Pick big CSV…", self._util_merge_pick_split_file)):
+            button = self._action_button(merge_pick, label, command)
+            button.pack(side="left")
+        self._util_merge_info = ttk.Label(
+            merge, text="no tables, folder or file picked yet",
+            style="CardMuted.TLabel", wraplength=620, justify="left")
+        grid_append(merge, self._util_merge_info, sticky="w", pady=(4, 0))
+        self._util_merge_firstcols = ttk.Entry(merge, width=44)
+        self._util_merge_firstcols.insert(0, "")
+        Tooltip(self._util_merge_firstcols,
+                "Comma-separated columns to keep first in the merged "
+                "output (the CSV_merger column-ordering contract); blank "
+                "keeps source order. Only used by the merge modes.")
+        form_row(merge, "first columns", self._util_merge_firstcols)
+        merge_opts = ttk.Frame(merge, style="Card.TFrame")
+        grid_append(merge, merge_opts, sticky="w")
+        merge_opts.columnconfigure(1, weight=1)
+        self._util_merge_ext = ttk.Entry(merge_opts, width=8)
+        self._util_merge_ext.insert(0, ".csv")
+        Tooltip(self._util_merge_ext,
+                "Folder-merge mode: the extension collected from the "
+                "folder (csv / xlsx / tsv ...).")
+        form_row(merge_opts, "extension", self._util_merge_ext)
+        self._util_merge_chunk = ttk.Entry(merge_opts, width=12)
+        self._util_merge_chunk.insert(0, "1500000")
+        Tooltip(self._util_merge_chunk,
+                "Split mode: maximum rows per part file (the rar's "
+                "default was 1.5M; parts land in a folder you pick).")
+        form_row(merge_opts, "rows per part", self._util_merge_chunk)
+        merge_run_row = ttk.Frame(merge, style="Card.TFrame")
+        grid_append(merge, merge_run_row, sticky="w", pady=(6, 0))
+        merge_run_btn = self._action_button(
+            merge_run_row, "Run", self._util_merge_run, primary=True,
+            tooltip="Merging reads every picked table/folder entry and "
+                    "stacks them; splitting streams the big CSV lazily so "
+                    "memory stays flat no matter the file size.")
+        merge_run_btn.pack(side="left")
+        self._util_merge_summary = ttk.Label(
+            merge_run_row, text="—", style="CardMuted.TLabel",
+            wraplength=520, justify="left")
+        self._util_merge_summary.pack(side="left", padx=(10, 0))
+        self._util_merge_save_btn = self._action_button(
+            merge_run_row, "Save merged CSV…", self._util_merge_save,
+            tooltip="The merged table from the last run (merge modes only).")
+        self._util_merge_save_btn.pack(side="left", padx=(10, 0))
+        merge_tree_frame = ttk.Frame(merge, style="Card.TFrame")
+        grid_append(merge, merge_tree_frame, sticky="nsew", pady=(6, 0),
+                    weight=True)
+        self._util_merge_tree = ttk.Treeview(
+            merge_tree_frame, show="headings", height=7)
+        merge_bar = ttk.Scrollbar(merge_tree_frame, orient="vertical",
+                                  command=self._util_merge_tree.yview)
+        merge_bar_x = ttk.Scrollbar(merge_tree_frame, orient="horizontal",
+                                    command=self._util_merge_tree.xview)
+        self._util_merge_tree.configure(yscrollcommand=merge_bar.set,
+                                        xscrollcommand=merge_bar_x.set)
+        self._util_merge_tree.pack(side="left", fill="both", expand=True)
+        merge_bar.pack(side="right", fill="y")
+        merge_bar_x.pack(side="bottom", fill="x")
+
+        # -- card 2: table compare & annotate --------------------------- #
+        compare = make_card(
+            page.grid, "Table compare & annotate", row=1, column=0,
+            subtitle="common_between_two_excel + notcommon + smilesgetter: "
+                     "reconcile one ligand-name column across two tables "
+                     "(common / only-A / only-B, name-normalised), or join "
+                     "SMILES onto name columns from a reference table.",
+        )
+        self._util_cmp_mode = ttk.Combobox(
+            compare, state="readonly", width=26, values=_UTIL_COMPARE_MODES)
+        self._util_cmp_mode.set(_UTIL_COMPARE_MODES[0])
+        form_row(compare, "mode", self._util_cmp_mode)
+        cmp_pick = ttk.Frame(compare, style="Card.TFrame")
+        grid_append(compare, cmp_pick, sticky="w")
+        for label, command in (
+                ("Table A…", self._util_cmp_pick_a),
+                ("Table B / reference…", self._util_cmp_pick_b)):
+            button = self._action_button(cmp_pick, label, command)
+            button.pack(side="left")
+        self._util_cmp_a: Path | None = None
+        self._util_cmp_b: Path | None = None
+        self._util_cmp_info = ttk.Label(
+            compare, text="pick two tables (csv / tsv / xlsx)",
+            style="CardMuted.TLabel", wraplength=300, justify="left")
+        grid_append(compare, self._util_cmp_info, sticky="w", pady=(4, 0))
+        self._util_cmp_column = ttk.Entry(compare, width=26)
+        self._util_cmp_column.insert(0, "Ligand")
+        Tooltip(self._util_cmp_column,
+                "Compare mode: the ligand-name column present in BOTH "
+                "tables (normalised before comparing, so 'LIG1.pdbqt' "
+                "equals 'lig1').")
+        form_row(compare, "compare column", self._util_cmp_column)
+        self._util_cmp_names = ttk.Entry(compare, width=26)
+        self._util_cmp_names.insert(0, "Ligand")
+        Tooltip(self._util_cmp_names,
+                "Annotate mode: comma-separated name columns in table A "
+                "that receive a '<column>_SMILES' companion column.")
+        form_row(compare, "annotate columns", self._util_cmp_names)
+        self._util_cmp_ref_name = ttk.Entry(compare, width=26)
+        self._util_cmp_ref_name.insert(0, "Ligand")
+        form_row(compare, "reference name col", self._util_cmp_ref_name)
+        self._util_cmp_ref_smiles = ttk.Entry(compare, width=26)
+        self._util_cmp_ref_smiles.insert(0, "SMILES")
+        form_row(compare, "reference SMILES col", self._util_cmp_ref_smiles)
+        cmp_run_row = ttk.Frame(compare, style="Card.TFrame")
+        grid_append(compare, cmp_run_row, sticky="w", pady=(6, 0))
+        cmp_run_btn = self._action_button(
+            cmp_run_row, "Run", self._util_compare_run, primary=True,
+            tooltip="Compare: the three-way reconciliation table; "
+                    "annotate: table A with the SMILES columns appended "
+                    "(empty string when a name is unknown).")
+        cmp_run_btn.pack(side="left")
+        self._util_cmp_summary = ttk.Label(
+            cmp_run_row, text="—", style="CardMuted.TLabel",
+            wraplength=300, justify="left")
+        self._util_cmp_summary.pack(side="left", padx=(8, 0))
+        cmp_tree_frame = ttk.Frame(compare, style="Card.TFrame")
+        grid_append(compare, cmp_tree_frame, sticky="nsew", pady=(6, 0),
+                    weight=True)
+        self._util_cmp_tree = ttk.Treeview(
+            cmp_tree_frame, show="headings", height=7)
+        cmp_bar = ttk.Scrollbar(cmp_tree_frame, orient="vertical",
+                                command=self._util_cmp_tree.yview)
+        self._util_cmp_tree.configure(yscrollcommand=cmp_bar.set)
+        self._util_cmp_tree.pack(side="left", fill="both", expand=True)
+        cmp_bar.pack(side="right", fill="y")
+
+        # -- card 3: approved drugs ------------------------------------- #
+        approved = make_card(
+            page.grid, "Approved drugs → report", row=1, column=1,
+            subtitle="approved.py: collect the drug names whose "
+                     "regulatory-approval column matches a status (a "
+                     "folder of TSV/CSV exports or several picked "
+                     "files), then write the list as CSV or as the "
+                     "rar's .docx -- now a real bordered Word table.",
+        )
+        appr_pick = ttk.Frame(approved, style="Card.TFrame")
+        grid_append(approved, appr_pick, sticky="w")
+        appr_btn = self._action_button(appr_pick, "Pick files…",
+                                       self._util_appr_pick_files)
+        appr_btn.pack(side="left")
+        self._util_appr_files: list[Path] = []
+        self._util_appr_info = ttk.Label(
+            approved, text="no approval exports picked yet",
+            style="CardMuted.TLabel", wraplength=300, justify="left")
+        grid_append(approved, self._util_appr_info, sticky="w", pady=(4, 0))
+        self._util_appr_drug = ttk.Entry(approved, width=26)
+        self._util_appr_drug.insert(0, "drug")
+        Tooltip(self._util_appr_drug,
+                "Drug-name column (matched case-insensitively; the "
+                "DGIdb export header is 'drug').")
+        form_row(approved, "drug column", self._util_appr_drug)
+        self._util_appr_col = ttk.Entry(approved, width=26)
+        self._util_appr_col.insert(0, "regulatory approval")
+        form_row(approved, "approval column", self._util_appr_col)
+        self._util_appr_status = ttk.Entry(approved, width=26)
+        self._util_appr_status.insert(0, "approved")
+        form_row(approved, "status", self._util_appr_status)
+        appr_run_row = ttk.Frame(approved, style="Card.TFrame")
+        grid_append(approved, appr_run_row, sticky="w", pady=(6, 0))
+        appr_run_btn = self._action_button(
+            appr_run_row, "Filter", self._util_approved_run, primary=True,
+            tooltip="One pass over every picked file; the matched names "
+                    "land in the list below, deduplicated and sorted.")
+        appr_run_btn.pack(side="left")
+        self._util_appr_summary = ttk.Label(
+            appr_run_row, text="—", style="CardMuted.TLabel",
+            wraplength=300, justify="left")
+        self._util_appr_summary.pack(side="left", padx=(8, 0))
+        appr_save_row = ttk.Frame(approved, style="Card.TFrame")
+        grid_append(approved, appr_save_row, sticky="w", pady=(4, 0))
+        appr_csv_btn = self._action_button(
+            appr_save_row, "Save names CSV…", self._util_approved_save_csv)
+        appr_csv_btn.pack(side="left")
+        appr_docx_btn = self._action_button(
+            appr_save_row, "Save report DOCX…", self._util_approved_save_docx,
+            tooltip="The rar's .docx output, upgraded: a bordered Word "
+                    "table with a bold header row (needs python-docx, "
+                    "pharmaml[reports]).")
+        appr_docx_btn.pack(side="left", padx=(10, 0))
+        appr_tree_frame = ttk.Frame(approved, style="Card.TFrame")
+        grid_append(approved, appr_tree_frame, sticky="nsew", pady=(6, 0),
+                    weight=True)
+        self._util_appr_tree = ttk.Treeview(
+            appr_tree_frame, columns=("drug",), show="headings", height=7)
+        self._util_appr_tree.heading("drug", text="drug")
+        self._util_appr_tree.column("drug", width=220, stretch=True)
+        appr_bar = ttk.Scrollbar(appr_tree_frame, orient="vertical",
+                                 command=self._util_appr_tree.yview)
+        self._util_appr_tree.configure(yscrollcommand=appr_bar.set)
+        self._util_appr_tree.pack(side="left", fill="both", expand=True)
+        appr_bar.pack(side="right", fill="y")
+
+        # -- card 4: campaign file tools -------------------------------- #
+        tools = make_card(
+            page.grid, "Campaign file tools", row=2, column=0,
+            subtitle="extaacter / dlg_extracter / ligand_pdbqt_extracter / "
+                     "Nameextracter / adder / deleter / delete: collect "
+                     "matching files out of a campaign tree, list a "
+                     "folder's names, distribute binaries into every "
+                     "sub-folder, delete strays, or clean a tree down to "
+                     "an allowlist -- destructive paths run dry-run "
+                     "first, always.",
+        )
+        self._util_tool_mode = ttk.Combobox(
+            tools, state="readonly", width=28, values=_UTIL_TOOL_MODES)
+        self._util_tool_mode.set(_UTIL_TOOL_MODES[0])
+        self._util_tool_mode.bind(
+            "<<ComboboxSelected>>", lambda _e: self._util_tool_mode_changed())
+        form_row(tools, "mode", self._util_tool_mode)
+        tool_pick = ttk.Frame(tools, style="Card.TFrame")
+        grid_append(tools, tool_pick, sticky="w")
+        for label, command in (
+                ("Folder…", self._util_tool_pick_folder),
+                ("Files…", self._util_tool_pick_files),
+                ("Collect into…", self._util_tool_pick_out)):
+            button = self._action_button(tool_pick, label, command)
+            button.pack(side="left")
+        self._util_tool_folder: Path | None = None
+        self._util_tool_files: list[Path] = []
+        self._util_tool_out: Path | None = None
+        self._util_tool_info = ttk.Label(
+            tools, text="pick a campaign folder (and files for "
+                        "distribute, an output folder for collect)",
+            style="CardMuted.TLabel", wraplength=300, justify="left")
+        grid_append(tools, self._util_tool_info, sticky="w", pady=(4, 0))
+        self._util_tool_filename = ttk.Entry(tools, width=26)
+        self._util_tool_filename.insert(0, "r.dlg")
+        Tooltip(self._util_tool_filename,
+                "Collect: exact filename to gather (r.dlg / r.gpf / "
+                "l.pdbqt ...); delete: the stray filename to remove "
+                "anywhere under the folder.")
+        form_row(tools, "filename", self._util_tool_filename)
+        self._util_tool_pattern = ttk.Entry(tools, width=26)
+        self._util_tool_pattern.insert(0, r"\d+\.pdbqt")
+        Tooltip(self._util_tool_pattern,
+                "Collect: a regex the filename must match (combine with "
+                "the exact name as a union); cleanup: the keep-pattern "
+                "filenames must match to survive.")
+        form_row(tools, "pattern", self._util_tool_pattern)
+        self._util_tool_ext = ttk.Entry(tools, width=26)
+        self._util_tool_ext.insert(0, ".csv")
+        form_row(tools, "extension (list)", self._util_tool_ext)
+        self._util_tool_keep = ttk.Entry(tools, width=26)
+        self._util_tool_keep.insert(0, "r.pdbqt,r.dlg,r.gpf,r.dpf")
+        Tooltip(self._util_tool_keep,
+                "Cleanup: comma-separated filenames that survive; "
+                "everything else in the tree is a deletion candidate.")
+        form_row(tools, "keep names (cleanup)", self._util_tool_keep)
+        self._util_tool_dry_var = tk.BooleanVar(value=True)
+        dry_check = ttk.Checkbutton(
+            tools, text="dry run (report only, nothing deleted)",
+            variable=self._util_tool_dry_var)
+        Tooltip(dry_check,
+                "On (the default): collect/delete/cleanup only report "
+                "what they would do. Untick and confirm to apply for "
+                "real -- the confirmation names the exact counts.")
+        form_row(tools, "safety", dry_check)
+        tool_run_row = ttk.Frame(tools, style="Card.TFrame")
+        grid_append(tools, tool_run_row, sticky="w", pady=(6, 0))
+        tool_run_btn = self._action_button(
+            tool_run_row, "Run", self._util_tools_run, primary=True,
+            tooltip="Distribute copies the picked files into every "
+                    "immediate sub-folder of the campaign folder (the "
+                    "adder.py bin/receptor push); the rest read the "
+                    "tree and report.")
+        tool_run_btn.pack(side="left")
+        self._util_tool_summary = ttk.Label(
+            tool_run_row, text="—", style="CardMuted.TLabel",
+            wraplength=300, justify="left")
+        self._util_tool_summary.pack(side="left", padx=(8, 0))
+        tool_tree_frame = ttk.Frame(tools, style="Card.TFrame")
+        grid_append(tools, tool_tree_frame, sticky="nsew", pady=(6, 0),
+                    weight=True)
+        self._util_tool_tree = ttk.Treeview(
+            tool_tree_frame, show="headings", height=7)
+        tool_bar = ttk.Scrollbar(tool_tree_frame, orient="vertical",
+                                 command=self._util_tool_tree.yview)
+        self._util_tool_tree.configure(yscrollcommand=tool_bar.set)
+        self._util_tool_tree.pack(side="left", fill="both", expand=True)
+        tool_bar.pack(side="right", fill="y")
+
+        # -- card 5: reindex by number ---------------------------------- #
+        reindex = make_card(
+            page.grid, "Reindex by number", row=2, column=1,
+            subtitle="Prettier_extracted_dlgs: align sparse per-ligand "
+                     "rows onto the full number range so missing runs "
+                     "appear as gaps instead of silently vanishing; rows "
+                     "outside the range are dropped with a warning.",
+        )
+        self._util_reindex_pick_btn = self._action_button(
+            reindex, "Pick CSV…", self._util_reindex_pick)
+        self._util_reindex_pick_btn.grid(row=0, column=0, sticky="w")
+        self._util_reindex_path: Path | None = None
+        self._util_reindex_info = ttk.Label(
+            reindex, text="no table picked yet",
+            style="CardMuted.TLabel", wraplength=300, justify="left")
+        grid_append(reindex, self._util_reindex_info, sticky="w", pady=(4, 0))
+        self._util_reindex_column = ttk.Entry(reindex, width=26)
+        self._util_reindex_column.insert(0, "ligand")
+        Tooltip(self._util_reindex_column,
+                "Column carrying the numbered names (e.g. "
+                "'5_result.dlg'); its first number becomes the index.")
+        form_row(reindex, "column", self._util_reindex_column)
+        reindex_range = ttk.Frame(reindex, style="Card.TFrame")
+        grid_append(reindex, reindex_range, sticky="w")
+        reindex_range.columnconfigure(1, weight=1)
+        self._util_reindex_start = ttk.Entry(reindex_range, width=8)
+        self._util_reindex_start.insert(0, "0")
+        form_row(reindex_range, "start", self._util_reindex_start)
+        self._util_reindex_stop = ttk.Entry(reindex_range, width=8)
+        self._util_reindex_stop.insert(0, "300")
+        form_row(reindex_range, "stop", self._util_reindex_stop)
+        self._util_reindex_pattern = ttk.Entry(reindex, width=26)
+        self._util_reindex_pattern.insert(0, r"(\d+)")
+        Tooltip(self._util_reindex_pattern,
+                "Regex whose first capture group extracts the ligand "
+                "number out of the column value.")
+        form_row(reindex, "number pattern", self._util_reindex_pattern)
+        reindex_run_row = ttk.Frame(reindex, style="Card.TFrame")
+        grid_append(reindex, reindex_run_row, sticky="w", pady=(6, 0))
+        reindex_run_btn = self._action_button(
+            reindex_run_row, "Reindex", self._util_reindex_run, primary=True,
+            tooltip="Left-joins the rows onto range(start, stop+1); the "
+                    "dense table previews below and Save CSV… writes it.")
+        reindex_run_btn.pack(side="left")
+        self._util_reindex_summary = ttk.Label(
+            reindex_run_row, text="—", style="CardMuted.TLabel",
+            wraplength=300, justify="left")
+        self._util_reindex_summary.pack(side="left", padx=(8, 0))
+        reindex_save_btn = self._action_button(
+            reindex_run_row, "Save CSV…", self._util_reindex_save)
+        reindex_save_btn.pack(side="left", padx=(10, 0))
+        reindex_tree_frame = ttk.Frame(reindex, style="Card.TFrame")
+        grid_append(reindex, reindex_tree_frame, sticky="nsew", pady=(6, 0),
+                    weight=True)
+        self._util_reindex_tree = ttk.Treeview(
+            reindex_tree_frame, show="headings", height=7)
+        reindex_bar = ttk.Scrollbar(reindex_tree_frame, orient="vertical",
+                                    command=self._util_reindex_tree.yview)
+        self._util_reindex_tree.configure(yscrollcommand=reindex_bar.set)
+        self._util_reindex_tree.pack(side="left", fill="both", expand=True)
+        reindex_bar.pack(side="right", fill="y")
+
+        # dynamic trees fill lazily on first render
+        self._util_frames: dict[str, Any] = {}
+
+    # -- utilities: shared helpers ------------------------------------- #
+    def _fill_dynamic_tree(self, tree: Any, frame: Any, max_rows: int = 200,
+                           widths: dict[str, int] | None = None) -> int:
+        """Rebuild a Treeview from an arbitrary DataFrame.
+
+        Returns the number of rows actually shown (capped at
+        ``max_rows`` so a 100k-row merge never freezes the UI -- the
+        summary labels carry the true count).
+        """
+        tree.delete(*tree.get_children())
+        columns = [str(column) for column in frame.columns]
+        tree["columns"] = columns
+        for column in columns:
+            tree.heading(column, text=column)
+            width = (widths or {}).get(column, 110)
+            tree.column(column, width=width, minwidth=56, stretch=True)
+        shown = 0
+        for _, row in frame.head(max_rows).iterrows():
+            tree.insert("", "end",
+                        values=[_cell_text(v, limit=32) for v in row.tolist()])
+            shown += 1
+        if len(frame) > max_rows:
+            tree.insert(
+                "", "end",
+                values=[
+                    (f"… {len(frame) - max_rows:,} more rows "
+                     f"(total {len(frame):,})"),
+                    *[""] * (len(columns) - 1),
+                ])
+        return shown
+
+    def _save_frame_dialog(self, frame: Any, title: str, name: str) -> None:
+        """Ask a path and write ``frame`` as CSV (the shared save path)."""
+        if frame is None:
+            messagebox.showinfo("Nothing to save", "Run the tool first.")
+            return
+        path = filedialog.asksaveasfilename(
+            title=title, defaultextension=".csv",
+            initialfile=name,
+            filetypes=[("CSV table", "*.csv")],
+        )
+        if not path:
+            return
+        try:
+            from pharmaml.utils.io import write_table
+
+            written = write_table(frame, path)
+            messagebox.showinfo("Saved", f"table written to\n{written}")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not save", exc)
+
+    # -- utilities: merge & split -------------------------------------- #
+    def _util_merge_mode_changed(self) -> None:
+        mode = self._util_merge_mode.get()
+        picked = "no tables, folder or file picked yet"
+        if mode.startswith("merge picked") and self._util_merge_files:
+            picked = (f"{len(self._util_merge_files)} table(s): "
+                      + ", ".join(p.name for p in self._util_merge_files[:4])
+                      + (" …" if len(self._util_merge_files) > 4 else ""))
+        elif mode.startswith("merge whole") and self._util_merge_folder:
+            picked = f"folder: {self._util_merge_folder}"
+        elif mode.startswith("split") and self._util_merge_split_file:
+            picked = f"big CSV: {self._util_merge_split_file}"
+        self._util_merge_info.configure(text=picked)
+
+    def _util_merge_pick_files(self) -> None:
+        paths = filedialog.askopenfilenames(
+            title="Pick the tables to merge",
+            filetypes=[("Tables", "*.csv *.tsv *.xlsx"),
+                       ("All files", "*.*")],
+        )
+        if not paths:
+            return
+        self._util_merge_files = [Path(p) for p in paths]
+        self._util_merge_mode_changed()
+
+    def _util_merge_pick_folder(self) -> None:
+        path = filedialog.askdirectory(title="Pick the folder to merge")
+        if path:
+            self._util_merge_folder = Path(path)
+            self._util_merge_mode_changed()
+
+    def _util_merge_pick_split_file(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Pick the big CSV to split",
+            filetypes=[("CSV file", "*.csv"), ("All files", "*.*")],
+        )
+        if path:
+            self._util_merge_split_file = Path(path)
+            self._util_merge_mode_changed()
+
+    def _util_merge_run(self) -> None:
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "table merge"):
+            return
+        mode = self._util_merge_mode.get()
+        first_columns = [
+            token.strip() for token in
+            self._util_merge_firstcols.get().split(",") if token.strip()
+        ] or None
+
+        if mode.startswith("merge picked"):
+            sources: list[Any] = list(getattr(self, "_util_merge_files", []))
+            if not sources:
+                messagebox.showwarning(
+                    "No tables", "Pick the tables to merge first.")
+                return
+            label = f"merging {len(sources)} table(s)"
+            out_dir = None
+            chunk_rows = 0
+        elif mode.startswith("merge whole"):
+            folder = getattr(self, "_util_merge_folder", None)
+            if folder is None:
+                messagebox.showwarning(
+                    "No folder", "Pick the folder to merge first.")
+                return
+            extension = self._util_merge_ext.get().strip() or ".csv"
+            sources = [folder]
+            label = f"merging {folder.name} ({extension})"
+            out_dir = None
+            chunk_rows = 0
+        else:  # split
+            big = getattr(self, "_util_merge_split_file", None)
+            if big is None:
+                messagebox.showwarning(
+                    "No file", "Pick the big CSV to split first.")
+                return
+            try:
+                chunk_rows = parse_int(self._util_merge_chunk.get(),
+                                       "rows per part", minimum=1)
+            except ValueError as exc:
+                messagebox.showerror("Input", str(exc))
+                return
+            out_dir = filedialog.askdirectory(
+                title="Pick the folder for the part files")
+            if not out_dir:
+                return
+            sources = [big]
+            label = f"splitting {big.name} every {chunk_rows:,} rows"
+
+        def work() -> Any:
+            from pharmaml.chem import merge_table_folder, merge_tables
+            from pharmaml.chem.converters import split_table_into_chunks
+
+            if mode.startswith("merge picked"):
+                return {"kind": "merge",
+                        "frame": merge_tables(sources, first_columns=first_columns)}
+            if mode.startswith("merge whole"):
+                return {"kind": "merge",
+                        "frame": merge_table_folder(
+                            sources[0], extension=extension,
+                            first_columns=first_columns)}
+            parts = split_table_into_chunks(
+                sources[0], Path(out_dir), chunk_rows=chunk_rows)
+            return {"kind": "split", "parts": parts}
+
+        def render(result: Any) -> None:
+            if result["kind"] == "merge":
+                frame = result["frame"]
+                self._util_frames["merge"] = frame
+                self._fill_dynamic_tree(self._util_merge_tree, frame)
+                self._util_merge_save_btn.state(["!disabled"])
+                self._util_merge_summary.configure(
+                    text=(f"merged: {len(frame):,} rows × "
+                          f"{len(frame.columns)} columns"),
+                    style="Field.TLabel")
+            else:
+                parts = result["parts"]
+                self._util_frames.pop("merge", None)
+                self._util_merge_save_btn.state(["disabled"])
+                self._fill_dynamic_tree(
+                    self._util_merge_tree,
+                    _frame_from_records(
+                        ("part", "rows", "bytes"),
+                        [(p.name, "?", p.stat().st_size if p.exists() else 0)
+                         for p in parts]),
+                )
+                self._util_merge_summary.configure(
+                    text=(f"split into {len(parts)} part file(s) in "
+                          f"{Path(out_dir).name} · "
+                          f"≤{chunk_rows:,} rows each"),
+                    style="Field.TLabel")
+
+        self._start_job(label, work, render)
+
+    def _util_merge_save(self) -> None:
+        self._save_frame_dialog(self._util_frames.get("merge"),
+                                "Save the merged table", "merged_output.csv")
+
+    # -- utilities: compare & annotate ---------------------------------- #
+    def _util_cmp_pick_a(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Pick table A",
+            filetypes=[("Tables", "*.csv *.tsv *.xlsx"), ("All files", "*.*")],
+        )
+        if path:
+            self._util_cmp_a = Path(path)
+            self._util_cmp_refresh_info()
+
+    def _util_cmp_pick_b(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Pick table B (or the SMILES reference)",
+            filetypes=[("Tables", "*.csv *.tsv *.xlsx"), ("All files", "*.*")],
+        )
+        if path:
+            self._util_cmp_b = Path(path)
+            self._util_cmp_refresh_info()
+
+    def _util_cmp_refresh_info(self) -> None:
+        a = self._util_cmp_a.name if self._util_cmp_a else "—"
+        b = self._util_cmp_b.name if self._util_cmp_b else "—"
+        self._util_cmp_info.configure(text=f"A: {a}\nB: {b}")
+
+    def _util_compare_run(self) -> None:
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "table compare"):
+            return
+        if self._util_cmp_a is None or self._util_cmp_b is None:
+            messagebox.showwarning(
+                "Two tables needed", "Pick table A and table B first.")
+            return
+        mode = self._util_cmp_mode.get()
+        a_path, b_path = self._util_cmp_a, self._util_cmp_b
+
+        if mode.startswith("compare"):
+            column = self._util_cmp_column.get().strip()
+            if not column:
+                messagebox.showwarning("Column", "Name the compare column.")
+                return
+
+            def work() -> Any:
+                from pharmaml.chem import compare_tables
+
+                return compare_tables(a_path, b_path, column)
+
+            def render(comparison: Any) -> None:
+                import pandas as pd
+
+                records = (
+                    [("common", name) for name in comparison.common]
+                    + [("only in A", name) for name in comparison.only_in_a]
+                    + [("only in B", name) for name in comparison.only_in_b]
+                )
+                frame = pd.DataFrame(records, columns=["section", "name"])
+                self._util_frames["compare"] = frame
+                self._fill_dynamic_tree(
+                    self._util_cmp_tree, frame, widths={"section": 90,
+                                                        "name": 180})
+                self._util_cmp_summary.configure(
+                    text=(f"common {len(comparison.common)} · "
+                          f"only A {len(comparison.only_in_a)} · "
+                          f"only B {len(comparison.only_in_b)}"),
+                    style="Field.TLabel")
+
+            self._start_job(f"comparing '{column}'", work, render)
+            return
+
+        # annotate mode
+        name_columns = [
+            token.strip() for token in
+            self._util_cmp_names.get().split(",") if token.strip()
+        ]
+        if not name_columns:
+            messagebox.showwarning(
+                "Columns", "Name the columns to annotate (comma-separated).")
+            return
+        ref_name = self._util_cmp_ref_name.get().strip() or "Ligand"
+        ref_smiles = self._util_cmp_ref_smiles.get().strip() or "SMILES"
+
+        def work() -> Any:
+            from pharmaml.chem import annotate_with_smiles
+            from pharmaml.utils.io import read_table
+
+            frame = read_table(a_path)
+            return annotate_with_smiles(
+                frame, b_path, name_columns,
+                reference_name_column=ref_name,
+                reference_smiles_column=ref_smiles)
+
+        def render(frame: Any) -> None:
+            self._util_frames["compare"] = frame
+            self._fill_dynamic_tree(self._util_cmp_tree, frame)
+            joined = sum(
+                1 for column in name_columns
+                if column + "_SMILES" in frame.columns
+                and frame[column + "_SMILES"].astype(str).str.len().any()
+            )
+            self._util_cmp_summary.configure(
+                text=(f"{len(frame):,} rows · {len(name_columns)} name "
+                      f"column(s) annotated ({joined} found SMILES)"),
+                style="Field.TLabel")
+
+        self._start_job("annotating with SMILES", work, render)
+
+    # -- utilities: approved drugs -------------------------------------- #
+    def _util_appr_pick_files(self) -> None:
+        paths = filedialog.askopenfilenames(
+            title="Pick the approval exports",
+            filetypes=[("Approval exports", "*.tsv *.csv *.tab"),
+                       ("All files", "*.*")],
+        )
+        if not paths:
+            return
+        self._util_appr_files = [Path(p) for p in paths]
+        shown = ", ".join(p.name for p in self._util_appr_files[:3])
+        if len(self._util_appr_files) > 3:
+            shown += f" … (+{len(self._util_appr_files) - 3})"
+        self._util_appr_info.configure(text=shown)
+
+    def _util_approved_run(self) -> None:
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "approval filtering"):
+            return
+        if not self._util_appr_files:
+            messagebox.showwarning(
+                "No files", "Pick the approval export files first.")
+            return
+        files = list(self._util_appr_files)
+        drug_column = self._util_appr_drug.get().strip() or "drug"
+        approval_column = self._util_appr_col.get().strip() or "regulatory approval"
+        status = self._util_appr_status.get().strip() or "approved"
+
+        def work() -> Any:
+            from pharmaml.pharma import filter_approved_drugs
+
+            return filter_approved_drugs(
+                [str(p) for p in files], drug_column=drug_column,
+                approval_column=approval_column, approval_status=status)
+
+        def render(names: Any) -> None:
+            import pandas as pd
+
+            frame = pd.DataFrame({"drug": list(names)})
+            self._util_frames["approved"] = frame
+            tree = self._util_appr_tree
+            tree.delete(*tree.get_children())
+            for name in list(names)[:500]:
+                tree.insert("", "end", values=(_cell_text(name, limit=40),))
+            if len(names) > 500:
+                tree.insert(
+                    "", "end",
+                    values=((f"… {len(names) - 500:,} more "
+                             f"(total {len(names):,})"),))
+            self._util_appr_summary.configure(
+                text=(f"{len(names)} approved drug name(s) "
+                      f"(status '{status}')"), style="Field.TLabel")
+
+        self._start_job(f"filtering {len(files)} file(s)", work, render)
+
+    def _util_approved_save_csv(self) -> None:
+        self._save_frame_dialog(self._util_frames.get("approved"),
+                                "Save the approved-drug names",
+                                "approved_drugs.csv")
+
+    def _util_approved_save_docx(self) -> None:
+        frame = self._util_frames.get("approved")
+        if frame is None:
+            messagebox.showinfo("Nothing to save",
+                                "Filter the approval files first.")
+            return
+        if not self._require_pharmaml():
+            return
+        import importlib.util
+
+        try:
+            has_docx = importlib.util.find_spec("docx") is not None
+        except (ImportError, ValueError):  # pragma: no cover
+            has_docx = False
+        if not has_docx:
+            messagebox.showwarning(
+                "DOCX needs python-docx",
+                "The Word export needs python-docx -- install it with:\n\n"
+                "    pip install 'pharmaml[reports]'\n\n"
+                "(the CSV export works without it).",
+            )
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save the approved-drug report", defaultextension=".docx",
+            initialfile="approved_drugs.docx",
+            filetypes=[("Word document", "*.docx")],
+        )
+        if not path:
+            return
+
+        def work() -> Any:
+            from pharmaml.viz import export_docx
+
+            return export_docx(frame, path)
+
+        def render(written: Any) -> None:
+            messagebox.showinfo("Saved", f"Word report written to\n{written}")
+
+        self._start_job("writing the DOCX report", work, render)
+
+    # -- utilities: campaign file tools --------------------------------- #
+    def _util_tool_mode_changed(self) -> None:
+        mode = self._util_tool_mode.get()
+        parts = []
+        if self._util_tool_folder is not None:
+            parts.append(f"folder: {self._util_tool_folder.name}")
+        if self._util_tool_files and mode.startswith("distribute"):
+            parts.append(f"{len(self._util_tool_files)} file(s): "
+                         + ", ".join(p.name for p in self._util_tool_files[:3]))
+        if self._util_tool_out is not None and mode.startswith("collect"):
+            parts.append(f"collect into: {self._util_tool_out.name}")
+        self._util_tool_info.configure(
+            text="\n".join(parts) or
+            "pick a campaign folder (and files for distribute, an "
+            "output folder for collect)")
+
+    def _util_tool_pick_folder(self) -> None:
+        path = filedialog.askdirectory(title="Pick the campaign folder")
+        if path:
+            self._util_tool_folder = Path(path)
+            self._util_tool_mode_changed()
+
+    def _util_tool_pick_files(self) -> None:
+        paths = filedialog.askopenfilenames(
+            title="Pick the files to distribute",
+            filetypes=[("All files", "*.*")],
+        )
+        if paths:
+            self._util_tool_files = [Path(p) for p in paths]
+            self._util_tool_mode_changed()
+
+    def _util_tool_pick_out(self) -> None:
+        path = filedialog.askdirectory(title="Pick the collect-output folder")
+        if path:
+            self._util_tool_out = Path(path)
+            self._util_tool_mode_changed()
+
+    def _util_tools_run(self) -> None:
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "campaign tools"):
+            return
+        mode = self._util_tool_mode.get()
+        folder = self._util_tool_folder
+        if folder is None and not mode.startswith("distribute"):
+            messagebox.showwarning(
+                "No folder", "Pick the campaign folder first.")
+            return
+        if folder is None and mode.startswith("distribute"):
+            messagebox.showwarning(
+                "No target folder", "Pick the campaign folder whose "
+                "sub-folders receive the files.")
+            return
+        dry_run = bool(self._util_tool_dry_var.get())
+        filename = self._util_tool_filename.get().strip() or None
+        pattern = self._util_tool_pattern.get().strip() or None
+        extension = self._util_tool_ext.get().strip() or ".csv"
+
+        if mode.startswith("collect"):
+            if not filename and not pattern:
+                messagebox.showwarning(
+                    "Nothing to match",
+                    "Give a filename and/or a pattern to collect.")
+                return
+            out_dir = self._util_tool_out or (folder / "collected")
+
+            def work() -> Any:
+                from pharmaml.docking import collect_files
+
+                return collect_files(folder, filename=filename,
+                                     pattern=pattern, out_dir=out_dir,
+                                     dry_run=dry_run)
+
+            def render(frame: Any) -> None:
+                self._util_frames["tools"] = frame
+                self._fill_dynamic_tree(
+                    self._util_tool_tree, frame,
+                    widths={"source": 200, "destination": 200})
+                copied = int(frame["copied"].sum()) if "copied" in frame else 0
+                verb = "would copy" if dry_run else "copied"
+                self._util_tool_summary.configure(
+                    text=(f"{len(frame)} match(es) · {verb} {copied} "
+                          f"into {out_dir.name}"
+                          + ("" if dry_run else " (dry run off)")),
+                    style="Field.TLabel")
+
+            self._start_job("collecting files", work, render)
+            return
+
+        if mode.startswith("list"):
+            def work() -> Any:
+                from pharmaml.docking import list_file_names
+
+                return list_file_names(folder, extension=extension)
+
+            def render(names: Any) -> None:
+                import pandas as pd
+
+                frame = pd.DataFrame({"name": list(names)})
+                self._util_frames["tools"] = frame
+                self._fill_dynamic_tree(self._util_tool_tree, frame,
+                                        widths={"name": 220})
+                self._util_tool_summary.configure(
+                    text=f"{len(names)} {extension} name(s), sorted",
+                    style="Field.TLabel")
+
+            self._start_job(f"listing {extension} files", work, render)
+            return
+
+        if mode.startswith("distribute"):
+            if not self._util_tool_files:
+                messagebox.showwarning(
+                    "No files", "Pick the files to distribute first "
+                    "(binaries, receptor, ...).")
+                return
+            files = [str(p) for p in self._util_tool_files]
+            if not dry_run and not messagebox.askyesno(
+                    "Distribute for real",
+                    f"Copy {len(files)} file(s) into EVERY immediate "
+                    f"sub-folder of\n{folder}?\n(existing copies are kept)"):
+                return
+
+            def work() -> Any:
+                from pharmaml.docking import distribute_files
+
+                return distribute_files(files, folder, overwrite=False)
+
+            def render(copied: Any) -> None:
+                import pandas as pd
+
+                frame = pd.DataFrame(
+                    {"destination": [str(p) for p in copied]})
+                self._util_frames["tools"] = frame
+                self._fill_dynamic_tree(self._util_tool_tree, frame,
+                                        widths={"destination": 260})
+                self._util_tool_summary.configure(
+                    text=f"placed {len(copied)} copy/copies "
+                         f"across {folder.name}", style="Field.TLabel")
+
+            self._start_job(f"distributing {len(files)} file(s)", work, render)
+            return
+
+        if mode.startswith("delete"):
+            if not filename:
+                messagebox.showwarning(
+                    "Filename", "Name the stray file to delete.")
+                return
+
+            def work() -> Any:
+                from pharmaml.docking import delete_named_files
+
+                return delete_named_files(folder, filename, dry_run=dry_run)
+
+            def render(count: Any) -> None:
+                verb = "would delete" if dry_run else "deleted"
+                self._util_frames.pop("tools", None)
+                tree = self._util_tool_tree
+                tree.delete(*tree.get_children())
+                tree["columns"] = ("result",)
+                tree.heading("result", text="result")
+                tree.column("result", width=240, stretch=True)
+                tree.insert("", "end", values=(
+                    f"{verb} {count} '{filename}' file(s)",))
+                self._util_tool_summary.configure(
+                    text=f"{verb} {count} file(s) under {folder.name}",
+                    style="Field.TLabel")
+
+            self._start_job(f"deleting '{filename}'", work, render)
+            return
+
+        if mode.startswith("cleanup"):
+            keep = {
+                token.strip() for token in
+                self._util_tool_keep.get().split(",") if token.strip()
+            }
+            if not dry_run and not messagebox.askyesno(
+                    "Cleanup for real",
+                    f"Delete every file under\n{folder}\nthat is NOT one "
+                    f"of the keep names / pattern?\n(empty folders can "
+                    f"remain; this cannot be undone)"):
+                return
+
+            def work() -> Any:
+                from pharmaml.docking import cleanup_tree
+
+                return cleanup_tree(folder, keep=keep,
+                                    keep_pattern=pattern, dry_run=dry_run)
+
+            def render(frame: Any) -> None:
+                self._util_frames["tools"] = frame
+                self._fill_dynamic_tree(self._util_tool_tree, frame)
+                verb = "would delete" if dry_run else "deleted"
+                self._util_tool_summary.configure(
+                    text=f"{len(frame)} file(s) {verb}", style="Field.TLabel")
+
+            self._start_job("cleaning the tree", work, render)
+
+    # -- utilities: reindex by number ----------------------------------- #
+    def _util_reindex_pick(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Pick the sparse results table",
+            filetypes=[("Tables", "*.csv *.tsv *.xlsx"), ("All files", "*.*")],
+        )
+        if path:
+            self._util_reindex_path = Path(path)
+            self._util_reindex_info.configure(text=path)
+
+    def _util_reindex_run(self) -> None:
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "reindex"):
+            return
+        if self._util_reindex_path is None:
+            messagebox.showwarning("No table", "Pick the CSV first.")
+            return
+        column = self._util_reindex_column.get().strip()
+        if not column:
+            messagebox.showwarning("Column", "Name the number column.")
+            return
+        try:
+            start = parse_int(self._util_reindex_start.get(), "start",
+                              minimum=0)
+            stop = parse_int(self._util_reindex_stop.get(), "stop",
+                             minimum=0)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        if stop < start:
+            messagebox.showerror("Input", "stop must be >= start")
+            return
+        pattern = self._util_reindex_pattern.get().strip() or r"(\d+)"
+        path = self._util_reindex_path
+
+        def work() -> Any:
+            from pharmaml.docking import reindex_by_number
+            from pharmaml.utils.io import read_table
+
+            frame = read_table(path)
+            return reindex_by_number(frame, column, start=start, stop=stop,
+                                     pattern=pattern)
+
+        def render(frame: Any) -> None:
+            self._util_frames["reindex"] = frame
+            self._fill_dynamic_tree(self._util_reindex_tree, frame)
+            missing = int(frame.iloc[:, 0].isna().sum()) if len(
+                frame.columns) else 0
+            self._util_reindex_summary.configure(
+                text=(f"dense {start}…{stop} · {len(frame)} rows · "
+                      f"{missing} gap row(s)"), style="Field.TLabel")
+
+        self._start_job(f"reindexing {path.name}", work, render)
+
+    def _util_reindex_save(self) -> None:
+        self._save_frame_dialog(self._util_frames.get("reindex"),
+                                "Save the dense table", "reindexed.csv")
+
+
+def _frame_from_records(columns: tuple[str, ...],
+                         records: list[tuple[Any, ...]]) -> Any:
+    """Build a small DataFrame from records (lazy pandas import)."""
+    import pandas as pd
+
+    return pd.DataFrame(records, columns=list(columns))
 
 
 def _format_operator_stats(metadata: dict[str, Any]) -> str:

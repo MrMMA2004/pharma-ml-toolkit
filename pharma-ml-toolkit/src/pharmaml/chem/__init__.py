@@ -37,9 +37,11 @@ from pharmaml.chem.features import (
 )
 from pharmaml.chem.rism import RISM_DESCRIPTORS, compute_rism_descriptors
 from pharmaml.chem.similarity import (
+    similarity_scan,
     tanimoto_from_bitarrays,
     tanimoto_from_sets,
     tanimoto_matrix,
+    top_matches,
 )
 from pharmaml.chem.standardize import (
     UNSUPPORTED_METALS,
@@ -90,6 +92,7 @@ __all__ = [
     "sdf_to_table",
     "select_top_features",
     "selection_metadata",
+    "similarity_scan",
     "smi_to_csv",
     "smiles_to_pdb",
     "split_table_into_chunks",
@@ -98,4 +101,5 @@ __all__ = [
     "tanimoto_from_bitarrays",
     "tanimoto_from_sets",
     "tanimoto_matrix",
+    "top_matches",
 ]

@@ -72,6 +72,7 @@ after adding new public functions.
 | `sdf_to_table` | function | Read an SD file back into a table (SMILES, tags and titles). |
 | `select_top_features` | function | Select the top-K features with the rar's two-layer strategy. |
 | `selection_metadata` | function | Build the JSON-ready metadata dict for a feature-selection run. |
+| `similarity_scan` | function | Scan reference ligands against a target library (Tanimoto >= threshold). |
 | `smi_to_csv` | function | Stream a ``.smi`` file to CSV one line at a time. |
 | `smiles_to_pdb` | function | Generate an optimised 3D PDB ligand from a SMILES string. |
 | `split_table_into_chunks` | function | Stream a large CSV into fixed-size part files. |
@@ -80,6 +81,7 @@ after adding new public functions.
 | `tanimoto_from_bitarrays` | function | Tanimoto coefficient for two equal-length binary arrays. |
 | `tanimoto_from_sets` | function | Tanimoto coefficient for two feature sets: |A∩B| / |A∪B|. |
 | `tanimoto_matrix` | function | All-vs-all Tanimoto similarities between two bit-matrix batches. |
+| `top_matches` | function | Return the ``k`` library entries most similar to ``query``. |
 
 ## `pharmaml.ml`
 
