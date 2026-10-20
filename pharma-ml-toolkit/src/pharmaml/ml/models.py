@@ -117,6 +117,13 @@ class ModelSpec:
         return self.requires is None or _module_available(self.requires)
 
 
+#: Default members of the registered ``voting`` / ``stacking`` ensembles
+#: -- the same RF + SVM + KNN trio the rar's own Voting.py and
+#: Stacking.py stacked.  Both builders accept any registry names, so
+#: custom ensembles are one ``build_voting(task, [...])`` call away.
+_ENSEMBLE_BASE_MODELS: tuple[str, ...] = ("random_forest", "svm", "knn")
+
+
 def _rf_cls() -> RandomForestClassifier:
     return RandomForestClassifier(random_state=42, n_jobs=-1)
 
@@ -629,6 +636,36 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
             "global SVR (regression only)"
         ),
     ),
+    "voting": ModelSpec(
+        name="voting",
+        task="both",
+        factory=None,
+        param_grid={
+            # only knobs BOTH task estimators accept (VotingRegressor
+            # has no 'voting' rule -- it always averages); the voting
+            # rule itself lives on the playground's ensemble card and
+            # build_voting's ``voting=`` argument.
+            "weights": [(1, 1, 1), (2, 1, 1), (1, 2, 1)],
+        },
+        notes=(
+            "voting ensemble of RF + SVM + KNN (upgrades Voting.py / "
+            "Voting reg.py; members configurable via build_voting)"
+        ),
+    ),
+    "stacking": ModelSpec(
+        name="stacking",
+        task="both",
+        factory=None,
+        param_grid={
+            "passthrough": [False, True],
+            "cv": [3, 5],
+        },
+        notes=(
+            "stacked ensemble: RF + SVM + KNN level-0, logistic/ridge "
+            "meta-learner level-1 (upgrades Stacking.py / Stacking reg.py; "
+            "members configurable via build_stacking)"
+        ),
+    ),
 }
 
 
@@ -658,6 +695,10 @@ MODEL_ALIASES: dict[str, str] = {
     "svc": "svm",
     "ann": "ann",
     "mlp": "ann",
+    "voting": "voting",
+    "vote": "voting",
+    "stacking": "stacking",
+    "stack": "stacking",
     "neural_net": "ann",
     "ada": "adaboost",
     "adaboost": "adaboost",
@@ -751,6 +792,22 @@ _TASK_FACTORIES: dict[str, dict[str, Callable[[], Any]]] = {
     "ann": {
         "classification": _mlp_cls,
         "regression": _mlp_reg,
+    },
+    "voting": {
+        "classification": lambda: build_voting(
+            "classification", list(_ENSEMBLE_BASE_MODELS), voting="soft"
+        ),
+        "regression": lambda: build_voting(
+            "regression", list(_ENSEMBLE_BASE_MODELS)
+        ),
+    },
+    "stacking": {
+        "classification": lambda: build_stacking(
+            "classification", list(_ENSEMBLE_BASE_MODELS)
+        ),
+        "regression": lambda: build_stacking(
+            "regression", list(_ENSEMBLE_BASE_MODELS)
+        ),
     },
     "xgboost": {
         "classification": _xgb_cls,

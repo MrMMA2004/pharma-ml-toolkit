@@ -242,6 +242,7 @@ after adding new public functions.
 | `delete_named_files` | function | Delete every file named ``filename`` anywhere under ``directory``. |
 | `distribute_files` | function | Copy each file into every immediate sub-directory of ``target_dir``. |
 | `distribute_receptor` | function | Copy a prepared receptor into every ligand folder of a campaign. |
+| `dock_smiles_array` | function | Dock every SMILES of an array against one receptor, simultaneously. |
 | `extract_pdbqt_atom_types` | function | Collect sorted unique AutoDock atom types from a PDBQT ligand. |
 | `ligand_efficiency` | function | Ligand efficiency ``LE = |ΔG| / N_heavy`` (kcal/mol per atom). |
 | `ligand_efficiency_series` | function | Vectorised ligand-efficiency column for a docking summary table. |

@@ -10,6 +10,72 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.49] — 2026-10-21
+
+### Added — the playground round the screenshot asked for: SMILES-array docking, RISM-KH, ensembles, model bundles
+
+Six user-visible upgrades landed together — the docking error of the
+reported screenshot fixed at the root, the batch docking the request
+described, the descriptor and ensemble families the request named,
+the model save/reuse loop, and the RL advisory that turns a silent
+empty leaderboard into an actionable message:
+
+- **`prepare_protein(allow_bad_res=True)`** — when Meeko's templates
+  cannot match residues (broken electron density, non-standard
+  chemistry — the `PolymerCreationError: Template matching failed for
+  ['A:972', ...]` of the screenshot), the offending residues are now
+  deleted automatically and the build retried (up to six rounds), the
+  library twin of Meeko CLI's `--delete_bad_res`. The strict path's
+  `DockingError` names the residues and the fix; the report counts
+  them (`bad_residues_removed`, `bad_residue_ids`) and the playground
+  ships a ticked-by-default checkbox.
+- **`dock_smiles_array(...)`** (`pharmaml.docking`) — the whole pasted
+  SMILES array docked in one call: every SMILES embedded to 3D PDBQT
+  (Meeko + RDKit, deterministic seed) into its own campaign folder,
+  then Vina or the full AutoDock4 stack (receptor distributed, GPF +
+  DPF written, autogrid4 + autodock4) run **simultaneously** across a
+  `ThreadPoolExecutor` worker pool (subprocesses release the GIL);
+  best affinities parsed from each engine's own output (Vina REMARK
+  poses / the DLG cluster table) into one ranked DataFrame with a
+  per-ligand progress callback. The Docking tab grows the matching
+  card: paste the array, pick the engine, box, exhaustiveness and
+  worker count, run — the ranked table lands in the results card and
+  the session remembers the array.
+- **RISM-KH solvation in the playground** — the Chemistry tab gains a
+  dedicated card for the ten 3D-RISM-KH-inspired descriptors (SPC /
+  TIP3P site models, temperature knob, per-descriptor plain-language
+  meanings, CSV export) and the feature factory's 8th family
+  checkbox: `rism` rides the same ranked top-K pipeline as the other
+  seven families.
+- **Voting + stacking are registry models** — `voting` and `stacking`
+  join `MODEL_REGISTRY` (dual-task, RF + SVM + KNN defaults, weights /
+  passthrough / cv grids, `vote`/`stack` aliases), so the model
+  combobox, the leaderboard and the CLI all see them; the Data & ML
+  tab additionally grows an **ensemble builder card** — tick any
+  members, pick soft/hard voting or the stacking meta-learner, train —
+  with the same held-out metrics, figure and report plumbing as every
+  other model.
+- **Model persistence in the playground** — a save half writes the
+  last trained model (or ensemble) as the provenance bundle
+  (`save_model`, now also recording the training **target** column so
+  inference audits can drop it automatically); a load half reopens
+  any bundle, shows its provenance (versions, timestamp, feature
+  contract) and predicts on any CSV after the `validate_bundle_input`
+  audit — with classifier probabilities and a predictions CSV export.
+- **The RL honesty pass** — a `prior epochs < 6` run that samples no
+  valid SMILES now explains itself (raise the epochs, 8+ is the CLI
+  default) instead of showing an empty leaderboard; the spinbox
+  default moves to the library default 8.
+
+### Fixed
+
+- `parse_typed_value` in the playground now parses comma-separated
+  integer lists as tuples for `None`-defaulted parameters — the voting
+  ensemble's `weights` knob is typeable by hand.
+- The Docking tab's engine-binary pre-flight understands the
+  SMILES-array card's `vina` / `autodock4` tokens (the same friendly
+  install hint as the campaign runner).
+
 ## [1.2.48] — 2026-10-21
 
 ### Added — manual hyperparameters + live progress/ETA: hands on the knobs, eyes on the clock

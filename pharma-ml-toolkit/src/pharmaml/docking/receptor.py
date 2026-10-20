@@ -95,6 +95,7 @@ pharmaml.exceptions.DataValidationError: receptor file not found: /tmp/pharmaml_
 
 from __future__ import annotations
 
+import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -143,6 +144,11 @@ class ProteinReport:
         ATOM / HETATM records found in the input.
     waters_removed / hetatm_removed / altloc_removed / hydrogens_removed:
         Records dropped by each cleaning rule.
+    bad_residues_removed:
+        Residues deleted by the ``allow_bad_res`` fallback (broken
+        residues Meeko's templates could not match).
+    bad_residue_ids:
+        The ``chain:resseq`` identifiers of those residues.
     chains:
         Chain identifiers kept in the receptor.
     residues:
@@ -166,6 +172,8 @@ class ProteinReport:
     hetatm_removed: int = 0
     altloc_removed: int = 0
     hydrogens_removed: int = 0
+    bad_residues_removed: int = 0
+    bad_residue_ids: list[str] = field(default_factory=list)
     chains: list[str] = field(default_factory=list)
     residues: int = 0
     output_atoms: int = 0
@@ -187,6 +195,8 @@ class ProteinReport:
             "hetatm_removed": self.hetatm_removed,
             "altloc_removed": self.altloc_removed,
             "hydrogens_removed": self.hydrogens_removed,
+            "bad_residues_removed": self.bad_residues_removed,
+            "bad_residue_ids": list(self.bad_residue_ids),
             "chains": list(self.chains),
             "residues": self.residues,
             "output_atoms": self.output_atoms,
@@ -205,6 +215,8 @@ class ProteinReport:
             f"{self.altloc_removed} alt-location, "
             f"{self.hydrogens_removed} input H"
         )
+        if self.bad_residues_removed:
+            dropped += f", {self.bad_residues_removed} bad residue(s)"
         return "\n".join(
             [
                 "Protein preparation audit",
@@ -374,6 +386,7 @@ def prepare_protein(
     chain: str | None = None,
     default_altloc: str | None = "first",
     strip_hydrogens: bool = True,
+    allow_bad_res: bool = False,
 ) -> ProteinReport:
     """Import a protein and prepare a docking-ready receptor PDBQT.
 
@@ -409,6 +422,12 @@ def prepare_protein(
         Remove input hydrogens before conversion.  Meeko re-adds polar
         hydrogens from its residue templates, so input H coordinates
         are not needed.
+    allow_bad_res:
+        When Meeko's templates cannot match a residue (broken density,
+        non-standard chemistry), delete that residue automatically and
+        retry instead of failing -- the library twin of Meeko CLI's
+        ``--delete_bad_res``.  Removed residues are named in the
+        report (``bad_residue_ids``) and counted per atom record.
 
     Returns
     -------
@@ -491,8 +510,18 @@ def prepare_protein(
             "(no Meeko step, charges kept)"
         )
     else:
-        pdbqt_text = _meeko_receptor_pdbqt("\n".join(cleaned) + "\nTER\nEND\n")
+        pdbqt_text, bad_ids = _meeko_receptor_pdbqt(
+            "\n".join(cleaned) + "\nTER\nEND\n", allow_bad_res=allow_bad_res
+        )
         pdbqt_lines = pdbqt_text.splitlines()
+        if bad_ids:
+            report.bad_residues_removed = len(bad_ids)
+            report.bad_residue_ids = bad_ids
+            report.notes.append(
+                "allow_bad_res: removed "
+                + ", ".join(bad_ids)
+                + " (Meeko template matching failed for these residues)"
+            )
 
     out.write_text("\n".join(pdbqt_lines) + "\n", encoding="utf-8")
 
@@ -551,8 +580,65 @@ def _cif_to_pdb_text(src: Path, text: str) -> str:
     return pdb_text
 
 
-def _meeko_receptor_pdbqt(pdb_text: str) -> str:
-    """Run the Meeko polymer pipeline and return rigid-receptor PDBQT text.
+# Meeko's template-matching failure message carries the offending
+# residue identifiers as a Python-repped list: ``Template matching
+# failed for: ['A:972', 'A:973', ...]`` (chain:resseq, optionally with
+# an insertion code, e.g. ``'A:101A'``).  Quoting the token in the
+# pattern keeps the prose of the surrounding recommendations (English
+# words with stray ``word: digit`` colons) out of the parse.  The
+# ``allow_bad_res`` fallback extracts exactly those tokens and deletes
+# the records before retrying -- the library twin of Meeko CLI's
+# ``--delete_bad_res`` switch.
+_BAD_RESIDUE_TOKEN = re.compile(r"'([A-Za-z0-9]):(\d+)([A-Za-z])?'")
+
+#: Hard cap on strip-and-retry rounds (each round removes at least one
+#: residue, so the loop terminates; the cap only guards pathological
+#: files where every residue fails).
+_MAX_BAD_RES_ROUNDS = 6
+
+
+def _extract_bad_residues(message: str) -> list[tuple[str, str, str]]:
+    """Parse ``chain:resseq(icode)`` tokens out of a Meeko error."""
+    found: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for match in _BAD_RESIDUE_TOKEN.finditer(message):
+        chain, resseq, icode = match.group(1), match.group(2), match.group(3) or ""
+        key = (chain, resseq, icode)
+        if key not in seen:
+            seen.add(key)
+            found.append(key)
+    return found
+
+
+def _strip_residue_records(
+    pdb_text: str, residues: list[tuple[str, str, str]]
+) -> tuple[str, int]:
+    """Delete the ATOM/HETATM records of ``residues`` from PDB text.
+
+    Returns the pruned text and the number of atom records removed.
+    """
+    targets = set(residues)
+    kept: list[str] = []
+    removed = 0
+    for line in pdb_text.splitlines():
+        if line.startswith(("ATOM", "HETATM")) and _parse_resseq_key(line) in targets:
+            removed += 1
+            continue
+        kept.append(line)
+    return "\n".join(kept), removed
+
+
+def _meeko_receptor_pdbqt(
+    pdb_text: str, allow_bad_res: bool = False
+) -> tuple[str, list[str]]:
+    """Run the Meeko polymer pipeline; return (PDBQT text, bad-residue ids).
+
+    With ``allow_bad_res`` the build retries: every Meeko
+    ``PolymerCreationError`` names the residues its templates could not
+    match; those records are stripped from the input and the build
+    retried (Meeko CLI's ``--delete_bad_res``, library edition).  The
+    returned list carries the removed ``chain:resseq`` identifiers so
+    the report can name them.
 
     Raises :class:`DependencyError` when Meeko is absent and
     :class:`DockingError` when the polymer cannot be built.
@@ -565,25 +651,77 @@ def _meeko_receptor_pdbqt(pdb_text: str) -> str:
             "Install with:  pip install 'pharmaml[docking]'  (or: meeko rdkit)"
         ) from exc
 
-    try:
-        templates = ResidueChemTemplates.create_from_defaults()
-        polymer = Polymer.from_pdb_string(pdb_text, templates)
-        rigid, flex = PDBQTWriterLegacy.write_from_polymer(polymer)
-    except Exception as exc:  # PolymerCreationError and friends
+    removed_ids: list[str] = []
+    current = pdb_text
+    last_error: Exception | None = None
+    attempts = _MAX_BAD_RES_ROUNDS if allow_bad_res else 1
+    for _round in range(attempts):
+        try:
+            templates = ResidueChemTemplates.create_from_defaults()
+            polymer = Polymer.from_pdb_string(current, templates)
+            rigid, flex = PDBQTWriterLegacy.write_from_polymer(polymer)
+            break
+        except Exception as exc:  # PolymerCreationError and friends
+            last_error = exc
+            bad = _extract_bad_residues(f"{exc}")
+            if not allow_bad_res or not bad:
+                hint = ""
+                if bad:
+                    named = ", ".join(f"{c}:{r}{i}" for c, r, i in bad)
+                    hint = (
+                        f" Bad residues: {named}. Re-run with "
+                        "allow_bad_res=True (or tick 'auto-remove bad "
+                        "residues' in the playground) to delete them "
+                        "automatically -- Meeko CLI's --delete_bad_res."
+                    )
+                raise DockingError(
+                    "Meeko could not build the receptor from this PDB "
+                    f"({type(exc).__name__}: {exc}). Common causes: broken "
+                    "residues from unresolved electron density, non-standard "
+                    "chemistry, or HETATM records the templates do not know. "
+                    "Trim the offending residues or convert them to standard "
+                    "ones first." + hint
+                ) from exc
+            named_list = [f"{c}:{r}{i}" for c, r, i in bad]
+            pruned, dropped_atoms = _strip_residue_records(current, bad)
+            remaining_atoms = sum(
+                1 for line in pruned.splitlines()
+                if line.startswith(("ATOM", "HETATM"))
+            )
+            if not dropped_atoms or not remaining_atoms:
+                # nothing matched, or EVERY residue failed (an empty
+                # polymer cannot be built): give up with the honest
+                # diagnosis instead of a cryptic numpy error.
+                raise DockingError(
+                    "Meeko could not build the receptor from this PDB "
+                    f"({type(exc).__name__}: {exc}). The failing residues "
+                    f"({', '.join(named_list)}) could not be safely removed -- "
+                    "inspect the structure manually."
+                ) from exc
+            _LOG.warning(
+                "allow_bad_res: deleting %s (%d atom records) and retrying",
+                ", ".join(named_list),
+                dropped_atoms,
+            )
+            removed_ids.extend(named_list)
+            if not current.endswith("END\n"):
+                current = pruned + "\nTER\nEND\n"
+            else:
+                current = pruned
+    else:  # pragma: no cover - every round failed
         raise DockingError(
-            "Meeko could not build the receptor from this PDB "
-            f"({type(exc).__name__}: {exc}). Common causes: broken residues "
-            "from unresolved electron density, non-standard chemistry, or "
-            "HETATM records the templates do not know. Trim the offending "
-            "residues or convert them to standard ones first."
-        ) from exc
+            "Meeko could not build the receptor from this PDB even after "
+            f"removing {len(removed_ids)} bad residue(s) "
+            f"({last_error and type(last_error).__name__}: {last_error}). "
+            "The structure needs manual inspection."
+        )
     if flex:
         _LOG.warning(
             "%d flexible sidechain(s) were requested by the polymer but a "
             "rigid receptor was written (flexible residues are out of scope)",
             len(flex),
         )
-    return rigid
+    return rigid, removed_ids
 
 
 def distribute_receptor(

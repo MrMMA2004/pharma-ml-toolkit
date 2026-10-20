@@ -48,6 +48,7 @@ from pharmaml.docking.scoring import (
     ligand_efficiency,
     ligand_efficiency_series,
 )
+from pharmaml.docking.smiles_docking import dock_smiles_array
 from pharmaml.docking.workflow import (
     batch_run_directories,
     parse_vina_config,
@@ -74,6 +75,7 @@ __all__ = [
     "delete_named_files",
     "distribute_files",
     "distribute_receptor",
+    "dock_smiles_array",
     "extract_pdbqt_atom_types",
     "ligand_efficiency",
     "ligand_efficiency_series",

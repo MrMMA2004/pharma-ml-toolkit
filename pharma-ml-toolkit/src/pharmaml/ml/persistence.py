@@ -115,8 +115,15 @@ def bundle_metadata(
     features: list[str] | None = None,
     best_params: dict[str, Any] | None = None,
     metrics: dict[str, Any] | None = None,
+    target: str | None = None,
 ) -> dict[str, Any]:
-    """Assemble the provenance metadata block for a model bundle."""
+    """Assemble the provenance metadata block for a model bundle.
+
+    ``target`` records the training target column name so inference
+    callers (the CLI check, the playground's predict card) can drop it
+    automatically when the scored CSV still carries it -- the same
+    convention the toolkit's own check flow documents.
+    """
     return {
         "name": name,
         "task": task,
@@ -127,6 +134,7 @@ def bundle_metadata(
         "features": list(features) if features is not None else None,
         "best_params": best_params or {},
         "metrics": metrics or {},
+        "target": target,
     }
 
 
@@ -138,6 +146,7 @@ def save_model(
     features: list[str] | None = None,
     best_params: dict[str, Any] | None = None,
     metrics: dict[str, Any] | None = None,
+    target: str | None = None,
 ) -> Path:
     """Persist a fitted model plus its metadata bundle.
 
@@ -153,6 +162,9 @@ def save_model(
         Ordered feature names expected at inference time.
     best_params, metrics:
         Optional hyperparameters and held-out metrics.
+    target:
+        Training target column name; inference-time audits drop it
+        automatically when the scored CSV still carries it.
 
     Returns
     -------
@@ -166,21 +178,25 @@ def save_model(
         cannot be written (permissions, unwritable location, joblib
         serialisation failures).
     """
-    target = Path(path)
-    if target.suffix.lower() not in {".joblib", ".pkl"}:
-        target = target.with_suffix(".joblib")
+    target_path = Path(path)
+    if target_path.suffix.lower() not in {".joblib", ".pkl"}:
+        target_path = target_path.with_suffix(".joblib")
 
     bundle = {
         _BUNDLE_KEY_MODEL: model,
-        _BUNDLE_KEY_META: bundle_metadata(name, task, features, best_params, metrics),
+        _BUNDLE_KEY_META: bundle_metadata(
+            name, task, features, best_params, metrics, target=target
+        ),
     }
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(bundle, target, compress=3)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(bundle, target_path, compress=3)
     except Exception as exc:
-        raise PersistenceError(f"Failed to save model to {target}: {exc}") from exc
-    _LOG.info("Saved model '%s' (%s) to %s", name, task, target)
-    return target
+        raise PersistenceError(
+            f"Failed to save model to {target_path}: {exc}"
+        ) from exc
+    _LOG.info("Saved model '%s' (%s) to %s", name, task, target_path)
+    return target_path
 
 
 def load_model(path: str | Path) -> tuple[Any, dict[str, Any]]:

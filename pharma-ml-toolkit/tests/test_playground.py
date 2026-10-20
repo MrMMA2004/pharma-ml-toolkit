@@ -1742,11 +1742,11 @@ class TestFeatureFactoryGuiUnderXvfb:
 
     def test_default_pasted_variance_run(self, app: Any,
                                          quiet_dialogs: list[Any]) -> None:
-        # the shipped defaults: pasted drug SMILES, all 7 families ticked
+        # the shipped defaults: pasted drug SMILES, all 8 families ticked
         assert app._feat_source_var.get() == "Pasted SMILES"
-        assert "7 families selected" in app._feat_width_label.cget("text")
+        assert "8 families selected" in app._feat_width_label.cget("text")
         assert (
-            f"~{10_752 + self._descriptor_count():,} columns" in
+            f"~{10_752 + 10 + self._descriptor_count():,} columns" in
             app._feat_width_label.cget("text")
         )
         app._feat_k_entry.delete(0, "end")
@@ -1755,7 +1755,7 @@ class TestFeatureFactoryGuiUnderXvfb:
         app._feat_compute()
         assert self._drain_jobs(app), "feature factory job hung"
         summary = app._feat_summary.cget("text")
-        assert f"{10_752 + self._descriptor_count():,} features" in summary
+        assert f"{10_752 + 10 + self._descriptor_count():,} features" in summary
         assert "3 molecules" in summary
         assert "median-survivors" in summary
         assert "variance" in summary
@@ -1771,6 +1771,7 @@ class TestFeatureFactoryGuiUnderXvfb:
         assert families_seen <= {
             "descriptors", "atompair_count", "ecfp", "avalon_count",
             "rdkit_fingerprint", "morgan_full", "morgan_scaffold",
+            "rism",  # the 8th family (1.2.49)
         }
         assert quiet_dialogs == []
 
