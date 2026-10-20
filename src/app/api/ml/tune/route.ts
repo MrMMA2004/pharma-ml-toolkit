@@ -1,19 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  hashCsvSeed,
-  numericColumnNames,
-  parseCsv,
-  resolveClassification,
-  resolveMultiRegression,
-  resolveRegression,
-  zscore,
-} from "@/lib/csv";
+import { resolveMlDataset } from "@/lib/ml-data";
 import {
   classificationMetrics,
   kFoldSplit,
-  makeMoons,
-  makeRegressionData,
   mean,
   mulberry32,
   regressionMetrics,
@@ -34,7 +24,7 @@ import {
   type HyperSource,
   type TuneChoice,
 } from "@/lib/ml-models";
-import type { CsvSourceMeta, MLTuneResponse, MLTuneTrial } from "@/lib/toolkit-types";
+import type { MLTuneResponse, MLTuneTrial } from "@/lib/toolkit-types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -112,116 +102,31 @@ export async function POST(request: NextRequest) {
   }
   const spaceSize = tuneSpaceSize(space);
 
-  /* Dataset resolution (identical rules to /api/ml/train — the same
-   * resolvers, the same ≥3-candidate multivariate trigger). */
-  let xs: number[] = [];
-  let ys: number[] = [];
-  let X: number[][] | null = null;
-  let pts: Array<{ x: number; y: number; label: number }> = [];
-  let source: CsvSourceMeta | undefined;
-  let features: string[] = [];
-  let featureNames: string[] = [];
-  let splitSeed = req.seed;
-
-  if (req.csv !== undefined) {
-    const table = parseCsv(req.csv);
-    if (table.rows.length === 0) {
-      return NextResponse.json(
-        { error: "The uploaded CSV has no data rows below the header." },
-        { status: 400 }
-      );
-    }
-    try {
-      if (req.task === "regression") {
-        const multi =
-          (req.featureColumns?.length ?? 0) >= 2 ||
-          (req.featureColumns === undefined &&
-            !req.featureColumn &&
-            numericColumnNames(table).length >= 3);
-        if (multi) {
-          const csv = resolveMultiRegression(table, req.featureColumns, req.targetColumn);
-          X = csv.X;
-          ys = csv.y;
-          features = csv.features.map((f) => `${f} (standardized)`);
-          featureNames = csv.features;
-          source = {
-            kind: "csv",
-            fileName: req.csvName,
-            columns: csv.columns,
-            featureColumns: csv.features,
-            targetColumn: csv.target,
-            nRows: csv.y.length,
-            droppedRows: csv.droppedRows,
-          };
-        } else {
-          const csv = resolveRegression(
-            table,
-            req.featureColumn ?? req.featureColumns?.[0],
-            req.targetColumn
-          );
-          xs = zscore(csv.x);
-          ys = csv.y;
-          features = [`${csv.feature} (standardized)`];
-          featureNames = [csv.feature];
-          source = {
-            kind: "csv",
-            fileName: req.csvName,
-            columns: csv.columns,
-            featureColumns: [csv.feature],
-            targetColumn: csv.target,
-            nRows: csv.x.length,
-            droppedRows: csv.droppedRows,
-          };
-        }
-      } else {
-        const csv = resolveClassification(
-          table,
-          req.featureColumn,
-          req.featureColumn2,
-          req.targetColumn
-        );
-        const sx1 = zscore(csv.x1);
-        const sx2 = zscore(csv.x2);
-        pts = sx1.map((x, i) => ({ x, y: sx2[i] ?? 0, label: csv.label[i] ?? 0 }));
-        features = [`${csv.feature1} (standardized)`, `${csv.feature2} (standardized)`];
-        featureNames = [csv.feature1, csv.feature2];
-        source = {
-          kind: "csv",
-          fileName: req.csvName,
-          columns: csv.columns,
-          featureColumns: [csv.feature1, csv.feature2],
-          targetColumn: csv.target,
-          nRows: csv.x1.length,
-          droppedRows: csv.droppedRows,
-          labelMap: csv.labelMap,
-        };
-      }
-    } catch (err) {
-      return NextResponse.json(
-        {
-          error: "Could not use the uploaded CSV.",
-          detail: [err instanceof Error ? err.message : String(err)],
-        },
-        { status: 400 }
-      );
-    }
-    splitSeed = hashCsvSeed(req.csv);
-  } else {
-    if (req.task === "regression") {
-      const rand = mulberry32(req.seed);
-      ({ xs, ys } = makeRegressionData(req.samples, req.noise, rand));
-      features = ["x (standardized)"];
-      featureNames = ["x"];
-    } else {
-      const rand = mulberry32(req.seed);
-      pts = makeMoons(req.samples, req.noise, rand);
-      features = ["x1 (standardized)", "x2 (standardized)"];
-      featureNames = ["x1", "x2"];
-    }
+  /* Dataset resolution — the shared resolver (identical rules to
+   * /api/ml/train: same CSV→matrix contract, same ≥3-candidate
+   * multivariate trigger, same content-hash split seed). */
+  const resolved = resolveMlDataset({
+    task: req.task,
+    samples: req.samples,
+    noise: req.noise,
+    seed: req.seed,
+    csv: req.csv,
+    csvName: req.csvName,
+    featureColumns: req.featureColumns,
+    featureColumn: req.featureColumn,
+    featureColumn2: req.featureColumn2,
+    targetColumn: req.targetColumn,
+  });
+  if (!resolved.ok) {
+    return NextResponse.json(
+      { error: resolved.error, ...(resolved.detail ? { detail: resolved.detail } : {}) },
+      { status: 400 }
+    );
   }
+  const data = resolved.data;
 
-  const effSeed = splitSeed ?? req.seed;
-  const n = req.task === "regression" ? (X ? ys.length : xs.length) : pts.length;
+  const effSeed = data.splitSeed;
+  const n = data.n;
   if (n < 12) {
     return NextResponse.json(
       { error: "Need at least 12 rows to cross-validate the search trials." },
@@ -231,14 +136,8 @@ export async function POST(request: NextRequest) {
 
   /* Row accessors shared by both tasks (single-feature regression wraps
    * xs into a 1-column matrix; multivariate uses the CSV matrix). */
-  const row = (i: number): number[] =>
-    req.task === "regression"
-      ? X
-        ? (X[i] ?? [])
-        : [xs[i] ?? 0]
-      : [pts[i]?.x ?? 0, pts[i]?.y ?? 0];
-  const target = (i: number): number =>
-    req.task === "regression" ? (ys[i] ?? 0) : (pts[i]?.label ?? 0);
+  const row = (i: number): number[] => data.row(i);
+  const target = (i: number): number => data.target(i);
 
   /* Deterministic CV folds, shared by every trial so scores are directly
    * comparable (same folds, same splits — only the params vary). */
@@ -265,7 +164,7 @@ export async function POST(request: NextRequest) {
           trainY,
           hp,
           modelRng(effSeed, f + 1),
-          featureNames
+          data.featureNames
         );
         const yTrue = fold.map(target);
         const yPred = fold.map((i) => fit.predict(row(i)));
@@ -277,7 +176,7 @@ export async function POST(request: NextRequest) {
         trainY,
         hp,
         modelRng(effSeed, f + 1),
-        featureNames
+        data.featureNames
       );
       const yTrue = fold.map(target);
       const yPred = fold.map((i) => fit.predict01(row(i)[0] ?? 0, row(i)[1] ?? 0));
@@ -303,7 +202,7 @@ export async function POST(request: NextRequest) {
           train.map(target),
           hp,
           modelRng(effSeed, 0),
-          featureNames
+          data.featureNames
         );
         const yTrue = test.map(target);
         const yPred = test.map((i) => fit.predict(row(i)));
@@ -315,7 +214,7 @@ export async function POST(request: NextRequest) {
         train.map(target),
         hp,
         modelRng(effSeed, 0),
-        featureNames
+        data.featureNames
       );
       const yTrue = test.map(target);
       const yPred = test.map((i) => fit.predict01(row(i)[0] ?? 0, row(i)[1] ?? 0));
@@ -478,8 +377,8 @@ export async function POST(request: NextRequest) {
         },
         datasetMeta: {
           nTotal: n,
-          features,
-          ...(source ? { source } : {}),
+          features: data.features,
+          ...(data.source ? { source: data.source } : {}),
         },
       };
       return NextResponse.json(response);
@@ -540,8 +439,8 @@ export async function POST(request: NextRequest) {
       },
       datasetMeta: {
         nTotal: n,
-        features,
-        ...(source ? { source } : {}),
+        features: data.features,
+        ...(data.source ? { source: data.source } : {}),
       },
     };
     return NextResponse.json(response);

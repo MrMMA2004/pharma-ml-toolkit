@@ -424,6 +424,70 @@ export interface MLTuneResponse {
 }
 
 /* ------------------------------------------------------------------ */
+/* ML model comparison (the web mirror of pharmaml.ml.training.       */
+/* compare_models — the rar's signature workflow)                      */
+/* ------------------------------------------------------------------ */
+
+export interface MLCompareRequest {
+  task: MLTask;
+  /** 2–6 registry models to train side by side. */
+  models: string[];
+  /** CV folds scoring every model (3 / 5 / 10 — never off: a leaderboard
+   *  without folds is just a test-split lottery). */
+  cv: 3 | 5 | 10;
+  seed: number;
+  testSize: number;
+  /** Synthetic-generator knobs (ignored when csv is present). */
+  samples: number;
+  noise: number;
+  /** Raw CSV text — when present, the comparison uses the uploaded data. */
+  csv?: string;
+  csvName?: string;
+  /** Regression only: feature/target column picks (same semantics as train). */
+  featureColumns?: string[];
+  featureColumn?: string;
+  featureColumn2?: string;
+  targetColumn?: string;
+}
+
+/** One leaderboard row: a model trained at its default hyperparameters. */
+export interface MLCompareEntry {
+  /** The model's registry key. */
+  model: string;
+  /** Mean CV score across the shared folds (R² or accuracy). */
+  cvMean: number;
+  /** Population std of the per-fold scores. */
+  cvStd: number;
+  /** Held-out test metric of the refit on the train split. */
+  testMetric: number;
+  /** "R²" or "Accuracy". */
+  metricName: string;
+  /** Wall-clock fit time of the held-out refit, milliseconds. */
+  fitMs: number;
+  /** Gap to the leaderboard's best (0 for the winner; negative for the
+   *  rest — reported in the same units as the metric). */
+  delta: number;
+  /** 1-based leaderboard rank (ties share the earlier rank). */
+  rank: number;
+}
+
+export interface MLCompareResponse {
+  task: MLTask;
+  /** Scored objective name ("R²" or "Accuracy"). */
+  objective: string;
+  /** CV folds every model was scored on (the same folds for all). */
+  cvK: number;
+  /** Leaderboard — best CV mean first. */
+  entries: MLCompareEntry[];
+  datasetMeta: {
+    nTotal: number;
+    features: string[];
+    /** Present when the comparison ran on a user-uploaded CSV. */
+    source?: CsvSourceMeta;
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* ML dataset preview                                                   */
 /* ------------------------------------------------------------------ */
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Brain,
   Check,
@@ -84,6 +84,8 @@ import { toast } from "sonner";
 import { DEFAULT_ML_CONFIG, useToolkitStore, type MlRunRecord } from "@/lib/store";
 import type {
   DatasetPreviewResponse,
+  MLCompareRequest,
+  MLCompareResponse,
   MLTrainResponse,
   MLTrainRequest,
   MLTuneRequest,
@@ -554,6 +556,14 @@ function hyperbandRoster(): string {
       return `${label} (${spec.label})`;
     })
     .join(", ");
+}
+
+/** Default model-comparison selection: the model being explored plus two
+ *  strong companions per task — deduped, capped at three. */
+function defaultCompareSel(task: Task, modelSel: string): string[] {
+  const companions =
+    task === "regression" ? ["huber", "random_forest"] : ["svm_rbf", "random_forest"];
+  return [modelSel, ...companions.filter((m) => m !== modelSel)].slice(0, 3);
 }
 
 /** Compact slider value pill format (5 → "5", 0.1 → "0.1"). */
@@ -1166,6 +1176,14 @@ export function MlPlayground() {
   const [tuneStatus, setTuneStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [tuneResult, setTuneResult] = useState<MLTuneResponse | null>(null);
   const [tuneError, setTuneError] = useState<string | null>(null);
+  /* Model comparison (the web mirror of pharmaml's compare_models):
+   *  2–6 registry keys trained side by side on the SAME folds. */
+  const [compareSel, setCompareSel] = useState<string[]>(() =>
+    defaultCompareSel(task, modelSel)
+  );
+  const [compareResult, setCompareResult] = useState<MLCompareResponse | null>(null);
+  const [compareStatus, setCompareStatus] = useState<"idle" | "running">("idle");
+  const [compareError, setCompareError] = useState<string | null>(null);
   const [maxTrials, setMaxTrials] = useState<string>("12");
   const [searcher, setSearcher] = useState<"random" | "hyperband">("random");
   const [etaSel, setEtaSel] = useState<string>("3");
@@ -1306,8 +1324,11 @@ export function MlPlayground() {
     if (next === "classification" && noise > 1.5) setMlConfig({ noise: 0.3 });
     /* Keep the pick when the model exists for both tasks (decision_tree,
      * random_forest, knn, mlp); otherwise fall back to the task default. */
+    let nextModel = modelSel;
     if (!specOf(next, modelSel)) {
-      setModelSel(next === "regression" ? (specOf("regression", regModel) ? regModel : "linear") : "logistic");
+      nextModel =
+        next === "regression" ? (specOf("regression", regModel) ? regModel : "linear") : "logistic";
+      setModelSel(nextModel);
       setHp({ ...DEFAULT_HP });
     }
     setStatus("idle");
@@ -1318,6 +1339,9 @@ export function MlPlayground() {
     setTuneStatus("idle");
     setTuneResult(null);
     setTuneError(null);
+    setCompareSel(defaultCompareSel(next, nextModel));
+    setCompareResult(null);
+    setCompareError(null);
   }
 
   /** Restore the default experiment setup and drop any stored results. */
@@ -1333,6 +1357,9 @@ export function MlPlayground() {
     setTuneStatus("idle");
     setTuneResult(null);
     setTuneError(null);
+    setCompareSel(defaultCompareSel("regression", "linear"));
+    setCompareResult(null);
+    setCompareError(null);
   }
 
   /* ------------------------- CSV data loading ------------------------- */
@@ -1652,6 +1679,101 @@ export function MlPlayground() {
         .map(([k, v]) => `${HP_LABELS[k] ?? k} ${fmtHp(v)}`)
         .join(" · "),
     });
+  }
+
+  /** Keep the comparison selection anchored on the model being explored:
+   *  picking a model that isn't selected inserts it at the head (what you
+   *  see is what you compare), capped at the server's 6-model maximum. */
+  useEffect(() => {
+    setCompareSel((sel) => {
+      if (sel.includes(modelSel)) return sel;
+      return [modelSel, ...sel].slice(0, 6);
+    });
+  }, [modelSel]);
+
+  /** Toggle one model in the comparison selection (2–6 picked to run). */
+  function toggleCompareModel(id: string) {
+    setCompareSel((sel) => {
+      if (sel.includes(id)) return sel.filter((m) => m !== id);
+      return sel.length >= 6 ? sel : [...sel, id];
+    });
+  }
+
+  /** Train the selected 2–6 models side by side at their default
+   *  hyperparameters — the web mirror of `ml compare` /
+   *  `train_model(..., compare_models)`. Same folds for every model, so
+   *  the ranking is a fair comparison; same seed → same leaderboard. */
+  async function runCompare() {
+    if (source === "synthetic" && !seedValid) {
+      setCompareError("Seed must be a non-negative integer (0 – 2147483647).");
+      return;
+    }
+    if (source === "csv" && (!mlCsv || !csvUsable)) {
+      setCompareError(
+        `Load a CSV with at least ${MIN_CSV_ROWS} rows and 2 numeric columns before comparing.`
+      );
+      return;
+    }
+    if (compareSel.length < 2) {
+      setCompareError("Pick at least 2 models to compare (6 at most).");
+      return;
+    }
+    setCompareStatus("running");
+    setCompareError(null);
+    const body: MLCompareRequest = {
+      task,
+      models: compareSel,
+      /* The comparison always cross-validates; CV=Off falls back to 5-fold. */
+      cv: (Number.parseInt(cv, 10) >= 3 ? Number.parseInt(cv, 10) : 5) as 3 | 5 | 10,
+      seed: Number.parseInt(seed, 10) || 0,
+      testSize: testSizePct / 100,
+      samples,
+      noise,
+    };
+    if (source === "csv" && mlCsv) {
+      body.csv = mlCsv.text;
+      body.csvName = mlCsv.fileName;
+      if (task === "regression") {
+        if (featureColumns.length > 0) body.featureColumns = featureColumns;
+        if (targetColumn) body.targetColumn = targetColumn;
+      } else {
+        if (featureColumn) body.featureColumn = featureColumn;
+        if (featureColumn2) body.featureColumn2 = featureColumn2;
+        if (targetColumn) body.targetColumn = targetColumn;
+      }
+    }
+    try {
+      const res = await fetch("/api/ml/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        const message =
+          typeof data === "object" && data !== null && "error" in data
+            ? `${String((data as { error: unknown }).error)}${
+                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+                  : ""
+              }`
+            : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      const payload = data as MLCompareResponse;
+      setCompareResult(payload);
+      const winner = payload.entries[0];
+      const winnerLabel =
+        specOf(payload.task, winner?.model ?? "")?.label ?? winner?.model ?? "?";
+      toast.success("Comparison complete", {
+        description: `${payload.entries.length} models · ${payload.cvK}-fold ${payload.objective} · #1 ${winnerLabel} ${fmtNum(winner?.cvMean ?? Number.NaN, 4)}`,
+      });
+    } catch (err) {
+      setCompareResult(null);
+      setCompareError(err instanceof Error ? err.message : "Comparison request failed.");
+    } finally {
+      setCompareStatus("idle");
+    }
   }
 
   /** Restore a previous run: config snapshot + full result + charts. The
@@ -2500,11 +2622,188 @@ export function MlPlayground() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           ) : null}
+
+          {/* ----------------- Model comparison (compare_models) ----------------- */}
+          <div className="space-y-2.5 border-t pt-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-xs font-semibold">
+                  <Trophy className="size-3.5 text-primary" aria-hidden />
+                  Compare models
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  2–6 families, default hyperparameters, the same folds — the honest
+                  leaderboard (the web mirror of{" "}
+                  <code className="font-mono text-[10px]">compare_models</code>).
+                </p>
+              </div>
+              <span
+                className="shrink-0 rounded-full border bg-muted/50 px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground"
+                aria-live="polite"
+              >
+                {compareSel.length}/6
+              </span>
+            </div>
+            <div
+              className="flex flex-wrap gap-1.5"
+              role="group"
+              aria-label="Models to compare"
+            >
+              {specs.map((m) => {
+                const picked = compareSel.includes(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => toggleCompareModel(m.id)}
+                    aria-pressed={picked}
+                    aria-label={`${picked ? "Remove" : "Add"} ${m.label} ${
+                      picked ? "from" : "to"
+                    } the comparison`}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                      picked
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-border bg-muted/40 text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                    )}
+                  >
+                    {m.label.split(" (")[0]}
+                  </button>
+                );
+              })}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 w-full gap-2"
+              onClick={() => void runCompare()}
+              disabled={compareStatus === "running" || compareSel.length < 2}
+            >
+              {compareStatus === "running" ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  Comparing…
+                </>
+              ) : (
+                <>
+                  <Trophy className="size-3.5" aria-hidden />
+                  Compare {Math.max(compareSel.length, 2)} model
+                  {compareSel.length === 2 ? "" : "s"}
+                </>
+              )}
+            </Button>
+            {compareError ? (
+              <p className="text-[11px] leading-snug text-destructive">{compareError}</p>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
       {/* ------------------------------ Results ------------------------------ */}
       <div className="min-w-0 space-y-4">
+        {compareResult ? (
+          <Card className="overflow-hidden py-0 shadow-sm">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/30 py-3">
+              <div className="min-w-0">
+                <CardTitle className="flex items-center gap-1.5 text-sm">
+                  <Trophy className="size-4 text-primary" aria-hidden />
+                  Model comparison
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {compareResult.entries.length} families · default hyperparameters ·{" "}
+                  {compareResult.cvK}-fold CV {compareResult.objective} ·{" "}
+                  {compareResult.datasetMeta.source
+                    ? `${compareResult.datasetMeta.nTotal} rows from ${
+                        compareResult.datasetMeta.source.fileName ?? "pasted.csv"
+                      }`
+                    : `seed ${Number.parseInt(seed, 10) || 0} · ${samples} samples`}
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
+                onClick={() => setCompareResult(null)}
+                aria-label="Dismiss the comparison leaderboard"
+              >
+                <X className="size-3.5" aria-hidden />
+                <span className="hidden sm:inline">Dismiss</span>
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="thin-scrollbar overflow-x-auto">
+                <Table className="data-table">
+                  <TableHeader>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableHead className="w-10 text-center">#</TableHead>
+                      <TableHead>Model</TableHead>
+                      <TableHead className="text-right">
+                        CV {compareResult.objective}
+                      </TableHead>
+                      <TableHead className="text-right">Held-out</TableHead>
+                      <TableHead className="text-right">Δ vs #1</TableHead>
+                      <TableHead className="text-right">Fit</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {compareResult.entries.map((entry) => {
+                      const spec = specOf(compareResult.task, entry.model);
+                      return (
+                        <TableRow
+                          key={entry.model}
+                          className={cn(
+                            "font-mono text-xs tabular-nums",
+                            entry.rank === 1 && "bg-primary/5"
+                          )}
+                        >
+                          <TableCell className="text-center text-muted-foreground">
+                            {entry.rank}
+                          </TableCell>
+                          <TableCell className="font-sans">
+                            <span className="font-medium">{spec?.label ?? entry.model}</span>
+                            {entry.model === modelSel ? (
+                              <span className="ml-1.5 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                                selected
+                              </span>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {fmtNum(entry.cvMean, 4)}
+                            <span className="text-muted-foreground">
+                              {" "}
+                              ± {fmtNum(entry.cvStd, 3)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {fmtNum(entry.testMetric, 4)}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {/* toFixed, never exponential: a near-tie reads as
+                             *  -0.0000 ("essentially tied"), not -7.3e-6. */}
+                            {entry.rank === 1
+                              ? "—"
+                              : `${entry.delta >= 0 ? "+" : ""}${entry.delta.toFixed(4)}`}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {entry.fitMs < 10
+                              ? `${fmtNum(entry.fitMs, 1)} ms`
+                              : `${Math.round(entry.fitMs)} ms`}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="border-t px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+                Same data and folds for every family — only the model varies, so the
+                ranking is a fair comparison. Every row is the default-configuration
+                run (tune a family first, then compare, to see its tuned form).
+                Deterministic: same seed → same leaderboard.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
         {preview ? (
           <Card className="overflow-hidden py-0 shadow-sm">
             <CardHeader className="border-b bg-muted/30 py-3">
