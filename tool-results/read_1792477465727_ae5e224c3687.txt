@@ -1,0 +1,840 @@
+     1→"""Unified model registry.
+     2→
+     3→The legacy codebase kept one ~150-line script per algorithm (30+ files
+     4→of near-duplicate load/preprocess/tune/evaluate boilerplate).  This
+     5→module collapses them into a registry: each entry provides the
+     6→estimator factory, the task(s) it supports, a tuned default parameter
+     7→grid and an availability probe.  One generic trainer then serves every
+     8→algorithm.
+     9→
+    10→Optional backends (XGBoost, LightGBM, CatBoost, PyTorch deep nets) are
+    11→imported lazily and reported as unavailable rather than crashing the
+    12→registry import.
+    13→
+    14→Examples
+    15→--------
+    16→>>> from pharmaml.ml.models import MODEL_REGISTRY
+    17→>>> spec = MODEL_REGISTRY["random_forest"]
+    18→>>> spec.task
+    19→'both'
+    20→>>> sorted(spec.param_grid)
+    21→['max_depth', 'min_samples_split', 'n_estimators']
+    22→>>> spec.available            # sklearn-backed: no optional dependency
+    23→True
+    24→"""
+    25→
+    26→from __future__ import annotations
+    27→
+    28→import importlib.util
+    29→import inspect
+    30→from collections.abc import Callable
+    31→from dataclasses import dataclass, field
+    32→from typing import Any, Literal
+    33→
+    34→from sklearn.ensemble import (
+    35→    AdaBoostClassifier,
+    36→    AdaBoostRegressor,
+    37→    ExtraTreesClassifier,
+    38→    ExtraTreesRegressor,
+    39→    GradientBoostingClassifier,
+    40→    GradientBoostingRegressor,
+    41→    RandomForestClassifier,
+    42→    RandomForestRegressor,
+    43→    StackingClassifier,
+    44→    StackingRegressor,
+    45→    VotingClassifier,
+    46→    VotingRegressor,
+    47→)
+    48→from sklearn.linear_model import (
+    49→    ElasticNet,
+    50→    HuberRegressor,
+    51→    Lasso,
+    52→    LinearRegression,
+    53→    LogisticRegression,
+    54→    Ridge,
+    55→    RidgeClassifier,
+    56→)
+    57→from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+    58→from sklearn.neural_network import MLPClassifier, MLPRegressor
+    59→from sklearn.svm import SVC, SVR
+    60→from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+    61→
+    62→from pharmaml.exceptions import DependencyError, ModelError
+    63→from pharmaml.logger import get_logger
+    64→
+    65→_LOG = get_logger(__name__)
+    66→
+    67→TaskKind = Literal["classification", "regression"]
+    68→
+    69→
+    70→def _module_available(module: str) -> bool:
+    71→    return importlib.util.find_spec(module) is not None
+    72→
+    73→
+    74→@dataclass(frozen=True, slots=True)
+    75→class ModelSpec:
+    76→    """Registry entry for one algorithm family.
+    77→
+    78→    Attributes
+    79→    ----------
+    80→    name:
+    81→        Registry key (kebab-case, e.g. ``'random_forest'``).
+    82→    task:
+    83→        ``'classification'``, ``'regression'`` or ``'both'``.
+    84→    factory:
+    85→        Zero-argument callable returning a fresh, unfitted estimator
+    86→        (random_state already threaded in where the estimator accepts
+    87→        one).  ``None`` for dual-task entries whose per-task estimator
+    88→        is built by :data:`_TASK_FACTORIES` inside :func:`build_model`.
+    89→    param_grid:
+    90→        Compact default grid for hyperparameter search.
+    91→    requires:
+    92→        Optional third-party module needed for the factory.
+    93→    notes:
+    94→        Short human description used by ``list_models`` output.
+    95→    """
+    96→
+    97→    name: str
+    98→    task: str
+    99→    factory: Callable[..., Any] | None
+   100→    param_grid: dict[str, list[Any]] = field(default_factory=dict)
+   101→    requires: str | None = None
+   102→    notes: str = ""
+   103→
+   104→    @property
+   105→    def available(self) -> bool:
+   106→        """True when the optional dependency (if any) is importable."""
+   107→        return self.requires is None or _module_available(self.requires)
+   108→
+   109→
+   110→def _rf_cls() -> RandomForestClassifier:
+   111→    return RandomForestClassifier(random_state=42, n_jobs=-1)
+   112→
+   113→
+   114→def _rf_reg() -> RandomForestRegressor:
+   115→    return RandomForestRegressor(random_state=42, n_jobs=-1)
+   116→
+   117→
+   118→def _et_cls() -> ExtraTreesClassifier:
+   119→    return ExtraTreesClassifier(random_state=42, n_jobs=-1)
+   120→
+   121→
+   122→def _et_reg() -> ExtraTreesRegressor:
+   123→    return ExtraTreesRegressor(random_state=42, n_jobs=-1)
+   124→
+   125→
+   126→def _gb_cls() -> GradientBoostingClassifier:
+   127→    # Friedman's classic: shallow depth-3 trees fit the residual
+   128→    # gradient, one learning_rate-shrunk contribution at a time.
+   129→    # n_jobs is not a GradientBoosting* parameter (fit is sequential
+   130→    # by construction) -- only random_state is pinned.
+   131→    return GradientBoostingClassifier(random_state=42)
+   132→
+   133→
+   134→def _gb_reg() -> GradientBoostingRegressor:
+   135→    return GradientBoostingRegressor(random_state=42)
+   136→
+   137→
+   138→def _svm_cls() -> SVC:
+   139→    return SVC(random_state=42, probability=True)
+   140→
+   141→
+   142→def _mlp_cls() -> MLPClassifier:
+   143→    return MLPClassifier(random_state=42, max_iter=1000)
+   144→
+   145→
+   146→def _mlp_reg() -> MLPRegressor:
+   147→    return MLPRegressor(random_state=42, max_iter=1000)
+   148→
+   149→
+   150→def _xgb_cls():
+   151→    from xgboost import XGBClassifier
+   152→
+   153→    return XGBClassifier(random_state=42, eval_metric="logloss", n_jobs=-1)
+   154→
+   155→
+   156→def _xgb_reg():
+   157→    from xgboost import XGBRegressor
+   158→
+   159→    return XGBRegressor(random_state=42, n_jobs=-1)
+   160→
+   161→
+   162→def _lgbm_cls():
+   163→    from lightgbm import LGBMClassifier
+   164→
+   165→    return LGBMClassifier(random_state=42, n_jobs=-1, verbose=-1)
+   166→
+   167→
+   168→def _lgbm_reg():
+   169→    from lightgbm import LGBMRegressor
+   170→
+   171→    return LGBMRegressor(random_state=42, n_jobs=-1, verbose=-1)
+   172→
+   173→
+   174→def _cat_cls():
+   175→    from catboost import CatBoostClassifier
+   176→
+   177→    return CatBoostClassifier(random_state=42, verbose=False)
+   178→
+   179→
+   180→def _cat_reg():
+   181→    from catboost import CatBoostRegressor
+   182→
+   183→    return CatBoostRegressor(random_state=42, verbose=False)
+   184→
+   185→
+   186→def _dnn_cls():
+   187→    from pharmaml.ml.neural import DeepMLPClassifier
+   188→
+   189→    return DeepMLPClassifier(random_state=42)
+   190→
+   191→
+   192→def _dnn_reg():
+   193→    from pharmaml.ml.neural import DeepMLPRegressor
+   194→
+   195→    return DeepMLPRegressor(random_state=42)
+   196→
+   197→
+   198→def _res_dnn_cls():
+   199→    from pharmaml.ml.neural import ResidualMLPClassifier
+   200→
+   201→    return ResidualMLPClassifier(random_state=42)
+   202→
+   203→
+   204→def _res_dnn_reg():
+   205→    from pharmaml.ml.neural import ResidualMLPRegressor
+   206→
+   207→    return ResidualMLPRegressor(random_state=42)
+   208→
+   209→
+   210→def _hsvr():
+   211→    from pharmaml.ml.hierarchical import HierarchicalSVR
+   212→
+   213→    return HierarchicalSVR(random_state=42)
+   214→
+   215→
+   216→#: Optional requirement -> pip extra that installs it (used by the
+   217→#: DependencyError hint in :func:`build_model` so every backend names
+   218→#: its own extra instead of a hard-coded one).
+   219→_REQUIREMENT_EXTRAS = {
+   220→    "xgboost": "boosting",
+   221→    "lightgbm": "boosting",
+   222→    "catboost": "boosting",
+   223→    "torch": "deep",
+   224→}
+   225→
+   226→
+   227→MODEL_REGISTRY: dict[str, ModelSpec] = {
+   228→    "logistic_regression": ModelSpec(
+   229→        name="logistic_regression",
+   230→        task="classification",
+   231→        factory=lambda: LogisticRegression(max_iter=5000, random_state=42),
+   232→        param_grid={"C": [0.01, 0.1, 1.0, 10.0], "penalty": ["l2"]},
+   233→        notes="Linear baseline (upgrades Logistic regression.py)",
+   234→    ),
+   235→    "ridge_classifier": ModelSpec(
+   236→        name="ridge_classifier",
+   237→        task="classification",
+   238→        factory=lambda: RidgeClassifier(random_state=42),
+   239→        param_grid={"alpha": [0.1, 1.0, 10.0]},
+   240→        notes="L2 linear classifier (upgrades Ridge.py)",
+   241→    ),
+   242→    "lasso_logistic": ModelSpec(
+   243→        name="lasso_logistic",
+   244→        task="classification",
+   245→        factory=lambda: LogisticRegression(
+   246→            penalty="l1", solver="liblinear", max_iter=5000, random_state=42
+   247→        ),
+   248→        param_grid={"C": [0.01, 0.1, 1.0, 10.0]},
+   249→        notes="L1 sparse logistic classifier (upgrades Classification/Lasso.py)",
+   250→    ),
+   251→    "elastic_net_logistic": ModelSpec(
+   252→        name="elastic_net_logistic",
+   253→        task="classification",
+   254→        factory=lambda: LogisticRegression(
+   255→            penalty="elasticnet",
+   256→            solver="saga",
+   257→            l1_ratio=0.5,
+   258→            max_iter=5000,
+   259→            random_state=42,
+   260→        ),
+   261→        param_grid={"C": [0.01, 0.1, 1.0, 10.0], "l1_ratio": [0.2, 0.5, 0.8]},
+   262→        notes=(
+   263→            "Elastic-net logistic classifier, saga solver "
+   264→            "(upgrades Classification/Elastic net.py)"
+   265→        ),
+   266→    ),
+   267→    "lasso": ModelSpec(
+   268→        name="lasso",
+   269→        task="regression",
+   270→        factory=lambda: Lasso(random_state=42, max_iter=20000),
+   271→        param_grid={"alpha": [0.001, 0.01, 0.1, 1.0]},
+   272→        notes="L1 sparse linear regression (upgrades Lasso.py)",
+   273→    ),
+   274→    "ridge": ModelSpec(
+   275→        name="ridge",
+   276→        task="regression",
+   277→        factory=lambda: Ridge(random_state=42),
+   278→        param_grid={"alpha": [0.1, 1.0, 10.0, 100.0]},
+   279→        notes="L2 linear regression (upgrades Ridge.py)",
+   280→    ),
+   281→    "elastic_net": ModelSpec(
+   282→        name="elastic_net",
+   283→        task="regression",
+   284→        factory=lambda: ElasticNet(random_state=42, max_iter=20000),
+   285→        param_grid={"alpha": [0.01, 0.1, 1.0], "l1_ratio": [0.2, 0.5, 0.8]},
+   286→        notes="L1/L2 mixture (upgrades Elastic net.py)",
+   287→    ),
+   288→    "linear_regression": ModelSpec(
+   289→        name="linear_regression",
+   290→        task="regression",
+   291→        factory=lambda: LinearRegression(),
+   292→        param_grid={},
+   293→        notes="OLS baseline (upgrades Linear regression.py)",
+   294→    ),
+   295→    "huber_regression": ModelSpec(
+   296→        name="huber_regression",
+   297→        task="regression",
+   298→        factory=lambda: HuberRegressor(),
+   299→        param_grid={"epsilon": [1.1, 1.35, 1.75, 2.0], "alpha": [0.0001, 0.001, 0.01]},
+   300→        notes="Robust regression with Huber loss (upgrades Huber.py)",
+   301→    ),
+   302→    "knn": ModelSpec(
+   303→        name="knn",
+   304→        task="both",
+   305→        factory=None,  # per-task dispatch via _TASK_FACTORIES in build_model
+   306→        param_grid={"n_neighbors": [3, 5, 7, 11], "weights": ["uniform", "distance"]},
+   307→        notes="k-nearest neighbours (upgrades KNN.py)",
+   308→    ),
+   309→    "decision_tree": ModelSpec(
+   310→        name="decision_tree",
+   311→        task="both",
+   312→        factory=None,
+   313→        param_grid={"max_depth": [None, 5, 10, 20], "min_samples_split": [2, 5, 10]},
+   314→        notes="CART tree (upgrades Decision tree.py)",
+   315→    ),
+   316→    "random_forest": ModelSpec(
+   317→        name="random_forest",
+   318→        task="both",
+   319→        factory=None,
+   320→        param_grid={
+   321→            "n_estimators": [100, 200, 300],
+   322→            "max_depth": [None, 10, 20],
+   323→            "min_samples_split": [2, 5, 10],
+   324→        },
+   325→        notes="Bagged ensemble (upgrades RF.py)",
+   326→    ),
+   327→    "extra_trees": ModelSpec(
+   328→        name="extra_trees",
+   329→        task="both",
+   330→        factory=None,
+   331→        param_grid={
+   332→            "n_estimators": [100, 200, 300],
+   333→            "max_depth": [None, 10, 20],
+   334→            "min_samples_split": [2, 5, 10],
+   335→        },
+   336→        notes=(
+   337→            "extremely randomized trees — random thresholds on the full "
+   338→            "sample (bootstrap=False): the extra variance reduction when "
+   339→            "bagging alone plateaus"
+   340→        ),
+   341→    ),
+   342→    "svm": ModelSpec(
+   343→        name="svm",
+   344→        task="both",
+   345→        factory=None,
+   346→        param_grid={"C": [0.1, 1.0, 10.0], "gamma": ["scale", "auto"]},
+   347→        notes="Kernel machines (upgrades SVM.py / SVM reg.py)",
+   348→    ),
+   349→    "adaboost": ModelSpec(
+   350→        name="adaboost",
+   351→        task="both",
+   352→        factory=None,
+   353→        param_grid={"n_estimators": [50, 100, 200], "learning_rate": [0.05, 0.1, 1.0]},
+   354→        notes="Boosted stumps (upgrades ADAboost.py)",
+   355→    ),
+   356→    "gradient_boosting": ModelSpec(
+   357→        name="gradient_boosting",
+   358→        task="both",
+   359→        factory=None,
+   360→        param_grid={
+   361→            "n_estimators": [100, 200, 300],
+   362→            "learning_rate": [0.05, 0.1],
+   363→            "max_depth": [2, 3, 4],
+   364→        },
+   365→        notes=(
+   366→            "Friedman gradient boosting (the sklearn classic behind "
+   367→            "XGboost.py / LightGBM.py): shallow depth-3 trees fit the "
+   368→            "residual gradient, learning-rate shrunk"
+   369→        ),
+   370→    ),
+   371→    "ann": ModelSpec(
+   372→        name="ann",
+   373→        task="both",
+   374→        factory=None,
+   375→        param_grid={
+   376→            "hidden_layer_sizes": [(64,), (128, 64), (256, 128, 64)],
+   377→            "alpha": [1e-4, 1e-3, 1e-2],
+   378→        },
+   379→        notes=(
+   380→            "MLP neural net (upgrades ANN.py / ANN class.py); batch "
+   381→            "normalisation: use the dnn/dnn_residual estimators "
+   382→            "(batchnorm=True) — sklearn's MLP has no BN layers"
+   383→        ),
+   384→    ),
+   385→    "xgboost": ModelSpec(
+   386→        name="xgboost",
+   387→        task="both",
+   388→        factory=None,
+   389→        requires="xgboost",
+   390→        param_grid={"n_estimators": [200, 400], "max_depth": [3, 6], "learning_rate": [0.05, 0.1]},
+   391→        notes="Gradient boosting (upgrades XGboost.py)",
+   392→    ),
+   393→    "lightgbm": ModelSpec(
+   394→        name="lightgbm",
+   395→        task="both",
+   396→        factory=None,
+   397→        requires="lightgbm",
+   398→        param_grid={"n_estimators": [200, 400], "num_leaves": [31, 63]},
+   399→        notes="LightGBM (upgrades LightGBM.py)",
+   400→    ),
+   401→    "catboost": ModelSpec(
+   402→        name="catboost",
+   403→        task="both",
+   404→        factory=None,
+   405→        requires="catboost",
+   406→        param_grid={"iterations": [200, 400], "depth": [6, 8]},
+   407→        notes="CatBoost (upgrades CATboost.py)",
+   408→    ),
+   409→    "dnn": ModelSpec(
+   410→        name="dnn",
+   411→        task="both",
+   412→        factory=None,
+   413→        requires="torch",
+   414→        param_grid={
+   415→            "hidden_layers": [(64, 32), (128, 64, 32)],
+   416→            "dropout": [0.0, 0.1],
+   417→            "learning_rate": [1e-3, 3e-4],
+   418→        },
+   419→        notes=(
+   420→            "deep feed-forward network (PyTorch, batchnorm=True available) — "
+   421→            "needs `pip install 'pharmaml[deep]'`"
+   422→        ),
+   423→    ),
+   424→    "dnn_residual": ModelSpec(
+   425→        name="dnn_residual",
+   426→        task="both",
+   427→        factory=None,
+   428→        requires="torch",
+   429→        param_grid={
+   430→            "hidden_layers": [(64, 32), (128, 64, 32)],
+   431→            "dropout": [0.0, 0.1],
+   432→            "learning_rate": [1e-3, 3e-4],
+   433→        },
+   434→        notes=(
+   435→            "residual deep network (PyTorch, batchnorm=True available) — "
+   436→            "needs `pip install 'pharmaml[deep]'`"
+   437→        ),
+   438→    ),
+   439→    "hsvr": ModelSpec(
+   440→        name="hsvr",
+   441→        task="regression",
+   442→        factory=lambda: _hsvr(),
+   443→        param_grid={
+   444→            "n_clusters": [2, 3, 4],
+   445→            "C": [0.1, 1.0, 10.0],
+   446→            "gamma": ["scale", "auto"],
+   447→        },
+   448→        notes=(
+   449→            "hierarchical SVR: k-means local specialists blended with a "
+   450→            "global SVR (regression only)"
+   451→        ),
+   452→    ),
+   453→}
+   454→
+   455→
+   456→#: Friendly short names accepted anywhere a registry key is expected
+   457→#: (``--model rf`` on the CLI, ``train_model("logistic", ...)`` ...).
+   458→MODEL_ALIASES: dict[str, str] = {
+   459→    "logistic": "logistic_regression",
+   460→    "logreg": "logistic_regression",
+   461→    "rf": "random_forest",
+   462→    "randomforest": "random_forest",
+   463→    "et": "extra_trees",
+   464→    "extratrees": "extra_trees",
+   465→    "ert": "extra_trees",
+   466→    "extremely_randomized_trees": "extra_trees",
+   467→    "dt": "decision_tree",
+   468→    "tree": "decision_tree",
+   469→    "gbm": "lightgbm",
+   470→    "lgbm": "lightgbm",
+   471→    "lightgbm": "lightgbm",
+   472→    "xgb": "xgboost",
+   473→    "xgboost": "xgboost",
+   474→    "cb": "catboost",
+   475→    "cat": "catboost",
+   476→    "catboost": "catboost",
+   477→    "knn": "knn",
+   478→    "svm": "svm",
+   479→    "svc": "svm",
+   480→    "ann": "ann",
+   481→    "mlp": "ann",
+   482→    "neural_net": "ann",
+   483→    "ada": "adaboost",
+   484→    "adaboost": "adaboost",
+   485→    "gb": "gradient_boosting",
+   486→    "gradientboosting": "gradient_boosting",
+   487→    "friedman_gbm": "gradient_boosting",
+   488→    "sk_gbm": "gradient_boosting",
+   489→    "linreg": "linear_regression",
+   490→    "ols": "linear_regression",
+   491→    "huber": "huber_regression",
+   492→    "huberreg": "huber_regression",
+   493→    "ridge": "ridge",
+   494→    "ridge_cls": "ridge_classifier",
+   495→    "lasso": "lasso",
+   496→    "enet": "elastic_net",
+   497→    "elasticnet": "elastic_net",
+   498→    "dnn": "dnn",
+   499→    "deep_mlp": "dnn",
+   500→    "dnn_residual": "dnn_residual",
+   501→    "resnet": "dnn_residual",
+   502→    "residual_dnn": "dnn_residual",
+   503→    "hsvr": "hsvr",
+   504→    "hierarchical_svr": "hsvr",
+   505→    "hierarchicalsvr": "hsvr",
+   506→    "h_svr": "hsvr",
+   507→}
+   508→
+   509→
+   510→def resolve_model_name(name: str) -> str:
+   511→    """Normalise a user-supplied model name to a registry key.
+   512→
+   513→    Applies case/whitespace/punctuation clean-up, then the
+   514→    :data:`MODEL_ALIASES` short-name map, so ``'Random-Forest'``,
+   515→    ``'rf'`` and ``'random_forest'`` all resolve to the same key.
+   516→
+   517→    Raises
+   518→    ------
+   519→    ModelError
+   520→        When the cleaned name is neither a registry key nor an alias.
+   521→    """
+   522→    lowered = str(name).strip().lower()
+   523→    underscored = lowered.replace(" ", "_").replace("-", "_")
+   524→    for candidate in (underscored, MODEL_ALIASES.get(lowered), MODEL_ALIASES.get(underscored)):
+   525→        if candidate in MODEL_REGISTRY:
+   526→            return candidate
+   527→    known = ", ".join(sorted(MODEL_REGISTRY))
+   528→    raise ModelError(f"Unknown model {name!r}. Registered models: {known}")
+   529→
+   530→
+   531→_TASK_FACTORIES: dict[str, dict[str, Callable[[], Any]]] = {
+   532→    "knn": {
+   533→        "classification": KNeighborsClassifier,
+   534→        "regression": KNeighborsRegressor,
+   535→    },
+   536→    "decision_tree": {
+   537→        "classification": lambda: DecisionTreeClassifier(random_state=42),
+   538→        "regression": lambda: DecisionTreeRegressor(random_state=42),
+   539→    },
+   540→    "random_forest": {
+   541→        "classification": _rf_cls,
+   542→        "regression": _rf_reg,
+   543→    },
+   544→    "extra_trees": {
+   545→        "classification": _et_cls,
+   546→        "regression": _et_reg,
+   547→    },
+   548→    "svm": {
+   549→        "classification": _svm_cls,
+   550→        "regression": lambda: SVR(),
+   551→    },
+   552→    "adaboost": {
+   553→        "classification": lambda: AdaBoostClassifier(random_state=42),
+   554→        "regression": lambda: AdaBoostRegressor(random_state=42),
+   555→    },
+   556→    "gradient_boosting": {
+   557→        "classification": _gb_cls,
+   558→        "regression": _gb_reg,
+   559→    },
+   560→    "ann": {
+   561→        "classification": _mlp_cls,
+   562→        "regression": _mlp_reg,
+   563→    },
+   564→    "xgboost": {
+   565→        "classification": _xgb_cls,
+   566→        "regression": _xgb_reg,
+   567→    },
+   568→    "lightgbm": {
+   569→        "classification": _lgbm_cls,
+   570→        "regression": _lgbm_reg,
+   571→    },
+   572→    "catboost": {
+   573→        "classification": _cat_cls,
+   574→        "regression": _cat_reg,
+   575→    },
+   576→    "dnn": {
+   577→        "classification": _dnn_cls,
+   578→        "regression": _dnn_reg,
+   579→    },
+   580→    "dnn_residual": {
+   581→        "classification": _res_dnn_cls,
+   582→        "regression": _res_dnn_reg,
+   583→    },
+   584→}
+   585→
+   586→
+   587→def list_models(task: str | None = None, only_available: bool = True) -> list[dict[str, Any]]:
+   588→    """List registry entries with availability information.
+   589→
+   590→    ``task`` filters by kind: ``'classification'``, ``'regression'`` or
+   591→    ``'both'`` (models usable for either task); ``None`` (the default)
+   592→    lists every entry.
+   593→
+   594→    Returns a list of dicts with keys ``name``, ``task``, ``available``,
+   595→    ``requires`` and ``notes`` -- ready for pretty printing or the CLI.
+   596→
+   597→    Raises
+   598→    ------
+   599→    ModelError
+   600→        When ``task`` is not one of the accepted kinds.  A typo'd value
+   601→        such as ``'clasification'`` used to silently return only the
+   602→        dual-task models instead of complaining.
+   603→    """
+   604→    if task is not None and task not in {"classification", "regression", "both"}:
+   605→        raise ModelError(
+   606→            f"task must be 'classification', 'regression' or 'both', got {task!r}"
+   607→        )
+   608→    entries = []
+   609→    for spec in MODEL_REGISTRY.values():
+   610→        if task and spec.task != "both" and spec.task != task:
+   611→            continue
+   612→        if only_available and not spec.available:
+   613→            continue
+   614→        entries.append(
+   615→            {
+   616→                "name": spec.name,
+   617→                "task": spec.task,
+   618→                "available": spec.available,
+   619→                "requires": spec.requires,
+   620→                "notes": spec.notes,
+   621→            }
+   622→        )
+   623→    return entries
+   624→
+   625→
+   626→def _accepted_param_names(estimator: Any) -> set[str]:
+   627→    """Parameter names :func:`build_model` accepts in ``params=``.
+   628→
+   629→    ``get_params()`` alone under-reports for estimators like CatBoost,
+   630→    whose ``get_params()`` returns only the *explicitly set* constructor
+   631→    kwargs — every real CatBoost hyperparameter ('iterations', 'depth',
+   632→    'learning_rate', ...) would look unknown and be rejected with a
+   633→    spurious :class:`ModelError`.  The constructor signature fills the
+   634→    gap, but only when ``__init__`` declares no ``**kwargs``: a
+   635→    kwargs-catching constructor accepts arbitrary names, so its named
+   636→    parameters say nothing about the accepted set (there
+   637→    :meth:`set_params` stays the rejector, and :func:`build_model`
+   638→    wraps its rejections as the typed error).
+   639→    """
+   640→    accepted = set(estimator.get_params())
+   641→    try:
+   642→        parameters = inspect.signature(type(estimator).__init__).parameters
+   643→    except (TypeError, ValueError):  # pragma: no cover - exotic constructors
+   644→        return accepted
+   645→    if any(param.kind is inspect.Parameter.VAR_KEYWORD for param in parameters.values()):
+   646→        return accepted
+   647→    accepted.update(
+   648→        name
+   649→        for name, param in parameters.items()
+   650→        if name != "self"
+   651→        and param.kind
+   652→        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+   653→    )
+   654→    return accepted
+   655→
+   656→
+   657→def build_model(
+   658→    name: str,
+   659→    task: str,
+   660→    params: dict[str, Any] | None = None,
+   661→) -> Any:
+   662→    """Instantiate an unfitted estimator from the registry.
+   663→
+   664→    Parameters
+   665→    ----------
+   666→    name:
+   667→        Registry key, e.g. ``'random_forest'``.
+   668→    task:
+   669→        ``'classification'`` or ``'regression'``.
+   670→    params:
+   671→        Estimator keyword overrides (e.g. ``{'n_estimators': 500}``).
+   672→        Names are validated against ``get_params()`` ∪ the constructor
+   673→        signature, so real CatBoost hyperparameters ('iterations',
+   674→        'depth', ...) are accepted despite CatBoost's partial
+   675→        ``get_params()``; genuinely unknown names raise
+   676→        :class:`ModelError`, as do ``set_params`` rejections.
+   677→
+   678→    Returns
+   679→    -------
+   680→    sklearn-compatible estimator
+   681→
+   682→    Raises
+   683→    ------
+   684→    ModelError
+   685→        Unknown name or task; ``DependencyError`` when the backend is
+   686→        not installed.
+   687→    """
+   688→    key = resolve_model_name(name)
+   689→    if task not in {"classification", "regression"}:
+   690→        raise ModelError(f"task must be 'classification' or 'regression', got {task!r}")
+   691→
+   692→    spec = MODEL_REGISTRY[key]
+   693→    if task != "both" and spec.task != "both" and spec.task != task:
+   694→        raise ModelError(f"Model {key!r} supports {spec.task!r}, not {task!r}")
+   695→    requires = spec.requires
+   696→    # ``requires is None`` entries are always available (see
+   697→    # ModelSpec.available), so this branch always has a concrete module name.
+   698→    if requires is not None and not spec.available:
+   699→        extra = _REQUIREMENT_EXTRAS.get(requires, requires)
+   700→        raise DependencyError(
+   701→            f"Model {key!r} requires the optional package '{requires}'. "
+   702→            f"Install with:  pip install 'pharmaml[{extra}]'"
+   703→        )
+   704→
+   705→    if spec.name in _TASK_FACTORIES:
+   706→        estimator = _TASK_FACTORIES[spec.name][task]()
+   707→    else:
+   708→        factory = spec.factory
+   709→        if factory is None:
+   710→            # Dual-task entries carry factory=None and are dispatched through
+   711→            # _TASK_FACTORIES above; a factory-less entry outside that table
+   712→            # would be a registry bug, not a caller error.
+   713→            raise ModelError(
+   714→                f"Model {key!r} has no estimator factory registered for task {task!r}"
+   715→            )
+   716→        estimator = factory()
+   717→
+   718→    if params:
+   719→        accepted = _accepted_param_names(estimator)
+   720→        unknown = set(params) - accepted
+   721→        if unknown:
+   722→            raise ModelError(
+   723→                f"Unknown parameters {sorted(unknown)} for {key!r}. "
+   724→                f"Valid: {sorted(accepted)[:20]}..."
+   725→            )
+   726→        try:
+   727→            estimator.set_params(**params)
+   728→        except Exception as exc:
+   729→            # Estimators with lenient constructors reject bad *values*
+   730→            # (or unknown names on **kwargs classes) inside set_params;
+   731→            # surface that as the documented typed error instead of a
+   732→            # raw backend exception (ValueError / CatBoostError / ...).
+   733→            raise ModelError(
+   734→                f"Invalid parameters {sorted(params)} for {key!r}: {exc}"
+   735→            ) from exc
+   736→    return estimator
+   737→
+   738→
+   739→def build_stacking(
+   740→    task: str,
+   741→    base_models: list[str],
+   742→    meta_model: str | None = None,
+   743→    passthrough: bool = False,
+   744→) -> Any:
+   745→    """Build a stacking ensemble (upgrades Stacking.py / Stacking reg.py).
+   746→
+   747→    Parameters
+   748→    ----------
+   749→    task:
+   750→        ``'classification'`` or ``'regression'``.
+   751→    base_models:
+   752→        Registry names of the level-0 learners.
+   753→    meta_model:
+   754→        Registry name of the level-1 blender.  Defaults to
+   755→        ``'logistic_regression'`` for classification and ``'ridge'``
+   756→        for regression.
+   757→    passthrough:
+   758→        Append original features to meta-features.
+   759→
+   760→    Raises
+   761→    ------
+   762→    ModelError
+   763→        When ``base_models`` is empty, a member name is unknown, or a
+   764→        member does not support ``task``.  Aliases in ``base_models``
+   765→        are resolved and duplicates collapsed, so ``['rf',
+   766→        'random_forest']`` builds one random-forest learner, not two
+   767→        identical ones.
+   768→    """
+   769→    if not base_models:
+   770→        raise ModelError(
+   771→            "base_models list is empty -- pass at least one registry name "
+   772→            "(see pharmaml.ml.list_models())"
+   773→        )
+   774→    if meta_model is None:
+   775→        meta_model = "logistic_regression" if task == "classification" else "ridge"
+   776→    keys = list(dict.fromkeys(resolve_model_name(name) for name in base_models))
+   777→    estimators = [(key, build_model(key, task)) for key in keys]
+   778→    meta = build_model(meta_model, task)
+   779→    if task == "classification":
+   780→        return StackingClassifier(
+   781→            estimators=estimators, final_estimator=meta, passthrough=passthrough, cv=5
+   782→        )
+   783→    return StackingRegressor(
+   784→        estimators=estimators, final_estimator=meta, passthrough=passthrough, cv=5
+   785→    )
+   786→
+   787→
+   788→def build_voting(
+   789→    task: str,
+   790→    base_models: list[str],
+   791→    voting: str = "soft",
+   792→    weights: list[float] | None = None,
+   793→) -> Any:
+   794→    """Build a voting ensemble (upgrades Voting.py / Voting reg.py).
+   795→
+   796→    ``voting='soft'`` (probability averaging) requires all members to
+   797→    expose ``predict_proba``; ``voting='hard'`` (majority vote) works
+   798→    for every estimator and for **any number of classes**.  For
+   799→    regression the voting rule is ignored (``VotingRegressor``
+   800→    averages predictions), but the value must still be ``'soft'`` or
+   801→    ``'hard'``.  Aliases in ``base_models`` are resolved and
+   802→    duplicates collapsed, so ``['rf', 'random_forest']`` casts one
+   803→    vote, not two.
+   804→
+   805→    Raises
+   806→    ------
+   807→    ModelError
+   808→        When ``base_models`` is empty, a member name is unknown,
+   809→        ``voting`` is neither ``'soft'`` nor ``'hard'``, ``weights``
+   810→        does not match the number of unique members, or a soft-voting
+   811→        member lacks ``predict_proba``.
+   812→    """
+   813→    if not base_models:
+   814→        raise ModelError(
+   815→            "base_models list is empty -- pass at least one registry name "
+   816→            "(see pharmaml.ml.list_models())"
+   817→        )
+   818→    if voting not in {"soft", "hard"}:
+   819→        raise ModelError(f"voting must be 'soft' or 'hard', got {voting!r}")
+   820→    keys = list(dict.fromkeys(resolve_model_name(name) for name in base_models))
+   821→    if weights is not None and len(weights) != len(keys):
+   822→        raise ModelError(
+   823→            f"weights has {len(weights)} entries for {len(keys)} unique base "
+   824→            "model(s) -- alias duplicates are collapsed"
+   825→        )
+   826→    estimators = [(key, build_model(key, task)) for key in keys]
+   827→    if task == "classification":
+   828→        if voting == "soft":
+   829→            unsupported = [
+   830→                key for key, est in estimators if not hasattr(est, "predict_proba")
+   831→            ]
+   832→            if unsupported:
+   833→                raise ModelError(
+   834→                    f"voting='soft' needs predict_proba on every member; "
+   835→                    f"{unsupported} lack it. Use voting='hard' (works for "
+   836→                    "binary and multiclass) or drop those models."
+   837→                )
+   838→        return VotingClassifier(estimators=estimators, voting=voting, weights=weights)
+   839→    return VotingRegressor(estimators=estimators, weights=weights)
+   840→
