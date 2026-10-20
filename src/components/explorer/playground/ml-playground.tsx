@@ -542,6 +542,20 @@ function specOf(task: Task, model: string): ModelSpec | null {
   return list.find((m) => m.id === model) ?? null;
 }
 
+/** The Hyperband-capable roster as human labels — generated from
+ *  RESOURCE_SPECS so it can never drift behind the registry (three
+ *  hard-coded copies shipped stale for two rounds after ada_boost and
+ *  extra_trees gained resource slots). */
+function hyperbandRoster(): string {
+  return Object.entries(RESOURCE_SPECS)
+    .map(([id, spec]) => {
+      const label =
+        specOf("regression", id)?.label ?? specOf("classification", id)?.label ?? id;
+      return `${label} (${spec.label})`;
+    })
+    .join(", ");
+}
+
 /** Compact slider value pill format (5 → "5", 0.1 → "0.1"). */
 function fmtHp(v: number): string {
   return String(Math.round(v * 100) / 100);
@@ -1545,7 +1559,7 @@ export function MlPlayground() {
     }
     if (searcher === "hyperband" && !hyperbandable) {
       setTuneError(
-        `Hyperband needs a resource hyperparameter — ${modelSpec.label} has none. Pick the neural net (epochs), random forest (estimators) or gradient boosting (rounds), or switch to RandomSearch.`
+        `Hyperband needs a resource hyperparameter — ${modelSpec.label} has none. Pick one of ${hyperbandRoster()}, or switch to RandomSearch.`
       );
       return;
     }
@@ -2417,7 +2431,7 @@ export function MlPlayground() {
                       }; same seed → same leaderboard.`
                   : hyperbandable && resourceSpec
                     ? `Successive halving over ${resourceSpec.label}: brackets start many configs at a low budget and promote only the top 1/η per rung. The schedule fixes the trial count; the budget knob is η.`
-                    : `Hyperband needs a resource hyperparameter — the neural net (epochs), random forest (estimators) or gradient boosting (rounds) qualify. Pick one or switch to Random.`}
+                    : `Hyperband needs a resource hyperparameter — ${hyperbandRoster()} qualify. Pick one or switch to Random.`}
               </p>
               {tuneError ? (
                 <p className="text-[11px] leading-snug text-destructive">{tuneError}</p>

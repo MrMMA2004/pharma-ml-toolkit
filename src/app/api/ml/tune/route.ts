@@ -339,9 +339,15 @@ export async function POST(request: NextRequest) {
         ? space.find((c) => c.key === (resourceSpec.key as keyof HyperSource))
         : undefined;
       if (!resourceSpec || !resourceChoice) {
+        /* The roster is generated from TUNE_RESOURCES so it can never
+         * drift behind the registry again (it hard-coded three models
+         * for two rounds after ada_boost/extra_trees landed). */
+        const roster = Object.entries(TUNE_RESOURCES)
+          .map(([name, spec]) => `${name} (${spec.label})`)
+          .join(", ");
         return NextResponse.json(
           {
-            error: `Hyperband needs a resource hyperparameter — ${req.model} has none. Pick mlp (epochs), random_forest (estimators) or gradient_boosting (boosting rounds), or switch to RandomSearch.`,
+            error: `Hyperband needs a resource hyperparameter — ${req.model} has none. Pick one of ${roster}, or switch to RandomSearch.`,
           },
           { status: 400 }
         );

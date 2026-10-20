@@ -98,6 +98,12 @@ addopts = "-q --tb=short --doctest-modules"
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# scratch/ is the probe-history archive: one-off exploratory drivers kept
+# for provenance (and shipped in the ZIP tree for exactly that reason),
+# never part of the linted surface. Without this pin a bare
+# `ruff check .` reported ~200 pre-existing scratch findings and hid the
+# real signal — the green convention was `--exclude scratch` all along.
+extend-exclude = ["scratch"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests deliberately nest the `_pharmaml_logs_visible()` logging fixture inside

@@ -437,10 +437,10 @@ export function Overview() {
               />
               <StatChip
                 icon={Brain}
-                value="18"
-                countTo={18}
+                value="22"
+                countTo={22}
                 label="registry models"
-                hint="16 classical + 2 PyTorch deep families"
+                hint="20 sklearn + 2 PyTorch deep families"
               />
             </motion.div>
 
