@@ -45,6 +45,13 @@ builder never writes) are flagged too.  Exit code 1 on any drift.  This
 is the provenance-closure leg the pytest suite runs as a guard
 (tests/test_data_provenance.py).
 
+Drift attribution (100x-116): every drift line names the BUILDER
+FUNCTION that owns the drifted file — ``... differs from the builder
+output (owner: build_qsar_classification)`` — so a drift report is an
+actionable pointer ("rerun that function, or re-extract its notebook
+cell"), not just a file name.  ``STATS["owners"]`` carries the full
+path -> function map for programmatic consumers.
+
 Usage::
 
     python scratch/build_example_data.py           # rebuild (idempotent)
@@ -60,6 +67,7 @@ import os
 for _var in ("LOKY_MAX_CPU_COUNT", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
     os.environ.setdefault(_var, "1")
 
+import functools
 import hashlib
 import importlib.util
 import io
@@ -101,17 +109,40 @@ STATS = {
     "fetched": [],
     "drift": [],   # --check mode only: files that differ / are missing
     "paths": [],   # every file the builder claims ownership of
+    "owners": {},  # 100x-116: path -> builder function that owns it
 }
 
 # Flipped by main("--check"): writes become drift records instead.
 CHECK_ONLY = {"active": False}
 
+# 100x-116 attribution: the @_owned decorator sets this while a build
+# function runs, so _write_if_changed/_fetch_pdb can name the culprit in
+# every drift line.  "?" only appears if a write happens outside every
+# decorated function — itself a bug worth seeing in a drift report.
+_OWNER = {"name": "?"}
+
+
+def _owned(fn):
+    """Set _OWNER while ``fn`` runs (drift lines name the culprit)."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        previous = _OWNER["name"]
+        _OWNER["name"] = fn.__name__
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            _OWNER["name"] = previous
+
+    return wrapper
+
 
 def _reset_stats() -> None:
     """Make main() safely re-runnable in one process (the pytest guard
     calls it twice: once clean, once with planted drift)."""
-    STATS.update(written=0, unchanged=0, fetched=[], drift=[], paths=[])
+    STATS.update(written=0, unchanged=0, fetched=[], drift=[], paths=[], owners={})
     CHECK_ONLY["active"] = False
+    _OWNER["name"] = "?"
 
 
 def _fail(message: str) -> None:
@@ -122,16 +153,20 @@ def _write_if_changed(path: Path, data: bytes) -> None:
     """Write bytes only when they differ from what is on disk (idempotency).
 
     In ``--check`` mode nothing is written: a differing or missing file
-    is recorded in ``STATS["drift"]`` instead, so the audit never mutates
-    the tree it is auditing.
+    is recorded in ``STATS["drift"]`` instead — naming the owning builder
+    function (100x-116) — so the audit never mutates the tree it is
+    auditing and every drift line is an actionable pointer.
     """
     STATS["paths"].append(path)
+    STATS["owners"][str(path)] = _OWNER["name"]
     if path.is_file() and path.read_bytes() == data:
         STATS["unchanged"] += 1
         return
     if CHECK_ONLY["active"]:
         state = "differs from" if path.is_file() else "is missing from"
-        STATS["drift"].append(f"{path} {state} the builder output")
+        STATS["drift"].append(
+            f"{path} {state} the builder output (owner: {_OWNER['name']})"
+        )
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
@@ -164,6 +199,7 @@ def _load_qsar_generator():
 # ---------------------------------------------------------------------------
 # complete_ml_workflow.ipynb -- cell 3 (demo QSAR table)
 # ---------------------------------------------------------------------------
+@_owned
 def build_qsar_classification() -> None:
     rng = np.random.default_rng(11)
     n = 420
@@ -268,6 +304,7 @@ LIBRARY = [
 ]
 
 
+@_owned
 def build_screening_library() -> None:
     library = pd.DataFrame(LIBRARY, columns=["name", "SMILES"])
     _write_frame(DATA_DIR / "screening_library.csv", library, index=False)
@@ -276,6 +313,7 @@ def build_screening_library() -> None:
 # ---------------------------------------------------------------------------
 # complete_ml_workflow.ipynb -- cells 6 + 7 + 11 (descriptors + activity)
 # ---------------------------------------------------------------------------
+@_owned
 def build_library_with_descriptors() -> None:
     from pharmaml.chem import compute_descriptors
 
@@ -308,6 +346,7 @@ def build_library_with_descriptors() -> None:
 # ---------------------------------------------------------------------------
 # complete_ml_workflow.ipynb -- cells 31 + 35 (multiclass + regression tables)
 # ---------------------------------------------------------------------------
+@_owned
 def build_qsar_multiclass_and_regression() -> None:
     generator = _load_qsar_generator()
 
@@ -354,6 +393,7 @@ DRUGS = {
 }
 
 
+@_owned
 def build_cellline_data() -> None:
     # --- cell 3: the screen (one rng continues into cell 17's matrix) ---
     rng = np.random.default_rng(42)
@@ -407,6 +447,7 @@ def make_pk_profile(ka: float = 1.2, ke: float = 0.35, f: float = 0.9, dose: flo
     return pd.DataFrame({"time_h": times, "conc_ng_ml": conc})
 
 
+@_owned
 def build_pk_profile() -> None:
     # The notebook writes this via pharmaml.utils.io.write_table, which is
     # exactly frame.to_csv(path, index=False) -- same bytes, idempotent here.
@@ -439,6 +480,7 @@ WALKTHROUGH_SMILES_VOCAB = [
 ]
 
 
+@_owned
 def build_walkthrough_tables() -> None:
     # cell 3: descriptors + string target + SMILES metadata column.
     rng = np.random.default_rng(5)
@@ -472,6 +514,7 @@ def build_walkthrough_tables() -> None:
 # ---------------------------------------------------------------------------
 # complete_docking_workflow.ipynb -- cell 3 (demo ligand library CSV)
 # ---------------------------------------------------------------------------
+@_owned
 def build_ligand_library() -> None:
     ligand_table = pd.DataFrame(
         {
@@ -516,6 +559,7 @@ SEED_TABLE = {
 }
 
 
+@_owned
 def build_seed_molecules() -> None:
     """12 named drugs, pinned at 443 B with NO trailing newline.
 
@@ -604,6 +648,7 @@ Audit: 12 OK / 1 MISSING_LOG / 1 INCOMPLETE
 """
 
 
+@_owned
 def build_docking_campaign() -> None:
     campaign = DATA_DIR / "docking_campaign"
     for i, (name, _) in enumerate(CAMPAIGN_LIGANDS, start=1):
@@ -637,14 +682,19 @@ def build_docking_campaign() -> None:
 # ---------------------------------------------------------------------------
 def _fetch_pdb(url: str, dest: Path, pinned_bytes: int) -> None:
     STATS["paths"].append(dest)
+    STATS["owners"][str(dest)] = _OWNER["name"]
     if dest.is_file():
         if CHECK_ONLY["active"] and dest.stat().st_size != pinned_bytes:
             STATS["drift"].append(
-                f"{dest} is {dest.stat().st_size} B, pinned size is {pinned_bytes} B"
+                f"{dest} is {dest.stat().st_size} B, pinned size is {pinned_bytes} B "
+                f"(owner: {_OWNER['name']})"
             )
         return
     if CHECK_ONLY["active"]:
-        STATS["drift"].append(f"{dest} is missing (fetch skipped in --check mode)")
+        STATS["drift"].append(
+            f"{dest} is missing (fetch skipped in --check mode) "
+            f"(owner: {_OWNER['name']})"
+        )
         return
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f"fetching {url} -> {dest}")
@@ -656,6 +706,7 @@ def _fetch_pdb(url: str, dest: Path, pinned_bytes: int) -> None:
     STATS["fetched"].append(str(dest))
 
 
+@_owned
 def ensure_pdbs() -> None:
     _fetch_pdb("https://files.rcsb.org/download/1AKI.pdb",
                DATA_DIR / "lysozyme_1aki.pdb", PIN_LYSOZYME_BYTES)

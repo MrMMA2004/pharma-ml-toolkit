@@ -10,6 +10,39 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.55] — 2026-10-21
+
+### Added — per-bracket best-CV chips on the Hyperband facet panels
+
+The "Per bracket" facet view (1.2.54) now answers "which bracket found
+it" at a glance instead of only flagging the panel that holds the global
+winner: every facet caption carries a `best CV <score>` chip — emerald
+tinted with the winner diamond when that bracket owns the global best,
+stone tinted otherwise — and the bracket's own best dot wears an emerald
+ring in BOTH views (the overlay legend gains a "bracket best" entry, the
+tooltip explains "this bracket's own winner"). Pure fold over the trial
+rows; deterministic tie-breaking on the first occurrence.
+
+### Added — the provenance contract extended to the CLI and README
+
+The notebook-source scan (1.2.54) now covers the other two documentation
+surfaces that promise data files (`tests/test_data_provenance.py`, 3 new
+tests): every `examples/data/...` path mentioned by the CLI's help
+text/docstrings (`src/pharmaml/cli.py`) and by the README — prose
+promises ("ships as ...") bind exactly like code blocks — must resolve
+on disk AND be builder-owned. A stray file or a stale promise after a
+rename now fails the suite.
+
+### Added — drift lines name their owning builder function
+
+`scratch/build_example_data.py --check` drift reports are actionable
+pointers now, not just file names: every drift line carries
+`(owner: build_qsar_multiclass_and_regression)`-style attribution, and
+the new `STATS["owners"]` maps all 44 owned paths to their 11 builder
+functions. The `@_owned` decorator tracks the running builder; the
+planted-drift pytest guard pins the attribution on both the byte-flip
+and the missing-file branches.
+
 ## [1.2.54] — 2026-10-21
 
 ### Added — the data-provenance round-trip check (the standing 100x-104 item)

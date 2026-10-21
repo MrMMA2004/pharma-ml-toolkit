@@ -1721,12 +1721,15 @@ interface RungPoint {
   rung: number;
   promoted: boolean;
   isWinner: boolean;
+  isBracketBest: boolean;
 }
 
 /** Per-point shape: the winner is a diamond with a halo, promoted dots
  *  are solid with a ring, culled dots are faint — the halving story in
  *  one glance (dots march right as survivors are re-scored at higher
- *  budgets, and the cloud thins by η each rung). */
+ *  budgets, and the cloud thins by η each rung). The bracket's own best
+ *  (100x-116) wears an emerald ring so each facet panel's local winner
+ *  is findable without reading the caption. */
 function rungDot(props: unknown) {
   const { cx, cy, payload } = props as {
     cx?: number;
@@ -1746,6 +1749,19 @@ function rungDot(props: unknown) {
           strokeWidth={1.2}
         />
       </g>
+    );
+  }
+  if (payload.isBracketBest) {
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={4.6}
+        fill={color}
+        fillOpacity={0.9}
+        stroke={CHART.emeraldDark}
+        strokeWidth={1.4}
+      />
     );
   }
   if (payload.promoted) {
@@ -1786,9 +1802,11 @@ function RungScatterTooltip({
       <p className="text-muted-foreground">
         {p.isWinner
           ? "winner"
-          : p.promoted
-            ? "promoted — re-scored at the next rung"
-            : "culled at this rung"}
+          : p.isBracketBest
+            ? "bracket best — this bracket's own winner"
+            : p.promoted
+              ? "promoted — re-scored at the next rung"
+              : "culled at this rung"}
       </p>
     </div>
   );
@@ -1820,17 +1838,33 @@ function HyperbandRungScatter({
 }) {
   const [facet, setFacet] = useState(false);
 
-  const points: RungPoint[] = trials
-    .filter((t) => typeof t.resource === "number" && Number.isFinite(t.score))
-    .map((t, i) => ({
-      x: t.resource as number,
-      y: t.score,
-      trial: t.trial,
-      bracket: t.bracket ?? 0,
-      rung: t.rung ?? 0,
-      promoted: t.promoted ?? false,
-      isWinner: i === 0,
-    }));
+  const evaluated = trials.filter(
+    (t) => typeof t.resource === "number" && Number.isFinite(t.score)
+  );
+  /* Per-bracket best (100x-116): the highest-scoring evaluation inside
+   *  each bracket, tracked by trial number so exactly one dot per bracket
+   *  carries the flag (strict > keeps ties on the first occurrence —
+   *  deterministic like every chart in the house). Pure fold, computed
+   *  before the rows so no object is mutated after creation. */
+  const bestTrialPerBracket = new Map<number, number>();
+  for (const t of evaluated) {
+    const b = t.bracket ?? 0;
+    const best = bestTrialPerBracket.get(b);
+    const bestScore = evaluated.find((e) => e.trial === best)?.score;
+    if (best === undefined || bestScore === undefined || t.score > bestScore) {
+      bestTrialPerBracket.set(b, t.trial);
+    }
+  }
+  const points: RungPoint[] = evaluated.map((t, i) => ({
+    x: t.resource as number,
+    y: t.score,
+    trial: t.trial,
+    bracket: t.bracket ?? 0,
+    rung: t.rung ?? 0,
+    promoted: t.promoted ?? false,
+    isWinner: i === 0,
+    isBracketBest: bestTrialPerBracket.get(t.bracket ?? 0) === t.trial,
+  }));
 
   if (points.length === 0) return null;
 
@@ -1905,7 +1939,7 @@ function HyperbandRungScatter({
           aria-label={`Hyperband bracket facets: ${points.length} evaluations split one panel per bracket (${bracketsUsed.length} brackets), shared axes — budget on X, CV ${objective} on Y; best CV ${fmtNum(
             winnerPoint?.y ?? points[0]!.y,
             4,
-          )} at ${resourceLabel} ${winnerPoint?.x ?? points[0]!.x}; dashed lines mark the full budget and the defaults CV ${fmtNum(
+          )} at ${resourceLabel} ${winnerPoint?.x ?? points[0]!.x}; each panel's caption names that bracket's own best CV; dashed lines mark the full budget and the defaults CV ${fmtNum(
             baselineScore,
             4,
           )}`}
@@ -1914,21 +1948,39 @@ function HyperbandRungScatter({
             const facetPoints = points.filter((p) => p.bracket === bracket);
             const facetPromoted = facetPoints.filter((p) => p.promoted).length;
             const hasWinner = facetPoints.some((p) => p.isWinner);
+            const facetBest = facetPoints.reduce(
+              (b, p) => (p.y > b.y ? p : b),
+              facetPoints[0]!
+            );
             return (
               <figure key={bracket} className="m-0">
-                <figcaption className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                <figcaption className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                   <span className="font-medium text-foreground">bracket {bracket}</span>
                   <span>
                     {new Set(facetPoints.map((p) => p.trial)).size} configs ·{" "}
                     {facetPromoted} promoted
                   </span>
-                  {hasWinner ? (
-                    <span
-                      className="inline-block size-2 rotate-45"
-                      style={{ backgroundColor: CHART.emerald }}
-                      aria-hidden
-                    />
-                  ) : null}
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-1.5 py-px font-medium tabular-nums ${
+                      hasWinner
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : "text-foreground/75"
+                    }`}
+                    style={{
+                      backgroundColor: hasWinner
+                        ? `${CHART.emerald}26`
+                        : "rgba(120,113,108,0.16)",
+                    }}
+                  >
+                    {hasWinner ? (
+                      <span
+                        className="inline-block size-1.5 rotate-45"
+                        style={{ backgroundColor: CHART.emerald }}
+                        aria-hidden
+                      />
+                    ) : null}
+                    best CV {fmtNum(facetBest.y, 4)}
+                  </span>
                   <span className="ml-auto tabular-nums">
                     {bracket === 0 ? "full budget" : `rungs up to ${Math.max(...facetPoints.map((p) => p.rung))}`}
                   </span>
@@ -2085,6 +2137,17 @@ function HyperbandRungScatter({
             aria-hidden
           />
           promoted (re-scored)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="inline-block size-2.5 rounded-full"
+            style={{
+              backgroundColor: CHART.emerald,
+              boxShadow: `0 0 0 1.5px ${CHART.emeraldDark}`,
+            }}
+            aria-hidden
+          />
+          bracket best
         </span>
         <span className="flex items-center gap-1.5">
           <span

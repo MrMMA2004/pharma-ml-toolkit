@@ -1,4 +1,4 @@
-"""Data-provenance round-trip guards (100x-115).
+"""Data-provenance round-trip guards (100x-115, extended 100x-116).
 
 The 100x-104 open item, finally closed: "every CSV the NOTEBOOKS load ==
 the file the builder writes".  Three legs, each pinned here:
@@ -12,6 +12,10 @@ the file the builder writes".  Three legs, each pinned here:
    re-generates the whole inventory in memory and proves the files on
    disk are byte-identical to the builder output, with no unclaimed
    orphans; the planted-drift test proves the gate actually fires.
+4. **Documentation surfaces** (100x-116) — the same resolve-or-fail
+   contract for the two other places that promise data files: the CLI's
+   help text/docstrings (``cli.py``) and the README (prose promises like
+   "ships as ``examples/data/...``" bind exactly like code blocks).
 
 Before this, leg 3 was guaranteed only by running the mutating builder
 after every sandbox reset — a silent fix, not a failing check.
@@ -21,6 +25,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import ClassVar
@@ -76,6 +81,82 @@ def _load_builder():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+_DOCS_PATH_PATTERN = re.compile(r"examples/data/([A-Za-z0-9_./-]+)")
+
+
+def _docs_data_references(text: str) -> set[str]:
+    """DATA_DIR-relative names promised by a documentation surface.
+
+    Works for prose AND code blocks: an ``examples/data/<name>`` mention
+    is a shipping promise either way.  Trailing slashes (directory
+    references like ``docking_campaign/``) and sentence punctuation
+    (``....pdb.``) are stripped before the name is returned; glob stars
+    simply never match the character class, so ``examples/data/*.csv``
+    contributes nothing (nothing to resolve).
+    """
+    found: set[str] = set()
+    for match in _DOCS_PATH_PATTERN.findall(text):
+        name = match.rstrip("/.")
+        if name:
+            found.add(name)
+    return found
+
+
+class TestDocsDataReferences:
+    """Leg 4 (100x-116): the CLI and README sides of the contract.
+
+    Every ``examples/data/...`` path the CLI help text or the README
+    mentions must resolve under ``examples/data`` — a stale promise
+    after a rename fails the suite exactly like a stale notebook
+    reference does.
+    """
+
+    def test_cli_references_resolve(self) -> None:
+        text = (TOOLKIT_ROOT / "src" / "pharmaml" / "cli.py").read_text(
+            encoding="utf-8"
+        )
+        names = _docs_data_references(text)
+        assert names, "cli.py lost all example-data mentions (scan pattern rot?)"
+        stale = sorted(n for n in names if not (DATA / n).exists())
+        assert not stale, f"cli.py references that do not resolve: {stale}"
+
+    def test_readme_references_resolve(self) -> None:
+        text = (TOOLKIT_ROOT / "README.md").read_text(encoding="utf-8")
+        names = _docs_data_references(text)
+        assert names, "README lost all example-data mentions (scan pattern rot?)"
+        stale = sorted(n for n in names if not (DATA / n).exists())
+        assert not stale, f"README references that do not resolve: {stale}"
+
+    def test_docs_references_in_builder_inventory(self) -> None:
+        """A resolving path is not enough — it must be BUILDER-OWNED.
+
+        A stray file that happens to sit under ``examples/data`` without
+        the builder knowing it would resolve fine but violate the
+        round-trip; this ties the documentation surfaces into the same
+        inventory the notebooks and the disk scan answer to.
+        """
+        builder = _load_builder()
+        builder.main(["--check"])  # populates STATS on the real tree (no drift)
+        owned: set[str] = set()
+        for p in builder.STATS["paths"]:
+            try:
+                owned.add(p.relative_to(DATA).as_posix())
+            except ValueError:
+                continue  # tests/data — not part of the docs inventory
+        owned_dirs: set[str] = set()
+        for name in owned:
+            parts = name.split("/")
+            if len(parts) > 1:
+                owned_dirs.add("/".join(parts[:-1]))
+        for surface in ("src/pharmaml/cli.py", "README.md"):
+            text = (TOOLKIT_ROOT / surface).read_text(encoding="utf-8")
+            for name in sorted(_docs_data_references(text)):
+                assert name in owned or name in owned_dirs, (
+                    f"{surface} references {name!r}, which the builder does not "
+                    "own (stray file or stale promise)"
+                )
 
 
 class TestNotebookDataReferences:
@@ -172,6 +253,19 @@ class TestBuilderRoundTrip:
         assert len(drift) == 1, f"expected exactly the planted drift, got {drift}"
         assert "qsar_regression.csv" in drift[0]
         assert "differs from" in drift[0]
+        # 100x-116 attribution: the drift line names the owning builder
+        # function — a pointer to rerun, not just a file name.
+        assert "owner: build_qsar_multiclass_and_regression" in drift[0]
+        # the empty-dir leg's missing-file lines carry owners too
+        assert all("(owner:" in d for d in missing), (
+            f"missing-file drift lines lost their owner attribution: {missing[:2]}"
+        )
+        # and the ownership map is complete: every owned path has a function
+        owners = builder.STATS["owners"]
+        assert owners and all(
+            isinstance(v, str) and (v.startswith("build_") or v == "ensure_pdbs")
+            for v in owners.values()
+        ), "STATS['owners'] must map every path to a real builder function"
 
         # and the audit never repaired the planted file
         assert victim.read_bytes() == original + b"drift\n"

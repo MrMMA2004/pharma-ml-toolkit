@@ -1,4 +1,4 @@
-"""100x-115 — the provenance round-trip closure, one-shot auditor.
+"""100x-115/116 — the provenance round-trip closure, one-shot auditor.
 
 The standing 100x-104 open item ("every CSV the NOTEBOOKS load == the
 file the builder writes") closed with three legs, each re-runnable here:
@@ -13,6 +13,15 @@ file the builder writes") closed with three legs, each re-runnable here:
      PDB size pins, and the verify() content pins — plus a planted-drift
      self-test proving the gate fires (exactly one drift line, exit 1,
      and the planted file is never repaired).
+
+100x-116 adds two extensions, re-run here with the same three-leg rig:
+
+  4. documentation surfaces — every examples/data/... path the CLI help
+     text (src/pharmaml/cli.py) and the README promise must resolve AND
+     be builder-owned (prose promises bind like code blocks);
+  5. drift attribution      — every drift line names the owning builder
+     function (owner: build_*) and STATS["owners"] maps every owned path
+     to its function, so a drift report is an actionable pointer.
 
 The pytest guards live in tests/test_data_provenance.py (the binding
 contract); this probe is the human-readable evidence run + the
@@ -105,7 +114,7 @@ def leg_builder_check() -> None:
     builder = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(builder)
 
-    # clean run: byte-identity + orphans + verify pins
+    # clean run: byte-identity + orphans + verify pins + the ownership map
     builder.main(["--check"])
     _ok(builder.STATS["drift"] == [], "clean run: zero drift")
     _ok(builder.STATS["written"] == 0, "clean run: --check wrote nothing")
@@ -119,6 +128,14 @@ def leg_builder_check() -> None:
         {p for p in owned if p.parent != builder.TESTS_DATA_DIR} == disk,
         f"clean run: owned set == disk set ({len(disk)} files, no orphans)",
     )
+    owners = builder.STATS["owners"]
+    _ok(
+        len(owners) == len(builder.STATS["paths"])
+        and all(str(v).startswith(("build_", "ensure_pdbs")) for v in owners.values()),
+        f"attribution: all {len(owners)} owned paths map to a builder function",
+    )
+    distinct = sorted(set(owners.values()))
+    print(f"    owners: {len(distinct)} functions -> {', '.join(distinct)}")
 
     # planted drift: one flipped byte -> exactly one drift line, exit 1,
     # and the audit never repairs the planted file
@@ -139,8 +156,9 @@ def leg_builder_check() -> None:
         _ok(
             len(builder.STATS["drift"]) == 1
             and "qsar_regression.csv" in builder.STATS["drift"][0]
-            and "differs from" in builder.STATS["drift"][0],
-            f"planted drift: exactly one drift line ({builder.STATS['drift']})",
+            and "differs from" in builder.STATS["drift"][0]
+            and "owner: build_qsar_multiclass_and_regression" in builder.STATS["drift"][0],
+            f"planted drift: exactly one ATTRIBUTED drift line ({builder.STATS['drift']})",
         )
         _ok(
             victim.read_bytes() == original + b"drift\n",
@@ -160,13 +178,57 @@ def leg_builder_check() -> None:
             missing_fired and len(missing) >= 40,
             f"empty-dir branch: {len(missing)} missing-file drift lines, exit 1",
         )
+        _ok(
+            all("(owner:" in d for d in missing),
+            "empty-dir branch: every missing line carries its owner",
+        )
+
+
+def leg_docs_surfaces() -> None:
+    """100x-116 leg 4: the CLI + README sides of the contract."""
+    print("\n--- leg 4: documentation surfaces (cli.py + README) ---")
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("build_example_data", BUILDER)
+    assert spec is not None and spec.loader is not None
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    builder.main(["--check"])
+
+    owned: set[str] = set()
+    for p in builder.STATS["paths"]:
+        try:
+            owned.add(p.relative_to(DATA).as_posix())
+        except ValueError:
+            continue  # tests/data — outside the docs inventory
+    owned_dirs: set[str] = set()
+    for name in owned:
+        parts = name.split("/")
+        if len(parts) > 1:
+            owned_dirs.add("/".join(parts[:-1]))
+
+    pattern = re.compile(r"examples/data/([A-Za-z0-9_./-]+)")
+    for surface in ("src/pharmaml/cli.py", "README.md"):
+        text = (ROOT / surface).read_text(encoding="utf-8")
+        names = {n.rstrip("/.") for n in pattern.findall(text)}
+        names.discard("")
+        stale = sorted(n for n in names if not (DATA / n).exists())
+        unowned = sorted(n for n in names if n not in owned and n not in owned_dirs)
+        print(f"  {surface:<24} {len(names)} example-data reference(s)")
+        _ok(bool(names), f"{surface}: the scan still finds references (pattern rot?)")
+        _ok(not stale, f"{surface}: every reference resolves (stale: {stale})")
+        _ok(
+            not unowned,
+            f"{surface}: every reference is builder-owned (unowned: {unowned})",
+        )
 
 
 def main() -> None:
-    print("PROVENANCE ROUND-TRIP AUDIT (100x-115)")
+    print("PROVENANCE ROUND-TRIP AUDIT (100x-115, extended 100x-116)")
     references = leg_notebook_scan()
     leg_no_orphans(references)
     leg_builder_check()
+    leg_docs_surfaces()
     print()
     if FAILURES:
         print(f"PROVENANCE ROUND-TRIP: FAIL ({len(FAILURES)} problem(s))")
@@ -175,8 +237,10 @@ def main() -> None:
         sys.exit(1)
     print(
         "PROVENANCE ROUND-TRIP: PASS — every notebook load resolves, every "
-        "shipped file is loaded, and examples/data is byte-identical to the "
-        "builder output (no orphans, drift gate proven to fire)"
+        "shipped file is loaded, examples/data is byte-identical to the "
+        "builder output (no orphans, drift gate proven to fire), every "
+        "CLI/README promise resolves and is builder-owned, and drift lines "
+        "name their owning builder function"
     )
 
 

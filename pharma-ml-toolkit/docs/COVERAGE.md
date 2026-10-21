@@ -443,7 +443,7 @@ absorbed 3 (documented non-goals), absent 0.** A NOTEBOOK-ABSENT row
 is a rot alarm, not a contract breach: the GUI axis remains the
 zero-tolerance one.
 
-## Data provenance round-trip (100x-115)
+## Data provenance round-trip (100x-115, extended 100x-116)
 
 The fourth axis closes the standing 100x-104 item: **every data file the
 notebooks load is the file the builder writes.** Three legs, pinned in
@@ -471,3 +471,24 @@ one probe (`scratch/probe_provenance_roundtrip_115.py`):
 Re-run rule: after touching `examples/data/`, any notebook data cell, or
 the builder, run the probe (or the pytest file) — a FAIL row is a
 regression, not a warning.
+
+### 100x-116 extensions
+
+Two additions, same probe file, same pytest module:
+
+4. **Documentation surfaces** — the resolve-or-fail contract extended to
+   the CLI and the README: every `examples/data/...` path mentioned by
+   `src/pharmaml/cli.py` (help text / docstrings) and by `README.md`
+   must resolve on disk **and** be builder-owned. Prose promises
+   ("ships as ...") bind exactly like code-block paths; a stray file or
+   a stale promise after a rename fails the suite (3 new tests:
+   CLI resolves, README resolves, both inside the builder inventory).
+5. **Drift attribution** — every drift line now names the owning builder
+   function — `... differs from the builder output (owner:
+   build_qsar_multiclass_and_regression)` — and the new
+   `STATS["owners"]` maps all 44 owned paths to their 11 builder
+   functions (`@_owned` decorator tracks the running builder). A drift
+   report is an actionable pointer ("rerun that function, or re-extract
+   its notebook cell"), not just a file name; the planted-drift guard
+   pins the attribution on both the byte-flip and the missing-file
+   branches.
