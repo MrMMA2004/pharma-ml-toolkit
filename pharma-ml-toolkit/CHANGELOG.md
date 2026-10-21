@@ -10,6 +10,50 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.54] — 2026-10-21
+
+### Added — the data-provenance round-trip check (the standing 100x-104 item)
+
+"Every CSV the notebooks load == the file the builder writes" is now a
+failing check, not a silent fix. Three legs, all pinned in
+`tests/test_data_provenance.py` (5 tests) and re-runnable as one probe
+(`scratch/probe_provenance_roundtrip_115.py`):
+
+1. **Notebook-source scan** — every `DATA_DIR / "<name>"` reference in
+   the eight executed notebooks' code cells resolves to a top-level
+   `examples/data` entry (15/15 today); a stale path fails loudly.
+2. **No orphans** — every shipped top-level entry is loaded by at least
+   one notebook, so the inventory can never grow a file the demos
+   forgot.
+3. **Builder `--check`** — `scratch/build_example_data.py --check` is
+   the non-mutating drift audit: byte-identity of every owned file (42
+   re-generated in memory), the missing-file branch, an orphan scan
+   (`disk == owned`, 43 files), the PDB size pins, and the full
+   `verify()` content pins — exit 1 with the drift list. The
+   planted-drift guard proves the gate fires on exactly one flipped
+   byte without ever repairing it.
+
+### Added — web-mirror parity guards inside the pytest suite
+
+The TS-mirror probe pairs now fail CI, not just the probes
+(`tests/test_web_parity.py`, 3 tests): `bayes-acquisition.ts` vs
+scipy.stats.norm (both twins run — the python emitter, then `bun` on
+the shipped module, then the cross-language verdict with the twins' own
+tolerances restated) and `docking-configs.ts` vs `pharmaml.docking`
+(the byte-parity probe plus the library twin). Skipped honestly in the
+zip-only layout or without bun.
+
+### Added — Hyperband bracket facet rows (web)
+
+The rung scatter gains a "All brackets / Per bracket" view switch
+(appears when > 1 bracket): the small-multiples edition renders one
+mini panel per bracket on **shared axes** — the breadth-vs-depth trade
+the η schedule makes becomes readable at a glance (bracket 0: many
+configs at full budget; the last: few configs, cheap rungs only). Each
+panel header carries config/promoted counts and the winner marker;
+dashed full-budget + defaults references per panel; ARIA labels carry
+the mode.
+
 ## [1.2.53] — 2026-10-21
 
 ### Fixed — the GPC/GP/HSVR refit-determinism pins flaked on exact-bit equality

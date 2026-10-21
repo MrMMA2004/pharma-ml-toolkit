@@ -442,3 +442,32 @@ Standing verdict after 1.2.52: **118/118 — notebook-covered 115,
 absorbed 3 (documented non-goals), absent 0.** A NOTEBOOK-ABSENT row
 is a rot alarm, not a contract breach: the GUI axis remains the
 zero-tolerance one.
+
+## Data provenance round-trip (100x-115)
+
+The fourth axis closes the standing 100x-104 item: **every data file the
+notebooks load is the file the builder writes.** Three legs, pinned in
+`tests/test_data_provenance.py` (the binding contract) and re-runnable as
+one probe (`scratch/probe_provenance_roundtrip_115.py`):
+
+1. **Notebook-source scan** — every `DATA_DIR / "<name>"` reference in the
+   eight executed notebooks' code cells resolves to a top-level
+   `examples/data` entry. A stale path (a rename the notebooks missed)
+   fails loudly. Standing verdict: 15/15 top-level entries referenced
+   across 36 code-cell references, zero stale, zero deep.
+2. **No orphans** — every top-level entry under `examples/data` is loaded
+   by at least one executed notebook (13 CSVs + `lysozyme_1aki.pdb` +
+   `docking_campaign/`). The inventory can never silently grow a file the
+   demos forgot.
+3. **Builder `--check`** — the non-mutating drift audit
+   (`scratch/build_example_data.py --check`): every owned file re-generated
+   in memory and byte-compared (42 files), missing files and orphans
+   flagged (`disk == owned`, 43 files under `examples/data`), PDB size
+   pins checked without a network fetch, and the full `verify()` content
+   pins run — exit 1 with the drift list on any deviation. The
+   planted-drift guard proves the gate: one flipped byte → exactly one
+   drift line, exit 1, and the audit never repairs the file.
+
+Re-run rule: after touching `examples/data/`, any notebook data cell, or
+the builder, run the probe (or the pytest file) — a FAIL row is a
+regression, not a warning.

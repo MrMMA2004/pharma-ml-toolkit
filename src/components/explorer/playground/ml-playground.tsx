@@ -1797,7 +1797,14 @@ function RungScatterTooltip({
 /** Every Hyperband evaluation as budget-vs-score dots, coloured by rung.
  *  The X axis is the resource the config was actually scored at, so a
  *  promoted config appears once per rung it survived — the classic
- *  successive-halving picture the leaderboard table cannot show. */
+ *  successive-halving picture the leaderboard table cannot show.
+ *
+ *  Two views (100x-115): "All brackets" overlays every bracket in one
+ *  field — the budget ladder as a whole; "Per bracket" is the small-
+ *  multiples edition, one mini panel per bracket on SHARED axes, where
+ *  the breadth-vs-depth trade the η schedule makes becomes readable at
+ *  a glance (bracket 0: many configs at full budget; the last: few
+ *  configs, mostly cheap rungs). */
 function HyperbandRungScatter({
   trials,
   maxResource,
@@ -1811,6 +1818,8 @@ function HyperbandRungScatter({
   baselineScore: number;
   objective: string;
 }) {
+  const [facet, setFacet] = useState(false);
+
   const points: RungPoint[] = trials
     .filter((t) => typeof t.resource === "number" && Number.isFinite(t.score))
     .map((t, i) => ({
@@ -1844,98 +1853,220 @@ function HyperbandRungScatter({
   const xHi = xMax + xPad;
 
   const rungsUsed = [...new Set(points.map((p) => p.rung))].sort((a, b) => a - b);
+  const bracketsUsed = [...new Set(points.map((p) => p.bracket))].sort((a, b) => a - b);
   const promotedCount = points.filter((p) => p.promoted).length;
+  const winnerPoint = points.find((p) => p.isWinner);
+
+  const overlayLabel = `Hyperband rung scatter: ${points.length} evaluations across ${
+    bracketsUsed.length
+  } brackets, ${promotedCount} promoted to a higher rung; best CV ${objective} ${fmtNum(
+    points[0]!.y,
+    4,
+  )} at ${resourceLabel} ${points[0]!.x}; dashed line marks the defaults CV ${fmtNum(
+    baselineScore,
+    4,
+  )}`;
 
   return (
-    <div
-      className="w-full"
-      role="img"
-      aria-label={`Hyperband rung scatter: ${points.length} evaluations across ${
-        new Set(points.map((p) => p.bracket)).size
-      } brackets, ${promotedCount} promoted to a higher rung; best CV ${objective} ${fmtNum(
-        points[0]!.y,
-        4,
-      )} at ${resourceLabel} ${points[0]!.x}; dashed line marks the defaults CV ${fmtNum(
-        baselineScore,
-        4,
-      )}`}
-    >
-      <div className="h-56 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
-            <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
-            <XAxis
-              type="number"
-              dataKey="x"
-              domain={[xLo, xHi]}
-              allowDecimals={false}
-              tick={CHART.axisTick}
-              tickLine={false}
-              axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
-              label={{
-                value: `${resourceLabel} (scoring budget)`,
-                position: "insideBottomRight",
-                offset: -2,
-                fill: "#78716c",
-                fontSize: 11,
-              }}
-            />
-            <YAxis
-              type="number"
-              dataKey="y"
-              width={52}
-              domain={[yMin, yMax]}
-              tick={CHART.axisTick}
-              tickFormatter={(v: number) => fmtNum(v, 2)}
-              tickLine={false}
-              axisLine={false}
-              label={{
-                value: `CV ${objective}`,
-                angle: -90,
-                position: "insideLeft",
-                offset: 16,
-                fill: "#78716c",
-                fontSize: 11,
-              }}
-            />
-            <Tooltip
-              cursor={{ strokeDasharray: "3 3" }}
-              content={<RungScatterTooltip />}
-              isAnimationActive={false}
-            />
-            <ReferenceLine
-              x={maxResource}
-              stroke={CHART.stone}
-              strokeDasharray="6 3"
-              strokeWidth={1.5}
-              label={{
-                value: "full budget",
-                position: "insideTopRight",
-                fill: CHART.stone,
-                fontSize: 10,
-              }}
-            />
-            <ReferenceLine
-              y={baselineScore}
-              stroke={CHART.amber}
-              strokeDasharray="6 3"
-              strokeWidth={1.5}
-              label={{
-                value: "defaults",
-                position: "insideTopLeft",
-                fill: CHART.amber,
-                fontSize: 10,
-              }}
-            />
-            <Scatter
-              name="evaluation"
-              data={points}
-              shape={rungDot}
-              isAnimationActive={false}
-            />
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
+    <div className="w-full">
+      {bracketsUsed.length > 1 ? (
+        <div
+          className="mb-2 flex rounded-lg border bg-muted/40 p-0.5"
+          role="group"
+          aria-label="Rung scatter view"
+        >
+          {(
+            [
+              { key: false, label: "All brackets" },
+              { key: true, label: "Per bracket" },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={facet === key}
+              onClick={() => setFacet(key)}
+              className={`h-7 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                facet === key
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {facet ? (
+        <div
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+          role="img"
+          aria-label={`Hyperband bracket facets: ${points.length} evaluations split one panel per bracket (${bracketsUsed.length} brackets), shared axes — budget on X, CV ${objective} on Y; best CV ${fmtNum(
+            winnerPoint?.y ?? points[0]!.y,
+            4,
+          )} at ${resourceLabel} ${winnerPoint?.x ?? points[0]!.x}; dashed lines mark the full budget and the defaults CV ${fmtNum(
+            baselineScore,
+            4,
+          )}`}
+        >
+          {bracketsUsed.map((bracket) => {
+            const facetPoints = points.filter((p) => p.bracket === bracket);
+            const facetPromoted = facetPoints.filter((p) => p.promoted).length;
+            const hasWinner = facetPoints.some((p) => p.isWinner);
+            return (
+              <figure key={bracket} className="m-0">
+                <figcaption className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="font-medium text-foreground">bracket {bracket}</span>
+                  <span>
+                    {new Set(facetPoints.map((p) => p.trial)).size} configs ·{" "}
+                    {facetPromoted} promoted
+                  </span>
+                  {hasWinner ? (
+                    <span
+                      className="inline-block size-2 rotate-45"
+                      style={{ backgroundColor: CHART.emerald }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <span className="ml-auto tabular-nums">
+                    {bracket === 0 ? "full budget" : `rungs up to ${Math.max(...facetPoints.map((p) => p.rung))}`}
+                  </span>
+                </figcaption>
+                <div className="h-28 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ScatterChart margin={{ top: 4, right: 6, bottom: 0, left: 0 }}>
+                      <CartesianGrid
+                        stroke={CHART.gridStroke}
+                        strokeOpacity={CHART.gridStrokeOpacity}
+                      />
+                      <XAxis
+                        type="number"
+                        dataKey="x"
+                        domain={[xLo, xHi]}
+                        allowDecimals={false}
+                        tick={{ fill: "#78716c", fontSize: 9 }}
+                        tickLine={false}
+                        axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+                      />
+                      <YAxis
+                        type="number"
+                        dataKey="y"
+                        width={38}
+                        domain={[yMin, yMax]}
+                        tick={{ fill: "#78716c", fontSize: 9 }}
+                        tickFormatter={(v: number) => fmtNum(v, 2)}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <Tooltip
+                        cursor={{ strokeDasharray: "3 3" }}
+                        content={<RungScatterTooltip />}
+                        isAnimationActive={false}
+                      />
+                      <ReferenceLine
+                        x={maxResource}
+                        stroke={CHART.stone}
+                        strokeDasharray="6 3"
+                        strokeWidth={1.2}
+                      />
+                      <ReferenceLine
+                        y={baselineScore}
+                        stroke={CHART.amber}
+                        strokeDasharray="6 3"
+                        strokeWidth={1.2}
+                      />
+                      <Scatter
+                        name="evaluation"
+                        data={facetPoints}
+                        shape={rungDot}
+                        isAnimationActive={false}
+                      />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </div>
+              </figure>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="h-56 w-full" role="img" aria-label={overlayLabel}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+              <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+              <XAxis
+                type="number"
+                dataKey="x"
+                domain={[xLo, xHi]}
+                allowDecimals={false}
+                tick={CHART.axisTick}
+                tickLine={false}
+                axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+                label={{
+                  value: `${resourceLabel} (scoring budget)`,
+                  position: "insideBottomRight",
+                  offset: -2,
+                  fill: "#78716c",
+                  fontSize: 11,
+                }}
+              />
+              <YAxis
+                type="number"
+                dataKey="y"
+                width={52}
+                domain={[yMin, yMax]}
+                tick={CHART.axisTick}
+                tickFormatter={(v: number) => fmtNum(v, 2)}
+                tickLine={false}
+                axisLine={false}
+                label={{
+                  value: `CV ${objective}`,
+                  angle: -90,
+                  position: "insideLeft",
+                  offset: 16,
+                  fill: "#78716c",
+                  fontSize: 11,
+                }}
+              />
+              <Tooltip
+                cursor={{ strokeDasharray: "3 3" }}
+                content={<RungScatterTooltip />}
+                isAnimationActive={false}
+              />
+              <ReferenceLine
+                x={maxResource}
+                stroke={CHART.stone}
+                strokeDasharray="6 3"
+                strokeWidth={1.5}
+                label={{
+                  value: "full budget",
+                  position: "insideTopRight",
+                  fill: CHART.stone,
+                  fontSize: 10,
+                }}
+              />
+              <ReferenceLine
+                y={baselineScore}
+                stroke={CHART.amber}
+                strokeDasharray="6 3"
+                strokeWidth={1.5}
+                label={{
+                  value: "defaults",
+                  position: "insideTopLeft",
+                  fill: CHART.amber,
+                  fontSize: 10,
+                }}
+              />
+              <Scatter
+                name="evaluation"
+                data={points}
+                shape={rungDot}
+                isAnimationActive={false}
+              />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
+      )}
       <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-3.5 gap-y-1 text-[11px] text-muted-foreground">
         {rungsUsed.map((r) => (
           <span key={r} className="flex items-center gap-1.5">

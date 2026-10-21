@@ -36,6 +36,19 @@ Properties: deterministic, idempotent (files are only rewritten when their
 bytes actually change -- a second run touches nothing), cwd-independent
 (all paths resolve from ``__file__``), single-threaded (worker-cap env vars
 are set before numpy/sklearn/RDKit import).
+
+``--check`` mode (100x-115): the non-mutating round-trip audit.  Nothing
+is written and no network fetch happens; every file the builder owns is
+compared byte-for-byte against what the generators produce, missing /
+differing files are reported as DRIFT, and orphans (files on disk the
+builder never writes) are flagged too.  Exit code 1 on any drift.  This
+is the provenance-closure leg the pytest suite runs as a guard
+(tests/test_data_provenance.py).
+
+Usage::
+
+    python scratch/build_example_data.py           # rebuild (idempotent)
+    python scratch/build_example_data.py --check    # audit only, no writes
 """
 
 from __future__ import annotations
@@ -82,7 +95,23 @@ PIN_ASPIRIN_SUMMARY = {  # parse_dlg_summary(01_aspirin/r.dlg), notebook cell 31
 PIN_LYSOZYME_BYTES = 116_397
 PIN_CRN_BYTES = 49_491
 
-STATS = {"written": 0, "unchanged": 0, "fetched": []}
+STATS = {
+    "written": 0,
+    "unchanged": 0,
+    "fetched": [],
+    "drift": [],   # --check mode only: files that differ / are missing
+    "paths": [],   # every file the builder claims ownership of
+}
+
+# Flipped by main("--check"): writes become drift records instead.
+CHECK_ONLY = {"active": False}
+
+
+def _reset_stats() -> None:
+    """Make main() safely re-runnable in one process (the pytest guard
+    calls it twice: once clean, once with planted drift)."""
+    STATS.update(written=0, unchanged=0, fetched=[], drift=[], paths=[])
+    CHECK_ONLY["active"] = False
 
 
 def _fail(message: str) -> None:
@@ -90,11 +119,21 @@ def _fail(message: str) -> None:
 
 
 def _write_if_changed(path: Path, data: bytes) -> None:
-    """Write bytes only when they differ from what is on disk (idempotency)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    """Write bytes only when they differ from what is on disk (idempotency).
+
+    In ``--check`` mode nothing is written: a differing or missing file
+    is recorded in ``STATS["drift"]`` instead, so the audit never mutates
+    the tree it is auditing.
+    """
+    STATS["paths"].append(path)
     if path.is_file() and path.read_bytes() == data:
         STATS["unchanged"] += 1
         return
+    if CHECK_ONLY["active"]:
+        state = "differs from" if path.is_file() else "is missing from"
+        STATS["drift"].append(f"{path} {state} the builder output")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     STATS["written"] += 1
 
@@ -597,7 +636,15 @@ def build_docking_campaign() -> None:
 # PDB fixtures (fetched from RCSB only when missing)
 # ---------------------------------------------------------------------------
 def _fetch_pdb(url: str, dest: Path, pinned_bytes: int) -> None:
+    STATS["paths"].append(dest)
     if dest.is_file():
+        if CHECK_ONLY["active"] and dest.stat().st_size != pinned_bytes:
+            STATS["drift"].append(
+                f"{dest} is {dest.stat().st_size} B, pinned size is {pinned_bytes} B"
+            )
+        return
+    if CHECK_ONLY["active"]:
+        STATS["drift"].append(f"{dest} is missing (fetch skipped in --check mode)")
         return
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f"fetching {url} -> {dest}")
@@ -796,7 +843,39 @@ def print_inventory() -> None:
     print(f"--- {len(files)} files, {total:,} B total")
 
 
-def main() -> None:
+def _drift_report() -> int:
+    """--check mode gate: 0 when disk == builder output, else 1.
+
+    Beyond byte-identity of the owned files, this also flags ORPHANS --
+    files sitting under ``examples/data`` that no builder path claims --
+    so the inventory can never silently grow a file the notebooks do
+    not know about.
+    """
+    disk = {p for p in DATA_DIR.rglob("*") if p.is_file()}
+    owned = {Path(p) for p in STATS["paths"]}
+    for orphan in sorted(disk - owned):
+        STATS["drift"].append(f"{orphan} is on disk but the builder never writes it")
+    drift = STATS["drift"]
+    if drift:
+        print(f"DRIFT: {len(drift)} problem(s) between examples/data and the builder output:")
+        for line in drift:
+            print(f"  - {line}")
+        return 1
+    print(
+        f"check OK: {STATS['unchanged']} file(s) byte-identical to the builder output, "
+        f"{len(owned)} owned, no orphans under {DATA_DIR}"
+    )
+    return 0
+
+
+def main(argv: list[str] | None = None) -> None:
+    argv = sys.argv[1:] if argv is None else list(argv)
+    unknown = [a for a in argv if a != "--check"]
+    if unknown:
+        raise SystemExit(f"unknown argument(s) {unknown} — only --check is supported")
+    check_only = "--check" in argv
+    _reset_stats()
+    CHECK_ONLY["active"] = check_only
     ensure_pdbs()
     build_qsar_classification()
     build_screening_library()
@@ -808,6 +887,12 @@ def main() -> None:
     build_ligand_library()
     build_seed_molecules()
     build_docking_campaign()
+    if check_only:
+        if _drift_report() != 0:
+            raise SystemExit(1)
+        verify()
+        print("check OK: verify pins passed (byte-identity + orphans + content)")
+        return
     verify()
     print_inventory()
     fetched = STATS["fetched"]
