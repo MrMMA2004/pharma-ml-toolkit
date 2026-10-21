@@ -10,6 +10,43 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.51] — 2026-10-21
+
+### Added — the per-file audit's two closing surfaces: batch campaign configs and the Vina results-folder scan
+
+The user asked for the coverage check **per file** ("each file of the
+zip and rar"). The fresh per-file grep audit (118 rows,
+`scratch/probe_coverage_111_perfile.py`) confirmed every file had a
+playground surface — except two behaviours the family-level audit of
+1.2.50 had absorbed too coarsely:
+
+- **`docking.write_config_batch`** (new, campaign) — the batch loop of
+  `others/Docking/gpfer.py`, `gpferreceptorni.py` and `dpfer.py`
+  upgraded: one `r.gpf` + `r.dpf` pair per campaign sub-folder, the
+  grid box computed from each folder's own ligand (padding / npts /
+  spacing forwarded to `compute_grid_box`), a custom
+  `receptor_types` override (the Ni-bearing `"A C HD N Ni OA SA"`
+  string `gpferreceptorni.py` hard-coded), `skip_existing` for
+  idempotent resumes, and honest per-folder statuses (`ok`,
+  `skipped (r.gpf exists)`, `no ligand PDBQT`, `failed: …`) — one bad
+  folder never sinks the batch. Exported from `pharmaml.docking`;
+  7 tests in `tests/test_campaign.py::TestWriteConfigBatch`.
+- **playground.py — Grid box & docking configs card** — new *Batch
+  GPF/DPF for campaign…* button (per-folder report with counts and
+  box centres) plus a *receptor types (blank = default)* field that
+  also feeds the single-ligand path; the card subtitle/docstring and
+  the home guide updated.
+- **playground.py — Docking results card** — new *Scan Vina results
+  folder…* button riding `docking.scan_vina_directory` (the
+  `vina_reader.py` folder walk: best affinity per log, strongest
+  binder first, crashed logs keep NaN rows and are reported, not
+  fatal). The card's subtitle now counts four sources.
+
+The ZIP side of the audit is re-verified standing: the downloaded
+archive's `playground.py` is byte-identical to the working tree, zero
+rar-content leakage (no Persian-named paths, no `ml-codes`/
+`extracted` entries), `testzip` clean.
+
 ## [1.2.50] — 2026-10-21
 
 ### Added — full RAR coverage in playground.py: the Utilities tab and five closing cards

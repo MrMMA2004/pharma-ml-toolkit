@@ -101,6 +101,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from pharmaml.docking.preparation import compute_grid_box, write_dpf, write_gpf
 from pharmaml.exceptions import DataValidationError, DockingError
 from pharmaml.logger import get_logger
 from pharmaml.utils.io import safe_filename
@@ -115,6 +116,7 @@ __all__ = [
     "list_file_names",
     "reindex_by_number",
     "scan_gpf_ligand_types",
+    "write_config_batch",
 ]
 
 
@@ -646,3 +648,160 @@ def scan_gpf_ligand_types(directory: str | Path) -> pd.DataFrame:
         rows.append({"folder": sub.name, "ligand_types": ligand_types})
     _LOG.info("Scanned %d sub-directory(ies) of %s for r.gpf files", len(rows), base)
     return pd.DataFrame(rows, columns=["folder", "ligand_types"])
+
+
+def write_config_batch(
+    directory: str | Path,
+    *,
+    receptor_file: str = "r.pdbqt",
+    padding: float = 4.0,
+    npts: tuple[int, int, int] = (60, 60, 60),
+    spacing: float = 0.375,
+    receptor_types: str | None = None,
+    ga_run: int = 100,
+    ga_pop_size: int = 150,
+    skip_existing: bool = False,
+) -> pd.DataFrame:
+    """Write the ``r.gpf`` + ``r.dpf`` pair into every ligand folder.
+
+    Upgrades the batch loops of ``others/Docking/gpfer.py``,
+    ``others/Docking/gpferreceptorni.py`` and ``others/dpfer.py``
+    (each walked the campaign tree writing one config pair per ligand
+    folder -- ``gpferreceptorni.py`` additionally carried a hand-set
+    ``receptor_types`` string with a Ni atom type, the namesake of the
+    script).  Each immediate sub-directory of ``directory`` is treated
+    as one ligand folder: the first ``*.pdbqt`` that is not the
+    receptor file becomes the reference ligand, the grid box is
+    computed from it (``padding`` / ``npts`` / ``spacing`` exactly as
+    :func:`~pharmaml.docking.preparation.compute_grid_box` takes them),
+    and both configs are written next to it via
+    :func:`~pharmaml.docking.preparation.write_gpf` /
+    :func:`~pharmaml.docking.preparation.write_dpf`.
+
+    Folders without a candidate ligand (or whose ligand cannot yield a
+    box) are reported with an honest status instead of aborting the
+    batch -- one bad folder must never sink the campaign.
+
+    Parameters
+    ----------
+    directory:
+        Campaign root whose *sub-directories* each hold one ligand.
+    receptor_file:
+        Receptor PDBQT filename referenced in the GPF (and excluded
+        from the ligand search).
+    padding:
+        Box margin around the ligand bounding box in A (>= 0).
+    npts:
+        Per-axis minimum grid points (axes grow to honour ``padding``).
+    spacing:
+        AutoDock4 grid spacing in A.
+    receptor_types:
+        Custom AutoDock4 receptor atom types, space-separated -- e.g.
+        ``"A C HD N Ni OA SA"`` for the Ni-bearing receptor of
+        ``gpferreceptorni.py``; ``None`` keeps the library default.
+    ga_run:
+        GA runs forwarded to ``write_dpf``.
+    ga_pop_size:
+        GA population forwarded to ``write_dpf``.
+    skip_existing:
+        When ``True``, folders that already hold ``r.gpf`` are left
+        untouched (status ``"skipped (r.gpf exists)"``) instead of
+        being rewritten -- the idempotent-resume contract of
+        :func:`~pharmaml.docking.workflow.batch_run_directories`.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per sub-directory with columns ``folder``,
+        ``ligand`` (filename, or empty when none was found), ``gpf``
+        and ``dpf`` (written paths, or empty), ``centre`` (the box
+        centre as ``"x y z"``) and ``status`` (``ok``,
+        ``"skipped (r.gpf exists)"``, ``"no ligand PDBQT"`` or
+        ``"failed: <reason>"``).
+
+    Raises
+    ------
+    DockingError
+        If ``directory`` is not a directory.
+
+    Examples
+    --------
+    >>> import shutil
+    >>> from pathlib import Path
+    >>> from pharmaml.docking.campaign import write_config_batch
+    >>> root = Path("/tmp/pharmaml_doctest_cfgbatch")
+    >>> shutil.rmtree(root, ignore_errors=True)
+    >>> ligand = root / "01_aspirin" / "l.pdbqt"
+    >>> ligand.parent.mkdir(parents=True)
+    >>> _ = ligand.write_text(
+    ...     "ATOM      1  C   LIG A   1       0.000   0.000   0.000  1.00  0.00     C\\n"
+    ...     "ATOM      2  O   LIG A   1       2.000   0.000   0.000  1.00  0.00     OA\\n"
+    ...     "TORSDOF 1\\n")
+    >>> empty = root / "02_empty"; empty.mkdir()
+    >>> report = write_config_batch(root, receptor_types="A C HD N Ni OA SA")
+    >>> report.loc[0, "folder"], report.loc[0, "status"]
+    ('01_aspirin', 'ok')
+    >>> from pharmaml.docking.preparation import read_gpf
+    >>> read_gpf(root / "01_aspirin" / "r.gpf")["receptor_types"]
+    ['A', 'C', 'HD', 'N', 'Ni', 'OA', 'SA']
+    >>> report.loc[1, "folder"], report.loc[1, "status"]
+    ('02_empty', 'no ligand PDBQT')
+    >>> again = write_config_batch(root, skip_existing=True)
+    >>> again.loc[0, "status"]
+    'skipped (r.gpf exists)'
+    >>> shutil.rmtree(root)
+    """
+    base = Path(directory)
+    if not base.is_dir():
+        raise DockingError(f"directory not found: {base}")
+    if padding < 0:
+        raise DataValidationError(f"padding must be >= 0, got {padding}")
+
+    rows: list[dict[str, str]] = []
+    for sub in sorted(p for p in base.iterdir() if p.is_dir()):
+        row: dict[str, str] = {
+            "folder": sub.name, "ligand": "", "gpf": "", "dpf": "",
+            "centre": "", "status": "",
+        }
+        rows.append(row)
+        if skip_existing and (sub / "r.gpf").is_file():
+            row["status"] = "skipped (r.gpf exists)"
+            continue
+        candidates = sorted(
+            p for p in sub.glob("*.pdbqt") if p.name != receptor_file
+        )
+        if not candidates:
+            row["status"] = "no ligand PDBQT"
+            continue
+        ligand = candidates[0]
+        row["ligand"] = ligand.name
+        try:
+            box = compute_grid_box(ligand, padding=padding, npts=npts,
+                                   spacing=spacing)
+            gpf_kwargs: dict[str, object] = {
+                "receptor_file": receptor_file, "box": box,
+                "output_path": sub / "r.gpf",
+            }
+            if receptor_types is not None:
+                gpf_kwargs["receptor_types"] = receptor_types
+            gpf = write_gpf(ligand, **gpf_kwargs)  # type: ignore[arg-type]
+            dpf = write_dpf(ligand, receptor_file=receptor_file,
+                            output_path=sub / "r.dpf", ga_run=ga_run,
+                            ga_pop_size=ga_pop_size)
+        except Exception as exc:  # noqa: BLE001 -- one bad folder, reported
+            row["status"] = f"failed: {exc}"
+            _LOG.warning("Config batch failed for %s: %s", sub, exc)
+            continue
+        row["gpf"] = str(gpf)
+        row["dpf"] = str(dpf)
+        row["centre"] = (
+            f"{box.center_x:.3f} {box.center_y:.3f} {box.center_z:.3f}"
+        )
+        row["status"] = "ok"
+    ok = sum(1 for row in rows if row["status"] == "ok")
+    _LOG.info("Config batch: %d/%d folder(s) configured under %s",
+              ok, len(rows), base)
+    return pd.DataFrame(
+        rows,
+        columns=["folder", "ligand", "gpf", "dpf", "centre", "status"],
+    )

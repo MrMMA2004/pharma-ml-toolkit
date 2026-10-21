@@ -30,12 +30,14 @@ A tabbed graphical interface opens with every calculation domain of the
   library and a receptor into PDBQT files (with an auto-remove bad
   residues fallback for the broken-density PDBs Meeko's templates
   reject -- the library twin of ``--delete_bad_res``), compute the
-  grid box and write the GPF/DPF configs, parse DLG / Vina results or
-  scan a whole campaign, launch batch AutoDock4 or single Vina runs
-  -- and dock a whole pasted SMILES ARRAY in one call: every SMILES
-  prepared into its own campaign folder, the Vina or AutoDock4 engine
-  run SIMULTANEOUSLY across a worker pool, and the best affinities
-  ranked into the results table.
+  grid box and write the GPF/DPF configs (one ligand, or the whole
+  campaign tree in one batch -- custom receptor types included for
+  Ni-bearing receptors), parse DLG / Vina results, scan a whole
+  campaign or a whole Vina results folder, launch batch AutoDock4 or
+  single Vina runs -- and dock a whole pasted SMILES ARRAY in one
+  call: every SMILES prepared into its own campaign folder, the Vina
+  or AutoDock4 engine run SIMULTANEOUSLY across a worker pool, and
+  the best affinities ranked into the results table.
 * **Data & ML**     -- open any CSV (or one of the bundled example
   datasets), pick a target column, train a registry model with the
   toolkit's own preprocessing pipeline, inspect the metrics and the
@@ -2748,12 +2750,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "Docking",
                 ("Ligand library and receptor preparation into PDBQT (bad "
                  "residues auto-removed), the grid box with GPF/DPF "
-                 "configs, DLG / Vina result parsing, batch campaign runs, "
-                 "the SMILES array card: paste a list, dock every molecule "
-                 "simultaneously with Vina or AutoDock4 -- plus the audit "
-                 "card (GPF parameters, ligand_types, torsion consistency, "
-                 "completion), the Vina config batch and one-ligand "
-                 "SMILES → PDBQT."),
+                 "configs — one ligand or the whole campaign at once, "
+                 "custom receptor types included — DLG / Vina result "
+                 "parsing (single logs or a full Vina results folder), "
+                 "batch campaign runs, the SMILES array card: paste a "
+                 "list, dock every molecule simultaneously with Vina or "
+                 "AutoDock4 -- plus the audit card (GPF parameters, "
+                 "ligand_types, torsion consistency, completion), the "
+                 "Vina config batch and one-ligand SMILES → PDBQT."),
                 "RDKit + pandas",
             ),
             (
@@ -5275,6 +5279,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_ga_pop_entry = ttk.Entry(grid_card, width=10)
         self._dock_ga_pop_entry.insert(0, "150")
         form_row(grid_card, "ga population", self._dock_ga_pop_entry)
+        self._dock_receptor_types_entry = ttk.Entry(grid_card, width=20)
+        form_row(grid_card, "receptor types (blank = default)",
+                 self._dock_receptor_types_entry)
         grid_btn = self._action_button(
             grid_card, "Compute box & write GPF/DPF", self._dock_compute_grid,
             primary=True,
@@ -5283,7 +5290,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         grid_btn.grid(row=grid_card.grid_size()[1], column=0, columnspan=2,
                       sticky="w", pady=(6, 0))
-        self._dock_grid_text = _grid_text(grid_card, height=7, mono=self._mono)
+        batch_btn = self._action_button(
+            grid_card, "Batch GPF/DPF for campaign…",
+            self._dock_write_config_batch,
+            tooltip="Every sub-folder's ligand PDBQT gets its own r.gpf/"
+                    "r.dpf pair — the gpfer/dpfer batch loop, one row per "
+                    "folder. Set receptor types for Ni-bearing receptors "
+                    "(gpferreceptorni.py).",
+        )
+        batch_btn.grid(row=grid_card.grid_size()[1], column=0, columnspan=2,
+                       sticky="w", pady=(6, 0))
+        self._dock_grid_text = _grid_text(grid_card, height=10, mono=self._mono)
         self._dock_grid_text.insert(
             "1.0", "box centre / size, ligand atom types and the written "
                    "paths appear here"
@@ -5326,6 +5343,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         vina_btn = self._action_button(vina_row, "Open Vina output…",
                                        self._dock_open_vina)
         vina_btn.pack(side="left")
+        vina_scan_btn = self._action_button(
+            vina_row, "Scan Vina results folder…", self._dock_scan_vina,
+            tooltip="Every .log under a results tree, best affinity per "
+                    "ligand, strongest binder first (vina_reader.py).",
+        )
+        vina_scan_btn.pack(side="left", padx=(10, 0))
         self._dock_results_info = ttk.Label(
             results, text="no results yet — scan a campaign or open a log",
             style="CardMuted.TLabel", wraplength=320, justify="left",
@@ -6028,6 +6051,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ga_run = parse_int(self._dock_ga_run_entry.get(), "ga_run", minimum=1)
             ga_pop = parse_int(self._dock_ga_pop_entry.get(), "ga population",
                                minimum=1)
+            receptor_types = self._dock_receptor_types_entry.get().strip() or None
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -6043,15 +6067,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             box = compute_grid_box(ligand, padding=padding, npts=npts,
                                    spacing=spacing)
             atom_types = extract_pdbqt_atom_types(ligand)
-            gpf = write_gpf(ligand, receptor_file=receptor_file, box=box,
-                            output_path=ligand.parent / "r.gpf")
+            gpf_kwargs: dict[str, Any] = {
+                "receptor_file": receptor_file,
+                "box": box,
+                "output_path": ligand.parent / "r.gpf",
+            }
+            if receptor_types is not None:
+                gpf_kwargs["receptor_types"] = receptor_types
+            gpf = write_gpf(ligand, **gpf_kwargs)
             dpf = write_dpf(ligand, receptor_file=receptor_file,
                             output_path=ligand.parent / "r.dpf",
                             ga_run=ga_run, ga_pop_size=ga_pop)
-            return box, atom_types, gpf, dpf, ga_run, ga_pop
+            return box, atom_types, gpf, dpf, ga_run, ga_pop, receptor_types
 
         def render(payload: Any) -> None:
-            box, atom_types, gpf, dpf, used_run, used_pop = payload
+            box, atom_types, gpf, dpf, used_run, used_pop, used_types = payload
             self._dock_box = box
             centre = (box.center_x, box.center_y, box.center_z)
             size = box.size
@@ -6062,11 +6092,71 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 (f"box size       ({size[0]:.3f}, {size[1]:.3f}, {size[2]:.3f}) Å "
                  f"· npts {box.npts} at {box.spacing:g} Å"),
                 f"ligand types   {' '.join(atom_types)}",
+                (f"receptor types {used_types or 'A C HD N NA OA SA (default)'}"),
                 f"r.gpf          {gpf}",
                 f"r.dpf          {dpf}   (ga_run {used_run} · pop {used_pop})",
             ]))
 
         self._start_job(f"grid box for {ligand.name}", work, render)
+
+    def _dock_write_config_batch(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "the config batch"):
+            return
+        path = filedialog.askdirectory(
+            title="Choose the campaign root (one sub-folder per ligand)"
+        )
+        if not path:
+            return
+        root = Path(path)
+        try:
+            padding = parse_float(self._dock_padding_entry.get(), "padding",
+                                  minimum=0.0)
+            npts = parse_int_triple(self._dock_npts_entry.get(), "npts", minimum=1)
+            spacing = parse_float(self._dock_spacing_entry.get(), "spacing",
+                                  minimum=0.01)
+            receptor_file = self._dock_receptor_name_entry.get().strip()
+            if not receptor_file:
+                raise ValueError("receptor file: pick a file name (e.g. r.pdbqt)")
+            ga_run = parse_int(self._dock_ga_run_entry.get(), "ga_run", minimum=1)
+            ga_pop = parse_int(self._dock_ga_pop_entry.get(), "ga population",
+                               minimum=1)
+            receptor_types = self._dock_receptor_types_entry.get().strip() or None
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.docking import write_config_batch
+
+            return write_config_batch(
+                root, receptor_file=receptor_file, padding=padding, npts=npts,
+                spacing=spacing, receptor_types=receptor_types,
+                ga_run=ga_run, ga_pop_size=ga_pop,
+            )
+
+        def render(report: Any) -> None:
+            ok = int((report["status"] == "ok").sum())
+            skipped = int((report["status"] == "skipped (r.gpf exists)").sum())
+            no_ligand = int((report["status"] == "no ligand PDBQT").sum())
+            failed = int(report["status"].str.startswith("failed").sum())
+            lines = [
+                f"campaign root  {root}",
+                (f"configured      {ok}/{len(report)} folders"
+                 + (f" · {skipped} skipped (r.gpf exists)" if skipped else "")
+                 + (f" · {no_ligand} without a ligand" if no_ligand else "")
+                 + (f" · {failed} failed" if failed else "")),
+            ]
+            for row in report.to_dict("records"):
+                centre = str(row.get("centre") or "")
+                lines.append(
+                    f"  {row['folder']:<20} {row['status']:<26}"
+                    + (f" box {centre}" if centre else "")
+                )
+            self._dock_grid_text.delete("1.0", "end")
+            self._dock_grid_text.insert("1.0", "\n".join(lines))
+
+        self._start_job(f"writing configs for {root.name}", work, render)
 
     # -- docking results card -------------------------------------------- #
     def _dock_scan_campaign(self) -> None:
@@ -6217,6 +6307,54 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dock_rescore_prefill()
 
         self._start_job(f"parsing {path.name}", work, render)
+
+    def _dock_scan_vina(self) -> None:
+        if not self._require_pharmaml() or not self._require("pandas",
+                                                            "Vina scanning"):
+            return
+        path = filedialog.askdirectory(
+            title="Choose the Vina results root to scan"
+        )
+        if not path:
+            return
+        root = Path(path)
+
+        def work() -> Any:
+            from pharmaml.docking import scan_vina_directory
+
+            return scan_vina_directory(root)
+
+        def render(frame: Any) -> None:
+            self._dock_results_frame = frame
+            self._dock_results_source = "vina"
+            tree = self._dock_results_tree
+            tree.delete(*tree.get_children())
+            columns = [str(column) for column in frame.columns]
+            tree["columns"] = columns
+            for column in columns:
+                tree.heading(column, text=column)
+                tree.column(column, width=120, minwidth=80, stretch=False)
+            for row in frame.to_dict("records"):
+                tree.insert(
+                    "", "end",
+                    values=[_cell_text(row[column]) for column in columns],
+                )
+            n_logs = len(frame)
+            if n_logs and frame["best_affinity"].notna().any():
+                best = float(frame["best_affinity"].min())
+                best_ligand = str(frame.loc[frame["best_affinity"].idxmin(),
+                                            "ligand"])
+                info = (f"{n_logs} Vina logs · best {best:.2f} kcal/mol "
+                        f"({best_ligand}) — strongest binder first")
+            elif n_logs:
+                info = (f"{n_logs} Vina logs · none scored a pose "
+                        "(check the logs for crashes)")
+            else:
+                info = "no Vina logs found under the chosen folder"
+            self._dock_results_info.configure(text=info, style="Field.TLabel")
+            self._dock_rescore_prefill()
+
+        self._start_job(f"scanning {root.name} for Vina logs", work, render)
 
     def _dock_open_vina(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas",

@@ -9,6 +9,7 @@ from pharmaml.docking.campaign import (
     list_file_names,
     reindex_by_number,
     scan_gpf_ligand_types,
+    write_config_batch,
 )
 from pharmaml.docking.ligands import (
     LigandLibrary,
@@ -97,6 +98,7 @@ __all__ = [
     "scan_torsion_consistency",
     "scan_vina_directory",
     "smiles_to_pdbqt",
+    "write_config_batch",
     "write_dpf",
     "write_gpf",
 ]

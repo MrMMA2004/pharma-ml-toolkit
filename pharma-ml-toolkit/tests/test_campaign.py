@@ -22,6 +22,7 @@ from pharmaml.docking.campaign import (
     list_file_names,
     reindex_by_number,
     scan_gpf_ligand_types,
+    write_config_batch,
 )
 from pharmaml.docking.ligands import (
     TorsionCheck,
@@ -576,6 +577,112 @@ class TestTorsionConsistency:
     def test_scan_missing_directory_raises(self, tmp_path) -> None:
         with pytest.raises(DockingError, match="not found"):
             scan_torsion_consistency(tmp_path / "nowhere")
+
+
+class TestWriteConfigBatch:
+    """The gpfer/dpfer/gpferreceptorni batch loop, upgraded (100x-111).
+
+    One config pair per campaign sub-folder, honest statuses for the
+    folders that cannot be configured, and the custom receptor-types
+    override the Ni-bearing script carried.
+    """
+
+    def _campaign(self, root: Path, ligand_text: str) -> None:
+        for name in ("01_aspirin", "02_ibuprofen"):
+            folder = root / name
+            folder.mkdir(parents=True)
+            (folder / "l.pdbqt").write_text(ligand_text, encoding="utf-8")
+        (root / "03_empty").mkdir()
+
+    def test_writes_pair_per_folder_with_statuses(
+        self, tmp_path, sample_ligand_pdbqt
+    ) -> None:
+        root = tmp_path / "campaign"
+        self._campaign(root, sample_ligand_pdbqt)
+        report = write_config_batch(root)
+        assert list(report["folder"]) == [
+            "01_aspirin", "02_ibuprofen", "03_empty",
+        ]
+        assert list(report.loc[:1, "status"]) == ["ok", "ok"]
+        assert report.loc[2, "status"] == "no ligand PDBQT"
+        for name in ("01_aspirin", "02_ibuprofen"):
+            assert (root / name / "r.gpf").is_file()
+            assert (root / name / "r.dpf").is_file()
+            parsed = read_gpf(root / name / "r.gpf")
+            # default receptor types, ligand-derived box
+            assert parsed["receptor_types"] == [
+                "A", "C", "HD", "N", "NA", "OA", "SA",
+            ]
+            assert parsed["receptor"] == "r.pdbqt"
+        assert report.loc[0, "centre"] != ""
+
+    def test_custom_receptor_types_land_in_every_gpf(
+        self, tmp_path, sample_ligand_pdbqt
+    ) -> None:
+        root = tmp_path / "campaign"
+        self._campaign(root, sample_ligand_pdbqt)
+        report = write_config_batch(
+            root, receptor_types="A C HD N Ni OA SA"
+        )
+        assert (report["status"] == "ok").sum() == 2
+        for name in ("01_aspirin", "02_ibuprofen"):
+            parsed = read_gpf(root / name / "r.gpf")
+            assert parsed["receptor_types"] == [
+                "A", "C", "HD", "N", "Ni", "OA", "SA",
+            ]  # the Ni type gpferreceptorni.py hard-coded
+
+    def test_skip_existing_leaves_pairs_untouched(
+        self, tmp_path, sample_ligand_pdbqt
+    ) -> None:
+        root = tmp_path / "campaign"
+        self._campaign(root, sample_ligand_pdbqt)
+        first = write_config_batch(root)
+        assert first.loc[0, "status"] == "ok"
+        marker = root / "01_aspirin" / "r.gpf"
+        original = marker.read_text(encoding="utf-8")
+        second = write_config_batch(root, skip_existing=True)
+        assert second.loc[0, "status"] == "skipped (r.gpf exists)"
+        assert marker.read_text(encoding="utf-8") == original
+
+    def test_receptor_file_excluded_from_ligand_search(
+        self, tmp_path, sample_ligand_pdbqt
+    ) -> None:
+        root = tmp_path / "campaign"
+        folder = root / "01_ligand"
+        folder.mkdir(parents=True)
+        (folder / "r.pdbqt").write_text(sample_ligand_pdbqt,
+                                        encoding="utf-8")
+        (folder / "l.pdbqt").write_text(sample_ligand_pdbqt,
+                                        encoding="utf-8")
+        report = write_config_batch(root)
+        assert report.loc[0, "ligand"] == "l.pdbqt"  # not the receptor
+
+    def test_negative_padding_raises(self, tmp_path) -> None:
+        with pytest.raises(DataValidationError):
+            write_config_batch(tmp_path, padding=-1.0)
+
+    def test_missing_directory_raises(self, tmp_path) -> None:
+        with pytest.raises(DockingError):
+            write_config_batch(tmp_path / "nope")
+
+    def test_failed_folder_is_reported_not_fatal(
+        self, tmp_path, sample_ligand_pdbqt
+    ) -> None:
+        root = tmp_path / "campaign"
+        good = root / "01_good"
+        good.mkdir(parents=True)
+        (good / "l.pdbqt").write_text(sample_ligand_pdbqt,
+                                      encoding="utf-8")
+        bad = root / "02_bad"
+        bad.mkdir()
+        # no ATOM records -> no coordinates -> the honest failed: row
+        (bad / "l.pdbqt").write_text(
+            "REMARK  Name = empty\nTORSDOF 0\n", encoding="utf-8"
+        )
+        report = write_config_batch(root)
+        assert report.loc[0, "status"] == "ok"
+        assert report.loc[1, "status"].startswith("failed:")
+        assert report.loc[1, "ligand"] == "l.pdbqt"
 
 
 class TestVinaConfig:

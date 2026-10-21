@@ -266,6 +266,7 @@ after adding new public functions.
 | `scan_torsion_consistency` | function | Audit every ``.pdbqt`` under a tree for torsion consistency. |
 | `scan_vina_directory` | function | Summarise every Vina ``.log`` under a results tree. |
 | `smiles_to_pdbqt` | function | Convert one SMILES to a 3D PDBQT ligand (Meeko + RDKit). |
+| `write_config_batch` | function | Write the ``r.gpf`` + ``r.dpf`` pair into every ligand folder. |
 | `write_dpf` | function | Write an AutoDock4 docking parameter file (DPF) for one ligand. |
 | `write_gpf` | function | Write an AutoDock4 grid parameter file (GPF) for one ligand. |
 

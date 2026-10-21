@@ -66,29 +66,29 @@ folder) is the point of the upgrade: one registry, one pipeline.
 
 | Rar file | PharmaML surface | Status |
 | --- | --- | --- |
-| `Convert IC50(nM) to pIC50.py` | `chem.parse_endpoint` (strips `<`/`>` qualifiers, never fabricates) + `chem.ic50_to_pic50` + `add_pic50_column`; `pharma.units` for the unit math; CLI `chem pic50` | ✅ |
-| `Convert CSV to SDF.py` | `chem.table_to_sdf` — AddHs → ETKDG (fixed seed) → UFF, every column becomes an SD tag, invalid SMILES counted not lost | ✅ |
-| `Convert SMI to CSV.py` | `chem.smi_to_csv` (streaming, BOM for Excel) — also `others/General/Convert SMI to CSV.py` | ✅ |
-| `others/Ml/Sdf reading.ipynb` | `chem.sdf_to_table` (tags → columns; the notebook's PandasTools.LoadSDF path) | ✅ |
+| `Convert IC50(nM) to pIC50.py` | `chem.parse_endpoint` (strips `<`/`>` qualifiers, never fabricates) + `chem.ic50_to_pic50` + `add_pic50_column`; `pharma.units` for the unit math; CLI `chem pic50` | `ic50_to_pic50`×2 `add_pic50_column`×2 |
+| `Convert CSV to SDF.py` | `chem.table_to_sdf` — AddHs → ETKDG (fixed seed) → UFF, every column becomes an SD tag, invalid SMILES counted not lost | `table_to_sdf`×2 |
+| `Convert SMI to CSV.py` | `chem.smi_to_csv` (streaming, BOM for Excel) — also `others/General/Convert SMI to CSV.py` | `smi_to_csv`×2 |
+| `others/Ml/Sdf reading.ipynb` | `chem.sdf_to_table` (tags → columns; the notebook's PandasTools.LoadSDF path) | `sdf_to_table`×2 |
 | `others/Ml/Descriptor calculator.py` / `Descriptoredited.py` | `chem.compute_descriptors(descriptor_set='rdkit_all')` | ✅ |
-| `others/Ml/Mordred_calculation.py` | `chem.compute_descriptors(descriptor_set='mordred')` — Error/Missing → NaN with an aggregate warning (100x-52) | ✅ |
-| `others/Ml/ECFP_calculation.py` | `chem.compute_fingerprints(kind='morgan')` (ECFP-style bits, radius & n_bits) | ✅ |
-| `others/Ml/Morgan_calculator.py` | `chem.compute_fingerprints(kind='morgan', as_counts=True/False)` | ✅ |
+| `others/Ml/Mordred_calculation.py` | `chem.compute_descriptors(descriptor_set='mordred')` — Error/Missing → NaN with an aggregate warning (100x-52) | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `others/Ml/ECFP_calculation.py` | `chem.compute_fingerprints(kind='morgan')` (ECFP-style bits, radius & n_bits) | `compute_fingerprints`×5 |
+| `others/Ml/Morgan_calculator.py` | `chem.compute_fingerprints(kind='morgan', as_counts=True/False)` | `compute_fingerprints`×5 |
 | `Tanimoto calculator.py` / `others/Ml/Tanimoto calculator.py` | `chem.tanimoto_matrix` (ref × target) + `similarity_scan` (long format, threshold) + `top_matches` | ✅ |
 | `Tanimoto-edited.py` / `others/Ml/Tanimotoedited.py` | the chunked/threshold variant → `similarity_scan(threshold=...)` | ✅ |
-| `Non-numerical data remover.py` | `ml.clean_numeric_frame` (target/keep_cols survive, dropped names logged); cell-level coercion is the mordred NaN path + `biology.normalize_expression` | ✅ |
+| `Non-numerical data remover.py` | `ml.clean_numeric_frame` (target/keep_cols survive, dropped names logged); cell-level coercion is the mordred NaN path + `biology.normalize_expression` | `clean_numeric_frame`×2 |
 | `Split CSV file.py` / `others/General/Split CSV file.py` | `chem.split_table_into_chunks` (flat memory, explicit output dir) | ✅ |
-| `others/General/CSV_merger.py` | `chem.merge_tables(first_columns=[...])` (the column-ordering contract) | ✅ |
-| `others/General/filemerger.py` | `chem.merge_table_folder` (CSV/Excel folder → one file); CLI `chem merge` | ✅ |
-| `others/General/common_between_two_excel.py` | `chem.compare_tables(...).common` / `.only_in_a` / `.only_in_b` (name-normalized set operations; TableComparison) | ✅ |
-| `others/compare/notcommon.py` | `chem.compare_tables(...).only_in_a / .only_in_b` differences report; CLI `chem compare` | ✅ |
-| `others/compare/smilesgetter.py` | `chem.annotate_with_smiles` (join SMILES onto a ligand-name column, extension/case normalization) | ✅ |
-| `others/General/approved.py` | `pharma.filter_approved_drugs` (17 TSVs → approved names) + `viz.export_docx` (any table as a real Word document — the rar wrote a bare .docx name list) | ✅ |
-| `others/General/Nameextracter.py` | `docking.list_file_names` (file inventory → table) | ✅ |
-| `others/General/adder.py` | `docking.distribute_files` + `docking.distribute_receptor` (copy binaries/receptor into every campaign subfolder) | ✅ |
-| `others/General/delete.py` | `docking.cleanup_tree` (keep-list + pattern, dry-run default) | ✅ |
-| `others/General/deleter.py` | `docking.delete_named_files` | ✅ |
-| `others/General/extaacter.py` | `docking.collect_files(pattern='r.dlg')` with unique-name resolution | ✅ |
+| `others/General/CSV_merger.py` | `chem.merge_tables(first_columns=[...])` (the column-ordering contract) | `merge_tables`×2 |
+| `others/General/filemerger.py` | `chem.merge_table_folder` (CSV/Excel folder → one file); CLI `chem merge` | `merge_table_folder`×2 |
+| `others/General/common_between_two_excel.py` | `chem.compare_tables(...).common` / `.only_in_a` / `.only_in_b` (name-normalized set operations; TableComparison) | `compare_tables`×2 |
+| `others/compare/notcommon.py` | `chem.compare_tables(...).only_in_a / .only_in_b` differences report; CLI `chem compare` | `compare_tables`×2 |
+| `others/compare/smilesgetter.py` | `chem.annotate_with_smiles` (join SMILES onto a ligand-name column, extension/case normalization) | `annotate_with_smiles`×2 |
+| `others/General/approved.py` | `pharma.filter_approved_drugs` (17 TSVs → approved names) + `viz.export_docx` (any table as a real Word document — the rar wrote a bare .docx name list) | `filter_approved_drugs`×2 `export_docx`×3 |
+| `others/General/Nameextracter.py` | `docking.list_file_names` (file inventory → table) | `list_file_names`×2 |
+| `others/General/adder.py` | `docking.distribute_files` + `docking.distribute_receptor` (copy binaries/receptor into every campaign subfolder) | `distribute_files`×2 |
+| `others/General/delete.py` | `docking.cleanup_tree` (keep-list + pattern, dry-run default) | `cleanup_tree`×2 |
+| `others/General/deleter.py` | `docking.delete_named_files` | `delete_named_files`×2 |
+| `others/General/extaacter.py` | `docking.collect_files(pattern='r.dlg')` with unique-name resolution | `collect_files`×2 |
 | `others/General/Prettier_extracted_dlgs.py` / `others/Prettier_extracted_dlgs.py` / `others/Docking/Prettier_extracted_dlgs.py` | `docking.reindex_by_number` (align sparse per-folder rows onto a dense 0..N index) | ✅ |
 | `others/General/reader_at_same_folder.py` / `others/reader_at_same_folder.py` | `docking.scan_docking_directory` (single-level scan) | ✅ |
 | `others/Ml/New Text Document.txt`, `others/Docking/New Text Document.txt` | empty placeholders | ⚠ nothing to cover |
@@ -105,7 +105,7 @@ folder) is the point of the upgrade: one registry, one pipeline.
 | `dpfer.py` / `others/dpfer.py` | `docking.write_dpf` (DPF from ligand atom types, TORSDOF, coords) | ✅ |
 | `reader.py` / `readerwithdetails.py` / `reader_at_same_folder.py` / others | `docking.parse_dlg_cluster_table` + `parse_dlg_summary` (cluster rank / lowest / mean / num-in-cluster; the top-cluster highlight) | ✅ |
 | `others/Reader for alphabetic folders/dlg_extracter_not_numeral.py` / `readerwithdetails.py` | `scan_docking_directory` accepts non-numeric folder names (pattern-based, not `\d+`-only) | ✅ |
-| `others/dlg_extracter.py` | `collect_files(pattern='r.dlg')` | ✅ |
+| `others/dlg_extracter.py` | `collect_files(pattern='r.dlg')` | `collect_files`×2 |
 | `smilestopdbqt.py` / `smiqt.py` | `docking.smiles_to_pdbqt` (Meeko, AD4 atom types) | ✅ |
 | `ligand_preparation_autodock4.py` / `others/ligand_preparation_autodock4.py` | `docking.prepare_ligand_library` (CSV → campaign folders → PDBQT with torsion reports) | ✅ |
 | `ligand_pdbqt_extracter.py` | `collect_files` (numbered .pdbqt collection with unique-name resolution) | ✅ |
@@ -266,3 +266,150 @@ x`), each file opened, its calls matched against
 `grep -n "<library function>" playground.py`; every zero-hit family
 in the table above gained its card in 1.2.50. Re-run the grep audit
 whenever a card moves — the matrix is the contract.
+
+## Per-file playground coverage (100x-111) — the tightened guarantee
+
+The user sharpened the standing contract to **each file**: "check that
+playground.py covers the entire contents (each file) of the zip and
+rar files." The family matrix above proved every *workflow family*
+had a card; the per-file audit re-ran the grep evidence **file by
+file** (118 rows) and found two behaviours the family lens had
+absorbed too coarsely — both closed in 1.2.51:
+
+- `others/Vina/vina_reader.py`'s **folder** walk → the Docking
+  results card's new *Scan Vina results folder…* button
+  (`scan_vina_directory`: best affinity per log, strongest binder
+  first, crashed logs keep NaN rows).
+- the `gpfer.py` / `gpferreceptorni.py` / `dpfer.py` **batch loop**
+  (one config pair per campaign sub-folder, custom receptor types)
+  → the new `docking.write_config_batch` + the grid card's *Batch
+  GPF/DPF for campaign…* button and *receptor types* field.
+
+The zip side is verified standing every release: the downloaded
+archive's `playground.py` is byte-identical to the working tree, zero
+rar-content leakage, `testzip` clean.
+
+The matrix below is the contract — re-run
+`scratch/probe_coverage_111_perfile.py` (fresh `unrar x` → per-file
+grep) whenever a card moves; a **ZERO-HIT** row is a regression.
+
+| Rar file | Playground surface | Grep evidence |
+| --- | --- | --- |
+| `Classification/ADAboost.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/ANN.py` | Data & ML → Train a model (ann) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/ANN/ANN class.py` | Data & ML → Train a model (ann) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/ANN/reuse.py` | Data & ML → Model persistence (load) | `load_model`×2 |
+| `Classification/BBB/BBB_Prediction_model.ipynb` | Data & ML end-to-end (load→train→compare→save) | `list_models`×2 `build_model`×4 `train_model`×4 `compare_models`×2 |
+| `Classification/BBB/tuned_random_forest_bbb_prediction_model.pkl` | Data & ML → Model persistence (fresh bundles; weights not shipped) | `save_model`×6 |
+| `Classification/CATboost.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/Decision tree.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/Descriptor/Descriptor classification.py` | Chemistry → Feature factory | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `Classification/Descriptor/Descriptor reuse(اگه اونیکی کار نکرد).py` | Chemistry → Feature factory (cached frame) | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `Classification/Descriptor/Descriptor reuse.py` | Chemistry → Feature factory (cached frame) | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `Classification/Elastic net.py` | Data & ML → Train a model (elastic_net_logistic) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/KNN.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/Lasso.py` | Data & ML → Train a model (lasso_logistic) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/LightGBM.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/Logestic Regression/Logistic regression class done.py` | Data & ML → Train + Save bundle | `list_models`×2 `build_model`×4 `train_model`×4 `save_model`×6 |
+| `Classification/Logestic Regression/reuse.py` | Data & ML → Model persistence (load) | `load_model`×2 |
+| `Classification/Logistic regression.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/RF.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/Ridge.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/SVM.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Classification/Stacking.py` | Data & ML → Ensemble builder (stacking) | `build_stacking`×2 `build_voting`×2 |
+| `Classification/Stacking/reuse.py` | Data & ML → Model persistence (load) | `load_model`×2 |
+| `Classification/Stacking/stacking class.py` | Data & ML → Ensemble builder (stacking) | `build_stacking`×2 `build_voting`×2 |
+| `Classification/Voting.py` | Data & ML → Ensemble builder (voting) | `build_stacking`×2 `build_voting`×2 |
+| `Classification/XGboost.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Convert CSV to SDF.py` | Chemistry → Structure & table converters (CSV→3D SDF) | `table_to_sdf`×2 |
+| `Convert IC50(nM) to pIC50.py` | Chemistry → Affinity conversion + converters (append pIC50) | `ic50_to_pic50`×2 `add_pic50_column`×2 |
+| `Convert SMI to CSV.py` | Chemistry → Structure & table converters (.smi→CSV) | `smi_to_csv`×2 |
+| `Descriptor classification.py` | Chemistry → Feature factory | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `Descriptor regression.py` | Chemistry → Feature factory | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `Non-numerical data remover.py` | Data & ML → Drop non-numeric columns | `clean_numeric_frame`×2 |
+| `Regression/ADAboost.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/ANN.py` | Data & ML → Train a model (ann) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/ANN2.py` | Data & ML → Train a model (ann) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/CATboost.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/Decision tree.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/Descriptor/Descriptor regression.py` | Chemistry → Feature factory | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `Regression/Descriptor/Descriptor reuse.py` | Chemistry → Feature factory (cached frame) | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `Regression/Elastic net.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/Huber.py` | Data & ML → Train a model (huber_regression) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/KNN.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/Lasso.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/LightGBM.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/Linear regression.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/RF.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/Ridge.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/SVM.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/SVM/SVM reg.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Regression/SVM/reuse.py` | Data & ML → Model persistence (load) | `load_model`×2 |
+| `Regression/Stacking.py` | Data & ML → Ensemble builder (stacking) | `build_stacking`×2 `build_voting`×2 |
+| `Regression/Stacking/Stacking reg.py` | Data & ML → Ensemble builder (stacking) | `build_stacking`×2 `build_voting`×2 |
+| `Regression/Stacking/reuse.py` | Data & ML → Model persistence (load) | `load_model`×2 |
+| `Regression/Voting.py` | Data & ML → Ensemble builder (voting) | `build_stacking`×2 `build_voting`×2 |
+| `Regression/Voting/Voting reg.py` | Data & ML → Ensemble builder (voting) | `build_stacking`×2 `build_voting`×2 |
+| `Regression/Voting/reuse.py` | Data & ML → Model persistence (load) | `load_model`×2 |
+| `Regression/XGboost.py` | Data & ML → Train a model (registry) | `list_models`×2 `build_model`×4 `train_model`×4 |
+| `Split CSV file.py` | Utilities → Table merge & split (split into chunks) | `split_table_into_chunks`×2 |
+| `Tanimoto calculator.py` | Chemistry → Library similarity scan (matrix) | `tanimoto_matrix`×2 `similarity_scan`×2 `top_matches`×2 |
+| `Tanimoto-edited.py` | Chemistry → Library similarity scan (scan ≥ threshold) | `similarity_scan`×2 |
+| `others/Docking/New Text Document.txt` | empty placeholder (absorbed) | — |
+| `others/Docking/Prettier_extracted_dlgs.py` | Utilities → Reindex by number | `reindex_by_number`×2 |
+| `others/Docking/checker.py` | Docking → Grid, torsion & completion audit | `check_docking_completion`×2 |
+| `others/Docking/dpfer.py` | Docking → Grid & configs (single) + **Batch GPF/DPF** (1.2.51) | `write_dpf`×2 `write_config_batch`×2 |
+| `others/Docking/gpfer.py` | Docking → Grid & configs (single) + **Batch GPF/DPF** (1.2.51) | `write_gpf`×2 `write_config_batch`×2 |
+| `others/Docking/gpferreceptorni.py` | Docking → **receptor types field** + Batch GPF/DPF (1.2.51) | `write_gpf`×2 `write_config_batch`×2 `receptor_types`×10 |
+| `others/Docking/gpfreader.py` | Docking → Audit (GPF → parameters, ligand_types per folder) | `read_gpf`×2 `scan_gpf_ligand_types`×2 |
+| `others/Docking/ligand generation/mismatch2.py` | Docking → Audit (folder: torsion consistency) | `check_torsion_consistency`×0 `scan_torsion_consistency`×2 |
+| `others/Docking/ligand generation/nigga.py` | Docking → Ligand library + Chemistry → CSV→3D SDF (Meeko path; mol2 absorbed) | `prepare_ligand_library`×2 `table_to_sdf`×2 |
+| `others/Docking/ligand generation/nigga2.py` | Docking → Ligand library + Chemistry → CSV→3D SDF (Meeko path; mol2 absorbed) | `prepare_ligand_library`×2 `table_to_sdf`×2 |
+| `others/Docking/ligand generation/niggamatch.py` | Docking → Audit (folder: torsion consistency) | `check_torsion_consistency`×0 `scan_torsion_consistency`×2 |
+| `others/Docking/ligand generation/niggaqt.py` | Docking → Ligand library → PDBQT (MGLTools absorbed → Meeko) | `prepare_ligand_library`×2 |
+| `others/Docking/ligand_pdbqt_extracter.py` | Utilities → Campaign file tools (collect) | `collect_files`×2 |
+| `others/Docking/ligand_preparation_autodock4.py` | Docking → Ligand library → PDBQT | `prepare_ligand_library`×2 |
+| `others/Docking/main.py` | Docking → Campaign runner | `batch_run_directories`×2 |
+| `others/Docking/reader.py` | Docking → Docking results (DLG cluster table) | `parse_dlg_cluster_table`×2 |
+| `others/Docking/reader_at_same_folder.py` | Docking → Docking results (campaign scan) | `scan_docking_directory`×2 |
+| `others/Docking/readerwithdetails.py` | Docking → Docking results (DLG cluster + summary) | `parse_dlg_cluster_table`×2 `parse_dlg_summary`×2 |
+| `others/Docking/smilestopdbqt.py` | Docking → SMILES → PDBQT (single) + Ligand library | `smiles_to_pdbqt`×2 |
+| `others/Docking/smiqt.py` | Docking → SMILES → PDBQT (single) + Ligand library | `smiles_to_pdbqt`×2 |
+| `others/General/CSV_merger.py` | Utilities → Table merge & split (merge picked files) | `merge_tables`×2 |
+| `others/General/Convert SMI to CSV.py` | Chemistry → Structure & table converters (.smi→CSV) | `smi_to_csv`×2 |
+| `others/General/Nameextracter.py` | Utilities → Campaign file tools (list file names) | `list_file_names`×2 |
+| `others/General/Prettier_extracted_dlgs.py` | Utilities → Reindex by number | `reindex_by_number`×2 |
+| `others/General/Split CSV file.py` | Utilities → Table merge & split (split into chunks) | `split_table_into_chunks`×2 |
+| `others/General/adder.py` | Utilities → Campaign file tools (distribute files) | `distribute_files`×2 |
+| `others/General/approved.py` | Utilities → Approved drugs → report (CSV + DOCX) | `filter_approved_drugs`×2 `export_docx`×3 |
+| `others/General/common_between_two_excel.py` | Utilities → Table compare & annotate (compare a column) | `compare_tables`×2 |
+| `others/General/delete.py` | Utilities → Campaign file tools (cleanup tree) | `cleanup_tree`×2 |
+| `others/General/deleter.py` | Utilities → Campaign file tools (delete named files) | `delete_named_files`×2 |
+| `others/General/extaacter.py` | Utilities → Campaign file tools (collect files) | `collect_files`×2 |
+| `others/General/filemerger.py` | Utilities → Table merge & split (merge whole folder) | `merge_table_folder`×2 |
+| `others/General/reader_at_same_folder.py` | Docking → Docking results (campaign scan) | `scan_docking_directory`×2 |
+| `others/Ml/Descriptor calculator.py` | Chemistry → Feature factory (rdkit_all) | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `others/Ml/Descriptoredited.py` | Chemistry → Feature factory (rdkit_all) | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `others/Ml/ECFP_calculation.py` | Chemistry → Feature factory (morgan fingerprints) | `compute_fingerprints`×5 |
+| `others/Ml/Mordred_calculation.py` | Chemistry → Feature factory (mordred set) | `compute_descriptors`×2 `compute_fingerprints`×5 |
+| `others/Ml/Morgan_calculator.py` | Chemistry → Feature factory (morgan counts) | `compute_fingerprints`×5 |
+| `others/Ml/New Text Document.txt` | empty placeholder (absorbed) | — |
+| `others/Ml/Sdf reading.ipynb` | Chemistry → Structure & table converters (SDF → table) | `sdf_to_table`×2 |
+| `others/Ml/Tanimoto calculator.py` | Chemistry → Library similarity scan (matrix) | `tanimoto_matrix`×2 |
+| `others/Ml/Tanimotoedited.py` | Chemistry → Library similarity scan (scan) | `similarity_scan`×2 |
+| `others/Prettier_extracted_dlgs.py` | Utilities → Reindex by number | `reindex_by_number`×2 |
+| `others/Reader for alphabetic folders/dlg_extracter_not_numeral.py` | Utilities → Campaign file tools (collect; pattern-based folders) | `scan_docking_directory`×2 |
+| `others/Reader for alphabetic folders/readerwithdetails.py` | Docking → Docking results (DLG cluster table) | `parse_dlg_cluster_table`×2 |
+| `others/Readme.txt` | README.md + Home → What lives where (absorbed) | — |
+| `others/Vina/vina_reader.py` | Docking → Docking results (**Scan Vina results folder**, 1.2.51) | `parse_vina_output`×2 `scan_vina_directory`×2 |
+| `others/Vina/vinar.py` | Docking → Campaign runner (Vina single ligand) | `run_vina`×2 |
+| `others/Vina/vinar_multiple.py` | Docking → Vina config batch | `run_vina_batch`×2 |
+| `others/adder.py` | Utilities → Campaign file tools (distribute) | `distribute_files`×2 |
+| `others/compare/notcommon.py` | Utilities → Table compare & annotate (compare a column) | `compare_tables`×2 |
+| `others/compare/smilesgetter.py` | Utilities → Table compare & annotate (annotate with SMILES) | `annotate_with_smiles`×2 |
+| `others/dlg_extracter.py` | Utilities → Campaign file tools (collect) | `collect_files`×2 |
+| `others/dpfer.py` | Docking → Grid & configs (single) + **Batch GPF/DPF** (1.2.51) | `write_dpf`×2 `write_config_batch`×2 |
+| `others/gpfer.py` | Docking → Grid & configs (single) + **Batch GPF/DPF** (1.2.51) | `write_gpf`×2 `write_config_batch`×2 |
+| `others/ligand_preparation_autodock4.py` | Docking → Ligand library → PDBQT | `prepare_ligand_library`×2 |
+| `others/main.py` | Docking → Campaign runner (batch_run_directories) | `batch_run_directories`×2 |
+| `others/reader_at_same_folder.py` | Docking → Docking results (campaign scan) | `scan_docking_directory`×2 |
