@@ -18,6 +18,7 @@ import { DockingParser } from "@/components/explorer/playground/docking-parser";
 import { ConsensusRescore } from "@/components/explorer/playground/consensus-rescore";
 import { FeatureFactory } from "@/components/explorer/playground/feature-factory";
 import { LigandPrep } from "@/components/explorer/playground/ligand-prep";
+import { BatchConfigs } from "@/components/explorer/playground/batch-configs";
 import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
 import { LigandReconciler } from "@/components/explorer/playground/ligand-reconciler";
 import { useToolkitStore } from "@/lib/store";
@@ -116,7 +117,10 @@ export function Playground() {
         <FeatureFactory />
       </TabsContent>
       <TabsContent value="ligandprep" className="mt-4 sm:mt-6">
-        <LigandPrep />
+        <div className="space-y-4 sm:space-y-6">
+          <LigandPrep />
+          <BatchConfigs />
+        </div>
       </TabsContent>
       <TabsContent value="reconciler" className="mt-4 sm:mt-6">
         <LigandReconciler />

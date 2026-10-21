@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/table";
 import { CHART } from "@/components/explorer/playground/calc-ui";
 import { StatChip } from "@/components/explorer/stat-chip";
+import { VinaFolderScan } from "@/components/explorer/playground/vina-folder-scan";
 import { CSV_SAMPLE, DLG_SAMPLE, VINA_SAMPLE } from "@/lib/docking-samples";
 import { fmtNum, parsePositiveNumber } from "@/lib/format";
 import type { DockingFormat, DockingParseResponse, DockingPose } from "@/lib/toolkit-types";
@@ -329,6 +330,18 @@ export function DockingParser() {
   function loadTorsionSample(mismatch: boolean) {
     setTorsionInput(mismatch ? TORSION_MISMATCH_SAMPLE : TORSION_OK_SAMPLE);
     toast.success(mismatch ? "Mismatch example loaded" : "Consistent example loaded");
+  }
+
+  /** Load one scanned Vina log into the parser above (format = vina). */
+  function openVinaLog(name: string, logContent: string) {
+    setFormat("vina");
+    setContent(logContent);
+    setStatus("idle");
+    setResult(null);
+    setError(null);
+    toast.success(`${name} loaded into the parser`);
+    const input = document.getElementById("dock-input");
+    input?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   function loadSample(f: DockingFormat) {
@@ -917,6 +930,9 @@ export function DockingParser() {
           </p>
         </CardContent>
       </Card>
+
+      {/* ------------------------------ Vina folder scan ------------------------------ */}
+      <VinaFolderScan onOpenLog={openVinaLog} />
     </div>
   );
 }
