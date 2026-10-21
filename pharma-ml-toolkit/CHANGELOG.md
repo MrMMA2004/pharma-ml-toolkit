@@ -10,6 +10,46 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.53] — 2026-10-21
+
+### Fixed — the GPC/GP/HSVR refit-determinism pins flaked on exact-bit equality
+
+`test_deterministic_refit` (GaussianProcessClassifier) failed once in
+the 100x-114 baseline under parallel ruff+mypy load — unreproduced in
+20+ re-runs loaded and unloaded. Root-cause class: `assert_array_equal`
+demands bit-equality between two independent BLAS-backed fits, while
+thread-scheduling may vary the reduction order by ~1 ULP. The three
+sklearn-family refit pins (GP regression, GPC, HierarchicalSVR) now
+assert round-off tolerance (`rtol=0, atol=1e-8`) — still catching any
+real seed/state leak (an O(1) shift) — with the provenance comment and
+`scratch/probe_gpc_flake_114.py` (40 paired refits, plain and under
+load) documenting the hunt.
+
+### Added — EI/UCB acquisition parity: the shipped web math vs scipy
+
+The 100x-113 GP-band overlay's Bayesian-optimisation math moved from
+the 5.3k-line component into `src/lib/bayes-acquisition.ts` (pure,
+self-contained — and its Φ doc comment now correctly credits
+Abramowitz–Stegun **26.2.17**, the direct polynomial, not 7.1.26 erf).
+New paired probes `pharma-ml-toolkit/scratch/verify_acquisition_
+parity_114.py` + `scratch/verify_acquisition_parity_114.ts` (the TS
+twin imports the SHIPPED lib module) verify against scipy.stats.norm:
+Φ ≤ 7.294e-8 (inside the 7.5e-8 AS bound claim), φ ≤ 5.6e-17,
+EI ≤ 3.5e-7, UCB exact — guard branch included.
+
+### Added — Hyperband per-trial rung scatter + the walkthrough §9 heat-map
+
+- The tuner result card grows the rung scatter the leaderboard table
+  could not show: every Hyperband evaluation as a budget-vs-score dot,
+  coloured by rung (stone → amber → teal → emerald), promoted dots
+  solid with a ring, culled dots faint, the winner a haloed diamond,
+  dashed references at the defaults CV and the full budget; custom
+  tooltip + ARIA summary (the 100x-102 candidate, closed).
+- Walkthrough §9's similarity scan now ends in the PICTURE:
+  `compute_fingerprints` → `tanimoto_matrix` → `plot_similarity_heatmap`
+  over the two reference drugs plus aspirin's three nearest library
+  hits (the standing "tables only" gap, closed).
+
 ## [1.2.52] — 2026-10-21
 
 ### Fixed — the ensemble builders were documented as `ml.*` but never exported from the package

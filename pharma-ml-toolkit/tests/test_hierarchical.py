@@ -87,7 +87,12 @@ class TestFitPredict:
         X, y = two_slopes()
         first = HierarchicalSVR(n_clusters=3, random_state=7).fit(X, y)
         second = HierarchicalSVR(n_clusters=3, random_state=7).fit(X, y)
-        assert np.array_equal(first.predict(X), second.predict(X))
+        # round-off tolerance, not bits: BLAS reduction order may vary
+        # by ~1 ULP under thread scheduling (the 100x-114 GPC flake),
+        # while a real seed/state leak moves predictions by O(1).
+        np.testing.assert_allclose(
+            first.predict(X), second.predict(X), rtol=0.0, atol=1e-8
+        )
 
     def test_constant_target_cluster_uses_the_constant(self) -> None:
         # cluster A carries a constant target (SVR cannot fit one distinct

@@ -1878,8 +1878,10 @@ class TestGaussianProcessFamily:
         second = train_model("gaussian_process", "regression", x, y, tune=False)
         m1, s1 = predict_with_uncertainty(first.model, x)
         m2, s2 = predict_with_uncertainty(second.model, x)
-        np.testing.assert_array_equal(m1, m2)
-        np.testing.assert_array_equal(s1, s2)
+        # round-off-tolerance determinism pin — see the GPC twin's
+        # 100x-114 comment: bits may differ by a BLAS ULP, fits may not.
+        np.testing.assert_allclose(m1, m2, rtol=0.0, atol=1e-8)
+        np.testing.assert_allclose(s1, s2, rtol=0.0, atol=1e-8)
 
     def test_non_gp_model_is_rejected(self) -> None:
         from pharmaml.ml.evaluation import predict_with_uncertainty
@@ -1996,8 +1998,17 @@ class TestGaussianProcessClassifierFamily:
         x, y = self._cls_data()
         first = train_model("gpc", "classification", x, y, tune=False)
         second = train_model("gpc", "classification", x, y, tune=False)
-        np.testing.assert_array_equal(
-            first.model.predict_proba(x), second.model.predict_proba(x)
+        # 100x-114: assert_array_equal flaked ONCE (first run of the
+        # round, under parallel ruff+mypy load; unreproduced in 20+
+        # re-runs loaded and unloaded).  Refit determinism is pinned to
+        # round-off, not to bits: BLAS reduction order may vary by ~1
+        # ULP under thread scheduling, while a real determinism bug
+        # (seed/state leakage between fits) moves predictions by O(1).
+        np.testing.assert_allclose(
+            first.model.predict_proba(x),
+            second.model.predict_proba(x),
+            rtol=0.0,
+            atol=1e-8,
         )
 
     def test_probabilities_hedge_away_from_data(self) -> None:

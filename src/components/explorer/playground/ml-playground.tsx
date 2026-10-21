@@ -43,6 +43,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  expectedImprovement,
+  upperConfidenceBound,
+} from "@/lib/bayes-acquisition";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -829,35 +833,9 @@ interface GpBandPoint {
   acq?: number;
 }
 
-/* -- Bayesian-optimisation acquisition math (pure, self-contained) -- */
-
-/** Standard-normal CDF via the Abramowitz–Stegun 7.1.26 erf
- *  approximation (|ε| < 7.5e-8 — plenty for a chart overlay). */
-function stdNormalCdf(z: number): number {
-  const t = 1 / (1 + 0.2316419 * Math.abs(z));
-  const poly =
-    t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
-  const p = 1 - (Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI)) * poly;
-  return z >= 0 ? p : 1 - p;
-}
-
-/** Standard-normal PDF. */
-function stdNormalPdf(z: number): number {
-  return Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
-}
-
-/** Expected Improvement (maximisation) at one posterior point:
- *  EI = (μ − f*)·Φ(z) + σ·φ(z) with z = (μ − f*)/σ. */
-function expectedImprovement(mu: number, sigma: number, fStar: number): number {
-  if (sigma <= 1e-12) return Math.max(0, mu - fStar);
-  const z = (mu - fStar) / sigma;
-  return (mu - fStar) * stdNormalCdf(z) + sigma * stdNormalPdf(z);
-}
-
-/** Upper Confidence Bound (maximisation): μ + κ·σ. */
-function upperConfidenceBound(mu: number, sigma: number, kappa: number): number {
-  return mu + kappa * sigma;
-}
+/* -- Bayesian-optimisation acquisition math lives in
+ *  @/lib/bayes-acquisition (pure, self-contained, probed against
+ *  scipy.stats.norm by scratch/verify_acquisition_parity_114) -- */
 
 /** Custom tooltip for the GP band chart — x, ŷ and the band edges in one
  *  compact card (the default ComposedChart tooltip would list the stacked
@@ -1699,6 +1677,291 @@ function RandomSearchTrajectory({
             aria-hidden
           />
           best so far
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="inline-block h-0.5 w-4"
+            style={{
+              backgroundImage: `repeating-linear-gradient(to right, ${CHART.amber} 0 4px, transparent 4px 7px)`,
+            }}
+            aria-hidden
+          />
+          defaults CV
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* -- Hyperband per-trial rung scatter (100x-114) ------------------------ */
+
+/** Rung colour progression: rung 0 — the cheapest, most crowded
+ *  evaluations — is stone; deeper rungs warm through amber and teal to
+ *  emerald, the survivors' colour. Cycled past six rungs (η ≥ 3 rarely
+ *  produces more than five). */
+const RUNG_COLORS = [
+  "#a8a29e",
+  CHART.amber,
+  CHART.teal,
+  CHART.emerald,
+  CHART.emeraldDark,
+  CHART.rose,
+] as const;
+
+function rungColor(rung: number): string {
+  return RUNG_COLORS[Math.max(0, rung) % RUNG_COLORS.length]!;
+}
+
+/** One Hyperband evaluation: a dot at (resource, CV score). */
+interface RungPoint {
+  x: number;
+  y: number;
+  trial: number;
+  bracket: number;
+  rung: number;
+  promoted: boolean;
+  isWinner: boolean;
+}
+
+/** Per-point shape: the winner is a diamond with a halo, promoted dots
+ *  are solid with a ring, culled dots are faint — the halving story in
+ *  one glance (dots march right as survivors are re-scored at higher
+ *  budgets, and the cloud thins by η each rung). */
+function rungDot(props: unknown) {
+  const { cx, cy, payload } = props as {
+    cx?: number;
+    cy?: number;
+    payload?: RungPoint;
+  };
+  if (cx === undefined || cy === undefined || !payload) return <g />;
+  const color = rungColor(payload.rung);
+  if (payload.isWinner) {
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={7} fill={color} fillOpacity={0.22} />
+        <path
+          d={`M ${cx} ${cy - 5} L ${cx + 4.5} ${cy} L ${cx} ${cy + 5} L ${cx - 4.5} ${cy} Z`}
+          fill={color}
+          stroke={CHART.emeraldDark}
+          strokeWidth={1.2}
+        />
+      </g>
+    );
+  }
+  if (payload.promoted) {
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={4.2}
+        fill={color}
+        fillOpacity={0.9}
+        stroke={color}
+        strokeWidth={1.4}
+      />
+    );
+  }
+  return <circle cx={cx} cy={cy} r={3.2} fill={color} fillOpacity={0.38} />;
+}
+
+function RungScatterTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: RungPoint }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0]?.payload;
+  if (!p) return null;
+  return (
+    <div className="rounded-md border bg-background/95 px-2.5 py-1.5 text-xs shadow-sm">
+      <p className="font-mono tabular-nums">trial {p.trial}</p>
+      <p className="font-mono tabular-nums">
+        budget = {p.x} · CV score = {fmtNum(p.y, 4)}
+      </p>
+      <p className="font-mono tabular-nums text-muted-foreground">
+        bracket {p.bracket} (0 = full budget) · rung {p.rung}
+      </p>
+      <p className="text-muted-foreground">
+        {p.isWinner
+          ? "winner"
+          : p.promoted
+            ? "promoted — re-scored at the next rung"
+            : "culled at this rung"}
+      </p>
+    </div>
+  );
+}
+
+/** Every Hyperband evaluation as budget-vs-score dots, coloured by rung.
+ *  The X axis is the resource the config was actually scored at, so a
+ *  promoted config appears once per rung it survived — the classic
+ *  successive-halving picture the leaderboard table cannot show. */
+function HyperbandRungScatter({
+  trials,
+  maxResource,
+  resourceLabel,
+  baselineScore,
+  objective,
+}: {
+  trials: MLTuneTrial[];
+  maxResource: number;
+  resourceLabel: string;
+  baselineScore: number;
+  objective: string;
+}) {
+  const points: RungPoint[] = trials
+    .filter((t) => typeof t.resource === "number" && Number.isFinite(t.score))
+    .map((t, i) => ({
+      x: t.resource as number,
+      y: t.score,
+      trial: t.trial,
+      bracket: t.bracket ?? 0,
+      rung: t.rung ?? 0,
+      promoted: t.promoted ?? false,
+      isWinner: i === 0,
+    }));
+
+  if (points.length === 0) return null;
+
+  const yValues = points.map((p) => p.y);
+  let yMin = Math.min(...yValues, baselineScore);
+  let yMax = Math.max(...yValues, baselineScore);
+  if (yMax - yMin < 1e-9) {
+    yMin -= 0.05;
+    yMax += 0.05;
+  }
+  const yPad = (yMax - yMin) * 0.08;
+  yMin -= yPad;
+  yMax += yPad;
+
+  const xValues = points.map((p) => p.x);
+  const xMin = Math.min(...xValues);
+  const xMax = Math.max(...xValues, maxResource);
+  const xPad = Math.max(1, (xMax - xMin) * 0.06);
+  const xLo = Math.max(0, xMin - xPad);
+  const xHi = xMax + xPad;
+
+  const rungsUsed = [...new Set(points.map((p) => p.rung))].sort((a, b) => a - b);
+  const promotedCount = points.filter((p) => p.promoted).length;
+
+  return (
+    <div
+      className="w-full"
+      role="img"
+      aria-label={`Hyperband rung scatter: ${points.length} evaluations across ${
+        new Set(points.map((p) => p.bracket)).size
+      } brackets, ${promotedCount} promoted to a higher rung; best CV ${objective} ${fmtNum(
+        points[0]!.y,
+        4,
+      )} at ${resourceLabel} ${points[0]!.x}; dashed line marks the defaults CV ${fmtNum(
+        baselineScore,
+        4,
+      )}`}
+    >
+      <div className="h-56 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+            <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
+            <XAxis
+              type="number"
+              dataKey="x"
+              domain={[xLo, xHi]}
+              allowDecimals={false}
+              tick={CHART.axisTick}
+              tickLine={false}
+              axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+              label={{
+                value: `${resourceLabel} (scoring budget)`,
+                position: "insideBottomRight",
+                offset: -2,
+                fill: "#78716c",
+                fontSize: 11,
+              }}
+            />
+            <YAxis
+              type="number"
+              dataKey="y"
+              width={52}
+              domain={[yMin, yMax]}
+              tick={CHART.axisTick}
+              tickFormatter={(v: number) => fmtNum(v, 2)}
+              tickLine={false}
+              axisLine={false}
+              label={{
+                value: `CV ${objective}`,
+                angle: -90,
+                position: "insideLeft",
+                offset: 16,
+                fill: "#78716c",
+                fontSize: 11,
+              }}
+            />
+            <Tooltip
+              cursor={{ strokeDasharray: "3 3" }}
+              content={<RungScatterTooltip />}
+              isAnimationActive={false}
+            />
+            <ReferenceLine
+              x={maxResource}
+              stroke={CHART.stone}
+              strokeDasharray="6 3"
+              strokeWidth={1.5}
+              label={{
+                value: "full budget",
+                position: "insideTopRight",
+                fill: CHART.stone,
+                fontSize: 10,
+              }}
+            />
+            <ReferenceLine
+              y={baselineScore}
+              stroke={CHART.amber}
+              strokeDasharray="6 3"
+              strokeWidth={1.5}
+              label={{
+                value: "defaults",
+                position: "insideTopLeft",
+                fill: CHART.amber,
+                fontSize: 10,
+              }}
+            />
+            <Scatter
+              name="evaluation"
+              data={points}
+              shape={rungDot}
+              isAnimationActive={false}
+            />
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-3.5 gap-y-1 text-[11px] text-muted-foreground">
+        {rungsUsed.map((r) => (
+          <span key={r} className="flex items-center gap-1.5">
+            <span
+              className="size-2 rounded-full"
+              style={{ backgroundColor: rungColor(r) }}
+              aria-hidden
+            />
+            rung {r}
+          </span>
+        ))}
+        <span className="flex items-center gap-1.5">
+          <span
+            className="size-2.5 rounded-full ring-1 ring-stone-500"
+            style={{ backgroundColor: CHART.stone }}
+            aria-hidden
+          />
+          promoted (re-scored)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="inline-block size-2 rotate-45"
+            style={{ backgroundColor: CHART.emerald }}
+            aria-hidden
+          />
+          winner
         </span>
         <span className="flex items-center gap-1.5">
           <span
@@ -5118,6 +5381,30 @@ export function MlPlayground() {
                       {Math.round(tuneResult.hyperband.budget.savedPct * 100)}% saved
                     </span>
                   </p>
+                </div>
+              ) : null}
+
+              {/* Hyperband: the per-trial rung scatter — every evaluation
+                  as a budget-vs-score dot, coloured by rung; promoted
+                  dots march right as survivors are re-scored, culled dots
+                  stay faint (the halving picture the table can't show). */}
+              {tuneResult.searcher === "hyperband" && tuneResult.hyperband ? (
+                <div className="space-y-1.5">
+                  <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <Layers className="size-3" aria-hidden />
+                    Rung scatter — every evaluation, budget vs CV {tuneResult.objective}
+                  </p>
+                  <HyperbandRungScatter
+                    trials={tuneResult.trials}
+                    maxResource={tuneResult.hyperband.maxResource}
+                    resourceLabel={
+                      tuneResult.hyperband.resourceLabel ??
+                      HP_LABELS[tuneResult.hyperband.resourceKey] ??
+                      tuneResult.hyperband.resourceKey
+                    }
+                    baselineScore={tuneResult.baseline.score}
+                    objective={tuneResult.objective}
+                  />
                 </div>
               ) : null}
 
