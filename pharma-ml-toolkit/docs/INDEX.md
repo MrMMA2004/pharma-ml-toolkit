@@ -109,6 +109,8 @@ after adding new public functions.
 | `build_hsvr` | function | :class:`~pharmaml.ml.hierarchical.HierarchicalSVR` hypermodel. |
 | `build_model` | function | Instantiate an unfitted estimator from the registry. |
 | `build_preprocessor` | function | Build the (impute -> scale) preprocessing pipeline. |
+| `build_stacking` | function | Build a stacking ensemble (upgrades Stacking.py / Stacking reg.py). |
+| `build_voting` | function | Build a voting ensemble (upgrades Voting.py / Voting reg.py). |
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |

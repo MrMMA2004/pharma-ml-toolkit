@@ -384,6 +384,10 @@ export interface MLTrainResponse {
   };
   series: {
     test: Array<{ x: number; y: number; label?: number; err?: number }>;
+    /** Training points (single-feature regression): where the model
+     *  actually observed data — the GP band chart draws them and the
+     *  acquisition overlay derives its best-observed y from them. */
+    train?: Array<{ x: number; y: number }>;
     curve?: Array<{ x: number; yhat: number; lo?: number; hi?: number }>;
     boundary?: Array<{ x: number; y: number; pred: number; proba?: number }>;
   };

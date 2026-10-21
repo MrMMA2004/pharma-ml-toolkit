@@ -413,3 +413,32 @@ grep) whenever a card moves; a **ZERO-HIT** row is a regression.
 | `others/ligand_preparation_autodock4.py` | Docking → Ligand library → PDBQT | `prepare_ligand_library`×2 |
 | `others/main.py` | Docking → Campaign runner (batch_run_directories) | `batch_run_directories`×2 |
 | `others/reader_at_same_folder.py` | Docking → Docking results (campaign scan) | `scan_docking_directory`×2 |
+
+## Per-file notebook coverage (100x-113) — the third axis, now with evidence
+
+The GUI axis (100x-111) stays the binding contract; the notebook axis
+now carries the same per-file evidence. Run
+`scratch/probe_coverage_113_notebooks.py` after any notebook or
+mapping change — it reuses the canonical FILE_MAP and greps every
+executed notebook's **code cells** (markdown prose does not count: an
+API tour means import/call surface, not a mention).
+
+First verdict: 108/118 covered, 7 absent (the whole Stacking/Voting
+family). Closed in 1.2.52:
+
+- the 7 ensemble files (`Classification/Stacking*.py`, `Voting*.py`,
+  `Regression/Stacking*.py`, `Voting*.py`) → the new *Meta-ensembles*
+  subsection of `complete_ml_workflow.ipynb` §11
+  (`build_voting` soft+weighted, `build_stacking` with the logistic /
+  ridge blenders, classification and regression both);
+- the data-utility families gained a dedicated tour
+  (`pharmaml_walkthrough.ipynb` §9 "Data utilities"): converters
+  round-trips, merge/compare/annotate, split ↔ merge-back,
+  clean-numeric-frame, name listing, approved filter, similarity
+  scan/top-k, GPF reading, batch config writing (Ni types) and the
+  Vina results-folder walk.
+
+Standing verdict after 1.2.52: **118/118 — notebook-covered 115,
+absorbed 3 (documented non-goals), absent 0.** A NOTEBOOK-ABSENT row
+is a rot alarm, not a contract breach: the GUI axis remains the
+zero-tolerance one.

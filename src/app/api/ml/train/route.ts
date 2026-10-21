@@ -528,6 +528,10 @@ function runRegression(
     ...(ensemble ? { ensemble } : {}),
     ...(fit.hsvr ? { hsvr: fit.hsvr } : {}),
     series: {
+      /* Training points ride along so the client can (a) draw where the
+       * GP actually observed data (uncertainty grows away from them) and
+       * (b) compute acquisition functions against the best observed y. */
+      train: train.map((i) => ({ x: xs[i] ?? 0, y: ys[i] ?? 0 })),
       test: test.map((i) => {
         const point: { x: number; y: number; err?: number } = {
           x: xs[i] ?? 0,

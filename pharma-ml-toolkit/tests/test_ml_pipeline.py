@@ -104,6 +104,18 @@ class TestRegistry:
         assert hasattr(stack, "fit")
         assert hasattr(vote, "fit")
 
+    def test_ensemble_builders_exported_from_package(self) -> None:
+        # COVERAGE.md documents ml.build_stacking / ml.build_voting, but
+        # they were importable only via pharmaml.ml.models until 1.2.52
+        # (the same "documented as ml.*, missing from __init__" defect
+        # the chem package had for similarity_scan in 100x-110).
+        from pharmaml import ml as ml_package
+
+        assert "build_stacking" in ml_package.__all__
+        assert "build_voting" in ml_package.__all__
+        assert ml_package.build_stacking is build_stacking
+        assert ml_package.build_voting is build_voting
+
     def test_huber_regression_registered(self) -> None:
         spec = MODEL_REGISTRY["huber_regression"]
         assert spec.task == "regression"

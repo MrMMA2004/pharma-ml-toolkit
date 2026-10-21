@@ -3796,3 +3796,632 @@ class TestDLCheckCSV:
         assert "1 extra column(s) the model does not know: descr_1" in body
         assert "--target pIC50" in body  # the label itself was auto-dropped
         assert "audit: FAIL" in app._job_label.cget("text")
+
+
+# --------------------------------------------------------------------- #
+# the Utilities / converter / similarity surfaces (100x-110) -- the
+# cards the scratch probes drove for three rounds without pytest pins
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestUtilitiesCoverageGui:
+    """Every 100x-110 coverage card, driven the way a mouse drives it.
+
+    The scratch probes (probe_coverage_110.py) have guarded these
+    surfaces manually since round 110; these tests pin the same visible
+    outcomes (frame rows, tree fills, on-disk side effects) so a
+    regression fails the suite, not a manual probe run.
+    """
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        for name in ("askyesno", "askokcancel"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)) or True,
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- fixtures ----------------------------------------------------- #
+    LIGANDS_A = (
+        "Ligand,SMILES,score\n"
+        "lig1,CCO,1.5\nlig2,CCOCC,2.5\nlig3,c1ccccc1,3.5\n"
+    )
+    LIGANDS_B = "Ligand,SMILES\nlig1,CCO\nlig4,CNC\n"
+
+    def test_merge_picked_files_and_first_columns_reorder(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        playground: Any,
+    ) -> None:
+        table_a = tmp_path / "ligands_a.csv"
+        table_a.write_text(self.LIGANDS_A, encoding="utf-8")
+        table_b = tmp_path / "ligands_b.csv"
+        table_b.write_text(self.LIGANDS_B, encoding="utf-8")
+
+        app._util_merge_files = [table_a, table_b]
+        app._util_merge_mode.set("merge picked files")
+        app._util_merge_mode_changed()
+        app._util_merge_run()
+        assert self._drain_jobs(app), "merge job hung"
+        merged = app._util_frames.get("merge")
+        assert merged is not None and len(merged) == 5
+
+        firstcols = app._util_merge_firstcols
+        firstcols.delete(0, "end")
+        firstcols.insert(0, "score,SMILES")
+        app._util_merge_run()
+        assert self._drain_jobs(app), "reordered merge job hung"
+        merged = app._util_frames.get("merge")
+        assert merged is not None
+        assert next(iter(merged.columns)) == "score"
+
+    def test_split_into_chunks(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        playground: Any,
+    ) -> None:
+        big_csv = tmp_path / "big.csv"
+        big_csv.write_text(
+            "a,b\n" + "".join(f"{i},{i * 2}\n" for i in range(25)),
+            encoding="utf-8",
+        )
+        parts_dir = tmp_path / "parts"
+
+        app._util_merge_split_file = big_csv
+        app._util_merge_mode.set("split into chunks")
+        app._util_merge_mode_changed()
+        app._util_merge_chunk.delete(0, "end")
+        app._util_merge_chunk.insert(0, "10")
+        monkey = pytest.MonkeyPatch()
+        monkey.setattr(playground.filedialog, "askdirectory",
+                       lambda **_k: str(parts_dir))
+        try:
+            app._util_merge_run()
+            assert self._drain_jobs(app), "split job hung"
+        finally:
+            monkey.undo()
+        parts = sorted(parts_dir.glob("*.csv")) if parts_dir.exists() else []
+        assert len(parts) == 3  # 25 rows / 10 per chunk
+
+    def test_compare_column_and_annotate_smiles(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+    ) -> None:
+        table_a = tmp_path / "ligands_a.csv"
+        table_a.write_text(self.LIGANDS_A, encoding="utf-8")
+        table_b = tmp_path / "ligands_b.csv"
+        table_b.write_text(self.LIGANDS_B, encoding="utf-8")
+
+        app._util_cmp_a = table_a
+        app._util_cmp_b = table_b
+        app._util_cmp_refresh_info()
+        app._util_cmp_mode.set("compare a column (A vs B)")
+        app._util_compare_run()
+        assert self._drain_jobs(app), "compare job hung"
+        cmp_frame = app._util_frames.get("compare")
+        sections = cmp_frame["section"].tolist()
+        assert sections.count("common") == 1
+        assert sections.count("only in A") == 2
+        assert sections.count("only in B") == 1
+
+        app._util_cmp_mode.set("annotate names with SMILES")
+        app._util_compare_run()
+        assert self._drain_jobs(app), "annotate job hung"
+        ann = app._util_frames.get("compare")
+        assert ann is not None and "Ligand_SMILES" in ann.columns
+        assert ann.loc[ann["Ligand"] == "lig1", "Ligand_SMILES"].iloc[0] == "CCO"
+
+    def test_approved_drug_filter(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+    ) -> None:
+        approval = tmp_path / "approvals.tsv"
+        approval.write_text(
+            "drug\tregulatory approval\naspirin\tapproved\n"
+            "caffeine\twithdrawn\nibuprofen\tapproved\n",
+            encoding="utf-8",
+        )
+        app._util_appr_files = [approval]
+        app._util_approved_run()
+        assert self._drain_jobs(app), "approved job hung"
+        appr = app._util_frames.get("approved")
+        assert appr is not None
+        assert appr["drug"].tolist() == ["aspirin", "ibuprofen"]
+
+    def test_campaign_tools_collect_list_distribute_cleanup(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+    ) -> None:
+        camp = tmp_path / "campaign"
+        for sub in ("lig1", "lig2", "lig3"):
+            (camp / sub).mkdir(parents=True)
+        (camp / "lig1" / "r.dlg").write_text("fake dlg", encoding="utf-8")
+        (camp / "lig2" / "r.dlg").write_text(
+            "fake dlg\nSuccessful Completion\n", encoding="utf-8")
+        (camp / "lig1" / "1.pdbqt").write_text(
+            "REMARK x\nTORSDOF 2\nBRANCH\nBRANCH\n", encoding="utf-8")
+        (camp / "stray.txt").write_text("stray", encoding="utf-8")
+
+        # collect (dry run): filename ∪ pattern union
+        app._util_tool_folder = camp
+        app._util_tool_mode.set("collect files (name/pattern)")
+        app._util_tool_mode_changed()
+        app._util_tool_filename.delete(0, "end")
+        app._util_tool_filename.insert(0, "r.dlg")
+        app._util_tools_run()
+        assert self._drain_jobs(app), "collect job hung"
+        tools_frame = app._util_frames.get("tools")
+        assert tools_frame is not None and len(tools_frame) == 3
+        collected = camp / "collected"
+        assert not collected.exists() or not list(collected.glob("*.dlg"))
+
+        # list file names
+        app._util_tool_mode.set("list file names")
+        app._util_tools_run()
+        assert self._drain_jobs(app), "list job hung"
+        listed = app._util_frames.get("tools")
+        assert listed is not None and "name" in listed.columns
+
+        # distribute one file into every campaign folder
+        marker = tmp_path / "bin_marker.txt"
+        marker.write_text("bin", encoding="utf-8")
+        app._util_tool_files = [marker]
+        app._util_tool_mode.set("distribute files into folders")
+        app._util_tools_run()
+        assert self._drain_jobs(app), "distribute job hung"
+        copies = list(camp.rglob("bin_marker.txt"))
+        assert len(copies) == 3
+
+        # cleanup (NOT dry): allowlist ∪ keep-pattern survives
+        app._util_tool_mode.set("cleanup tree (keep list)")
+        app._util_tool_dry_var.set(False)
+        app._util_tools_run()
+        assert self._drain_jobs(app), "cleanup job hung"
+        app._util_tool_dry_var.set(True)
+        survivors = {p.name for p in camp.rglob("*") if p.is_file()}
+        assert survivors <= {
+            "r.pdbqt", "r.dlg", "r.gpf", "r.dpf", "bin_marker.txt", "1.pdbqt",
+        }
+        assert "stray.txt" not in survivors
+        assert "1.pdbqt" in survivors  # the keep pattern kept it
+
+    def test_reindex_dense_range(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+    ) -> None:
+        sparse = tmp_path / "sparse.csv"
+        sparse.write_text(
+            "ligand,energy\n5_result.dlg,-7.1\n6_result.dlg,-8.2\n"
+            "8_result.dlg,-6.0\n",
+            encoding="utf-8",
+        )
+        app._util_reindex_path = sparse
+        app._util_reindex_column.delete(0, "end")
+        app._util_reindex_column.insert(0, "ligand")
+        app._util_reindex_start.delete(0, "end")
+        app._util_reindex_start.insert(0, "5")
+        app._util_reindex_stop.delete(0, "end")
+        app._util_reindex_stop.insert(0, "8")
+        app._util_reindex_run()
+        assert self._drain_jobs(app), "reindex job hung"
+        reindexed = app._util_frames.get("reindex")
+        assert reindexed is not None and len(reindexed) == 4  # 5..8 dense
+
+    @pytest.mark.skipif(
+        importlib.util.find_spec("rdkit") is None, reason="needs RDKit"
+    )
+    def test_converters_csv_sdf_smi_pic50(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+    ) -> None:
+        table_a = tmp_path / "ligands_a.csv"
+        table_a.write_text(self.LIGANDS_A, encoding="utf-8")
+
+        # CSV table -> 3D SDF
+        sdf_out = tmp_path / "ligands.sdf"
+        app._conv_input = table_a
+        app._conv_output = sdf_out
+        app._conv_mode.set("CSV table → 3D SDF")
+        app._conv_run()
+        assert self._drain_jobs(app), "CSV→SDF job hung"
+        assert sdf_out.exists() and sdf_out.stat().st_size > 0
+
+        # .smi list -> CSV
+        smi_out = tmp_path / "list.smi"
+        smi_out.write_text(
+            "CCO ethanol\nCC(C)CO isopropanol\n", encoding="utf-8")
+        smi_csv_out = tmp_path / "list.csv"
+        app._conv_input = smi_out
+        app._conv_output = smi_csv_out
+        app._conv_mode.set(".smi list → CSV")
+        app._conv_run()
+        assert self._drain_jobs(app), ".smi→CSV job hung"
+        assert smi_csv_out.exists()
+        assert "SMILES" in smi_csv_out.read_text(encoding="utf-8")
+
+        # SDF -> table
+        app._conv_input = sdf_out
+        app._conv_mode.set("SDF → table")
+        app._conv_run()
+        assert self._drain_jobs(app), "SDF→table job hung"
+        sdf_frame = app._conv_frame
+        assert sdf_frame is not None and len(sdf_frame) == 3
+        assert "score" in sdf_frame.columns
+
+        # pIC50 column: censored + junk rows stay NaN (honesty rule)
+        measure_csv = tmp_path / "measure.csv"
+        measure_csv.write_text(
+            "compound,IC50 (nM)\nA,100\nB,<10\nC,xyz\n", encoding="utf-8")
+        app._conv_input = measure_csv
+        app._conv_mode.set("append pIC50 column")
+        app._conv_source_col.delete(0, "end")
+        app._conv_source_col.insert(0, "IC50 (nM)")
+        app._conv_run()
+        assert self._drain_jobs(app), "pIC50 job hung"
+        pic_frame = app._conv_frame
+        assert pic_frame is not None
+        assert int(pic_frame["pIC50"].notna().sum()) == 2
+        assert abs(pic_frame.loc[0, "pIC50"] - 7.0) < 1e-9
+
+    @pytest.mark.skipif(
+        importlib.util.find_spec("rdkit") is None, reason="needs RDKit"
+    )
+    def test_similarity_scan_matrix_threshold_topk(
+        self, app: Any, quiet_dialogs: list[Any],
+    ) -> None:
+        # matrix: 2 default references x 7 default library rows
+        app._scan_mode.set("matrix: references × library")
+        app._scan_run()
+        assert self._drain_jobs(app), "matrix job hung"
+        matrix_frame = app._scan_frame
+        assert matrix_frame is not None
+        assert matrix_frame.shape == (2, 1 + 7)
+        assert abs(float(matrix_frame.iloc[0, 1]) - 1.0) < 1e-9
+
+        # threshold scan: both identity pairs clear 0.4
+        app._scan_mode.set("scan: pairs ≥ threshold")
+        app._scan_threshold.delete(0, "end")
+        app._scan_threshold.insert(0, "0.4")
+        app._scan_run()
+        assert self._drain_jobs(app), "threshold job hung"
+        scan_frame = app._scan_frame
+        assert scan_frame is not None and len(scan_frame) == 2
+        identity_pairs = {
+            (row.reference, row.target) for row in scan_frame.itertuples()
+            if row.similarity >= 0.999
+        }
+        assert len(identity_pairs) == 2
+        assert {"reference", "target", "similarity"} <= set(scan_frame.columns)
+
+        # top-k: sorted descending
+        app._scan_mode.set("top-k: nearest of first reference")
+        app._scan_k.delete(0, "end")
+        app._scan_k.insert(0, "3")
+        app._scan_run()
+        assert self._drain_jobs(app), "top-k job hung"
+        top_frame = app._scan_frame
+        assert top_frame is not None and len(top_frame) == 3
+        assert top_frame["similarity"].iloc[0] >= top_frame["similarity"].iloc[-1]
+
+    def test_clean_numeric_frame_keeps_smiles(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+    ) -> None:
+        mixed = tmp_path / "mixed.csv"
+        mixed.write_text(
+            "SMILES,name,MolWt,LogP,target\n"
+            "CCO,ethanol,46.1,-0.3,1.0\nCC(C)CO,iso,60.1,0.3,2.0\n",
+            encoding="utf-8",
+        )
+        app._ml_load_path(mixed)
+        assert self._drain_jobs(app), "dataset load job hung"
+        app._ml_keep_entry.delete(0, "end")
+        app._ml_keep_entry.insert(0, "SMILES")
+        app._ml_clean_frame()
+        assert self._drain_jobs(app), "clean job hung"
+        cleaned_active = list(app._ml_frame.columns)
+        assert "SMILES" in cleaned_active
+        assert "name" not in cleaned_active
+        assert {"MolWt", "LogP", "target"} <= set(cleaned_active)
+
+
+# --------------------------------------------------------------------- #
+# the Docking coverage surfaces (100x-110 + 100x-111): the audit card,
+# single SMILES→PDBQT, the Vina config batch, the campaign GPF/DPF
+# batch with custom receptor types, and the Vina results folder scan
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestDockingCoverageGui:
+    LIGAND_PDBQT = (
+        "REMARK  Name = probe_ligand\n"
+        "ROOT\n"
+        "ATOM      1  C   LIG A   1       0.000   0.000   0.000  1.00  0.00     C\n"
+        "ATOM      2  O   LIG A   1       2.000   0.000   0.000  1.00  0.00     OA\n"
+        "ATOM      3  N   LIG A   1       0.000   2.000   0.000  1.00  0.00     NA\n"
+        "ENDROOT\n"
+        "TORSDOF 1\n"
+    )
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        for name in ("askyesno", "askokcancel"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)) or True,
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def _campaign_fixture(self, tmp_path: Path) -> Path:
+        camp = tmp_path / "campaign"
+        for sub in ("lig1", "lig2", "lig3"):
+            (camp / sub).mkdir(parents=True)
+        (camp / "lig1" / "r.dlg").write_text("fake dlg", encoding="utf-8")
+        (camp / "lig2" / "r.dlg").write_text(
+            "fake dlg\nSuccessful Completion\n", encoding="utf-8")
+        (camp / "lig1" / "1.pdbqt").write_text(
+            "REMARK x\nTORSDOF 2\nBRANCH\nBRANCH\n", encoding="utf-8")
+        return camp
+
+    def test_audit_card_gpf_torsion_completion(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+    ) -> None:
+        camp = self._campaign_fixture(tmp_path)
+        gpf = tmp_path / "r.gpf"
+        gpf.write_text(
+            "ligand_types C HD OA\nreceptor r.pdbqt\n"
+            "receptor_types C HD OA A\n"
+            "npts 40 40 40\nspacing 0.375\ngridcenter 1.0 2.0 3.0\n"
+            "smooth 0.5\ndielectric -0.1465\nmap 1.C.map\n",
+            encoding="utf-8",
+        )
+
+        # GPF file -> parameters
+        app._dock_audit_gpf = gpf
+        app._dock_audit_mode.set("GPF file → parameters")
+        app._dock_audit_run()
+        assert self._drain_jobs(app), "GPF audit job hung"
+        params_frame = app._dock_audit_frame
+        assert params_frame is not None and len(params_frame) == 9
+        assert params_frame.loc[0, "value"] == "C HD OA"
+
+        # folder: torsion consistency
+        app._dock_audit_mode.set("folder: torsion consistency")
+        app._dock_audit_folder = camp
+        app._dock_audit_run()
+        assert self._drain_jobs(app), "torsion audit job hung"
+        torsion_frame = app._dock_audit_frame
+        assert torsion_frame is not None and len(torsion_frame) >= 1
+        assert {"ligand", "torsdof", "branches", "status"} <= set(
+            torsion_frame.columns)
+
+        # folder: completion check (lig2 OK, lig1 INCOMPLETE, lig3 MISSING_LOG)
+        app._dock_audit_mode.set("folder: completion check")
+        app._dock_audit_run()
+        assert self._drain_jobs(app), "completion audit job hung"
+        completion_frame = app._dock_audit_frame
+        statuses = completion_frame["status"].tolist()
+        assert "OK" in statuses and "INCOMPLETE" in statuses
+        assert "MISSING_LOG" in statuses
+
+    @pytest.mark.skipif(
+        importlib.util.find_spec("rdkit") is None
+        or importlib.util.find_spec("meeko") is None,
+        reason="needs RDKit + Meeko",
+    )
+    def test_single_smiles_to_pdbqt(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+    ) -> None:
+        smi_dir = tmp_path / "smi_out"
+        app._dock_smi_out = smi_dir
+        app._dock_smi_entry.delete(0, "end")
+        app._dock_smi_entry.insert(0, "CC(=O)Oc1ccccc1C(=O)O")  # aspirin
+        app._dock_smi_run()
+        assert self._drain_jobs(app), "SMILES→PDBQT job hung"
+        pdbqt = list(smi_dir.glob("*.pdbqt")) if smi_dir.exists() else []
+        assert len(pdbqt) == 1
+
+    def test_vina_config_batch_fake_engine(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        monkeypatch: Any,
+    ) -> None:
+        import os
+        import stat
+
+        binroot = tmp_path / "bin"
+        binroot.mkdir()
+        fake_vina = binroot / "vina"
+        fake_vina.write_text(
+            "#!/bin/bash\n"
+            "out=''; lig=''; prev=''\n"
+            "for arg in \"$@\"; do\n"
+            "  [ \"$prev\" = --out ] && out=\"$arg\"\n"
+            "  [ \"$prev\" = --ligand ] && lig=\"$arg\"\n"
+            "  prev=\"$arg\"\n"
+            "done\n"
+            "{ echo 'REMARK VINA RESULT:    -8.2      0.000      0.000'\n"
+            "  echo 'REMARK VINA RESULT:    -7.1      1.923      2.941'\n"
+            "  grep '^ATOM\\|^HETATM' \"$lig\"; } > \"$out\"\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        fake_vina.chmod(fake_vina.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP
+                        | stat.S_IXOTH)
+        monkeypatch.setenv(
+            "PATH", f"{binroot}{os.pathsep}{os.environ.get('PATH', '')}")
+
+        vbatch_dir = tmp_path / "vbatch"
+        (vbatch_dir / "ligands").mkdir(parents=True)
+        for name in ("l1", "l2"):
+            (vbatch_dir / "ligands" / f"{name}.pdbqt").write_text(
+                "REMARK ok\nATOM      1  C   LIG A   1       0.000   0.000   "
+                "0.000  1.00  0.00           C\n", encoding="utf-8")
+        (vbatch_dir / "r.pdbqt").write_text("ATOM receptor\n", encoding="utf-8")
+        conf = vbatch_dir / "vina.conf"
+        conf.write_text(
+            "receptor = r.pdbqt\ncenter_x = 0\nsize_x = 20\n", encoding="utf-8")
+        vout = vbatch_dir / "results"
+
+        app._dock_vbatch_conf = conf
+        app._dock_vbatch_ligands = vbatch_dir / "ligands"
+        app._dock_vbatch_out = vout
+        app._dock_vbatch_refresh_info()
+        app._dock_vbatch_run()
+        assert self._drain_jobs(app), "vina batch job hung"
+        outs = sorted(vout.glob("*_out.pdbqt")) if vout.exists() else []
+        assert len(outs) == 2
+        assert app._dock_vbatch_frame is not None
+        assert len(app._dock_vbatch_frame) == 2
+
+    def test_batch_gpf_dpf_campaign_and_receptor_types(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        playground: Any,
+    ) -> None:
+        campaign = tmp_path / "campaign"
+        for name in ("01_aspirin", "02_ibuprofen"):
+            folder = campaign / name
+            folder.mkdir(parents=True)
+            (folder / "l.pdbqt").write_text(
+                self.LIGAND_PDBQT, encoding="utf-8")
+        (campaign / "03_empty").mkdir()
+
+        # batch over the campaign tree: 2/3 folders configured
+        monkey = pytest.MonkeyPatch()
+        monkey.setattr(playground.filedialog, "askdirectory",
+                       lambda **_k: str(campaign))
+        try:
+            app._dock_write_config_batch()
+            assert self._drain_jobs(app), "batch config job hung"
+        finally:
+            monkey.undo()
+        report_text = app._dock_grid_text.get("1.0", "end")
+        assert "configured      2/3 folders" in report_text
+        assert "without a ligand" in report_text
+        for name in ("01_aspirin", "02_ibuprofen", "03_empty"):
+            assert name in report_text
+        assert "no ligand PDBQT" in report_text
+        for name in ("01_aspirin", "02_ibuprofen"):
+            for fname in ("r.gpf", "r.dpf"):
+                assert (campaign / name / fname).is_file()
+        gpf_text = (campaign / "01_aspirin" / "r.gpf").read_text(
+            encoding="utf-8")
+        assert "A C HD N NA OA SA" in gpf_text  # default receptor types
+
+        # the receptor-types field feeds the single-ligand path too
+        single = tmp_path / "single"
+        single.mkdir()
+        ligand_path = single / "l.pdbqt"
+        ligand_path.write_text(self.LIGAND_PDBQT, encoding="utf-8")
+        app._dock_set_ligand_path(ligand_path)
+        app._dock_receptor_types_entry.delete(0, "end")
+        app._dock_receptor_types_entry.insert(0, "A C HD N Ni OA SA")
+        app._dock_compute_grid()
+        assert self._drain_jobs(app), "single grid job hung"
+        grid_text = app._dock_grid_text.get("1.0", "end")
+        assert "receptor types A C HD N Ni OA SA" in grid_text
+        single_gpf = (single / "r.gpf").read_text(encoding="utf-8")
+        assert "A C HD N Ni OA SA" in single_gpf
+        app._dock_receptor_types_entry.delete(0, "end")  # back to default
+
+        # batch with the Ni types (the gpferreceptorni.py case)
+        for name in ("01_aspirin", "02_ibuprofen"):
+            (campaign / name / "r.gpf").unlink()  # force a fresh write
+        app._dock_receptor_types_entry.insert(0, "A C HD N Ni OA SA")
+        monkey.setattr(playground.filedialog, "askdirectory",
+                       lambda **_k: str(campaign))
+        try:
+            app._dock_write_config_batch()
+            assert self._drain_jobs(app), "Ni batch config job hung"
+        finally:
+            monkey.undo()
+        batch_gpf = (campaign / "01_aspirin" / "r.gpf").read_text(
+            encoding="utf-8")
+        assert "A C HD N Ni OA SA" in batch_gpf
+
+    def test_scan_vina_results_folder(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        playground: Any,
+    ) -> None:
+        vina_log = (
+            "Estimated Free Energy of Binding   = -7.051 (kcal/mol)\n"
+            "REMARK VINA RESULT:    -7.051      0.000      0.000\n"
+            "REMARK VINA RESULT:    -6.802      1.938      3.655\n"
+        )
+        vina_root = tmp_path / "vina_results"
+        (vina_root / "lig01").mkdir(parents=True)
+        (vina_root / "lig01" / "lig01.log").write_text(
+            vina_log, encoding="utf-8")
+        (vina_root / "lig02.log").write_text(
+            vina_log.replace("-7.051", "-8.35"), encoding="utf-8")
+        (vina_root / "crashed.log").write_text(
+            "Vina crashed before scoring\n", encoding="utf-8")
+
+        monkey = pytest.MonkeyPatch()
+        monkey.setattr(playground.filedialog, "askdirectory",
+                       lambda **_k: str(vina_root))
+        try:
+            app._dock_scan_vina()
+            assert self._drain_jobs(app), "vina scan job hung"
+        finally:
+            monkey.undo()
+
+        rows = app._dock_results_tree.get_children()
+        assert len(rows) == 3
+        values = [app._dock_results_tree.item(row, "values") for row in rows]
+        # strongest binder first (lig02, -8.35), crashed row kept last
+        assert values[0][0] == "lig02" and "-8.35" in str(values[0][2])
+        assert any(v[0] == "crashed" for v in values)
+        info = app._dock_results_info.cget("text")
+        assert "3 Vina logs" in info and "lig02" in info and "-8.35" in info
+        # the scan table is the active results frame (saveable/rescorable)
+        assert app._dock_results_source == "vina"
+        assert list(app._dock_results_frame.columns) == [
+            "ligand", "log", "best_affinity", "n_poses",
+        ]

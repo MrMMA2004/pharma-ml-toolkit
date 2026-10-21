@@ -7,6 +7,8 @@ from pharmaml.ml.models import (
     MODEL_ALIASES,
     MODEL_REGISTRY,
     build_model,
+    build_stacking,
+    build_voting,
     list_models,
     resolve_model_name,
 )
@@ -66,6 +68,8 @@ __all__ = [
     "build_hsvr",
     "build_model",
     "build_preprocessor",
+    "build_stacking",
+    "build_voting",
     "clean_numeric_frame",
     "compare_models",
     "evaluate_model",

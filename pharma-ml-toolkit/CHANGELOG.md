@@ -10,6 +10,57 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.52] — 2026-10-21
+
+### Fixed — the ensemble builders were documented as `ml.*` but never exported from the package
+
+`docs/COVERAGE.md` rows say `ml.build_stacking('classification', [...])`
+and `ml.build_voting(...)` — the same "documented as `pkg.*`, importable
+only via the submodule" defect the chem package had for
+`similarity_scan`/`top_matches` (fixed in 100x-110). Both builders now
+export from `pharmaml.ml` (imports + `__all__`), with a regression test
+pinning the package-level identity (`test_ensemble_builders_exported_
+from_package`). `docs/INDEX.md` regenerated: 260 → **262 symbols**.
+
+### Added — the notebook axis of the per-file coverage contract
+
+The 100x-111 audit greps `playground.py` per rar file (the GUI axis, the
+binding contract); the notebook axis was documented separately without
+per-file evidence. New `scratch/probe_coverage_113_notebooks.py` reuses
+the canonical FILE_MAP and greps every executed notebook's **code cells**
+(markdown prose does not count — an API tour means import/call surface).
+First verdict: 108/118 covered, 7 absent — the entire Stacking/Voting
+family. Both gaps closed:
+
+- **`complete_ml_workflow.ipynb` §11** gains a "Meta-ensembles" subsection
+  that builds, fits and evaluates `build_voting` (soft votes, weighted)
+  and `build_stacking` (out-of-fold + logistic/ridge blender) on the
+  splits the notebook already trained single models on — classification
+  *and* regression, the direct upgrade of the 7 ensemble rar files.
+- **`pharmaml_walkthrough.ipynb` §9 "Data utilities"** tours the every-day
+  chores on shipped demo data: `table_to_sdf`/`sdf_to_table`/`smi_to_csv`
+  round-trips, `merge_tables`/`compare_tables`/`annotate_with_smiles`,
+  `split_table_into_chunks` + `merge_table_folder` (split ↔ merge-back
+  round-trip), `clean_numeric_frame`, `list_file_names`,
+  `filter_approved_drugs`, `similarity_scan`/`top_matches`,
+  `read_gpf`/`write_config_batch` (Ni receptor types included) and
+  `scan_vina_directory` + the honest `run_vina_batch` engine gate.
+  After: **118/118 — notebook-covered 115, absorbed 3, absent 0.**
+
+### Added — pytest guards for the 100x-110/111 GUI surfaces (the three-round-standing open item)
+
+The scratch probes (`probe_coverage_110/111.py`) drove the Utilities tab
+cards and the docking coverage surfaces manually for three rounds;
+`tests/test_playground.py` now pins them as
+`TestUtilitiesCoverageGui` (9 tests: merge/reorder, split, compare/
+annotate, approved filter, collect/list/distribute/cleanup, reindex,
+converters incl. censored pIC50 honesty, similarity matrix/threshold/
+top-k, clean-numeric-frame) and `TestDockingCoverageGui` (5 tests: GPF/
+torsion/completion audit, single SMILES→PDBQT, Vina config batch with a
+fake engine, batch GPF/DPF campaign + Ni receptor types both paths, Vina
+results-folder scan) — **14 GUI regression tests**, all driven the way a
+mouse drives it (picker stubs, real callbacks, drained job queue).
+
 ## [1.2.51] — 2026-10-21
 
 ### Added — the per-file audit's two closing surfaces: batch campaign configs and the Vina results-folder scan

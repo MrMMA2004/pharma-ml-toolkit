@@ -824,6 +824,39 @@ interface GpBandPoint {
   yhat: number;
   bandBase: number;
   bandSpan: number;
+  /** Acquisition value (EI or UCB) at this x — present only when the
+   *  overlay is switched on; rides on the secondary right axis. */
+  acq?: number;
+}
+
+/* -- Bayesian-optimisation acquisition math (pure, self-contained) -- */
+
+/** Standard-normal CDF via the Abramowitz–Stegun 7.1.26 erf
+ *  approximation (|ε| < 7.5e-8 — plenty for a chart overlay). */
+function stdNormalCdf(z: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const poly =
+    t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  const p = 1 - (Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI)) * poly;
+  return z >= 0 ? p : 1 - p;
+}
+
+/** Standard-normal PDF. */
+function stdNormalPdf(z: number): number {
+  return Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+}
+
+/** Expected Improvement (maximisation) at one posterior point:
+ *  EI = (μ − f*)·Φ(z) + σ·φ(z) with z = (μ − f*)/σ. */
+function expectedImprovement(mu: number, sigma: number, fStar: number): number {
+  if (sigma <= 1e-12) return Math.max(0, mu - fStar);
+  const z = (mu - fStar) / sigma;
+  return (mu - fStar) * stdNormalCdf(z) + sigma * stdNormalPdf(z);
+}
+
+/** Upper Confidence Bound (maximisation): μ + κ·σ. */
+function upperConfidenceBound(mu: number, sigma: number, kappa: number): number {
+  return mu + kappa * sigma;
 }
 
 /** Custom tooltip for the GP band chart — x, ŷ and the band edges in one
@@ -846,6 +879,11 @@ function GpBandTooltip({
       <p className="font-mono tabular-nums text-muted-foreground">
         ±1.96σ band = [{fmtNum(p.bandBase, 3)}, {fmtNum(p.bandBase + p.bandSpan, 3)}]
       </p>
+      {p.acq !== undefined ? (
+        <p className="font-mono tabular-nums" style={{ color: CHART.amber }}>
+          acquisition = {fmtNum(p.acq, 4)}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -2551,6 +2589,44 @@ export function MlPlayground() {
     }));
   }, [result, predActual]);
 
+  /* -- Bayesian-optimisation overlay on the GP band (since 100x-113) -- */
+
+  /** Acquisition overlay mode: where should the NEXT experiment go? */
+  const [acqMode, setAcqMode] = useState<"off" | "ei" | "ucb">("off");
+  /** UCB exploration parameter κ (bigger → wider trust in σ). */
+  const [ucbKappa, setUcbKappa] = useState(1);
+
+  /** Best observed y on the TRAINING split (EI's f*); falls back to the
+   *  test points for older payloads that predate series.train. */
+  const bestObserved = useMemo(() => {
+    const pts = result?.series.train?.length
+      ? result.series.train
+      : (result?.series.test ?? []);
+    return pts.length ? Math.max(...pts.map((p) => p.y)) : null;
+  }, [result]);
+
+  /** The band curve with per-point acquisition values attached (and the
+   *  argmax marker). Null when the overlay is off or the band is absent.
+   *  σ at each x is recovered from the ±1.96σ band: span / 3.92. */
+  const acqCurve = useMemo(() => {
+    if (!bandCurve || acqMode === "off" || bestObserved === null) return null;
+    let bestX: number | null = null;
+    let bestVal = -Infinity;
+    const rows = bandCurve.map((p) => {
+      const sigma = p.bandSpan / 3.92;
+      const value =
+        acqMode === "ei"
+          ? expectedImprovement(p.yhat, sigma, bestObserved)
+          : upperConfidenceBound(p.yhat, sigma, ucbKappa);
+      if (value > bestVal) {
+        bestVal = value;
+        bestX = p.x;
+      }
+      return { ...p, acq: value };
+    });
+    return bestX === null ? null : { rows, bestX, bestVal };
+  }, [bandCurve, acqMode, ucbKappa, bestObserved]);
+
   /** GP on the predicted-vs-actual chart: ŷ whiskers per test point. */
   const hasTestErr = useMemo(
     () => (result?.series.test.some((p) => p.err !== undefined) ?? false) && predActual,
@@ -3866,32 +3942,103 @@ export function MlPlayground() {
             {/* Chart */}
             <Card className="overflow-hidden py-0 shadow-sm">
               <CardHeader className="border-b bg-muted/30 py-3">
-                <CardTitle className="text-sm">
-                  {result.task === "regression"
-                    ? bandCurve
-                      ? "GP mean & 95% predictive band"
-                      : predActual
-                        ? "Predicted vs actual (test set)"
-                        : "Test points & fitted curve"
-                    : result.datasetMeta.source
-                      ? "Test points & decision boundary"
-                      : "Two moons & decision boundary"}
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  {result.datasetMeta.source
-                    ? `${result.datasetMeta.nTotal} rows from ${
-                        result.datasetMeta.source.fileName ?? "pasted.csv"
-                      } · ${result.datasetMeta.nTrain} train · ${result.datasetMeta.nTest} test · ${
-                        result.datasetMeta.source.droppedRows
-                      } dropped${
-                        predActual
-                          ? ` · ${result.datasetMeta.features.length} features`
-                          : ""
-                      }`
-                    : `${result.datasetMeta.nTotal} samples · ${result.datasetMeta.nTrain} train · ${
-                        result.datasetMeta.nTest
-                      } test · seed ${result.datasetMeta.seed}`}
-                </CardDescription>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <CardTitle className="text-sm">
+                      {result.task === "regression"
+                        ? bandCurve
+                          ? acqCurve
+                            ? "GP mean, 95% band & acquisition"
+                            : "GP mean & 95% predictive band"
+                          : predActual
+                            ? "Predicted vs actual (test set)"
+                            : "Test points & fitted curve"
+                        : result.datasetMeta.source
+                          ? "Test points & decision boundary"
+                          : "Two moons & decision boundary"}
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      {result.datasetMeta.source
+                        ? `${result.datasetMeta.nTotal} rows from ${
+                            result.datasetMeta.source.fileName ?? "pasted.csv"
+                          } · ${result.datasetMeta.nTrain} train · ${result.datasetMeta.nTest} test · ${
+                            result.datasetMeta.source.droppedRows
+                          } dropped${
+                            predActual
+                              ? ` · ${result.datasetMeta.features.length} features`
+                              : ""
+                          }`
+                        : `${result.datasetMeta.nTotal} samples · ${result.datasetMeta.nTrain} train · ${
+                            result.datasetMeta.nTest
+                          } test · seed ${result.datasetMeta.seed}`}
+                    </CardDescription>
+                  </div>
+                  {bandCurve ? (
+                    /* Bayesian-optimisation overlay switch — only the GP
+                     * band chart carries σ, so only it can answer "where
+                     * should the next experiment go?". */
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div
+                        className="flex rounded-lg border bg-muted/40 p-0.5"
+                        role="group"
+                        aria-label="Acquisition overlay"
+                      >
+                        {(["off", "ei", "ucb"] as const).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            aria-pressed={acqMode === m}
+                            onClick={() => setAcqMode(m)}
+                            className={`h-7 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                              acqMode === m
+                                ? "bg-background shadow-sm text-foreground"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {m === "off" ? "No acquisition" : m === "ei" ? "EI" : "UCB"}
+                          </button>
+                        ))}
+                      </div>
+                      {acqMode === "ucb" ? (
+                        <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span className="font-mono">κ</span>
+                          <input
+                            type="range"
+                            min={0.25}
+                            max={3}
+                            step={0.05}
+                            value={ucbKappa}
+                            onChange={(e) => setUcbKappa(Number(e.target.value))}
+                            className="h-1.5 w-24 accent-primary"
+                            aria-label="UCB exploration parameter kappa"
+                          />
+                          <span className="w-8 font-mono tabular-nums">{ucbKappa.toFixed(2)}</span>
+                        </label>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                {acqCurve ? (
+                  <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                    {acqMode === "ei" ? (
+                      <>
+                        Expected Improvement over the best observed training y (f* = {fmtNum(bestObserved ?? 0, 3)}) —
+                        the amber curve on the right axis peaks where the GP expects the biggest gain{" "}
+                        <span className="font-medium text-foreground">
+                          next experiment: x ≈ {fmtNum(acqCurve.bestX, 3)}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        Upper Confidence Bound μ + κ·σ (κ = {ucbKappa.toFixed(2)}) — optimism under uncertainty; the amber
+                        curve trades exploitation (high μ) against exploration (wide σ){" "}
+                        <span className="font-medium text-foreground">
+                          next experiment: x ≈ {fmtNum(acqCurve.bestX, 3)}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                ) : null}
               </CardHeader>
               <CardContent className="p-3 sm:p-4">
                 <div
@@ -3900,7 +4047,9 @@ export function MlPlayground() {
                   aria-label={
                     result.task === "regression"
                       ? bandCurve
-                        ? "Scatter plot of test points with the Gaussian process posterior mean and its shaded 95 percent predictive band"
+                        ? acqCurve
+                          ? "Scatter plot of training and test points with the Gaussian process posterior mean, its shaded 95 percent predictive band, and the expected improvement or upper confidence bound acquisition curve on a secondary axis, with the next candidate experiment marked"
+                          : "Scatter plot of test points with the Gaussian process posterior mean and its shaded 95 percent predictive band"
                         : predActual
                           ? "Scatter plot of model predictions versus actual values on the test set, with the perfect-prediction reference line"
                           : "Scatter plot of test points with the fitted regression curve"
@@ -3914,8 +4063,14 @@ export function MlPlayground() {
                       bandCurve ? (
                         /* GP: filled ±1.96σ band (stacked areas — the
                          * invisible bandBase + the tinted bandSpan) under
-                         * the posterior-mean line, test points on top. */
-                        <ComposedChart data={bandCurve} margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+                         * the posterior-mean line, train + test points on
+                         * top, and (when switched on) the acquisition
+                         * curve on its own right axis with the argmax
+                         * marked as the next candidate experiment. */
+                        <ComposedChart
+                          data={acqCurve?.rows ?? bandCurve}
+                          margin={{ top: 8, right: acqCurve ? 46 : 14, bottom: 4, left: 0 }}
+                        >
                           <CartesianGrid stroke={CHART.gridStroke} strokeOpacity={CHART.gridStrokeOpacity} />
                           <XAxis
                             type="number"
@@ -3941,6 +4096,22 @@ export function MlPlayground() {
                             tickLine={false}
                             axisLine={false}
                           />
+                          {acqCurve ? (
+                            /* The acquisition rides on its own right axis
+                             * (same x grid, independent 0→max domain) so
+                             * EI/UCB units never distort the y geometry. */
+                            <YAxis
+                              yAxisId="acq"
+                              type="number"
+                              orientation="right"
+                              width={38}
+                              domain={[0, "auto"]}
+                              tick={CHART.axisTick}
+                              tickFormatter={(v: number) => fmtNum(v, 2)}
+                              tickLine={false}
+                              axisLine={false}
+                            />
+                          ) : null}
                           <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<GpBandTooltip />} />
                           <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
                           <Area
@@ -3968,6 +4139,17 @@ export function MlPlayground() {
                             name="GP mean (ŷ)"
                             isAnimationActive={false}
                           />
+                          {result.series.train?.length ? (
+                            /* Where the GP actually observed data — the
+                             * band pinches around them and widens away. */
+                            <Scatter
+                              data={result.series.train}
+                              fill={CHART.stone}
+                              fillOpacity={0.35}
+                              name="train points"
+                              isAnimationActive={false}
+                            />
+                          ) : null}
                           <Scatter
                             data={result.series.test}
                             fill={CHART.stone}
@@ -3975,6 +4157,36 @@ export function MlPlayground() {
                             name="test points"
                             isAnimationActive={false}
                           />
+                          {acqCurve ? (
+                            <Line
+                              yAxisId="acq"
+                              dataKey="acq"
+                              stroke={CHART.amber}
+                              strokeWidth={1.8}
+                              strokeDasharray="5 3"
+                              dot={false}
+                              name={acqMode === "ei" ? "EI (right axis)" : "UCB (right axis)"}
+                              isAnimationActive={false}
+                            />
+                          ) : null}
+                          {acqCurve ? (
+                            /* The next candidate: a dashed vertical at the
+                             * acquisition argmax + an amber diamond at the
+                             * GP mean's y there. */
+                            <ReferenceLine
+                              yAxisId="acq"
+                              x={acqCurve.bestX}
+                              stroke={CHART.amber}
+                              strokeDasharray="4 3"
+                              strokeOpacity={0.7}
+                              label={{
+                                value: "next x",
+                                position: "insideTopRight",
+                                fill: CHART.amber,
+                                fontSize: 10,
+                              }}
+                            />
+                          ) : null}
                         </ComposedChart>
                       ) : (
                         <ScatterChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
