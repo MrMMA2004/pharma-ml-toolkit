@@ -10,6 +10,47 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.56] — 2026-10-21
+
+### Added — the Hyperband bracket-best fold as a probed shipped module
+
+The per-bracket best fold (1.2.55) lived inline in the 5.8k-line
+`ml-playground.tsx`; it now ships as the pure module
+`src/lib/hyperband-rungs.ts` (`buildRungPoints` + `RungPoint`),
+following the `bayes-acquisition.ts` precedent: the component imports
+it back, and the probe runs the code the browser runs, not a mirror.
+`scratch/probe_rung_fold_117.ts` (bun) pins the whole contract —
+winner-first on the API's ranked trials, exactly one bracket-best dot
+per bracket owning the bracket max, ties keeping the first occurrence,
+the winner legitimately carrying both flags, filter defaults, and
+row-parity with the original quadratic algorithm on a 241-trial seeded
+grid — and `tests/test_web_parity.py` runs it from inside the suite
+(`TestHyperbandRungFold`), so a regression now fails CI.
+
+### Fixed — NaN resources no longer draw a dot at x = NaN
+
+The fold's filter asked `typeof resource === "number"`, which lets
+`NaN` through (`typeof NaN === "number"`); a Hyperband trial scored at
+a non-finite budget would have rendered a broken dot. Caught by the new
+probe on its first run, fixed in the shipped module (the filter now
+requires a finite resource), and pinned as an explicit contract —
+while extracting the fold, the quadratic `find`-in-loop was also
+replaced by an O(n) single pass (behavior-identical on the seeded grid,
+proven row-for-row).
+
+### Added — the walkthrough §9 heat-map figure and the docs/ guides join the failing contracts
+
+Two extensions of the established guard families:
+`tests/test_notebook_variants.py` gains
+`test_walkthrough_similarity_heatmap_is_committed` — the §9 similarity
+heat-map (1.2.53) must carry its committed `image/png` output, decoded
+and magic-byte-checked with a minimum size, so the figure can never
+silently vanish or become a stub; and
+`tests/test_data_provenance.py`'s documentation-surface leg now scans
+every `docs/*.md` guide (not just `cli.py`/README) for
+`examples/data/...` promises — currently empty by design, so a
+synthetic pattern-rot guard keeps the scanner honest.
+
 ## [1.2.55] — 2026-10-21
 
 ### Added — per-bracket best-CV chips on the Hyperband facet panels

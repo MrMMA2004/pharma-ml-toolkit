@@ -100,6 +100,7 @@ import type {
   MLTuneResponse,
   MLTuneTrial,
 } from "@/lib/toolkit-types";
+import { buildRungPoints, type RungPoint } from "@/lib/hyperband-rungs";
 
 type Task = "regression" | "classification";
 
@@ -1712,18 +1713,6 @@ function rungColor(rung: number): string {
   return RUNG_COLORS[Math.max(0, rung) % RUNG_COLORS.length]!;
 }
 
-/** One Hyperband evaluation: a dot at (resource, CV score). */
-interface RungPoint {
-  x: number;
-  y: number;
-  trial: number;
-  bracket: number;
-  rung: number;
-  promoted: boolean;
-  isWinner: boolean;
-  isBracketBest: boolean;
-}
-
 /** Per-point shape: the winner is a diamond with a halo, promoted dots
  *  are solid with a ring, culled dots are faint — the halving story in
  *  one glance (dots march right as survivors are re-scored at higher
@@ -1838,33 +1827,12 @@ function HyperbandRungScatter({
 }) {
   const [facet, setFacet] = useState(false);
 
-  const evaluated = trials.filter(
-    (t) => typeof t.resource === "number" && Number.isFinite(t.score)
-  );
-  /* Per-bracket best (100x-116): the highest-scoring evaluation inside
-   *  each bracket, tracked by trial number so exactly one dot per bracket
-   *  carries the flag (strict > keeps ties on the first occurrence —
-   *  deterministic like every chart in the house). Pure fold, computed
-   *  before the rows so no object is mutated after creation. */
-  const bestTrialPerBracket = new Map<number, number>();
-  for (const t of evaluated) {
-    const b = t.bracket ?? 0;
-    const best = bestTrialPerBracket.get(b);
-    const bestScore = evaluated.find((e) => e.trial === best)?.score;
-    if (best === undefined || bestScore === undefined || t.score > bestScore) {
-      bestTrialPerBracket.set(b, t.trial);
-    }
-  }
-  const points: RungPoint[] = evaluated.map((t, i) => ({
-    x: t.resource as number,
-    y: t.score,
-    trial: t.trial,
-    bracket: t.bracket ?? 0,
-    rung: t.rung ?? 0,
-    promoted: t.promoted ?? false,
-    isWinner: i === 0,
-    isBracketBest: bestTrialPerBracket.get(t.bracket ?? 0) === t.trial,
-  }));
+  /* The rows (filter → per-bracket best fold → map) live in the shipped
+   * pure module src/lib/hyperband-rungs.ts since 100x-117 — probed by
+   * scratch/probe_rung_fold_117.ts (bun) and guarded by
+   * tests/test_web_parity.py — following the bayes-acquisition.ts
+   * precedent. Only `points` is consumed below. */
+  const points: RungPoint[] = buildRungPoints(trials);
 
   if (points.length === 0) return null;
 

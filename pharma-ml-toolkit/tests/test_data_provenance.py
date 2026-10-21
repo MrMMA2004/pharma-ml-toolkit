@@ -12,10 +12,11 @@ the file the builder writes".  Three legs, each pinned here:
    re-generates the whole inventory in memory and proves the files on
    disk are byte-identical to the builder output, with no unclaimed
    orphans; the planted-drift test proves the gate actually fires.
-4. **Documentation surfaces** (100x-116) — the same resolve-or-fail
-   contract for the two other places that promise data files: the CLI's
-   help text/docstrings (``cli.py``) and the README (prose promises like
-   "ships as ``examples/data/...``" bind exactly like code blocks).
+4. **Documentation surfaces** (100x-116, extended 100x-117) — the same
+   resolve-or-fail contract for the other places that promise data
+   files: the CLI's help text/docstrings (``cli.py``), the README, and
+   every ``docs/*.md`` guide (prose promises like "ships as
+   ``examples/data/...``" bind exactly like code blocks).
 
 Before this, leg 3 was guaranteed only by running the mutating builder
 after every sandbox reset — a silent fix, not a failing check.
@@ -85,6 +86,14 @@ def _load_builder():
 
 _DOCS_PATH_PATTERN = re.compile(r"examples/data/([A-Za-z0-9_./-]+)")
 
+# The docs/ guides (100x-117): every markdown file under docs/ is a
+# documentation surface.  Unlike cli.py/README.md they are ALLOWED to
+# promise zero data paths (COVERAGE.md/INDEX.md describe the audit, not
+# the inventory) — the guard only fails when a promise exists and does
+# not resolve.  DATA_AUDIT.md is the one that names inventory entries
+# today; the contract catches future ones in any guide.
+DOCS_MD = tuple(sorted((TOOLKIT_ROOT / "docs").glob("*.md")))
+
 
 def _docs_data_references(text: str) -> set[str]:
     """DATA_DIR-relative names promised by a documentation surface.
@@ -105,12 +114,12 @@ def _docs_data_references(text: str) -> set[str]:
 
 
 class TestDocsDataReferences:
-    """Leg 4 (100x-116): the CLI and README sides of the contract.
+    """Leg 4 (100x-116, extended 100x-117): the docs sides of the contract.
 
-    Every ``examples/data/...`` path the CLI help text or the README
-    mentions must resolve under ``examples/data`` — a stale promise
-    after a rename fails the suite exactly like a stale notebook
-    reference does.
+    Every ``examples/data/...`` path the CLI help text, the README, or a
+    ``docs/*.md`` guide mentions must resolve under ``examples/data`` —
+    a stale promise after a rename fails the suite exactly like a stale
+    notebook reference does.
     """
 
     def test_cli_references_resolve(self) -> None:
@@ -128,6 +137,44 @@ class TestDocsDataReferences:
         assert names, "README lost all example-data mentions (scan pattern rot?)"
         stale = sorted(n for n in names if not (DATA / n).exists())
         assert not stale, f"README references that do not resolve: {stale}"
+
+    def test_docs_directory_references_resolve(self) -> None:
+        """100x-117: the docs/ guides join the contract.
+
+        Each ``docs/*.md`` may promise zero data paths (the guides
+        describe the audit, not the inventory) — but a promise it DOES
+        make must resolve.  The pattern-rot guard for a currently-empty
+        surface lives in ``test_docs_scan_pattern_live`` below (a
+        synthetic planted reference must be extracted).
+        """
+        assert DOCS_MD, "docs/ lost its markdown guides (directory moved?)"
+        for path in DOCS_MD:
+            names = _docs_data_references(path.read_text(encoding="utf-8"))
+            stale = sorted(n for n in names if not (DATA / n).exists())
+            assert not stale, (
+                f"docs/{path.name} references that do not resolve: {stale}"
+            )
+
+    def test_docs_scan_pattern_live(self) -> None:
+        """The extraction pattern itself is not dead on docs-style text.
+
+        docs/*.md promise few paths today, so a regex regression could
+        silently extract nothing forever (the emptiness is legitimate
+        there, unlike cli.py/README whose non-empty scans self-guard).
+        A synthetic surface with one planted reference — including the
+        sentence punctuation and directory-slash variants the docstring
+        promises to strip — must extract exactly the clean name.
+        """
+        synthetic = (
+            "The inventory ships as ``examples/data/qsar_classification.csv``. "
+            "See also examples/data/docking_campaign/ (a directory) and "
+            "the sizes of examples/data/lysozyme_1aki.pdb, which pins."
+        )
+        assert _docs_data_references(synthetic) == {
+            "qsar_classification.csv",
+            "docking_campaign",
+            "lysozyme_1aki.pdb",
+        }
 
     def test_docs_references_in_builder_inventory(self) -> None:
         """A resolving path is not enough — it must be BUILDER-OWNED.
@@ -150,7 +197,10 @@ class TestDocsDataReferences:
             parts = name.split("/")
             if len(parts) > 1:
                 owned_dirs.add("/".join(parts[:-1]))
-        for surface in ("src/pharmaml/cli.py", "README.md"):
+        surfaces = ["src/pharmaml/cli.py", "README.md"] + [
+            f"docs/{p.name}" for p in DOCS_MD
+        ]
+        for surface in surfaces:
             text = (TOOLKIT_ROOT / surface).read_text(encoding="utf-8")
             for name in sorted(_docs_data_references(text)):
                 assert name in owned or name in owned_dirs, (

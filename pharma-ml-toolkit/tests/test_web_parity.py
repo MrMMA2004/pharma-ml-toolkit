@@ -1,11 +1,13 @@
-"""Web-mirror parity guards (100x-115).
+"""Web-mirror parity guards (100x-115, extended 100x-117).
 
 The shipped TS modules under ``<repo>/src/lib`` mirror library math:
 
 - ``bayes-acquisition.ts`` (the GP band's EI/UCB overlay) vs
   ``scipy.stats.norm`` — the 100x-114 pair;
 - ``docking-configs.ts`` (GPF/DPF writers, grid box, Vina log scan) vs
-  ``pharmaml.docking`` — the 100x-112 pair.
+  ``pharmaml.docking`` — the 100x-112 pair;
+- ``hyperband-rungs.ts`` (the rung-scatter row fold) vs its own
+  pinned contract — the 100x-117 pair.
 
 The paired scratch probes verify them, but until now nothing FAILED the
 pytest suite when they broke.  These guards run BOTH sides of each pair
@@ -30,12 +32,20 @@ import pytest
 TOOLKIT_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = TOOLKIT_ROOT.parent
 ACQUISITION_TS = REPO_ROOT / "src" / "lib" / "bayes-acquisition.ts"
+RUNG_FOLD_TS = REPO_ROOT / "src" / "lib" / "hyperband-rungs.ts"
 BUN = shutil.which("bun")
 
 needs_web_side = pytest.mark.skipif(
     not ACQUISITION_TS.is_file() or BUN is None,
     reason="web checkout (<repo>/src/lib TS mirrors) + bun runtime required; "
     "the zip-only tree skips — its probes live outside the shipped tree",
+)
+
+needs_rung_fold = pytest.mark.skipif(
+    not RUNG_FOLD_TS.is_file() or BUN is None,
+    reason="web checkout (<repo>/src/lib/hyperband-rungs.ts) + bun runtime "
+    "required; the zip-only tree skips — its probes live outside the "
+    "shipped tree",
 )
 
 
@@ -79,6 +89,23 @@ class TestAcquisitionParity:
             assert worst <= tol, (
                 f"{quantity}: shipped TS vs scipy max|d| = {worst:.3e} > {tol:.1e}"
             )
+
+
+class TestHyperbandRungFold:
+    """hyperband-rungs.ts vs its pinned fold contract (100x-117).
+
+    The bracket-best fold (100x-115/116, extracted from
+    ml-playground.tsx this round) is pure and mirrorable: the probe
+    pins the winner-first contract, the exactly-one-bracket-best
+    invariant, the tie-first-occurrence rule, the filter defaults,
+    the NaN-resource fix, and row-parity with the original quadratic
+    algorithm on a 241-trial seeded grid — all against the SHIPPED
+    module the browser imports.
+    """
+
+    @needs_rung_fold
+    def test_fold_contract(self) -> None:
+        _run([BUN, "run", "scratch/probe_rung_fold_117.ts"], REPO_ROOT)
 
 
 class TestDockingConfigsParity:

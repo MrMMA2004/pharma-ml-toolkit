@@ -443,7 +443,7 @@ absorbed 3 (documented non-goals), absent 0.** A NOTEBOOK-ABSENT row
 is a rot alarm, not a contract breach: the GUI axis remains the
 zero-tolerance one.
 
-## Data provenance round-trip (100x-115, extended 100x-116)
+## Data provenance round-trip (100x-115, extended 100x-116/117)
 
 The fourth axis closes the standing 100x-104 item: **every data file the
 notebooks load is the file the builder writes.** Three legs, pinned in
@@ -492,3 +492,25 @@ Two additions, same probe file, same pytest module:
    its notebook cell"), not just a file name; the planted-drift guard
    pins the attribution on both the byte-flip and the missing-file
    branches.
+
+### 100x-117 extensions
+
+6. **The `docs/*.md` guides join leg 4** — every markdown file under
+   `docs/` (COVERAGE, DATA_AUDIT, INDEX, LEAKAGE_AUDIT) is now a
+   documentation surface: an `examples/data/...` path a guide promises
+   must resolve and be builder-owned, exactly like cli.py/README
+   promises. The guides legitimately promise zero data paths today
+   (they document the audit, not the inventory), so the scan carries a
+   synthetic pattern-rot guard — a planted reference (with the
+   sentence-punctuation and directory-slash variants) must extract
+   exactly the clean name, keeping the scanner honest while the real
+   surfaces stay empty (2 new tests).
+7. **The walkthrough §9 heat-map figure is a failing check** —
+   `tests/test_notebook_variants.py::
+   test_walkthrough_similarity_heatmap_is_committed` decodes the §9
+   similarity heat-map's committed `image/png` output, checks the PNG
+   magic bytes, and pins a minimum size (a 5x5 labelled matrix renders
+   tens of kilobytes, never bytes). Before this round the figure's
+   existence was drift-checked only by notebook re-execution; now the
+   suite fails if the demo's picture silently vanishes or becomes a
+   stub (1 new test).

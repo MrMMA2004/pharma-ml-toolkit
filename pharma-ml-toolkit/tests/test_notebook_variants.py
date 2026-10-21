@@ -38,10 +38,16 @@ Five guard families live here:
   the tuner's gain line, Hyperband's resource ladder and savings, and
   the batchnorm A/B — so the demo can never silently become stale or
   un-executed.
+* ``test_walkthrough_similarity_heatmap_is_committed`` — the §9
+  figure guard (round 100x-117): the walkthrough's similarity heat-map
+  (round 100x-114) must carry its committed ``image/png`` output; the
+  guard decodes the PNG, checks the magic bytes, and pins a minimum
+  size so the figure can never silently vanish or become a stub.
 """
 
 from __future__ import annotations
 
+import base64
 import re
 from pathlib import Path
 
@@ -278,6 +284,56 @@ def test_tuning_workflow_quartet_is_committed():
     # verdict -- batchnorm does not help -- is unchanged).
     assert "plain      R2 0.897" in outputs
     assert "batchnorm  R2 0.856" in outputs
+
+
+def test_walkthrough_similarity_heatmap_is_committed():
+    """The §9 similarity heat-map demo (round 100x-114) must stay executed.
+
+    ``plot_similarity_heatmap`` — the picture twin of the §9 Tanimoto scan
+    (the notebook face of ``Tanimoto-edited.py``'s matrix view) — renders
+    the two reference drugs plus aspirin's three nearest library hits as
+    one committed figure.  The ``image/png`` output IS the demo: a cell
+    edit nobody re-executed, a stripped notebook, or a figure that stopped
+    rendering fails here.  Before 100x-117 the figure's existence was
+    drift-checked only by re-execution — now the suite pins it.
+    """
+    nb = _read("pharmaml_walkthrough")
+    sources = "\n".join(c.source for c in nb.cells if c.cell_type == "code")
+    assert "from pharmaml.viz import plot_similarity_heatmap" in sources, (
+        "pharmaml_walkthrough lost the §9 heat-map demo"
+    )
+    assert "fig_heat = plot_similarity_heatmap(" in sources
+
+    heatmap_cells = [
+        c
+        for c in nb.cells
+        if c.cell_type == "code" and "plot_similarity_heatmap(" in c.source
+    ]
+    assert heatmap_cells, "the heat-map cell itself is gone"
+    figures = [
+        out
+        for out in heatmap_cells[0].get("outputs", [])
+        if out.get("output_type") == "display_data"
+        and "image/png" in out.get("data", {})
+    ]
+    assert figures, (
+        "the §9 heat-map cell carries no committed figure — re-execute "
+        "the notebook (scratch/reexecute_all_notebooks_64.py)"
+    )
+    # the committed PNG is a real figure, not a stray stub: it decodes,
+    # wears the PNG magic, and is big enough to be a rendered heat-map
+    # (the committed figure is a 5x5 labelled matrix at 100 dpi — tens
+    # of kilobytes, never bytes).
+    png = figures[0]["data"]["image/png"]
+    payload = "".join(png) if isinstance(png, list) else png
+    decoded = base64.b64decode(payload)
+    assert decoded[:8] == b"\x89PNG\r\n\x1a\n", (
+        "the committed heat-map output does not decode to a PNG"
+    )
+    assert len(decoded) > 10_000, (
+        f"the committed heat-map figure is only {len(decoded)} B — "
+        "suspiciously small for the 5x5 labelled matrix (stub or cropped)"
+    )
 
 
 # The no-inline-fabrication contract (round 24).  Each token below is a
