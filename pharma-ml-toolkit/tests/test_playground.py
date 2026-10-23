@@ -4425,3 +4425,156 @@ class TestDockingCoverageGui:
         assert list(app._dock_results_frame.columns) == [
             "ligand", "log", "best_affinity", "n_poses",
         ]
+
+
+class TestApplicabilityDomainGui:
+    """The AD card (100x-118): the uploaded workflow driven end-to-end."""
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 180.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def test_source_line_tracks_training_runs(self, playground: Any, app: Any,
+                                              tmp_path: Path) -> None:
+        assert "no run yet" in app._ad_source_info.cget("text")
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
+                          / "library_with_descriptors.csv")
+        app._model_combo.set("logistic_regression")
+        app._ml_train()
+        assert self._drain(app), "train job hung"
+        info = app._ad_source_info.cget("text")
+        assert "logistic_regression" in info and "query rows" in info
+
+    def test_full_analysis_renders_table_figure_and_status(
+        self, playground: Any, app: Any
+    ) -> None:
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
+                          / "library_with_descriptors.csv")
+        app._model_combo.set("logistic_regression")
+        app._ml_train()
+        assert self._drain(app), "train job hung"
+        n_query = len(app._ml_last_run[5])
+        app._ad_boot_spin.set("8")
+        app._ml_ad_run()
+        assert self._drain(app), "AD job hung"
+        result = app._ml_ad_result
+        assert result is not None and result.reliable is not None
+        assert len(app._ad_tree.get_children()) == n_query
+        status = app._ad_status.cget("text")
+        assert "distance threshold" in status and "reliable" in status
+        assert len(app._ad_host.winfo_children()) == 1  # figure embedded
+        # the name column carries the library's SMILES strings
+        first = str(app._ad_tree.item(app._ad_tree.get_children()[0])["values"][0])
+        assert any(ch in first for ch in "CNc#(")
+
+    def test_knn_only_quick_pass(self, playground: Any, app: Any) -> None:
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
+                          / "library_with_descriptors.csv")
+        app._model_combo.set("logistic_regression")
+        app._ml_train()
+        assert self._drain(app), "train job hung"
+        app._ad_boot_spin.set("0")
+        app._ml_ad_run()
+        assert self._drain(app), "kNN-only job hung"
+        assert app._ml_ad_result.reliable is None
+        assert "kNN-only" in app._ad_status.cget("text")
+        assert app._ml_ad_frame["reliable"].isna().all()
+
+    def test_bundle_mode_round_trip(self, playground: Any, app: Any,
+                                    monkeypatch: Any, quiet_dialogs: list[Any],
+                                    tmp_path: Path) -> None:
+        import pandas as pd
+
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
+                          / "library_with_descriptors.csv")
+        app._model_combo.set("logistic_regression")
+        app._ml_train()
+        assert self._drain(app), "train job hung"
+        bundle = tmp_path / "bundle.joblib"
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename",
+                            lambda **_k: str(bundle))
+        app._ml_save_model_bundle()
+        assert self._drain(app), "bundle save hung"
+        assert bundle.is_file()
+        monkeypatch.setattr(playground.filedialog, "askopenfilename",
+                            lambda **_k: str(bundle))
+        app._ml_load_model_bundle()
+        assert self._drain(app), "bundle load hung"
+
+        frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data"
+                            / "library_with_descriptors.csv")
+        train_csv = tmp_path / "train.csv"
+        test_csv = tmp_path / "test.csv"
+        frame.iloc[:60].to_csv(train_csv, index=False)
+        frame.iloc[60:].to_csv(test_csv, index=False)
+        app._ml_ad_train_path = train_csv
+        app._ml_ad_test_path = test_csv
+        app._ad_source_combo.set("loaded bundle")
+        app._ml_ad_source_changed()
+        assert app._ad_bundle_row.winfo_manager() == "grid"
+        assert "logistic_regression" in app._ad_source_info.cget("text")
+
+        app._ad_boot_spin.set("6")
+        app._ml_ad_run()
+        assert self._drain(app), "bundle-mode AD job hung"
+        assert app._ml_ad_result.pred_mean is not None
+        assert len(app._ad_tree.get_children()) == len(frame) - 60
+
+    def test_bundle_mode_visibility_toggles(self, playground: Any,
+                                             app: Any) -> None:
+        app._ad_source_combo.set("loaded bundle")
+        app._ml_ad_source_changed()
+        assert app._ad_bundle_row.winfo_manager() == "grid"
+        app._ad_source_combo.set("last trained model")
+        app._ml_ad_source_changed()
+        # grid_remove keeps the grid bookkeeping but unmaps the row:
+        # winfo_manager() goes empty (pack would report "forget")
+        assert app._ad_bundle_row.winfo_manager() == ""
+        # no bundle loaded: the hint names the persistence card
+        app._ad_source_combo.set("loaded bundle")
+        app._ml_ad_source_changed()
+        assert "no bundle loaded" in app._ad_source_info.cget("text")
+
+    def test_no_run_and_bad_knob_warnings(self, playground: Any, app: Any,
+                                          quiet_dialogs: list[Any]) -> None:
+        seen = quiet_dialogs
+        app._ml_last_run = None
+        app._ml_ad_run()  # no run: warning, no job
+        assert seen and any("Train a model" in str(a) for a in seen)
+        # a bad knob: parse_int refuses before the job starts
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
+                          / "library_with_descriptors.csv")
+        app._model_combo.set("logistic_regression")
+        app._ml_train()
+        assert self._drain(app), "train job hung"
+        app._ad_k_spin.set("0")
+        app._ml_ad_run()
+        assert any("k (neighbours)" in str(a) for a in seen)

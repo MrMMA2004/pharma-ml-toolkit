@@ -514,3 +514,22 @@ Two additions, same probe file, same pytest module:
    existence was drift-checked only by notebook re-execution; now the
    suite fails if the demo's picture silently vanishes or becomes a
    stub (1 new test).
+
+## User uploads (100x-118) — the contract extends past the two archives
+
+The standing guarantee is "playground.py covers the entire contents of
+the zip and rar files" — and a file the user hands over later binds
+exactly the same way. The 2026-10 upload
+`Applicability_domain_analysis.py` joins as **file #119**:
+
+| Uploaded file | PharmaML surface | Status |
+| --- | --- | --- |
+| `Applicability_domain_analysis.py` | `ml.applicability_domain` + `knn_applicability_domain` + `bootstrap_uncertainty` (estimator-agnostic clones, half the upload's fits, seeded resamples, self-distance excluded); `viz.plot_applicability_domain` (the combined two-panel figure); CLI `ml ad` (`--data` split mode and the upload's `--bundle/--train-data/--test-data` flow); the playground **Applicability domain & prediction reliability** card (model source = last trained run or loaded bundle + its CSVs, k/percentile/bootstrap knobs, SMILES-named reliability table, the `Applicability_Domain_Results.csv` save); ML notebook §14 Trust | ✚ |
+
+The probe axis: `scratch/probe_coverage_111_perfile.py` grew an
+**uploads axis** (the upload's 8 mapped GUI symbols all hit;
+zero-hit/missing-upload fails the probe) and
+`scratch/probe_coverage_113_notebooks.py` requires its notebook surface
+(binding — an uploaded file must tour in an executed notebook). The
+verdict line now reads 118 rar files (115 covered, 3 absorbed,
+zero-hit 0) **+ 1 upload covered = 119/119**.

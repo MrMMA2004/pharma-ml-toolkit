@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import {
   Area,
+  Bar,
   CartesianGrid,
   ComposedChart,
   ErrorBar,
@@ -91,6 +92,7 @@ import { toast } from "sonner";
 import { DEFAULT_ML_CONFIG, useToolkitStore, type MlRunRecord } from "@/lib/store";
 import type {
   DatasetPreviewResponse,
+  MLAdResponse,
   MLCompareEntry,
   MLCompareRequest,
   MLCompareResponse,
@@ -690,6 +692,53 @@ const RESOURCE_SPECS: Record<string, { key: string; label: string }> = {
 function specOf(task: Task, model: string): ModelSpec | null {
   const list = task === "regression" ? REG_MODELS : CLS_MODELS;
   return list.find((m) => m.id === model) ?? null;
+}
+
+/** Histogram bins for the AD panel (a): the training kNN-distance density. */
+function adHistogram(ad: MLAdResponse): Array<{ x: number; count: number }> {
+  const values = ad.trainMean;
+  if (values.length === 0) return [];
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  if (!(hi > lo)) return [{ x: lo, count: values.length }];
+  const bins = 24;
+  const width = (hi - lo) / bins;
+  const counts = new Array<number>(bins).fill(0);
+  for (const v of values) {
+    const idx = Math.min(bins - 1, Math.floor((v - lo) / width));
+    counts[idx] += 1;
+  }
+  return counts.map((count, i) => ({ x: lo + (i + 0.5) * width, count }));
+}
+
+/** Scatter rows for the AD panel (b): distance vs the ensemble prediction. */
+function adScatter(ad: MLAdResponse, inside: boolean): Array<{ knn: number; predicted: number }> {
+  return ad.rows
+    .filter((r) => r.insideAd === inside && r.predicted !== null)
+    .map((r) => ({ knn: r.knnDistance, predicted: r.predicted as number }));
+}
+
+/** A tiny yes/no/— pill for the reliability table's three verdict columns. */
+function VerdictPill({ ok, nullable, strong }: { ok: boolean | null; nullable?: boolean; strong?: boolean }) {
+  if (ok === null) {
+    return <span className="font-mono text-xs text-muted-foreground">—</span>;
+  }
+  const tone = ok
+    ? strong
+      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+      : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+    : strong
+      ? "bg-rose-500/15 text-rose-700 dark:text-rose-400"
+      : "bg-rose-500/10 text-rose-700 dark:text-rose-400";
+  return (
+    <span
+      className={`inline-flex min-w-14 justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${tone} ${
+        nullable ? "" : ""
+      }`}
+    >
+      {ok ? "yes" : "no"}
+    </span>
+  );
 }
 
 /** The Hyperband-capable roster as human labels — generated from
@@ -2245,6 +2294,16 @@ export function MlPlayground() {
   const [compareResult, setCompareResult] = useState<MLCompareResponse | null>(null);
   const [compareStatus, setCompareStatus] = useState<"idle" | "running">("idle");
   const [compareError, setCompareError] = useState<string | null>(null);
+  /* Applicability-domain state (the 2026-10 upload's workflow, web
+   * edition): the analysis re-runs the LAST train request's split, so
+   * the verdict names the very held-out rows the parity chart drew. */
+  const [adStatus, setAdStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [adResult, setAdResult] = useState<MLAdResponse | null>(null);
+  const [adError, setAdError] = useState<string | null>(null);
+  const [adK, setAdK] = useState("5");
+  const [adPct, setAdPct] = useState("95");
+  const [adModels, setAdModels] = useState("20");
+  const lastTrainBodyRef = useRef<MLTrainRequest | null>(null);
   const [maxTrials, setMaxTrials] = useState<string>("12");
   const [searcher, setSearcher] = useState<"random" | "hyperband">("random");
   const [etaSel, setEtaSel] = useState<string>("3");
@@ -2572,6 +2631,11 @@ export function MlPlayground() {
       }
     }
 
+    /* Park the exact train request for the applicability-domain card —
+     * the AD route re-runs this split (content-hashed seed), so its
+     * verdict names the very rows this run's parity chart drew. */
+    lastTrainBodyRef.current = body;
+
     try {
       const res = await fetch("/api/ml/train", {
         method: "POST",
@@ -2642,6 +2706,90 @@ export function MlPlayground() {
       setStatus("error");
       const message = err instanceof Error ? err.message : "Training request failed.";
       setError(message);
+    }
+  }
+
+  /** The uploaded Applicability_domain_analysis.py workflow, web
+   *  edition: re-run the last train request's split, then judge every
+   *  held-out row by its mean kNN distance (inside the training
+   *  descriptor space?) and — for regression models — the bootstrap
+   *  ensemble's per-row spread (how sure is the model?), folding both
+   *  into the upload's reliable/not-reliable verdict. */
+  async function runAd() {
+    const last = lastTrainBodyRef.current;
+    if (!last || !last.csv) {
+      setAdError("Train on a loaded CSV first — the analysis judges that run's held-out rows.");
+      setAdStatus("error");
+      return;
+    }
+    const kNum = Number.parseInt(adK, 10);
+    const pctNum = Number.parseFloat(adPct);
+    const modelsNum = Number.parseInt(adModels, 10);
+    if (!Number.isInteger(kNum) || kNum < 1 || kNum > 20) {
+      setAdError("k (neighbours) must be an integer between 1 and 20.");
+      setAdStatus("error");
+      return;
+    }
+    if (!Number.isFinite(pctNum) || pctNum < 50 || pctNum > 99.9) {
+      setAdError("Threshold percentile must be between 50 and 99.9.");
+      setAdStatus("error");
+      return;
+    }
+    if (!Number.isInteger(modelsNum) || modelsNum < 0 || modelsNum > 60) {
+      setAdError("Bootstrap models must be an integer between 0 (quick pass) and 60.");
+      setAdStatus("error");
+      return;
+    }
+    setAdStatus("running");
+    setAdError(null);
+    const body: Record<string, unknown> = {
+      task: last.task,
+      csv: last.csv,
+      csvName: last.csvName,
+      model: last.model,
+      testSize: last.testSize,
+      featureColumns: last.featureColumns,
+      featureColumn: last.featureColumn,
+      featureColumn2: last.featureColumn2,
+      targetColumn: last.targetColumn,
+      adK: kNum,
+      adPercentile: pctNum,
+      adModels: modelsNum,
+    };
+    /* The hyperparameters the trained run used — the bootstrap members
+     * clone the same configuration. */
+    for (const key of [
+      "alpha", "l1Ratio", "l2", "k", "maxDepth", "nEstimators", "rounds",
+      "learningRate", "hidden", "epochs", "lr", "C", "epsilon", "gamma",
+      "nClusters", "radiusFactor", "nComponents", "lengthScale", "signalStd",
+      "noiseStd",
+    ] as const) {
+      const value = (last as unknown as Record<string, unknown>)[key];
+      if (value !== undefined) body[key] = value;
+    }
+    try {
+      const res = await fetch("/api/ml/ad", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        const message =
+          typeof data === "object" && data !== null && "error" in data
+            ? `${String((data as { error: unknown }).error)}${
+                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+                  : ""
+              }`
+            : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      setAdResult(data as MLAdResponse);
+      setAdStatus("done");
+    } catch (err) {
+      setAdStatus("error");
+      setAdError(err instanceof Error ? err.message : "The analysis request failed.");
     }
   }
 
@@ -5374,6 +5522,306 @@ export function MlPlayground() {
               hierarchical model to view it.
             </p>
           )
+        ) : null}
+
+        {/* ------------------------- Applicability domain ------------------------- */}
+        {result && status !== "running" ? (
+          <Card className="overflow-hidden py-0 shadow-sm">
+            <CardHeader className="border-b bg-muted/30 py-3">
+              <CardTitle className="flex items-center gap-1.5 text-sm">
+                <Crosshair className="size-3.5 text-primary" aria-hidden />
+                Applicability domain &amp; prediction reliability
+              </CardTitle>
+              <CardDescription className="text-xs">
+                The uploaded Applicability_domain_analysis.py workflow on this run&rsquo;s
+                held-out rows: mean kNN distance vs the training space&rsquo;s p
+                {adResult ? adResult.summary.percentile : 95} threshold (inside the domain?),
+                bootstrap-ensemble spread vs its own training-side threshold (how sure?),
+                one reliable verdict per row.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 pb-4">
+              {/* Knobs + run */}
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="w-24">
+                  <Label className="text-[11px] text-muted-foreground">k neighbours</Label>
+                  <Input
+                    inputMode="numeric"
+                    value={adK}
+                    onChange={(e) => setAdK(e.target.value)}
+                    className="mt-1 h-8 font-mono text-xs"
+                    aria-label="k nearest neighbours of the distance domain"
+                  />
+                </div>
+                <div className="w-28">
+                  <Label className="text-[11px] text-muted-foreground">percentile</Label>
+                  <Input
+                    inputMode="decimal"
+                    value={adPct}
+                    onChange={(e) => setAdPct(e.target.value)}
+                    className="mt-1 h-8 font-mono text-xs"
+                    aria-label="percentile both thresholds are cut at"
+                  />
+                </div>
+                <div className="w-32">
+                  <Label className="text-[11px] text-muted-foreground">bootstrap models</Label>
+                  <Input
+                    inputMode="numeric"
+                    value={adModels}
+                    onChange={(e) => setAdModels(e.target.value)}
+                    className="mt-1 h-8 font-mono text-xs"
+                    aria-label="bootstrap ensemble size (0 = kNN-only quick pass)"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  onClick={runAd}
+                  disabled={adStatus === "running" || !lastTrainBodyRef.current?.csv}
+                  className="h-8"
+                >
+                  {adStatus === "running" ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden /> Analysing…
+                    </>
+                  ) : (
+                    <>
+                      <Play className="size-3.5" aria-hidden /> Analyse reliability
+                    </>
+                  )}
+                </Button>
+                {!lastTrainBodyRef.current?.csv ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Train on a loaded CSV first — the analysis judges that run&rsquo;s held-out
+                    rows.
+                  </p>
+                ) : null}
+              </div>
+
+              {adError ? (
+                <Alert variant="destructive">
+                  <TriangleAlert className="size-4" aria-hidden />
+                  <AlertTitle>Analysis failed</AlertTitle>
+                  <AlertDescription>{adError}</AlertDescription>
+                </Alert>
+              ) : null}
+
+              {adResult ? (
+                <>
+                  {/* Verdict strip */}
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+                      <p className="text-xs text-muted-foreground">Distance threshold</p>
+                      <p className="font-mono text-xl font-semibold tabular-nums">
+                        {fmtNum(adResult.summary.distanceThreshold, 3)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+                      <p className="text-xs text-muted-foreground">Inside the domain</p>
+                      <p className="font-mono text-xl font-semibold tabular-nums">
+                        {adResult.summary.insideCount}/{adResult.summary.nQuery}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+                      <p className="text-xs text-muted-foreground">
+                        {adResult.summary.uncertaintyThreshold === null
+                          ? "Uncertainty"
+                          : "σ threshold"}
+                      </p>
+                      <p className="font-mono text-xl font-semibold tabular-nums">
+                        {adResult.summary.uncertaintyThreshold === null
+                          ? "—"
+                          : fmtNum(adResult.summary.uncertaintyThreshold, 3)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+                      <p className="text-xs text-muted-foreground">Reliable verdicts</p>
+                      <p
+                        className={`font-mono text-xl font-semibold tabular-nums ${
+                          adResult.summary.reliableCount === null
+                            ? ""
+                            : adResult.summary.reliableCount === adResult.summary.nQuery
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-amber-600 dark:text-amber-400"
+                        }`}
+                      >
+                        {adResult.summary.reliableCount === null
+                          ? "—"
+                          : `${adResult.summary.reliableCount}/${adResult.summary.nQuery}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {adResult.bootstrapNote ? (
+                    <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+                      {adResult.bootstrapNote}
+                    </p>
+                  ) : null}
+
+                  {/* The upload's combined figure: (a) distance histogram + (b) verdict scatter */}
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div>
+                      <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                        (a) Training distance density — {adResult.nTrain} rows, k ={" "}
+                        {adResult.summary.k}
+                      </p>
+                      <div className="h-44">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart
+                            data={adHistogram(adResult)}
+                            margin={{ top: 4, right: 8, left: -18, bottom: 0 }}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke={CHART.gridStroke}
+                              strokeOpacity={CHART.gridStrokeOpacity}
+                            />
+                            <XAxis
+                              dataKey="x"
+                              type="number"
+                              domain={["dataMin", "dataMax"]}
+                              tickFormatter={(v: number) => fmtTick(v)}
+                              fontSize={10}
+                              stroke={CHART.axisTick.fill}
+                            />
+                            <YAxis fontSize={10} stroke={CHART.axisTick.fill} />
+                            <Tooltip
+                              contentStyle={{ fontSize: 11 }}
+                              formatter={(v: number) => [v, "rows"]}
+                              labelFormatter={(l: number) => `distance ≈ ${fmtNum(l, 3)}`}
+                            />
+                            <Bar dataKey="count" fill={CHART.teal} fillOpacity={0.75} />
+                            <ReferenceLine
+                              x={adResult.summary.distanceThreshold}
+                              stroke={CHART.rose}
+                              strokeDasharray="5 4"
+                              ifOverflow="extendDomain"
+                            />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                        (b) Distance vs prediction — {adResult.summary.insideCount}/
+                        {adResult.summary.nQuery} inside
+                      </p>
+                      <div className="h-44">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ScatterChart
+                            margin={{ top: 4, right: 8, left: -18, bottom: 0 }}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke={CHART.gridStroke}
+                              strokeOpacity={CHART.gridStrokeOpacity}
+                            />
+                            <XAxis
+                              dataKey="knn"
+                              type="number"
+                              domain={["dataMin", "dataMax"]}
+                              tickFormatter={(v: number) => fmtTick(v)}
+                              fontSize={10}
+                              stroke={CHART.axisTick.fill}
+                            />
+                            <YAxis
+                              dataKey="predicted"
+                              type="number"
+                              domain={["auto", "auto"]}
+                              tickFormatter={(v: number) => fmtTick(v)}
+                              fontSize={10}
+                              stroke={CHART.axisTick.fill}
+                            />
+                            <Tooltip
+                              contentStyle={{ fontSize: 11 }}
+                              formatter={(v: number, n: string) => [fmtNum(v, 3), n]}
+                              labelFormatter={() => ""}
+                            />
+                            <ReferenceLine
+                              x={adResult.summary.distanceThreshold}
+                              stroke={CHART.amber}
+                              strokeDasharray="5 4"
+                              ifOverflow="extendDomain"
+                            />
+                            <Scatter
+                              name="inside domain"
+                              data={adScatter(adResult, true)}
+                              fill={CHART.emerald}
+                              fillOpacity={0.8}
+                            />
+                            <Scatter
+                              name="outside domain"
+                              data={adScatter(adResult, false)}
+                              fill={CHART.rose}
+                              shape="diamond"
+                              fillOpacity={0.9}
+                            />
+                          </ScatterChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* The reliability table (the upload's results CSV) */}
+                  <div className="thin-scrollbar max-h-72 overflow-y-auto">
+                    <Table className="data-table">
+                      <TableHeader className="sticky top-0 bg-muted/60 backdrop-blur">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="h-9">Row</TableHead>
+                          <TableHead className="h-9 text-right">Predicted</TableHead>
+                          <TableHead className="h-9 text-right">± sd</TableHead>
+                          <TableHead className="h-9 text-right">kNN distance</TableHead>
+                          <TableHead className="h-9 text-center">Inside AD</TableHead>
+                          <TableHead className="h-9 text-center">Low σ</TableHead>
+                          <TableHead className="h-9 text-center">Reliable</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {adResult.rows.map((row, i) => (
+                          <TableRow key={`${row.name}-${i}`}>
+                            <TableCell className="py-1.5 font-mono text-xs">
+                              {row.name}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right font-mono text-xs tabular-nums">
+                              {row.predicted === null ? "—" : fmtNum(row.predicted, 3)}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right font-mono text-xs tabular-nums">
+                              {row.predictionSd === null ? "—" : fmtNum(row.predictionSd, 3)}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right font-mono text-xs tabular-nums">
+                              {fmtNum(row.knnDistance, 3)}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-center">
+                              <VerdictPill ok={row.insideAd} />
+                            </TableCell>
+                            <TableCell className="py-1.5 text-center">
+                              <VerdictPill ok={row.lowUncertainty} nullable />
+                            </TableCell>
+                            <TableCell className="py-1.5 text-center">
+                              <VerdictPill ok={row.reliable} nullable strong />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    {adResult.summary.nModels === null
+                      ? "kNN-only verdict — no bootstrap fits ran."
+                      : `${adResult.summary.nModels} bootstrap members in ${adResult.summary.fitSeconds.toFixed(1)} s (each predicts on the query AND training rows — half the upload's 2 × n fits).`}{" "}
+                    Feature space: {adResult.featureNames.length} descriptor(s) ·{" "}
+                    {adResult.nTrain} training rows.
+                  </p>
+                </>
+              ) : (
+                <p className="rounded-md border border-dashed px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+                  The upload&rsquo;s two questions answered per held-out row: is the compound
+                  inside the training descriptor space, and how much does the model&rsquo;s
+                  answer wobble under bootstrap resampling? Train on a CSV, then run the
+                  analysis.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         ) : null}
 
         {/* ------------------------------ Tuner results ------------------------------ */}

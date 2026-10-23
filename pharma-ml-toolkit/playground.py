@@ -1531,13 +1531,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._last_figure: Any = None
         self._ml_frame: Any = None
         self._ml_path: Path | None = None
-        # -- Data & ML report state (100x-76, extended 100x-79) ----- #
-        # (trained, report, task, X_test, y_test, train_target) of the
-        # last successful train -- the Save-report button rebuilds the
-        # CLI's bundle from it; the Check-CSV button audits new data
-        # against it (the training target rides along as the automatic
-        # --target drop).
-        self._ml_last_run: tuple[Any, Any, str, Any, Any, str] | None = None
+        # -- Data & ML report state (100x-76, extended 100x-79/118) -- #
+        # (trained, report, task, X_train, y_train, X_test, y_test,
+        # train_target) of the last successful train -- the Save-report
+        # button rebuilds the CLI's bundle from it; the Check-CSV button
+        # audits new data against it (the training target rides along as
+        # the automatic --target drop); the applicability-domain card
+        # reuses its split (X_train for the domain, X_test as the query
+        # set -- 100x-118, the upload's workflow on the live run).
+        self._ml_last_run: tuple[Any, Any, str, Any, Any, Any, Any, str] | None = None
         # -- Hyperparameter-search card state (100x-90) ------------- #
         # (TunerResults, estimator token, task, target column) of the
         # last search -- the Apply-best and Save-trials payloads.
@@ -1596,6 +1598,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # -- Ensemble-builder + model-persistence state (ML tab) ------ #
         self._ml_bundle: tuple[Any, dict[str, Any], Path] | None = None
         self._ml_predictions: Any = None        # last bundle prediction frame
+        # -- Applicability-domain card state (100x-118: the upload) --- #
+        self._ml_ad_result: Any = None          # ApplicabilityDomainResult
+        self._ml_ad_frame: Any = None           # its reliability table
+        self._ml_ad_train_path: Path | None = None  # bundle-mode train CSV
+        self._ml_ad_test_path: Path | None = None   # bundle-mode test CSV
 
         # -- session + theme state ------------------------------------- #
         self._persist_session = persist_session
@@ -7678,6 +7685,135 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._predict_tree.pack(side="left", fill="both", expand=True)
         predict_bar.pack(side="right", fill="y")
 
+        # -- applicability domain (100x-118: the uploaded script as a
+        #    first-class card) ------------------------------------------ #
+        ad = make_card(
+            page.grid, "Applicability domain & prediction reliability",
+            span=2, row=9, column=0,
+            subtitle="The uploaded Applicability_domain_analysis.py: is the "
+                     "query compound inside the training descriptor space "
+                     "(mean kNN distance vs a percentile threshold), and how "
+                     "much does the model's answer wobble under bootstrap "
+                     "resampling (ensemble spread vs its own training-side "
+                     "threshold)? Both answers fold into one reliable / "
+                     "not-reliable verdict per compound.",
+        )
+        ad_source_row = ttk.Frame(ad, style="Card.TFrame")
+        grid_append(ad, ad_source_row, sticky="ew")
+        ttk.Label(ad_source_row, text="model source",
+                  style="CardMuted.TLabel").pack(side="left")
+        self._ad_source_combo = ttk.Combobox(
+            ad_source_row, state="readonly", width=22,
+            values=("last trained model", "loaded bundle"))
+        Tooltip(self._ad_source_combo,
+                "The last trained model (or ensemble) carries its own "
+                "80/20 split -- the query set is its held-out rows, no "
+                "file picking needed. A loaded bundle (the persistence "
+                "card) needs the original train and test CSVs, exactly "
+                "like the uploaded script's optimized train/test sets.")
+        self._ad_source_combo.set("last trained model")
+        self._ad_source_combo.pack(side="left", padx=(8, 0))
+        self._ad_source_combo.bind("<<ComboboxSelected>>",
+                                   self._ml_ad_source_changed)
+        self._ad_source_info = ttk.Label(ad_source_row, text="no run yet",
+                                         style="CardMuted.TLabel",
+                                         wraplength=560, justify="left")
+        self._ad_source_info.pack(side="left", padx=(12, 0))
+        # bundle-mode file pickers (only meaningful for the bundle source)
+        self._ad_bundle_row = ttk.Frame(ad, style="Card.TFrame")
+        grid_append(ad, self._ad_bundle_row, sticky="ew", pady=(6, 0))
+        ad_train_btn = self._action_button(
+            self._ad_bundle_row, "Open train CSV…", self._ml_ad_pick_train_csv,
+            tooltip="The bundle mode's training table -- the descriptor "
+                    "columns the domain is measured in and the target the "
+                    "bootstrap ensemble refits on (the upload's "
+                    "Optimized_Train_set CSV).")
+        ad_train_btn.pack(side="left")
+        self._ad_train_label = ttk.Label(self._ad_bundle_row, text="no file",
+                                         style="CardMuted.TLabel",
+                                         wraplength=200, justify="left")
+        self._ad_train_label.pack(side="left", padx=(8, 0))
+        ad_test_btn = self._action_button(
+            self._ad_bundle_row, "Open test CSV…", self._ml_ad_pick_test_csv,
+            tooltip="The bundle mode's query table -- the compounds judged "
+                    "inside/outside the domain (the upload's "
+                    "Optimized_Test_set CSV).")
+        ad_test_btn.pack(side="left", padx=(14, 0))
+        self._ad_test_label = ttk.Label(self._ad_bundle_row, text="no file",
+                                        style="CardMuted.TLabel",
+                                        wraplength=200, justify="left")
+        self._ad_test_label.pack(side="left", padx=(8, 0))
+        ad_knobs = ttk.Frame(ad, style="Card.TFrame")
+        grid_append(ad, ad_knobs, sticky="ew", pady=(6, 0))
+        self._ad_k_spin = ttk.Spinbox(ad_knobs, from_=1, to=20, increment=1,
+                                      width=8)
+        self._ad_k_spin.set("5")
+        Tooltip(self._ad_k_spin,
+                "Nearest neighbours of the distance domain (the upload's "
+                "k = 5). Training distances exclude each point's own "
+                "self-match, so the threshold is not deflated.")
+        form_row(ad_knobs, "k (neighbours)", self._ad_k_spin)
+        self._ad_pct_spin = ttk.Spinbox(ad_knobs, from_=50.0, to=99.9,
+                                        increment=0.5, width=8)
+        self._ad_pct_spin.set("95.0")
+        Tooltip(self._ad_pct_spin,
+                "Percentile of the training distances (and of the "
+                "training-side ensemble spread) both thresholds are cut "
+                "at -- the upload's 95th.")
+        form_row(ad_knobs, "threshold percentile", self._ad_pct_spin)
+        self._ad_boot_spin = ttk.Spinbox(ad_knobs, from_=0, to=200,
+                                         increment=1, width=8)
+        self._ad_boot_spin.set("30")
+        Tooltip(self._ad_boot_spin,
+                "Bootstrap ensemble size for the uncertainty half (the "
+                "upload's 30 CatBoost models -- here clones of the trained "
+                "estimator itself). 0 = kNN-only quick pass, no extra fits. "
+                "Every member predicts on the query AND training rows in "
+                "one pass, so this costs half the upload's 2 x n fits.")
+        form_row(ad_knobs, "bootstrap models", self._ad_boot_spin)
+        ad_buttons = ttk.Frame(ad, style="Card.TFrame")
+        grid_append(ad, ad_buttons, sticky="ew", pady=(8, 0))
+        ad_run_btn = self._action_button(
+            ad_buttons, "Analyse applicability domain", self._ml_ad_run,
+            primary=True,
+            tooltip="Runs the upload's workflow end-to-end: standardise the "
+                    "descriptor space, kNN distances + percentile "
+                    "threshold, bootstrap-ensemble spread + its own "
+                    "threshold, then the per-compound reliability table "
+                    "and the combined two-panel figure. The status bar "
+                    "carries per-member progress for the bootstrap fits.")
+        ad_run_btn.pack(side="left")
+        ad_save_btn = self._action_button(
+            ad_buttons, "Save AD results CSV…", self._ml_ad_save,
+            tooltip="The last reliability table -- the upload's "
+                    "Applicability_Domain_Results.csv.")
+        ad_save_btn.pack(side="left", padx=(10, 0))
+        self._ad_status = ttk.Label(
+            ad_buttons, text="run the analysis to see the verdict",
+            style="CardMuted.TLabel", wraplength=520, justify="left")
+        self._ad_status.pack(side="left", padx=(10, 0))
+        ad_results = ttk.Frame(ad, style="Card.TFrame")
+        grid_append(ad, ad_results, sticky="nsew", pady=(6, 0), weight=True)
+        # minsize guarantees the figure column its share even when the
+        # table's natural (heading-driven) width would swallow the row
+        ad_results.columnconfigure(0, weight=3, minsize=320)
+        ad_results.columnconfigure(1, weight=4, minsize=430)
+        ad_results.rowconfigure(0, weight=1)
+        ad_table_frame = ttk.Frame(ad_results, style="Card.TFrame")
+        ad_table_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        self._ad_tree = ttk.Treeview(ad_table_frame, show="headings", height=8)
+        ad_bar = ttk.Scrollbar(ad_table_frame, orient="vertical",
+                               command=self._ad_tree.yview)
+        self._ad_tree.configure(yscrollcommand=ad_bar.set)
+        self._ad_tree.pack(side="left", fill="both", expand=True)
+        ad_bar.pack(side="right", fill="y")
+        # a manual figure host (the _figure_host helper grids into its
+        # parent's next row; this one lives beside the table in column 1)
+        self._ad_host = tk.Frame(ad_results, background=CARD, height=300)
+        self._ad_host.grid(row=0, column=1, sticky="nsew")
+        self._ad_host.pack_propagate(False)
+        self._ml_ad_refresh_source()
+
     def _ml_open_csv(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
             return
@@ -8057,16 +8193,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 trained.model, x_test, y_test, task,
                 keep_predictions=(task == "regression"),
             )
-            return trained, report, task, dropped, y_test, x_test
+            return trained, report, task, dropped, x_train, y_train, x_test, y_test
 
         def render(payload: Any) -> None:
-            trained, report, task, dropped, y_test, x_test = payload
+            trained, report, task, dropped, x_train, y_train, x_test, y_test = payload
             # the Save-report button rebuilds the CLI bundle from this run;
             # the Check-CSV button audits new data against it (the training
-            # target rides along as the automatic --target drop).
-            self._ml_last_run = (trained, report, task, x_test, y_test, target)
+            # target rides along as the automatic --target drop); the AD
+            # card reuses the split for the domain + query sets.
+            self._ml_last_run = (trained, report, task, x_train, y_train,
+                                 x_test, y_test, target)
             gp = self._ml_gp_sigma(trained, x_test)
             self._fill_ml_metrics(trained, report, task, dropped, gp=gp)
+            self._ml_ad_refresh_source()
             if not self.deps.get("matplotlib"):
                 return
             try:
@@ -8189,12 +8328,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 estimator, x_test, y_test, task,
                 keep_predictions=(task == "regression"),
             )
-            return trained, report, task, dropped, y_test, x_test
+            return trained, report, task, dropped, x_train, y_train, x_test, y_test
 
         def render(payload: Any) -> None:
-            trained, report, task, dropped, y_test, x_test = payload
-            self._ml_last_run = (trained, report, task, x_test, y_test, target)
+            trained, report, task, dropped, x_train, y_train, x_test, y_test = payload
+            self._ml_last_run = (trained, report, task, x_train, y_train,
+                                 x_test, y_test, target)
             self._fill_ml_metrics(trained, report, task, dropped)
+            self._ml_ad_refresh_source()
             members_named = "+".join(members)
             self._ens_summary.configure(
                 text=(f"{kind} ({members_named}) trained — metrics in the "
@@ -8246,7 +8387,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "the last run's fitted estimator and its metrics.",
             )
             return
-        trained, report, task, _x_test, _y_test, target = self._ml_last_run
+        trained, report, task, _x_train, _y_train, _x_test, _y_test, target = self._ml_last_run
         path = filedialog.asksaveasfilename(
             title="Save the model bundle",
             defaultextension=".joblib",
@@ -8427,6 +8568,268 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save", exc)
 
+    # -- applicability-domain card (100x-118: the upload) ------------- #
+    def _ml_ad_refresh_source(self) -> None:
+        """Refresh the AD card's source line + bundle-mode visibility.
+
+        Called at build time, whenever a model finishes training, and on
+        every combobox change: 'last trained model' shows the run's
+        split summary; 'loaded bundle' shows the bundle's provenance and
+        the train/test CSV pickers.
+        """
+        mode = self._ad_source_combo.get()
+        bundle_mode = mode == "loaded bundle"
+        if bundle_mode:
+            self._ad_bundle_row.grid()
+        else:
+            self._ad_bundle_row.grid_remove()
+        if not bundle_mode:
+            if self._ml_last_run is None:
+                self._ad_source_info.configure(
+                    text="no run yet — train a model (or an ensemble) first")
+            else:
+                trained = self._ml_last_run[0]
+                x_train, x_test = self._ml_last_run[3], self._ml_last_run[5]
+                self._ad_source_info.configure(
+                    text=(f"{trained.name} — {len(x_train)} train / "
+                          f"{len(x_test)} held-out query rows (its own "
+                          "80/20 split)"),
+                    style="Field.TLabel")
+            return
+        if self._ml_bundle is None:
+            self._ad_source_info.configure(
+                text="no bundle loaded — open one in the persistence card above")
+            return
+        _model, metadata, _path = self._ml_bundle
+        features = metadata.get("features")
+        self._ad_source_info.configure(
+            text=(f"{metadata.get('name', '?')} · {metadata.get('task', '?')}"
+                  f" · {len(features) if features else '?'} features — pick "
+                  "the original train + test CSVs below"),
+            style="Field.TLabel")
+
+    def _ml_ad_source_changed(self, _event: Any = None) -> None:
+        """Combobox callback — re-render the source line."""
+        self._ml_ad_refresh_source()
+
+    def _ml_ad_pick_train_csv(self) -> None:
+        """Pick the bundle mode's training CSV."""
+        path = filedialog.askopenfilename(
+            title="Open the training CSV",
+            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        self._ml_ad_train_path = Path(path)
+        self._ad_train_label.configure(text=Path(path).name,
+                                        style="Field.TLabel")
+
+    def _ml_ad_pick_test_csv(self) -> None:
+        """Pick the bundle mode's query CSV."""
+        path = filedialog.askopenfilename(
+            title="Open the test CSV",
+            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        self._ml_ad_test_path = Path(path)
+        self._ad_test_label.configure(text=Path(path).name,
+                                      style="Field.TLabel")
+
+    def _ml_ad_bundle_frames(self) -> tuple[Any, Any, Any, Any, Any]:
+        """Load + contract-check the bundle mode's train/test CSVs.
+
+        Returns ``(model, X_train, y_train, X_test, test_frame)`` where
+        ``test_frame`` is the raw query table (for the SMILES lookup).
+        Raises ``ValueError`` with a user-facing message on any contract
+        violation.  A SMILES / name column riding along is fine -- it is
+        metadata for the reliability table, not a feature (the upload's
+        own CSVs carry SMILES in the first column).
+        """
+        import pandas as pd
+
+        from pharmaml.ml.persistence import validate_bundle_input
+
+        model, metadata, bundle_path = self._ml_bundle
+        if self._ml_ad_train_path is None or self._ml_ad_test_path is None:
+            raise ValueError(
+                "pick both the training and the test CSV first (the "
+                "bundle mode needs the original tables).")
+        train_frame = pd.read_csv(self._ml_ad_train_path)
+        test_frame = pd.read_csv(self._ml_ad_test_path)
+        target = metadata.get("target")
+        if target is None or target not in train_frame.columns:
+            raise ValueError(
+                "the training CSV must carry the bundle's target column "
+                f"({target!r}) -- the bootstrap ensemble refits on it.")
+        y_train = train_frame[target]
+        features = metadata.get("features")
+        if features:
+            missing_train = [c for c in features if c not in train_frame.columns]
+            missing_test = [c for c in features if c not in test_frame.columns]
+            if missing_train or missing_test:
+                raise ValueError(
+                    "the CSVs are missing recorded feature column(s): "
+                    f"train {missing_train or '—'} · test {missing_test or '—'}")
+            # selecting by the recorded names IS the contract (missing /
+            # extra / reordered all resolved); the SMILES column survives
+            # outside the matrices as table metadata
+            x_train = train_frame[list(features)]
+            x_test = test_frame[list(features)]
+        else:
+            # no recorded order: audit the numeric views (target dropped)
+            train_features = train_frame.drop(columns=[target])
+            audit = validate_bundle_input(bundle_path, train_features)
+            if not audit.ok:
+                raise ValueError(
+                    "the training CSV does not satisfy the bundle's feature "
+                    f"contract:\n{audit}")
+            audit = validate_bundle_input(bundle_path, test_frame.select_dtypes("number"))
+            if not audit.ok:
+                raise ValueError(
+                    "the test CSV does not satisfy the bundle's feature "
+                    f"contract:\n{audit}")
+            x_train = train_features.select_dtypes("number")
+            x_test = test_frame.select_dtypes("number")
+        return model, x_train, y_train, x_test, test_frame
+
+    def _ml_ad_run(self) -> None:
+        """The uploaded workflow, one click (see the card subtitle)."""
+        if not self._require_pharmaml() or not self._require(
+                "sklearn", "applicability-domain analysis"):
+            return
+        mode = self._ad_source_combo.get()
+        if mode == "loaded bundle" and self._ml_bundle is None:
+            messagebox.showwarning(
+                "No bundle", "Open a model bundle first (the persistence "
+                "card above), or switch the source to the last trained model.")
+            return
+        if mode != "loaded bundle" and self._ml_last_run is None:
+            messagebox.showwarning(
+                "No run yet",
+                "Train a model (or an ensemble) first -- the analysis "
+                "reuses its split, or switch the source to a loaded bundle.")
+            return
+        try:
+            k = parse_int(self._ad_k_spin.get(), "k (neighbours)",
+                          minimum=1, maximum=20)
+            percentile = parse_float(self._ad_pct_spin.get(),
+                                     "threshold percentile",
+                                     minimum=50.0, maximum=99.9)
+            n_models = parse_int(self._ad_boot_spin.get(), "bootstrap models",
+                                 minimum=0, maximum=200)
+        except ValueError as exc:
+            messagebox.showwarning("Check the settings", str(exc))
+            return
+        bundle_mode = mode == "loaded bundle"
+        query_names: list[str] | None = None
+        if not bundle_mode:
+            trained = self._ml_last_run[0]
+            x_train = self._ml_last_run[3]
+            y_train = self._ml_last_run[4]
+            x_test = self._ml_last_run[5]
+            model = trained.model
+            task = self._ml_last_run[2]
+            target = self._ml_last_run[7]
+            # the reliability table's name column: the original frame's
+            # SMILES (or first column) looked up through the preserved
+            # split index -- the upload's test_df.iloc[:, 0]
+            frame = self._ml_frame
+            smiles = detect_smiles_column(frame) if frame is not None else None
+            if smiles is not None:
+                try:
+                    query_names = frame.loc[x_test.index, smiles].tolist()
+                except Exception:  # noqa: BLE001 - index drift: generic names
+                    query_names = None
+            label = f"{trained.name} ({task})"
+        else:
+            try:
+                model, x_train, y_train, x_test, test_frame = \
+                    self._ml_ad_bundle_frames()
+            except ValueError as exc:
+                messagebox.showwarning("Bundle mode", str(exc))
+                return
+            task = str(self._ml_bundle[1].get("task", "regression"))
+            target = str(self._ml_bundle[1].get("target", "value"))
+            smiles = detect_smiles_column(test_frame)
+            if smiles is not None:
+                query_names = test_frame[smiles].tolist()
+            label = str(self._ml_bundle[1].get("name", "bundle"))
+        if n_models == 0 and len(x_train) <= k:
+            messagebox.showwarning(
+                "Too few training rows",
+                f"k={k} needs at least {k + 1} training rows; only "
+                f"{len(x_train)} available -- lower k or skip the analysis.")
+            return
+
+        def work(report: Any) -> Any:
+            from pharmaml.ml import applicability_domain
+
+            def on_fit(done: int, total: int) -> None:
+                report(done, total, f"bootstrap member {done}/{total}")
+
+            return applicability_domain(
+                model, x_train, y_train, x_test,
+                k=k, percentile=percentile, n_models=max(n_models, 1),
+                uncertainty=n_models > 0, progress=on_fit,
+            )
+
+        def render(payload: Any) -> None:
+            self._ml_ad_result = payload
+            table = payload.to_frame(names=query_names)
+            self._ml_ad_frame = table
+            self._fill_dynamic_tree(
+                self._ad_tree, table, max_rows=200,
+                widths={"name": 200, "predicted": 90, "prediction_sd": 90,
+                        "knn_distance": 100, "inside_ad": 80,
+                        "low_uncertainty": 100, "reliable": 80},
+            )
+            inside = int(payload.inside_ad.sum())
+            total = int(payload.inside_ad.size)
+            if payload.reliable is not None:
+                reliable = int(payload.reliable.sum())
+                low = int(payload.low_uncertainty.sum())
+                self._ad_status.configure(
+                    text=(f"distance threshold {payload.distance_threshold:.3g} "
+                          f"(p{percentile:g}, k={k}) — {inside}/{total} inside AD · "
+                          f"{payload.n_models}-member ensemble in "
+                          f"{payload.fit_seconds:.1f} s · uncertainty threshold "
+                          f"{payload.uncertainty_threshold:.3g} — {low}/{total} "
+                          f"low-uncertainty · {reliable}/{total} reliable"),
+                    style="Field.TLabel")
+            else:
+                self._ad_status.configure(
+                    text=(f"distance threshold {payload.distance_threshold:.3g} "
+                          f"(p{percentile:g}, k={k}) — {inside}/{total} inside AD "
+                          "(kNN-only pass: bootstrap models = 0)"),
+                    style="Field.TLabel")
+            if not self.deps.get("matplotlib"):
+                return
+            try:
+                from pharmaml.viz import plot_applicability_domain
+
+                y_label = (f"predicted {target}" if task == "regression"
+                           else "predicted P(positive)")
+                figure = plot_applicability_domain(
+                    payload, y_label=y_label,
+                    title=f"Applicability domain — {label}")
+                self._render_figure(self._ad_host, figure)
+            except Exception as exc:  # noqa: BLE001
+                self._show_error("AD plot failed", exc)
+
+        self._start_job(f"applicability domain ({label})", work, render)
+
+    def _ml_ad_save(self) -> None:
+        """Save the last reliability table (the upload's results CSV)."""
+        frame = getattr(self, "_ml_ad_frame", None)
+        if frame is None:
+            messagebox.showinfo(
+                "Nothing to save", "Run the applicability-domain analysis first.")
+            return
+        self._save_frame_dialog(
+            frame, "Save the applicability-domain results",
+            "Applicability_Domain_Results.csv")
+
     def _ml_gp_sigma(self, trained: Any, x_test: Any) -> tuple[Any, Any] | None:
         """Predictive ``(mean, sigma)`` when the run's model is a GP.
 
@@ -8480,7 +8883,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         target = filedialog.askdirectory(title="Choose the report folder")
         if not target:
             return
-        trained, report, task, x_test, y_test, _train_target = self._ml_last_run
+        trained, report, task, _x_train, _y_train, x_test, y_test, _train_target = self._ml_last_run
         model_name = trained.name
 
         def work() -> Any:
@@ -8590,7 +8993,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not chosen:
             return
         path = Path(chosen)
-        trained, _report, task, x_test, _y_test, train_target = self._ml_last_run
+        trained, _report, task, _x_train, _y_train, x_test, _y_test, train_target = self._ml_last_run
         model_name = trained.name
 
         def work() -> Any:

@@ -3,6 +3,8 @@
  * Used by both client components and API routes.
  */
 
+import type { AdRow, AdSummary } from "@/lib/ml-ad";
+
 /* ------------------------------------------------------------------ */
 /* Toolkit file tree                                                   */
 /* ------------------------------------------------------------------ */
@@ -881,4 +883,24 @@ export interface LigandPrepResponse {
   nFailed: number;
   elapsedSeconds: number;
   rdkitVersion: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Applicability domain (ml ad — the 2026-10 upload's workflow)        */
+/* ------------------------------------------------------------------ */
+
+/** Response of POST /api/ml/ad — the reliability verdict per held-out
+ *  row of the last trained configuration (kNN distance domain +
+ *  bootstrap-ensemble uncertainty, the upload's two questions). */
+export interface MLAdResponse {
+  task: "regression" | "classification";
+  model: string;
+  summary: AdSummary;
+  rows: AdRow[];
+  /** Training-side mean kNN distances (panel (a) histogram input). */
+  trainMean: number[];
+  nTrain: number;
+  featureNames: string[];
+  /** Why the bootstrap half was skipped (classification / adModels 0). */
+  bootstrapNote: string | null;
 }

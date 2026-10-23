@@ -289,6 +289,76 @@ def _build_parser() -> argparse.ArgumentParser:
         help="save the best estimator as a .joblib bundle (ml check compatible)",
     )
 
+    ad = ml_sub.add_parser(
+        "ad",
+        help="applicability-domain analysis — is a prediction reliable?",
+    )
+    ad.add_argument(
+        "--data", default=None,
+        help="single CSV/Excel: split 80/20, train --model, judge the "
+        "held-out rows (the convenient mode)",
+    )
+    ad.add_argument(
+        "--bundle", default=None,
+        help="a .joblib bundle written by a previous `ml train` run — "
+        "with --train-data/--test-data this is the uploaded "
+        "Applicability_domain_analysis.py flow verbatim",
+    )
+    ad.add_argument(
+        "--train-data", default=None,
+        help="with --bundle: the original training table (target column "
+        "required — the bootstrap ensemble refits on it)",
+    )
+    ad.add_argument(
+        "--test-data", default=None,
+        help="with --bundle: the query table to judge inside/outside the "
+        "domain",
+    )
+    ad.add_argument("--target", default=None, help="target column (auto-detected)")
+    ad.add_argument(
+        "--model", default="random_forest",
+        help="registry model name for the --data mode (default random_forest)",
+    )
+    ad.add_argument(
+        "--task", choices=["classification", "regression", "auto"], default="auto",
+        help="task type; 'auto' infers it from the target column (default)",
+    )
+    ad.add_argument(
+        "--keep-categorical", action="store_true",
+        help="keep string feature columns and one-hot encode them",
+    )
+    ad.add_argument(
+        "--k", type=int, default=5,
+        help="nearest neighbours of the distance domain (default 5, the "
+        "upload's value)",
+    )
+    ad.add_argument(
+        "--percentile", type=float, default=95.0,
+        help="percentile of the training distances AND the training-side "
+        "ensemble spread both thresholds are cut at (default 95)",
+    )
+    ad.add_argument(
+        "--n-models", type=int, default=30,
+        help="bootstrap ensemble size for the uncertainty half (default "
+        "30, the upload's value; every member predicts on the query AND "
+        "training rows in one pass — half the upload's 2 x n fits)",
+    )
+    ad.add_argument(
+        "--no-uncertainty", action="store_true",
+        help="skip the bootstrap half — a kNN-distance-only quick pass",
+    )
+    ad.add_argument(
+        "--out", default=None,
+        help="write the reliability table to this path (csv/tsv/md/json/"
+        "html); the upload's Applicability_Domain_Results.csv",
+    )
+    ad.add_argument(
+        "--plot", action="store_true",
+        help="save the combined two-panel AD figure into the current "
+        "directory (ad_applicability_domain.png) — requires "
+        "pharmaml[reports]",
+    )
+
     # ---- chem --------------------------------------------------------
     chem_parser = subparsers.add_parser("chem", help="cheminformatics utilities")
     chem_sub = chem_parser.add_subparsers(dest="chem_command", required=True)
@@ -1371,6 +1441,151 @@ def _cmd_ml_tune(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ml_ad(args: argparse.Namespace) -> int:
+    """Applicability-domain analysis — the uploaded workflow as a command."""
+    from pharmaml.ml import applicability_domain
+    from pharmaml.ml.persistence import load_model
+    from pharmaml.ml.preprocessing import make_train_test_split
+    from pharmaml.ml.training import train_model
+
+    if bool(args.data) == bool(args.bundle):
+        print(
+            "error: give exactly one of --data (train + judge the held-out "
+            "rows) or --bundle (with --train-data/--test-data, the "
+            "upload's flow)",
+            file=sys.stderr,
+        )
+        return 1
+
+    names: list[str] | None = None
+    if args.bundle:
+        if not args.train_data or not args.test_data:
+            print(
+                "error: --bundle needs --train-data and --test-data (the "
+                "original tables the bundle was trained on / the query "
+                "compounds)",
+                file=sys.stderr,
+            )
+            return 1
+        model, metadata = load_model(Path(args.bundle))
+        from pharmaml.data import load_dataset
+        from pharmaml.utils.io import read_table
+
+        train = load_dataset(args.train_data, target=args.target)
+        target = train.target
+        features = metadata.get("features")
+        if features:
+            missing = [c for c in features if c not in train.X.columns]
+            if missing:
+                print(
+                    f"error: --train-data is missing feature column(s): "
+                    f"{', '.join(missing)}",
+                    file=sys.stderr,
+                )
+                return 1
+            x_train = train.X[list(features)]
+        else:
+            x_train = train.X
+        y_train = train.y
+        # the query table needs no target — only the feature columns
+        test_frame = read_table(args.test_data)
+        if features:
+            missing = [c for c in features if c not in test_frame.columns]
+            if missing:
+                print(
+                    f"error: --test-data is missing feature column(s): "
+                    f"{', '.join(missing)}",
+                    file=sys.stderr,
+                )
+                return 1
+            x_test = test_frame[list(features)]
+        else:
+            x_test = test_frame.select_dtypes("number")
+        # the name column: the query table's SMILES (the upload's
+        # test_df.iloc[:, 0]) when it carries one
+        smiles = next(
+            (c for c in test_frame.columns if str(c).upper() == "SMILES"), None)
+        if smiles is not None:
+            names = test_frame[smiles].astype(str).tolist()
+        label = str(metadata.get("name", Path(args.bundle).stem))
+        task = str(metadata.get("task", "regression"))
+        head = [
+            ("bundle", str(args.bundle)),
+            ("model", label),
+            ("task", task),
+            ("train", f"{len(x_train)} rows x {x_train.shape[1]} features"),
+            ("query", f"{len(x_test)} rows"),
+        ]
+    else:
+        dataset = _load_cli_dataset(args)
+        x_train, x_test, y_train, _y_test = make_train_test_split(dataset.X, dataset.y)
+        trained = train_model(
+            args.model, dataset.task, x_train, y_train, tune=False, cv=2
+        )
+        model = trained.model
+        target = dataset.target
+        task = dataset.task
+        smiles = next(
+            (c for c in dataset.frame.columns if str(c).upper() == "SMILES"), None)
+        if smiles is not None:
+            names = dataset.frame.loc[x_test.index, smiles].astype(str).tolist()
+        label = f"{args.model} (trained on the 80% split)"
+        head = [
+            ("dataset", f"{dataset.n_samples} rows x {dataset.n_features} features"),
+            ("model", label),
+            ("task", task),
+            ("query", f"{len(x_test)} held-out rows"),
+        ]
+
+    result = applicability_domain(
+        model, x_train, y_train, x_test,
+        k=args.k, percentile=args.percentile,
+        n_models=args.n_models, uncertainty=not args.no_uncertainty,
+    )
+    for key, value in head:
+        print(f"{key + ':':9} {value}")
+    print(
+        f"domain:   k={result.k} distance threshold "
+        f"{result.distance_threshold:.4g} (p{args.percentile:g})"
+    )
+    inside = int(result.inside_ad.sum())
+    print(f"inside:   {inside}/{result.inside_ad.size} query compounds inside the domain")
+    if result.reliable is not None:
+        print(
+            f"ensemble: {result.n_models} bootstrap members in "
+            f"{result.fit_seconds:.1f} s ({result.uncertainty_kind})"
+        )
+        print(
+            f"sigma:    uncertainty threshold {result.uncertainty_threshold:.4g}"
+        )
+        print(
+            f"reliable: {int(result.reliable.sum())}/{result.reliable.size} "
+            "compounds (inside AD & low uncertainty)"
+        )
+    else:
+        print("ensemble: skipped (--no-uncertainty: distance-only verdict)")
+
+    if args.out:
+        from pharmaml.viz import export_table
+
+        table = result.to_frame(names=names)
+        written = export_table(table, args.out)
+        print(f"table:    {written}")
+    if args.plot:
+        from pharmaml.viz import plot_applicability_domain, save_figure
+
+        figure = plot_applicability_domain(
+            result,
+            y_label=f"predicted {target}" if task == "regression"
+            else "predicted P(positive)",
+            title=f"Applicability domain — {label}",
+        )
+        out = Path("ad_applicability_domain.png")
+        save_figure(figure, out)
+        print(f"figure:   {out}")
+    return 0
+
+
 def _cmd_chem_pic50(args: argparse.Namespace) -> int:
     from pharmaml.chem.converters import add_pic50_column
     from pharmaml.utils.io import read_table, write_table
@@ -2327,6 +2542,7 @@ _HANDLERS = {
     ("ml", "compare"): _cmd_ml_compare,
     ("ml", "check"): _cmd_ml_check,
     ("ml", "tune"): _cmd_ml_tune,
+    ("ml", "ad"): _cmd_ml_ad,
     ("chem", "pic50"): _cmd_chem_pic50,
     ("chem", "descriptors"): _cmd_chem_descriptors,
     ("chem", "rism"): _cmd_chem_rism,

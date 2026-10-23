@@ -1,6 +1,13 @@
 """QSAR machine learning: preprocessing, training, evaluation, persistence,
-hyperparameter tuning."""
+hyperparameter tuning, applicability-domain analysis."""
 
+from pharmaml.ml.applicability import (
+    ApplicabilityDomainResult,
+    BootstrapUncertainty,
+    applicability_domain,
+    bootstrap_uncertainty,
+    knn_applicability_domain,
+)
 from pharmaml.ml.evaluation import evaluate_model, predict_with_uncertainty
 from pharmaml.ml.hierarchical import HierarchicalSVR
 from pharmaml.ml.models import (
@@ -50,6 +57,8 @@ from pharmaml.ml.tuner import (
 __all__ = [
     "MODEL_ALIASES",
     "MODEL_REGISTRY",
+    "ApplicabilityDomainResult",
+    "BootstrapUncertainty",
     "DeepMLPClassifier",
     "DeepMLPRegressor",
     "HierarchicalSVR",
@@ -61,6 +70,8 @@ __all__ = [
     "ResidualMLPRegressor",
     "TrialResult",
     "TunerResults",
+    "applicability_domain",
+    "bootstrap_uncertainty",
     "build_ann_classifier",
     "build_ann_regressor",
     "build_deep_classifier",
@@ -74,6 +85,7 @@ __all__ = [
     "compare_models",
     "evaluate_model",
     "has_categorical_columns",
+    "knn_applicability_domain",
     "list_models",
     "load_model",
     "make_cv_splitter",

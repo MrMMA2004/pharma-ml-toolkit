@@ -7,7 +7,9 @@ The shipped TS modules under ``<repo>/src/lib`` mirror library math:
 - ``docking-configs.ts`` (GPF/DPF writers, grid box, Vina log scan) vs
   ``pharmaml.docking`` — the 100x-112 pair;
 - ``hyperband-rungs.ts`` (the rung-scatter row fold) vs its own
-  pinned contract — the 100x-117 pair.
+  pinned contract — the 100x-117 pair;
+- ``ml-ad.ts`` (the AD card's distance domain) vs
+  ``pharmaml.ml.applicability`` — the 100x-118 pair.
 
 The paired scratch probes verify them, but until now nothing FAILED the
 pytest suite when they broke.  These guards run BOTH sides of each pair
@@ -46,6 +48,12 @@ needs_rung_fold = pytest.mark.skipif(
     reason="web checkout (<repo>/src/lib/hyperband-rungs.ts) + bun runtime "
     "required; the zip-only tree skips — its probes live outside the "
     "shipped tree",
+)
+AD_TS_PATH = REPO_ROOT / "src" / "lib" / "ml-ad.ts"
+needs_ad_parity = pytest.mark.skipif(
+    not AD_TS_PATH.is_file() or BUN is None,
+    reason="web checkout (<repo>/src/lib/ml-ad.ts) + bun runtime required; "
+    "the zip-only tree skips — its probes live outside the shipped tree",
 )
 
 
@@ -128,3 +136,29 @@ class TestDockingConfigsParity:
         then updates both twins, which is exactly the contract.
         """
         _run([BUN, "run", "scratch/probe_batch_parity_112.ts"], REPO_ROOT)
+
+
+class TestApplicabilityDomainParity:
+    """ml-ad.ts vs pharmaml.ml.applicability (the 100x-118 pair).
+
+    The web AD card (Data & ML playground) mirrors the uploaded
+    workflow's distance half in TS; this guard runs BOTH sides of the
+    pair from inside the suite so a regression in either language
+    fails CI with the probe's own diagnostics.
+    """
+
+    AD_TS = REPO_ROOT / "src" / "lib" / "ml-ad.ts"
+
+    @needs_ad_parity
+    def test_ad_knn_parity(self) -> None:
+        """The python twin writes the numeric readout (train/test mean
+        distances, threshold, verdicts) from ``knn_applicability_domain``
+        on the shared minstd dataset; the bun twin runs the SHIPPED
+        ``ml-ad.ts`` (fitStandardizer + knnDomain) on the identical rows
+        and asserts agreement to 1e-9 plus the self-exclusion invariant.
+        """
+        _run(
+            [sys.executable, str(TOOLKIT_ROOT / "scratch" / "probe_ad_parity_118.py")],
+            TOOLKIT_ROOT,
+        )
+        _run([BUN, "run", "scratch/probe_ad_parity_118.ts"], REPO_ROOT)

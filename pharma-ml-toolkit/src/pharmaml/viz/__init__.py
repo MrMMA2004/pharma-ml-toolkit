@@ -13,7 +13,10 @@ layer for **all** toolkit codes:
                   :func:`plot_cv_scores`,
                   :func:`plot_calibration_curve` (reliability diagram
                   + Brier score), :func:`plot_learning_curve`
-                  (data-size vs CV score);
+                  (data-size vs CV score),
+                  :func:`plot_applicability_domain` (the uploaded AD
+                  workflow's combined reliability figure — training
+                  distance density + distance-vs-prediction scatter);
 * pharmaceutics — :func:`plot_concentration_profile` (linear + semi-log
                   with shaded AUC), :func:`plot_dose_accumulation`
                   (steady-state envelope);
@@ -84,6 +87,7 @@ from pharmaml.viz.generative_plots import (
     plot_rl_introspection,
 )
 from pharmaml.viz.ml_plots import (
+    plot_applicability_domain,
     plot_calibration_curve,
     plot_class_distribution,
     plot_confusion_matrix,
@@ -126,6 +130,7 @@ __all__ = [
     "metrics_to_dataframe",
     "new_figure",
     # ML figures
+    "plot_applicability_domain",
     "plot_calibration_curve",
     "plot_class_distribution",
     # pharma figures

@@ -10,6 +10,11 @@ Method (the standing contract from docs/COVERAGE.md):
      (COVERAGE.md matrix, audited one-by-one in 100x-101)
   3. grep playground.py for the mapped GUI symbol(s)
   4. report every file: COVERED (hit count) / ZERO-HIT (gap) / ABSORBED (documented non-goal)
+
+100x-118 extension — the uploads axis: the 2026-10 user upload
+Applicability_domain_analysis.py joins the contract as file #119 (the
+user's standing rule extends to every file they hand over, not just the
+two archives).
 """
 from __future__ import annotations
 
@@ -168,6 +173,26 @@ ABSORBED = {
     "others/Docking/ligand generation/niggaqt.py",  # MGLTools deprecated -> Meeko path
 }
 
+# ---------------------------------------------------------------
+# 100x-118: the uploads axis — user files outside the two archives.
+# The 2026-10 upload Applicability_domain_analysis.py maps to the AD
+# card's GUI surface (the card, its run/save handlers, the library
+# functions the card calls, the figure, and the CLI twin).
+# ---------------------------------------------------------------
+UPLOAD_ROOT = Path("/home/z/my-project/upload")
+UPLOAD_MAP: dict[str, list[str]] = {
+    "Applicability_domain_analysis.py": [
+        "applicability_domain",          # the composed workflow (card work())
+        "plot_applicability_domain",     # the combined two-panel figure
+        "_ml_ad_run",                    # the Analyse button
+        "_ml_ad_save",                   # the results CSV button
+        "_ml_ad_refresh_source",         # the source line + mode switch
+        "_ad_source_combo",              # last-run vs loaded-bundle modes
+        "_ad_boot_spin",                 # the bootstrap-ensemble knob
+        "Applicability_Domain_Results",  # the upload's output name
+    ],
+}
+
 
 def count_hits(symbol: str) -> int:
     return len(re.findall(r"\b" + re.escape(symbol) + r"\b", src))
@@ -204,16 +229,38 @@ def main() -> int:
             detail = " ".join(f"{s}:{h}" for s, h in hits.items())
             rows.append((rel, "COVERED", detail))
 
+    # 100x-118: the uploads axis — every uploaded file must be covered too
+    upload_rows: list[tuple[str, str, str]] = []
+    upload_zero: list[tuple[str, list[str]]] = []
+    for rel, syms in sorted(UPLOAD_MAP.items()):
+        if not (UPLOAD_ROOT / rel).is_file():
+            upload_rows.append((rel, "MISSING-UPLOAD", ""))
+            upload_zero.append((rel, syms))
+            continue
+        hits = {s: count_hits(s) for s in syms}
+        if all(h == 0 for h in hits.values()):
+            upload_zero.append((rel, syms))
+            upload_rows.append((rel, "ZERO-HIT", ",".join(syms)))
+        else:
+            detail = " ".join(f"{s}:{h}" for s, h in hits.items())
+            upload_rows.append((rel, "COVERED", detail))
+
     print("\n=== PER-FILE RESULT ===")
     for rel, status, detail in rows:
         print(f"{status:9s} {rel}  {detail}")
+    print("\n=== UPLOADS AXIS (100x-118) ===")
+    for rel, status, detail in upload_rows:
+        print(f"{status:16s} {rel}  {detail}")
 
     n_cov = sum(1 for r in rows if r[1] == "COVERED")
     n_abs = sum(1 for r in rows if r[1] in ("ABSORVED", "EMPTY"))
     n_zero = sum(1 for r in rows if r[1] == "ZERO-HIT")
     n_nomap = sum(1 for r in rows if r[1] == "NO-MAPPING")
+    u_cov = sum(1 for r in upload_rows if r[1] == "COVERED")
+    u_zero = sum(1 for r in upload_rows if r[1] in ("ZERO-HIT", "MISSING-UPLOAD"))
     print(f"\ntotal={len(rows)} covered={n_cov} absorbed/empty={n_abs} "
           f"zero-hit={n_zero} no-mapping={n_nomap}")
+    print(f"uploads: covered={u_cov} zero-hit/missing={u_zero}")
     if missing_map:
         print(f"\nFILES WITHOUT MAPPING ({len(missing_map)}):")
         for f in missing_map:
@@ -222,12 +269,13 @@ def main() -> int:
         print(f"\nSTALE MAP ENTRIES ({len(stale_map)}):")
         for f in stale_map:
             print(f"  - {f}")
-    if zero_hit:
-        print(f"\nZERO-HIT FILES ({len(zero_hit)}):")
-        for f, syms in zero_hit:
+    if zero_hit or upload_zero:
+        print(f"\nZERO-HIT FILES ({len(zero_hit) + len(upload_zero)}):")
+        for f, syms in zero_hit + upload_zero:
             print(f"  - {f} (expected: {syms})")
         return 1
-    print("\nVERDICT: every rar file has a playground.py surface (or a documented absorption).")
+    print("\nVERDICT: every rar + upload file has a playground.py surface "
+          "(or a documented absorption).")
     return 0
 
 

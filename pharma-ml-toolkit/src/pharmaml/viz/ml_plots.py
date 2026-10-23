@@ -8,6 +8,10 @@ Restores and upgrades the figures the legacy scripts hard-coded:
   multiclass targets.
 * ``Regression/RF.py``      → ``Predicted vs Actual`` scatter — now
   :func:`plot_predicted_vs_actual`, plus a residual companion.
+* ``Applicability_domain_analysis.py`` (user upload) → the combined
+  reliability figure — now :func:`plot_applicability_domain` (training
+  kNN-distance histogram + distance-vs-prediction scatter, inside /
+  outside the domain colour-coded).
 
 New chart types the originals never had: model-leaderboard bars with
 CV error bars (:func:`plot_model_comparison`), class balance
@@ -124,6 +128,7 @@ from pharmaml.logger import get_logger
 from pharmaml.viz._compat import PALETTE, new_figure
 
 __all__ = [
+    "plot_applicability_domain",
     "plot_calibration_curve",
     "plot_class_distribution",
     "plot_confusion_matrix",
@@ -1077,4 +1082,141 @@ def plot_cv_scores(
     ax.set_ylabel(metric_label)
     ax.set_title(f"{title} — {label}")
     ax.legend(fontsize=9, loc="best")
+    return fig
+
+
+def plot_applicability_domain(
+    result: Any,
+    y_label: str = "predicted value",
+    title: str = "Applicability domain",
+    bins: int = 40,
+) -> Any:
+    """The uploaded AD workflow's combined two-panel reliability figure.
+
+    Restores ``Applicability_domain_analysis.py``'s ``AD_Combined_
+    Figure.jpeg`` (2026-10 upload) as the toolkit's honest readout of a
+    QSAR prediction's trustworthiness:
+
+    * **(a) training kNN-distance histogram** — the descriptor-space
+      density the model was fitted on, with the percentile threshold
+      that separates inside from outside;
+    * **(b) distance vs prediction scatter** — every query compound at
+      its mean kNN distance against the ensemble's predicted value,
+      green inside the domain, red outside, the same threshold line.
+
+    When the analysis ran without the bootstrap half (a kNN-only quick
+    pass) panel (b) falls back to plotting the per-row distances alone
+    — the ``y`` axis becomes the row index, honestly labelled.
+
+    Parameters
+    ----------
+    result:
+        An :class:`~pharmaml.ml.applicability.ApplicabilityDomainResult`
+        (from ``applicability_domain`` or ``knn_applicability_domain``).
+    y_label:
+        Axis label for the prediction axis (e.g. ``"predicted pIC50"``).
+    title:
+        Figure title.
+    bins:
+        Histogram bin count for panel (a).
+
+    Raises
+    ------
+    DataValidationError
+        When ``result`` is not an applicability-domain result object.
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> from sklearn.linear_model import Ridge
+    >>> from pharmaml.ml import applicability_domain
+    >>> from pharmaml.viz import close_figure
+    >>> x = pd.DataFrame({"a": np.linspace(0.0, 10.0, 60)})
+    >>> y = pd.Series(2.0 * x["a"] + 1.0)
+    >>> model = Ridge().fit(x, y)
+    >>> res = applicability_domain(model, x, y,
+    ...                            pd.DataFrame({"a": [0.5, 100.0]}), n_models=4)
+    >>> fig = plot_applicability_domain(res, y_label="predicted pIC50")
+    >>> len(fig.axes)
+    2
+    >>> ax_a, ax_b = fig.axes
+    >>> ax_a.get_xlabel()
+    'mean kNN distance (training set, standardised)'
+    >>> ax_b.get_ylabel()
+    'predicted pIC50'
+    >>> [text.get_text() for text in ax_b.get_legend().get_texts()]
+    ['inside domain', 'outside domain', 'threshold = 0.127']
+    >>> plot_applicability_domain({"not": "a result"})
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: result must be an ApplicabilityDomainResult, got dict
+    >>> close_figure(fig)
+    """
+    needed = ("train_knn_mean", "test_knn_mean", "inside_ad", "distance_threshold")
+    if any(not hasattr(result, name) for name in needed):
+        raise DataValidationError(
+            "result must be an ApplicabilityDomainResult, got "
+            f"{type(result).__name__}"
+        )
+    train_dist = np.asarray(result.train_knn_mean, dtype=float).reshape(-1)
+    test_dist = np.asarray(result.test_knn_mean, dtype=float).reshape(-1)
+    inside = np.asarray(result.inside_ad, dtype=bool).reshape(-1)
+    threshold = float(result.distance_threshold)
+    if test_dist.size != inside.size:
+        raise DataValidationError(
+            f"test_knn_mean ({test_dist.size}) and inside_ad ({inside.size}) "
+            "must match"
+        )
+    k = int(getattr(result, "k", 5))
+    percentile = float(getattr(result, "percentile", 95.0))
+    n_inside = int(inside.sum())
+
+    fig, (ax_a, ax_b) = new_figure(1, 2, figsize=(12.4, 5.2))
+    fig.subplots_adjust(wspace=0.28)
+
+    # panel (a): training distance distribution + threshold
+    ax_a.hist(train_dist, bins=bins, color=PALETTE[0], alpha=0.85,
+              edgecolor="white", linewidth=0.4)
+    ax_a.axvline(threshold, color=PALETTE[3], linestyle="--", lw=1.8,
+                 label=f"threshold = {threshold:.3g} "
+                       f"(p{percentile:g}, k={k})")
+    ax_a.set_xlabel("mean kNN distance (training set, standardised)")
+    ax_a.set_ylabel("compounds")
+    ax_a.set_title(f"(a) training distance density — {train_dist.size} compound(s)")
+    ax_a.legend(fontsize=9)
+
+    # panel (b): distance vs prediction, colour-coded by the verdict
+    pred = getattr(result, "pred_mean", None)
+    if pred is not None and np.asarray(pred).size == test_dist.size:
+        pred = np.asarray(pred, dtype=float).reshape(-1)
+        ax_b.scatter(test_dist[inside], pred[inside], s=30, alpha=0.8,
+                     color=PALETTE[4], edgecolor="white", linewidth=0.4,
+                     label="inside domain")
+        if (~inside).any():
+            ax_b.scatter(test_dist[~inside], pred[~inside], s=44, alpha=0.9,
+                         color=PALETTE[3], edgecolor="white", linewidth=0.5,
+                         marker="D", label="outside domain")
+        ax_b.set_ylabel(y_label)
+        y_lo = float(np.nanmin(pred))
+        y_hi = float(np.nanmax(pred))
+        pad = 0.06 * (y_hi - y_lo or 1.0)
+        ax_b.set_ylim(y_lo - pad, y_hi + pad)
+    else:
+        positions = np.arange(test_dist.size)
+        ax_b.scatter(test_dist[inside], positions[inside], s=30, alpha=0.8,
+                     color=PALETTE[4], edgecolor="white", linewidth=0.4,
+                     label="inside domain")
+        if (~inside).any():
+            ax_b.scatter(test_dist[~inside], positions[~inside], s=44, alpha=0.9,
+                         color=PALETTE[3], edgecolor="white", linewidth=0.5,
+                         marker="D", label="outside domain")
+        ax_b.set_ylabel("query row")
+        ax_b.set_ylim(-1, test_dist.size)
+    ax_b.axvline(threshold, color=PALETTE[1], linestyle="--", lw=1.8,
+                 label=f"threshold = {threshold:.3g}")
+    ax_b.set_xlabel("mean kNN distance (query compounds, standardised)")
+    ax_b.set_title(f"(b) distance vs prediction — {n_inside}/{test_dist.size} "
+                   "inside the domain")
+    ax_b.legend(fontsize=9, loc="best")
+    fig.suptitle(title, fontsize=12)
     return fig

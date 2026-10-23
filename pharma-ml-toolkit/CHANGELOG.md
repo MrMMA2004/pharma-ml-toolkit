@@ -10,6 +10,72 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.57] — 2026-10-23
+
+### Added — applicability domain analysis (the 2026-10 user upload, file #119)
+
+The user's uploaded `Applicability_domain_analysis.py` — "is this QSAR
+prediction trustworthy?" — is now first-class toolkit surface, the
+round's answer to "playground.py content is incomplete":
+
+* `pharmaml.ml.applicability` — `knn_applicability_domain` (the distance
+  half: standardised descriptor space, mean kNN distance, percentile
+  threshold), `bootstrap_uncertainty` (the ensemble half) and the
+  composed `applicability_domain` returning an
+  `ApplicabilityDomainResult` whose `to_frame()` is the upload's
+  reliability table (`name, predicted, prediction_sd, knn_distance,
+  inside_ad, low_uncertainty, reliable`).
+* `plot_applicability_domain` (`pharmaml.viz`) — the upload's combined
+  two-panel figure: the training distance density with its threshold
+  and the distance-vs-prediction scatter colour-coded inside/outside
+  the domain.
+* CLI `ml ad` — both flows: `--data` (split, train, judge the held-out
+  rows) and `--bundle + --train-data + --test-data` (the upload's
+  verbatim flow), with `--out` writing the reliability table and
+  `--plot` the figure.
+* The playground's **Data & ML** tab gains the "Applicability domain &
+  prediction reliability" card: model source (the last trained run's
+  own split, or a loaded persistence bundle + its original CSVs), k /
+  percentile / bootstrap-model knobs, per-member progress in the status
+  bar, the SMILES-named reliability table beside the combined figure,
+  and the upload's `Applicability_Domain_Results.csv` save button.
+* The ML workflow notebook gains **§14 Trust** — the analysis on the §9
+  regression split with one wild extrapolation, the verdict counts and
+  the figure.
+
+### Changed — four deliberate upgrades over the upload's own math
+
+* **Estimator-agnostic**: the bootstrap ensemble is `clone(model)` of
+  whatever fitted pipeline the caller hands in — the upload hard-coded
+  30 fresh `CatBoostRegressor`s, so only CatBoost models could be
+  audited; ridge, random forests, stacking ensembles, GP pipelines and
+  binary classifiers (via the positive-class probability spread) all
+  work now.
+* **Half the fits**: every bootstrap member predicts on the query AND
+  training rows in one pass — the upload ran two separate 30-model
+  rounds (60 fits) to get the training-side threshold.
+* **Deterministic**: resample `i` is seeded with `random_state + i` —
+  the upload sampled unseeded, so two runs of the "same" analysis
+  produced different reliability verdicts.
+* **Self-distance excluded**: the training kNN query now drops each
+  point's own zero first-neighbour distance — the upload's thresholds
+  were systematically slightly too tight.
+
+### Testing — the coverage contract extends to uploads (119 files)
+
+The user's standing rule ("check that playground.py covers the entire
+contents of the zip and rar files") now includes every file handed
+over, not just the two archives: `scratch/probe_coverage_111_perfile.py`
+gains an **uploads axis** — the upload maps to the AD card's GUI
+symbols (all 8 hit) — and `scratch/probe_coverage_113_notebooks.py`
+requires its notebook surface too. 40 new unit tests
+(`tests/test_applicability.py`) pin the math, the error contracts and
+the plot; 6 new GUI tests (`tests/test_playground.py` ::
+`TestApplicabilityDomainGui`) drive the card end-to-end under Xvfb
+including the bundle round-trip; `scratch/probe_ad_e2e_118.py` is the
+one-shot full-workflow probe (last-run mode, kNN-only pass, bundle
+mode, save, guard rails).
+
 ## [1.2.56] — 2026-10-21
 
 ### Added — the Hyperband bracket-best fold as a probed shipped module

@@ -91,6 +91,8 @@ after adding new public functions.
 |---|---|---|
 | `MODEL_ALIASES` | constant |  |
 | `MODEL_REGISTRY` | constant |  |
+| `ApplicabilityDomainResult` | class | Outcome of a full applicability-domain analysis. |
+| `BootstrapUncertainty` | class | Bootstrap-ensemble uncertainty of a fitted estimator. |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
 | `HierarchicalSVR` | class | Hierarchical Support Vector Regression (global + per-cluster SVRs). |
@@ -102,6 +104,8 @@ after adding new public functions.
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
 | `TrialResult` | class | One evaluated trial. |
 | `TunerResults` | class | The outcome of one :meth:`RandomSearch.search` / Hyperband run. |
+| `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
+| `bootstrap_uncertainty` | function | Bootstrap-ensemble prediction uncertainty (the upload's step 6). |
 | `build_ann_classifier` | function | sklearn MLP classifier hypermodel (the legacy ANN upgrade). |
 | `build_ann_regressor` | function | sklearn MLP regressor hypermodel (the legacy ANN upgrade). |
 | `build_deep_classifier` | function | Deep MLP classifier hypermodel (PyTorch, ``batchnorm`` searchable). |
@@ -115,6 +119,7 @@ after adding new public functions.
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
+| `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
 | `list_models` | function | List registry entries with availability information. |
 | `load_model` | function | Load a model bundle saved by :func:`save_model`. |
 | `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
@@ -289,6 +294,7 @@ after adding new public functions.
 | `get_pyplot` | function | Return ``matplotlib.pyplot`` with a safe backend already selected. |
 | `metrics_to_dataframe` | function | Any report object as a tidy ``metric | value`` DataFrame. |
 | `new_figure` | function | Create a styled ``(figure, axes)`` pair (grid + soft spines). |
+| `plot_applicability_domain` | function | The uploaded AD workflow's combined two-panel reliability figure. |
 | `plot_calibration_curve` | function | Reliability diagram — are the predicted probabilities honest? |
 | `plot_class_distribution` | function | Bar chart of class balance (accepts a mapping or a ``Dataset``). |
 | `plot_concentration_profile` | function | Plot one PK profile: linear + semi-log panels with AUC shading. |
