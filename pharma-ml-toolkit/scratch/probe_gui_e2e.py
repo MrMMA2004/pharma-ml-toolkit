@@ -252,6 +252,125 @@ assert len(app._ga_host.winfo_children()) == 1, "trajectory figure not embedded"
 print("ga stats head:", stats.splitlines()[1] if len(stats.splitlines()) > 1 else stats)
 print("ga trajectory: embedded")
 
+# -- 100x-119 additions: NCA / infusion / TDM / PD family ------------- #
+DIALOGS.clear()
+app._nca_run()
+assert pump_until_idle(timeout=120), "NCA job hung"
+nca_text = app._nca_result.cget("text")
+print("nca:", nca_text[:110])
+assert "AUC" in nca_text and "MRT" in nca_text and "t½(term)" in nca_text, nca_text
+assert len(app._nca_host.winfo_children()) == 1, "NCA figure not embedded"
+
+app._nca_plot()
+assert pump_until_idle(timeout=120), "NCA plot job hung"
+assert len(app._nca_host.winfo_children()) == 1
+
+app._infusion_math()
+inf_text = app._inf_result.cget("text")
+print("infusion:", inf_text[:110])
+assert "rate for Css" in inf_text and "Vd =" in inf_text, inf_text
+
+app._tdm_math()
+tdm_text = app._tdm_result.cget("text")
+print("tdm:", tdm_text)
+assert "new dose" in tdm_text, tdm_text
+
+app._pd_family_math()
+assert pump_until_idle(timeout=120), "PD family job hung"
+fam_rows = app._fam_tree.get_children()
+print("pd family:", app._fam_result.cget("text")[:80], "| rows:", len(fam_rows))
+assert len(fam_rows) == 6, f"PD table rows: {len(fam_rows)}"
+assert len(app._fam_host.winfo_children()) == 1, "PD family figure not embedded"
+
+app._pd_target_ec50()
+fam_result = app._fam_result.cget("text")
+print("pd reverse:", fam_result[:90])
+assert "EC50 =" in fam_result, fam_result
+
+app._plot_accumulation()
+assert pump_until_idle(timeout=120), "accumulation plot job hung"
+assert len(app._acc_host.winfo_children()) == 1, "accumulation figure not embedded"
+print("accumulation figure: embedded")
+
+# -- chemistry: tautomer / 3D / MACCS / heatmap ------------------------ #
+app._tautomer_run()
+taut_text = app._taut_result.cget("text")
+print("tautomer:", taut_text[:60])
+assert taut_text and taut_text != "—", "tautomer result empty"
+
+app._maccs_run()
+assert pump_until_idle(timeout=120), "MACCS job hung"
+maccs_text = app._maccs_result.cget("text")
+print("maccs:", maccs_text.splitlines()[0][:80])
+assert "/167" in maccs_text, maccs_text
+
+# matrix scan first (heatmap fuel), then the heatmap figure
+app._scan_mode.set("matrix: references × library")
+app._scan_run()
+assert pump_until_idle(timeout=180), "matrix scan job hung"
+app._scan_plot_heatmap()
+assert pump_until_idle(timeout=120), "heatmap job hung"
+assert len(app._scan_host.winfo_children()) == 1, "heat-map figure not embedded"
+print("similarity heat-map: embedded")
+
+# -- biology: replicate variability + compound summary ------------------ #
+app._bio_replicate_variability()
+assert pump_until_idle(timeout=120), "replicate variability job hung"
+rep_text = app._bio_audit_text.get("1.0", "end").strip()
+print("replicate variability head:", rep_text.splitlines()[0][:70])
+
+app._bio_summarize_compounds()
+assert pump_until_idle(timeout=120), "compound summary job hung"
+sum_text = app._bio_audit_text.get("1.0", "end").strip()
+print("compound summary head:", sum_text.splitlines()[0][:70])
+assert "compound summary" in sum_text, sum_text[:80]
+
+# -- docking: atom types + top ligands ---------------------------------- #
+app._dock_plot_atom_types()
+assert pump_until_idle(timeout=120), "atom types job hung"
+assert len(app._dock_receptor_host.winfo_children()) == 1, "atom-type figure not embedded"
+print("receptor atom types: embedded")
+
+# top-ligand bars need a campaign-scan frame (folder-ranked) -- reload it
+app._dock_load_example_campaign()
+assert pump_until_idle(timeout=180), "campaign reload job hung"
+app._dock_plot_top_ligands()
+assert pump_until_idle(timeout=120), "top ligands job hung"
+assert len(app._dock_results_host.winfo_children()) == 1, "top-ligand figure not embedded"
+print("top ligands figure: embedded")
+
+# -- ML: calibration curve + leaderboard bars ---------------------------- #
+app._example_combo.set("qsar_classification.csv")
+app._ml_load_example()
+app._task_combo.set("classification")
+app._ml_task_changed()
+if "activity" in app._target_combo["values"]:
+    app._target_combo.set("activity")
+app._model_combo.set("logistic_regression")
+app._ml_train()
+assert pump_until_idle(timeout=300), "classification train job hung"
+app._ml_plot_calibration()
+assert pump_until_idle(timeout=180), "calibration job hung"
+assert len(app._ml_host.winfo_children()) == 1, "calibration figure not embedded"
+print("calibration curve: embedded")
+
+app._ml_compare()
+assert pump_until_idle(timeout=600), "compare job hung"
+app._ml_plot_leaderboard()
+assert pump_until_idle(timeout=120), "leaderboard plot job hung"
+assert len(app._board_host.winfo_children()) == 1, "leaderboard figure not embedded"
+print("leaderboard bars: embedded")
+
+# -- quick-jump chips + tab cycling -------------------------------------- #
+app._jump_to_tab(1)
+assert app._book.index(app._book.select()) == 1, "quick-jump failed"
+class _FakeEvent:
+    keysym = "Next"
+app._cycle_tab(_FakeEvent())
+assert app._book.index(app._book.select()) == 2, "tab cycling failed"
+app._jump_to_tab(0)
+print("quick-jump + tab cycling: OK")
+
 app.destroy()
 assert not DIALOGS, f"unexpected dialogs: {DIALOGS}"
 print("PROBE_OK")

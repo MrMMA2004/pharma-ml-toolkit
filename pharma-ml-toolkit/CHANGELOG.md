@@ -10,6 +10,80 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.58] — 2026-10-23
+
+### Added — the full-review completeness pass (100x-119): the library's own surface, fully in the GUI
+
+The user's standing complaint — "playground.py content is incomplete" —
+was re-audited from the fourth axis: not rar-file coverage (119/119,
+re-proven) but **library coverage** — the toolkit had grown to 1.2.57
+while the GUI mapped an older library. The audit (every public symbol
+of every module grepped against playground.py) found ~30 user-facing
+capabilities with no GUI surface. All closed in this release:
+
+* **PK / PD tab — four new cards:**
+  * *Non-compartmental analysis (NCA)* — paste a concentration-time
+    series: `validate_concentration_series` + `nca_summary` (AUC /
+    AUMC / MRT / Cmax / Tmax / terminal t½), `vd_from_dose_auc` + CL
+    when a dose is given, the shaded profile figure
+    (`plot_concentration_profile`) and a summary CSV export.
+  * *IV infusion & distribution* — `infusion_rate` (rate = CL·Css),
+    `iv_infusion_steady_state`, `volume_of_distribution` (CL/ke),
+    `bioavailability` (EV/IV AUC pairs) and the repeated-dosing
+    approach-to-steady-state figure (`plot_dose_accumulation`).
+  * *TDM trough adjustment* — `tdm_trough_adjustment` with the
+    optional minimum-dose floor.
+  * *PD model explorer* — the family beyond plain Emax:
+    `sigmoid_emax_effect` (Hill slope), `inhibitory_emax_effect`,
+    `linear_effect`; effect table + curve, and the reverse question via
+    `ec50_for_target_effect` ("which EC50 reaches a target effect?").
+* **Chemistry tab — two new cards + a figure:**
+  * *Tautomer & 3D structure* — `canonicalize_tautomer` plus the
+    multi-conformer 3D PDB writer (`smiles_to_pdb`, ETKDG + MMFF/UFF
+    with its `PdbLigandReport`).
+  * *MACCS key fingerprint* — `compute_maccs`: the 167 structural keys
+    per pasted molecule.
+  * The similarity scan card gained *Plot heatmap* — the labelled
+    square heat-map (`plot_similarity_heatmap`) over references +
+    library combined.
+* **Data & ML tab — two new figures:**
+  * *Calibration curve* — `plot_calibration_curve` (the reliability
+    diagram) for the last trained classifier, with a bins knob.
+  * *Plot leaderboard* — `plot_model_comparison` bars over the
+    compare-models ranking.
+* **Cell Lines tab** — the screen card gained *Replicate variability*
+  (`replicate_variability`, always over the raw pre-collapse table)
+  and *Compound summary* (`summarize_compounds`).
+* **Docking tab — two new figures:** *Plot atom types*
+  (`plot_receptor_atom_types` over the prepared receptor's census) and
+  *Plot top ligands* (`plot_top_ligands` over the campaign scan, with
+  a friendly "campaign scans only" guard for DLG/Vina tables).
+
+### Changed — UI polish (the same review's second half)
+
+* Every card title now carries a 3px accent strip (`make_card`),
+  recoloured with the theme via `_retint_plain_widgets`.
+* The home tab's hero offers quick-jump chips straight to every tab
+  (the new `Chip.TButton` style).
+* The status bar names the finished job and its duration
+  ("training ridge — done in 3 s") instead of reverting to "idle".
+* `Ctrl+PgDn` / `Ctrl+PgUp` cycle the notebook tabs; the hint row
+  lists the new accelerator.
+* The home guide's blurbs were rewritten to describe the grown tabs.
+
+### Tests
+
+* `tests/test_playground.py` +11 (217 total): the NCA card (default,
+  with dose, mismatch guard), infusion (rate/Css/Vd + the F pair), TDM
+  adjustment, the PD family table + reverse EC50, tautomer + MACCS,
+  quick-jump + tab cycling, the accent strips, the new shortcut hint.
+* The two status-bar tests were updated for the "done in" label.
+* `scratch/probe_gui_e2e.py` grew a 100x-119 section exercising every
+  new card end-to-end under Xvfb (figures asserted embedded).
+* Full suite: **2192 passed / 2 skipped / 0 failed**; coverage probe
+  verdict unchanged: 118 rar + 1 upload = 119/119 GUI surfaces;
+  `ruff` and `mypy src/` clean.
+
 ## [1.2.57] — 2026-10-23
 
 ### Added — applicability domain analysis (the 2026-10 user upload, file #119)

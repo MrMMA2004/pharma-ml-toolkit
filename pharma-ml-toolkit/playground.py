@@ -17,11 +17,24 @@ A tabbed graphical interface opens with every calculation domain of the
   over an embedded 3D geometry with the SPC / TIP3P site models),
   and the feature factory: the rar's own pipeline grown to an
   8-family, 10,000+-column descriptor + fingerprint matrix (the
-  RISM-KH family included), ranked and cut to a top-K selection.
+  RISM-KH family included), ranked and cut to a top-K selection --
+  plus (100x-119) the canonical-tautomer & 3D-structure card
+  (canonicalize_tautomer + a multi-conformer 3D PDB writer with its
+  ETKDG/UFF report), the 167-key MACCS fingerprint card, and the
+  similarity scan's labelled heat-map figure.
 * **PK / PD**       -- half-life <-> k(e), accumulation, IV bolus decay
   and Emax curves (plotted), oral Cmax/tmax, Cockcroft-Gault creatinine
   clearance with renal dose adjustment, loading/maintenance dosing,
-  BSA/weight-based and pediatric dose rules.
+  BSA/weight-based and pediatric dose rules -- plus (100x-119) the
+  non-compartmental analysis card (paste a concentration-time series:
+  AUC/AUMC/MRT/Cmax/Tmax + terminal t½ by the linear trapezoid, Vd and
+  CL when a dose is given, the shaded profile figure, a CSV export),
+  the IV infusion & distribution card (rate = CL·Css, steady state,
+  Vd = CL/ke, absolute bioavailability F, the repeated-dosing
+  approach-to-steady-state figure), the TDM trough adjustment card,
+  and the PD model explorer (sigmoid Emax with a Hill slope, inhibitory
+  Emax, linear effect -- table + curve + the reverse
+  EC50-for-a-target-effect solver).
 * **Cell Lines**    -- GDSC-style drug-response screens: load and audit
   a screen, pivot the sensitivity matrix, call sensitive vs resistant
   lines, convert ``LN_IC50`` <-> pIC50, and discover expression
@@ -155,10 +168,15 @@ Design notes
   playground looks exactly like the package's published figures.
 * A quiet keyboard-shortcut hint row sits above the status bar,
   listing every global accelerator (Ctrl+O open · Ctrl+S save figure ·
-  Ctrl+Shift+S save session · Ctrl+Shift+R reset this tab · Ctrl+Q
-  quit -- all five bound and pinned by tests).  ``View ▸ Shortcut
-  hints`` or the row's own ``Hide`` button toggles it, and the
-  preference rides the session file like any other input.
+  Ctrl+Shift+S save session · Ctrl+Shift+R reset this tab ·
+  Ctrl+PgDn/PgUp next/previous tab · Ctrl+Q quit -- all bound and
+  pinned by tests).  ``View ▸ Shortcut hints`` or the row's own
+  ``Hide`` button toggles it, and the preference rides the session
+  file like any other input.
+* UI polish (100x-119): every card title carries a 3px accent strip
+  (recoloured with the theme), the home tab's hero offers quick-jump
+  chips straight to every tab, the status bar names the finished job
+  and how long it took, and Ctrl+PgDn / Ctrl+PgUp cycle the tabs.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -758,6 +776,19 @@ def parse_float_triple(raw: str, field: str) -> tuple[float, float, float]:
     return (first, second, third)
 
 
+def _split_pair(raw: str) -> tuple[float, float]:
+    """Parse a ``"dose / auc"`` pair entry (slash or whitespace separated).
+
+    The IV-infusion card's bioavailability row types two numbers into one
+    field; this splits them with a field-named error for anything else.
+    """
+    text = raw.replace("/", " ").strip()
+    parts = text.split()
+    if len(parts) != 2:
+        raise ValueError(f"pair {raw!r} must be two numbers, e.g. '250 / 58.3'")
+    return parse_float(parts[0], "pair value"), parse_float(parts[1], "pair value")
+
+
 #: The Docking tab's campaign-runner engines (combobox values).
 _DOCK_ENGINES = ("AutoDock4 campaign", "Vina single ligand")
 
@@ -846,6 +877,20 @@ _DOCK_SMILES_DEFAULTS = (
     "CC(C)Cc1ccc(cc1)C(C)C(=O)O",     # ibuprofen
     "COc1ccc2cc(ccc2c1)C(C)C(=O)O",    # naproxen
 )
+
+#: PK / PD tab -- the PD model explorer card's models (the pharma.pd
+#: family beyond the plain-Emax card: the sigmoid Emax with its Hill
+#: slope, the inhibitory Emax, and the pure linear effect).
+_PD_FAMILY_MODES = (
+    "sigmoid Emax (Hill slope)",
+    "inhibitory Emax",
+    "linear effect",
+)
+
+#: PK / PD tab -- a realistic default concentration-time series for the
+#: NCA card: a one-compartment IV bolus, t½ ≈ 4 h, sampled to 24 h.
+_NCA_DEFAULT_TIMES = "0, 0.5, 1, 2, 4, 6, 8, 12, 16, 24"
+_NCA_DEFAULT_CONCS = "12.0, 10.2, 8.7, 6.4, 4.6, 3.3, 2.4, 1.2, 0.63, 0.17"
 
 # Canonical evidence columns for the consensus rescore card, in
 # preference order -- the names consensus_rescore's own examples and the
@@ -1149,6 +1194,7 @@ SHORTCUT_HINTS: tuple[tuple[str, str], ...] = (
     ("Ctrl+S", "save figure"),
     ("Ctrl+Shift+S", "save session"),
     ("Ctrl+Shift+R", "reset this tab"),
+    ("Ctrl+PgDn/PgUp", "next/previous tab"),
     ("Ctrl+Q", "quit"),
 )
 
@@ -1413,6 +1459,11 @@ def make_card(
 
     Returns the content frame callers grid their controls into (the
     content frame is itself grid-managed with two weighted columns).
+
+    The header carries a 3px accent strip to the title's left (the
+    100x-119 UI pass): a quiet visual anchor that groups each card's
+    controls at a glance.  The strip is a plain ``tk.Frame`` painted
+    ``ACCENT``; ``_retint_plain_widgets`` recolours it on theme flips.
     """
     shell = tk.Frame(parent, background=CARD, highlightbackground=BORDER,
                      highlightthickness=1)
@@ -1420,7 +1471,12 @@ def make_card(
                padx=6, pady=6)
     header = ttk.Frame(shell, style="Card.TFrame", padding=(14, 10, 14, 0))
     header.pack(fill="x")
-    ttk.Label(header, text=title, style="CardTitle.TLabel").pack(anchor="w")
+    title_row = ttk.Frame(header, style="Card.TFrame")
+    title_row.pack(fill="x")
+    strip = tk.Frame(title_row, width=3, background=ACCENT)
+    strip.pack(side="left", fill="y", padx=(0, 8))
+    ttk.Label(title_row, text=title, style="CardTitle.TLabel").pack(
+        side="left", anchor="w")
     if subtitle:
         ttk.Label(header, text=subtitle, style="CardMuted.TLabel",
                   wraplength=620, justify="left").pack(anchor="w", pady=(2, 0))
@@ -1710,6 +1766,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                   foreground=[("active", ACCENT), ("disabled", BORDER)],
                   lightcolor=[("pressed", BG)],
                   darkcolor=[("pressed", BG)])
+        # the home tab's quick-jump chips (100x-119): flat pills that lift
+        # to the accent on hover -- navigation, not actions
+        style.configure("Chip.TButton", background=TAB, foreground=INK,
+                        borderwidth=0, lightcolor=TAB, darkcolor=TAB,
+                        focusthickness=1, focuscolor=ACCENT, padding=(12, 4),
+                        font=("TkDefaultFont", 9, "bold"))
+        style.map("Chip.TButton",
+                  background=[("active", ACCENT_SOFT), ("disabled", TAB)],
+                  foreground=[("active", ACCENT_DARK), ("disabled", MUTED)],
+                  lightcolor=[("pressed", BORDER)],
+                  darkcolor=[("pressed", BORDER)])
         style.configure("TNotebook", background=BG, borderwidth=0,
                         tabmargins=(10, 6, 12, 0))
         style.configure("TNotebook.Tab", background=TAB, foreground=MUTED,
@@ -1906,6 +1973,29 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_dl_tab()
         self._build_generative_tab()
         self._build_utilities_tab()
+        # keyboard tab cycling (100x-119): Ctrl+PgDn / Ctrl+PgUp walk the
+        # notebook without reaching for the mouse
+        self.bind("<Control-Next>", self._cycle_tab)
+        self.bind("<Control-Prior>", self._cycle_tab)
+
+    def _cycle_tab(self, event: Any) -> str:
+        """Ctrl+PgDn / Ctrl+PgUp -- select the next / previous tab."""
+        try:
+            count = self._book.index("end")
+            current = self._book.index(self._book.select())
+        except tk.TclError:  # pragma: no cover - no tab selected yet
+            return "break"
+        step = 1 if str(event.keysym) == "Next" else -1
+        self._book.select((current + step) % count)
+        return "break"
+
+    def _jump_to_tab(self, index: int) -> None:
+        """Select a tab by index (the home tab's quick-jump chips)."""
+        try:
+            if 0 <= index < self._book.index("end"):
+                self._book.select(index)
+        except tk.TclError:  # pragma: no cover - no tab selected yet
+            pass
 
     def _new_page(self, title: str, reset: bool = True) -> Any:
         page = ScrollFrame(self._book)
@@ -2083,7 +2173,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         with contextlib.suppress(queue.Empty):
             while True:  # late progress stragglers never leak either
                 self._progress_updates.get_nowait()
-        self._job_label.configure(text="idle")
+        # the 100x-119 UI pass: a finished job reports what it was and
+        # how long it took (the label reverts to "idle" only when the
+        # next job starts)
+        elapsed = time.monotonic() - self._job_started
+        label = getattr(self, "_job_label_base", "") or "job"
+        if error is not None:
+            self._job_label.configure(text=f"{label} FAILED after "
+                                           f"{_fmt_duration(elapsed)}")
+        else:
+            self._job_label.configure(
+                text=f"{label} — done in {_fmt_duration(elapsed)}")
         for button in self._action_buttons:
             if button.winfo_exists():
                 button.state(["!disabled"])
@@ -2242,6 +2342,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     if klass == "Frame":
                         if str(child.cget("background")) == previous["CARD"]:
                             child.configure(background=CARD)
+                        if str(child.cget("background")) == previous["ACCENT"]:
+                            # the card headers' 3px accent strips (100x-119)
+                            child.configure(background=ACCENT)
                         if str(child.cget("highlightbackground")) == previous["BORDER"]:
                             child.configure(highlightbackground=BORDER)
                     elif klass == "Canvas":
@@ -2274,6 +2377,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "corpus": self._corpus_text.get("1.0", "end-1c"),
             "smiles": self._dock_smiles_text.get("1.0", "end-1c"),
             "rism": self._rism_text.get("1.0", "end-1c"),
+            "maccs": self._maccs_text.get("1.0", "end-1c"),
+            "scan_refs": self._scan_ref_text.get("1.0", "end-1c"),
+            "scan_lib": self._scan_lib_text.get("1.0", "end-1c"),
         }
         try:
             tab = self._book.index(self._book.select())
@@ -2388,7 +2494,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         text_widgets = {"pasted": self._feat_pasted_text,
                         "corpus": self._corpus_text,
                         "smiles": getattr(self, "_dock_smiles_text", None),
-                        "rism": getattr(self, "_rism_text", None)}
+                        "rism": getattr(self, "_rism_text", None),
+                        "maccs": getattr(self, "_maccs_text", None)}
         applied = 0
         for name in sorted(names):
             if name.startswith("family:"):
@@ -2578,7 +2685,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         text_widgets = {"pasted": self._feat_pasted_text,
                         "corpus": self._corpus_text,
                         "smiles": getattr(self, "_dock_smiles_text", None),
-                        "rism": getattr(self, "_rism_text", None)}
+                        "rism": getattr(self, "_rism_text", None),
+                        "maccs": getattr(self, "_maccs_text", None),
+                        "scan_refs": getattr(self, "_scan_ref_text", None),
+                        "scan_lib": getattr(self, "_scan_lib_text", None)}
         for key, content in session["texts"].items():
             widget = text_widgets.get(key)
             if widget is not None:
@@ -2690,6 +2800,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ttk.Label(hero, text=version_line, style="CardMuted.TLabel").grid(
             row=0, column=0, sticky="w"
         )
+        # quick-jump row (the 100x-119 UI pass): one chip per tab -- the
+        # fastest route from "where do I start" to the card you want.
+        jump_row = ttk.Frame(hero, style="Card.TFrame")
+        jump_row.grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(jump_row, text="jump to:", style="CardMuted.TLabel").pack(
+            side="left", padx=(0, 8))
+        for index, name in enumerate(
+                ("Chemistry", "PK / PD", "Cell Lines", "Docking",
+                 "Data & ML", "Deep Learning", "Generative", "Utilities")):
+            chip = ttk.Button(
+                jump_row, text=name, style="Chip.TButton",
+                command=lambda idx=index + 1: self._jump_to_tab(idx))
+            chip.pack(side="left", padx=(0, 6))
+            Tooltip(chip, f"Switch straight to the {name} tab.")
 
         status = make_card(page.grid, "Dependency status", span=2, row=1, column=0,
                            subtitle="Each tab degrades politely and tells you the pip line it wants.")
@@ -2737,29 +2861,41 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                  "card (ten solvation-theory descriptors), the feature "
                  "factory: 10,000+ descriptor/fingerprint columns ranked to "
                  "a top-K, the structure & table converters (CSV → 3D SDF, "
-                 "SMI ↔ CSV, SDF → table, batch pIC50) and the library "
-                 "similarity scan (matrix / threshold / top-k)."),
+                 "SMI ↔ CSV, SDF → table, batch pIC50), the library "
+                 "similarity scan (matrix / threshold / top-k, now with the "
+                 "labelled heat-map figure), the canonical-tautomer & "
+                 "3D-PDB writer and the 167-key MACCS fingerprint."),
                 "RDKit + pandas",
             ),
             (
                 "PK / PD",
                 ("Half-life, accumulation, IV bolus decay and Emax curves, "
-                 "Cockcroft–Gault, loading/maintenance and pediatric dosing."),
+                 "Cockcroft–Gault, loading/maintenance and pediatric dosing — "
+                 "plus non-compartmental analysis over any pasted "
+                 "concentration-time series (AUC/AUMC/MRT/Cmax/t½ with the "
+                 "profile figure), IV infusion & steady state, Vd and "
+                 "bioavailability, the TDM trough dose adjustment, and the "
+                 "full PD model family (sigmoid Emax / inhibitory Emax / "
+                 "linear) with the reverse EC50-for-target-effect solver."),
                 "numpy",
             ),
             (
                 "Cell Lines",
-                ("Drug-response screens: audit, the sensitivity matrix, sensitive "
-                 "vs resistant calls and expression biomarker discovery."),
+                ("Drug-response screens: audit (plus the replicate-variability "
+                 "and per-compound summary readouts), the sensitivity "
+                 "matrix, sensitive vs resistant calls and expression "
+                 "biomarker discovery."),
                 "pandas + scipy",
             ),
             (
                 "Docking",
                 ("Ligand library and receptor preparation into PDBQT (bad "
-                 "residues auto-removed), the grid box with GPF/DPF "
+                 "residues auto-removed, atom-type census figure included), "
+                 "the grid box with GPF/DPF "
                  "configs — one ligand or the whole campaign at once, "
                  "custom receptor types included — DLG / Vina result "
-                 "parsing (single logs or a full Vina results folder), "
+                 "parsing (single logs or a full Vina results folder, "
+                 "top-ligand bars included), "
                  "batch campaign runs, the SMILES array card: paste a "
                  "list, dock every molecule simultaneously with Vina or "
                  "AutoDock4 -- plus the audit card (GPF parameters, "
@@ -2770,10 +2906,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             (
                 "Data & ML",
                 ("Open a CSV (or a bundled example), drop the non-numeric "
-                 "columns, train a model, read the metrics, browse the "
-                 "cross-validation leaderboard, build voting / stacking "
-                 "ensembles by hand, and save the trained model as a bundle "
-                 "you can load back and predict with (PDF report included)."),
+                 "columns, train a model, read the metrics (classification "
+                 "runs gain the calibration reliability diagram), browse the "
+                 "cross-validation leaderboard (with the bar figure), build "
+                 "voting / stacking ensembles by hand, and save the trained "
+                 "model as a bundle you can load back and predict with (PDF "
+                 "report included)."),
                 "pandas + sklearn",
             ),
             (
@@ -3312,6 +3450,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             scan_run_row, "Save result CSV…", self._scan_save,
             tooltip="The last scan/matrix/top-k table.")
         scan_save_btn.pack(side="left", padx=(10, 0))
+        scan_heat_btn = self._action_button(
+            scan_run_row, "Plot heatmap", self._scan_plot_heatmap,
+            tooltip="The matrix mode's labelled heat-map figure "
+                    "(plot_similarity_heatmap) — run a matrix scan first.")
+        scan_heat_btn.pack(side="left", padx=(10, 0))
         scan_tree_frame = ttk.Frame(scan, style="Card.TFrame")
         grid_append(scan, scan_tree_frame, sticky="nsew", pady=(6, 0),
                     weight=True)
@@ -3326,7 +3469,72 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._scan_tree.pack(side="left", fill="both", expand=True)
         scan_bar.pack(side="right", fill="y")
         scan_bar_x.pack(side="bottom", fill="x")
+        self._scan_host = self._figure_host(scan, height=280)
         self._scan_frame: Any = None
+        self._scan_matrix: Any = None   # (matrix, refs, libs) — heatmap fuel
+
+        # -- tautomer & 3D structure (the library's canonicalize_tautomer
+        #    + smiles_to_pdb — the 100x-119 completeness review) --------- #
+        taut = make_card(
+            page.grid, "Tautomer & 3D structure", row=6, column=0,
+            subtitle="Canonical tautomer form (RDKit's tautomer "
+                     "canonicalization) and a multi-conformer 3D PDB "
+                     "written to disk (ETKDG embedding + UFF relaxation).",
+        )
+        self._taut_smiles = ttk.Entry(taut, width=26)
+        self._taut_smiles.insert(0, "CC(=O)Oc1ccccc1C(=O)O")
+        form_row(taut, "SMILES", self._taut_smiles)
+        self._taut_confs = ttk.Entry(taut, width=10)
+        self._taut_confs.insert(0, "50")
+        form_row(taut, "conformers", self._taut_confs)
+        taut_buttons = ttk.Frame(taut, style="Card.TFrame")
+        grid_append(taut, taut_buttons, sticky="w", pady=(6, 0))
+        taut_btn = self._action_button(
+            taut_buttons, "Canonical tautomer", self._tautomer_run,
+            tooltip="The canonical tautomer form of the SMILES — the form "
+                    "the descriptor calculations should agree on.",
+        )
+        taut_btn.pack(side="left")
+        taut_pdb_btn = self._action_button(
+            taut_buttons, "Write 3D PDB…", self._smiles_3d_run, primary=True,
+            tooltip="Embeds the requested number of conformers, relaxes "
+                    "them with UFF and writes a multi-model PDB (asks "
+                    "where to save).",
+        )
+        taut_pdb_btn.pack(side="left", padx=(10, 0))
+        self._taut_result = ttk.Label(taut, text="—", style="Result.TLabel",
+                                      font=self._mono_result, wraplength=320,
+                                      justify="left")
+        grid_append(taut, self._taut_result, sticky="w")
+        self._taut_report = _grid_text(taut, height=6, mono=self._mono)
+        self._taut_report.insert(
+            "1.0", "the 3D writer's report appears here (conformers, atoms, energies)")
+        grid_append(taut, self._taut_report, sticky="ew", pady=(6, 0))
+        bind_enter(self._taut_smiles, taut_btn)
+
+        # -- MACCS keys (the library's compute_maccs — 167 structural  #
+        #    keys as a fingerprint matrix; the 100x-119 review) --------- #
+        maccs = make_card(
+            page.grid, "MACCS key fingerprint", row=6, column=1,
+            subtitle="The 167-bit MACCS structural-key count for a pasted "
+                     "list of SMILES — the classic substructure "
+                     "fingerprint, one bit per structural rule.",
+        )
+        self._maccs_text = _grid_text(maccs, height=6, mono=self._mono)
+        self._maccs_text.insert("1.0", "\n".join(_FEAT_DEFAULT_SMILES))
+        grid_append(maccs, self._maccs_text, sticky="ew")
+        maccs_buttons = ttk.Frame(maccs, style="Card.TFrame")
+        grid_append(maccs, maccs_buttons, sticky="w", pady=(6, 0))
+        maccs_btn = self._action_button(
+            maccs_buttons, "Compute MACCS", self._maccs_run, primary=True,
+            tooltip="compute_maccs: the 167-bit key vector per molecule, "
+                    "mean on-bits summarised.",
+        )
+        maccs_btn.pack(side="left")
+        self._maccs_result = ttk.Label(maccs_buttons, text="—",
+                                       style="CardMuted.TLabel",
+                                       wraplength=300, justify="left")
+        self._maccs_result.pack(side="left", padx=(10, 0))
 
     def _rism_run(self) -> None:
         """Compute the RISM-KH solvation descriptors for the pasted array."""
@@ -3717,6 +3925,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             import pandas as pd
 
             matrix, refs, libs = result
+            self._scan_matrix = (matrix, refs, libs)
             frame = pd.DataFrame(
                 matrix,
                 index=[f"ref {i + 1}: {s[:20]}" for i, s in enumerate(refs)],
@@ -3740,6 +3949,150 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         self._save_frame_dialog(frame, "Save the similarity result",
                                 "similarity.csv")
+
+    def _scan_plot_heatmap(self) -> None:
+        """The matrix scan's labelled heat-map (plot_similarity_heatmap)."""
+        stashed = getattr(self, "_scan_matrix", None)
+        if stashed is None:
+            messagebox.showinfo(
+                "No matrix yet",
+                "Run a matrix-mode scan first — the heat-map needs the "
+                "references × library Tanimoto matrix.")
+            return
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the similarity heat-map"):
+            return
+        _matrix, refs, libs = stashed
+        kind = self._scan_kind.get()
+        try:
+            n_bits = parse_int(self._scan_bits.get(), "bits", minimum=32,
+                               maximum=65536)
+            radius = parse_int(self._scan_radius.get(), "radius", minimum=0,
+                               maximum=16)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        combined = refs + libs
+
+        def work() -> Any:
+            from pharmaml.chem import compute_fingerprints, tanimoto_matrix
+            from pharmaml.viz import plot_similarity_heatmap
+
+            # plot_similarity_heatmap draws a square matrix -- build the
+            # combined refs+library self-similarity (the §9 walkthrough
+            # demo's shape: ref-ref, ref-lib and lib-lib blocks in one
+            # picture)
+            bits, ok = compute_fingerprints(combined, kind=kind,
+                                            radius=radius, n_bits=n_bits)
+            square = tanimoto_matrix(bits, bits)
+            labels = [combined[i] for i in ok]
+            labels = [f"{s[:18]}…" if len(s) > 18 else s for s in labels]
+            annotate = len(labels) <= 10
+            return plot_similarity_heatmap(square, labels=labels,
+                                           annotate=annotate,
+                                           title="Tanimoto similarity "
+                                                 "(references + library)")
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._scan_host, figure)
+
+        self._start_job("similarity heat-map", work, render)
+
+    def _tautomer_run(self) -> None:
+        """Canonical tautomer of the card's SMILES (canonicalize_tautomer)."""
+        if not self._require_pharmaml() or not self._require(
+                "rdkit", "tautomer canonicalization"):
+            return
+        smiles = self._taut_smiles.get().strip()
+        if not smiles:
+            messagebox.showwarning("Empty SMILES", "Type a SMILES string first.")
+            return
+
+        try:
+            from pharmaml.chem import canonicalize_tautomer
+
+            result = canonicalize_tautomer(smiles)
+            self._taut_result.configure(text=result or "(none)")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Tautomer canonicalization failed", exc)
+
+    def _smiles_3d_run(self) -> None:
+        """Multi-conformer 3D PDB writer (chem.smiles_to_pdb)."""
+        if not self._require_pharmaml() or not self._require(
+                "rdkit", "the 3D embedder"):
+            return
+        smiles = self._taut_smiles.get().strip()
+        if not smiles:
+            messagebox.showwarning("Empty SMILES", "Type a SMILES string first.")
+            return
+        try:
+            num_confs = parse_int(self._taut_confs.get(), "conformers",
+                                  minimum=1, maximum=1000)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        path = filedialog.asksaveasfilename(
+            title="Write 3D PDB", defaultextension=".pdb",
+            initialfile="ligand_3d.pdb",
+            filetypes=[("PDB file", "*.pdb")],
+        )
+        if not path:
+            return
+
+        def work() -> Any:
+            from pharmaml.chem import smiles_to_pdb
+
+            return smiles_to_pdb(smiles, path, num_confs=num_confs)
+
+        def render(report: Any) -> None:
+            lines = [f"3D PDB written → {report.output_path}",
+                     f"conformers         {report.num_conformers}",
+                     f"atoms / bonds      {report.num_atoms} / {report.num_bonds}",
+                     f"force field        {report.forcefield}",
+                     f"name               {report.name}"]
+            self._taut_report.delete("1.0", "end")
+            self._taut_report.insert("1.0", "\n".join(lines))
+            self._taut_result.configure(
+                text=(f"{report.num_conformers} conformers · "
+                      f"{report.num_atoms} atoms · {report.forcefield} → "
+                      f"{report.output_path}"))
+
+        self._start_job("3D embedding + UFF", work, render)
+
+    def _maccs_run(self) -> None:
+        """MACCS structural-key fingerprint card (compute_maccs)."""
+        if not self._require_pharmaml() or not self._require(
+                "numpy", "MACCS keys") or not self._require(
+                "rdkit", "MACCS keys"):
+            return
+        smiles = parse_smiles_lines(self._maccs_text.get("1.0", "end"))
+        if not smiles:
+            messagebox.showwarning("Empty list", "Paste at least one SMILES.")
+            return
+
+        def work() -> Any:
+            from pharmaml.chem import compute_maccs
+
+            matrix, ok = compute_maccs(smiles)
+            return matrix, [smiles[i] for i in ok]
+
+        def render(payload: Any) -> None:
+            matrix, kept = payload
+            on_bits = matrix.sum(axis=1) if matrix.size else []
+            if len(kept):
+                per = "  ·  ".join(
+                    f"{s[:16]}: {int(bits)}/167" for s, bits in zip(kept, on_bits))
+                mean = float(on_bits.mean())
+                self._maccs_result.configure(
+                    text=(f"{len(kept)} molecule(s) · mean {mean:.1f}/167 "
+                          f"keys set\n{per}"),
+                    style="Field.TLabel", justify="left")
+            dropped = len(smiles) - len(kept)
+            if dropped:
+                self._maccs_result.configure(
+                    text=f"{dropped} SMILES failed to parse — no MACCS keys")
+
+        self._start_job("MACCS keys", work, render)
 
     def _convert_affinity(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "conversion"):
@@ -4316,6 +4669,183 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._pd_host = self._figure_host(emax, height=300)
         bind_enter(self._pd_concs, button)
 
+        # -- non-compartmental analysis (the library's pharma.pk NCA) -- #
+        nca = make_card(
+            page.grid, "Non-compartmental analysis (NCA)", row=4, column=0,
+            span=2,
+            subtitle="Paste a concentration-time series (both comma lists, "
+                     "matched pairs): AUC / AUMC by the linear trapezoid, "
+                     "MRT, Cmax / Tmax, the terminal half-life — plus Vd and "
+                     "CL when a dose is given (Vd = dose / AUC after IV).",
+        )
+        self._nca_times = ttk.Entry(nca, width=34)
+        self._nca_times.insert(0, _NCA_DEFAULT_TIMES)
+        form_row(nca, "times (h)", self._nca_times)
+        self._nca_concs = ttk.Entry(nca, width=34)
+        self._nca_concs.insert(0, _NCA_DEFAULT_CONCS)
+        form_row(nca, "concentrations", self._nca_concs)
+        self._nca_dose = ttk.Entry(nca, width=14)
+        form_row(nca, "IV dose (mg, optional)", self._nca_dose)
+        nca_buttons = ttk.Frame(nca, style="Card.TFrame")
+        grid_append(nca, nca_buttons, sticky="w", pady=(6, 0))
+        nca_btn = self._action_button(
+            nca_buttons, "Analyse", self._nca_run, primary=True,
+            tooltip="Validates the series (sorted times, non-negative "
+                    "concentrations), then runs the trapezoid NCA.",
+        )
+        nca_btn.pack(side="left")
+        nca_plot_btn = self._action_button(
+            nca_buttons, "Plot profile", self._nca_plot,
+            tooltip="The concentration-time profile with the AUC shaded "
+                    "under the curve.",
+        )
+        nca_plot_btn.pack(side="left", padx=(10, 0))
+        nca_save_btn = self._action_button(
+            nca_buttons, "Save summary CSV…", self._nca_save,
+            tooltip="The NCA metrics as a one-row table.",
+        )
+        nca_save_btn.pack(side="left", padx=(10, 0))
+        self._nca_result = ttk.Label(nca, text="—", style="Result.TLabel",
+                                     font=self._mono_result, wraplength=620,
+                                     justify="left")
+        grid_append(nca, self._nca_result, sticky="w")
+        self._nca_host = self._figure_host(nca, height=260)
+        bind_enter(self._nca_concs, nca_btn)
+
+        # -- IV infusion, steady state, Vd & bioavailability -------------- #
+        infusion = make_card(
+            page.grid, "IV infusion & distribution", row=5, column=0,
+            subtitle="The infusion rate that holds a target Css "
+                     "(rate = CL·Css), the steady state a given rate "
+                     "reaches, Vd = CL / k(e), and absolute "
+                     "bioavailability F from paired EV/IV AUCs.",
+        )
+        self._inf_cl = ttk.Entry(infusion, width=14); self._inf_cl.insert(0, "5")
+        form_row(infusion, "clearance CL (L/h)", self._inf_cl)
+        self._inf_target = ttk.Entry(infusion, width=14); self._inf_target.insert(0, "8")
+        form_row(infusion, "target Css (mg/L)", self._inf_target)
+        self._inf_rate = ttk.Entry(infusion, width=14); self._inf_rate.insert(0, "40")
+        form_row(infusion, "infusion rate (mg/h)", self._inf_rate)
+        self._vd_ke = ttk.Entry(infusion, width=14); self._vd_ke.insert(0, "0.173")
+        form_row(infusion, "k(e) (1/h) — for Vd", self._vd_ke)
+        self._bio_ev_dose = ttk.Entry(infusion, width=14)
+        form_row(infusion, "EV dose / AUC (optional)", self._bio_ev_dose)
+        self._bio_iv_dose = ttk.Entry(infusion, width=14)
+        form_row(infusion, "IV dose / AUC (optional)", self._bio_iv_dose)
+        button = self._action_button(infusion, "Compute", self._infusion_math)
+        button.grid(row=infusion.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._inf_result = ttk.Label(infusion, text="—", style="Result.TLabel",
+                                     font=self._mono_result, wraplength=320,
+                                     justify="left")
+        self._inf_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
+                              padx=(10, 0))
+        acc_row = ttk.Frame(infusion, style="Card.TFrame")
+        grid_append(infusion, acc_row, sticky="w", pady=(8, 0))
+        self._acc_dose = ttk.Entry(acc_row, width=10); self._acc_dose.insert(0, "250")
+        self._acc_dose.pack(side="left")
+        ttk.Label(acc_row, text="mg dose", style="CardMuted.TLabel").pack(
+            side="left", padx=(4, 12))
+        acc_btn = self._action_button(
+            acc_row, "Plot repeated dosing", self._plot_accumulation,
+            tooltip="The classic approach-to-steady-state picture: peaks "
+                    "and troughs over the dosing interval from t½ and τ "
+                    "(plot_dose_accumulation).",
+        )
+        acc_btn.pack(side="left")
+        self._acc_host = self._figure_host(infusion, height=240)
+        bind_enter(self._inf_rate, button)
+
+        # -- therapeutic drug monitoring --------------------------------- #
+        tdm = make_card(
+            page.grid, "TDM trough adjustment", row=5, column=1,
+            subtitle="Dose individualisation from one measured trough: the "
+                     "linear-proportional new dose (with an optional floor).",
+        )
+        self._tdm_dose = ttk.Entry(tdm, width=14); self._tdm_dose.insert(0, "250")
+        form_row(tdm, "current dose (mg)", self._tdm_dose)
+        self._tdm_measured = ttk.Entry(tdm, width=14); self._tdm_measured.insert(0, "6.2")
+        form_row(tdm, "measured trough", self._tdm_measured)
+        self._tdm_target = ttk.Entry(tdm, width=14); self._tdm_target.insert(0, "10")
+        form_row(tdm, "target trough", self._tdm_target)
+        self._tdm_min = ttk.Entry(tdm, width=14); self._tdm_min.insert(0, "25")
+        form_row(tdm, "minimum dose (mg)", self._tdm_min)
+        button = self._action_button(tdm, "Adjust dose", self._tdm_math)
+        button.grid(row=tdm.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._tdm_result = ttk.Label(tdm, text="—", style="Result.TLabel",
+                                     font=self._mono_result, wraplength=300,
+                                     justify="left")
+        self._tdm_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
+                              padx=(10, 0))
+        bind_enter(self._tdm_target, button)
+
+        # -- PD model explorer (the full pharma.pd model family) --------- #
+        family = make_card(
+            page.grid, "PD model explorer", row=6, column=0, span=2,
+            subtitle="The pharmacodynamic family beyond plain Emax: the "
+                     "sigmoid Emax with its Hill slope, the inhibitory Emax, "
+                     "and the linear effect — table, curve, and the reverse "
+                     "question (which concentration reaches a target "
+                     "effect?).",
+        )
+        family.columnconfigure(0, weight=1)
+        family.columnconfigure(1, weight=1)
+        fam_left = ttk.Frame(family, style="Card.TFrame")
+        fam_left.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+        self._pd_family_combo = ttk.Combobox(
+            fam_left, state="readonly", width=24, values=_PD_FAMILY_MODES)
+        self._pd_family_combo.set(_PD_FAMILY_MODES[0])
+        Tooltip(self._pd_family_combo,
+                "sigmoid Emax: E = E0 + Emax·C^h/(EC50^h + C^h); inhibitory "
+                "Emax: E = E0 − Imax·C^h/(IC50^h + C^h); linear: E = "
+                "slope·C + intercept.")
+        form_row(fam_left, "model", self._pd_family_combo)
+        self._fam_e0 = ttk.Entry(fam_left, width=12); self._fam_e0.insert(0, "5")
+        form_row(fam_left, "E0 (baseline)", self._fam_e0)
+        self._fam_max = ttk.Entry(fam_left, width=12); self._fam_max.insert(0, "60")
+        form_row(fam_left, "Emax / Imax", self._fam_max)
+        self._fam_c50 = ttk.Entry(fam_left, width=12); self._fam_c50.insert(0, "2.5")
+        form_row(fam_left, "EC50 / IC50", self._fam_c50)
+        self._fam_hill = ttk.Entry(fam_left, width=12); self._fam_hill.insert(0, "1.5")
+        form_row(fam_left, "Hill slope h", self._fam_hill)
+        self._fam_slope = ttk.Entry(fam_left, width=12); self._fam_slope.insert(0, "4")
+        form_row(fam_left, "slope (linear)", self._fam_slope)
+        fam_right = ttk.Frame(family, style="Card.TFrame")
+        fam_right.grid(row=0, column=1, sticky="nsew")
+        self._fam_concs = ttk.Entry(fam_right, width=24)
+        self._fam_concs.insert(0, "0.5, 1, 2.5, 5, 10, 25")
+        form_row(fam_right, "concentrations (comma list)", self._fam_concs)
+        self._fam_target = ttk.Entry(fam_right, width=12); self._fam_target.insert(0, "30")
+        form_row(fam_right, "target effect (reverse EC50)", self._fam_target)
+        fam_buttons = ttk.Frame(family, style="Card.TFrame")
+        grid_append(family, fam_buttons, sticky="w", pady=(6, 0))
+        fam_btn = self._action_button(
+            fam_buttons, "Compute & plot", self._pd_family_math, primary=True,
+            tooltip="Fills the effect table and draws the model curve over "
+                    "the concentration grid.",
+        )
+        fam_btn.pack(side="left")
+        fam_rev_btn = self._action_button(
+            fam_buttons, "Solve EC50 for target", self._pd_target_ec50,
+            tooltip="The reverse question: which EC50 puts the model "
+                    "through the target effect at the given EC50 "
+                    "reference concentration?",
+        )
+        fam_rev_btn.pack(side="left", padx=(10, 0))
+        self._fam_result = ttk.Label(family, text="—", style="CardMuted.TLabel",
+                                     wraplength=560, justify="left")
+        grid_append(family, self._fam_result, sticky="w")
+        fam_tree_frame = ttk.Frame(family, style="Card.TFrame")
+        grid_append(family, fam_tree_frame, sticky="nsew", pady=(4, 0), weight=True)
+        self._fam_tree = ttk.Treeview(fam_tree_frame, show="headings", height=6,
+                                      columns=("concentration", "effect"))
+        self._fam_tree.heading("concentration", text="concentration")
+        self._fam_tree.heading("effect", text="effect")
+        self._fam_tree.column("concentration", width=160, anchor="e")
+        self._fam_tree.column("effect", width=160, anchor="e")
+        self._fam_tree.pack(side="left", fill="both", expand=True)
+        self._fam_host = self._figure_host(family, height=280)
+        bind_enter(self._fam_concs, fam_btn)
+
     def _halflife_math(self) -> None:
         if not self._require_pharmaml() or not self._require("numpy", "PK math"):
             return
@@ -4558,6 +5088,384 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         self._start_job("Emax model", work, render)
 
+    # -- NCA / infusion / TDM / PD-family cards (the 100x-119 review) -- #
+    def _nca_series(self) -> tuple[list[float], list[float]]:
+        """Parse + validate the NCA card's time/concentration lists."""
+        times = [parse_float(part, "time") for part
+                 in self._nca_times.get().split(",") if part.strip()]
+        concs = [parse_float(part, "concentration") for part
+                 in self._nca_concs.get().split(",") if part.strip()]
+        if not times or not concs:
+            raise ValueError("give at least one time and one concentration")
+        if len(times) != len(concs):
+            raise ValueError(
+                f"{len(times)} times but {len(concs)} concentrations -- the "
+                "two lists must be matched pairs")
+        return times, concs
+
+    def _nca_run(self) -> None:
+        """Trapezoid NCA over the pasted concentration-time series."""
+        if not self._require_pharmaml() or not self._require("numpy", "NCA"):
+            return
+        try:
+            times, concs = self._nca_series()
+            dose_raw = self._nca_dose.get().strip()
+            dose = parse_float(dose_raw, "IV dose") if dose_raw else None
+            if dose is not None and dose <= 0:
+                raise ValueError("IV dose must be positive")
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.pharma.pk import (
+                nca_summary,
+                validate_concentration_series,
+                vd_from_dose_auc,
+            )
+
+            t, c = validate_concentration_series(times, concs)
+            summary = nca_summary(t, c)
+            vd = vd_from_dose_auc(dose, summary.auc) if dose else None
+            return summary, vd, t, c
+
+        def render(payload: Any) -> None:
+            summary, vd, t, c = payload
+            self._nca_summary = summary
+            parts = [
+                f"AUC {format_number(summary.auc)} mg·h/L",
+                f"AUMC {format_number(summary.aucm)} mg·h²/L",
+                f"MRT {format_number(summary.mrt)} h",
+                f"Cmax {format_number(summary.c_max)} mg/L",
+                f"Tmax {format_number(summary.t_max)} h",
+                f"t½(term) {format_number(summary.half_life_terminal)} h",
+            ]
+            if vd is not None:
+                clearance = dose / summary.auc if summary.auc else float("nan")
+                parts.append(f"Vd {format_number(vd)} L")
+                parts.append(f"CL {format_number(clearance)} L/h")
+            self._nca_result.configure(
+                text=f"{len(t)} points · " + "  ·  ".join(parts))
+            if self.deps.get("matplotlib"):
+                try:
+                    from pharmaml.viz import plot_concentration_profile
+
+                    figure = plot_concentration_profile(
+                        t, c, summary=summary, auc=summary.auc)
+                    self._render_figure(self._nca_host, figure)
+                except Exception as exc:  # noqa: BLE001
+                    self._show_error("Plot failed", exc)
+
+        self._start_job("non-compartmental analysis", work, render)
+
+    def _nca_plot(self) -> None:
+        """Draw the concentration-time profile (AUC shaded) standalone."""
+        if not self._require_pharmaml() or not self._require(
+                "numpy", "NCA") or not self._require(
+                "matplotlib", "the concentration profile"):
+            return
+        try:
+            times, concs = self._nca_series()
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.pharma.pk import (
+                auc_trapezoid,
+                nca_summary,
+                validate_concentration_series,
+            )
+
+            t, c = validate_concentration_series(times, concs)
+            return t, c, nca_summary(t, c), auc_trapezoid(t, c)
+
+        def render(payload: Any) -> None:
+            t, c, summary, auc = payload
+            from pharmaml.viz import plot_concentration_profile
+
+            figure = plot_concentration_profile(t, c, summary=summary, auc=auc)
+            self._render_figure(self._nca_host, figure)
+
+        self._start_job("concentration profile", work, render)
+
+    def _nca_save(self) -> None:
+        """Save the last NCA summary as a one-row CSV."""
+        summary = getattr(self, "_nca_summary", None)
+        if summary is None:
+            messagebox.showinfo("Nothing to save", "Run the NCA first.")
+            return
+        if not self._require_pharmaml():
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save NCA summary", defaultextension=".csv",
+            filetypes=[("CSV table", "*.csv")],
+        )
+        if not path:
+            return
+        try:
+            import pandas as pd
+
+            from pharmaml.utils.io import write_table
+
+            frame = pd.DataFrame([{
+                "auc_mg_h_L": summary.auc,
+                "aucm_mg_h2_L": summary.aucm,
+                "mrt_h": summary.mrt,
+                "c_max": summary.c_max,
+                "t_max": summary.t_max,
+                "half_life_terminal_h": summary.half_life_terminal,
+            }])
+            written = write_table(frame, path)
+            messagebox.showinfo("Saved", f"{written} rows → {path}")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Save failed", exc)
+
+    def _infusion_math(self) -> None:
+        """Infusion rate / steady state / Vd / bioavailability card."""
+        if not self._require_pharmaml() or not self._require("numpy", "PK math"):
+            return
+        try:
+            clearance = parse_float(self._inf_cl.get(), "clearance CL")
+            if clearance <= 0:
+                raise ValueError("clearance must be positive")
+            target = parse_float(self._inf_target.get(), "target Css")
+            if target <= 0:
+                raise ValueError("target Css must be positive")
+            rate = parse_float(self._inf_rate.get(), "infusion rate")
+            if rate <= 0:
+                raise ValueError("infusion rate must be positive")
+            ke = parse_float(self._vd_ke.get(), "k(e)")
+            if ke <= 0:
+                raise ValueError("k(e) must be positive")
+            bio_pair = self._bio_ev_dose.get().strip()
+            iv_pair = self._bio_iv_dose.get().strip()
+            bio = None
+            if bio_pair and iv_pair:
+                ev_dose, ev_auc = _split_pair(bio_pair)
+                iv_dose, iv_auc = _split_pair(iv_pair)
+                for name, value in (("EV dose", ev_dose), ("EV AUC", ev_auc),
+                                    ("IV dose", iv_dose), ("IV AUC", iv_auc)):
+                    if value <= 0:
+                        raise ValueError(f"{name} must be positive")
+                bio = (ev_dose, ev_auc, iv_dose, iv_auc)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        try:
+            from pharmaml.pharma.dosage import infusion_rate
+            from pharmaml.pharma.pk import (
+                bioavailability,
+                iv_infusion_steady_state,
+                volume_of_distribution,
+            )
+
+            need_rate = infusion_rate(clearance, target)
+            css = iv_infusion_steady_state(rate, clearance)
+            vd = volume_of_distribution(clearance, ke)
+            parts = [
+                (f"rate for Css {format_number(target)} = "
+                 f"{format_number(need_rate)} mg/h"),
+                (f"Css at {format_number(rate)} mg/h = "
+                 f"{format_number(css)} mg/L"),
+                f"Vd = {format_number(vd)} L",
+            ]
+            if bio is not None:
+                ev_dose, ev_auc, iv_dose, iv_auc = bio
+                f_abs = bioavailability(ev_dose, ev_auc, iv_dose, iv_auc)
+                parts.append(f"F = {format_number(f_abs * 100)}%")
+            self._inf_result.configure(text="  ·  ".join(parts))
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Computation failed", exc)
+
+    def _plot_accumulation(self) -> None:
+        """Repeated-dosing approach to steady state (plot_dose_accumulation)."""
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the accumulation plot"):
+            return
+        try:
+            dose = parse_float(self._acc_dose.get(), "dose")
+            if dose <= 0:
+                raise ValueError("dose must be positive")
+            thalf = parse_float(self._thalf_a.get(), "t½")
+            if thalf <= 0:
+                raise ValueError("t½ must be positive")
+            tau = parse_float(self._tau_a.get(), "dosing interval τ")
+            if tau <= 0:
+                raise ValueError("dosing interval must be positive")
+            clearance = parse_float(self._inf_cl.get(), "clearance CL")
+            ke = parse_float(self._vd_ke.get(), "k(e)")
+            if clearance <= 0 or ke <= 0:
+                raise ValueError("clearance and k(e) must be positive "
+                                 "(they set Vd for the accumulation plot)")
+            vd = clearance / ke
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.viz import plot_dose_accumulation
+
+            return plot_dose_accumulation(dose, tau, t_half=thalf, vd=vd,
+                                          n_doses=8)
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._acc_host, figure)
+
+        self._start_job("dose accumulation plot", work, render)
+
+    def _tdm_math(self) -> None:
+        """TDM trough adjustment card."""
+        if not self._require_pharmaml():
+            return
+        try:
+            dose = parse_float(self._tdm_dose.get(), "current dose")
+            measured = parse_float(self._tdm_measured.get(), "measured trough")
+            target = parse_float(self._tdm_target.get(), "target trough")
+            if dose <= 0 or measured <= 0 or target <= 0:
+                raise ValueError("dose and troughs must be positive")
+            min_raw = self._tdm_min.get().strip()
+            min_dose = parse_float(min_raw, "minimum dose") if min_raw else None
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        try:
+            from pharmaml.pharma.dosage import tdm_trough_adjustment
+
+            new_dose = tdm_trough_adjustment(
+                dose, measured, target, min_dose=min_dose)
+            capped = (min_dose is not None and new_dose == min_dose
+                      and dose * target / measured < min_dose)
+            self._tdm_result.configure(
+                text=(f"new dose {format_number(new_dose)} mg"
+                      + ("  (floored at the minimum)" if capped else "")))
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Computation failed", exc)
+
+    def _pd_family_math(self) -> None:
+        """The PD model explorer: table + curve for the chosen model."""
+        if not self._require_pharmaml() or not self._require("numpy", "PD math"):
+            return
+        model = self._pd_family_combo.get()
+        try:
+            e0 = parse_float(self._fam_e0.get(), "E0")
+            top = parse_float(self._fam_max.get(), "Emax / Imax")
+            c50 = parse_float(self._fam_c50.get(), "EC50 / IC50", minimum=1e-12)
+            hill = parse_float(self._fam_hill.get(), "Hill slope")
+            if hill <= 0:
+                raise ValueError("Hill slope must be positive")
+            slope = parse_float(self._fam_slope.get(), "slope")
+            concs = [parse_float(part, "concentration", minimum=0.0)
+                     for part in self._fam_concs.get().split(",") if part.strip()]
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        if not concs:
+            messagebox.showwarning("Input", "Give at least one concentration.")
+            return
+        want_plot = self.deps.get("matplotlib")
+
+        def work() -> Any:
+            import numpy as np
+
+            if model.startswith("sigmoid"):
+                from pharmaml.pharma.pd import sigmoid_emax_effect
+
+                def fn(c: Any) -> Any:
+                    return sigmoid_emax_effect(c, e0, top, c50, hill)
+
+                label = (f"E = {format_number(e0)} + {format_number(top)}·C^{format_number(hill)}"
+                         f"/({format_number(c50)}^{format_number(hill)} + C^{format_number(hill)})")
+            elif model.startswith("inhibitory"):
+                from pharmaml.pharma.pd import inhibitory_emax_effect
+
+                def fn(c: Any) -> Any:  # type: ignore[no-redef]
+                    return inhibitory_emax_effect(c, e0, top, c50, hill)
+
+                label = (f"E = {format_number(e0)} − {format_number(top)}·C^{format_number(hill)}"
+                         f"/({format_number(c50)}^{format_number(hill)} + C^{format_number(hill)})")
+            else:
+                from pharmaml.pharma.pd import linear_effect
+
+                def fn(c: Any) -> Any:  # type: ignore[no-redef]
+                    return linear_effect(c, slope)
+
+                label = f"E = {format_number(slope)}·C + 0"
+            effects = np.asarray(fn(np.asarray(concs)), dtype=float)
+            grid = np.linspace(0.0, max(concs) * 1.15 or c50 * 20, 240)
+            curve = np.asarray(fn(grid), dtype=float)
+            return effects, grid, curve, label
+
+        def render(payload: Any) -> None:
+            effects, grid, curve, label = payload
+            self._fam_tree.delete(*self._fam_tree.get_children())
+            for conc, effect in zip(concs, effects):
+                self._fam_tree.insert(
+                    "", "end",
+                    values=(format_number(conc), format_number(effect, 2)))
+            self._fam_result.configure(
+                text=f"{model} · {label}", style="CardMuted.TLabel")
+            if not want_plot:
+                return
+            try:
+                from pharmaml.viz import PALETTE, new_figure
+
+                fig, ax = new_figure(figsize=(5.2, 2.9))
+                ax.plot(grid, curve, color=PALETTE[0], lw=2.2, label=label)
+                ax.scatter(concs, effects, color=PALETTE[1], zorder=3,
+                           label="your points")
+                if not model.startswith("linear"):
+                    ax.axvline(c50, color=MUTED, ls=":", lw=1.0)
+                ax.set_xlabel("concentration")
+                ax.set_ylabel("effect")
+                ax.set_title(model, loc="left")
+                ax.legend(frameon=False, fontsize=8)
+                self._render_figure(self._fam_host, fig)
+            except Exception as exc:  # noqa: BLE001
+                self._show_error("Plot failed", exc)
+
+        self._start_job(f"PD model ({model})", work, render)
+
+    def _pd_target_ec50(self) -> None:
+        """Reverse question: the EC50 that hits a target effect."""
+        if not self._require_pharmaml():
+            return
+        try:
+            target = parse_float(self._fam_target.get(), "target effect")
+            e0 = parse_float(self._fam_e0.get(), "E0")
+            top = parse_float(self._fam_max.get(), "Emax / Imax")
+            c50 = parse_float(self._fam_c50.get(), "EC50 / IC50", minimum=1e-12)
+            hill = parse_float(self._fam_hill.get(), "Hill slope")
+            if hill <= 0:
+                raise ValueError("Hill slope must be positive")
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        try:
+            from pharmaml.pharma.pd import ec50_for_target_effect
+
+            needed = ec50_for_target_effect(target, c50, e0, top, hill)
+            if needed is None or not math.isfinite(needed) or needed <= 0:
+                self._fam_result.configure(
+                    text=(f"target {format_number(target, 2)} is outside the "
+                          f"model's reachable range (E0 {format_number(e0)} "
+                          f"→ plateau {format_number(e0 + top)}) — no EC50 "
+                          "exists"),
+                    style="CardMuted.TLabel")
+                return
+            self._fam_result.configure(
+                text=(f"to reach E = {format_number(target, 2)}: "
+                      f"EC50 = {format_number(needed)} "
+                      f"(with E0 {format_number(e0)}, "
+                      f"{'Emax' if top >= 0 else 'Imax'} {format_number(top)}, "
+                      f"h {format_number(hill)})"),
+                style="CardMuted.TLabel")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Computation failed", exc)
+
     # ------------------------------------------------------------------ #
     # Cell Lines tab
     # ------------------------------------------------------------------ #
@@ -4580,6 +5488,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "(examples/data/cellline_screen.csv).",
         )
         example_btn.pack(side="left", padx=(10, 0))
+        bio_rep_btn = self._action_button(
+            screen_buttons, "Replicate variability", self._bio_replicate_variability,
+            tooltip="Per cell-line × compound pair with replicates: the "
+                    "metric's spread (range / CV) across the replicate "
+                    "measurements — the honest quality readout before "
+                    "collapsing them to a median.",
+        )
+        bio_rep_btn.pack(side="left", padx=(10, 0))
+        bio_sum_btn = self._action_button(
+            screen_buttons, "Compound summary", self._bio_summarize_compounds,
+            tooltip="Per-compound statistics over the loaded metric (mean / "
+                    "median / std / min / max / n) — the one-table overview "
+                    "of the panel.",
+        )
+        bio_sum_btn.pack(side="left", padx=(10, 0))
         self._bio_collapse_var = tk.BooleanVar(value=True)
         collapse_check = ttk.Checkbutton(
             screen, text="collapse replicates (median per duplicated pair)",
@@ -4854,6 +5777,67 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._bio_marker_compound_combo["values"] = compounds
         if compounds:
             self._bio_compound_var.set(compounds[0])
+
+    def _bio_replicate_variability(self) -> None:
+        """Replicate spread per duplicated pair (biology.replicate_variability)."""
+        if not self._require_pharmaml() or not self._require("pandas", "the audit"):
+            return
+        if self._bio_screen is None:
+            messagebox.showwarning("No screen", "Load a response screen first.")
+            return
+        path = getattr(self, "_bio_screen_path", None)
+
+        def work() -> Any:
+            from pharmaml.biology import load_response_table, replicate_variability
+
+            # replicates must be audited BEFORE any collapsing -- reload
+            # the raw table (the loaded screen may already be collapsed)
+            raw = (load_response_table(path) if path is not None
+                   else self._bio_screen)
+            return replicate_variability(raw)
+
+        def render(frame: Any) -> None:
+            self._bio_audit_text.delete("1.0", "end")
+            if frame is None or not len(frame):
+                self._bio_audit_text.insert(
+                    "1.0",
+                    "replicate variability: no duplicated cell-line × "
+                    "compound pairs in this screen — nothing to compare")
+                return
+            self._bio_audit_text.insert(
+                "1.0",
+                "replicate variability (per duplicated pair, "
+                "before any collapsing):\n\n" + frame.to_string(index=False))
+
+        self._start_job("replicate variability", work, render)
+
+    def _bio_summarize_compounds(self) -> None:
+        """Per-compound statistics over the chosen metric (summarize_compounds)."""
+        if not self._require_pharmaml() or not self._require("pandas", "the summary"):
+            return
+        if self._bio_screen is None:
+            messagebox.showwarning("No screen", "Load a response screen first.")
+            return
+        metric = self._bio_metric_combo.get()
+        if not metric:
+            messagebox.showwarning("No metric", "Pick the response metric.")
+            return
+        lower_is_sensitive = bool(self._bio_lower_var.get())
+
+        def work() -> Any:
+            from pharmaml.biology import summarize_compounds
+
+            return summarize_compounds(
+                self._bio_screen, metric,
+                higher_is_more_sensitive=not lower_is_sensitive)
+
+        def render(frame: Any) -> None:
+            self._bio_audit_text.delete("1.0", "end")
+            header = (f"compound summary — {metric} "
+                      f"({'lower = more sensitive' if lower_is_sensitive else 'higher = more sensitive'}):\n\n")
+            self._bio_audit_text.insert("1.0", header + frame.to_string(index=False))
+
+        self._start_job(f"compound summary ({metric})", work, render)
 
     def _bio_build_matrix(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "the matrix"):
@@ -5246,6 +6230,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "of a campaign root.",
         )
         dist_btn.pack(side="left")
+        rec_plot_btn = self._action_button(
+            dist_buttons, "Plot atom types", self._dock_plot_atom_types,
+            tooltip="The prepared receptor's AutoDock atom-type census as "
+                    "chemistry-coloured bars (plot_receptor_atom_types) — "
+                    "a missing polar-hydrogen population is visible at a "
+                    "glance.")
+        rec_plot_btn.pack(side="left", padx=(10, 0))
+        self._dock_receptor_host = self._figure_host(receptor, height=240)
         self._dock_distribute_info = ttk.Label(
             dist_buttons, text="", style="CardMuted.TLabel", wraplength=260,
             justify="left",
@@ -5375,6 +6367,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                                                self._dock_save_results)
         results_save_btn.grid(row=results.grid_size()[1], column=0, columnspan=2,
                               sticky="w", pady=(6, 0))
+        top_ligands_btn = self._action_button(
+            results, "Plot top ligands", self._dock_plot_top_ligands,
+            tooltip="The strongest binders of the last campaign scan as "
+                    "energy-annotated horizontal bars (plot_top_ligands).")
+        top_ligands_btn.grid(row=results.grid_size()[1], column=0, columnspan=2,
+                             sticky="w", pady=(2, 0))
+        self._dock_results_host = self._figure_host(results, height=260)
 
         # -- card 5: campaign runner ------------------------------------- #
         runner = make_card(
@@ -6434,6 +7433,60 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Saved", f"Results written to\n{written}")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save", exc)
+
+    # -- receptor atom-type census + top-ligand bars (100x-119) -------- #
+    def _dock_plot_atom_types(self) -> None:
+        """The prepared receptor's atom-type census (plot_receptor_atom_types)."""
+        report = getattr(self, "_dock_protein_report", None)
+        if report is None:
+            messagebox.showinfo(
+                "No receptor yet",
+                "Prepare a receptor first — the atom-type census needs "
+                "the prepared PDBQT.")
+            return
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the atom-type chart"):
+            return
+
+        def work() -> Any:
+            from pharmaml.viz import plot_receptor_atom_types
+
+            return plot_receptor_atom_types(report)
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._dock_receptor_host, figure)
+
+        self._start_job("receptor atom types", work, render)
+
+    def _dock_plot_top_ligands(self) -> None:
+        """Strongest binders of the last scan as bars (plot_top_ligands)."""
+        frame = getattr(self, "_dock_results_frame", None)
+        if frame is None:
+            messagebox.showinfo(
+                "No results yet",
+                "Scan a campaign first — the top-ligand bars need the "
+                "ranked summary table.")
+            return
+        if "folder" not in [str(c) for c in frame.columns]:
+            messagebox.showinfo(
+                "Campaign scans only",
+                "The top-ligand bars need a campaign-scan table (the "
+                "folder-ranked summary). Scan a campaign folder first — a "
+                "DLG cluster table or a Vina log has no ligand ranking.")
+            return
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the top-ligand chart"):
+            return
+
+        def work() -> Any:
+            from pharmaml.viz import plot_top_ligands
+
+            return plot_top_ligands(frame, top_n=12)
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._dock_results_host, figure)
+
+        self._start_job("top-ligand bars", work, render)
 
     # -- consensus rescore card ------------------------------------------ #
     def _dock_open_rescore_csv(self) -> None:
@@ -7507,6 +8560,25 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         grid_append(tuner, self._tune_summary, sticky="w", pady=(6, 0))
 
         results = make_card(page.grid, "Results", span=2, row=5, column=0)
+        ml_result_buttons = ttk.Frame(results, style="Card.TFrame")
+        grid_append(results, ml_result_buttons, sticky="w")
+        calib_btn = self._action_button(
+            ml_result_buttons, "Calibration curve", self._ml_plot_calibration,
+            tooltip="The reliability diagram of the last trained "
+                    "CLASSIFIER (plot_calibration_curve): predicted "
+                    "probability vs observed frequency per bin -- the "
+                    "honest answer to 'can I trust p = 0.7?'.")
+        calib_btn.pack(side="left")
+        self._calib_bins = ttk.Entry(ml_result_buttons, width=5)
+        self._calib_bins.insert(0, "10")
+        self._calib_bins.pack(side="left", padx=(8, 0))
+        ttk.Label(ml_result_buttons, text="bins",
+                  style="CardMuted.TLabel").pack(side="left", padx=(2, 0))
+        ml_result_note = ttk.Label(
+            ml_result_buttons, text="", style="CardMuted.TLabel",
+            wraplength=430, justify="left")
+        ml_result_note.pack(side="left", padx=(10, 0))
+        self._ml_result_note = ml_result_note
         self._ml_metrics = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, self._ml_metrics, sticky="ew")
         ttk.Label(self._ml_metrics, text="train a model to see metrics",
@@ -7531,6 +8603,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._board_tree.configure(yscrollcommand=board_bar.set)
         self._board_tree.pack(side="left", fill="both", expand=True)
         board_bar.pack(side="right", fill="y")
+        board_buttons = ttk.Frame(board, style="Card.TFrame")
+        grid_append(board, board_buttons, sticky="w", pady=(6, 0))
+        board_plot_btn = self._action_button(
+            board_buttons, "Plot leaderboard", self._ml_plot_leaderboard,
+            tooltip="The leaderboard as horizontal bars "
+                    "(plot_model_comparison) -- the cross-validated score "
+                    "per model, error bars where the table carries them.")
+        board_plot_btn.pack(side="left")
+        self._board_host = self._figure_host(board, height=300)
 
         # -- ensemble builder (voting + stacking, members by hand) ---- #
         ensemble = make_card(
@@ -9451,6 +10532,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                                   on_model=on_model)
 
         def render(board: Any) -> None:
+            self._board_frame = board
             self._board_tree.delete(*self._board_tree.get_children())
             columns = [str(column) for column in board.columns]
             self._board_tree["columns"] = columns
@@ -9467,6 +10549,70 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         self._start_job(f"comparing models ({task})", work, render)
+
+    # -- calibration + leaderboard figures (the 100x-119 review) ----- #
+    def _ml_plot_calibration(self) -> None:
+        """Reliability diagram of the last trained classifier."""
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo(
+                "No trained model", "Train a classification model first.")
+            return
+        trained, _report, task, _x_tr, _y_tr, x_test, y_test, target = run
+        if task != "classification":
+            messagebox.showinfo(
+                "Classification only",
+                f"The last run trained a {task} model — the reliability "
+                "diagram needs predicted probabilities (a classifier).")
+            return
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the calibration curve"):
+            return
+        try:
+            bins = parse_int(self._calib_bins.get(), "calibration bins",
+                             minimum=2, maximum=20)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.viz import plot_calibration_curve
+
+            return plot_calibration_curve(
+                trained.model, x_test, y_test, n_bins=bins,
+                title=f"Calibration — {trained.name} ({target})")
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._ml_host, figure)
+            self._ml_result_note.configure(
+                text="reliability diagram replaces the parity figure — "
+                     "Train & evaluate brings it back")
+
+        self._start_job("calibration curve", work, render)
+
+    def _ml_plot_leaderboard(self) -> None:
+        """The compare-models leaderboard as a bar figure."""
+        board = getattr(self, "_board_frame", None)
+        if board is None:
+            messagebox.showinfo(
+                "No leaderboard yet",
+                "Run Compare models first — the bar chart needs the "
+                "cross-validated ranking table.")
+            return
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the leaderboard bars"):
+            return
+
+        def work() -> Any:
+            from pharmaml.viz import plot_model_comparison
+
+            return plot_model_comparison(
+                board, title="Cross-validated model leaderboard")
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._board_host, figure)
+
+        self._start_job("leaderboard bars", work, render)
 
     # ------------------------------------------------------------------ #
     # Deep Learning tab (100x-61) -- the pharmaml.ml.neural estimators

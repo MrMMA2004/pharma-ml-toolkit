@@ -980,8 +980,12 @@ class TestGuiUnderXvfb:
         trained = app._ml_last_run[0]
         assert trained.model.named_steps["reg"].alpha == 0.5  # pinned
         assert trained.best_params == {"alpha": 0.5}
-        # the status bar returned to launch state
-        assert app._job_label.cget("text") == "idle"
+        # the status bar reports the finished job (100x-119): the label
+        # names what ran and how long it took, the bar returned to the
+        # launch-time marquee
+        done_text = app._job_label.cget("text")
+        assert done_text.startswith("training ridge (regression) — done in "), (
+            done_text)
         assert str(app._progress.cget("mode")) == "indeterminate"
         assert quiet_dialogs == []
 
@@ -1007,7 +1011,8 @@ class TestGuiUnderXvfb:
         assert not app._busy, "tune job hung"
         assert saw_fraction and saw_eta, "the search never reported progress"
         assert len(app._tune_last[0].trials) == 4
-        assert app._job_label.cget("text") == "idle"
+        # the finished-job label (100x-119) names the search + duration
+        assert " — done in " in app._job_label.cget("text")
         assert quiet_dialogs == []
 
     def test_apply_best_prefills_the_manual_panel(
@@ -4578,3 +4583,169 @@ class TestApplicabilityDomainGui:
         app._ad_k_spin.set("0")
         app._ml_ad_run()
         assert any("k (neighbours)" in str(a) for a in seen)
+
+
+class TestCompletenessReviewGui:
+    """The 100x-119 additions: NCA, infusion/TDM, the PD family, the
+    chemistry tautomer/MACCS cards, the new figures and the navigation
+    chips -- every gap the full review found, pinned."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 180.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def test_nca_card_computes_the_trapezoid_summary(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._nca_run()
+        assert self._drain(app), "NCA job hung"
+        text = app._nca_result.cget("text")
+        assert "10 points" in text, text
+        assert "AUC 56.4850" in text and "MRT 5.2523" in text, text
+        assert "t½(term)" in text and "Cmax 12.0000" in text, text
+        # no dose given: Vd/CL stay absent
+        assert "Vd" not in text
+        # the profile figure embedded
+        assert len(app._nca_host.winfo_children()) == 1
+        assert quiet_dialogs == []
+
+    def test_nca_card_with_dose_reports_vd_and_clearance(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._nca_dose.insert(0, "500")
+        app._nca_run()
+        assert self._drain(app), "NCA job hung"
+        text = app._nca_result.cget("text")
+        assert "Vd 8.8519" in text, text   # 500 / 56.485
+        assert "CL 8.8519" in text, text   # 500 / 56.485 L/h
+        assert quiet_dialogs == []
+
+    def test_nca_series_length_mismatch_is_named(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._nca_concs.delete(0, "end")
+        app._nca_concs.insert(0, "1, 2, 3")
+        app._nca_run()
+        assert any("matched pairs" in str(a) for a in quiet_dialogs)
+
+    def test_infusion_card_computes_rate_css_vd(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._infusion_math()
+        text = app._inf_result.cget("text")
+        assert "rate for Css 8.0000 = 40.0000 mg/h" in text, text
+        assert "Css at 40.0000 mg/h = 8.0000 mg/L" in text, text
+        assert "Vd = 28.9017 L" in text, text
+        assert "F =" not in text  # no EV/IV pairs typed
+        assert quiet_dialogs == []
+
+    def test_infusion_card_bioavailability_pair(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._bio_ev_dose.insert(0, "250 / 58.3")
+        app._bio_iv_dose.insert(0, "250 / 96.5")
+        app._infusion_math()
+        text = app._inf_result.cget("text")
+        assert "F = 60.4145%" in text, text  # 58.3 / 96.5
+        assert quiet_dialogs == []
+
+    def test_tdm_card_adjusts_the_dose(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._tdm_math()
+        text = app._tdm_result.cget("text")
+        assert "new dose 403.2258 mg" in text, text
+        assert "floored" not in text
+        assert quiet_dialogs == []
+
+    def test_pd_family_card_table_and_reverse(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._pd_family_math()
+        assert self._drain(app), "PD family job hung"
+        rows = app._fam_tree.get_children()
+        assert len(rows) == 6, rows
+        values = app._fam_tree.item(rows[0], "values")
+        assert values[0] == "0.5000" and values[1] == "9.93", values
+        assert len(app._fam_host.winfo_children()) == 1
+        app._pd_target_ec50()
+        assert "EC50 = 1.9977" in app._fam_result.cget("text")
+        assert quiet_dialogs == []
+
+    def test_tautomer_card_and_maccs_card(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._tautomer_run()
+        assert app._taut_result.cget("text") == "CC(=O)Oc1ccccc1C(=O)O"
+        app._maccs_run()
+        assert self._drain(app), "MACCS job hung"
+        text = app._maccs_result.cget("text")
+        assert "3 molecule(s)" in text and "/167" in text, text
+        assert quiet_dialogs == []
+
+    def test_quick_jump_and_tab_cycling(self, app: Any) -> None:
+        app._jump_to_tab(4)
+        assert app._book.index(app._book.select()) == 4
+        app._jump_to_tab(0)
+        assert app._book.index(app._book.select()) == 0
+
+        class _Event:
+            keysym = "Next"
+
+        app._cycle_tab(_Event())
+        assert app._book.index(app._book.select()) == 1
+
+        class _Back:
+            keysym = "Prior"
+
+        app._cycle_tab(_Back())
+        assert app._book.index(app._book.select()) == 0
+        # out-of-range jumps are ignored, not raised
+        app._jump_to_tab(99)
+
+    def test_cards_carry_the_accent_strip(self, app: Any) -> None:
+        # walk one card's header: a 3px plain Frame painted ACCENT sits
+        # next to the title (make_card, 100x-119)
+        found = 0
+
+        def walk(widget: Any) -> None:
+            nonlocal found
+            for child in widget.winfo_children():
+                if child.winfo_class() == "Frame" and child.winfo_width() <= 4:
+                    found += 1
+                walk(child)
+
+        walk(app)
+        assert found >= 30, f"expected >=30 accent strips, found {found}"
+
+    def test_hint_row_lists_the_tab_cycling_shortcut(self, playground: Any) -> None:
+        text = playground.shortcut_hints_text()
+        assert "Ctrl+PgDn/PgUp next/previous tab" in text

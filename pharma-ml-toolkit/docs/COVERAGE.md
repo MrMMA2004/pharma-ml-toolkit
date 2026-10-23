@@ -533,3 +533,52 @@ zero-hit/missing-upload fails the probe) and
 (binding — an uploaded file must tour in an executed notebook). The
 verdict line now reads 118 rar files (115 covered, 3 absorbed,
 zero-hit 0) **+ 1 upload covered = 119/119**.
+
+## Library coverage (100x-119) — the fourth axis: the toolkit itself in the GUI
+
+The user's next sharpening — "playground.py content is incomplete" —
+opened a fourth audit axis: the rar mapping above proves the *original
+archive* is covered, but the **library had outgrown the GUI**. The
+audit walked every public symbol of every `pharmaml` module and grepped
+`playground.py` for a surface, separating user-facing features from
+internal helpers (preprocessor plumbing, validators used inside other
+functions, `dataclass`/logger infrastructure — those ride along inside
+the covered calls).
+
+First verdict: ~30 user-facing capabilities with no GUI surface, all
+closed in **1.2.58**:
+
+| Library capability | playground.py surface since 1.2.58 |
+| --- | --- |
+| `pharma.nca_summary` + `auc_trapezoid` + `aucm_trapezoid` + `mrt` + `vd_from_dose_auc` + `validate_concentration_series` | PK / PD → *Non-compartmental analysis (NCA)* card (profile figure + CSV export) |
+| `pharma.infusion_rate` + `iv_infusion_steady_state` + `volume_of_distribution` + `bioavailability` | PK / PD → *IV infusion & distribution* card |
+| `pharma.tdm_trough_adjustment` | PK / PD → *TDM trough adjustment* card |
+| `pharma.sigmoid_emax_effect` + `inhibitory_emax_effect` + `linear_effect` + `ec50_for_target_effect` (+ `effect_table` semantics) | PK / PD → *PD model explorer* card (table + curve + reverse EC50) |
+| `viz.plot_concentration_profile` + `plot_dose_accumulation` | the NCA card's figure + the infusion card's repeated-dosing plot |
+| `chem.canonicalize_tautomer` + `chem.smiles_to_pdb` (`PdbLigandReport`) | Chemistry → *Tautomer & 3D structure* card |
+| `chem.compute_maccs` | Chemistry → *MACCS key fingerprint* card |
+| `viz.plot_similarity_heatmap` | Chemistry → similarity scan card's *Plot heatmap* |
+| `viz.plot_calibration_curve` | Data & ML → Results card's *Calibration curve* |
+| `viz.plot_model_comparison` | Data & ML → Leaderboard card's *Plot leaderboard* |
+| `biology.replicate_variability` + `summarize_compounds` | Cell Lines → screen card's two readout buttons |
+| `viz.plot_receptor_atom_types` | Docking → receptor card's *Plot atom types* |
+| `viz.plot_top_ligands` | Docking → results card's *Plot top ligands* |
+
+Remaining zero-hit symbols are the documented non-goals: internal
+plumbing (`build_preprocessor`, `split_features_target`,
+`has_categorical_columns` — inside `train_model`), single-object
+companions the composed call already covers
+(`knn_applicability_domain`/`bootstrap_uncertainty` inside the AD card's
+`applicability_domain`; `run_genetic_optimization`/`run_rl_optimization`
+inside the generative tab's optimizer classes; `check_torsion_consistency`
+inside the audit card's `scan_torsion_consistency`; `parse_vina_config`
+inside `run_vina_batch`), pure helpers (`tanimoto_from_sets`,
+`safe_filename`, validators), `viz` export plumbing (`figure_to_base64`,
+`export_table` — the save dialogs call `write_table`/`save_figure`
+directly), and the figures whose data the GUI renders as tables instead
+(`plot_table_comparison`, `plot_descriptor_distributions`,
+`plot_energy_distribution`, `plot_class_distribution`, `plot_cv_scores`,
+`plot_learning_curve`, `plot_residuals`, `plot_feature_importance`,
+`plot_dose_accumulation`'s notebook twins). The audit method is
+re-runnable: walk `inspect.getmembers(pharmaml.<module>)` and grep
+`playground.py` — a user-facing zero-hit is the next round's todo.
