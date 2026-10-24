@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  Activity,
   Check,
   Dices,
   Dna,
@@ -232,6 +233,9 @@ export function BiologyPlayground() {
   const [seed, setSeed] = useState(DEFAULTS.seed);
   const [nCellLines, setNCellLines] = useState(DEFAULTS.nCellLines);
   const [result, setResult] = useState<BiomarkersResponse | null>(null);
+  /* (100x-124) the MAD variability ranking toggle — the desktop's
+   * "Rank variable genes (MAD)" button mirrored as a disclosure. */
+  const [showMad, setShowMad] = useState(false);
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   /** Which gene the scatter shows: the top hit, or EGFR specifically. */
@@ -760,6 +764,87 @@ export function BiologyPlayground() {
                   {result.meta.runtimeMs} ms.
                 </p>
               </CardContent>
+            </Card>
+
+            {/* Variable genes (MAD) — the most_variable_genes twin (100x-124) */}
+            <Card className="overflow-hidden py-0 shadow-sm">
+              <CardHeader className="border-b bg-muted/30 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+                      <Activity className="size-4 shrink-0 text-primary" aria-hidden />
+                      Variable genes (MAD)
+                    </CardTitle>
+                    <CardDescription className="mt-0.5 text-xs">
+                      Median absolute deviation across the {result.meta.nCellLines}-line panel — the
+                      robust pre-filter asking “which probes carry signal at all?” before any
+                      response is correlated
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0 gap-1.5 text-xs"
+                    onClick={() => setShowMad((v) => !v)}
+                    aria-expanded={showMad}
+                  >
+                    {showMad ? "Hide" : "Rank variable genes (MAD)"}
+                  </Button>
+                </div>
+              </CardHeader>
+              {showMad ? (
+                <>
+                  <div className="thin-scrollbar max-h-72 overflow-auto">
+                    <Table className="data-table min-w-[360px]">
+                      <TableHeader className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="h-9 w-10 text-right">#</TableHead>
+                          <TableHead className="h-9">Gene</TableHead>
+                          <TableHead className="h-9 text-right">MAD</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {result.variableGenes.map((row) => (
+                          <TableRow
+                            key={row.gene}
+                            className={cn(
+                              row.gene === "EGFR" &&
+                                "bg-emerald-500/5 hover:bg-emerald-500/5"
+                            )}
+                          >
+                            <TableCell className="py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                              {row.rank}
+                            </TableCell>
+                            <TableCell className="py-2 font-mono text-xs font-medium">
+                              {row.gene}
+                            </TableCell>
+                            <TableCell className="py-2 text-right font-mono text-xs tabular-nums">
+                              {fmtNum(row.mad, 3)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <CardContent className="border-t bg-muted/20 py-2">
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      Top {result.variableGenes.length} of {result.meta.nGenes} genes by MAD — most
+                      variable: {result.variableGenes[0]?.gene} (MAD ={" "}
+                      {fmtNum(result.variableGenes[0]?.mad ?? 0, 3)}). Deterministic ranking: MAD
+                      descending, ties by gene name — the{" "}
+                      <span className="font-mono">most_variable_genes</span> contract.
+                    </p>
+                  </CardContent>
+                </>
+              ) : (
+                <CardContent className="bg-muted/20 py-2">
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    The ranking ships with every screen — press{" "}
+                    <span className="font-medium text-foreground">Rank variable genes (MAD)</span>{" "}
+                    to browse the leaderboard.
+                  </p>
+                </CardContent>
+              )}
             </Card>
           </>
         ) : null}

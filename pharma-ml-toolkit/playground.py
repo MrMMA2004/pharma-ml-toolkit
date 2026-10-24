@@ -225,7 +225,14 @@ Design notes
   table (real text pages via the library's own ``tables=`` axis --
   searchable, truncation notes and all), and the session restore now
   re-syncs the swapped GA/RL and reference rows to the restored
-  selections.
+  selections.  (100x-124) The reporting layer gained its portable
+  twin: ``File ▸ Save session report (HTML)…`` drives
+  ``pharmaml.viz.HTMLReport`` -- the library's self-contained HTML
+  builder, its first caller anywhere -- over the exact same two axes
+  (figures base64-embedded, tables as styled text, plus the builder's
+  own metric cards carrying the session census), and the generative
+  Results card draws its leaderboard's top molecules as a 2D
+  structure grid with a score row per panel.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -1643,7 +1650,9 @@ def _truncate_caption_text(text: str, width: int = 34) -> str:
     return text if len(text) <= width else text[: width - 1] + "\u2026"
 
 
-def molecule_grid_figure(entries: list[tuple[str, str]], title: str) -> Any:
+def molecule_grid_figure(
+    entries: list[tuple[str, str]], title: str, scores: list[str] | None = None
+) -> Any:
     """One matplotlib figure of captioned 2D structure panels (100x-123).
 
     ``entries`` pairs a short caption with a SMILES string: every
@@ -1653,6 +1662,12 @@ def molecule_grid_figure(entries: list[tuple[str, str]], title: str) -> Any:
     list draws the honest ``nothing to draw`` line.  Callers pass the
     caption pre-built (label + truncated SMILES) so the grid stays
     self-describing when copy-pasted into the session report.
+
+    (100x-124) ``scores`` adds one score line per entry -- rendered as
+    the panel's ``xlabel``, a distinct row under every structure, so a
+    ranked leaderboard reads at a glance.  A shorter list pads with
+    blanks and a longer one is truncated (a caller's off-by-one can
+    never shift the grid); ``None`` keeps the classic bare panels.
     """
     import matplotlib.pyplot as plt
     import numpy as np
@@ -1668,11 +1683,22 @@ def molecule_grid_figure(entries: list[tuple[str, str]], title: str) -> Any:
         rows, columns, figsize=(3.1 * columns, 3.0 * rows + 0.5), squeeze=False
     )
     panels = [panel for row_axes in axes for panel in row_axes]
+    score_lines: list[str | None] = [None] * len(entries)
+    if scores is not None:
+        for index in range(min(len(scores), len(entries))):
+            score_lines[index] = scores[index] or None
     for panel in panels:
-        panel.axis("off")
+        # NB: axis("off") would hide the xlabel machinery too (axison
+        # skips the whole xaxis at draw time), so the scores row would
+        # vanish -- hide the frame and the ticks instead, keeping the
+        # label machinery alive.  Same look, one more capability.
+        for spine in panel.spines.values():
+            spine.set_visible(False)
+        panel.set_xticks([])
+        panel.set_yticks([])
     if not entries:
         panels[0].text(0.5, 0.5, "nothing to draw", ha="center", va="center", fontsize=11)
-    for panel, (caption, smiles) in zip(panels, entries):
+    for panel, (caption, smiles), score_line in zip(panels, entries, score_lines):
         mol = Chem.MolFromSmiles(smiles) if smiles else None
         if mol is None:
             panel.text(
@@ -1687,6 +1713,8 @@ def molecule_grid_figure(entries: list[tuple[str, str]], title: str) -> Any:
         raster = np.asarray(Draw.MolToImage(mol, size=(300, 300)))
         panel.imshow(raster)
         panel.set_title(caption, fontsize=8, pad=6)
+        if score_line is not None:
+            panel.set_xlabel(score_line, fontsize=8.5, labelpad=2)
     figure.suptitle(title, fontsize=10)
     figure.tight_layout(rect=(0, 0, 1, 0.96))
     return figure
@@ -2093,6 +2121,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         file_menu.add_command(
             label="Save session report (PDF)…", command=self._menu_save_session_report
+        )
+        # (100x-124) the portable twin -- pharmaml.viz.HTMLReport's first
+        # caller anywhere: same two axes, metric cards, no fpdf needed.
+        file_menu.add_command(
+            label="Save session report (HTML)…", command=self._menu_save_session_report_html
         )
         file_menu.add_separator()
         file_menu.add_command(
@@ -3387,6 +3420,107 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         self._start_job("session report", work, render)
 
+    def _menu_save_session_report_html(self) -> None:
+        """File ▸ Save session report (HTML)… -- the portable twin.
+
+        (100x-124) :class:`pharmaml.viz.HTMLReport` is the library's
+        self-contained HTML report builder -- figures base64-embedded,
+        zero external resources, so the file renders identically
+        offline and survives being moved or e-mailed -- and until this
+        round it had NO caller anywhere.  This is its surface: the
+        exact same two axes the PDF report walks (every live session
+        figure + every filled table), plus the builder's own metric
+        cards (``add_metrics`` -- the session census, which not even
+        the library exercised) and an ``add_text`` provenance block.
+        No fpdf dependency: one .html file, any browser.
+        """
+        live = self._live_session_figures()
+        tables = self._live_session_tables()
+        if not live and not tables:
+            messagebox.showinfo(
+                "Nothing to report yet",
+                "Run a calculation first -- the report collects every "
+                "figure currently on screen plus every filled table, as "
+                "one self-contained HTML file (figures embedded, no "
+                "external resources).",
+            )
+            return
+        if not self._require_pharmaml():
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save session report (HTML)",
+            defaultextension=".html",
+            filetypes=[("HTML report", "*.html"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        stamp = time.strftime("%Y-%m-%d %H:%M")
+        try:
+            cards = len(self._live_cards())
+        except Exception:  # noqa: BLE001 - the census is cosmetic
+            cards = 0
+        figure_count = len(live)
+        table_count = len(tables)
+        # caption dedupe: two cards can carry the same job label, and
+        # identical captions would read as a missing figure -- number
+        # the repeats the way the PDF's page names do.
+        seen_captions: dict[str, int] = {}
+
+        def unique_caption(base: str) -> str:
+            seen = seen_captions.get(base, 0)
+            seen_captions[base] = seen + 1
+            return base if seen == 0 else f"{base} ({seen + 1})"
+
+        captioned = [(unique_caption(title), figure) for _host, title, figure in live]
+
+        def work() -> Any:
+            import pandas as pd
+
+            from pharmaml.viz import HTMLReport
+
+            report = HTMLReport(
+                "PharmaML Playground session",
+                subtitle=(
+                    f"{figure_count} figure(s) · {table_count} table(s) · "
+                    f"generated {stamp} · playground {__version__}"
+                ),
+            )
+            report.add_metrics(
+                {
+                    "figures": str(figure_count),
+                    "tables": str(table_count),
+                    "cards on screen": str(cards),
+                    "pharmaml": str(self.pharmaml.__version__),
+                }
+            )
+            report.add_text(
+                "Every figure and every filled table currently on screen, "
+                "collected in one pass.  A figure replaced on its card is "
+                "gone -- the report shows the newest render, the honest "
+                "provenance of the session.  The figures are embedded as "
+                "base64, so this file needs no network and no companion "
+                "assets: move it, mail it, archive it.",
+                heading="What this file contains",
+            )
+            for title, headings, rows in tables:
+                report.add_table(
+                    pd.DataFrame(rows, columns=headings), heading=f"{title} table"
+                )
+            for caption, figure in captioned:
+                report.add_figure(figure, caption=caption)
+            return report.save(path)
+
+        def render(saved: Any) -> None:
+            messagebox.showinfo(
+                "Session report saved",
+                f"{figure_count} figure(s) + {table_count} table(s) written to\n"
+                f"{saved}\n\nSelf-contained HTML -- the figures are embedded, "
+                "so the file renders identically offline and survives "
+                "being moved or e-mailed.",
+            )
+
+        self._start_job("session report (HTML)", work, render)
+
     def _show_about(self) -> None:
         pharmaml_line = (
             f"pharmaml {self.pharmaml.__version__}"
@@ -3625,9 +3759,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "Evolve molecules against QED / LogP / similarity / novelty / "
                     "SMARTS objectives with the GA or reinforcement learning; "
                     "adaptive runs show the operator-mix learning curve, RL runs "
-                    "the prior-drift introspection, and the surgery cards "
-                    "enumerate one molecule's ring moves or breed two parents -- "
-                    "then draw every mutant or child as a 2D structure grid."
+                    "the prior-drift introspection, the leaderboard's top "
+                    "molecules draw as a scored 2D structure grid, and the "
+                    "surgery cards enumerate one molecule's ring moves or breed "
+                    "two parents -- then draw every mutant or child the same "
+                    "way."
                 ),
                 "RDKit (+ torch for RL)",
             ),
@@ -13393,6 +13529,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             stats_buttons, "Save leaderboard as CSV…", self._save_ga_leaderboard
         )
         save_btn.pack(side="left")
+        # (100x-124) the leaderboard's top rows as 2D structures -- the
+        # ranked molecules become visible, each panel carrying its
+        # total score as a dedicated score row.
+        draw_top_btn = self._action_button(
+            stats_buttons,
+            "Draw top molecules",
+            self._gen_draw_top,
+            tooltip="A 2D structure panel per leaderboard row (top 12, rank 1 "
+            "first) with each molecule's score under it -- the run's "
+            "ranking becomes visible, not just tabulated.",
+        )
+        draw_top_btn.pack(side="left", padx=(10, 0))
+        self._ga_grid_host = self._figure_host(results, height=380)
         self._ga_host = self._figure_host(results, height=340)
 
         # -- Pareto front card (100x-58) ------------------------------ #
@@ -13706,6 +13855,58 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._render_figure(self._topo_host, figure)
 
         self._start_job("mutant structure grid", work, render)
+
+    def _gen_draw_top(self) -> None:
+        """Draw the leaderboard's top molecules as a 2D structure grid.
+
+        (100x-124) The Results card tabulated the top 20 rows as text;
+        the molecules themselves stayed invisible.  The grid takes the
+        last run's ranked frame (rank 1 first), keeps twelve panels,
+        and carries each row's total score as the panel's score row --
+        the objective's ranking becomes visible, not just listed.
+        """
+        if self._ga_result is None:
+            messagebox.showinfo(
+                "No run yet",
+                "Run an evolution first -- the structure grid draws the "
+                "leaderboard's top molecules (a new run replaces it).",
+            )
+            return
+        if not self._require_pharmaml() or not self._require(
+            "rdkit", "the top-molecule grid"
+        ) or not self._require("matplotlib", "the top-molecule grid"):
+            return
+
+        def work() -> Any:
+            frame = self._ga_result.to_dataframe()
+            top = frame.head(12)
+            entries: list[tuple[str, str]] = []
+            scores: list[str] = []
+            for row in top.itertuples(index=False):
+                cells = row._asdict()
+                rank = cells.get("rank")
+                smiles = str(cells.get("smiles", ""))
+                score = cells.get("score")
+                entries.append(
+                    (f"#{rank} · {_truncate_caption_text(smiles, 26)}", smiles)
+                )
+                try:
+                    scores.append(f"score {float(score):.3f}")
+                except (TypeError, ValueError):
+                    scores.append("score —")
+            return molecule_grid_figure(
+                entries,
+                title=(
+                    f"Top {len(entries)} molecules — the last run's leaderboard "
+                    "(rank 1 first)"
+                ),
+                scores=scores,
+            )
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._ga_grid_host, figure)
+
+        self._start_job("top-molecule structure grid", work, render)
 
     def _gen_draw_breed(self) -> None:
         """Draw the parents and viable children of the last litter."""

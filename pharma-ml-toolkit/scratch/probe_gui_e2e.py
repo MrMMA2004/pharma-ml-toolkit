@@ -693,6 +693,60 @@ shutil.rmtree(_tmp122, ignore_errors=True)
 _plt.close("all")
 print("session report: guard + registry replace + real PDF written")
 
+# -- 100x-124 additions: the GA top-molecule grid + the HTML report -- #
+
+# the leaderboard's scored structure grid: a real evolution run first
+app._objective_combo.set("QED drug-likeness")
+app._pop_size.set("8")
+app._generations.set("2")
+app._run_evolution()
+assert pump_until_idle(timeout=300), "evolution job hung"
+assert app._ga_result is not None
+app._gen_draw_top()
+assert pump_until_idle(timeout=300), "draw-top job hung"
+_grid = getattr(app._ga_grid_host, "_pg_figure", None)
+assert _grid is not None, "the top-molecule grid never landed"
+_labels = [a.get_xlabel() for a in _grid.get_axes()]
+assert any(l.startswith("score ") for l in _labels), _labels[:4]
+_titles = [a.get_title() for a in _grid.get_axes()]
+assert any(t.startswith("#1") for t in _titles), _titles[:4]
+# the run's trajectory host + the grid host both join the session
+# registry (4 -> 6 live figures: adaptive default plots the operator
+# mix into _ga_host, the grid lands on _ga_grid_host)
+assert len(app._live_session_figures()) == 6, len(app._live_session_figures())
+# the guard: no run yet -> the honest info
+_saved_ga, app._ga_result = app._ga_result, None
+app._gen_draw_top()
+assert any("No run yet" in str(a) for a in DIALOGS), DIALOGS
+app._ga_result = _saved_ga
+DIALOGS.clear()
+print("GA top grid: run + draw + registry + guard OK")
+
+# the HTML session report: the SAME two axes, one self-contained file
+_tmp124 = Path(tempfile.mkdtemp(prefix="probe124_"))
+_target124 = _tmp124 / "session-report.html"
+fd.asksaveasfilename = lambda t="", _p=_target124, **k: str(_p)
+app._menu_save_session_report_html()
+assert pump_until_idle(timeout=240), "HTML report job hung"
+assert _target124.exists() and _target124.stat().st_size > 50_000
+_html = _target124.read_text(encoding="utf-8")
+assert "<!DOCTYPE html>" in _html
+assert "data:image" in _html, "figures were not embedded"
+assert "<table" in _html, "tables missing"
+assert "cards on screen" in _html, "metric cards missing"
+assert "What this file contains" in _html
+assert any("figure(s) + " in str(a) for a in DIALOGS), DIALOGS
+DIALOGS.clear()
+# the guard path: both axes empty -> the honest info
+app._session_figures.clear()
+_empty_filled_tables(app)
+app._menu_save_session_report_html()
+assert any("Nothing to report yet" in str(a) for a in DIALOGS), DIALOGS
+DIALOGS.clear()
+shutil.rmtree(_tmp124, ignore_errors=True)
+_plt.close("all")
+print("HTML session report: real write + guard OK")
+
 # the live-card census grew with the two surgery cards
 assert len(app._live_cards()) >= 68, f"live cards: {len(app._live_cards())}"
 print("card census:", len(app._live_cards()))

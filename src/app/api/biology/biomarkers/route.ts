@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { gaussian, mulberry32 } from "@/lib/ml-math";
+import { rankVariableGenes } from "@/lib/variable-genes";
 import type {
   BiomarkerRow,
   BiomarkerScatter,
@@ -440,6 +441,10 @@ export async function POST(request: NextRequest) {
 
     const result: BiomarkersResponse = {
       biomarkers: rows.slice(0, TOP_N),
+      /* (100x-124) the MAD variability pre-filter — the TS twin of
+       * pharmaml.biology.most_variable_genes, computed over the SAME
+       * expression matrix (parity-guarded row-by-row). */
+      variableGenes: rankVariableGenes(expression, TOP_N),
       egfr: egfrRow,
       topHit: scatterFor(topRow),
       egfrScatter: egfrRow ? scatterFor(egfrRow) : null,

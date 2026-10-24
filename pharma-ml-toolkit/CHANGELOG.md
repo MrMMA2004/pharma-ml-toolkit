@@ -10,6 +10,48 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.63] — 2026-10-24
+
+### Added — the round-9 full review (100x-124): the HTML session report and the scored leaderboard grid
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a ninth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: 44 zero-hit symbols, every claimed absorption
+re-verified in source — `correlate_with_response` inside
+`sensitivity_associations`, `aucm_trapezoid` inside `pk_summary`,
+`check_torsion_consistency` behind `scan_torsion_consistency`). The
+audit's genuine find: **`pharmaml.viz.HTMLReport` had NO caller
+anywhere** — a documented, user-facing, self-contained HTML report
+builder shipped dark. This round gives it its surface, and the
+generative Results card gains the structure grid its leaderboard
+always deserved:
+
+| Surface | What 1.2.63 adds |
+| --- | --- |
+| File ▸ Save session report (HTML)… | **The portable twin** of the PDF report: `HTMLReport`'s first caller anywhere. The exact same two axes (every live session figure + every filled table, walked by the same registry + table walk), plus the builder's own **metric cards** (`add_metrics` — the session census: figures, tables, cards on screen, pharmaml version — which not even the library exercised) and an `add_text` provenance block. One `.html` file: figures base64-embedded, zero external resources, renders identically offline, survives being moved or e-mailed. No fpdf dependency |
+| Generative ▸ Results card | **Draw top molecules** — a 2D structure panel per leaderboard row (top 12, rank 1 first). The ranked molecules become visible, not just tabulated |
+| `molecule_grid_figure` | An optional **scores row**: one score line per entry rendered as the panel's xlabel, a distinct row under every structure (a ranked leaderboard reads at a glance). Shorter lists pad, longer ones truncate — a caller's off-by-one can never shift the grid. NB: `axis("off")` would hide the xlabel machinery (`axison` skips the whole xaxis at draw time), so the panels hide frame + ticks instead |
+| Web ▸ Cell Line tab | **Rank variable genes (MAD)** — the desktop's MAD pre-filter mirrored as a disclosure on the web biomarker card: `src/lib/variable-genes.ts` (the TS twin of `most_variable_genes`: same median/MAD conventions, MAD descending, ties by gene name ascending) computed over the SAME expression matrix in the biomarkers route, parity-guarded row-by-row |
+
+- The HTML report's captions dedupe the way the PDF's page names do
+  (two cards carrying the same job label get numbered captions), the
+  save message counts both axes, and the guard covers both axes
+  ("Nothing to report yet" fires only when neither a live figure nor
+  a filled table exists).
+- The web parity guard (`TestVariableGenesParity`) runs both sides on
+  two hand-crafted matrices (a 9-line odd panel and an 8-line even
+  panel, each with MAD ties, a constant gene, negatives and decimals)
+  and asserts row-by-row agreement — gene order exact, MAD values to
+  1e-12; the fixtures also pin the semantics (the runaway-spread gene
+  leads, the constant gene is last, the MAD ties rank alphabetically).
+- Tests: 12 new in `TestReview124Gui` (the grid's scores-row contracts
+  incl. pad/truncate/None, the draw-top guard + full real-evolution
+  path, the button pin, the File-menu pin, the HTML report's guard +
+  real-file write with embedded figures/tables/metric cards +
+  caption dedupe, the docstring/home-guide pins) + 1 web parity test
+  → **2363 passed + 5 skipped / 0 failures** (2368 collected).
+
 ## [1.2.62] — 2026-10-24
 
 ### Added — the round-8 full review (100x-123): the report's table axis and the surgery structure grids

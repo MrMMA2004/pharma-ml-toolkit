@@ -514,7 +514,11 @@ CODE_EDITS = (
      CELLLINE_SETUP, 'DATA_DIR = Path("data")'),
     ("complete_cellline_workflow.ipynb", 3, "CELL_LINES = {", CELLLINE_CELL3,
      'DATA_DIR / "cellline_screen.csv"'),
-    ("complete_cellline_workflow.ipynb", 17, "DEMO EXPRESSION MATRIX", CELLLINE_CELL17,
+    # (100x-124 index re-pin) the cellline notebook gained three cells
+    # before this one in earlier rounds (the AD section) -- the edit was
+    # already applied at 20; the stale 17 pointed at a markdown cell and
+    # apply_edits' idempotency check could never find its done-marker.
+    ("complete_cellline_workflow.ipynb", 20, "DEMO EXPRESSION MATRIX", CELLLINE_CELL17,
      'DATA_DIR / "cellline_expression.csv"'),
     ("complete_pk_workflow.ipynb", 2, 'prefix="pk_workflow_"', PK_SETUP,
      'DATA_DIR = Path("data")'),
@@ -606,10 +610,14 @@ PROSE_EDITS = (
     # Post-re-execution honesty pass: the running-baseline RL (round 26)
     # no longer triggers the plateau early stop on this seed, so the §7
     # prose and the §11 recap bullet must not claim it did.
-    ("complete_generative_workflow.ipynb", 29,
+    # (100x-124 index re-pin) the generative notebook's cell numbering
+    # drifted as later rounds added cells -- both prose targets moved to
+    # 58 and 68; the 58 patch is already applied (prefix overlap), the 68
+    # patch is the still-pending honesty fix this re-pin finally lands.
+    ("complete_generative_workflow.ipynb", 58,
      "plateau triggers the built-in early stop — RL runs until it stops\nimproving, not until the iteration budget burns out.",
      "plateau triggers the built-in early stop — RL runs until it stops\nimproving, not until the iteration budget burns out (this run kept\nimproving to the final iteration, so the stop never fired)."),
-    ("complete_generative_workflow.ipynb", 39,
+    ("complete_generative_workflow.ipynb", 68,
      "fine-tuning bent it toward the objective and stopped itself on the\n  plateau (§7);",
      "fine-tuning bent it toward the objective; the plateau early-stop stayed\n  armed but never fired — the mean score improved to the last iteration\n  (§7);"),
     ("pharmaml_walkthrough.ipynb", 0,

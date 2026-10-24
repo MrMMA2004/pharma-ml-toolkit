@@ -6055,3 +6055,257 @@ class TestReview123Gui:
             if widget.winfo_class() == "TLabel"
         )
         assert "2D structure grid" in dump
+
+
+class TestReview124Gui:
+    """Round 100x-124: the HTML session report (HTMLReport's first
+    caller anywhere) and the leaderboard's scored structure grid."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- molecule_grid_figure's scores row ------------------------------ #
+    def test_grid_scores_row_renders_xlabels(self, playground: Any) -> None:
+        figure = playground.molecule_grid_figure(
+            [("#1 · C1CCCC1", "C1CCCC1"), ("#2 · c1ccccc1", "c1ccccc1")],
+            title="scored",
+            scores=["score 0.987", "score 0.500"],
+        )
+        try:
+            labels = [axis.get_xlabel() for axis in figure.get_axes()]
+            assert "score 0.987" in labels, labels
+            assert "score 0.500" in labels, labels
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
+
+    def test_grid_scores_mismatch_never_shifts(self, playground: Any) -> None:
+        # a shorter list pads (entry 2 keeps no score row), a longer
+        # one is truncated -- the grid cannot mis-align
+        short = playground.molecule_grid_figure(
+            [("#1 · C1CCCC1", "C1CCCC1"), ("#2 · c1ccccc1", "c1ccccc1")],
+            title="pad",
+            scores=["score 0.987"],
+        )
+        try:
+            labels = [axis.get_xlabel() for axis in short.get_axes()]
+            assert "score 0.987" in labels and "" in labels, labels
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(short)
+        long = playground.molecule_grid_figure(
+            [("#1 · C1CCCC1", "C1CCCC1")],
+            title="cut",
+            scores=["score 0.987", "score 0.500", "score 0.250"],
+        )
+        try:
+            labels = [axis.get_xlabel() for axis in long.get_axes()]
+            assert "score 0.987" in labels, labels
+            assert "score 0.500" not in labels, labels
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(long)
+
+    def test_grid_scores_keep_bare_panels_for_none(self, playground: Any) -> None:
+        figure = playground.molecule_grid_figure([("m\nC1CCCC1", "C1CCCC1")], title="x")
+        try:
+            assert all(
+                axis.get_xlabel() == "" for axis in figure.get_axes()
+            )
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
+
+    # -- the GA leaderboard's draw-top button --------------------------- #
+    def test_draw_top_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ga_result = None
+        app._gen_draw_top()
+        assert any("No run yet" in str(a) for _n, a in quiet_dialogs)
+        assert getattr(app._ga_grid_host, "_pg_figure", None) is None
+
+    def test_draw_top_full_path(self, app: Any) -> None:
+        # a tiny real evolution through the card's own runner
+        app._objective_combo.set("QED drug-likeness")
+        app._pop_size.set("8")
+        app._generations.set("2")
+        app._run_evolution()
+        assert self._drain(app), "the evolution job hung"
+        assert app._ga_result is not None
+        app._gen_draw_top()
+        assert self._drain(app), "the draw-top job hung"
+        figure = getattr(app._ga_grid_host, "_pg_figure", None)
+        assert figure is not None, "the top-molecule grid never landed"
+        labels = [axis.get_xlabel() for axis in figure.get_axes()]
+        assert any(label.startswith("score ") for label in labels), labels
+        titles = [axis.get_title() for axis in figure.get_axes()]
+        assert any(title.startswith("#1") for title in titles), titles
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_results_card_carries_draw_top_button(self, app: Any) -> None:
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+            if widget.winfo_class() == "TButton"
+        )
+        assert "Draw top molecules" in dump
+        assert "Save leaderboard as CSV…" in dump
+
+    # -- the HTML session report ----------------------------------------- #
+    def test_file_menu_offers_html_report(self, app: Any) -> None:
+        import tkinter as tkmod
+
+        bar = app.nametowidget(app.cget("menu"))
+        assert isinstance(bar, tkmod.Menu)
+        labels: list[str] = []
+        # NB: menu.type() never raises past the end on this Tk build --
+        # index("end") is the only honest bound.
+        for index in range(bar.index("end") + 1):
+            if bar.type(index) != "cascade":
+                continue
+            if str(bar.entrycget(index, "label")).strip() != "File":
+                continue
+            sub = app.nametowidget(bar.entrycget(index, "menu"))
+            for j in range(sub.index("end") + 1):
+                if sub.type(j) == "command":
+                    labels.append(str(sub.entrycget(j, "label")))
+        assert "Save session report (PDF)…" in labels, labels
+        assert "Save session report (HTML)…" in labels, labels
+
+    def test_html_report_guard_covers_both_axes(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # neither a figure nor a filled table -> the honest info dialog
+        app._session_figures.clear()
+        app._menu_save_session_report_html()
+        assert any("Nothing to report yet" in str(a) for _n, a in quiet_dialogs)
+
+    def test_html_report_writes_real_file(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Any
+    ) -> None:
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "session.html"
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
+        # one live figure on the registry + one filled table
+        figure = self._figure_static("smoke plot")
+        app._render_figure(app._topo_host, figure)
+        app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+        app._menu_save_session_report_html()
+        assert self._drain(app), "the HTML report job hung"
+        assert target.is_file()
+        text = target.read_text(encoding="utf-8")
+        assert "<!DOCTYPE html>" in text
+        assert "PharmaML Playground session" in text
+        assert "data:image" in text, "figures were not embedded"
+        assert "<table" in text, "the tables never landed"
+        assert "What this file contains" in text
+        assert "cards on screen" in text, "the metric cards never landed"
+        assert "SMILES inspector table" in text, "the table walk's heading"
+        assert any(
+            "figure(s) + " in str(a) for _n, a in quiet_dialogs
+        ), "the save message never fired"
+        # close=False semantics: the on-screen figure stays alive
+        import matplotlib.pyplot as plt
+
+        assert getattr(app._topo_host, "_pg_figure", None) is figure
+        plt.close("all")
+        app._desc_tree.delete(*app._desc_tree.get_children())
+
+    def test_html_report_dedupes_captions(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Any
+    ) -> None:
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "dedupe.html"
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
+        # two hosts, the SAME job label -> the second caption is numbered
+        first = self._figure_static("alpha")
+        second = self._figure_static("beta")
+        app._render_figure(app._topo_host, first)
+        app._render_figure(app._breed_host, second)
+        # same title for both entries (the dedupe contract)
+        app._session_figures[0][1] = "same label"
+        app._session_figures[1][1] = "same label"
+        app._menu_save_session_report_html()
+        assert self._drain(app), "the HTML report job hung"
+        text = target.read_text(encoding="utf-8")
+        assert "same label" in text
+        assert "same label (2)" in text, "the repeat caption was not numbered"
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    @staticmethod
+    def _figure_static(title: str) -> Any:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure()
+        axes = fig.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title(title)
+        return fig
+
+    # -- the round's documentation pins --------------------------------- #
+    def test_module_docstring_records_round_124(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-124" in doc
+        assert "HTMLReport" in doc  # the HTML twin is documented
+
+    def test_home_guide_mentions_scored_grid(self, app: Any, playground: Any) -> None:
+        guide = None
+        for title, _subtitle, shell in playground._CARD_INDEX:
+            if title != "What lives where":
+                continue
+            try:
+                live = bool(shell.winfo_exists())
+            except Exception:  # noqa: BLE001 - destroyed earlier shell
+                live = False
+            if live:
+                guide = shell
+                break
+        assert guide is not None
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(guide)
+            if widget.winfo_class() == "TLabel"
+        )
+        assert "scored 2D structure grid" in dump

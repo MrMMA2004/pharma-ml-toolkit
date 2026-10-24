@@ -687,3 +687,32 @@ The 44 zero-hit symbols are unchanged from round 7's classification
 (containers, constants, plumbing, verified absorptions — all
 documented above); the honest next library-axis frontier is the
 notebook axis, which stays binding on the rar files only.
+
+### Round 9 (100x-124) — HTMLReport surfaces, the library axis holds
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: 244 public symbols, 44 zero-hit. The
+genuine find this round: **`pharmaml.viz.HTMLReport` — a documented,
+user-facing, self-contained HTML report builder — had NO caller
+anywhere** (not the playground, not the CLI, not the library's own
+compositions; even its `add_metrics` metric-card path was dead code).
+Every other zero-hit symbol was re-verified in source:
+`correlate_with_response` is the engine `sensitivity_associations`
+calls (biomarkers.py:141), `aucm_trapezoid` feeds `pk_summary` and
+the AUCM ratio (pk.py:246/409), `tanimoto_from_sets` is the set
+primitive under the bitarray/Mol similarity the cards drive,
+`check_torsion_consistency` runs inside `scan_torsion_consistency`.
+
+| Surface | The 1.2.63 fix |
+| --- | --- |
+| File ▸ Save session report (HTML)… | `HTMLReport`'s first caller: the same figure registry + table walk as the PDF, plus `add_metrics` census cards and an `add_text` provenance block — one self-contained `.html` (figures base64-embedded) |
+| Generative ▸ Results card | **Draw top molecules** — the leaderboard's top 12 as a 2D structure grid, each panel carrying its total score as an xlabel score row (`molecule_grid_figure(scores=…)`) |
+| Web ▸ Cell Line tab | the MAD variable-genes disclosure (`src/lib/variable-genes.ts`, parity-guarded against `most_variable_genes`) |
+
+The 44 zero-hit count is unchanged — `HTMLReport` was already
+classified "builder with no surface" and now HAS its surface (the
+count drops to 43 by the audit's grep, the honest direction), and
+`figure_to_base64` moves from plumbing to "the HTML report's embed
+path". The remaining 43 are the round-7/8 classification: containers,
+constants, verified absorptions.

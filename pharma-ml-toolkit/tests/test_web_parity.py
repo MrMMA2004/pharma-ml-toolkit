@@ -217,3 +217,52 @@ class TestUnitConverterParity:
         assert {k: sorted(v) for k, v in supported_ts.items()} == {
             k: sorted(v) for k, v in supported_ref.items()
         }
+
+
+class TestVariableGenesParity:
+    """variable-genes.ts vs pharmaml.biology.most_variable_genes (the
+    100x-124 pair).
+
+    The web Cell Line tab's "Rank variable genes (MAD)" disclosure
+    mirrors the desktop's MAD pre-filter in TS; this guard runs BOTH
+    sides on the same hand-crafted matrices (a 9-line odd panel and an
+    8-line even panel, each with MAD ties, a constant gene, negatives
+    and decimals) and asserts row-by-row agreement: the gene ORDER is
+    exact (ties broken by name ascending on both sides — the library
+    contract) and the MAD values compare as floats (both sides compute
+    median and median-of-|deviations| with the average-of-two-middles
+    convention in the same IEEE order).
+    """
+
+    MAD_TS = REPO_ROOT / "src" / "lib" / "variable-genes.ts"
+
+    @pytest.mark.skipif(
+        not MAD_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src/lib/variable-genes.ts) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+    def test_mad_ranking_parity(self) -> None:
+        _run(
+            [sys.executable, str(TOOLKIT_ROOT / "scratch" / "probe_mad_parity_124.py")],
+            TOOLKIT_ROOT,
+        )
+        _run([BUN, "run", "scratch/probe_mad_parity_124.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/mad_ts_124.json").read_text())
+        ref = json.loads(Path("/tmp/mad_ref_124.json").read_text())
+        assert ts["topN"] == ref["topN"]
+        for panel in ("odd", "even"):
+            ts_rows, ref_rows = ts[panel], ref[panel]
+            assert len(ts_rows) == len(ref_rows) > 0, panel
+            for ts_row, ref_row in zip(ts_rows, ref_rows):
+                assert ts_row["rank"] == ref_row["rank"], (panel, ts_row, ref_row)
+                assert ts_row["gene"] == ref_row["gene"], (panel, ts_row, ref_row)
+                assert abs(ts_row["mad"] - ref_row["mad"]) <= 1e-12, (panel, ts_row, ref_row)
+        # the hand-crafted fixtures pin the semantics: the odd panel's
+        # runaway-spread gene leads, the constant gene is last, and the
+        # MAD ties really are ties ranked alphabetically
+        odd = ref["odd"]
+        assert odd[0]["gene"] == "GENE_I" and odd[0]["mad"] == 200.0
+        assert odd[-1]["gene"] == "GENE_C" and odd[-1]["mad"] == 0.0
+        tie_genes = [row["gene"] for row in odd if row["mad"] == 2.0]
+        assert tie_genes == ["GENE_A", "GENE_B", "GENE_E", "GENE_F", "GENE_J"], tie_genes

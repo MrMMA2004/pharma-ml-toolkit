@@ -692,9 +692,20 @@ export interface BiomarkerScatter {
   trend: Array<{ x: number; y: number }>;
 }
 
+/** One row of the MAD variability ranking (the most_variable_genes twin). */
+export interface VariableGeneRow {
+  /** 1-based rank by MAD descending. */
+  rank: number;
+  gene: string;
+  /** Median absolute deviation of the gene's expression across the panel. */
+  mad: number;
+}
+
 export interface BiomarkersResponse {
   /** Top 15 genes by |rho|. */
   biomarkers: BiomarkerRow[];
+  /** Top 15 genes by MAD — the robust variability pre-filter (100x-124). */
+  variableGenes: VariableGeneRow[];
   /** Full row for EGFR when present in the matrix (always is). */
   egfr: BiomarkerRow | null;
   /** Scatter payload of the #1 ranked gene. */

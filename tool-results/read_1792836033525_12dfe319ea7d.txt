@@ -1,0 +1,770 @@
+     1→"use client";
+     2→
+     3→import { useMemo, useState } from "react";
+     4→import {
+     5→  Check,
+     6→  Dices,
+     7→  Dna,
+     8→  FlaskConical,
+     9→  Loader2,
+    10→  Microscope,
+    11→  Play,
+    12→  RotateCcw,
+    13→  TrendingDown,
+    14→  TrendingUp,
+    15→  TriangleAlert,
+    16→} from "lucide-react";
+    17→import {
+    18→  CartesianGrid,
+    19→  ComposedChart,
+    20→  Legend,
+    21→  Line,
+    22→  ResponsiveContainer,
+    23→  Scatter,
+    24→  Tooltip,
+    25→  XAxis,
+    26→  YAxis,
+    27→} from "recharts";
+    28→import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+    29→import { Badge } from "@/components/ui/badge";
+    30→import { Button } from "@/components/ui/button";
+    31→import {
+    32→  Card,
+    33→  CardContent,
+    34→  CardDescription,
+    35→  CardHeader,
+    36→  CardTitle,
+    37→} from "@/components/ui/card";
+    38→import { Input } from "@/components/ui/input";
+    39→import { Label } from "@/components/ui/label";
+    40→import {
+    41→  Select,
+    42→  SelectContent,
+    43→  SelectItem,
+    44→  SelectTrigger,
+    45→  SelectValue,
+    46→} from "@/components/ui/select";
+    47→import { Slider } from "@/components/ui/slider";
+    48→import {
+    49→  Table,
+    50→  TableBody,
+    51→  TableCell,
+    52→  TableHead,
+    53→  TableHeader,
+    54→  TableRow,
+    55→} from "@/components/ui/table";
+    56→import { CHART } from "@/components/explorer/playground/calc-ui";
+    57→import { fmtNum, fmtTick } from "@/lib/format";
+    58→import { cn } from "@/lib/utils";
+    59→import { toast } from "sonner";
+    60→import type {
+    61→  BiomarkerPoint,
+    62→  BiomarkerScatter,
+    63→  BiomarkersResponse,
+    64→  BiologyCompound,
+    65→} from "@/lib/toolkit-types";
+    66→
+    67→/* ------------------------------------------------------------------ */
+    68→/* Compound panel                                                      */
+    69→/* ------------------------------------------------------------------ */
+    70→
+    71→const COMPOUNDS: Array<{
+    72→  id: BiologyCompound;
+    73→  label: string;
+    74→  hint: string;
+    75→  egfr: boolean;
+    76→}> = [
+    77→  { id: "erlotinib", label: "Erlotinib", hint: "EGFR inhibitor — planted biomarker active", egfr: true },
+    78→  { id: "gefitinib", label: "Gefitinib", hint: "EGFR inhibitor — planted biomarker active", egfr: true },
+    79→  {
+    80→    id: "cisplatin",
+    81→    label: "Cisplatin",
+    82→    hint: "tissue shifts: blood −0.6 · skin +0.4",
+    83→    egfr: false,
+    84→  },
+    85→  { id: "doxorubicin", label: "Doxorubicin", hint: "no tissue shift — plain baseline", egfr: false },
+    86→  {
+    87→    id: "paclitaxel",
+    88→    label: "Paclitaxel",
+    89→    hint: "tissue shifts: prostate −0.5 · breast −0.3",
+    90→    egfr: false,
+    91→  },
+    92→  {
+    93→    id: "5-fluorouracil",
+    94→    label: "5-Fluorouracil",
+    95→    hint: "tissue shift: colon −0.4",
+    96→    egfr: false,
+    97→  },
+    98→  { id: "gemcitabine", label: "Gemcitabine", hint: "tissue shift: pancreas −0.7", egfr: false },
+    99→  { id: "sorafenib", label: "Sorafenib", hint: "tissue shift: liver −0.5", egfr: false },
+   100→];
+   101→
+   102→/** Panel-size options (canonical line slices, 6–24 like the Python CLI). */
+   103→const PANEL_SIZES: Array<{ value: string; label: string }> = [
+   104→  { value: "6", label: "6 lines — lung + breast" },
+   105→  { value: "9", label: "9 lines — + colon" },
+   106→  { value: "12", label: "12 lines — + blood & skin" },
+   107→  { value: "15", label: "15 lines — + pancreas & liver" },
+   108→  { value: "18", label: "18 lines — + ovary & prostate" },
+   109→  { value: "21", label: "21 lines — + brain (partial)" },
+   110→  { value: "24", label: "24 lines — full panel" },
+   111→];
+   112→
+   113→/** Categorical tissue colors (10 hues, no blue/indigo anywhere). */
+   114→const TISSUE_COLORS: Record<string, string> = {
+   115→  lung: "#10b981",
+   116→  breast: "#ec4899",
+   117→  colon: "#f59e0b",
+   118→  blood: "#ef4444",
+   119→  skin: "#f97316",
+   120→  pancreas: "#84cc16",
+   121→  liver: "#a16207",
+   122→  ovary: "#d946ef",
+   123→  prostate: "#14b8a6",
+   124→  brain: "#8b5cf6",
+   125→};
+   126→
+   127→const DEFAULTS = {
+   128→  compound: "erlotinib" as BiologyCompound,
+   129→  genes: 300,
+   130→  seed: "42",
+   131→  nCellLines: "24",
+   132→};
+   133→
+   134→/** Chart datum: recharts x/y plus the payload fields the tooltip shows. */
+   135→interface ScatterDatum {
+   136→  x: number;
+   137→  y: number;
+   138→  cellLine: string;
+   139→  tissue: string;
+   140→  value: number;
+   141→  lnIc50: number;
+   142→  auc: number;
+   143→}
+   144→
+   145→function toDatum(p: BiomarkerPoint): ScatterDatum {
+   146→  return {
+   147→    x: p.value,
+   148→    y: p.lnIc50,
+   149→    cellLine: p.cellLine,
+   150→    tissue: p.tissue,
+   151→    value: p.value,
+   152→    lnIc50: p.lnIc50,
+   153→    auc: p.auc,
+   154→  };
+   155→}
+   156→
+   157→/* ------------------------------------------------------------------ */
+   158→/* Small presentational helpers                                        */
+   159→/* ------------------------------------------------------------------ */
+   160→
+   161→function StatCard({ label, value }: { label: string; value: string }) {
+   162→  return (
+   163→    <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+   164→      <p className="text-xs text-muted-foreground">{label}</p>
+   165→      <p className="font-mono text-xl font-semibold tabular-nums">{value}</p>
+   166→    </div>
+   167→  );
+   168→}
+   169→
+   170→/** Custom scatter tooltip: cell line + tissue + both values. */
+   171→function ScatterTooltip({
+   172→  active,
+   173→  payload,
+   174→}: {
+   175→  active?: boolean;
+   176→  payload?: Array<{ payload?: ScatterDatum }>;
+   177→}) {
+   178→  if (!active || !payload || payload.length === 0) return null;
+   179→  const p = payload[0]?.payload;
+   180→  if (!p) return null;
+   181→  const color = TISSUE_COLORS[p.tissue] ?? CHART.stone;
+   182→  return (
+   183→    <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
+   184→      <p className="font-mono font-semibold">{p.cellLine}</p>
+   185→      <p className="mt-0.5 flex items-center gap-1.5 text-muted-foreground">
+   186→        <span className="size-2 rounded-full" style={{ backgroundColor: color }} aria-hidden />
+   187→        {p.tissue}
+   188→      </p>
+   189→      <p className="mt-1 font-mono tabular-nums">
+   190→        expression {fmtNum(p.value, 3)} · LN_IC50 {fmtNum(p.lnIc50, 3)}
+   191→      </p>
+   192→      <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+   193→        AUC {fmtNum(p.auc, 3)}
+   194→      </p>
+   195→    </div>
+   196→  );
+   197→}
+   198→
+   199→/** rho cell coloring: negative = sensitizing (emerald), positive = resisting (rose). */
+   200→function RhoCell({ rho }: { rho: number }) {
+   201→  const negative = rho < 0;
+   202→  return (
+   203→    <span className="inline-flex items-center gap-1.5 font-mono text-xs tabular-nums">
+   204→      <span className={negative ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
+   205→        {negative ? <TrendingDown className="size-3" aria-hidden /> : <TrendingUp className="size-3" aria-hidden />}
+   206→        {fmtNum(rho, 3)}
+   207→      </span>
+   208→      <Badge
+   209→        variant="secondary"
+   210→        className={cn(
+   211→          "h-4 gap-0.5 px-1 text-[9px] font-medium",
+   212→          negative
+   213→            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+   214→            : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+   215→        )}
+   216→      >
+   217→        {negative ? "sensitizing" : "resisting"}
+   218→      </Badge>
+   219→    </span>
+   220→  );
+   221→}
+   222→
+   223→/* ------------------------------------------------------------------ */
+   224→/* Panel                                                               */
+   225→/* ------------------------------------------------------------------ */
+   226→
+   227→export function BiologyPlayground() {
+   228→  /* Transient panel state — same convention as the docking parser and the
+   229→   * ligand reconciler (only the ML/PK setups persist in the store). */
+   230→  const [compound, setCompound] = useState<BiologyCompound>(DEFAULTS.compound);
+   231→  const [genes, setGenes] = useState(DEFAULTS.genes);
+   232→  const [seed, setSeed] = useState(DEFAULTS.seed);
+   233→  const [nCellLines, setNCellLines] = useState(DEFAULTS.nCellLines);
+   234→  const [result, setResult] = useState<BiomarkersResponse | null>(null);
+   235→  const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+   236→  const [error, setError] = useState<string | null>(null);
+   237→  /** Which gene the scatter shows: the top hit, or EGFR specifically. */
+   238→  const [chartGene, setChartGene] = useState<"top" | "egfr">("top");
+   239→
+   240→  const running = status === "running";
+   241→  const seedValid = /^\d{1,10}$/.test(seed.trim());
+   242→
+   243→  /** Tissue-grouped series (stable references for recharts). */
+   244→  const series = useMemo(() => {
+   245→    if (!result) return null;
+   246→    const scatter: BiomarkerScatter =
+   247→      chartGene === "egfr" && result.egfrScatter ? result.egfrScatter : result.topHit;
+   248→    const byTissue = new Map<string, ScatterDatum[]>();
+   249→    for (const p of scatter.points) {
+   250→      const list = byTissue.get(p.tissue) ?? [];
+   251→      list.push(toDatum(p));
+   252→      byTissue.set(p.tissue, list);
+   253→    }
+   254→    return {
+   255→      scatter,
+   256→      groups: result.tissues
+   257→        .filter((t) => byTissue.has(t))
+   258→        .map((t) => ({ tissue: t, data: byTissue.get(t) ?? [] })),
+   259→    };
+   260→  }, [result, chartGene]);
+   261→
+   262→  function randomizeSeed() {
+   263→    setSeed(String(Math.floor(Math.random() * 2_147_483_648)));
+   264→  }
+   265→
+   266→  function resetSetup() {
+   267→    setCompound(DEFAULTS.compound);
+   268→    setGenes(DEFAULTS.genes);
+   269→    setSeed(DEFAULTS.seed);
+   270→    setNCellLines(DEFAULTS.nCellLines);
+   271→    setStatus("idle");
+   272→    setResult(null);
+   273→    setError(null);
+   274→    setChartGene("top");
+   275→  }
+   276→
+   277→  async function discover() {
+   278→    if (!seedValid) {
+   279→      setError("Seed must be a non-negative integer (0 – 2147483647).");
+   280→      return;
+   281→    }
+   282→    setStatus("running");
+   283→    setError(null);
+   284→    try {
+   285→      const res = await fetch("/api/biology/biomarkers", {
+   286→        method: "POST",
+   287→        headers: { "Content-Type": "application/json" },
+   288→        body: JSON.stringify({
+   289→          compound,
+   290→          genes,
+   291→          seed: Number.parseInt(seed, 10) || 0,
+   292→          nCellLines: Number.parseInt(nCellLines, 10) || 24,
+   293→        }),
+   294→      });
+   295→      const data: unknown = await res.json();
+   296→      if (!res.ok) {
+   297→        const message =
+   298→          typeof data === "object" && data !== null && "error" in data
+   299→            ? `${String((data as { error: unknown }).error)}${
+   300→                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+   301→                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+   302→                  : ""
+   303→              }`
+   304→            : `HTTP ${res.status}`;
+   305→        throw new Error(message);
+   306→      }
+   307→      const payload = data as BiomarkersResponse;
+   308→      setResult(payload);
+   309→      setStatus("done");
+   310→      setChartGene("top");
+   311→      toast.success("Biomarkers ranked", {
+   312→        description:
+   313→          payload.meta.plantedHit === "EGFR"
+   314→            ? `${payload.meta.nGenes} genes screened — planted EGFR biomarker recovered at rank #1.`
+   315→            : `${payload.meta.nGenes} genes screened — ${
+   316→                payload.meta.nSignificant
+   317→              } significant at FDR < 0.05.`,
+   318→      });
+   319→    } catch (err) {
+   320→      setStatus("error");
+   321→      const message = err instanceof Error ? err.message : "Discovery request failed.";
+   322→      setError(message);
+   323→      toast.error("Biomarker discovery failed", { description: message });
+   324→    }
+   325→  }
+   326→
+   327→  const panelLabel =
+   328→    PANEL_SIZES.find((p) => p.value === nCellLines)?.label.split(" — ")[1] ?? `${nCellLines} lines`;
+   329→
+   330→  return (
+   331→    <div className="grid gap-4 xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
+   332→      {/* ------------------------------ Controls ------------------------------ */}
+   333→      <Card className="h-fit overflow-hidden py-0 shadow-sm xl:sticky xl:top-24">
+   334→        <CardHeader className="border-b bg-muted/30 py-3">
+   335→          <div className="flex items-center gap-2.5">
+   336→            <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+   337→              <Dna className="size-4.5" aria-hidden />
+   338→            </span>
+   339→            <div>
+   340→              <CardTitle className="text-base">Biomarker discovery</CardTitle>
+   341→              <CardDescription className="text-xs">
+   342→                Synthetic GDSC/CCLE panel — 24 cell lines × 10 tissues, planted EGFR signal
+   343→              </CardDescription>
+   344→            </div>
+   345→          </div>
+   346→        </CardHeader>
+   347→        <CardContent className="space-y-5 pb-4">
+   348→          {/* Compound */}
+   349→          <div className="space-y-1.5">
+   350→            <Label htmlFor="bio-compound" className="text-xs font-medium">
+   351→              Compound
+   352→            </Label>
+   353→            <Select value={compound} onValueChange={(v) => setCompound(v as BiologyCompound)}>
+   354→              <SelectTrigger id="bio-compound" className="h-10" aria-label="Screened compound">
+   355→                {/* Short label in the trigger; the rich item (hint + badge)
+   356→                 * only renders inside the dropdown itself. */}
+   357→                <span className="truncate">
+   358→                  {COMPOUNDS.find((c) => c.id === compound)?.label ?? compound}
+   359→                </span>
+   360→              </SelectTrigger>
+   361→              <SelectContent>
+   362→                {COMPOUNDS.map((c) => (
+   363→                  <SelectItem key={c.id} value={c.id} textValue={c.label} className="items-start py-2">
+   364→                    <span className="flex min-w-0 flex-col gap-0.5">
+   365→                      <span className="text-sm">
+   366→                        {c.label}
+   367→                        {c.egfr ? (
+   368→                          <span className="ml-1.5 rounded bg-emerald-500/10 px-1 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+   369→                            EGFR-linked
+   370→                          </span>
+   371→                        ) : null}
+   372→                      </span>
+   373→                      <span className="text-[11px] leading-snug text-muted-foreground">{c.hint}</span>
+   374→                    </span>
+   375→                  </SelectItem>
+   376→                ))}
+   377→              </SelectContent>
+   378→            </Select>
+   379→            <p className="text-[11px] leading-snug text-muted-foreground">
+   380→              LN_IC50 = baseline + tissue effect + EGFR coefficient × EGFR z + noise σ 0.25
+   381→            </p>
+   382→          </div>
+   383→
+   384→          {/* Genes */}
+   385→          <div className="space-y-2">
+   386→            <div className="flex items-center justify-between">
+   387→              <Label htmlFor="bio-genes" className="text-xs font-medium">
+   388→                Genes screened
+   389→              </Label>
+   390→              <span className="font-mono text-xs tabular-nums text-muted-foreground">{genes}</span>
+   391→            </div>
+   392→            <Slider
+   393→              id="bio-genes"
+   394→              min={60}
+   395→              max={600}
+   396→              step={10}
+   397→              value={[genes]}
+   398→              onValueChange={(v) => setGenes(v[0] ?? genes)}
+   399→            />
+   400→            <p className="text-[11px] text-muted-foreground">
+   401→              GENE_001… noise columns + EGFR + KRT8 (breast-hot)
+   402→            </p>
+   403→          </div>
+   404→
+   405→          {/* Seed + dice */}
+   406→          <div className="space-y-1.5">
+   407→            <Label htmlFor="bio-seed" className="text-xs font-medium">
+   408→              Seed
+   409→            </Label>
+   410→            <div className="flex gap-2">
+   411→              <Input
+   412→                id="bio-seed"
+   413→                inputMode="numeric"
+   414→                value={seed}
+   415→                onChange={(e) => setSeed(e.target.value)}
+   416→                aria-invalid={seedValid ? undefined : true}
+   417→                className={`h-10 font-mono text-sm tabular-nums ${seedValid ? "" : "border-destructive/60"}`}
+   418→              />
+   419→              <Button
+   420→                type="button"
+   421→                variant="outline"
+   422→                size="icon"
+   423→                className="size-10 shrink-0"
+   424→                onClick={randomizeSeed}
+   425→                disabled={running}
+   426→                aria-label="Randomize the seed"
+   427→                title="Randomize the seed"
+   428→              >
+   429→                <Dices className="size-4" aria-hidden />
+   430→              </Button>
+   431→            </div>
+   432→            {!seedValid ? (
+   433→              <p className="text-[11px] text-destructive">Non-negative integer.</p>
+   434→            ) : null}
+   435→          </div>
+   436→
+   437→          {/* Panel size */}
+   438→          <div className="space-y-1.5">
+   439→            <Label htmlFor="bio-panel" className="text-xs font-medium">
+   440→              Cell line panel
+   441→            </Label>
+   442→            <Select value={nCellLines} onValueChange={setNCellLines}>
+   443→              <SelectTrigger id="bio-panel" className="h-10" aria-label="Cell line panel size">
+   444→                <SelectValue />
+   445→              </SelectTrigger>
+   446→              <SelectContent>
+   447→                {PANEL_SIZES.map((p) => (
+   448→                  <SelectItem key={p.value} value={p.value}>
+   449→                    {p.label}
+   450→                  </SelectItem>
+   451→                ))}
+   452→              </SelectContent>
+   453→            </Select>
+   454→          </div>
+   455→
+   456→          <div className="flex gap-2">
+   457→            <Button
+   458→              size="lg"
+   459→              className="h-11 flex-1 gap-2"
+   460→              onClick={() => void discover()}
+   461→              disabled={running}
+   462→            >
+   463→              {running ? (
+   464→                <>
+   465→                  <Loader2 className="size-4 animate-spin" aria-hidden />
+   466→                  Screening…
+   467→                </>
+   468→              ) : (
+   469→                <>
+   470→                  <Play className="size-4" aria-hidden />
+   471→                  Discover biomarkers
+   472→                </>
+   473→              )}
+   474→            </Button>
+   475→            <Button
+   476→              size="lg"
+   477→              variant="outline"
+   478→              className="h-11 shrink-0 gap-2"
+   479→              onClick={resetSetup}
+   480→              disabled={running}
+   481→              aria-label="Reset the discovery setup to defaults"
+   482→              title="Reset setup to defaults"
+   483→            >
+   484→              <RotateCcw className="size-4" aria-hidden />
+   485→              <span className="hidden xl:inline">Reset</span>
+   486→            </Button>
+   487→          </div>
+   488→
+   489→          {error ? (
+   490→            <Alert variant="destructive">
+   491→              <TriangleAlert className="size-4" aria-hidden />
+   492→              <AlertTitle>Request failed</AlertTitle>
+   493→              <AlertDescription>{error}</AlertDescription>
+   494→            </Alert>
+   495→          ) : null}
+   496→        </CardContent>
+   497→      </Card>
+   498→
+   499→      {/* ------------------------------ Results ------------------------------ */}
+   500→      <div className="min-w-0 space-y-4">
+   501→        {!result && status !== "running" ? (
+   502→          <Card className="py-0 shadow-sm">
+   503→            <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+   504→              <span className="ping-ring flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+   505→                <Microscope className="size-6" aria-hidden />
+   506→              </span>
+   507→              <p className="text-sm font-medium">No discovery run yet</p>
+   508→              <p className="max-w-sm text-xs text-muted-foreground">
+   509→                Pick a compound and press{" "}
+   510→                <strong className="font-semibold text-foreground">Discover biomarkers</strong>. Every
+   511→                gene in the expression matrix is correlated (Spearman, BH-corrected) with the
+   512→                compound&apos;s LN_IC50 across the panel — erlotinib should recover the planted EGFR
+   513→                biomarker, cisplatin should not.
+   514→              </p>
+   515→            </CardContent>
+   516→          </Card>
+   517→        ) : null}
+   518→
+   519→        {status === "running" ? (
+   520→          <Card className="py-0 shadow-sm">
+   521→            <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+   522→              <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
+   523→              <p className="text-sm font-medium">Screening…</p>
+   524→              <p className="text-xs text-muted-foreground">
+   525→                Generating the {panelLabel} screen + {genes}-gene expression matrix and ranking every
+   526→                gene against {compound}.
+   527→              </p>
+   528→            </CardContent>
+   529→          </Card>
+   530→        ) : null}
+   531→
+   532→        {result && status !== "running" ? (
+   533→          <>
+   534→            {/* Stats strip */}
+   535→            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+   536→              <StatCard label="genes screened" value={String(result.meta.nGenes)} />
+   537→              <StatCard
+   538→                label="significant (FDR<0.05)"
+   539→                value={String(result.meta.nSignificant)}
+   540→              />
+   541→              <StatCard label="strongest |ρ|" value={fmtNum(result.meta.strongestRho, 3)} />
+   542→              <StatCard label="runtime" value={`${result.meta.runtimeMs} ms`} />
+   543→            </div>
+   544→
+   545→            {/* Scatter chart */}
+   546→            <Card className="overflow-hidden py-0 shadow-sm">
+   547→              <CardHeader className="border-b bg-muted/30 py-3">
+   548→                <div className="flex flex-wrap items-center justify-between gap-2">
+   549→                  <div className="min-w-0">
+   550→                    <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+   551→                      <FlaskConical className="size-3.5 text-primary" aria-hidden />
+   552→                      {series?.scatter.gene ?? result.topHit.gene} expression vs LN_IC50 —{" "}
+   553→                      {result.meta.compound}
+   554→                      {result.meta.plantedHit === "EGFR" ? (
+   555→                        <Badge
+   556→                          variant="secondary"
+   557→                          className="gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+   558→                        >
+   559→                          <Check className="size-3" aria-hidden />
+   560→                          planted biomarker recovered
+   561→                        </Badge>
+   562→                      ) : null}
+   563→                    </CardTitle>
+   564→                    <CardDescription className="text-xs">
+   565→                      {result.meta.nCellLines} cell lines · ρ ={" "}
+   566→                      {fmtNum((series?.scatter ?? result.topHit).rho, 3)} · Spearman rank trend
+   567→                      dashed · points colored by tissue
+   568→                    </CardDescription>
+   569→                  </div>
+   570→                  {result.egfrScatter && result.topHit.gene !== "EGFR" ? (
+   571→                    <div
+   572→                      className="grid gap-1 rounded-lg border bg-muted/40 p-1"
+   573→                      role="tablist"
+   574→                      aria-label="Scatter gene"
+   575→                    >
+   576→                      {(
+   577→                        [
+   578→                          ["top", `top hit (${result.topHit.gene})`],
+   579→                          ["egfr", "EGFR"],
+   580→                        ] as const
+   581→                      ).map(([value, label]) => (
+   582→                        <button
+   583→                          key={value}
+   584→                          type="button"
+   585→                          role="tab"
+   586→                          aria-selected={chartGene === value}
+   587→                          onClick={() => setChartGene(value)}
+   588→                          className={`h-7 rounded-md px-2.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+   589→                            chartGene === value
+   590→                              ? "bg-background text-foreground shadow-sm"
+   591→                              : "text-muted-foreground hover:text-foreground"
+   592→                          }`}
+   593→                        >
+   594→                          {label}
+   595→                        </button>
+   596→                      ))}
+   597→                    </div>
+   598→                  ) : null}
+   599→                </div>
+   600→              </CardHeader>
+   601→              <CardContent className="p-3 sm:p-4">
+   602→                <div
+   603→                  className="h-[340px] w-full"
+   604→                  role="img"
+   605→                  aria-label={`Scatter plot of ${series?.scatter.gene ?? "gene"} expression versus LN_IC50 across ${result.meta.nCellLines} cell lines, points colored by tissue, with the fitted rank trend line`}
+   606→                >
+   607→                  <ResponsiveContainer width="100%" height="100%">
+   608→                    <ComposedChart margin={{ top: 8, right: 14, bottom: 4, left: 0 }}>
+   609→                      <CartesianGrid
+   610→                        stroke={CHART.gridStroke}
+   611→                        strokeOpacity={CHART.gridStrokeOpacity}
+   612→                      />
+   613→                      <XAxis
+   614→                        type="number"
+   615→                        dataKey="x"
+   616→                        domain={["auto", "auto"]}
+   617→                        tick={CHART.axisTick}
+   618→                        tickFormatter={fmtTick}
+   619→                        tickLine={false}
+   620→                        axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
+   621→                        label={{
+   622→                          value: `${series?.scatter.gene ?? "gene"} (log2 expression)`,
+   623→                          position: "insideBottomRight",
+   624→                          offset: -2,
+   625→                          fill: "#78716c",
+   626→                          fontSize: 11,
+   627→                        }}
+   628→                      />
+   629→                      <YAxis
+   630→                        type="number"
+   631→                        dataKey="y"
+   632→                        width={44}
+   633→                        domain={["auto", "auto"]}
+   634→                        tick={CHART.axisTick}
+   635→                        tickFormatter={fmtTick}
+   636→                        tickLine={false}
+   637→                        axisLine={false}
+   638→                        label={{
+   639→                          value: "LN_IC50",
+   640→                          angle: -90,
+   641→                          position: "insideBottomLeft",
+   642→                          offset: 18,
+   643→                          fill: "#78716c",
+   644→                          fontSize: 11,
+   645→                        }}
+   646→                      />
+   647→                      <Tooltip
+   648→                        cursor={{ strokeDasharray: "3 3" }}
+   649→                        content={<ScatterTooltip />}
+   650→                      />
+   651→                      <Legend
+   652→                        wrapperStyle={{ fontSize: 11, color: "#78716c", paddingTop: 4 }}
+   653→                        iconSize={8}
+   654→                      />
+   655→                      {series?.groups.map((g) => (
+   656→                        <Scatter
+   657→                          key={g.tissue}
+   658→                          name={g.tissue}
+   659→                          data={g.data}
+   660→                          fill={TISSUE_COLORS[g.tissue] ?? CHART.stone}
+   661→                          fillOpacity={0.85}
+   662→                          isAnimationActive={false}
+   663→                        />
+   664→                      ))}
+   665→                      <Line
+   666→                        name="rank trend"
+   667→                        data={(series?.scatter ?? result.topHit).trend}
+   668→                        dataKey="y"
+   669→                        stroke={CHART.stone}
+   670→                        strokeWidth={2}
+   671→                        strokeDasharray="6 3"
+   672→                        dot={false}
+   673→                        activeDot={false}
+   674→                        isAnimationActive={false}
+   675→                      />
+   676→                    </ComposedChart>
+   677→                  </ResponsiveContainer>
+   678→                </div>
+   679→              </CardContent>
+   680→            </Card>
+   681→
+   682→            {/* Ranked biomarker table */}
+   683→            <Card className="overflow-hidden py-0 shadow-sm">
+   684→              <CardHeader className="border-b bg-muted/30 py-3">
+   685→                <CardTitle className="text-sm">
+   686→                  Ranked biomarkers — top {result.biomarkers.length} of{" "}
+   687→                  {result.meta.nGenes} genes
+   688→                </CardTitle>
+   689→                <CardDescription className="text-xs">
+   690→                  Spearman ρ vs {result.meta.compound} LN_IC50 · two-sided normal-approximation p
+   691→                  with tie correction · Benjamini–Hochberg FDR · significant at FDR &lt; 0.05
+   692→                </CardDescription>
+   693→              </CardHeader>
+   694→              <div className="thin-scrollbar max-h-96 overflow-auto">
+   695→                <Table className="data-table min-w-[560px]">
+   696→                  <TableHeader className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
+   697→                    <TableRow className="hover:bg-transparent">
+   698→                      <TableHead className="h-9 w-10 text-right">#</TableHead>
+   699→                      <TableHead className="h-9">Gene</TableHead>
+   700→                      <TableHead className="h-9">Spearman ρ</TableHead>
+   701→                      <TableHead className="h-9 text-right">p-value</TableHead>
+   702→                      <TableHead className="h-9 text-right">FDR</TableHead>
+   703→                      <TableHead className="h-9 w-14 text-center">hit</TableHead>
+   704→                    </TableRow>
+   705→                  </TableHeader>
+   706→                  <TableBody>
+   707→                    {result.biomarkers.map((row) => (
+   708→                      <TableRow
+   709→                        key={row.gene}
+   710→                        className={cn(row.gene === "EGFR" && "bg-emerald-500/5 hover:bg-emerald-500/5")}
+   711→                      >
+   712→                        <TableCell className="py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
+   713→                          {row.rank}
+   714→                        </TableCell>
+   715→                        <TableCell className="py-2 font-mono text-xs font-medium">
+   716→                          {row.gene}
+   717→                        </TableCell>
+   718→                        <TableCell className="py-2">
+   719→                          <RhoCell rho={row.rho} />
+   720→                        </TableCell>
+   721→                        <TableCell className="py-2 text-right font-mono text-xs tabular-nums">
+   722→                          {fmtNum(row.pValue, 3)}
+   723→                        </TableCell>
+   724→                        <TableCell className="py-2 text-right font-mono text-xs tabular-nums">
+   725→                          {fmtNum(row.fdr, 3)}
+   726→                        </TableCell>
+   727→                        <TableCell className="py-2 text-center">
+   728→                          {row.significant ? (
+   729→                            <span
+   730→                              className="inline-flex items-center justify-center rounded-full bg-emerald-500/15 p-0.5 text-emerald-600 dark:text-emerald-400"
+   731→                              title="Significant at FDR < 0.05"
+   732→                            >
+   733→                              <Check className="size-3.5" aria-hidden />
+   734→                              <span className="sr-only">significant</span>
+   735→                            </span>
+   736→                          ) : (
+   737→                            <span className="text-muted-foreground/40" aria-hidden>
+   738→                              —
+   739→                            </span>
+   740→                          )}
+   741→                        </TableCell>
+   742→                      </TableRow>
+   743→                    ))}
+   744→                  </TableBody>
+   745→                </Table>
+   746→              </div>
+   747→              <CardContent className="border-t bg-muted/20 py-2">
+   748→                <p className="text-[11px] leading-snug text-muted-foreground">
+   749→                  {result.egfr
+   750→                    ? `EGFR ranks #${result.egfr.rank} of ${result.meta.nGenes} (ρ = ${fmtNum(
+   751→                        result.egfr.rho,
+   752→                        3
+   753→                      )}, FDR = ${fmtNum(result.egfr.fdr, 3)})${
+   754→                        result.meta.plantedHit === "EGFR"
+   755→                          ? " — the planted biomarker, exactly what a working discovery pipeline should surface for an EGFR inhibitor."
+   756→                          : " — no planted signal for this compound, so EGFR behaves like any noise gene."
+   757→                      }`
+   758→                    : "EGFR is not in the matrix."}{" "}
+   759→                  Panel: {result.meta.nCellLines} lines · seed {result.meta.seed} · runtime{" "}
+   760→                  {result.meta.runtimeMs} ms.
+   761→                </p>
+   762→              </CardContent>
+   763→            </Card>
+   764→          </>
+   765→        ) : null}
+   766→      </div>
+   767→    </div>
+   768→  );
+   769→}
+   770→
