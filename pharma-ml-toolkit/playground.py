@@ -34,7 +34,8 @@ A tabbed graphical interface opens with every calculation domain of the
   approach-to-steady-state figure), the TDM trough adjustment card,
   and the PD model explorer (sigmoid Emax with a Hill slope, inhibitory
   Emax, linear effect -- table + curve + the reverse
-  EC50-for-a-target-effect solver).
+  EC50-for-a-target-effect solver) -- and (100x-121) the dimension-
+  aware unit converter (mass / volume / amount / concentration / time).
 * **Cell Lines**    -- GDSC-style drug-response screens: load and audit
   a screen, pivot the sensitivity matrix, call sensitive vs resistant
   lines, convert ``LN_IC50`` <-> pIC50, and discover expression
@@ -190,6 +191,17 @@ Design notes
   the cell-line expression card, ``effect_table`` behind the PD
   explorer's sigmoid table, and a single-folder AutoDock4 engine mode
   next to the campaign runner.
+* Content review (100x-121): ``UnitConverter`` gained its card on the
+  PK/PD tab (dimension-aware mass / volume / amount / concentration /
+  time conversion with the honest cross-dimension error), and EVERY
+  table save in the window now routes through ``export_table`` --
+  pick ``.csv``, ``.tsv``, GitHub-ready ``.md``, records ``.json`` or
+  a standalone styled ``.html``; the Deep Learning tab's training
+  history card grew the size-vs-score learning curve (the deep twin of
+  the ML results button), the single-folder AutoDock4 verdict line
+  carries the parsed DLG cluster summary, and the Ctrl+F finder
+  remembers its last query across dialog opens AND restarts (the
+  session file's ``finder`` text key).
 
 Command line helpers (useful for scripting and CI)::
 
@@ -905,6 +917,20 @@ _PD_FAMILY_MODES = (
 #: NCA card: a one-compartment IV bolus, t½ ≈ 4 h, sampled to 24 h.
 _NCA_DEFAULT_TIMES = "0, 0.5, 1, 2, 4, 6, 8, 12, 16, 24"
 _NCA_DEFAULT_CONCS = "12.0, 10.2, 8.7, 6.4, 4.6, 3.3, 2.4, 1.2, 0.63, 0.17"
+
+#: PK / PD tab -- the unit-converter card's dimensions and their units
+#: (pharmaml.pharma.UnitConverter's own scale tables, mirrored for the
+#: comboboxes; the entries stay editable so an unknown or cross-dimension
+#: unit surfaces the library's honest UnitConversionError, which names
+#: every supported unit by dimension).
+_UNIT_DIMENSIONS = ("mass", "volume", "amount", "concentration", "time")
+_UNIT_CHOICES: dict[str, tuple[str, ...]] = {
+    "mass": ("kg", "g", "mg", "ug", "µg", "mcg", "ng", "pg"),
+    "volume": ("L", "mL", "ml", "uL", "µL", "nL"),
+    "amount": ("mol", "mmol", "umol", "µmol", "nmol"),
+    "concentration": ("M", "mM", "uM", "µM", "nM", "pM"),
+    "time": ("s", "min", "h", "hr", "d", "day"),
+}
 
 # Canonical evidence columns for the consensus rescore card, in
 # preference order -- the names consensus_rescore's own examples and the
@@ -2088,6 +2114,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                             "Enter jumps to it.", style="CardMuted.TLabel"
                   ).pack(anchor="w", padx=14, pady=(12, 4))
         entry = ttk.Entry(win, width=54)
+        # 100x-121: the finder remembers its last query -- prefilled here,
+        # persisted with the session ("finder" text key).
+        last_query = getattr(self, "_finder_last_query", "")
+        if last_query:
+            entry.insert(0, last_query)
         entry.pack(fill="x", padx=14, pady=(0, 8))
         tree = ttk.Treeview(win, columns=("card", "tab"), show="headings",
                             height=12)
@@ -2102,6 +2133,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         def refresh() -> None:
             query = entry.get().strip().lower()
+            self._finder_last_query = entry.get().strip()
             tree.delete(*tree.get_children())
             for title, subtitle, _shell, index in self._live_cards():
                 haystack = f"{title} {subtitle}".lower()
@@ -2546,6 +2578,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "maccs": self._maccs_text.get("1.0", "end-1c"),
             "scan_refs": self._scan_ref_text.get("1.0", "end-1c"),
             "scan_lib": self._scan_lib_text.get("1.0", "end-1c"),
+            # 100x-121: the Ctrl+F card finder's last query -- a plain
+            # string (restored into the attribute, not a Text widget).
+            "finder": getattr(self, "_finder_last_query", ""),
         }
         try:
             tab = self._book.index(self._book.select())
@@ -2856,6 +2891,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         "scan_refs": getattr(self, "_scan_ref_text", None),
                         "scan_lib": getattr(self, "_scan_lib_text", None)}
         for key, content in session["texts"].items():
+            if key == "finder":
+                # 100x-121: the finder's last query -- an attribute, not a
+                # Text widget; older sessions simply lack the key.
+                self._finder_last_query = str(content)
+                continue
             widget = text_widgets.get(key)
             if widget is not None:
                 widget.delete("1.0", "end")
@@ -3041,9 +3081,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                  "plus non-compartmental analysis over any pasted "
                  "concentration-time series (AUC/AUMC/MRT/Cmax/t½ with the "
                  "profile figure), IV infusion & steady state, Vd and "
-                 "bioavailability, the TDM trough dose adjustment, and the "
+                 "bioavailability, the TDM trough dose adjustment, the "
                  "full PD model family (sigmoid Emax / inhibitory Emax / "
-                 "linear) with the reverse EC50-for-target-effect solver."),
+                 "linear) with the reverse EC50-for-target-effect solver, "
+                 "and the dimension-aware unit converter."),
                 "numpy",
             ),
             (
@@ -3085,6 +3126,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                  "model as a bundle you can load back and predict with (PDF "
                  "report included)."),
                 "pandas + sklearn",
+            ),
+            (
+                "Deep Learning",
+                ("The PyTorch estimators behind one card: pick the "
+                 "architecture (feed-forward or residual MLP), the hidden "
+                 "widths, dropout, Adam's learning rate / weight decay and "
+                 "the early-stopping patience, then watch the held-out "
+                 "metrics, the parity / confusion figure and the "
+                 "epoch-by-epoch loss curves — with the size-vs-score "
+                 "learning curve (are more rows still buying accuracy?) "
+                 "and the ml check CSV audit beside them."),
+                "torch",
             ),
             (
                 "Generative",
@@ -3779,17 +3832,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Nothing to save",
                                 "Compute the RISM-KH descriptors first.")
             return
-        path = filedialog.asksaveasfilename(
-            title="Save the RISM-KH descriptors", defaultextension=".csv",
-            filetypes=[("CSV table", "*.csv")],
-        )
-        if not path:
-            return
-        try:
-            frame.to_csv(path, index=False)
-            messagebox.showinfo("Saved", f"RISM-KH table written to\n{path}")
-        except Exception as exc:  # noqa: BLE001
-            self._show_error("Could not save", exc)
+        self._save_frame_dialog(frame, "Save the RISM-KH descriptors",
+                                "rism_kh.csv", "RISM-KH table")
 
     # -- structure & table converters (100x-110) ------------------------ #
     def _conv_pick_input(self) -> None:
@@ -4357,21 +4401,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self._desc_frame is None:
             messagebox.showinfo("Nothing to save", "Analyse a SMILES string first.")
             return
-        if not self._require_pharmaml():
-            return
-        path = filedialog.asksaveasfilename(
-            title="Save descriptors", defaultextension=".csv",
-            filetypes=[("CSV table", "*.csv")],
-        )
-        if not path:
-            return
-        try:
-            from pharmaml.utils.io import write_table
-
-            written = write_table(self._desc_frame, path)
-            messagebox.showinfo("Saved", f"Descriptor table written to\n{written}")
-        except Exception as exc:  # noqa: BLE001
-            self._show_error("Could not save", exc)
+        self._save_frame_dialog(self._desc_frame, "Save descriptors",
+                                "descriptors.csv", "Descriptor table")
 
     def _compare_similarity(self) -> None:
         if not self._require_pharmaml() or not self._require("rdkit", "fingerprints"):
@@ -4647,17 +4678,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         if not self._require_pharmaml():
             return
-        path = filedialog.asksaveasfilename(
-            title="Save the selected features", defaultextension=".csv",
-            initialfile="selected_features.csv",
-            filetypes=[("CSV table", "*.csv")],
-        )
-        if not path:
-            return
         try:
             import pandas as pd
-
-            from pharmaml.utils.io import write_table
 
             out = pd.DataFrame({"SMILES": list(self._feat_smiles)})
             if (self._feat_target_name is not None
@@ -4665,12 +4687,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 out[self._feat_target_name] = list(self._feat_target_series)
             for column in self._feat_selection.selected:
                 out[column] = self._feat_frame[column].tolist()
-            written = write_table(out, path)
-            messagebox.showinfo(
-                "Saved", f"Selected-feature table written to\n{written}"
-            )
         except Exception as exc:  # noqa: BLE001
-            self._show_error("Could not save", exc)
+            self._show_error("Could not build the table", exc)
+            return
+        self._save_frame_dialog(out, "Save the selected features",
+                                "selected_features.csv",
+                                "Selected-feature table")
 
     def _feat_save_json(self) -> None:
         if self._feat_selection is None:
@@ -5067,6 +5089,100 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._fam_host = self._figure_host(family, height=280)
         bind_enter(self._fam_concs, fam_btn)
 
+        # -- unit converter (UnitConverter, dimension-aware; 100x-121) -- #
+        units_card = make_card(
+            page.grid, "Unit converter", row=7, column=0,
+            subtitle="Dimension-aware pharmaceutical unit conversion "
+                     "(UnitConverter): mass, volume, amount, concentration "
+                     "and time -- 500 mg → 0.5 g, 1 µM → 1000 nM -- with "
+                     "the honest UnitConversionError when a unit is unknown "
+                     "or the dimensions disagree.",
+        )
+        self._uc_dim_combo = ttk.Combobox(
+            units_card, state="readonly", width=16,
+            values=list(_UNIT_DIMENSIONS))
+        self._uc_dim_combo.set(_UNIT_DIMENSIONS[0])
+        self._uc_dim_combo.bind(
+            "<<ComboboxSelected>>", lambda _e: self._uc_dimension_changed())
+        Tooltip(self._uc_dim_combo,
+                "Picking a dimension loads its units into both comboboxes "
+                "(the entries stay editable -- a typo or a cross-dimension "
+                "pick surfaces the library's own error, naming every "
+                "supported unit).")
+        form_row(units_card, "dimension", self._uc_dim_combo)
+        self._uc_value = ttk.Entry(units_card, width=14)
+        self._uc_value.insert(0, "500")
+        form_row(units_card, "value", self._uc_value)
+        self._uc_from = ttk.Combobox(units_card, width=10)
+        self._uc_from.set("mg")
+        form_row(units_card, "from unit", self._uc_from)
+        self._uc_to = ttk.Combobox(units_card, width=10)
+        self._uc_to.set("g")
+        form_row(units_card, "to unit", self._uc_to)
+        uc_btn = self._action_button(
+            units_card, "Convert", self._uc_convert, primary=True,
+            tooltip="UnitConverter.convert(value, from, to) -- "
+                    "dimension-checked, with the conversion factor shown.")
+        uc_btn.grid(row=units_card.grid_size()[1], column=0,
+                    sticky="w", pady=(6, 0))
+        self._uc_result = ttk.Label(units_card, text="—",
+                                    style="Result.TLabel",
+                                    font=self._mono_result, wraplength=320,
+                                    justify="left")
+        self._uc_result.grid(row=uc_btn.grid_info()["row"], column=1,
+                             sticky="w", padx=(10, 0))
+        self._uc_units_hint = ttk.Label(units_card, text="",
+                                        style="CardMuted.TLabel",
+                                        wraplength=360, justify="left")
+        grid_append(units_card, self._uc_units_hint, sticky="w", pady=(2, 0))
+        bind_enter(self._uc_value, uc_btn)
+        bind_enter(self._uc_to, uc_btn)
+        self._uc_dimension_changed()
+
+    def _uc_dimension_changed(self) -> None:
+        """Load the picked dimension's units into both comboboxes."""
+        dimension = self._uc_dim_combo.get()
+        choices = _UNIT_CHOICES.get(dimension, ())
+        self._uc_from.configure(values=list(choices))
+        self._uc_to.configure(values=list(choices))
+        if choices:
+            if dimension == "mass":
+                self._uc_from.set("mg")
+                self._uc_to.set("g")
+            elif dimension == "concentration":
+                self._uc_from.set("uM")
+                self._uc_to.set("nM")
+            elif dimension == "time":
+                self._uc_from.set("h")
+                self._uc_to.set("min")
+            else:
+                self._uc_from.set(choices[0])
+                self._uc_to.set(choices[1] if len(choices) > 1 else choices[0])
+        self._uc_units_hint.configure(
+            text=f"{dimension}: " + " · ".join(choices))
+
+    def _uc_convert(self) -> None:
+        """One dimension-checked conversion (UnitConverter.convert)."""
+        if not self._require_pharmaml():
+            return
+        from pharmaml.pharma import UnitConverter
+
+        try:
+            value = parse_float(self._uc_value.get(), "value")
+            source = self._uc_from.get().strip()
+            target = self._uc_to.get().strip()
+            converted = UnitConverter.convert(value, source, target)
+            dimension = UnitConverter.dimension_of(source)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Conversion failed", exc)
+            return
+        factor = (converted / value) if value else None
+        lines = [f"{value:g} {source}  =  {converted:.6g} {target}",
+                 f"{dimension} conversion"]
+        if factor is not None:
+            lines.append(f"factor  ×{factor:.6g}")
+        self._uc_result.configure(text="\n".join(lines))
+
     def _halflife_math(self) -> None:
         if not self._require_pharmaml() or not self._require("numpy", "PK math"):
             return
@@ -5411,36 +5527,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._start_job("concentration profile", work, render)
 
     def _nca_save(self) -> None:
-        """Save the last NCA summary as a one-row CSV."""
+        """Save the last NCA summary as a one-row table (five formats)."""
         summary = getattr(self, "_nca_summary", None)
         if summary is None:
             messagebox.showinfo("Nothing to save", "Run the NCA first.")
             return
-        if not self._require_pharmaml():
-            return
-        path = filedialog.asksaveasfilename(
-            title="Save NCA summary", defaultextension=".csv",
-            filetypes=[("CSV table", "*.csv")],
-        )
-        if not path:
-            return
-        try:
-            import pandas as pd
+        import pandas as pd
 
-            from pharmaml.utils.io import write_table
-
-            frame = pd.DataFrame([{
-                "auc_mg_h_L": summary.auc,
-                "aucm_mg_h2_L": summary.aucm,
-                "mrt_h": summary.mrt,
-                "c_max": summary.c_max,
-                "t_max": summary.t_max,
-                "half_life_terminal_h": summary.half_life_terminal,
-            }])
-            written = write_table(frame, path)
-            messagebox.showinfo("Saved", f"{written} rows → {path}")
-        except Exception as exc:  # noqa: BLE001
-            self._show_error("Save failed", exc)
+        frame = pd.DataFrame([{
+            "auc_mg_h_L": summary.auc,
+            "aucm_mg_h2_L": summary.aucm,
+            "mrt_h": summary.mrt,
+            "c_max": summary.c_max,
+            "t_max": summary.t_max,
+            "half_life_terminal_h": summary.half_life_terminal,
+        }])
+        self._save_frame_dialog(frame, "Save NCA summary", "nca_summary.csv",
+                                "NCA summary")
 
     def _infusion_math(self) -> None:
         """Infusion rate / steady state / Vd / bioavailability card."""
@@ -7200,21 +7303,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self._dock_report is None:
             messagebox.showinfo("Nothing to save", "Prepare a ligand library first.")
             return
-        if not self._require_pharmaml():
-            return
-        path = filedialog.asksaveasfilename(
-            title="Save the ligand preparation report", defaultextension=".csv",
-            filetypes=[("CSV table", "*.csv")],
-        )
-        if not path:
-            return
-        try:
-            from pharmaml.utils.io import write_table
-
-            written = write_table(self._dock_report.frame, path)
-            messagebox.showinfo("Saved", f"Preparation report written to\n{written}")
-        except Exception as exc:  # noqa: BLE001
-            self._show_error("Could not save", exc)
+        self._save_frame_dialog(self._dock_report.frame,
+                                "Save the ligand preparation report",
+                                "ligand_report.csv", "Preparation report")
 
     # -- receptor card -------------------------------------------------- #
     def _dock_open_receptor(self) -> None:
@@ -7757,21 +7848,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Nothing to save",
                                 "Scan a campaign or parse a log first.")
             return
-        if not self._require_pharmaml():
-            return
-        path = filedialog.asksaveasfilename(
-            title="Save the docking results", defaultextension=".csv",
-            filetypes=[("CSV table", "*.csv")],
-        )
-        if not path:
-            return
-        try:
-            from pharmaml.utils.io import write_table
-
-            written = write_table(self._dock_results_frame, path)
-            messagebox.showinfo("Saved", f"Results written to\n{written}")
-        except Exception as exc:  # noqa: BLE001
-            self._show_error("Could not save", exc)
+        self._save_frame_dialog(self._dock_results_frame,
+                                "Save the docking results",
+                                "docking_results.csv", "Results")
 
     # -- receptor atom-type census + top-ligand bars (100x-119) -------- #
     def _dock_plot_atom_types(self) -> None:
@@ -8577,9 +8656,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             def render_single(result: Any) -> None:
                 state = "ok" if result.ok else f"FAILED — {result.error}"
                 dlg_note = f" · dlg {result.dlg.name}" if result.dlg else ""
+                cluster_note = ""
+                if result.dlg is not None:
+                    # 100x-121: the parsed DLG cluster summary rides the
+                    # verdict line (parse_dlg_summary: best + most populated
+                    # cluster + extremes, the columns the rar exported to
+                    # Excel).
+                    try:
+                        from pharmaml.docking import parse_dlg_summary
+
+                        summary = parse_dlg_summary(result.dlg)
+                        cluster_note = (
+                            f" · {summary['n_clusters']} clusters · "
+                            f"top {summary['top_lowest_energy']:.2f} "
+                            f"(n={summary['top_num_in_cluster']}) · "
+                            f"best-populated {summary['best_lowest_energy']:.2f} "
+                            f"(n={summary['best_num_in_cluster']})")
+                    except Exception:  # noqa: BLE001 - best effort note
+                        cluster_note = ""
                 self._dock_run_summary.configure(
                     text=(f"autogrid4+autodock4 {state} · "
-                          f"{result.seconds:.1f} s{dlg_note} — {root.name}"),
+                          f"{result.seconds:.1f} s{dlg_note}{cluster_note}"
+                          f" — {root.name}"),
                     style="Field.TLabel",
                 )
 
@@ -10098,17 +10196,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo(
                 "Nothing to save", "Predict with a loaded bundle first.")
             return
-        path = filedialog.asksaveasfilename(
-            title="Save the predictions", defaultextension=".csv",
-            filetypes=[("CSV table", "*.csv")],
-        )
-        if not path:
-            return
-        try:
-            frame.to_csv(path, index=False)
-            messagebox.showinfo("Saved", f"Predictions written to\n{path}")
-        except Exception as exc:  # noqa: BLE001
-            self._show_error("Could not save", exc)
+        self._save_frame_dialog(frame, "Save the predictions",
+                                "predictions.csv", "Predictions")
 
     # -- applicability-domain card (100x-118: the upload) ------------- #
     def _ml_ad_refresh_source(self) -> None:
@@ -11279,6 +11368,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             tooltip="The exact per-epoch records the estimator kept -- "
                     "epoch, train_loss, val_loss.")
         save_btn.pack(side="left")
+        ttk.Label(hist_buttons, text="CV folds", style="CardMuted.TLabel").pack(
+            side="left", padx=(14, 4))
+        self._dl_cv_entry = ttk.Entry(hist_buttons, width=4)
+        self._dl_cv_entry.insert(0, "5")
+        self._dl_cv_entry.pack(side="left")
+        curve_btn = self._action_button(
+            hist_buttons, "Learning curve…", self._dl_plot_learning_curve,
+            tooltip="plot_learning_curve over the FULL dataset (100x-121): "
+                    "training-set size vs CV score -- are more rows still "
+                    "buying accuracy?  The estimator clones refit with the "
+                    "network's own epochs, so a big curve takes its time.")
+        curve_btn.pack(side="left", padx=(10, 0))
+        self._dl_curve_host = self._figure_host(hist, height=300)
 
     def _dl_open_csv(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
@@ -11539,24 +11641,61 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._dl_history:
             messagebox.showinfo("Nothing to save", "Train a network first.")
             return
-        if not self._require_pharmaml():
+        import pandas as pd
+
+        frame = pd.DataFrame(self._dl_history)
+        self._save_frame_dialog(frame, "Save training history",
+                                "dl_history.csv", "Training history")
+
+    def _dl_plot_learning_curve(self) -> None:
+        """Training-set size vs CV score for the last network (100x-121).
+
+        The deep twin of the ML Results card's learning curve: the same
+        ``plot_learning_curve`` over the FULL dataset (train + test rows
+        re-joined), the estimator cloned per fold exactly like the
+        sklearn registry models -- "should we assay more compounds?"
+        answered with a curve, not a single CV number.
+        """
+        if self._dl_last_run is None:
+            messagebox.showinfo("No network", "Train a network first.")
             return
-        path = filedialog.asksaveasfilename(
-            title="Save training history", defaultextension=".csv",
-            filetypes=[("CSV table", "*.csv")],
-        )
-        if not path:
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the learning curve"):
+            return
+        network, _name, _task, _x_test, target = self._dl_last_run
+        frame = self._dl_frame
+        if frame is None or target not in frame.columns:
+            messagebox.showinfo("No dataset", "Open the training CSV again.")
             return
         try:
-            import pandas as pd
+            folds = parse_int(self._dl_cv_entry.get(), "CV folds",
+                              minimum=2, maximum=10)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        numeric, _dropped = numeric_feature_columns(frame, target)
+        if not numeric:
+            messagebox.showwarning("No numeric features",
+                                   "The dataset no longer has numeric "
+                                   "feature columns.")
+            return
+        x_full = frame[numeric]
+        y_full = frame[target]
 
-            from pharmaml.utils.io import write_table
+        def work() -> Any:
+            from pharmaml.viz import plot_learning_curve
 
-            frame = pd.DataFrame(self._dl_history)
-            written = write_table(frame, Path(path))
-            messagebox.showinfo("Saved", f"Training history written to\n{written}")
-        except Exception as exc:  # noqa: BLE001
-            self._show_error("Could not save", exc)
+            return plot_learning_curve(
+                network, x_full, y_full, cv=folds,
+                title=(f"Learning curve — {type(network).__name__} · "
+                       f"{len(x_full)} rows × {len(numeric)} features · "
+                       f"{folds}-fold CV"),
+            )
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._dl_curve_host, figure)
+
+        self._start_job("deep learning curve", work, render)
 
     def _dl_check_csv(self) -> None:
         """Audit any CSV against the last trained network (``ml check``).
@@ -12010,21 +12149,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self._ga_result is None:
             messagebox.showinfo("Nothing to save", "Run an evolution first.")
             return
-        if not self._require_pharmaml():
-            return
-        path = filedialog.asksaveasfilename(
-            title="Save leaderboard", defaultextension=".csv",
-            filetypes=[("CSV table", "*.csv")],
-        )
-        if not path:
-            return
-        try:
-            from pharmaml.utils.io import write_table
-
-            written = write_table(self._ga_result.to_dataframe(), path)
-            messagebox.showinfo("Saved", f"Leaderboard written to\n{written}")
-        except Exception as exc:  # noqa: BLE001
-            self._show_error("Could not save", exc)
+        self._save_frame_dialog(self._ga_result.to_dataframe(),
+                                "Save leaderboard", "ga_leaderboard.csv",
+                                "Leaderboard")
 
     # -- the Pareto front card (100x-58) ------------------------------- #
     def _render_pareto(self, result: Any) -> None:
@@ -12112,26 +12239,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._show_error("Pareto plot failed", exc)
 
     def _save_pareto_front(self) -> None:
-        """Write the front table of the last multi-objective run as CSV."""
+        """Write the front table of the last multi-objective run (5 formats)."""
         if self._pareto_front is None:
             messagebox.showinfo("Nothing to save",
                                 "Run a multi-objective evolution first.")
             return
-        if not self._require_pharmaml():
-            return
-        path = filedialog.asksaveasfilename(
-            title="Save Pareto front", defaultextension=".csv",
-            filetypes=[("CSV table", "*.csv")],
-        )
-        if not path:
-            return
-        try:
-            from pharmaml.utils.io import write_table
-
-            written = write_table(self._pareto_front.to_dataframe(), path)
-            messagebox.showinfo("Saved", f"Pareto front written to\n{written}")
-        except Exception as exc:  # noqa: BLE001
-            self._show_error("Could not save", exc)
+        self._save_frame_dialog(self._pareto_front.to_dataframe(),
+                                "Save Pareto front", "pareto_front.csv",
+                                "Pareto front")
 
     # ------------------------------------------------------------------ #
     # Utilities tab -- the rar's own file & table operations, one by one
@@ -12580,23 +12695,39 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 ])
         return shown
 
-    def _save_frame_dialog(self, frame: Any, title: str, name: str) -> None:
-        """Ask a path and write ``frame`` as CSV (the shared save path)."""
+    def _save_frame_dialog(self, frame: Any, title: str, name: str,
+                           subject: str = "table") -> None:
+        """Ask a path and write ``frame`` (``export_table``, five formats).
+
+        The library's visual export story owns the dialog (100x-121):
+        ``.csv``, ``.tsv``, GitHub-ready ``.md``, records ``.json`` and a
+        standalone styled ``.html`` -- ``export_table`` picks the writer
+        from the picked extension, so every table card can hand its
+        results to a report, a notebook or a browser.
+        """
         if frame is None:
             messagebox.showinfo("Nothing to save", "Run the tool first.")
             return
         path = filedialog.asksaveasfilename(
             title=title, defaultextension=".csv",
             initialfile=name,
-            filetypes=[("CSV table", "*.csv")],
+            filetypes=[
+                ("CSV table", "*.csv"),
+                ("TSV table", "*.tsv"),
+                ("Markdown table", "*.md"),
+                ("JSON records", "*.json"),
+                ("HTML table", "*.html"),
+            ],
         )
         if not path:
             return
+        if not self._require_pharmaml():
+            return
         try:
-            from pharmaml.utils.io import write_table
+            from pharmaml.viz import export_table
 
-            written = write_table(frame, path)
-            messagebox.showinfo("Saved", f"table written to\n{written}")
+            written = export_table(frame, path)
+            messagebox.showinfo("Saved", f"{subject} written to\n{written}")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save", exc)
 

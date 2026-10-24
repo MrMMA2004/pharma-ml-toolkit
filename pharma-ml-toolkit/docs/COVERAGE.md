@@ -602,3 +602,22 @@ bundle (`plot_residuals`, `plot_roc_curves`, `plot_cv_scores`,
 `save_visual_bundle`). The audit method is
 re-runnable: walk `inspect.getmembers(pharmaml.<module>)` and grep
 `playground.py` — a user-facing zero-hit is the next round's todo.
+
+## Library coverage (100x-121) — round 6: UnitConverter + export_table
+
+The sixth audit re-run (same method, after 1.2.59) re-examined the 38
+documented non-goals one by one and found two more genuinely
+user-facing capabilities; both closed in **1.2.60**:
+
+| Library capability | playground.py surface since 1.2.60 |
+| --- | --- |
+| `pharma.UnitConverter` | PK / PD → *Unit converter* card (dimension picker + editable unit comboboxes + factor; the honest `UnitConversionError` names every supported unit) |
+| `viz.export_table` | every table save in the window — one shared dialog offering `.csv` / `.tsv` / `.md` / `.json` / `.html` (all 11 save sites migrated) |
+
+Round 6 also rode three content/UI items: the Deep Learning tab's
+size-vs-score learning curve (`plot_learning_curve` over the full
+dataset — the deep twin of the ML Results button), the parsed
+`parse_dlg_summary` cluster verdict on the single-folder AutoDock4
+line, and the Ctrl+F finder's session-persisted last query. Remaining
+zero-hit symbols (36, down from 38): the documented non-goals above
+minus `UnitConverter` and `export_table`.

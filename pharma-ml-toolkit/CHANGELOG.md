@@ -10,6 +10,59 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.60] — 2026-10-24
+
+### Added — the round-6 full review (100x-121): UnitConverter + export_table + the deep learning curve
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a sixth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: 38 zero-hit symbols re-examined one by one). Two more
+genuine user-facing gaps surfaced, plus three content/UI polish items
+from the 120 hand-over list:
+
+| Library capability | playground.py surface since 1.2.60 |
+| --- | --- |
+| `pharma.UnitConverter` | PK / PD → **Unit converter** card (row 7): dimension picker (mass / volume / amount / concentration / time) loads both comboboxes, value entry, `Convert` reports the result + dimension + conversion factor; the entries stay editable so an unknown or cross-dimension unit surfaces the library's own `UnitConversionError` — which names every supported unit by dimension |
+| `viz.export_table` | **Every table save in the window** now routes through one shared dialog offering five formats — `.csv`, `.tsv`, GitHub-ready `.md`, records `.json`, standalone styled `.html` — the format follows the picked extension. All 11 save sites migrated (descriptors, RISM-KH, feature selection, NCA summary, ligand preparation report, docking results, ML predictions, DL history, GA leaderboard, Pareto front, and the shared `_save_frame_dialog` callers) |
+
+- **Deep Learning tab — the size-vs-score learning curve**: the
+  Training history card gained a *Learning curve…* button + CV-folds
+  entry + its own figure host — `plot_learning_curve` over the FULL
+  dataset (train + test re-joined), the estimator cloned per fold
+  exactly like the sklearn registry models ("should we assay more
+  compounds?" answered with a curve; the deep twin of the ML Results
+  button from 1.2.59).
+- **Docking — the parsed DLG cluster summary rides the verdict line**:
+  after a successful *AutoDock4 single folder* run, the summary now
+  carries `parse_dlg_summary`'s numbers — cluster count, the top
+  cluster's lowest energy and size, and the best-populated cluster's
+  (the columns the original rar exported to Excel).
+- **The Ctrl+F card finder remembers its last query** — prefilled on
+  the next dialog open AND persisted across restarts (the session
+  file's new `finder` text key; older sessions simply lack it).
+- **The home guide gained its missing Deep Learning row** — the "What
+  lives where" card listed seven of the eight content tabs; the DL
+  blurb (architectures, loss curves, the new learning curve, the CSV
+  audit) completes it, and the PK / PD row now mentions the unit
+  converter.
+
+### Tests
+
+- 21 new GUI tests (`TestReview121Gui`): the unit converter's default
+  conversion / dimension swap / time defaults / unknown-unit /
+  cross-dimension / bad-value contracts, the five-format save dialog
+  (filetypes + real `.md`/`.html` writes + routing from the ML
+  predictions, NCA and RISM saves + the no-frame guard), the DL
+  learning curve (no-network guard + full job + bad-folds), the DLG
+  summary verdict line (a real `CLUSTERING HISTOGRAM` table), the
+  finder memory (session payload + restore + prefilled dialog), the
+  home-guide Deep Learning row and the docstring round pin. The DL
+  session-input pin grew 15 → 16 (the CV-folds entry).
+- The E2E probe gained the 100x-121 section (unit converter + error
+  contract, four export formats on disk, the DL curve embedded,
+  finder memory, the DLG verdict) — the live-card census is now 66.
+
 ## [1.2.59] — 2026-10-24
 
 ### Added — the round-5 full review (100x-120): the last library stragglers gain GUI surfaces

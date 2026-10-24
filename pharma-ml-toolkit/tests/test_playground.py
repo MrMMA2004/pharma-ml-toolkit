@@ -2798,7 +2798,7 @@ class TestDeepLearningTab:
             first._dl_batchnorm_var.set(True)
             payload = first._collect_session()
             saved = [key for key in payload["variables"] if key.startswith("_dl_")]
-            assert len(saved) == 15  # every input on the tab
+            assert len(saved) == 16  # every input on the tab (CV folds since 121)
 
             second._session = payload
             second._restore_session()
@@ -5030,3 +5030,355 @@ class TestReview120Gui:
     ) -> None:
         text = playground.shortcut_hints_text()
         assert "Ctrl+F find a card" in text
+
+
+class TestReview121Gui:
+    """Round 100x-121: UnitConverter card, export_table saves, DL curve."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- PK/PD: the UnitConverter card -------------------------------- #
+    def test_unit_converter_default_converts_mg_to_g(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        assert app._uc_from.get() == "mg"
+        assert app._uc_to.get() == "g"
+        app._uc_convert()
+        text = app._uc_result.cget("text")
+        assert "500 mg" in text and "=  0.5 g" in text, text
+        assert "mass conversion" in text
+        assert "factor" in text
+        assert "mass: kg · g · mg" in app._uc_units_hint.cget("text")
+        assert quiet_dialogs == []
+
+    def test_unit_converter_dimension_swap(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._uc_dim_combo.set("concentration")
+        app._uc_dimension_changed()
+        assert app._uc_from.get() == "uM"
+        assert app._uc_to.get() == "nM"
+        app._uc_convert()
+        text = app._uc_result.cget("text")
+        assert "=  500000 nM" in text or "=  5e+05 nM" in text, text
+        assert "concentration conversion" in text
+        assert quiet_dialogs == []
+
+    def test_unit_converter_time_dimension_defaults(
+        self, app: Any
+    ) -> None:
+        app._uc_dim_combo.set("time")
+        app._uc_dimension_changed()
+        assert app._uc_from.get() == "h" and app._uc_to.get() == "min"
+
+    def test_unit_converter_unknown_unit_is_named(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._uc_from.delete(0, "end")
+        app._uc_from.insert(0, "stones")
+        app._uc_convert()
+        assert any("Conversion failed" in str(a) for a in quiet_dialogs)
+        # the result label is untouched by the failed run
+        assert app._uc_result.cget("text") == "—"
+
+    def test_unit_converter_cross_dimension_is_rejected(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._uc_to.delete(0, "end")
+        app._uc_to.insert(0, "mL")
+        app._uc_convert()
+        assert any("Conversion failed" in str(a) for a in quiet_dialogs)
+
+    def test_unit_converter_bad_value_is_named(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._uc_value.delete(0, "end")
+        app._uc_value.insert(0, "not-a-number")
+        app._uc_convert()
+        assert any("Conversion failed" in str(a) for a in quiet_dialogs)
+
+    # -- export_table: the five-format save dialog --------------------- #
+    def test_save_frame_dialog_offers_five_formats(
+        self, app: Any, playground: Any, monkeypatch: Any,
+        quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        picked: dict[str, str] = {}
+
+        def fake_ask(title: str = "", **kwargs: Any) -> str:
+            picked["filetypes"] = str(kwargs.get("filetypes", ""))
+            return str(tmp_path / "out.csv")
+
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename",
+                            fake_ask)
+        frame = pd.DataFrame({"a": [1, 2], "b": [3.5, 4.5]})
+        app._save_frame_dialog(frame, "Save it", "out.csv", "The table")
+        assert ".csv" in picked["filetypes"]
+        assert ".tsv" in picked["filetypes"]
+        assert ".md" in picked["filetypes"]
+        assert ".json" in picked["filetypes"]
+        assert ".html" in picked["filetypes"]
+        assert (tmp_path / "out.csv").exists()
+        assert any("The table written" in str(a) for a in quiet_dialogs)
+
+    def test_save_frame_dialog_writes_markdown_and_html(
+        self, app: Any, playground: Any, monkeypatch: Any,
+        quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        frame = pd.DataFrame({"name": ["aspirin", "caffeine"],
+                              "score": [1.5, 2.5]})
+        for suffix in ("md", "html"):
+            target = tmp_path / f"table.{suffix}"
+            monkeypatch.setattr(
+                playground.filedialog, "asksaveasfilename",
+                lambda t="", _p=target, **k: str(_p))
+            app._save_frame_dialog(frame, "Save it", "table.csv", "The table")
+            content = target.read_text(encoding="utf-8")
+            assert "aspirin" in content and "caffeine" in content
+            if suffix == "html":
+                assert "<table" in content
+        assert quiet_dialogs, "the Saved confirmation did not fire"
+
+    def test_export_table_routed_from_ml_predictions_save(
+        self, app: Any, playground: Any, monkeypatch: Any,
+        quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        app._ml_predictions = pd.DataFrame({"SMILES": ["CCO"],
+                                            "prediction": [7.2]})
+        target = tmp_path / "preds.md"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename",
+            lambda t="", **k: str(target))
+        app._ml_save_predictions()
+        assert target.exists()
+        assert "CCO" in target.read_text(encoding="utf-8")
+
+    def test_export_table_routed_from_nca_save(
+        self, app: Any, playground: Any, monkeypatch: Any,
+        quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        from types import SimpleNamespace
+
+        app._nca_summary = SimpleNamespace(
+            auc=55.0, aucm=410.0, mrt=7.45, c_max=12.0, t_max=0.5,
+            half_life_terminal=3.9)
+        target = tmp_path / "nca.json"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename",
+            lambda t="", **k: str(target))
+        app._nca_save()
+        assert target.exists()
+        assert "55" in target.read_text(encoding="utf-8")
+
+    def test_save_frame_dialog_no_frame_is_named(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._save_frame_dialog(None, "Save it", "out.csv")
+        assert any("Nothing to save" in str(a) for a in quiet_dialogs)
+
+    def test_rism_save_routes_through_the_shared_dialog(
+        self, app: Any, playground: Any, monkeypatch: Any,
+        quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        app._rism_frame = pd.DataFrame({"rism": [1.0]})
+        target = tmp_path / "rism.tsv"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename",
+            lambda t="", **k: str(target))
+        app._rism_save()
+        assert target.exists()
+        assert "RISM-KH table written" in str(quiet_dialogs[-1][1])
+
+    # -- Deep Learning: the size-vs-score learning curve --------------- #
+    def test_dl_learning_curve_needs_a_network(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_plot_learning_curve()
+        assert any("No network" in str(a) for a in quiet_dialogs)
+
+    def test_dl_learning_curve_after_training(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_load_example()
+        app._dl_hidden_entry.delete(0, "end")
+        app._dl_hidden_entry.insert(0, "8")
+        app._dl_epochs.delete(0, "end")
+        app._dl_epochs.insert(0, "3")
+        app._dl_train()
+        assert self._drain(app), "DL train job hung"
+        app._dl_cv_entry.delete(0, "end")
+        app._dl_cv_entry.insert(0, "2")
+        app._dl_plot_learning_curve()
+        assert self._drain(app), "DL learning-curve job hung"
+        assert len(app._dl_curve_host.winfo_children()) == 1
+        assert quiet_dialogs == []
+
+    def test_dl_learning_curve_bad_folds_is_named(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_load_example()
+        app._dl_hidden_entry.delete(0, "end")
+        app._dl_hidden_entry.insert(0, "8")
+        app._dl_epochs.delete(0, "end")
+        app._dl_epochs.insert(0, "3")
+        app._dl_train()
+        assert self._drain(app), "DL train job hung"
+        app._dl_cv_entry.delete(0, "end")
+        app._dl_cv_entry.insert(0, "1")
+        app._dl_plot_learning_curve()
+        assert any("CV folds" in str(a) for a in quiet_dialogs)
+
+    # -- single-folder AutoDock4: the DLG cluster summary -------------- #
+    def test_single_folder_render_carries_dlg_summary(
+        self, app: Any, playground: Any, monkeypatch: Any, tmp_path: Path
+    ) -> None:
+        from types import SimpleNamespace
+
+        # a real DLG cluster table (the format readerwithdetails.py
+        # parsed): three clusters, rank 1 lowest, rank 3 most populated
+        dlg = tmp_path / "r.dlg"
+        dlg.write_text(
+            "________\n"
+            "CLUSTERING HISTOGRAM\n"
+            "__________________\n"
+            "______________________________________________________________________\n"
+            "Cluster Rank | Lowest Energy | Run | Mean Energy | # in Cluster\n"
+            "_____________|_______________|_____|_____________|________________\n"
+            "     1       |     -11.5     |  3  |    -11.2    |      7 |\n"
+            "     2       |     -10.8     |  9  |    -10.5    |     34 |\n"
+            "     3       |      -9.9     | 17  |    -9.7    |      52 |\n"
+            "____________|_______________|_____|_____________|________________\n",
+            encoding="utf-8",
+        )
+        result = SimpleNamespace(ok=True, error="", seconds=12.5,
+                                 dlg=dlg)
+        engine_holder: dict[str, str] = {}
+
+        def fake_start_job(label: str, work: Any, render: Any) -> None:
+            engine_holder["render"] = render  # type: ignore[assignment]
+
+        monkeypatch.setattr(app, "_start_job", fake_start_job)
+        monkeypatch.setattr(
+            playground, "docking_engine_binaries", lambda engine: ())
+        app._dock_engine_combo.set("AutoDock4 single folder")
+        app._dock_campaign_root = tmp_path
+        app._dock_run()
+        engine_holder["render"](result)  # type: ignore[index]
+        text = app._dock_run_summary.cget("text")
+        assert "3 clusters" in text, text
+        assert "top -11.50" in text, text
+        assert "(n=7)" in text, text
+        assert "best-populated -9.90 (n=52)" in text, text
+
+    # -- the finder remembers its last query --------------------------- #
+    def test_finder_remembers_last_query_in_session_payload(
+        self, app: Any
+    ) -> None:
+        app._finder_last_query = "unit converter"
+        payload = app._collect_session()
+        assert payload["texts"]["finder"] == "unit converter"
+
+    def test_finder_restores_last_query_from_session(
+        self, app: Any
+    ) -> None:
+
+        # a raw session dict shaped like load_session's output
+        app._session = {
+            "theme": "light", "geometry": "", "tab": 0,
+            "variables": {}, "families": {},
+            "texts": {"finder": "learning curve"},
+        }
+        app._restore_session()
+        assert app._finder_last_query == "learning curve"
+
+    def test_finder_dialog_prefills_the_last_query(
+        self, app: Any
+    ) -> None:
+        import tkinter as tkmod
+
+        app._finder_last_query = "nca"
+        app._find_card_dialog()
+        dialogs = [child for child in app.winfo_children()
+                   if isinstance(child, tkmod.Toplevel)
+                   and child.title() == "Find a card"]
+        assert len(dialogs) == 1
+        win = dialogs[0]
+        entry = next(child for child in win.winfo_children()
+                     if child.winfo_class() == "TEntry")
+        assert entry.get() == "nca"
+        tree = next(child for child in win.winfo_children()
+                    if child.winfo_class() == "Treeview")
+        # the prefill also filtered the list: NCA cards only
+        labels = [str(tree.item(row, "values")[0])
+                  for row in tree.get_children()]
+        assert labels and all("NCA" in label for label in labels), labels
+        win.destroy()
+
+    # -- the home guide grew the Deep Learning blurb ------------------- #
+    def test_home_guide_lists_deep_learning(
+        self, app: Any, playground: Any
+    ) -> None:
+        guide = None
+        for title, _subtitle, shell in playground._CARD_INDEX:
+            if title != "What lives where":
+                continue
+            try:
+                live = bool(shell.winfo_exists())
+            except Exception:  # noqa: BLE001 - destroyed earlier shell
+                live = False
+            if live:
+                guide = shell
+                break
+        assert guide is not None
+        dump = "\n".join(
+            str(widget.cget("text")) for widget in app._walk_widgets(guide)
+            if widget.winfo_class() == "TLabel")
+        assert "Deep Learning" in dump
+        assert "residual MLP" in dump
+        assert "unit converter" in dump
+
+    # -- the docstring records the round ------------------------------- #
+    def test_module_docstring_records_round_121(
+        self, playground: Any
+    ) -> None:
+        doc = playground.__doc__ or ""
+        assert "UnitConverter" in doc
+        assert "export_table" in doc
+        assert "100x-121" in doc

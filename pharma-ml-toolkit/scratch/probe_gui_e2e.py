@@ -453,6 +453,115 @@ assert app._dock_exhaust_entry.get() == "12"
 shutil.rmtree(_tmp, ignore_errors=True)
 print("vina config parse: 8 keys · form filled")
 
+# -- 100x-121 additions: UnitConverter, export_table, DL curve, memory -- #
+# the unit converter card: default mass conversion + dimension swap
+app._uc_convert()
+_uc_text = app._uc_result.cget("text")
+assert "500 mg" in _uc_text and "=  0.5 g" in _uc_text, _uc_text
+assert "factor" in _uc_text and "mass conversion" in _uc_text
+app._uc_dim_combo.set("concentration")
+app._uc_dimension_changed()
+assert app._uc_from.get() == "uM" and app._uc_to.get() == "nM"
+app._uc_convert()
+assert "=  500000 nM" in app._uc_result.cget("text"), app._uc_result.cget("text")
+print("unit converter:", _uc_text.replace("\n", " | "))
+
+# the unknown-unit error contract (one dialog fires, then we clear it)
+app._uc_from.delete(0, "end")
+app._uc_from.insert(0, "stones")
+app._uc_convert()
+assert len(DIALOGS) == 1 and DIALOGS[0][0] == "error", DIALOGS
+DIALOGS.clear()
+app._uc_from.delete(0, "end")
+app._uc_from.insert(0, "mg")
+app._uc_dim_combo.set("mass")
+app._uc_dimension_changed()
+print("unit converter: unknown unit named in a dialog")
+
+# export_table: the five-format save dialog writes md/html/json/tsv
+_frame = pd.DataFrame({"name": ["aspirin", "caffeine"],
+                        "score": [1.5, 2.5]})
+_orig_ask = fd.asksaveasfilename
+_tmp121 = Path(tempfile.mkdtemp(prefix="probe121_"))
+for _suffix in ("md", "html", "json", "tsv"):
+    _target = _tmp121 / f"table.{_suffix}"
+    fd.asksaveasfilename = lambda t="", _p=_target, **k: str(_p)
+    app._save_frame_dialog(_frame, "Save it", "table.csv", "The table")
+    assert _target.exists(), f"{_suffix} export missing"
+    assert "aspirin" in _target.read_text(encoding="utf-8")
+fd.asksaveasfilename = _orig_ask
+shutil.rmtree(_tmp121, ignore_errors=True)
+assert len(DIALOGS) == 4 and all(d[0] == "info" for d in DIALOGS), DIALOGS
+DIALOGS.clear()
+print("export_table: md/html/json/tsv all written")
+
+# the DL learning curve (small network, 2-fold, 3 epochs)
+app._dl_load_example()
+app._dl_hidden_entry.delete(0, "end")
+app._dl_hidden_entry.insert(0, "8")
+app._dl_epochs.delete(0, "end")
+app._dl_epochs.insert(0, "3")
+app._dl_train()
+assert pump_until_idle(timeout=600), "DL train job hung"
+app._dl_cv_entry.delete(0, "end")
+app._dl_cv_entry.insert(0, "2")
+app._dl_plot_learning_curve()
+assert pump_until_idle(timeout=600), "DL learning-curve job hung"
+assert len(app._dl_curve_host.winfo_children()) == 1, "DL curve not embedded"
+print("DL learning curve: embedded")
+
+# the finder remembers its last query (session payload + prefill)
+app._finder_last_query = "unit converter"
+_payload121 = app._collect_session()
+assert _payload121["texts"]["finder"] == "unit converter"
+app._find_card_dialog()
+_d121 = [c for c in app.winfo_children()
+         if isinstance(c, _tk.Toplevel) and c.title() == "Find a card"]
+assert len(_d121) == 1
+_e121 = next(c for c in _d121[0].winfo_children() if c.winfo_class() == "TEntry")
+assert _e121.get() == "unit converter", _e121.get()
+_d121[0].destroy()
+print("finder memory: session payload + prefilled dialog")
+
+# the DLG cluster summary rides the single-folder verdict line
+from types import SimpleNamespace as _NS
+
+_tmp_dlg = Path(tempfile.mkdtemp(prefix="probe121dlg_"))
+_dlg = _tmp_dlg / "r.dlg"
+_dlg.write_text(
+    "________\nCLUSTERING HISTOGRAM\n__________________\n"
+    "______________________________________________________________________\n"
+    "Cluster Rank | Lowest Energy | Run | Mean Energy | # in Cluster\n"
+    "_____________|_______________|_____|_____________|________________\n"
+    "     1       |     -11.5     |  3  |    -11.2    |      7 |\n"
+    "     2       |     -10.8     |  9  |    -10.5    |     34 |\n"
+    "     3       |      -9.9     | 17  |    -9.7    |      52 |\n"
+    "____________|_______________|_____|_____________|________________\n",
+    encoding="utf-8")
+_captured = {}
+
+
+def _fake_start_job(label, work, render):
+    _captured["render"] = render
+
+
+_orig_start_job = app._start_job
+_orig_binaries = playground.docking_engine_binaries
+playground.docking_engine_binaries = lambda engine: ()
+app._start_job = _fake_start_job
+app._dock_engine_combo.set("AutoDock4 single folder")
+app._dock_campaign_root = _tmp_dlg
+app._dock_run()
+app._start_job = _orig_start_job
+playground.docking_engine_binaries = _orig_binaries
+_captured["render"](_NS(ok=True, error="", seconds=12.5, dlg=_dlg))
+_summary121 = app._dock_run_summary.cget("text")
+assert "3 clusters" in _summary121 and "top -11.50" in _summary121, _summary121
+assert "best-populated -9.90 (n=52)" in _summary121, _summary121
+shutil.rmtree(_tmp_dlg, ignore_errors=True)
+app._dock_engine_combo.set("AutoDock4 campaign")
+print("dlg summary:", _summary121[:90])
+
 app.destroy()
 assert not DIALOGS, f"unexpected dialogs: {DIALOGS}"
 print("PROBE_OK")
