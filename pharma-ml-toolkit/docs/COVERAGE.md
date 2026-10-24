@@ -663,3 +663,27 @@ combobox; `ring_topology_mutate` behind the GA's topology mutation;
 `run_genetic/rl_optimization` behind the class-based optimiser cards;
 `SmilesRnn` inside `ReinventOptimizer`; `ScoringObjective` the
 abstract base every concrete objective subclasses).
+
+### Round 8 (100x-123) — the audit re-run and the GUI's own content gaps
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: 244 public symbols, 44 zero-hit — every
+one re-examined and re-verified in source this round (the GA/RL
+`run_*_optimization` functions are thin wrappers around the
+`GeneticOptimizer`/`ReinventOptimizer` classes the cards drive
+directly; `SmilesRnn` is the prior engine inside `ReinventOptimizer`;
+`RISM_DESCRIPTORS` is the RISM card's ten meanings; `MODEL_ALIASES`
+powers the model-name resolution every text entry feeds). The library
+axis stayed at its floor — no new library-symbol gaps — so the round
+closed the two genuine gaps on the GUI's OWN content surfaces:
+
+| GUI surface | The 1.2.62 fix |
+| --- | --- |
+| the session PDF report | figures only → **figures + every filled table** (`_live_session_tables` walks the live `ttk.Treeview`s, climbs to the card shell for provenance, and ships real text pages through `save_pdf_report(tables=…)`) |
+| the two surgery cards | text summaries only → **2D structure grids** (`molecule_grid_figure`: one RDKit panel per mutant / parent / viable child, honest unparseable-slot and empty-grid notes) |
+
+The 44 zero-hit symbols are unchanged from round 7's classification
+(containers, constants, plumbing, verified absorptions — all
+documented above); the honest next library-axis frontier is the
+notebook axis, which stays binding on the rar files only.

@@ -94,9 +94,7 @@ class TestAcquisitionParity:
         tolerances = {"cdf": 1.5e-7, "pdf": 1e-12, "ei": 1e-6, "ucb": 1e-12}
         for quantity, tol in tolerances.items():
             worst = max(abs(a - b) for a, b in zip(ts[quantity], ref[quantity]))
-            assert worst <= tol, (
-                f"{quantity}: shipped TS vs scipy max|d| = {worst:.3e} > {tol:.1e}"
-            )
+            assert worst <= tol, f"{quantity}: shipped TS vs scipy max|d| = {worst:.3e} > {tol:.1e}"
 
 
 class TestHyperbandRungFold:
@@ -162,3 +160,60 @@ class TestApplicabilityDomainParity:
             TOOLKIT_ROOT,
         )
         _run([BUN, "run", "scratch/probe_ad_parity_118.ts"], REPO_ROOT)
+
+
+class TestUnitConverterParity:
+    """unit-converter.ts vs pharmaml.pharma.units (the 100x-123 pair).
+
+    The web Calculators card's unit converter mirrors the desktop's
+    dimension-aware converter in TS; this guard runs BOTH sides on the
+    same matrix (every same-dimension unit pair of every dimension at
+    the sample value 7.5, the dimension_of answers, the sorted unit
+    lists, and both error paths) and asserts field-by-field agreement:
+    conversions compare as EXACT floats (both sides compute
+    ``value * from / to`` in the same IEEE order), the cross-dimension
+    message byte-identically, and the unknown-unit message modulo the
+    JSON-vs-repr quoting of the supported-units dictionary.
+    """
+
+    UNITS_TS = REPO_ROOT / "src" / "lib" / "unit-converter.ts"
+
+    @pytest.mark.skipif(
+        not UNITS_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src/lib/unit-converter.ts) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+    def test_units_matrix_parity(self) -> None:
+        _run(
+            [sys.executable, str(TOOLKIT_ROOT / "scratch" / "probe_units_parity_123.py")],
+            TOOLKIT_ROOT,
+        )
+        _run([BUN, "run", "scratch/probe_units_parity_123.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/units_ts_123.json").read_text())
+        ref = json.loads(Path("/tmp/units_ref_123.json").read_text())
+        assert len(ts["conversions"]) == len(ref["conversions"]) > 150
+        for a, b in zip(ts["conversions"], ref["conversions"]):
+            assert (a["from"], a["to"]) == (b["from"], b["to"]), (a, b)
+            assert a["value"] == b["value"], (a, b)  # exact IEEE parity
+        assert ts["dimensions"] == ref["dimensions"]
+        assert ts["unitLists"] == ref["unitLists"]
+        assert ts["errors"]["crossDimension"] == ref["errors"]["crossDimension"]
+        # unknown-unit: identical prefix + identical parsed payload (the
+        # quoting of the supported-units dict differs by language --
+        # Python repr vs JSON -- so parse both sides back to structures)
+        import ast
+
+        prefix = "unknown unit 'bogus'; supported units by dimension: "
+        payloads = {}
+        for side, message in (
+            ("ts", ts["errors"]["unknownUnit"]),
+            ("ref", ref["errors"]["unknownUnit"]),
+        ):
+            assert message.startswith(prefix), message
+            payloads[side] = message[len(prefix) :]
+        supported_ts = json.loads(payloads["ts"])
+        supported_ref = ast.literal_eval(payloads["ref"])
+        assert {k: sorted(v) for k, v in supported_ts.items()} == {
+            k: sorted(v) for k, v in supported_ref.items()
+        }

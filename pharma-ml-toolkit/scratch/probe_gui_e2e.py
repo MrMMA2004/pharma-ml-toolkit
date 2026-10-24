@@ -595,13 +595,52 @@ assert len(_litter) == 4, _litter
 assert "viable children" in app._breed_summary.cget("text")
 print("breed:", app._breed_summary.cget("text")[:80])
 
-# the session PDF report: guard first (the registry is emptied -- earlier
-# probe sections drew figures), then a real two-figure write
+# the session PDF report: guard first (the registry is emptied AND every
+# filled table is emptied -- the guard covers the report's two axes
+# since 100x-123), then a real write with BOTH axes
 app._session_figures.clear()
+
+
+def _empty_filled_tables(widget):
+    from tkinter import ttk as _ttk
+
+    for child in widget.winfo_children():
+        if isinstance(child, _ttk.Treeview) and len(child.get_children()):
+            child.delete(*child.get_children())
+        _empty_filled_tables(child)
+
+
+_empty_filled_tables(app)
+assert app._live_session_tables() == [], "probe failed to empty every table"
 app._menu_save_session_report()
 assert len(DIALOGS) == 1 and DIALOGS[0][0] == "info", DIALOGS
-assert "No figures yet" in str(DIALOGS[0][1]), DIALOGS
+assert "Nothing to report yet" in str(DIALOGS[0][1]), DIALOGS
 DIALOGS.clear()
+
+# (100x-123) the surgery structure grids: enumerate -> draw, breed -> draw
+app._gen_topology_moves()
+assert pump_until_idle(timeout=240), "topology job hung"
+assert app._topo_last[1], "no mutants enumerated"
+app._gen_draw_topology()
+assert pump_until_idle(timeout=240), "topology draw job hung"
+assert getattr(app._topo_host, "_pg_figure", None) is not None, "no topo grid"
+app._gen_breed()
+assert pump_until_idle(timeout=240), "breed job hung"
+app._gen_draw_breed()
+assert pump_until_idle(timeout=240), "breed draw job hung"
+assert getattr(app._breed_host, "_pg_figure", None) is not None, "no litter grid"
+# the draw guards: without a last result the honest info fires
+_saved_topo, app._topo_last = app._topo_last, None
+app._gen_draw_topology()
+assert any("No enumeration yet" in str(a) for a in DIALOGS), DIALOGS
+app._topo_last = _saved_topo
+DIALOGS.clear()
+
+# the table axis: a REAL job fills the descriptor table (200+ rows)
+app._analyse_smiles()
+assert pump_until_idle(timeout=240), "analyse job hung"
+_walked = app._live_session_tables()
+assert any(t == "SMILES inspector" and len(r) > 150 for t, _h, r in _walked), _walked[:2]
 
 import matplotlib
 
@@ -620,12 +659,15 @@ app._job_label_base = "figure alpha"
 app._render_figure(app._ml_host, _figA)
 app._job_label_base = "figure beta"
 app._render_figure(app._feat_host, _figB)
-assert len(app._live_session_figures()) == 2
+# (100x-123) the surgery grids drawn earlier in this probe are ALSO
+# live session figures now: topo + breed + ml + feat = 4 hosts
+assert len(app._live_session_figures()) == 4
 _figC = _plt.figure()
 _figC.add_subplot(111).plot([0, 1], [1, 0])
 app._render_figure(app._ml_host, _figC)  # replace in place
-assert len(app._live_session_figures()) == 2, "registry must stay one-per-host"
-assert app._session_figures[0][2] is _figC
+assert len(app._live_session_figures()) == 4, "registry must stay one-per-host"
+_ml_entry = next(e for e in app._session_figures if e[0] is app._ml_host)
+assert _ml_entry[2] is _figC
 
 _tmp122 = Path(tempfile.mkdtemp(prefix="probe122_"))
 _target122 = _tmp122 / "session-report.pdf"
@@ -634,8 +676,19 @@ app._menu_save_session_report()
 assert pump_until_idle(timeout=240), "report job hung"
 assert _target122.exists() and _target122.stat().st_size > 1_000
 assert app._ml_host._pg_figure is _figC, "close=False must keep live figures"
-assert len(DIALOGS) == 1 and "figure page(s) written" in str(DIALOGS[0][1]), DIALOGS
+assert len(DIALOGS) == 1 and "figure page(s)" in str(DIALOGS[0][1]), DIALOGS
+assert "table page(s)" in str(DIALOGS[0][1]), DIALOGS
 DIALOGS.clear()
+import pypdf as _pypdf
+
+_reader = _pypdf.PdfReader(str(_target122))
+_pages = [(_page.extract_text() or "").lower() for _page in _reader.pages]
+_joined = "\n".join(_pages)
+assert "table page(s)" in _joined, "subtitle did not count tables"
+assert "smiles inspector table" in _joined, "the table page did not ship"
+assert "molwt" in _joined, "walked rows did not ship"
+assert "more rows" in _joined, "the truncation note did not ship"
+assert len(_reader.pages) >= 5, "expected title + 2 figures + 1 table at least"
 shutil.rmtree(_tmp122, ignore_errors=True)
 _plt.close("all")
 print("session report: guard + registry replace + real PDF written")

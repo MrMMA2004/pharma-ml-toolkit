@@ -10,6 +10,49 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.62] — 2026-10-24
+
+### Added — the round-8 full review (100x-123): the report's table axis and the surgery structure grids
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited an eighth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: the 44 remaining zero-hit symbols re-examined and every
+claimed absorption re-verified in source — the GA/RL thin wrappers,
+`SmilesRnn` behind `ReinventOptimizer`, the RISM constant family
+behind the RISM card's meanings). The library axis stays at its
+documented floor; this round closed the two genuine CONTENT gaps on
+the GUI's own surfaces:
+
+| Surface | What 1.2.62 adds |
+| --- | --- |
+| File ▸ Save session report (PDF)… | The **table axis**: every filled table on screen — leaderboards, prediction sheets, descriptor panels, docking results, any card's table with rows — is walked the same way the figure registry walks hosts and shipped through `save_pdf_report(tables=…)` as REAL text pages (searchable, selectable, the library's own 38-row truncation note). The PDF is now the session's whole record: pictures AND numbers |
+| Ring topology moves card | **Draw mutants** — a 2D structure panel per enumerated mutant (RDKit `MolToImage` rasters in a matplotlib grid); the ring-size contraction/expansion becomes visible instead of a line of text |
+| Breed two molecules card | **Draw litter** — parents and viable children side by side, one 2D panel each; the bridge / ring-merge / linker-transplant geometry of every crossover draw becomes visible |
+
+- **The table walk** (`_live_session_tables`) discovers every live
+  `ttk.Treeview` with rows and derives each table's provenance by
+  climbing the widget tree to the nearest registered card shell (the
+  `Ctrl+F` card index), so no card needed per-site registration;
+  trees outside any card (the finder dialog) and empty trees are
+  skipped honestly. Hierarchical trees (`show="tree headings"`, e.g.
+  the sensitivity matrix) contribute their `#0` labels as the first
+  column exactly the way users read them.
+- **The structure grids** (`molecule_grid_figure`) never lie: an
+  unparseable SMILES keeps its panel with an honest note instead of
+  silently vanishing, and an empty litter draws the "nothing to draw"
+  line. Captions carry the label AND the truncated SMILES, so a grid
+  pasted into the session report stays self-describing.
+- The report guard now covers both axes ("Nothing to report yet" only
+  when there is neither a figure nor a filled table), the save
+  message and the PDF subtitle count both page kinds, and page names
+  reuse the plain-file-name contract (`"1 of 7"`, never `"1/7"`).
+- Tests: 17 new GUI tests (the grid helper's panels/edge cases, both
+  draw buttons' full job paths and no-data guards, the card-title
+  climb, the walk's empty/hierarchical/real-job contracts, three real
+  PDF writes incl. the tables-only and combined-axes reports, and the
+  docstring/home-guide pins). Full suite: 2355 collected, 0 failures.
+
 ## [1.2.61] — 2026-10-24
 
 ### Added — the round-7 full review (100x-122): the reference objectives, molecule surgery, the session PDF report

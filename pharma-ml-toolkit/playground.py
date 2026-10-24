@@ -216,12 +216,16 @@ Design notes
   ``SubstructureObjective``) with their swapped-in reference /
   SMARTS row -- plus the two molecule-surgery cards
   (``ring_topology_moves`` and ``scaffold_hop_crossover``) for
-  single-molecule what-ifs without a full run.  The UI gained its
-  reporting layer: ``File ▸ Save session report (PDF)…`` composes
-  ``save_pdf_report`` over every live figure on screen (one page per
-  figure, a title page with the census, the on-screen figures stay
-  alive via ``close=False``), and the session restore now re-syncs the
-  swapped GA/RL and reference rows to the restored selections.
+  single-molecule what-ifs without a full run, each with its 2D
+  structure grid (one RDKit panel per mutant / parent / child).  The
+  UI gained its reporting layer: ``File ▸ Save session report
+  (PDF)…`` composes ``save_pdf_report`` over every live figure on
+  screen (one page per figure, a title page with the census, the
+  on-screen figures stay alive via ``close=False``) AND every filled
+  table (real text pages via the library's own ``tables=`` axis --
+  searchable, truncation notes and all), and the session restore now
+  re-syncs the swapped GA/RL and reference rows to the restored
+  selections.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -1634,6 +1638,60 @@ def _grid_text(parent: Any, height: int = 6, mono: Any = None) -> Any:
     return box
 
 
+def _truncate_caption_text(text: str, width: int = 34) -> str:
+    """Shorten a caption line to ``width`` characters with an ellipsis."""
+    return text if len(text) <= width else text[: width - 1] + "\u2026"
+
+
+def molecule_grid_figure(entries: list[tuple[str, str]], title: str) -> Any:
+    """One matplotlib figure of captioned 2D structure panels (100x-123).
+
+    ``entries`` pairs a short caption with a SMILES string: every
+    parseable molecule becomes one panel (an RDKit 2D drawing raster,
+    :func:`rdkit.Chem.Draw.MolToImage`), an unparseable entry keeps its
+    slot with an honest note instead of silently vanishing, and an empty
+    list draws the honest ``nothing to draw`` line.  Callers pass the
+    caption pre-built (label + truncated SMILES) so the grid stays
+    self-describing when copy-pasted into the session report.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from rdkit import Chem
+    from rdkit.Chem import Draw
+
+    count = max(len(entries), 1)
+    # 3 columns fit the card width up to a 2-row litter (parents +
+    # children); wider grids only for the biggest draws.
+    columns = 3 if count <= 6 else 4
+    rows = max(1, -(-count // columns))  # ceil division
+    figure, axes = plt.subplots(
+        rows, columns, figsize=(3.1 * columns, 3.0 * rows + 0.5), squeeze=False
+    )
+    panels = [panel for row_axes in axes for panel in row_axes]
+    for panel in panels:
+        panel.axis("off")
+    if not entries:
+        panels[0].text(0.5, 0.5, "nothing to draw", ha="center", va="center", fontsize=11)
+    for panel, (caption, smiles) in zip(panels, entries):
+        mol = Chem.MolFromSmiles(smiles) if smiles else None
+        if mol is None:
+            panel.text(
+                0.5,
+                0.5,
+                f"{caption}\n(unparseable SMILES)",
+                ha="center",
+                va="center",
+                fontsize=9,
+            )
+            continue
+        raster = np.asarray(Draw.MolToImage(mol, size=(300, 300)))
+        panel.imshow(raster)
+        panel.set_title(caption, fontsize=8, pad=6)
+    figure.suptitle(title, fontsize=10)
+    figure.tight_layout(rect=(0, 0, 1, 0.96))
+    return figure
+
+
 # --------------------------------------------------------------------------- #
 # the application
 # --------------------------------------------------------------------------- #
@@ -2600,7 +2658,38 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         buffer = io.BytesIO()
         figure.savefig(buffer, format="png", dpi=110, facecolor=CARD)
-        photo = tk.PhotoImage(data=buffer.getvalue())
+        data = buffer.getvalue()
+        photo = tk.PhotoImage(data=data)
+        # (100x-123) the PNG fallback cannot REDRAW like the TkAgg canvas
+        # does, so an oversize raster used to show only its middle band
+        # (the round-123 surgery grids were 385-682 px tall in 260 px
+        # hosts -- the VLM screenshot review caught the clipping).  Fit
+        # the whole figure instead: resample to the host's real box with
+        # PIL (aspect kept, LANCZOS); without PIL the old behaviour
+        # stands (matplotlib always depends on Pillow, so in practice
+        # the resample always runs).
+        try:
+            from PIL import Image
+
+            host.update_idletasks()
+            box_w = max(int(host.winfo_width()), 100)
+            box_h = max(int(host.winfo_height()), 100)
+            with Image.open(io.BytesIO(data)) as raster:
+                if raster.width > box_w or raster.height > box_h:
+                    scale = min(box_w / raster.width, box_h / raster.height)
+                    resample = getattr(Image, "Resampling", Image).LANCZOS
+                    resized = raster.resize(
+                        (
+                            max(1, int(raster.width * scale)),
+                            max(1, int(raster.height * scale)),
+                        ),
+                        resample,
+                    )
+                    out = io.BytesIO()
+                    resized.save(out, format="PNG")
+                    photo = tk.PhotoImage(data=out.getvalue())
+        except Exception:  # noqa: BLE001 - keep the unscaled raster
+            photo = tk.PhotoImage(data=data)
         label = tk.Label(host, image=photo, background=CARD)
         label.pack(fill="both", expand=True)
         label._pg_photo = photo  # keep a reference -- Tk frees unreferenced images
@@ -2642,6 +2731,68 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 continue  # superseded inside the host (defensive)
             live.append(entry)
         return live
+
+    def _card_title_for_widget(self, widget: Any) -> str | None:
+        """The card title of the nearest registered shell above ``widget``.
+
+        (100x-123) Walks the parent chain until a :data:`_CARD_INDEX`
+        shell matches; widgets that live outside every card (the finder
+        dialog's tree, the root itself) return ``None`` and are skipped
+        by the table walk.
+        """
+        node = widget
+        while node is not None:
+            for title, _subtitle, shell in _CARD_INDEX:
+                if shell is node:
+                    return title
+            node = getattr(node, "master", None)
+        return None
+
+    def _live_session_tables(self) -> list[tuple[str, list[str], list[list[str]]]]:
+        """Every filled table on screen: ``(title, headings, rows)``.
+
+        (100x-123) The report's table axis -- the figure registry's twin.
+        Instead of registering at fill time (15+ scattered sites), the
+        walk discovers every live :class:`ttk.Treeview` with rows and
+        derives its provenance from the card index.  Trees outside any
+        card (the finder dialog) are skipped; empty trees are skipped
+        (an unfilled card has nothing to report).  Hierarchical trees
+        (``show`` includes ``tree``) contribute their ``#0`` label as
+        the first column, the same way the user reads them.
+        """
+        collected: list[tuple[str, list[str], list[list[str]]]] = []
+
+        def visit(widget: Any) -> None:
+            try:
+                children = widget.winfo_children()
+            except tk.TclError:
+                return  # a destroyed intermediate (defensive)
+            for child in children:
+                if isinstance(child, ttk.Treeview):
+                    rows = list(child.get_children())
+                    if rows:
+                        title = self._card_title_for_widget(child)
+                        if title:
+                            shows = [str(token) for token in child.cget("show")]
+                            hierarchical = "tree" in shows
+                            headings: list[str] = []
+                            if hierarchical:
+                                headings.append(str(child.heading("#0", "text") or "item"))
+                            headings.extend(
+                                str(child.heading(column, "text") or str(column))
+                                for column in child["columns"]
+                            )
+                            data: list[list[str]] = []
+                            for iid in rows:
+                                values = [str(value) for value in child.item(iid, "values")]
+                                if hierarchical:
+                                    values.insert(0, str(child.item(iid, "text")))
+                                data.append(values)
+                            collected.append((title, headings, data))
+                visit(child)
+
+        visit(self)
+        return collected
 
     # -- session + theme ------------------------------------------------- #
     def _read_session_file(self) -> Any:
@@ -3147,20 +3298,30 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._show_error("Could not save the figure", exc)
 
     def _menu_save_session_report(self) -> None:
-        """File ▸ Save session report -- one PDF of every figure on screen.
+        """File ▸ Save session report -- one PDF of the session on screen.
 
         (100x-122) Composes :func:`pharmaml.viz.save_pdf_report` over the
         session figure registry: a title page with the census and stamp,
         then one page per live figure (a figure replaced on its card is
         gone -- the host now shows the newer render, and the report says
         so honestly).  ``close=False``: the on-screen figures stay alive.
+
+        (100x-123) The report gained its TABLE axis: every filled table
+        on screen (leaderboards, prediction sheets, descriptor panels,
+        docking results -- any card's table with rows) is walked the
+        same way the registry walks hosts and shipped through
+        ``save_pdf_report(tables=...)`` as REAL text pages -- searchable,
+        selectable, the library's own truncation note and all -- so the
+        PDF is the session's whole record, pictures AND numbers.
         """
         live = self._live_session_figures()
-        if not live:
+        tables = self._live_session_tables()
+        if not live and not tables:
             messagebox.showinfo(
-                "No figures yet",
-                "Run a calculation that draws a figure first -- the report "
-                "collects every figure currently on screen (one page each).",
+                "Nothing to report yet",
+                "Run a calculation first -- the report collects every "
+                "figure currently on screen (one page each) plus every "
+                "filled table (real text pages, one each).",
             )
             return
         if not self._require_pharmaml() or not fpdf_available():
@@ -3180,14 +3341,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         if not path:
             return
+
+        def unique_name(base: str, *registries: dict[str, Any]) -> str:
+            # NB: save_pdf_report validates page names as plain file
+            # names -- no directories, no '/' separators.
+            name = base
+            suffix = 2
+            while any(name in registry for registry in registries):
+                name = f"{base} ({suffix})"
+                suffix += 1
+            return name
+
         figures: dict[str, Any] = {}
         for _host, title, figure in live:
-            name = title
-            suffix = 2
-            while name in figures:  # unique page titles
-                name = f"{title} ({suffix})"
-                suffix += 1
-            figures[name] = figure
+            figures[unique_name(title, figures)] = figure
+        import pandas as pd
+
+        table_pages: dict[str, Any] = {}
+        for title, headings, rows in tables:
+            frame = pd.DataFrame(rows, columns=headings)
+            table_pages[unique_name(f"{title} table", table_pages, figures)] = frame
         stamp = time.strftime("%Y-%m-%d %H:%M")
 
         def work() -> Any:
@@ -3195,10 +3368,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             return save_pdf_report(
                 figures,
+                tables=table_pages or None,
                 out_path=path,
                 title="PharmaML Playground session",
                 subtitle=(
-                    f"{len(figures)} figure page(s) · generated {stamp} · playground {__version__}"
+                    f"{len(figures)} figure page(s) · {len(table_pages)} table "
+                    f"page(s) · generated {stamp} · playground {__version__}"
                 ),
                 close=False,
             )
@@ -3206,7 +3381,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(saved: Any) -> None:
             messagebox.showinfo(
                 "Session report saved",
-                f"{len(figures)} figure page(s) written to\n{saved}",
+                f"{len(figures)} figure page(s) + {len(table_pages)} table "
+                f"page(s) written to\n{saved}",
             )
 
         self._start_job("session report", work, render)
@@ -3450,7 +3626,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "SMARTS objectives with the GA or reinforcement learning; "
                     "adaptive runs show the operator-mix learning curve, RL runs "
                     "the prior-drift introspection, and the surgery cards "
-                    "enumerate one molecule's ring moves or breed two parents."
+                    "enumerate one molecule's ring moves or breed two parents -- "
+                    "then draw every mutant or child as a 2D structure grid."
                 ),
                 "RDKit (+ torch for RL)",
             ),
@@ -13295,11 +13472,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "the GA's 'topology' mutation draws from.",
         )
         enumerate_btn.pack(side="left")
+        # (100x-123) the mutants' structures, not just their SMILES --
+        # a 2D panel per mutant makes the ring-size change visible.
+        draw_topo_btn = self._action_button(
+            moves_buttons,
+            "Draw mutants",
+            self._gen_draw_topology,
+            tooltip="A 2D structure panel per enumerated mutant (RDKit "
+            "drawing) — the contraction/expansion becomes visible "
+            "instead of a line of text.",
+        )
+        draw_topo_btn.pack(side="left", padx=(10, 0))
         self._topo_summary = ttk.Label(
             moves, text="no enumeration yet", style="Field.TLabel", wraplength=300, justify="left"
         )
         grid_append(moves, self._topo_summary, pady=(6, 0))
         self._topo_text = _grid_text(moves, height=6, mono=self._mono)
+        self._topo_host = self._figure_host(moves, height=320)
 
         breed = make_card(
             page.grid,
@@ -13334,11 +13523,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "honestly fail (no viable cut pair) and says so.",
         )
         breed_btn.pack(side="left")
+        # (100x-123) parents and children side by side — the hybrid
+        # geometry of each crossover draw becomes visible.
+        draw_breed_btn = self._action_button(
+            breed_buttons,
+            "Draw litter",
+            self._gen_draw_breed,
+            tooltip="One 2D panel per parent and per viable child (RDKit "
+            "drawing) — the bridge / ring-merge / linker-transplant "
+            "geometry of each draw becomes visible.",
+        )
+        draw_breed_btn.pack(side="left", padx=(10, 0))
         self._breed_summary = ttk.Label(
             breed, text="no children yet", style="Field.TLabel", wraplength=300, justify="left"
         )
         grid_append(breed, self._breed_summary, pady=(6, 0))
         self._breed_text = _grid_text(breed, height=6, mono=self._mono)
+        self._breed_host = self._figure_host(breed, height=420)
 
     def _objective_hint(self, _event: Any = None) -> None:
         kind = self._objective_combo.get()
@@ -13401,6 +13602,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         def render(payload: tuple[list[str], str]) -> None:
             mutants, source = payload
+            self._topo_last = (source, mutants)
             self._topo_text.delete("1.0", "end")
             self._topo_text.insert("1.0", "\n".join(mutants))
             if mutants:
@@ -13453,6 +13655,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(payload: tuple[list[str | None], int]) -> None:
             litter, count = payload
             viable = [child for child in litter if child]
+            self._breed_last = (parent_a, parent_b, litter)
             self._breed_text.delete("1.0", "end")
             lines = [child if child else "(no viable crossover on this draw)" for child in litter]
             self._breed_text.insert("1.0", "\n".join(lines))
@@ -13466,6 +13669,82 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         self._start_job("scaffold-hop crossover", work, render)
+
+    def _gen_draw_topology(self) -> None:
+        """Draw the last enumerated ring-size mutants as structures."""
+        last = getattr(self, "_topo_last", None)
+        if last is None:
+            messagebox.showinfo(
+                "No enumeration yet",
+                "Enumerate mutants first -- the structure grid draws the "
+                "last move set (a new enumeration replaces it).",
+            )
+            return
+        if not self._require_pharmaml() or not self._require(
+            "matplotlib", "the mutant structure grid"
+        ):
+            return
+        source, mutants = last
+
+        def work() -> Any:
+            entries = [
+                (
+                    f"mutant {index + 1}\n{_truncate_caption_text(smiles)}",
+                    smiles,
+                )
+                for index, smiles in enumerate(mutants)
+            ]
+            return molecule_grid_figure(
+                entries,
+                title=(
+                    f"Ring topology moves — {len(mutants)} mutant(s) of "
+                    f"{_truncate_caption_text(source, 28)}"
+                ),
+            )
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._topo_host, figure)
+
+        self._start_job("mutant structure grid", work, render)
+
+    def _gen_draw_breed(self) -> None:
+        """Draw the parents and viable children of the last litter."""
+        last = getattr(self, "_breed_last", None)
+        if last is None:
+            messagebox.showinfo(
+                "No litter yet",
+                "Breed two molecules first -- the structure grid draws the "
+                "last litter (a new breed replaces it).",
+            )
+            return
+        if not self._require_pharmaml() or not self._require(
+            "matplotlib", "the litter structure grid"
+        ):
+            return
+        parent_a, parent_b, litter = last
+        viable = [child for child in litter if child]
+
+        def work() -> Any:
+            entries = [
+                (f"parent A\n{_truncate_caption_text(parent_a)}", parent_a),
+                (f"parent B\n{_truncate_caption_text(parent_b)}", parent_b),
+            ]
+            entries.extend(
+                (f"child {index}\n{_truncate_caption_text(child)}", child)
+                for index, child in enumerate(viable, start=1)
+            )
+            return molecule_grid_figure(
+                entries,
+                title=(
+                    f"Scaffold-hop litter — {len(viable)}/{len(litter)} viable "
+                    f"children (parents first)"
+                ),
+            )
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._breed_host, figure)
+
+        self._start_job("litter structure grid", work, render)
 
     def _on_method_change(self, _event: Any = None) -> None:
         """Swap the GA / RL parameter blocks (grid_remove collapses the row)."""

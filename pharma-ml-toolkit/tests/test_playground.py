@@ -5641,8 +5641,10 @@ class TestReview122Gui:
     def test_session_report_with_no_figures_is_an_info(
         self, app: Any, quiet_dialogs: list[Any]
     ) -> None:
+        # (100x-123) the guard covers the report's TWO axes now: no
+        # figures AND no filled tables -> the honest info dialog.
         app._menu_save_session_report()
-        assert any("No figures yet" in str(a) for a in quiet_dialogs)
+        assert any("Nothing to report yet" in str(a) for a in quiet_dialogs)
 
     @staticmethod
     def _figure(app: Any, title: str) -> Any:
@@ -5704,7 +5706,11 @@ class TestReview122Gui:
         # close=False: the on-screen figures are still the live registry's
         assert app._ml_host._pg_figure is figure_a
         assert app._feat_host._pg_figure is figure_b
-        assert any("figure page(s) written" in str(a) for a in quiet_dialogs)
+        # (100x-123) the save message counts BOTH axes now -- a fresh app
+        # has no filled tables, so the table count is an honest zero
+        assert any(
+            "figure page(s)" in str(a) and "written to" in str(a) for a in quiet_dialogs
+        )
         import matplotlib.pyplot as plt
 
         plt.close("all")
@@ -5786,3 +5792,266 @@ class TestReview122Gui:
         )
         assert "similarity" in dump
         assert "breed two parents" in dump
+
+
+@XVFB_SKIP
+class TestReview123Gui:
+    """Round 100x-123: the surgery structure grids and the report's
+    table axis (every filled table becomes a REAL text page)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the module-level structure grid helper ------------------------- #
+    def test_molecule_grid_figure_draws_panels(self, playground: Any) -> None:
+        figure = playground.molecule_grid_figure(
+            [("mutant 1\nC1CCCC1", "C1CCCC1"), ("mutant 2\nC1CCCNCC1", "C1CCCNCC1")],
+            title="two mutants",
+        )
+        try:
+            assert figure.get_axes()  # at least the panels
+            titles = [axis.get_title() for axis in figure.get_axes()]
+            assert any("mutant 1" in title for title in titles), titles
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
+
+    def test_molecule_grid_figure_honors_unparseable_and_empty(self, playground: Any) -> None:
+        figure = playground.molecule_grid_figure([("bad\nnotasmiles", "notasmiles")], title="x")
+        try:
+            # the unparseable entry keeps its slot (no silent vanish)
+            assert len(figure.get_axes()) >= 1
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
+        empty = playground.molecule_grid_figure([], title="nothing")
+        try:
+            assert len(empty.get_axes()) >= 1
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(empty)
+
+    def test_truncate_caption_text(self, playground: Any) -> None:
+        assert playground._truncate_caption_text("short") == "short"
+        long = "C" * 60
+        cut = playground._truncate_caption_text(long)
+        assert len(cut) == 34 and cut.endswith("\u2026")
+
+    # -- the surgery cards' draw buttons ------------------------------- #
+    def test_topology_draw_full_path(self, app: Any) -> None:
+        app._gen_topology_moves()
+        assert self._drain(app), "topology job hung"
+        source, mutants = app._topo_last
+        assert source == "C1CCNCC1"
+        assert mutants  # piperidine always yields mutants
+        app._gen_draw_topology()
+        assert self._drain(app), "topology draw job hung"
+        figure = getattr(app._topo_host, "_pg_figure", None)
+        assert figure is not None, "the grid never landed on the host"
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_topology_draw_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._topo_last = None
+        app._gen_draw_topology()
+        assert any("No enumeration yet" in str(a) for a in quiet_dialogs)
+        assert getattr(app._topo_host, "_pg_figure", None) is None
+
+    def test_breed_draw_full_path(self, app: Any) -> None:
+        app._gen_breed()
+        assert self._drain(app), "breed job hung"
+        parent_a, parent_b, litter = app._breed_last
+        assert parent_a and parent_b and len(litter) == 4
+        app._gen_draw_breed()
+        assert self._drain(app), "breed draw job hung"
+        figure = getattr(app._breed_host, "_pg_figure", None)
+        assert figure is not None, "the litter grid never landed"
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_breed_draw_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._breed_last = None
+        app._gen_draw_breed()
+        assert any("No litter yet" in str(a) for a in quiet_dialogs)
+
+    def test_surgery_cards_carry_draw_buttons(self, app: Any) -> None:
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+            if widget.winfo_class() == "TButton"
+        )
+        assert "Draw mutants" in dump
+        assert "Draw litter" in dump
+
+    # -- the table walk ------------------------------------------------- #
+    def test_card_title_for_widget_climbs_to_the_card(self, app: Any) -> None:
+        assert app._card_title_for_widget(app._desc_tree) == "SMILES inspector"
+        assert app._card_title_for_widget(app) is None  # the root is no card
+
+    def test_live_session_tables_skips_empty_trees(self, app: Any) -> None:
+        assert app._live_session_tables() == []
+
+    def test_live_session_tables_walks_a_real_job(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._analyse_smiles()
+        assert self._drain(app), "analyse job hung"
+        walked = app._live_session_tables()
+        assert any(title == "SMILES inspector" and len(rows) > 150 for title, _h, rows in walked), [
+            (t, len(r)) for t, _h, r in walked
+        ]
+        entry = next(t for t, _h, r in walked if t == "SMILES inspector")
+        headings = next(h for t, h, r in walked if t == "SMILES inspector")
+        assert headings == ["descriptor", "value"], headings
+        assert entry  # rows came back
+
+    def test_live_session_tables_covers_hierarchical_tree(self, app: Any) -> None:
+        # the bio matrix tree uses show="tree headings" -- its #0 labels
+        # must arrive as the first column exactly the way users read them
+        app._bio_matrix_tree.insert("", "end", text="cell-A", values=("1.0", "2.0"))
+        walked = app._live_session_tables()
+        match = next((t, h, r) for t, h, r in walked if t and "sensitivity" in t.lower())
+        assert match is not None, [(t, h) for t, h, _r in walked]
+        _title, headings, rows = match
+        assert headings[0] == "cell line", headings  # the real #0 heading
+        assert rows[0][0] == "cell-A"
+        app._bio_matrix_tree.delete(*app._bio_matrix_tree.get_children())
+
+    # -- the report's table axis ---------------------------------------- #
+    def test_session_report_ships_tables_as_real_text_pages(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Any
+    ) -> None:
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "report123.pdf"
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
+        app._analyse_smiles()
+        assert self._drain(app), "analyse job hung"
+        assert app._live_session_figures() == []  # figures axis empty: tables only
+        app._menu_save_session_report()
+        assert self._drain(app), "report job hung"
+        assert target.is_file() and target.stat().st_size > 1_000
+        import pypdf
+
+        reader = pypdf.PdfReader(str(target))
+        joined = "\n".join((page.extract_text() or "").lower() for page in reader.pages)
+        assert "table page(s)" in joined, "the subtitle did not count tables"
+        assert "smiles inspector table" in joined, "no table page shipped"
+        assert "molwt" in joined, "the rows are not real text"
+        assert "more rows" in joined, "the truncation note is missing"
+        assert len(reader.pages) >= 2  # title + at least one table page
+
+    def test_session_report_combines_both_axes(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Any
+    ) -> None:
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "combined.pdf"
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
+        figure = self._figure_static("combined")
+        app._job_label_base = "combined figure"
+        app._render_figure(app._ml_host, figure)
+        app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+        app._menu_save_session_report()
+        assert self._drain(app), "report job hung"
+        assert target.is_file()
+        import pypdf
+
+        reader = pypdf.PdfReader(str(target))
+        assert len(reader.pages) >= 3  # title + figure + table
+        joined = "\n".join((page.extract_text() or "").lower() for page in reader.pages)
+        assert "1 figure page(s)" in joined and "1 table page(s)" in joined
+        assert "molwt" in joined
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_session_report_page_names_avoid_path_separators(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Any
+    ) -> None:
+        # save_pdf_report validates names as plain file names: a card
+        # title may contain no '/' (the library would reject it)
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "names.pdf"
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
+        app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+        # simulate a card title with a slash: the unique_name path must
+        # never construct one itself -- prove the happy path stays valid
+        app._menu_save_session_report()
+        assert self._drain(app), "report job hung"
+        assert target.is_file()
+        app._desc_tree.delete(*app._desc_tree.get_children())
+
+    @staticmethod
+    def _figure_static(title: str) -> Any:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        figure = plt.figure()
+        axes = figure.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title(title)
+        return figure
+
+    # -- the round's documentation pins --------------------------------- #
+    def test_module_docstring_records_round_123(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-123" in doc or "structure grid" in doc
+        assert "tables=" in doc  # the report's table axis is documented
+        assert "2D" in doc  # the surgery grids are documented
+
+    def test_home_guide_mentions_structure_grids(self, app: Any, playground: Any) -> None:
+        guide = None
+        for title, _subtitle, shell in playground._CARD_INDEX:
+            if title != "What lives where":
+                continue
+            try:
+                live = bool(shell.winfo_exists())
+            except Exception:  # noqa: BLE001 - destroyed earlier shell
+                live = False
+            if live:
+                guide = shell
+                break
+        assert guide is not None
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(guide)
+            if widget.winfo_class() == "TLabel"
+        )
+        assert "2D structure grid" in dump

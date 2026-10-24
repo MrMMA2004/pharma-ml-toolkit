@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   Activity,
+  ArrowLeftRight,
   LineChart as LineChartIcon,
   Pill,
   Plus,
@@ -48,6 +49,13 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { CHART, NumberField, ResultBlock } from "@/components/explorer/playground/calc-ui";
 import { fmtNum, fmtTick, parseNonNegativeNumber, parsePositiveNumber } from "@/lib/format";
+import {
+  UNIT_SCALES,
+  UnitConversionError,
+  convertUnits,
+  unitsForDimension,
+  type Dimension,
+} from "@/lib/unit-converter";
 
 /* ------------------------------------------------------------------ */
 /* Shared card shell                                                   */
@@ -785,8 +793,144 @@ function PdCard() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Section                                                             */
+/* 8. Dimension-aware unit converter (the desktop card's web twin)    */
 /* ------------------------------------------------------------------ */
+
+const UNIT_DIMENSIONS: Array<{ value: Dimension; label: string; preset: [string, string] }> = [
+  { value: "mass", label: "Mass (kg … pg)", preset: ["mg", "g"] },
+  { value: "volume", label: "Volume (L … nL)", preset: ["mL", "L"] },
+  { value: "amount", label: "Amount (mol … nmol)", preset: ["mmol", "mol"] },
+  { value: "concentration", label: "Concentration (M … pM)", preset: ["uM", "nM"] },
+  { value: "time", label: "Time (s … day)", preset: ["h", "min"] },
+];
+
+function UnitConverterCard() {
+  const [dimension, setDimension] = useState<Dimension>("mass");
+  const [value, setValue] = useState("500");
+  const [fromUnit, setFromUnit] = useState("mg");
+  const [toUnit, setToUnit] = useState("g");
+
+  const units = unitsForDimension(dimension);
+
+  const parsed = parseNonNegativeNumber(value);
+  let result: number | null = null;
+  let error: string | null =
+    parsed === null ? (value.length === 0 ? "Enter a number" : "Must be ≥ 0") : null;
+  if (parsed !== null) {
+    try {
+      result = convertUnits(parsed, fromUnit, toUnit);
+    } catch (err) {
+      // unreachable via the closed selects (same dimension, known
+      // units) — kept honest anyway: the twin's contract IS to throw.
+      error = err instanceof UnitConversionError ? err.message : String(err);
+    }
+  }
+  const factor =
+    UNIT_SCALES[dimension][fromUnit] !== undefined &&
+    UNIT_SCALES[dimension][toUnit] !== undefined
+      ? UNIT_SCALES[dimension][fromUnit] / UNIT_SCALES[dimension][toUnit]
+      : null;
+
+  const onDimensionChange = (next: string) => {
+    const entry = UNIT_DIMENSIONS.find((d) => d.value === next);
+    if (!entry) return;
+    setDimension(entry.value);
+    setFromUnit(entry.preset[0]);
+    setToUnit(entry.preset[1]);
+  };
+
+  return (
+    <CalcCard
+      icon={ArrowLeftRight}
+      title="Unit converter"
+      description="Dimension-aware conversion — mass, volume, amount, concentration, time"
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="uc-dimension" className="text-xs font-medium">
+            Dimension
+          </Label>
+          <Select value={dimension} onValueChange={onDimensionChange}>
+            <SelectTrigger id="uc-dimension" className="h-10">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {UNIT_DIMENSIONS.map((d) => (
+                <SelectItem key={d.value} value={d.value}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <NumberField
+          id="uc-value"
+          label="Value"
+          unit={fromUnit}
+          value={value}
+          onChange={setValue}
+          error={error}
+          placeholder="500"
+        />
+        <div className="space-y-1.5">
+          <Label htmlFor="uc-from" className="text-xs font-medium">
+            From
+          </Label>
+          <Select value={fromUnit} onValueChange={setFromUnit}>
+            <SelectTrigger id="uc-from" className="h-10 font-mono">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {units.map((unit) => (
+                <SelectItem key={unit} value={unit} className="font-mono">
+                  {unit}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="uc-to" className="text-xs font-medium">
+            To
+          </Label>
+          <Select value={toUnit} onValueChange={setToUnit}>
+            <SelectTrigger id="uc-to" className="h-10 font-mono">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {units.map((unit) => (
+                <SelectItem key={unit} value={unit} className="font-mono">
+                  {unit}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <ResultBlock
+        label="Result"
+        value={result !== null ? fmtNum(result, 6) : null}
+        unit={toUnit}
+        copyText={
+          result !== null && parsed !== null
+            ? `${parsed} ${fromUnit} = ${fmtNum(result, 6)} ${toUnit}`
+            : null
+        }
+        formula={
+          factor !== null
+            ? `${dimension} · factor ×${fmtNum(factor, 6)} (dimension-checked — cross-dimension pairs are refused)`
+            : undefined
+        }
+      />
+      <p className="text-xs text-muted-foreground">
+        Units in this dimension: {units.join(", ")}. The conversion runs through
+        the same single front-door as{" "}
+        <code className="rounded bg-muted px-1 font-mono text-xs">pharmaml.pharma.UnitConverter</code>{" "}
+        — pinned to the library by a byte-level parity guard.
+      </p>
+    </CalcCard>
+  );
+}
 
 export function PharmaCalcs() {
   return (
@@ -804,6 +948,7 @@ export function PharmaCalcs() {
         <HalfLifeCard />
         <AucCard />
         <PdCard />
+        <UnitConverterCard />
       </div>
     </div>
   );

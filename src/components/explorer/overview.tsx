@@ -285,7 +285,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "2332 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite)",
+    after: "2350 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite)",
   },
   {
     aspect: "Interface",
@@ -430,8 +430,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="2332"
-                countTo={2332}
+                value="2350"
+                countTo={2350}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
