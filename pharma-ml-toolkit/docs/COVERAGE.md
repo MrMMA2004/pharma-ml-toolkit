@@ -793,3 +793,24 @@ library axis otherwise holds; the round's genuine work was round
 The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
 green after the round's edits. The GUI-axis census holds at 68 live
 cards (the three new buttons joined existing cards).
+
+### Round 13 (100x-128) — the per-card export closes app-wide
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **245 public symbols, 43 zero-hit —
+byte-identical to round 127's final floor** (the REPORT_THEMES wiring
+of 1.2.66 removed the 44th; every remaining member a previously
+verified source absorption — torsion, PKSummary/aucm,
+correlate_with_response and the rest of the standing classification).
+The library axis holds; the round's genuine work was round 127's
+handover item (b), taken to completion:
+
+| Surface | The 1.2.67 fix |
+| --- | --- |
+| Every remaining figure card (15) | **Save figure…** on every figure card that lacked it — Data & ML (results / leaderboard / AD), Deep Learning (results + the TWO-host training history, newest stamp wins), PK / PD (IV profile / Emax / NCA / accumulation / family), Chemistry (feature factory / similarity scan), Docking (receptor / results), Utilities (reconciliation). Each saves the figure the card's OWN host shows through `save_figure` (PNG/SVG/PDF), never the global Ctrl+S last-drawn-anywhere figure; honest per-card guards everywhere |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.67 via
+both drivers). The GUI-axis census holds at 68 live cards (the DL
+Results card's new row is a frame INSIDE the card, not a new card).

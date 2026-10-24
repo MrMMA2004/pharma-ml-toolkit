@@ -119,7 +119,15 @@ A tabbed graphical interface opens with every calculation domain of the
   combobox selects).  (100x-127) every Generative figure card -- the
   evolution Results, both surgery cards, the front -- carries its own
   "Save figure…" button, so a grid or plot leaves the app from the
-  card that shows it instead of racing the global Ctrl+S.
+  card that shows it instead of racing the global Ctrl+S.  (100x-128)
+  the pattern closes app-wide: EVERY remaining figure card -- the ML
+  results / leaderboard / applicability-domain, the network results
+  and training history, the PK profile / accumulation / NCA, the PD
+  and pharmacology-family curves, the descriptor distributions, the
+  similarity heat-map, the docking receptor and results, the
+  utilities reconciliation -- carries the same per-card export
+  button; a figure now leaves the app from the card that shows it,
+  everywhere.
 * **Utilities**     -- the original archive's own file & table
   operations, the coverage audit's closing move (100x-110): merge
   picked tables or a whole folder (``CSV_merger`` / ``filemerger``),
@@ -3843,8 +3851,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "figure export, and the surgery cards enumerate one "
                     "molecule's ring moves or breed two parents -- then draw "
                     "every mutant or child the same way.  Every figure card "
-                    "carries its own Save figure… button: the grid leaves the "
-                    "app from the card that shows it, not the global Ctrl+S."
+                    "in the whole app carries its own Save figure… button -- "
+                    "the ML parity / calibration / learning curves, the "
+                    "network results and training history, the PK, PD and "
+                    "NCA profiles, the descriptor distributions, the "
+                    "similarity heat-map, the docking pictures and these "
+                    "grids: a figure leaves the app from the card that "
+                    "shows it, not the global Ctrl+S."
                 ),
                 "RDKit (+ torch for RL)",
             ),
@@ -4214,6 +4227,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "before any model sees the numbers.",
         )
         feat_dist_btn.pack(side="left", padx=(10, 0))
+        # 100x-128: the per-card export rides on EVERY figure card now.
+        save_feat_figure_btn = self._action_button(
+            feat_export_buttons,
+            "Save figure…",
+            self._save_feat_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "descriptor histogram grid -- as PNG, SVG or PDF (unlike "
+            "Ctrl+S, which saves the last figure drawn anywhere).",
+        )
+        save_feat_figure_btn.pack(side="left", padx=(10, 0))
         self._feat_host = self._figure_host(factory, height=300)
         self._feat_update_width()
         self._feat_refresh_source()
@@ -4517,6 +4540,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "(plot_similarity_heatmap) — run a matrix scan first.",
         )
         scan_heat_btn.pack(side="left", padx=(10, 0))
+        save_scan_figure_btn = self._action_button(
+            scan_run_row,
+            "Save figure…",
+            self._save_scan_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "similarity heat-map -- as PNG, SVG or PDF (unlike Ctrl+S, "
+            "which saves the last figure drawn anywhere).",
+        )
+        save_scan_figure_btn.pack(side="left", padx=(10, 0))
         scan_tree_frame = ttk.Frame(scan, style="Card.TFrame")
         grid_append(scan, scan_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
         self._scan_tree = ttk.Treeview(scan_tree_frame, show="headings", height=7)
@@ -5720,6 +5752,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             tooltip="Draws the decay curve with 1·t½, 2·t½, 3·t½ markers.",
         )
         button.grid(row=ivp.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        # 100x-128: the per-card figure export, grid-layout edition.
+        save_iv_figure_btn = self._action_button(
+            ivp,
+            "Save figure…",
+            self._save_iv_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "concentration decay curve with its half-life markers -- as "
+            "PNG, SVG or PDF (unlike Ctrl+S, which saves the last figure "
+            "drawn anywhere).",
+        )
+        save_iv_figure_btn.grid(row=ivp.grid_size()[1], column=0, sticky="w", pady=(6, 0))
         self._iv_host = self._figure_host(ivp)
 
         oral = make_card(
@@ -5912,6 +5955,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             emax, text="—", style="CardMuted.TLabel", wraplength=300, justify="left"
         )
         self._pd_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
+        save_pd_figure_btn = self._action_button(
+            emax,
+            "Save figure…",
+            self._save_pd_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "Emax effect curve over your concentrations -- as PNG, SVG or "
+            "PDF (unlike Ctrl+S, which saves the last figure drawn "
+            "anywhere).",
+        )
+        save_pd_figure_btn.grid(row=emax.grid_size()[1], column=0, sticky="w", pady=(6, 0))
         self._pd_host = self._figure_host(emax, height=300)
         bind_enter(self._pd_concs, button)
 
@@ -5960,6 +6013,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             tooltip="The NCA metrics as a one-row table.",
         )
         nca_save_btn.pack(side="left", padx=(10, 0))
+        save_nca_figure_btn = self._action_button(
+            nca_buttons,
+            "Save figure…",
+            self._save_nca_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "concentration-time profile with its AUC -- as PNG, SVG or "
+            "PDF (unlike Ctrl+S, which saves the last figure drawn "
+            "anywhere).",
+        )
+        save_nca_figure_btn.pack(side="left", padx=(10, 0))
         self._nca_result = ttk.Label(
             nca,
             text="—",
@@ -6025,6 +6088,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "(plot_dose_accumulation).",
         )
         acc_btn.pack(side="left")
+        save_acc_figure_btn = self._action_button(
+            acc_row,
+            "Save figure…",
+            self._save_acc_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "approach-to-steady-state peaks and troughs -- as PNG, SVG "
+            "or PDF (unlike Ctrl+S, which saves the last figure drawn "
+            "anywhere).",
+        )
+        save_acc_figure_btn.pack(side="left", padx=(10, 0))
         self._acc_host = self._figure_host(infusion, height=240)
         bind_enter(self._inf_rate, button)
 
@@ -6132,6 +6205,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "reference concentration?",
         )
         fam_rev_btn.pack(side="left", padx=(10, 0))
+        save_fam_figure_btn = self._action_button(
+            fam_buttons,
+            "Save figure…",
+            self._save_fam_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "family effect curve through your points -- as PNG, SVG or "
+            "PDF (unlike Ctrl+S, which saves the last figure drawn "
+            "anywhere).",
+        )
+        save_fam_figure_btn.pack(side="left", padx=(10, 0))
         self._fam_result = ttk.Label(
             family, text="—", style="CardMuted.TLabel", wraplength=560, justify="left"
         )
@@ -7855,6 +7938,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "glance.",
         )
         rec_plot_btn.pack(side="left", padx=(10, 0))
+        save_rec_figure_btn = self._action_button(
+            dist_buttons,
+            "Save figure…",
+            self._save_dock_receptor_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "receptor's AutoDock atom-type census bars -- as PNG, SVG "
+            "or PDF (unlike Ctrl+S, which saves the last figure drawn "
+            "anywhere).",
+        )
+        save_rec_figure_btn.pack(side="left", padx=(10, 0))
         self._dock_receptor_host = self._figure_host(receptor, height=240)
         self._dock_distribute_info = ttk.Label(
             dist_buttons,
@@ -8016,6 +8109,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "energy-annotated horizontal bars (plot_top_ligands).",
         )
         top_ligands_btn.grid(
+            row=results.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(2, 0)
+        )
+        save_dock_fig_btn = self._action_button(
+            results,
+            "Save figure…",
+            self._save_dock_results_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "top-ligands energy bars of the last campaign scan -- as "
+            "PNG, SVG or PDF (unlike Ctrl+S, which saves the last "
+            "figure drawn anywhere).",
+        )
+        save_dock_fig_btn.grid(
             row=results.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(2, 0)
         )
         self._dock_results_host = self._figure_host(results, height=260)
@@ -10603,6 +10708,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ttk.Label(ml_result_buttons, text="folds", style="CardMuted.TLabel").pack(
             side="left", padx=(2, 0)
         )
+        # 100x-128: the per-card export -- the parity, calibration or
+        # learning-curve figure, whichever drew LAST on this card.
+        save_ml_figure_btn = self._action_button(
+            ml_result_buttons,
+            "Save figure…",
+            self._save_ml_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "parity plot, calibration or learning curve, whichever "
+            "drew last -- as PNG, SVG or PDF (unlike Ctrl+S, which "
+            "saves the last figure drawn anywhere).",
+        )
+        save_ml_figure_btn.pack(side="left", padx=(10, 0))
         ml_result_note = ttk.Label(
             ml_result_buttons, text="", style="CardMuted.TLabel", wraplength=430, justify="left"
         )
@@ -10651,6 +10768,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "per model, error bars where the table carries them.",
         )
         board_plot_btn.pack(side="left")
+        save_board_figure_btn = self._action_button(
+            board_buttons,
+            "Save figure…",
+            self._save_board_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "cross-validated leaderboard bars -- as PNG, SVG or PDF "
+            "(unlike Ctrl+S, which saves the last figure drawn "
+            "anywhere).",
+        )
+        save_board_figure_btn.pack(side="left", padx=(10, 0))
         self._board_host = self._figure_host(board, height=300)
 
         # -- ensemble builder (voting + stacking, members by hand) ---- #
@@ -10982,6 +11109,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             tooltip="The last reliability table -- the upload's Applicability_Domain_Results.csv.",
         )
         ad_save_btn.pack(side="left", padx=(10, 0))
+        save_ad_figure_btn = self._action_button(
+            ad_buttons,
+            "Save figure…",
+            self._save_ad_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "two-panel reliability picture (distance + ensemble "
+            "spread) -- as PNG, SVG or PDF (unlike Ctrl+S, which "
+            "saves the last figure drawn anywhere).",
+        )
+        save_ad_figure_btn.pack(side="left", padx=(10, 0))
         self._ad_status = ttk.Label(
             ad_buttons,
             text="run the analysis to see the verdict",
@@ -12994,6 +13131,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ttk.Label(
             self._dl_metrics, text="train a network to see metrics", style="CardMuted.TLabel"
         ).pack(anchor="w")
+        # 100x-128: the per-card export -- this card had no button row
+        # of its own until now (the train buttons live on the Network
+        # card), so the Results card gets one.
+        dl_save_row = ttk.Frame(results, style="Card.TFrame")
+        grid_append(results, dl_save_row, sticky="w", pady=(6, 0))
+        save_dl_figure_btn = self._action_button(
+            dl_save_row,
+            "Save figure…",
+            self._save_dl_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "parity plot or the confusion matrix of the last trained "
+            "network -- as PNG, SVG or PDF (unlike Ctrl+S, which saves "
+            "the last figure drawn anywhere).",
+        )
+        save_dl_figure_btn.pack(side="left")
         self._dl_host = self._figure_host(results, height=330)
 
         hist = make_card(
@@ -13036,6 +13188,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "network's own epochs, so a big curve takes its time.",
         )
         curve_btn.pack(side="left", padx=(10, 0))
+        # 100x-128: the per-card export -- the history card holds TWO
+        # figure hosts (loss curves + learning curve), newest wins.
+        save_dl_hist_figure_btn = self._action_button(
+            hist_buttons,
+            "Save figure…",
+            self._save_dl_history_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "training loss curves or the learning curve, whichever "
+            "drew last -- as PNG, SVG or PDF (unlike Ctrl+S, which "
+            "saves the last figure drawn anywhere).",
+        )
+        save_dl_hist_figure_btn.pack(side="left", padx=(10, 0))
         self._dl_curve_host = self._figure_host(hist, height=300)
 
     def _dl_open_csv(self) -> None:
@@ -14575,6 +14739,198 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ),
         )
 
+    # -- 100x-128: the per-card export on EVERY remaining figure card -- #
+    # Rounds 126/127 shipped the Generative cards; this closes the set:
+    # the ML results / leaderboard / AD, the DL results and history, the
+    # PK & PD figures, the feature factory, the similarity scan, the
+    # docking receptor & results, the NCA profile and the utilities
+    # reconciliation -- one button per card, each saving the figure the
+    # card's OWN host shows (never the global Ctrl+S last-drawn).
+
+    def _save_ml_figure(self) -> None:
+        """Save the ML results card's live figure (100x-128).
+
+        The card's single host carries whichever of the parity plot,
+        the calibration curve or the learning curve drew last -- the
+        honest per-card answer to ``Ctrl+S`` racing some other card's
+        figure.
+        """
+        self._save_card_figure(
+            [self._ml_host],
+            dialog_title="Save ML results figure",
+            empty_hint=(
+                "Train a model (or draw the calibration / learning "
+                "curve) first -- this saves the figure the results "
+                "card is currently showing."
+            ),
+        )
+
+    def _save_board_figure(self) -> None:
+        """Save the leaderboard card's comparison bars (100x-128)."""
+        self._save_card_figure(
+            [self._board_host],
+            dialog_title="Save leaderboard figure",
+            empty_hint=(
+                "Run Compare models and press Plot leaderboard first -- "
+                "this saves the bars the card is currently showing."
+            ),
+        )
+
+    def _save_ad_figure(self) -> None:
+        """Save the applicability-domain card's two-panel figure (100x-128)."""
+        self._save_card_figure(
+            [self._ad_host],
+            dialog_title="Save applicability domain figure",
+            empty_hint=(
+                "Run the applicability-domain analysis first -- this "
+                "saves the two-panel reliability figure the card is "
+                "currently showing."
+            ),
+        )
+
+    def _save_dl_figure(self) -> None:
+        """Save the DL results card's parity/confusion figure (100x-128)."""
+        self._save_card_figure(
+            [self._dl_host],
+            dialog_title="Save network results figure",
+            empty_hint=(
+                "Train & evaluate a network first -- this saves the "
+                "parity plot or confusion matrix the card is currently "
+                "showing."
+            ),
+        )
+
+    def _save_dl_history_figure(self) -> None:
+        """Save the DL history card's live figure (100x-128).
+
+        The history card holds TWO figure hosts -- the training loss
+        curves and the learning curve -- so the export saves whichever
+        of the card's own figures drew LAST (the same newest-stamp
+        semantics the Generative Results card uses).
+        """
+        self._save_card_figure(
+            [self._dl_hist_host, self._dl_curve_host],
+            dialog_title="Save training history figure",
+            empty_hint=(
+                "Train a network (or plot its learning curve) first -- "
+                "this saves the loss curves or the learning curve, "
+                "whichever drew last."
+            ),
+        )
+
+    def _save_iv_figure(self) -> None:
+        """Save the IV bolus card's decay-curve figure (100x-128)."""
+        self._save_card_figure(
+            [self._iv_host],
+            dialog_title="Save IV bolus profile figure",
+            empty_hint=(
+                "Press Plot profile first -- this saves the decay curve "
+                "with its half-life markers."
+            ),
+        )
+
+    def _save_pd_figure(self) -> None:
+        """Save the Emax pharmacodynamics card's effect curve (100x-128)."""
+        self._save_card_figure(
+            [self._pd_host],
+            dialog_title="Save Emax effect figure",
+            empty_hint=(
+                "Press Compute & plot first -- this saves the effect "
+                "curve the card is currently showing."
+            ),
+        )
+
+    def _save_nca_figure(self) -> None:
+        """Save the NCA card's concentration-time profile (100x-128)."""
+        self._save_card_figure(
+            [self._nca_host],
+            dialog_title="Save NCA profile figure",
+            empty_hint=(
+                "Run the non-compartmental analysis first -- this saves "
+                "the concentration-time profile with its AUC."
+            ),
+        )
+
+    def _save_acc_figure(self) -> None:
+        """Save the infusion card's accumulation figure (100x-128)."""
+        self._save_card_figure(
+            [self._acc_host],
+            dialog_title="Save dose accumulation figure",
+            empty_hint=(
+                "Press Plot repeated dosing first -- this saves the "
+                "approach-to-steady-state picture."
+            ),
+        )
+
+    def _save_fam_figure(self) -> None:
+        """Save the pharmacology family card's effect curve (100x-128)."""
+        self._save_card_figure(
+            [self._fam_host],
+            dialog_title="Save family effect figure",
+            empty_hint=(
+                "Compute a family fit first -- this saves the effect "
+                "curve through your points."
+            ),
+        )
+
+    def _save_feat_figure(self) -> None:
+        """Save the feature factory card's histogram grid (100x-128)."""
+        self._save_card_figure(
+            [self._feat_host],
+            dialog_title="Save descriptor distributions figure",
+            empty_hint=(
+                "Compute features and press Plot distributions first -- "
+                "this saves the histogram grid the card is currently "
+                "showing."
+            ),
+        )
+
+    def _save_scan_figure(self) -> None:
+        """Save the similarity scan card's heat-map figure (100x-128)."""
+        self._save_card_figure(
+            [self._scan_host],
+            dialog_title="Save similarity heatmap figure",
+            empty_hint=(
+                "Run a matrix scan and press Plot heatmap first -- this "
+                "saves the labelled heat-map the card is currently "
+                "showing."
+            ),
+        )
+
+    def _save_dock_receptor_figure(self) -> None:
+        """Save the docking receptor card's atom-type census (100x-128)."""
+        self._save_card_figure(
+            [self._dock_receptor_host],
+            dialog_title="Save receptor atom types figure",
+            empty_hint=(
+                "Prepare a receptor and press Plot atom types first -- "
+                "this saves the atom-type census bars."
+            ),
+        )
+
+    def _save_dock_results_figure(self) -> None:
+        """Save the docking results card's top-ligands bars (100x-128)."""
+        self._save_card_figure(
+            [self._dock_results_host],
+            dialog_title="Save docking results figure",
+            empty_hint=(
+                "Scan a campaign and press Plot top ligands first -- "
+                "this saves the energy-annotated bars."
+            ),
+        )
+
+    def _save_util_cmp_figure(self) -> None:
+        """Save the utilities reconciliation card's overlap figure (100x-128)."""
+        self._save_card_figure(
+            [self._util_cmp_host],
+            dialog_title="Save reconciliation figure",
+            empty_hint=(
+                "Run a reconciliation and press Plot reconciliation "
+                "first -- this saves the overlap figure the card is "
+                "currently showing."
+            ),
+        )
+
     # ------------------------------------------------------------------ #
     # Utilities tab -- the rar's own file & table operations, one by one
     # (100x-110: the coverage audit found these scripts covered by the
@@ -14811,6 +15167,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             cmp_plot_row, text="", style="CardMuted.TLabel", wraplength=300, justify="left"
         )
         self._util_cmp_plot_note.pack(side="left", padx=(8, 0))
+        save_cmp_figure_btn = self._action_button(
+            cmp_plot_row,
+            "Save figure…",
+            self._save_util_cmp_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "three-way overlap figure of the last reconciliation -- as "
+            "PNG, SVG or PDF (unlike Ctrl+S, which saves the last "
+            "figure drawn anywhere).",
+        )
+        save_cmp_figure_btn.pack(side="left", padx=(10, 0))
         self._util_cmp_host = self._figure_host(compare, height=260)
         self._util_cmp_last: Any = None
 

@@ -10,6 +10,59 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.67] — 2026-10-25
+
+### Added — the round-13 full review (100x-128): the per-card figure export closes app-wide
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a thirteenth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **245 public symbols, 43 zero-hit**, byte-identical to
+round 127's documented floor — every member a previously verified
+source absorption: `check_torsion_consistency`/`TorsionCheck` are the
+engine behind the ligand-audit card's folder walk, `PKSummary`/
+`aucm_trapezoid` are what the PK card reads (`summary.aucm`),
+`correlate_with_response` is absorbed inside `sensitivity_associations`,
+and so on; no new library-symbol gaps). The round's genuine work was
+round 127's handover item (b), taken to completion:
+
+**Every remaining figure card in the playground now carries its own
+"Save figure…" export.** Rounds 1.2.65/1.2.66 shipped the pattern for
+the Generative cards; 1.2.67 closes the set — one button per card,
+each saving the figure the card's **own** host shows (never the global
+`Ctrl+S` last-drawn-anywhere figure) through the library's
+`save_figure` with the menu path's PNG/SVG/PDF filetypes:
+
+| Tab | Cards gaining the per-card export |
+| --- | --- |
+| Data & ML | **Results** (parity / calibration / learning curve, whichever drew last — one host, many figures) · **Leaderboard** (the cross-validated bars) · **Applicability domain** (the two-panel reliability picture) |
+| Deep Learning | **Results** (parity or confusion matrix — the card had no button row of its own until now) · **Training history** (a TWO-host card: loss curves + learning curve; the newest render stamp wins, the same semantics the Generative Results card uses) |
+| PK / PD | **IV bolus profile** · **Emax pharmacodynamics** · **NCA** (the concentration-time profile with its AUC) · **infusion accumulation** · **pharmacology family** |
+| Chemistry | **Feature factory** (the descriptor histogram grid) · **similarity scan** (the heat-map) |
+| Docking | **receptor card** (the atom-type census bars) · **results card** (the top-ligands energy bars) |
+| Utilities | **table reconciliation** (the three-way overlap figure) |
+
+- The honest guards ride everywhere: a card with nothing drawn yet
+  answers with the per-card hint ("Run … first — this saves the figure
+  the card is currently showing"), never a crash and never the global
+  shortcut's silent wrong-figure race.
+- The DL Results card's button row is new UI (the train buttons live
+  on the Network card); every other button joined its card's existing
+  row. Verified in-browser-class GUI E2E: a real IV profile drawn by
+  the card's own Plot button, exported by the card's own Save button
+  over a decoy global figure; the DL history card's two hosts racing
+  with the newest stamp winning both directions.
+- Tests: `TestReview128Gui` (20) — the per-tab button census (15 new +
+  4 Generative = 19 app-wide), parametrized guards over all 15 cards,
+  the NCA decoy semantics, the DL two-host newest-wins, and the
+  docstring/home-guide pins. Probe/smoke/shoot sections re-run clean;
+  VLM review of the IV / NCA / ML card screenshots: every QA point
+  clean (buttons visible in the rows, figures fully visible, labels
+  readable, no defects).
+- Notebooks re-executed with 1.2.67 via BOTH drivers (the 26-driver's
+  first run hit the box's 4 GB-cgroup OOM killer mid-kernel — dmesg
+  pinned it; the documented re-run was clean).
+
 ## [1.2.66] — 2026-10-24
 
 ### Added — the round-12 full review (100x-127): the per-card figure export on every Generative figure card, and the web twin's session report

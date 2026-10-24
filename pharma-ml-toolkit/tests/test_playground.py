@@ -6941,3 +6941,228 @@ class TestReview127Gui:
             if widget.winfo_class() == "TLabel"
         )
         assert "Every figure card" in dump and "Save figure" in dump
+
+
+class TestReview128Gui:
+    """Round 100x-128: the per-card "Save figure…" export closes app-wide --
+    every REMAINING figure card (ML results / leaderboard / AD, the DL
+    results and the two-host training history, the PK & PD figures, the
+    feature factory, the similarity scan, both docking cards, the NCA
+    profile, the utilities reconciliation) carries its own export button,
+    each saving the figure the card's OWN host shows -- never the global
+    Ctrl+S last-drawn-anywhere figure."""
+
+    #: (method, host attribute names) for every card shipped this round.
+    NEW_CARDS: ClassVar[list[tuple[str, tuple[str, ...]]]] = [
+        ("_save_feat_figure", ("_feat_host",)),
+        ("_save_scan_figure", ("_scan_host",)),
+        ("_save_iv_figure", ("_iv_host",)),
+        ("_save_pd_figure", ("_pd_host",)),
+        ("_save_nca_figure", ("_nca_host",)),
+        ("_save_acc_figure", ("_acc_host",)),
+        ("_save_fam_figure", ("_fam_host",)),
+        ("_save_dock_receptor_figure", ("_dock_receptor_host",)),
+        ("_save_dock_results_figure", ("_dock_results_host",)),
+        ("_save_ml_figure", ("_ml_host",)),
+        ("_save_board_figure", ("_board_host",)),
+        ("_save_ad_figure", ("_ad_host",)),
+        ("_save_dl_figure", ("_dl_host",)),
+        ("_save_dl_history_figure", ("_dl_hist_host", "_dl_curve_host")),
+        ("_save_util_cmp_figure", ("_util_cmp_host",)),
+    ]
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _tab_buttons(app: Any, index: int) -> list[str]:
+        return [
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[index]))
+            if widget.winfo_class() == "TButton"
+        ]
+
+    # -- the buttons exist, one per figure card, on every tab ------------ #
+    def test_every_tab_carries_its_save_figure_buttons(self, app: Any) -> None:
+        # (tab index, expected count, a co-resident button to prove the
+        # row joined the right card)
+        expectations = [
+            (1, 2, "Plot distributions"),   # Chemistry: factory + scan
+            (2, 5, "Plot repeated dosing"),  # PK/PD: IV, Emax, NCA, acc, family
+            (4, 2, "Plot atom types"),      # Docking: receptor + results
+            (5, 3, "Calibration curve"),    # Data & ML: results, board, AD
+            (6, 2, "Train & evaluate"),     # DL: results + history
+            (8, 1, "Plot reconciliation"),  # Utilities: compare
+        ]
+        total = 0
+        for index, count, neighbour in expectations:
+            buttons = self._tab_buttons(app, index)
+            assert buttons.count("Save figure…") == count, (index, buttons.count("Save figure…"))
+            assert neighbour in buttons, (index, neighbour)
+            total += count
+        assert total == 15, total
+        # plus the four Generative buttons shipped in rounds 126/127 --
+        # the pattern now covers every figure card in the app.
+        assert self._tab_buttons(app, 7).count("Save figure…") == 4
+
+    # -- the honest guards, one per new card ------------------------------ #
+    @pytest.mark.parametrize(
+        ("method_name", "host_names"),
+        NEW_CARDS,
+        ids=[name for name, _hosts in NEW_CARDS],
+    )
+    def test_save_figure_guard(
+        self, app: Any, quiet_dialogs: list[Any], method_name: str, host_names: tuple[str, ...]
+    ) -> None:
+        import matplotlib.pyplot as plt
+
+        for host_name in host_names:
+            host = getattr(app, host_name)
+            if getattr(host, "_pg_figure", None) is not None:
+                host._pg_figure = None
+        plt.close("all")
+        getattr(app, method_name)()
+        assert any("No figure on the card yet" in str(a) for _n, a in quiet_dialogs), method_name
+
+    # -- the semantics: the CARD's figure, not the global last-drawn ----- #
+    def test_save_nca_figure_saves_the_cards_figure(
+        self, app: Any, monkeypatch: Any, tmp_path: Any, playground: Any,
+        quiet_dialogs: list[Any],
+    ) -> None:
+        import matplotlib.pyplot as plt
+
+        target = tmp_path / "nca.png"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target),
+        )
+        import pharmaml.viz as viz_module
+
+        real_save = viz_module.save_figure
+        captured: dict[str, Any] = {}
+
+        def spy(figure: Any, path: Any, *args: Any, **kwargs: Any) -> Any:
+            captured["figure"] = figure
+            return real_save(figure, path, *args, **kwargs)
+
+        monkeypatch.setattr(viz_module, "save_figure", spy)
+
+        profile, axis = plt.subplots()
+        axis.set_title("concentration-time profile")
+        decoy, decoy_axis = plt.subplots()
+        decoy_axis.plot([0, 1], [1, 0])
+        try:
+            app._render_figure(app._nca_host, profile)
+            app._last_figure = decoy  # something else drew last ANYWHERE
+            app._save_nca_figure()
+            assert self._drain(app), "the save job hung"
+            assert captured["figure"] is profile, "saved a figure that is not the card's"
+            assert captured["figure"] is not decoy
+            assert target.exists(), "the PNG never landed"
+            assert target.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+            assert any("Figure saved" in str(a) for _n, a in quiet_dialogs)
+        finally:
+            plt.close("all")
+
+    # -- the two-host DL history card: NEWEST of the card's own figures --- #
+    def test_save_dl_history_figure_newest_of_two_hosts(
+        self, app: Any, monkeypatch: Any, tmp_path: Any, playground: Any,
+        quiet_dialogs: list[Any],
+    ) -> None:
+        import matplotlib.pyplot as plt
+
+        target = tmp_path / "history.png"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target),
+        )
+        import pharmaml.viz as viz_module
+
+        real_save = viz_module.save_figure
+        captured: dict[str, Any] = {}
+
+        def spy(figure: Any, path: Any, *args: Any, **kwargs: Any) -> Any:
+            captured["figure"] = figure
+            return real_save(figure, path, *args, **kwargs)
+
+        monkeypatch.setattr(viz_module, "save_figure", spy)
+
+        losses, l_axis = plt.subplots()
+        l_axis.set_title("loss curves")
+        curve, c_axis = plt.subplots()
+        c_axis.set_title("learning curve")
+        again, a_axis = plt.subplots()
+        a_axis.set_title("loss curves again")
+        try:
+            # training auto-plots the losses, the learning-curve button
+            # draws later: the save follows whichever drew LAST.
+            app._render_figure(app._dl_hist_host, losses)
+            app._render_figure(app._dl_curve_host, curve)
+            app._save_dl_history_figure()
+            assert self._drain(app), "the save job hung"
+            assert captured["figure"] is curve, "the newest card figure did not win"
+
+            app._render_figure(app._dl_hist_host, again)  # losses re-drew last
+            app._save_dl_history_figure()
+            assert self._drain(app), "the second save job hung"
+            assert captured["figure"] is again, "the newest card figure did not win"
+            assert target.exists()
+            assert target.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+        finally:
+            plt.close("all")
+
+    # -- the documentation pins -------------------------------------------- #
+    def test_module_docstring_records_round_128(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-128" in doc
+        assert "closes app-wide" in doc
+        assert "utilities reconciliation" in doc
+
+    def test_home_guide_mentions_app_wide_export(self, app: Any, playground: Any) -> None:
+        guide = None
+        for title, _subtitle, shell in playground._CARD_INDEX:
+            if title != "What lives where":
+                continue
+            try:
+                live = bool(shell.winfo_exists())
+            except Exception:  # noqa: BLE001 - destroyed earlier shell
+                live = False
+            if live:
+                guide = shell
+                break
+        assert guide is not None
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(guide)
+            if widget.winfo_class() == "TLabel"
+        )
+        assert "Every figure card" in dump
+        assert "in the whole app" in dump

@@ -996,7 +996,125 @@ app._theme_var.set("auto")
 DIALOGS.clear()
 print("REPORT_THEMES bake guard: drifted value -> auto OK")
 
-# the live-card census: the three buttons joined EXISTING cards
+# -- 100x-128 additions: the per-card export closes APP-WIDE (the 15
+# remaining figure cards) -------------------------------------------- #
+# a REAL end-to-end path: the IV bolus card's own Plot profile button
+# draws the decay curve, then the card's own export saves THAT figure
+# while a decoy holds the global last-drawn slot
+app._iv_c0.delete(0, "end"); app._iv_c0.insert(0, "10")
+app._iv_thalf.delete(0, "end"); app._iv_thalf.insert(0, "4")
+app._iv_hours.delete(0, "end"); app._iv_hours.insert(0, "24")
+app._plot_iv_bolus()
+assert pump_until_idle(timeout=240), "IV profile job hung"
+_iv_fig128 = getattr(app._iv_host, "_pg_figure", None)
+assert _iv_fig128 is not None, "the IV decay curve never landed"
+_real_save128 = _viz126.save_figure
+_captured128: dict = {}
+
+
+def _spy128(figure, path, *args, **kwargs):
+    _captured128["figure"] = figure
+    return _real_save128(figure, path, *args, **kwargs)
+
+
+_viz126.save_figure = _spy128
+try:
+    _export_iv = "/tmp/probe128-iv-export.png"
+    playground.filedialog.asksaveasfilename = lambda **_k: _export_iv
+    _decoy128, _decoy_axis128 = _plt.subplots()
+    _decoy_axis128.plot([0, 1], [1, 0])
+    app._last_figure = _decoy128
+    app._save_iv_figure()
+    assert pump_until_idle(timeout=240), "IV save job hung"
+    assert _captured128["figure"] is _iv_fig128, "IV: not the card's figure"
+    assert _captured128["figure"] is not _decoy128
+    with open(_export_iv, "rb") as _fh128:
+        assert _fh128.read(8) == b"\x89PNG\r\n\x1a\n"
+    assert any("Figure saved" in str(a) for a in DIALOGS), DIALOGS
+    _plt.close(_decoy128)
+    DIALOGS.clear()
+finally:
+    _viz126.save_figure = _real_save128
+print("IV per-card save: real plot -> card's own figure over decoy OK")
+
+# the two-host DL history card: newest of the card's OWN figures wins
+_losses128, _l_axis128 = _plt.subplots()
+_l_axis128.set_title("loss curves")
+_curve128, _c_axis128 = _plt.subplots()
+_c_axis128.set_title("learning curve")
+_again128, _a_axis128 = _plt.subplots()
+_a_axis128.set_title("loss curves again")
+try:
+    app._render_figure(app._dl_hist_host, _losses128)
+    app._render_figure(app._dl_curve_host, _curve128)
+    assert (
+        getattr(app._dl_hist_host, "_pg_figure_seq", 0)
+        < getattr(app._dl_curve_host, "_pg_figure_seq", 0)
+    ), "DL render stamps are not ordered"
+    _viz126.save_figure = _spy128
+    try:
+        _export_dl = "/tmp/probe128-dl-export.png"
+        playground.filedialog.asksaveasfilename = lambda **_k: _export_dl
+        app._save_dl_history_figure()
+        assert pump_until_idle(timeout=240), "DL history save job hung"
+        assert _captured128["figure"] is _curve128, "newest DL card figure lost"
+        app._render_figure(app._dl_hist_host, _again128)  # losses re-drew last
+        app._save_dl_history_figure()
+        assert pump_until_idle(timeout=240), "second DL history save job hung"
+        assert _captured128["figure"] is _again128, "newest DL card figure lost"
+        with open(_export_dl, "rb") as _fh128:
+            assert _fh128.read(8) == b"\x89PNG\r\n\x1a\n"
+        assert any("Figure saved" in str(a) for a in DIALOGS), DIALOGS
+        DIALOGS.clear()
+    finally:
+        _viz126.save_figure = _real_save128
+finally:
+    _plt.close("all")
+print("DL history two-host save: newest-of-card + stamps OK")
+
+# the honest guards across a representative spread of the new cards
+for _method128 in (
+    "_save_feat_figure",
+    "_save_scan_figure",
+    "_save_pd_figure",
+    "_save_nca_figure",
+    "_save_acc_figure",
+    "_save_fam_figure",
+    "_save_dock_receptor_figure",
+    "_save_dock_results_figure",
+    "_save_ml_figure",
+    "_save_board_figure",
+    "_save_ad_figure",
+    "_save_dl_figure",
+    "_save_util_cmp_figure",
+):
+    for _host128 in (
+        "_feat_host", "_scan_host", "_pd_host", "_nca_host", "_acc_host",
+        "_fam_host", "_dock_receptor_host", "_dock_results_host",
+        "_ml_host", "_board_host", "_ad_host", "_dl_host", "_util_cmp_host",
+    ):
+        _host_obj128 = getattr(app, _host128, None)
+        if _host_obj128 is not None and getattr(_host_obj128, "_pg_figure", None) is not None:
+            _host_obj128._pg_figure = None
+    getattr(app, _method128)()
+    assert any("No figure on the card yet" in str(a) for a in DIALOGS), (_method128, DIALOGS)
+    DIALOGS.clear()
+print("Per-card guards: 13 representative new cards OK")
+
+# the button census: one Save figure… per figure card on EVERY tab
+for _idx128, _want128 in ((1, 2), (2, 5), (4, 2), (5, 3), (6, 2), (8, 1), (7, 4)):
+    _tab_buttons128 = [
+        str(w.cget("text"))
+        for w in app._walk_widgets(app._book.nametowidget(app._book.tabs()[_idx128]))
+        if w.winfo_class() == "TButton"
+    ]
+    assert _tab_buttons128.count("Save figure…") == _want128, (
+        _idx128, _want128, _tab_buttons128.count("Save figure…")
+    )
+print("Button census: 19 Save figure… buttons app-wide (15 new + 4 Generative)")
+
+# the live-card census: the new buttons joined EXISTING cards (the DL
+# results card's new row is a frame INSIDE the card, not a new card)
 assert len(app._live_cards()) >= 68, f"live cards: {len(app._live_cards())}"
 print("card census:", len(app._live_cards()))
 
