@@ -169,6 +169,7 @@ Design notes
 * A quiet keyboard-shortcut hint row sits above the status bar,
   listing every global accelerator (Ctrl+O open · Ctrl+S save figure ·
   Ctrl+Shift+S save session · Ctrl+Shift+R reset this tab ·
+  Ctrl+F find a card ·
   Ctrl+PgDn/PgUp next/previous tab · Ctrl+Q quit -- all bound and
   pinned by tests).  ``View ▸ Shortcut hints`` or the row's own
   ``Hide`` button toggles it, and the preference rides the session
@@ -177,6 +178,18 @@ Design notes
   (recoloured with the theme), the home tab's hero offers quick-jump
   chips straight to every tab, the status bar names the finished job
   and how long it took, and Ctrl+PgDn / Ctrl+PgUp cycle the tabs.
+* UI polish (100x-120): ``Ctrl+F`` (or ``View \u25b8 Find a card...``)
+  opens a live card finder -- type any words from a card's title or
+  subtitle, Enter jumps to its tab, scrolls it into view and flashes
+  its border.  A 60-card window becomes navigable without hunting.
+* Content review (100x-120): the GUI now surfaces the last library
+  stragglers -- descriptor-distribution histograms on the feature
+  factory, the learning-curve figure on the ML results card, the
+  ligand-set reconciliation figure on the table-compare card, the
+  parsed view of a picked Vina config, MAD-ranked variable genes on
+  the cell-line expression card, ``effect_table`` behind the PD
+  explorer's sigmoid table, and a single-folder AutoDock4 engine mode
+  next to the campaign runner.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -1194,6 +1207,7 @@ SHORTCUT_HINTS: tuple[tuple[str, str], ...] = (
     ("Ctrl+S", "save figure"),
     ("Ctrl+Shift+S", "save session"),
     ("Ctrl+Shift+R", "reset this tab"),
+    ("Ctrl+F", "find a card"),
     ("Ctrl+PgDn/PgUp", "next/previous tab"),
     ("Ctrl+Q", "quit"),
 )
@@ -1446,6 +1460,15 @@ class ScrollFrame(ttk.Frame):  # type: ignore[misc] # ttk is None headless
             self._canvas.yview_scroll(3, "units")
 
 
+#: The card finder's directory (100x-120): every card shell ``make_card``
+#: appends ``(title, subtitle, shell)`` here, and ``Ctrl+F`` filters it
+#: live.  Module-level because ``make_card`` is a plain function; the
+#: shells are weak references in practice (a destroyed app leaves
+#: dead paths -- the finder re-resolves tabs through the LIVE notebook,
+#: so stale entries simply never match).
+_CARD_INDEX: list[tuple[str, str, Any]] = []
+
+
 def make_card(
     parent: Any,
     title: str,
@@ -1464,9 +1487,13 @@ def make_card(
     100x-119 UI pass): a quiet visual anchor that groups each card's
     controls at a glance.  The strip is a plain ``tk.Frame`` painted
     ``ACCENT``; ``_retint_plain_widgets`` recolours it on theme flips.
+
+    Every shell is also appended to :data:`_CARD_INDEX` (title,
+    subtitle, shell) -- the Ctrl+F card finder's directory (100x-120).
     """
     shell = tk.Frame(parent, background=CARD, highlightbackground=BORDER,
                      highlightthickness=1)
+    _CARD_INDEX.append((title, subtitle, shell))
     shell.grid(row=row, column=column, columnspan=span, sticky="nsew",
                padx=6, pady=6)
     header = ttk.Frame(shell, style="Card.TFrame", padding=(14, 10, 14, 0))
@@ -1870,6 +1897,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         bar.add_cascade(label="File", menu=file_menu)
 
         view_menu = tk.Menu(bar, tearoff=0)
+        # the card finder (100x-120): Ctrl+F, also bound below
+        view_menu.add_command(label="Find a card…", accelerator="Ctrl+F",
+                              command=self._find_card_dialog)
+        view_menu.add_separator()
         self._theme_var = tk.StringVar(value=self._theme)
         for label, value in (("Follow system", "auto"), ("Light", "light"),
                              ("Dark", "dark")):
@@ -1898,8 +1929,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self.bind_all("<Control-Shift-S>", lambda _e: self._save_session_now())
         # 100x-65: the menu (and the docstring) had advertised Ctrl+Shift+R
         # since 100x-54, but no binding ever existed -- pressing it did
-        # nothing.  Bound now, and the test suite pins all five sequences.
+        # nothing.  Bound now, and the test suite pins the whole set.
         self.bind_all("<Control-Shift-R>", lambda _e: self._reset_current_tab())
+        # 100x-120: the card finder -- bound and advertised in the hint
+        # row together with the rest of the accelerators.
+        self.bind_all("<Control-f>", lambda _e: self._find_card_dialog())
         self.bind_all("<Control-q>", lambda _e: self._on_close())
 
     def _build_statusbar(self) -> None:
@@ -1996,6 +2030,136 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._book.select(index)
         except tk.TclError:  # pragma: no cover - no tab selected yet
             pass
+
+    # -- the Ctrl+F card finder (100x-120) ----------------------------- #
+    def _card_tab_index(self, shell: Any, pages: list[Any]) -> int | None:
+        """Resolve which tab page a card shell descends from."""
+        node: Any = shell
+        while node is not None:
+            for index, page in enumerate(pages):
+                if node is page:
+                    return index
+            try:
+                node = node.master
+            except tk.TclError:  # a destroyed ancestor
+                return None
+        return None
+
+    def _live_cards(self) -> list[tuple[str, str, Any, int]]:
+        """The card index filtered to shells of THIS app's live tabs."""
+        try:
+            pages = [self._book.nametowidget(tab)
+                     for tab in self._book.tabs()]
+        except tk.TclError:  # pragma: no cover - no notebook yet
+            return []
+        live: list[tuple[str, str, Any, int]] = []
+        for title, subtitle, shell in _CARD_INDEX:
+            try:
+                if not bool(shell.winfo_exists()):
+                    continue
+            except tk.TclError:
+                continue
+            index = self._card_tab_index(shell, pages)
+            if index is not None:
+                live.append((title, subtitle, shell, index))
+        return live
+
+    def _find_card_dialog(self) -> None:
+        """Ctrl+F -- a live card finder over every tab (100x-120).
+
+        Typing filters the card index on title + subtitle; Enter (or a
+        double-click) selects the card's tab, scrolls the card into
+        view and flashes its border -- a 60-card window becomes
+        navigable without hunting through tabs.
+        """
+        if tk is None:  # pragma: no cover - headless import
+            return
+        win = tk.Toplevel(self)
+        win.title("Find a card")
+        win.configure(background=BG)
+        win.transient(self)
+        try:
+            win.geometry(f"+{self.winfo_rootx() + 140}+{self.winfo_rooty() + 110}")
+        except tk.TclError:  # pragma: no cover - unmapped parent
+            pass
+        ttk.Label(win, text="Type words from a card's title or subtitle — "
+                            "Enter jumps to it.", style="CardMuted.TLabel"
+                  ).pack(anchor="w", padx=14, pady=(12, 4))
+        entry = ttk.Entry(win, width=54)
+        entry.pack(fill="x", padx=14, pady=(0, 8))
+        tree = ttk.Treeview(win, columns=("card", "tab"), show="headings",
+                            height=12)
+        tree.heading("card", text="card")
+        tree.heading("tab", text="tab")
+        tree.column("card", width=360)
+        tree.column("tab", width=130)
+        tree.pack(fill="both", expand=True, padx=14, pady=(0, 4))
+        ttk.Label(win, text="Enter jump · double-click jump · Esc close",
+                  style="CardMuted.TLabel").pack(anchor="w", padx=14,
+                                                 pady=(0, 10))
+
+        def refresh() -> None:
+            query = entry.get().strip().lower()
+            tree.delete(*tree.get_children())
+            for title, subtitle, _shell, index in self._live_cards():
+                haystack = f"{title} {subtitle}".lower()
+                if query and not all(word in haystack for word in query.split()):
+                    continue
+                try:
+                    tab_name = str(self._book.tab(index, "text")).strip()
+                except tk.TclError:  # pragma: no cover - tab vanished
+                    continue
+                tree.insert("", "end", values=(title, tab_name),
+                            iid=f"{index}:{title}")
+
+        def jump(item: str | None = None) -> None:
+            picked = item or (tree.selection() or [None])[0]
+            if not picked:
+                return
+            index = int(str(picked).split(":", 1)[0])
+            title = str(picked).split(":", 1)[1]
+            self._jump_to_card(index, title)
+            win.destroy()
+
+        entry.bind("<KeyRelease>", lambda _e: refresh())
+        entry.bind("<Return>", lambda _e: jump())
+        tree.bind("<Double-1>", lambda e: jump(tree.identify_row(e.y)))
+        win.bind("<Escape>", lambda _e: win.destroy())
+        refresh()
+        entry.focus_set()
+
+    def _jump_to_card(self, tab_index: int, title: str) -> None:
+        """Select the tab, scroll the card into view and flash it."""
+        self._jump_to_tab(tab_index)
+        self.update_idletasks()
+        for entry_title, _subtitle, shell in _CARD_INDEX:
+            if entry_title != title:
+                continue
+            try:
+                if not bool(shell.winfo_exists()):
+                    continue
+            except tk.TclError:
+                continue
+            if self._card_tab_index(
+                    shell, [self._book.nametowidget(tab)
+                            for tab in self._book.tabs()]) != tab_index:
+                continue
+            page = self._book.nametowidget(self._book.tabs()[tab_index])
+            canvas = getattr(page, "_canvas", None)
+            if canvas is not None:
+                body_height = int(page.body.winfo_reqheight() or 1)
+                fraction = max(0.0, min(0.99, (shell.winfo_y() - 12)
+                                        / max(1, body_height)))
+                canvas.yview_moveto(fraction)
+            shell.configure(highlightbackground=ACCENT, highlightthickness=3)
+            self.after(1200, lambda s=shell: self._unflash_card(s))
+            break
+
+    def _unflash_card(self, shell: Any) -> None:
+        """Restore a flashed card's border (the finder's highlight)."""
+        with contextlib.suppress(tk.TclError):
+            if bool(shell.winfo_exists()):
+                shell.configure(highlightbackground=BORDER, highlightthickness=1)
 
     def _new_page(self, title: str, reset: bool = True) -> Any:
         page = ScrollFrame(self._book)
@@ -3206,6 +3370,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "fingerprint sizes, K and method.",
         )
         feat_json_btn.pack(side="left", padx=(10, 0))
+        # 100x-120: the descriptor-distribution figure (the last viz
+        # straggler) -- a histogram grid over the computed frame.
+        feat_dist_btn = self._action_button(
+            feat_export_buttons, "Plot distributions",
+            self._feat_plot_distributions,
+            tooltip="A histogram grid over the numeric columns of the "
+                    "computed frame (plot_descriptor_distributions) -- the "
+                    "honest first look at skew, bimodality and outliers "
+                    "before any model sees the numbers.",
+        )
+        feat_dist_btn.pack(side="left", padx=(10, 0))
+        self._feat_host = self._figure_host(factory, height=300)
         self._feat_update_width()
         self._feat_refresh_source()
 
@@ -4513,6 +4689,42 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Saved", f"Metadata written to\n{path}")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save", exc)
+
+    def _feat_plot_distributions(self) -> None:
+        """Histogram grid over the last computed feature frame (100x-120).
+
+        ``plot_descriptor_distributions`` finally has its GUI surface:
+        after a compute, the button lays the frame's numeric columns out
+        as a grid of histograms (first nine columns by default) --
+        skew, bimodality and outliers become visible before any model
+        sees the numbers.
+        """
+        frame = getattr(self, "_feat_frame", None)
+        if frame is None or len(frame) == 0 or len(frame.columns) == 0:
+            messagebox.showinfo(
+                "No features yet",
+                "Compute & select features first -- the histogram grid "
+                "needs the computed frame.",
+            )
+            return
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the distribution histograms"):
+            return
+        n_rows, n_cols = len(frame), len(frame.columns)
+
+        def work() -> Any:
+            from pharmaml.viz import plot_descriptor_distributions
+
+            return plot_descriptor_distributions(
+                frame,
+                title=(f"Descriptor distributions — {n_rows} molecules · "
+                       f"{n_cols:,} columns (first grid)"),
+            )
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._feat_host, figure)
+
+        self._start_job("descriptor distributions", work, render)
 
     # ------------------------------------------------------------------ #
     # PK / PD tab
