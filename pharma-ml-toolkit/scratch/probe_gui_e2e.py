@@ -562,6 +562,88 @@ shutil.rmtree(_tmp_dlg, ignore_errors=True)
 app._dock_engine_combo.set("AutoDock4 campaign")
 print("dlg summary:", _summary121[:90])
 
+# -- 100x-122 additions: reference objectives, surgery cards, PDF report -- #
+# the three new objectives + the swapped reference row
+app._objective_combo.set("Similarity to reference SMILES")
+app._objective_hint()
+assert app._obj_ref_label.cget("text") == "reference"
+assert app._obj_ref_frame.grid_info() != {}
+assert "Tanimoto similarity" in app._objective_hint_label.cget("text")
+app._objective_combo.set("Contains substructure (SMARTS)")
+app._objective_hint()
+assert app._obj_ref_label.cget("text") == "SMARTS"
+app._objective_combo.set("Novelty vs corpus")
+app._objective_hint()
+assert app._obj_ref_frame.grid_info() == {}
+app._objective_combo.set("QED drug-likeness")
+app._objective_hint()
+print("objectives: reference row swaps for similarity/SMARTS, hides for novelty")
+
+# the ring-topology moves card: piperidine's three mutants
+app._gen_topology_moves()
+assert pump_until_idle(timeout=240), "topology job hung"
+_topo = app._topo_text.get("1.0", "end").strip()
+assert "C1CCCC1" in _topo and "C1CCCNCC1" in _topo and "C1CCNC1" in _topo, _topo
+assert app._topo_summary.cget("text").startswith("3 distinct")
+print("ring topology moves:", _topo.replace("\n", " · "))
+
+# the breed card: aspirin x ibuprofen, 4 seeded children
+app._gen_breed()
+assert pump_until_idle(timeout=240), "breed job hung"
+_litter = app._breed_text.get("1.0", "end").strip().splitlines()
+assert len(_litter) == 4, _litter
+assert "viable children" in app._breed_summary.cget("text")
+print("breed:", app._breed_summary.cget("text")[:80])
+
+# the session PDF report: guard first (the registry is emptied -- earlier
+# probe sections drew figures), then a real two-figure write
+app._session_figures.clear()
+app._menu_save_session_report()
+assert len(DIALOGS) == 1 and DIALOGS[0][0] == "info", DIALOGS
+assert "No figures yet" in str(DIALOGS[0][1]), DIALOGS
+DIALOGS.clear()
+
+import matplotlib
+
+matplotlib.use("Agg", force=True)
+import matplotlib.pyplot as _plt
+
+_figA = _plt.figure()
+_axA = _figA.add_subplot(111)
+_axA.plot([0, 1], [0, 1])
+_axA.set_title("alpha")
+_figB = _plt.figure()
+_axB = _figB.add_subplot(111)
+_axB.plot([1, 0], [0, 1])
+_axB.set_title("beta")
+app._job_label_base = "figure alpha"
+app._render_figure(app._ml_host, _figA)
+app._job_label_base = "figure beta"
+app._render_figure(app._feat_host, _figB)
+assert len(app._live_session_figures()) == 2
+_figC = _plt.figure()
+_figC.add_subplot(111).plot([0, 1], [1, 0])
+app._render_figure(app._ml_host, _figC)  # replace in place
+assert len(app._live_session_figures()) == 2, "registry must stay one-per-host"
+assert app._session_figures[0][2] is _figC
+
+_tmp122 = Path(tempfile.mkdtemp(prefix="probe122_"))
+_target122 = _tmp122 / "session-report.pdf"
+fd.asksaveasfilename = lambda t="", _p=_target122, **k: str(_p)
+app._menu_save_session_report()
+assert pump_until_idle(timeout=240), "report job hung"
+assert _target122.exists() and _target122.stat().st_size > 1_000
+assert app._ml_host._pg_figure is _figC, "close=False must keep live figures"
+assert len(DIALOGS) == 1 and "figure page(s) written" in str(DIALOGS[0][1]), DIALOGS
+DIALOGS.clear()
+shutil.rmtree(_tmp122, ignore_errors=True)
+_plt.close("all")
+print("session report: guard + registry replace + real PDF written")
+
+# the live-card census grew with the two surgery cards
+assert len(app._live_cards()) >= 68, f"live cards: {len(app._live_cards())}"
+print("card census:", len(app._live_cards()))
+
 app.destroy()
 assert not DIALOGS, f"unexpected dialogs: {DIALOGS}"
 print("PROBE_OK")

@@ -53,11 +53,23 @@ class TestModuleSurface:
 
     def test_module_exposes_helpers_and_app(self, playground: Any) -> None:
         for name in (
-            "probe_dependencies", "load_pharmaml", "parse_float", "parse_int",
-            "parse_smiles_lines", "format_number", "build_objective",
-            "toolkit_version", "PlaygroundApp", "main", "self_test",
-            "print_banner", "apply_theme", "session_path", "dump_session",
-            "load_session", "parse_geometry",
+            "probe_dependencies",
+            "load_pharmaml",
+            "parse_float",
+            "parse_int",
+            "parse_smiles_lines",
+            "format_number",
+            "build_objective",
+            "toolkit_version",
+            "PlaygroundApp",
+            "main",
+            "self_test",
+            "print_banner",
+            "apply_theme",
+            "session_path",
+            "dump_session",
+            "load_session",
+            "parse_geometry",
         ):
             assert hasattr(playground, name), name
 
@@ -76,9 +88,7 @@ class TestToolkitVersion:
     def _pyproject_project_version() -> str:
         """Independent re-derivation of the pyproject ``[project]`` version."""
         in_project = False
-        for raw_line in (TOOLKIT_ROOT / "pyproject.toml").read_text(
-            encoding="utf-8"
-        ).splitlines():
+        for raw_line in (TOOLKIT_ROOT / "pyproject.toml").read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()
             if line.startswith("[") and line.endswith("]"):
                 in_project = line == "[project]"
@@ -140,9 +150,7 @@ class TestCellLineSurface:
 
     def test_dependency_table_covers_the_heavy_packages(self, playground: Any) -> None:
         modules = {entry[0] for entry in playground._DEPENDENCIES}
-        assert modules == {
-            "numpy", "pandas", "sklearn", "scipy", "matplotlib", "rdkit", "torch"
-        }
+        assert modules == {"numpy", "pandas", "sklearn", "scipy", "matplotlib", "rdkit", "torch"}
 
 
 # --------------------------------------------------------------------- #
@@ -164,12 +172,16 @@ class TestDockingTab:
 # pure helpers
 # --------------------------------------------------------------------- #
 class TestPureHelpers:
-    def test_probe_dependencies_returns_booleans_for_every_module(
-        self, playground: Any
-    ) -> None:
+    def test_probe_dependencies_returns_booleans_for_every_module(self, playground: Any) -> None:
         status = playground.probe_dependencies()
         assert set(status) == {
-            "numpy", "pandas", "sklearn", "scipy", "matplotlib", "rdkit", "torch"
+            "numpy",
+            "pandas",
+            "sklearn",
+            "scipy",
+            "matplotlib",
+            "rdkit",
+            "torch",
         }
         assert all(isinstance(value, bool) for value in status.values())
 
@@ -217,37 +229,31 @@ class TestPureHelpers:
 # the manual-hyperparameter + progress helpers (100x-106)
 # --------------------------------------------------------------------- #
 class TestManualHyperparameterHelpers:
-    def test_parse_typed_value_follows_the_default_type(
-        self, playground: Any
-    ) -> None:
+    def test_parse_typed_value_follows_the_default_type(self, playground: Any) -> None:
         parse = playground.parse_typed_value
-        assert parse("0.5", 1.0) == 0.5          # float default
-        assert parse("300", 100) == 300          # int default
+        assert parse("0.5", 1.0) == 0.5  # float default
+        assert parse("300", 100) == 300  # int default
         assert parse("scale", "auto") == "scale"  # string default
-        assert parse("true", False) is True      # bool before int
+        assert parse("true", False) is True  # bool before int
         assert parse("NO", True) is False
-        assert parse("", 7.5) == 7.5             # blank keeps the default
+        assert parse("", 7.5) == 7.5  # blank keeps the default
 
-    def test_parse_typed_value_none_and_tuple_defaults(
-        self, playground: Any
-    ) -> None:
+    def test_parse_typed_value_none_and_tuple_defaults(self, playground: Any) -> None:
         parse = playground.parse_typed_value
-        assert parse("none", None) is None       # explicit None slot
+        assert parse("none", None) is None  # explicit None slot
         assert parse("null", None) is None
-        assert parse("7", None) == 7             # numeric fallback
+        assert parse("7", None) == 7  # numeric fallback
         assert parse("auto-ish", None) == "auto-ish"
         assert parse("(128, 64)", (100,)) == (128, 64)
         assert parse("128, 64", (100,)) == (128, 64)
         assert parse("16", (100,)) == (16,)
 
-    def test_parse_typed_value_rejects_rubbish_with_field_context(
-        self, playground: Any
-    ) -> None:
+    def test_parse_typed_value_rejects_rubbish_with_field_context(self, playground: Any) -> None:
         parse = playground.parse_typed_value
         with pytest.raises(ValueError, match="true/false"):
             parse("maybe", False)
         with pytest.raises(ValueError):
-            parse("abc", 1.0)                     # float slot, float jargon
+            parse("abc", 1.0)  # float slot, float jargon
         with pytest.raises(ValueError, match="width"):
             parse("(128, sixty-four)", (100,))
 
@@ -255,14 +261,12 @@ class TestManualHyperparameterHelpers:
         fmt = playground._fmt_duration
         assert fmt(0) == "0 s"
         assert fmt(41.9) == "42 s"
-        assert fmt(-3.0) == "0 s"                # clamped, never negative
+        assert fmt(-3.0) == "0 s"  # clamped, never negative
         assert fmt(192) == "3 min 12 s"
         assert fmt(599.6) == "10 min 00 s"
         assert fmt(3720) == "1 h 02 min"
 
-    def test_accepts_progress_argument_signature_rule(
-        self, playground: Any
-    ) -> None:
+    def test_accepts_progress_argument_signature_rule(self, playground: Any) -> None:
         accepts = playground._accepts_progress_argument
         assert accepts(lambda report: None) is True
         assert accepts(lambda: None) is False
@@ -270,9 +274,7 @@ class TestManualHyperparameterHelpers:
         assert accepts(lambda x=None, *, y=1: None) is True  # x is positional
         assert accepts(lambda *, y=1: None) is False  # keyword-only is no
 
-    def test_call_work_injects_the_reporter_conditionally(
-        self, playground: Any
-    ) -> None:
+    def test_call_work_injects_the_reporter_conditionally(self, playground: Any) -> None:
         call = playground._call_work
         seen: list[object] = []
         assert call(lambda: 1, seen.append) == 1
@@ -315,7 +317,8 @@ class TestDockingHelpers:
 
     def test_docking_engine_binaries(self, playground: Any) -> None:
         assert playground.docking_engine_binaries("AutoDock4 campaign") == (
-            "autogrid4", "autodock4",
+            "autogrid4",
+            "autodock4",
         )
         assert playground.docking_engine_binaries("Vina single ligand") == ("vina",)
 
@@ -324,9 +327,7 @@ class TestDockingHelpers:
 # session persistence + themes (pure helpers -- no Tk required)
 # --------------------------------------------------------------------- #
 class TestSessionHelpers:
-    def test_session_path_lives_under_home_dot_pharmaml(
-        self, playground: Any
-    ) -> None:
+    def test_session_path_lives_under_home_dot_pharmaml(self, playground: Any) -> None:
         path = playground.session_path()
         assert path.name == "playground-session.json"
         assert path.parent == Path.home() / ".pharmaml"
@@ -334,58 +335,80 @@ class TestSessionHelpers:
     def test_parse_geometry_accepts_only_full_specs(self, playground: Any) -> None:
         assert playground.parse_geometry("1180x780+100+50") == (1180, 780, 100, 50)
         assert playground.parse_geometry(" 900x600-20+0 ") == (900, 600, -20, 0)
-        for broken in ("", "1180x780", "+100+50", "1180x780+100", "junk",
-                       "0x0+0+0extra", "1180xx780+1+1"):
+        for broken in (
+            "",
+            "1180x780",
+            "+100+50",
+            "1180x780+100",
+            "junk",
+            "0x0+0+0extra",
+            "1180xx780+1+1",
+        ):
             assert playground.parse_geometry(broken) is None, broken
 
     def test_dump_session_normalises_every_field(self, playground: Any) -> None:
         payload = playground.dump_session(
-            theme="neon", geometry=1180, tab=True,
+            theme="neon",
+            geometry=1180,
+            tab=True,
             variables={"_a": "x", 5: "y"},
             families={"descriptors": 1, "ecfp": None},
             texts={"pasted": "CCO", "corpus": 42},
         )
         assert payload["format"] == playground.SESSION_FORMAT
-        assert payload["theme"] == "light"          # unknown theme -> light
-        assert payload["geometry"] == "1180"          # coerced to str
-        assert payload["tab"] == 1                    # bool -> int
+        assert payload["theme"] == "light"  # unknown theme -> light
+        assert payload["geometry"] == "1180"  # coerced to str
+        assert payload["tab"] == 1  # bool -> int
         assert payload["variables"] == {"_a": "x", "5": "y"}
         assert payload["families"] == {"descriptors": True, "ecfp": False}
         assert payload["texts"] == {"pasted": "CCO", "corpus": "42"}
 
     def test_load_session_rejects_malformed_payloads(self, playground: Any) -> None:
-        for raw in (None, [], "session", {}, {"format": 0},
-                    {"format": "1"}, {"format": 2, "theme": "dark"}):
+        for raw in (
+            None,
+            [],
+            "session",
+            {},
+            {"format": 0},
+            {"format": "1"},
+            {"format": 2, "theme": "dark"},
+        ):
             assert playground.load_session(raw) is None, raw
 
-    def test_load_session_sanitises_half_formed_payloads(
-        self, playground: Any
-    ) -> None:
-        loaded = playground.load_session({
-            "format": playground.SESSION_FORMAT,
-            "theme": "solarized", "geometry": None, "tab": -4,
-            "variables": "not a dict", "families": {"descriptors": "yes"},
-            "texts": {"pasted": "ok", "corpus": 7},
-        })
+    def test_load_session_sanitises_half_formed_payloads(self, playground: Any) -> None:
+        loaded = playground.load_session(
+            {
+                "format": playground.SESSION_FORMAT,
+                "theme": "solarized",
+                "geometry": None,
+                "tab": -4,
+                "variables": "not a dict",
+                "families": {"descriptors": "yes"},
+                "texts": {"pasted": "ok", "corpus": 7},
+            }
+        )
         assert loaded == {
             "format": playground.SESSION_FORMAT,
-            "theme": "light", "geometry": "", "tab": 0,
-            "variables": {}, "families": {}, "texts": {"pasted": "ok"},
+            "theme": "light",
+            "geometry": "",
+            "tab": 0,
+            "variables": {},
+            "families": {},
+            "texts": {"pasted": "ok"},
         }
 
     def test_dump_load_round_trip_is_lossless(self, playground: Any) -> None:
         payload = playground.dump_session(
-            theme="dark", geometry="1180x780+10+20", tab=4,
-            variables={"_aff_value": "3.14", "_tune_var": True,
-                       "_feat_k_entry": "777"},
+            theme="dark",
+            geometry="1180x780+10+20",
+            tab=4,
+            variables={"_aff_value": "3.14", "_tune_var": True, "_feat_k_entry": "777"},
             families={"descriptors": True, "morgan_scaffold": False},
             texts={"pasted": "CCO\nCCN", "corpus": ""},
         )
         assert playground.load_session(payload) == payload
 
-    def test_apply_theme_rebinds_and_restores_module_colours(
-        self, playground: Any
-    ) -> None:
+    def test_apply_theme_rebinds_and_restores_module_colours(self, playground: Any) -> None:
         light_bg = playground.BG
         try:
             assert playground.apply_theme("dark") == "dark"
@@ -422,41 +445,35 @@ class TestPharmamlIntegration:
     ) -> None:
         assert "adaptive" in playground._format_operator_stats({})
 
-    def test_format_operator_stats_renders_levels_and_probabilities(
-        self, playground: Any
-    ) -> None:
-        text = playground._format_operator_stats({
-            "operator_stats": {
-                "level1": {
-                    "clone": {"draws": 24, "successes": 20, "final_probability": 0.893},
-                },
-                "mutation": {
-                    "topology": {"draws": 200, "successes": 180, "final_probability": 0.896},
-                },
+    def test_format_operator_stats_renders_levels_and_probabilities(self, playground: Any) -> None:
+        text = playground._format_operator_stats(
+            {
+                "operator_stats": {
+                    "level1": {
+                        "clone": {"draws": 24, "successes": 20, "final_probability": 0.893},
+                    },
+                    "mutation": {
+                        "topology": {"draws": 200, "successes": 180, "final_probability": 0.896},
+                    },
+                }
             }
-        })
+        )
         assert "[level1]" in text and "[mutation]" in text
         assert "clone" in text and "p 0.893" in text
         assert "topology" in text and "p 0.896" in text
 
-    @pytest.mark.skipif(
-        importlib.util.find_spec("rdkit") is None, reason="needs RDKit"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("rdkit") is None, reason="needs RDKit")
     def test_build_objective_qed_has_score(self, playground: Any) -> None:
         objective = playground.build_objective("QED drug-likeness", 1.0, 3.0)
         assert callable(objective.score)
 
-    @pytest.mark.skipif(
-        importlib.util.find_spec("rdkit") is None, reason="needs RDKit"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("rdkit") is None, reason="needs RDKit")
     def test_build_objective_logp_window_scores_inside_band(self, playground: Any) -> None:
         objective = playground.build_objective("LogP window", 1.0, 3.0)
         aspirin = "CC(=O)Oc1ccccc1C(=O)O"  # LogP ~ 1.31 -- inside the band
         assert objective.score(aspirin) > 0.0
 
-    @pytest.mark.skipif(
-        importlib.util.find_spec("rdkit") is None, reason="needs RDKit"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("rdkit") is None, reason="needs RDKit")
     def test_build_objective_blend_is_multiobjective(self, playground: Any) -> None:
         from pharmaml.generative import MultiObjective
 
@@ -469,9 +486,7 @@ class TestPharmamlIntegration:
 # no Tk -- pins the shipped example data's flagship facts)
 # --------------------------------------------------------------------- #
 class TestCellLinePipeline:
-    @pytest.mark.skipif(
-        importlib.util.find_spec("scipy") is None, reason="needs SciPy"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("scipy") is None, reason="needs SciPy")
     def test_example_screen_audit_and_matrix_facts(self) -> None:
         import pandas as pd
 
@@ -503,9 +518,7 @@ class TestCellLinePipeline:
         assert ln_ic50_to_pic50(3.2085197999117585) == 4.606557555820998
         assert isinstance(matrix, pd.DataFrame)  # the tab stores exactly this
 
-    @pytest.mark.skipif(
-        importlib.util.find_spec("scipy") is None, reason="needs SciPy"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("scipy") is None, reason="needs SciPy")
     def test_example_biomarker_story_pins_egfr(self) -> None:
         import pandas as pd
 
@@ -522,9 +535,7 @@ class TestCellLinePipeline:
         data = TOOLKIT_ROOT / "examples" / "data"
         screen = collapse_replicates(load_response_table(data / "cellline_screen.csv"))
         matrix = response_matrix(screen, "LN_IC50")
-        expression = pd.read_csv(
-            data / "cellline_expression.csv", index_col="cell_line"
-        )
+        expression = pd.read_csv(data / "cellline_expression.csv", index_col="cell_line")
         assert expression.shape == (23, 300)
         norm = impute_expression(normalize_expression(expression))
         assert int(norm.isna().sum().sum()) == 0
@@ -562,9 +573,7 @@ class TestCellLinePipeline:
 # Tk -- pins the shipped example library / receptor / campaign facts)
 # --------------------------------------------------------------------- #
 class TestDockingPipeline:
-    @pytest.mark.skipif(
-        importlib.util.find_spec("rdkit") is None, reason="needs RDKit"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("rdkit") is None, reason="needs RDKit")
     def test_example_ligand_library_prep_and_grid_configs(self, tmp_path: Any) -> None:
         from pharmaml.docking import (
             compute_grid_box,
@@ -591,16 +600,19 @@ class TestDockingPipeline:
         box = compute_grid_box(ligand, padding=4.0, npts=(60, 60, 60), spacing=0.375)
         assert box.size == (22.125, 22.125, 22.125)  # (npts - 1) * spacing
         assert extract_pdbqt_atom_types(ligand) == ["A", "C", "HD", "OA"]
-        gpf = write_gpf(ligand, receptor_file="r.pdbqt", box=box,
-                        output_path=ligand.parent / "r.gpf")
-        dpf = write_dpf(ligand, receptor_file="r.pdbqt",
-                        output_path=ligand.parent / "r.dpf",
-                        ga_run=100, ga_pop_size=150)
+        gpf = write_gpf(
+            ligand, receptor_file="r.pdbqt", box=box, output_path=ligand.parent / "r.gpf"
+        )
+        dpf = write_dpf(
+            ligand,
+            receptor_file="r.pdbqt",
+            output_path=ligand.parent / "r.dpf",
+            ga_run=100,
+            ga_pop_size=150,
+        )
         assert gpf.is_file() and dpf.is_file()
 
-    @pytest.mark.skipif(
-        importlib.util.find_spec("pandas") is None, reason="needs pandas"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("pandas") is None, reason="needs pandas")
     def test_example_campaign_scan_and_dlg_facts(self) -> None:
         import pandas as pd
 
@@ -629,9 +641,16 @@ class TestDockingPipeline:
         assert summary["top_lowest_energy"] == pytest.approx(-4.91)
 
         cluster_frame = pd.DataFrame(
-            [{"rank": c.rank, "lowest_energy": c.lowest_energy,
-              "mean_energy": c.mean_energy, "num_in_cluster": c.num_in_cluster,
-              "n_heavy": 13} for c in clusters]
+            [
+                {
+                    "rank": c.rank,
+                    "lowest_energy": c.lowest_energy,
+                    "mean_energy": c.mean_energy,
+                    "num_in_cluster": c.num_in_cluster,
+                    "n_heavy": 13,
+                }
+                for c in clusters
+            ]
         )
         efficiency = ligand_efficiency_series(
             cluster_frame, affinity_col="lowest_energy", atoms_col="n_heavy"
@@ -648,7 +667,10 @@ class TestCommandLine:
     def test_probe_reports_pharmaml_and_dependencies(self) -> None:
         result = subprocess.run(
             [sys.executable, str(PLAYGROUND_PATH), "--probe"],
-            check=False, capture_output=True, text=True, timeout=120,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
             cwd=TOOLKIT_ROOT,
         )
         assert result.returncode == 0, result.stderr
@@ -658,7 +680,10 @@ class TestCommandLine:
     def test_version_prints_both_versions(self) -> None:
         result = subprocess.run(
             [sys.executable, str(PLAYGROUND_PATH), "--version"],
-            check=False, capture_output=True, text=True, timeout=60,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
             cwd=TOOLKIT_ROOT,
         )
         assert result.returncode == 0
@@ -698,7 +723,8 @@ def xvfb_display() -> str:
     display = ":98"
     process = subprocess.Popen(
         ["Xvfb", display, "-screen", "0", "1280x800x24"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     socket_path = Path(f"/tmp/.X11-unix/X{display[1:]}")
     deadline = time.time() + 10.0
@@ -748,18 +774,19 @@ class TestGuiUnderXvfb:
 
         result = subprocess.run(
             [sys.executable, str(PLAYGROUND_PATH), "--self-test"],
-            check=False, capture_output=True, text=True, timeout=180,
-            cwd=TOOLKIT_ROOT, env={**os.environ, "DISPLAY": xvfb_display},
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            cwd=TOOLKIT_ROOT,
+            env={**os.environ, "DISPLAY": xvfb_display},
         )
         assert result.returncode == 0, result.stderr
         assert "no errors" in result.stdout
 
-    def test_example_corpus_loader_fills_the_text_widget(
-        self, playground: Any, app: Any
-    ) -> None:
+    def test_example_corpus_loader_fills_the_text_widget(self, playground: Any, app: Any) -> None:
         app._load_example_corpus()
-        lines = [line for line in app._corpus_text.get("1.0", "end").splitlines()
-                 if line.strip()]
+        lines = [line for line in app._corpus_text.get("1.0", "end").splitlines() if line.strip()]
         assert len(lines) == 12  # examples/data/seed_molecules.csv ships 12
         assert "CC(=O)Oc1ccccc1C(=O)O" in lines  # aspirin
 
@@ -783,7 +810,8 @@ class TestGuiUnderXvfb:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -827,9 +855,7 @@ class TestGuiUnderXvfb:
         assert app._bio_ic50_result.cget("text") == "3.2084"
         assert quiet_dialogs == []
 
-    def test_cellline_matrix_job_fills_the_tree(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_cellline_matrix_job_fills_the_tree(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._bio_load_example()
         app._bio_build_matrix()
         assert self._drain_jobs(app), "matrix job hung"
@@ -839,9 +865,7 @@ class TestGuiUnderXvfb:
         assert app._bio_matrix is not None and app._bio_matrix.shape == (23, 8)
         assert quiet_dialogs == []
 
-    def test_cellline_sensitive_resistant_calls(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_cellline_sensitive_resistant_calls(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._bio_load_example()
         app._bio_compound_var.set("erlotinib")
         app._bio_call_sensitive()
@@ -941,9 +965,7 @@ class TestGuiUnderXvfb:
         assert app._ml_manual_params("ridge", "regression") is None
         assert quiet_dialogs == []
 
-    def test_progress_report_drives_determinate_bar_and_eta(
-        self, app: Any
-    ) -> None:
+    def test_progress_report_drives_determinate_bar_and_eta(self, app: Any) -> None:
         import time as _time
 
         app._busy = True
@@ -967,9 +989,7 @@ class TestGuiUnderXvfb:
         app._poll_progress()
         assert app._job_label.cget("text") == "probe job — 7"
 
-    def test_progress_resets_when_the_job_ends(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_progress_resets_when_the_job_ends(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._ml_load_example()
         app._model_combo.set("ridge")
         app._ml_refresh_hyperparam_panel()
@@ -984,8 +1004,7 @@ class TestGuiUnderXvfb:
         # names what ran and how long it took, the bar returned to the
         # launch-time marquee
         done_text = app._job_label.cget("text")
-        assert done_text.startswith("training ridge (regression) — done in "), (
-            done_text)
+        assert done_text.startswith("training ridge (regression) — done in "), done_text
         assert str(app._progress.cget("mode")) == "indeterminate"
         assert quiet_dialogs == []
 
@@ -1015,9 +1034,7 @@ class TestGuiUnderXvfb:
         assert " — done in " in app._job_label.cget("text")
         assert quiet_dialogs == []
 
-    def test_apply_best_prefills_the_manual_panel(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_apply_best_prefills_the_manual_panel(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._ml_load_example()
         app._tune_trials.set("4")
         app._ml_tune()
@@ -1027,9 +1044,7 @@ class TestGuiUnderXvfb:
         assert app._model_combo.get() == estimator
         # the winner's alpha (a registry knob of ann) landed in the panel
         if "alpha" in app._ml_param_entries:
-            assert app._ml_param_entries["alpha"].get() == str(
-                results.best_params["alpha"]
-            )
+            assert app._ml_param_entries["alpha"].get() == str(results.best_params["alpha"])
         pinned = app._ml_manual_params(estimator, task)
         assert pinned is None or "alpha" in pinned  # parseable end-to-end
         assert quiet_dialogs == []
@@ -1056,7 +1071,8 @@ class TestDockingGuiUnderXvfb:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -1076,13 +1092,18 @@ class TestDockingGuiUnderXvfb:
     def test_tab_order_places_docking_after_cell_lines(self, app: Any) -> None:
         titles = [app._book.tab(tab, "text").strip() for tab in app._book.tabs()]
         assert titles == [
-            "Home", "Chemistry", "PK / PD", "Cell Lines", "Docking",
-            "Data & ML", "Deep Learning", "Generative", "Utilities",
+            "Home",
+            "Chemistry",
+            "PK / PD",
+            "Cell Lines",
+            "Docking",
+            "Data & ML",
+            "Deep Learning",
+            "Generative",
+            "Utilities",
         ]
 
-    def test_docking_example_library_loads(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_docking_example_library_loads(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._dock_load_example()
         info = app._dock_lib_info.cget("text")
         assert "10 rows" in info
@@ -1104,14 +1125,16 @@ class TestDockingGuiUnderXvfb:
         assert quiet_dialogs == []
 
     def test_docking_receptor_prepare_job_renders_the_report(
-        self, playground: Any, app: Any, quiet_dialogs: list[Any],
-        monkeypatch: Any, tmp_path: Any,
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
+        tmp_path: Any,
     ) -> None:
         app._dock_load_receptor_example()
         target = tmp_path / "receptor.pdbqt"
-        monkeypatch.setattr(
-            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
-        )
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
         app._dock_prepare_receptor()
         assert self._drain_jobs(app, timeout=180.0), "receptor prep job hung"
         report = app._dock_protein_report
@@ -1142,9 +1165,7 @@ class TestDockingGuiUnderXvfb:
         assert "22.125" in app._dock_grid_text.get("1.0", "end")
         assert quiet_dialogs == []
 
-    def test_docking_example_campaign_scan(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_docking_example_campaign_scan(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._dock_load_example_campaign()
         assert self._drain_jobs(app), "campaign scan job hung"
         rows = app._dock_results_tree.get_children()
@@ -1178,8 +1199,12 @@ class TestDockingGuiUnderXvfb:
         assert quiet_dialogs == []
 
     def test_docking_vina_output_parse(
-        self, playground: Any, app: Any, quiet_dialogs: list[Any],
-        monkeypatch: Any, tmp_path: Any,
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
+        tmp_path: Any,
     ) -> None:
         sample = (
             "Modes | Affinity | dist from best mode\n"
@@ -1192,9 +1217,7 @@ class TestDockingGuiUnderXvfb:
         )
         vina_log = tmp_path / "vina_out.txt"
         vina_log.write_text(sample, encoding="utf-8")
-        monkeypatch.setattr(
-            playground.filedialog, "askopenfilename", lambda **_k: str(vina_log)
-        )
+        monkeypatch.setattr(playground.filedialog, "askopenfilename", lambda **_k: str(vina_log))
         app._dock_open_vina()
         assert self._drain_jobs(app), "vina parse job hung"
         rows = app._dock_results_tree.get_children()
@@ -1205,8 +1228,12 @@ class TestDockingGuiUnderXvfb:
         assert quiet_dialogs == []
 
     def test_docking_run_gate_reports_missing_binary(
-        self, playground: Any, app: Any, quiet_dialogs: list[Any],
-        monkeypatch: Any, tmp_path: Any,
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
+        tmp_path: Any,
     ) -> None:
         app._dock_campaign_root = tmp_path
         monkeypatch.setattr(playground.shutil, "which", lambda _name: None)
@@ -1219,12 +1246,14 @@ class TestDockingGuiUnderXvfb:
         assert "autodock4" in message
         assert "install" in message  # actionable hint, not a bare refusal
 
-    @pytest.mark.filterwarnings(
-        "ignore:This process.*multi-threaded.*fork:DeprecationWarning"
-    )
+    @pytest.mark.filterwarnings("ignore:This process.*multi-threaded.*fork:DeprecationWarning")
     def test_docking_run_starts_job_with_fake_binary(
-        self, playground: Any, app: Any, quiet_dialogs: list[Any],
-        monkeypatch: Any, tmp_path: Any,
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
+        tmp_path: Any,
     ) -> None:
         root = tmp_path / "campaign"
         ligand_dir = root / "01_lig"
@@ -1233,7 +1262,8 @@ class TestDockingGuiUnderXvfb:
         (ligand_dir / "r.dpf").write_text("# stub\n", encoding="utf-8")
         app._dock_campaign_root = root
         monkeypatch.setattr(
-            playground.shutil, "which",
+            playground.shutil,
+            "which",
             lambda name: "/usr/bin/true" if name in ("autogrid4", "autodock4") else None,
         )
         app._dock_run()
@@ -1261,8 +1291,10 @@ class TestDockingGuiUnderXvfb:
         rows = tree.get_children()
         assert len(rows) == 14  # 12 scored + the 2 incomplete folders
         assert list(tree["columns"]) == [
-            "folder", "best_lowest_energy_norm",
-            "best_num_in_cluster_norm", "consensus",
+            "folder",
+            "best_lowest_energy_norm",
+            "best_num_in_cluster_norm",
+            "consensus",
         ]
         winner = list(tree.item(rows[0], "values"))
         assert winner == ["13_coumarin", "0.3682", "1.0000", "0.6841"]
@@ -1272,16 +1304,19 @@ class TestDockingGuiUnderXvfb:
         # the frame behind Save results CSV… is the full rescored table
         frame = app._dock_results_frame
         assert list(frame.columns[:1]) + list(frame.columns[-3:]) == [
-            "folder", "best_lowest_energy_norm",
-            "best_num_in_cluster_norm", "consensus",
+            "folder",
+            "best_lowest_energy_norm",
+            "best_num_in_cluster_norm",
+            "consensus",
         ]
         text = app._dock_rescore_text.get("1.0", "end")
         assert "evidence: best_lowest_energy (lower=better)" in text
         assert "best_num_in_cluster (higher=better)" in text
         assert "14 row(s) rescored" in text
-        assert ("13_coumarin tops the table (consensus 0.684): "
-                "best_num_in_cluster_norm = 1.000 is the driving evidence"
-                ) in text
+        assert (
+            "13_coumarin tops the table (consensus 0.684): "
+            "best_num_in_cluster_norm = 1.000 is the driving evidence"
+        ) in text
         assert quiet_dialogs == []
 
     def test_docking_consensus_rescore_dlg_with_ligand_efficiency(
@@ -1302,17 +1337,21 @@ class TestDockingGuiUnderXvfb:
         rows = app._dock_results_tree.get_children()
         assert len(rows) == 5  # aspirin's five clusters
         assert list(app._dock_results_tree["columns"]) == [
-            "rank", "LE (kcal/mol/atom)_norm", "lowest_energy_norm",
-            "num_in_cluster_norm", "consensus",
+            "rank",
+            "LE (kcal/mol/atom)_norm",
+            "lowest_energy_norm",
+            "num_in_cluster_norm",
+            "consensus",
         ]
         # rank 4 wins: LE + energy units 0.901 carry it, not rank 1
         winner = list(app._dock_results_tree.item(rows[0], "values"))
         assert winner == ["4", "0.9008", "0.9008", "0.7778", "0.8598"]
         text = app._dock_rescore_text.get("1.0", "end")
         assert "weight" not in text.split("\n")[0]  # uniform -> no weights
-        assert ("4 tops the table (consensus 0.860): "
-                "LE (kcal/mol/atom)_norm = 0.901 is the driving evidence"
-                ) in text
+        assert (
+            "4 tops the table (consensus 0.860): "
+            "LE (kcal/mol/atom)_norm = 0.901 is the driving evidence"
+        ) in text
         assert quiet_dialogs == []
 
     def test_docking_rescore_weights_change_the_recipe_line(
@@ -1332,9 +1371,7 @@ class TestDockingGuiUnderXvfb:
         assert "best_num_in_cluster (higher=better, weight 3)" in text
         assert quiet_dialogs == []
 
-    def test_docking_rescore_gates(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_docking_rescore_gates(self, app: Any, quiet_dialogs: list[Any]) -> None:
         # no results table loaded -> the guard names the remedy
         app._dock_rescore()
         assert len(quiet_dialogs) == 1
@@ -1354,8 +1391,7 @@ class TestDockingGuiUnderXvfb:
         assert "at least one evidence column" in " ".join(str(p) for p in args)
 
         # malformed weights -> the parse_float error verbatim
-        app._dock_rescore_columns_entry.insert(
-            0, "best_lowest_energy, best_num_in_cluster")
+        app._dock_rescore_columns_entry.insert(0, "best_lowest_energy, best_num_in_cluster")
         app._dock_rescore_weights_entry.insert(0, "1,x")
         app._dock_rescore()
         assert len(quiet_dialogs) == 3
@@ -1365,8 +1401,12 @@ class TestDockingGuiUnderXvfb:
         assert not app._busy  # every gate stopped before any job started
 
     def test_docking_rescore_open_summary_csv(
-        self, playground: Any, app: Any, quiet_dialogs: list[Any],
-        monkeypatch: Any, tmp_path: Any,
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
+        tmp_path: Any,
     ) -> None:
         # the --data twin: any summary CSV becomes the results table
         summary = tmp_path / "enriched_summary.csv"
@@ -1378,7 +1418,8 @@ class TestDockingGuiUnderXvfb:
             encoding="utf-8",
         )
         monkeypatch.setattr(
-            playground.filedialog, "askopenfilename",
+            playground.filedialog,
+            "askopenfilename",
             lambda **_k: str(summary),
         )
         app._dock_open_rescore_csv()
@@ -1387,7 +1428,8 @@ class TestDockingGuiUnderXvfb:
         assert len(app._dock_results_tree.get_children()) == 3
         # the prefill recognises the enriched table's canonical columns
         assert app._dock_rescore_columns_entry.get() == (
-            "ligand_efficiency, best_lowest_energy, best_num_in_cluster")
+            "ligand_efficiency, best_lowest_energy, best_num_in_cluster"
+        )
         info = app._dock_results_info.cget("text")
         assert "3 row(s)" in info and "enriched_summary.csv" in info
 
@@ -1430,7 +1472,8 @@ class TestDockingRescoreReport:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -1448,9 +1491,7 @@ class TestDockingRescoreReport:
             time.sleep(0.02)
         return False
 
-    def test_report_needs_a_rescore_first(
-        self, app: Any, dialogs: list[Any]
-    ) -> None:
+    def test_report_needs_a_rescore_first(self, app: Any, dialogs: list[Any]) -> None:
         app._dock_save_report()
         assert not app._busy  # the guard fired before any job started
         titles = [call[1][0] for call in dialogs]
@@ -1470,13 +1511,16 @@ class TestDockingRescoreReport:
         assert "pharmaml[reports]" in dialogs[0][1][1]  # the install hint
 
     def test_report_bundle_end_to_end(
-        self, app: Any, dialogs: list[Any], monkeypatch: Any,
-        playground: Any, tmp_path: Path,
+        self,
+        app: Any,
+        dialogs: list[Any],
+        monkeypatch: Any,
+        playground: Any,
+        tmp_path: Path,
     ) -> None:
         pypdf = pytest.importorskip("pypdf")
         target = tmp_path / "bundle"
-        monkeypatch.setattr(playground.filedialog, "askdirectory",
-                            lambda **k: str(target))
+        monkeypatch.setattr(playground.filedialog, "askdirectory", lambda **k: str(target))
         app._dock_load_example_campaign()
         assert self._drain(app), "campaign scan job did not finish"
         app._dock_rescore()
@@ -1505,8 +1549,7 @@ class TestDockingRescoreReport:
 
         # the unticked default: a second save ships HTML only
         target_html = tmp_path / "bundle_html"
-        monkeypatch.setattr(playground.filedialog, "askdirectory",
-                            lambda **k: str(target_html))
+        monkeypatch.setattr(playground.filedialog, "askdirectory", lambda **k: str(target_html))
         app._dock_pdf_var.set(False)
         app._dock_save_report()
         assert self._drain(app), "second report job did not finish"
@@ -1617,19 +1660,24 @@ class TestSessionGuiUnderXvfb:
         # a session recorded on a much bigger screen: keep the size,
         # drop the off-screen position
         payload = playground.dump_session(
-            theme="light", geometry="1000x700+40000+50000", tab=0,
-            variables={"_aff_value": "1.5"}, families={}, texts={},
+            theme="light",
+            geometry="1000x700+40000+50000",
+            tab=0,
+            variables={"_aff_value": "1.5"},
+            families={},
+            texts={},
         )
         (isolated_home / ".pharmaml").mkdir(parents=True)
         (isolated_home / ".pharmaml" / "playground-session.json").write_text(
-            __import__("json").dumps(payload), encoding="utf-8")
+            __import__("json").dumps(payload), encoding="utf-8"
+        )
         app = playground.PlaygroundApp()
         self._drain(app)
-        assert app._aff_value.get() == "1.5"      # inputs restored
-        assert app.winfo_width() <= 1000           # size honoured (Xvfb 1280x800)
+        assert app._aff_value.get() == "1.5"  # inputs restored
+        assert app.winfo_width() <= 1000  # size honoured (Xvfb 1280x800)
         # no window manager under Xvfb pins the window at +0+0; what
         # matters is that the OFF-SCREEN +40000+50000 was dropped
-        assert "+40000" not in app.geometry()      # position dropped
+        assert "+40000" not in app.geometry()  # position dropped
         app.destroy()
         del app
         gc.collect()
@@ -1645,9 +1693,7 @@ class TestFeatureFactorySurface:
     def test_docstring_mentions_the_feature_factory(self, playground: Any) -> None:
         assert "feature factory" in (playground.__doc__ or "").lower()
 
-    def test_chemistry_tab_source_references_the_feature_factory(
-        self, playground: Any
-    ) -> None:
+    def test_chemistry_tab_source_references_the_feature_factory(self, playground: Any) -> None:
         import inspect
 
         source = inspect.getsource(playground.PlaygroundApp._build_chemistry_tab)
@@ -1657,8 +1703,13 @@ class TestFeatureFactorySurface:
     def test_feature_factory_width_sums_family_bits(self, playground: Any) -> None:
         width = playground.feature_factory_width(
             (
-                "descriptors", "atompair_count", "ecfp", "avalon_count",
-                "rdkit_fingerprint", "morgan_full", "morgan_scaffold",
+                "descriptors",
+                "atompair_count",
+                "ecfp",
+                "avalon_count",
+                "rdkit_fingerprint",
+                "morgan_full",
+                "morgan_scaffold",
             ),
             43,
         )
@@ -1675,25 +1726,14 @@ class TestFeatureFactorySurface:
                 self.columns = columns
 
         assert playground.detect_smiles_column(_Frame(["name", "SMILES"])) == "SMILES"
-        assert (
-            playground.detect_smiles_column(_Frame(["Canonical_Smiles"]))
-            == "Canonical_Smiles"
-        )
+        assert playground.detect_smiles_column(_Frame(["Canonical_Smiles"])) == "Canonical_Smiles"
         assert playground.detect_smiles_column(_Frame(["molecule", "activity"])) is None
 
-    def test_ranker_and_task_label_maps_cover_every_combobox_value(
-        self, playground: Any
-    ) -> None:
+    def test_ranker_and_task_label_maps_cover_every_combobox_value(self, playground: Any) -> None:
         assert set(playground._FEAT_RANKER_METHODS) == set(playground._FEAT_RANKERS)
-        assert (
-            playground._FEAT_RANKER_METHODS["Variance (no target needed)"]
-            == "variance"
-        )
+        assert playground._FEAT_RANKER_METHODS["Variance (no target needed)"] == "variance"
         assert playground._FEAT_RANKER_METHODS["Random forest"] == "random_forest"
-        assert (
-            playground._FEAT_RANKER_METHODS["Auto (RandomForest or LightGBM)"]
-            == "auto"
-        )
+        assert playground._FEAT_RANKER_METHODS["Auto (RandomForest or LightGBM)"] == "auto"
         assert playground._FEAT_RANKER_METHODS["LightGBM (if installed)"] == "lightgbm"
         assert set(playground._FEAT_TASK_METHODS) == set(playground._FEAT_TASKS)
         assert playground._FEAT_TASK_METHODS["Auto detect"] == "auto"
@@ -1722,7 +1762,8 @@ class TestFeatureFactoryGuiUnderXvfb:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -1745,14 +1786,12 @@ class TestFeatureFactoryGuiUnderXvfb:
 
         return len(rdMolDescriptors.Properties.GetAvailableProperties())
 
-    def test_default_pasted_variance_run(self, app: Any,
-                                         quiet_dialogs: list[Any]) -> None:
+    def test_default_pasted_variance_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
         # the shipped defaults: pasted drug SMILES, all 8 families ticked
         assert app._feat_source_var.get() == "Pasted SMILES"
         assert "8 families selected" in app._feat_width_label.cget("text")
-        assert (
-            f"~{10_752 + 10 + self._descriptor_count():,} columns" in
-            app._feat_width_label.cget("text")
+        assert f"~{10_752 + 10 + self._descriptor_count():,} columns" in app._feat_width_label.cget(
+            "text"
         )
         app._feat_k_entry.delete(0, "end")
         app._feat_k_entry.insert(0, "50")
@@ -1766,7 +1805,10 @@ class TestFeatureFactoryGuiUnderXvfb:
         assert "variance" in summary
         assert "selected per family" in app._feat_family_label.cget("text")
         assert tuple(app._feat_tree["columns"]) == (
-            "rank", "feature", "family", "importance",
+            "rank",
+            "feature",
+            "family",
+            "importance",
         )
         rows = app._feat_tree.get_children()
         assert len(rows) == 50
@@ -1774,15 +1816,24 @@ class TestFeatureFactoryGuiUnderXvfb:
         assert first[0] == "1"  # rank column counts from 1
         families_seen = {app._feat_tree.item(row, "values")[2] for row in rows}
         assert families_seen <= {
-            "descriptors", "atompair_count", "ecfp", "avalon_count",
-            "rdkit_fingerprint", "morgan_full", "morgan_scaffold",
+            "descriptors",
+            "atompair_count",
+            "ecfp",
+            "avalon_count",
+            "rdkit_fingerprint",
+            "morgan_full",
+            "morgan_scaffold",
             "rism",  # the 8th family (1.2.49)
         }
         assert quiet_dialogs == []
 
     def test_exports_rar_style_csv_and_metadata_json(
-        self, playground: Any, app: Any, quiet_dialogs: list[Any],
-        monkeypatch: Any, tmp_path: Any,
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
+        tmp_path: Any,
     ) -> None:
         import json
 
@@ -1826,8 +1877,7 @@ class TestFeatureFactoryGuiUnderXvfb:
         # the only dialogs are the two Saved confirmations
         assert [kind for kind, _args in quiet_dialogs] == ["showinfo", "showinfo"]
         assert all(
-            "written to" in " ".join(str(part) for part in args)
-            for _kind, args in quiet_dialogs
+            "written to" in " ".join(str(part) for part in args) for _kind, args in quiet_dialogs
         )
 
     def test_tree_truncates_at_300_rows_and_reruns_at_new_k(
@@ -1866,9 +1916,7 @@ class TestFeatureFactoryGuiUnderXvfb:
         assert "MolWt" in values and "RingCount" in values
         assert quiet_dialogs == []
 
-    def test_unchecked_families_narrow_the_run(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_unchecked_families_narrow_the_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
         keep = {"descriptors", "avalon_count"}
         for family, var in app._feat_family_vars.items():
             var.set(family in keep)
@@ -1890,15 +1938,18 @@ class TestFeatureFactoryGuiUnderXvfb:
         assert quiet_dialogs == []
 
     def test_target_driven_random_forest_run_exports_target_column(
-        self, playground: Any, app: Any, quiet_dialogs: list[Any],
-        monkeypatch: Any, tmp_path: Any,
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
+        tmp_path: Any,
     ) -> None:
         import pandas as pd
 
         csv_path = tmp_path / "tiny_screen.csv"
         csv_path.write_text(
-            "SMILES,activity\n"
-            "C,0\nCC,0\nCCC,0\nCCCC,1\nCCCCC,1\nCCCCCC,1\n",
+            "SMILES,activity\nC,0\nCC,0\nCCC,0\nCCCC,1\nCCCCC,1\nCCCCCC,1\n",
             encoding="utf-8",
         )
         app._feat_source_var.set("CSV file")
@@ -1917,9 +1968,7 @@ class TestFeatureFactoryGuiUnderXvfb:
         assert quiet_dialogs == []
 
         target = tmp_path / "selected_with_target.csv"
-        monkeypatch.setattr(
-            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
-        )
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
         app._feat_save_csv()
         assert target.is_file()
         exported = pd.read_csv(target)
@@ -1970,26 +2019,27 @@ class TestSessionShareAndReset:
 
     def test_export_session_round_trip(self, playground: Any, tmp_path: Path) -> None:
         payload = playground.dump_session(
-            theme="dark", geometry="1200x800+10+20", tab=3,
-            variables={"_aff_value": "42"}, families={"ecfp": False},
-            texts={"pasted": "CCO\n# note"})
+            theme="dark",
+            geometry="1200x800+10+20",
+            tab=3,
+            variables={"_aff_value": "42"},
+            families={"ecfp": False},
+            texts={"pasted": "CCO\n# note"},
+        )
         target = tmp_path / "shared-session.json"
         assert playground.export_session(payload, target) is True
         revived = playground.load_session(playground.read_json_file(target))
         assert revived == payload  # identical after the file round-trip
 
-    def test_export_session_unwritable_path(
-        self, playground: Any, tmp_path: Path
-    ) -> None:
+    def test_export_session_unwritable_path(self, playground: Any, tmp_path: Path) -> None:
         payload = playground.dump_session(
-            theme="light", geometry="", tab=0, variables={}, families={},
-            texts={})
-        assert playground.export_session(
-            payload, tmp_path / "no" / "such" / "dir" / "s.json") is False
+            theme="light", geometry="", tab=0, variables={}, families={}, texts={}
+        )
+        assert (
+            playground.export_session(payload, tmp_path / "no" / "such" / "dir" / "s.json") is False
+        )
 
-    def test_read_json_file_missing_and_invalid(
-        self, playground: Any, tmp_path: Path
-    ) -> None:
+    def test_read_json_file_missing_and_invalid(self, playground: Any, tmp_path: Path) -> None:
         assert playground.read_json_file(tmp_path / "absent.json") is None
         junk = tmp_path / "junk.json"
         junk.write_text("{not json at all", encoding="utf-8")
@@ -1998,16 +2048,19 @@ class TestSessionShareAndReset:
     # -- live GUI under Xvfb -------------------------------------------- #
 
     def test_export_writes_shareable_file(
-        self, playground: Any, xvfb_display: str, isolated_home: Path,
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         app = playground.PlaygroundApp()
         app.update_idletasks()
         app._aff_value.delete(0, "end")
         app._aff_value.insert(0, "9.9")
         target = isolated_home / "colleague-session.json"
-        monkeypatch.setattr(
-            playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
         app._export_session()
         assert target.is_file()
         payload = playground.load_session(playground.read_json_file(target))
@@ -2018,8 +2071,12 @@ class TestSessionShareAndReset:
         app.destroy()
 
     def test_import_applies_shareable_file(
-        self, playground: Any, xvfb_display: str, isolated_home: Path,
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         app = playground.PlaygroundApp()
         app.update_idletasks()
@@ -2030,16 +2087,19 @@ class TestSessionShareAndReset:
         # the user then changes the live input -- import must win
         app._aff_value.delete(0, "end")
         app._aff_value.insert(0, "1.1")
-        monkeypatch.setattr(
-            playground.filedialog, "askopenfilename", lambda **_k: str(source))
+        monkeypatch.setattr(playground.filedialog, "askopenfilename", lambda **_k: str(source))
         app._import_session()
         assert app._aff_value.get() == "9.9"
         assert "session imported" in str(app._job_label.cget("text"))
         app.destroy()
 
     def test_import_invalid_file_shows_error_and_keeps_state(
-        self, playground: Any, xvfb_display: str, isolated_home: Path,
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         app = playground.PlaygroundApp()
         app.update_idletasks()
@@ -2048,11 +2108,10 @@ class TestSessionShareAndReset:
         junk = tmp_path / "not-a-session.json"
         junk.write_text('{"hello": "world"}', encoding="utf-8")
         seen: list[Any] = []
+        monkeypatch.setattr(playground.filedialog, "askopenfilename", lambda **_k: str(junk))
         monkeypatch.setattr(
-            playground.filedialog, "askopenfilename", lambda **_k: str(junk))
-        monkeypatch.setattr(
-            playground.messagebox, "showerror",
-            lambda *args, **_k: seen.append(args))
+            playground.messagebox, "showerror", lambda *args, **_k: seen.append(args)
+        )
         app._import_session()
         assert app._aff_value.get() == "7.7"  # untouched
         assert seen and "Invalid session file" in str(seen[0][0])
@@ -2060,7 +2119,10 @@ class TestSessionShareAndReset:
         app.destroy()
 
     def test_reset_current_tab_restores_only_that_tab(
-        self, playground: Any, xvfb_display: str, isolated_home: Path,
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
     ) -> None:
         app = playground.PlaygroundApp()
         app.update_idletasks()
@@ -2071,8 +2133,8 @@ class TestSessionShareAndReset:
         app._aff_value.insert(0, "9.9")
         app._tune_var.set(not default_tune)
         chemistry_tab = next(
-            index for index, names in app._tab_input_owners.items()
-            if "_aff_value" in names)
+            index for index, names in app._tab_input_owners.items() if "_aff_value" in names
+        )
         app._book.select(chemistry_tab)
         app._reset_current_tab()
         assert app._aff_value.get() == default_aff  # reset to default
@@ -2081,22 +2143,28 @@ class TestSessionShareAndReset:
         app.destroy()
 
     def test_tab_ownership_map_excludes_theme_and_covers_families(
-        self, playground: Any, xvfb_display: str, isolated_home: Path,
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
     ) -> None:
         app = playground.PlaygroundApp()
         app.update_idletasks()
         owners = app._tab_input_owners
         every_name = {name for names in owners.values() for name in names}
         assert "_theme_var" not in every_name  # not a user input
-        assert not any(
-            name.startswith("_book") for name in every_name)
+        assert not any(name.startswith("_book") for name in every_name)
         family_tabs = [
-            index for index, names in owners.items()
-            if any(name.startswith("family:") for name in names)]
+            index
+            for index, names in owners.items()
+            if any(name.startswith("family:") for name in names)
+        ]
         assert family_tabs == [1]  # the Chemistry tab owns the checkboxes
         text_tabs = [
-            index for index, names in owners.items()
-            if any(name.startswith("text:") for name in names)]
+            index
+            for index, names in owners.items()
+            if any(name.startswith("text:") for name in names)
+        ]
         assert 1 in text_tabs  # pasted SMILES corpus lives on Chemistry
         app.destroy()
 
@@ -2124,11 +2192,15 @@ class TestPerTabResetButtons:
 
     def _footer_buttons(self, app: Any, index: int) -> list[Any]:
         page = app._book.nametowidget(app._book.tabs()[index])
-        return [widget for widget in page.footer.winfo_children()
-                if widget.winfo_class() == "TButton"]
+        return [
+            widget for widget in page.footer.winfo_children() if widget.winfo_class() == "TButton"
+        ]
 
     def test_every_content_tab_carries_both_footer_buttons(
-        self, playground: Any, xvfb_display: str, isolated_home: Path,
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
     ) -> None:
         app = playground.PlaygroundApp()
         app.update_idletasks()
@@ -2150,7 +2222,10 @@ class TestPerTabResetButtons:
         app.destroy()
 
     def test_footer_button_resets_own_tab_not_the_selected_one(
-        self, playground: Any, xvfb_display: str, isolated_home: Path,
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
     ) -> None:
         app = playground.PlaygroundApp()
         app.update_idletasks()
@@ -2163,11 +2238,13 @@ class TestPerTabResetButtons:
         # reset CHEMISTRY (index-explicit wiring, not "current tab")
         app._book.select(2)
         chemistry = next(
-            index for index, names in app._tab_input_owners.items()
-            if "_aff_value" in names)
+            index for index, names in app._tab_input_owners.items() if "_aff_value" in names
+        )
         reset = next(
-            b for b in self._footer_buttons(app, chemistry)
-            if str(b.cget("text")) == "Reset this tab to defaults")
+            b
+            for b in self._footer_buttons(app, chemistry)
+            if str(b.cget("text")) == "Reset this tab to defaults"
+        )
         reset.invoke()
         assert app._aff_value.get() == default_aff  # its own tab restored
         assert bool(app._tune_var.get()) is (not default_tune)  # Data & ML kept
@@ -2175,7 +2252,10 @@ class TestPerTabResetButtons:
         app.destroy()
 
     def test_reset_tab_is_index_explicit(
-        self, playground: Any, xvfb_display: str, isolated_home: Path,
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
     ) -> None:
         app = playground.PlaygroundApp()
         app.update_idletasks()
@@ -2184,8 +2264,8 @@ class TestPerTabResetButtons:
         app._aff_value.insert(0, "5.5")
         app._tune_var.set(not default_tune)
         data_ml = next(
-            index for index, names in app._tab_input_owners.items()
-            if "_tune_var" in names)
+            index for index, names in app._tab_input_owners.items() if "_tune_var" in names
+        )
         app._book.select(1)  # Chemistry visible; Data & ML reset by INDEX
         app._reset_tab(data_ml)
         assert bool(app._tune_var.get()) is default_tune  # restored
@@ -2193,7 +2273,10 @@ class TestPerTabResetButtons:
         app.destroy()
 
     def test_ghost_button_style_follows_the_live_theme(
-        self, playground: Any, xvfb_display: str, isolated_home: Path,
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
     ) -> None:
         app = playground.PlaygroundApp()
         app.update_idletasks()
@@ -2216,14 +2299,11 @@ class TestGenerativeParetoCard:
     def test_objective_kinds_gain_the_druglike_triple(self, playground: Any) -> None:
         assert self.DRUGLIKE in playground._OBJECTIVE_KINDS
 
-    def test_build_objective_druglike_scores_the_triple(
-        self, playground: Any
-    ) -> None:
+    def test_build_objective_druglike_scores_the_triple(self, playground: Any) -> None:
         # the CLI's 'druglike' recipe, rebuilt by its GUI label: the
         # aspirin breakdown must carry exactly the three band objectives.
         objective = playground.build_objective(self.DRUGLIKE, 1.0, 3.0)
-        _total, breakdown = objective.score_with_breakdown(
-            "CC(=O)Oc1ccccc1C(=O)O")
+        _total, breakdown = objective.score_with_breakdown("CC(=O)Oc1ccccc1C(=O)O")
         assert sorted(breakdown) == ["mw_band", "qed", "tpsa_band"]
 
     @pytest.fixture()
@@ -2243,7 +2323,8 @@ class TestGenerativeParetoCard:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -2260,8 +2341,7 @@ class TestGenerativeParetoCard:
             time.sleep(0.02)
         return False
 
-    def _run_druglike(self, app: Any, *, population: str = "12",
-                      generations: str = "4") -> None:
+    def _run_druglike(self, app: Any, *, population: str = "12", generations: str = "4") -> None:
         app._objective_combo.set(self.DRUGLIKE)
         app._pop_size.set(population)
         app._generations.set(generations)
@@ -2280,8 +2360,7 @@ class TestGenerativeParetoCard:
         rows = app._pareto_tree.get_children()
         assert len(rows) == 7
         columns = list(app._pareto_tree["columns"])
-        assert columns == ["rank", "smiles", "qed", "mw_band", "tpsa_band",
-                           "dominates", "crowding"]
+        assert columns == ["rank", "smiles", "qed", "mw_band", "tpsa_band", "dominates", "crowding"]
         first = app._pareto_tree.item(rows[0], "values")
         assert first[0] == "1"  # leaderboard rank 1 is always on the front
         # rank 1 leads the BLEND, not necessarily an objective extreme --
@@ -2296,9 +2375,7 @@ class TestGenerativeParetoCard:
         assert app._pareto_host._pg_figure is not None  # auto-drawn scatter
         assert quiet_dialogs == []
 
-    def test_single_objective_run_explains_itself(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_single_objective_run_explains_itself(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._objective_combo.set("QED drug-likeness")
         app._pop_size.set("8")
         app._generations.set("4")
@@ -2327,13 +2404,18 @@ class TestGenerativeParetoCard:
         assert quiet_dialogs == []
 
     def test_save_front_writes_the_full_table(
-        self, playground: Any, app: Any, quiet_dialogs: list[Any],
-        monkeypatch: Any, tmp_path: Path,
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
+        tmp_path: Path,
     ) -> None:
         self._run_druglike(app)
         target = tmp_path / "front.csv"
         monkeypatch.setattr(
-            playground.filedialog, "asksaveasfilename",
+            playground.filedialog,
+            "asksaveasfilename",
             lambda **_kwargs: str(target),
         )
         app._save_pareto_front()
@@ -2346,9 +2428,7 @@ class TestGenerativeParetoCard:
         # the info dialog reports the written path, nothing errored
         assert any(call[1][0] == "Saved" for call in quiet_dialogs)
 
-    def test_plot_and_save_guard_without_a_run(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_plot_and_save_guard_without_a_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._plot_pareto_front()
         app._save_pareto_front()
         titles = [call[1][0] for call in quiet_dialogs]
@@ -2380,9 +2460,7 @@ class TestCopyTabInputs:
         gc.collect()
 
     def _tab_index(self, app: Any, owner_name: str) -> int:
-        return next(
-            index for index, names in app._tab_input_owners.items()
-            if owner_name in names)
+        return next(index for index, names in app._tab_input_owners.items() if owner_name in names)
 
     def _copy_tab(self, app: Any, index: int) -> dict[str, Any]:
         app._copy_tab_inputs(index)
@@ -2390,7 +2468,9 @@ class TestCopyTabInputs:
         return json.loads(app.clipboard_get())
 
     def test_copy_chemistry_inputs_reflects_live_values(
-        self, playground: Any, app: Any,
+        self,
+        playground: Any,
+        app: Any,
     ) -> None:
         chemistry = self._tab_index(app, "_aff_value")
         app._aff_value.delete(0, "end")
@@ -2402,12 +2482,13 @@ class TestCopyTabInputs:
         assert set(payload) == {"tab", "variables", "families", "texts"}
         assert "copied as JSON" in str(app._job_label.cget("text"))
         # the items count in the status line matches the payload size
-        items = (len(payload["variables"]) + len(payload["families"])
-                 + len(payload["texts"]))
+        items = len(payload["variables"]) + len(payload["families"]) + len(payload["texts"])
         assert f"{items} items" in str(app._job_label.cget("text"))
 
     def test_copy_generative_inputs_includes_corpus_text(
-        self, playground: Any, app: Any,
+        self,
+        playground: Any,
+        app: Any,
     ) -> None:
         generative = self._tab_index(app, "text:corpus")  # the ownership key
         app._corpus_text.delete("1.0", "end")
@@ -2419,7 +2500,9 @@ class TestCopyTabInputs:
         assert payload["variables"]["_pop_size"] == "24"
 
     def test_copy_is_index_explicit_and_isolated(
-        self, playground: Any, app: Any,
+        self,
+        playground: Any,
+        app: Any,
     ) -> None:
         # copy CHEMISTRY while a DIFFERENT tab is selected: the payload
         # must carry Chemistry's inputs only -- no cross-tab leakage.
@@ -2428,11 +2511,13 @@ class TestCopyTabInputs:
         payload = self._copy_tab(app, chemistry)
         assert "_aff_value" in payload["variables"]
         assert "_pop_size" not in payload["variables"]  # Generative's
-        assert "corpus" not in payload["texts"]          # Generative's
+        assert "corpus" not in payload["texts"]  # Generative's
         assert payload["tab"] == "Chemistry"
 
     def test_copied_json_round_trips_through_the_session_fields(
-        self, playground: Any, app: Any,
+        self,
+        playground: Any,
+        app: Any,
     ) -> None:
         # the snippet's field vocabulary is the session file's own:
         # variables / families / texts, JSON-clean under indent+sort_keys.
@@ -2462,7 +2547,9 @@ class TestShortcutHints:
     }
 
     def test_every_advertised_accelerator_is_bound(
-        self, playground: Any, xvfb_display: str,
+        self,
+        playground: Any,
+        xvfb_display: str,
     ) -> None:
         # Ctrl+Shift+R was advertised in the File menu (and the module
         # docstring) since 100x-54 with NO binding behind it -- pressing
@@ -2471,13 +2558,14 @@ class TestShortcutHints:
         app = playground.PlaygroundApp(persist_session=False)
         try:
             for label, sequence in self.ACCELERATORS.items():
-                assert app.bind_all(sequence), (
-                    f"{label} ({sequence}) is advertised but not bound")
+                assert app.bind_all(sequence), f"{label} ({sequence}) is advertised but not bound"
         finally:
             app.destroy()
 
     def test_hint_row_lists_every_shortcut(
-        self, playground: Any, xvfb_display: str,
+        self,
+        playground: Any,
+        xvfb_display: str,
     ) -> None:
         from tkinter import ttk
 
@@ -2486,15 +2574,18 @@ class TestShortcutHints:
             text = playground.shortcut_hints_text()
             for keys, what in playground.SHORTCUT_HINTS:
                 assert f"{keys} {what}" in text
-            labels = [child for child in app._hint_bar.winfo_children()
-                      if isinstance(child, ttk.Label)]
+            labels = [
+                child for child in app._hint_bar.winfo_children() if isinstance(child, ttk.Label)
+            ]
             assert labels, "the hint row carries no label"
             assert labels[0].cget("text") == text
         finally:
             app.destroy()
 
     def test_hint_row_sits_above_the_status_bar(
-        self, playground: Any, xvfb_display: str,
+        self,
+        playground: Any,
+        xvfb_display: str,
     ) -> None:
         app = playground.PlaygroundApp(persist_session=False)
         try:
@@ -2504,7 +2595,9 @@ class TestShortcutHints:
             app.destroy()
 
     def test_view_toggle_and_hide_button_flip_visibility(
-        self, playground: Any, xvfb_display: str,
+        self,
+        playground: Any,
+        xvfb_display: str,
     ) -> None:
         app = playground.PlaygroundApp(persist_session=False)
         try:
@@ -2523,7 +2616,9 @@ class TestShortcutHints:
             app.destroy()
 
     def test_hint_preference_survives_a_session_round_trip(
-        self, playground: Any, xvfb_display: str,
+        self,
+        playground: Any,
+        xvfb_display: str,
     ) -> None:
         first = playground.PlaygroundApp(persist_session=False)
         second = playground.PlaygroundApp(persist_session=False)
@@ -2567,7 +2662,8 @@ class TestDeepLearningTab:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -2584,8 +2680,9 @@ class TestDeepLearningTab:
             time.sleep(0.02)
         return False
 
-    def _configure_tiny(self, app: Any, hidden: str = "8",
-                        epochs: str = "30", patience: str = "5") -> None:
+    def _configure_tiny(
+        self, app: Any, hidden: str = "8", epochs: str = "30", patience: str = "5"
+    ) -> None:
         """Shrink the network so the suite trains in seconds, not minutes."""
         app._dl_hidden_entry.delete(0, "end")
         app._dl_hidden_entry.insert(0, hidden)
@@ -2593,9 +2690,7 @@ class TestDeepLearningTab:
         app._dl_patience.set(patience)
 
     def _metric_texts(self, app: Any) -> str:
-        return " | ".join(
-            str(child.cget("text")) for child in app._dl_metrics.winfo_children()
-        )
+        return " | ".join(str(child.cget("text")) for child in app._dl_metrics.winfo_children())
 
     # -- pure helpers (no Tk, no pharmaml import needed) ------------------ #
     def test_parse_hidden_layers_variants(self, playground: Any) -> None:
@@ -2607,17 +2702,12 @@ class TestDeepLearningTab:
             with pytest.raises(ValueError, match="widths"):
                 playground.parse_hidden_layers(junk)
 
-    def test_estimator_name_covers_all_four_combinations(
-        self, playground: Any
-    ) -> None:
+    def test_estimator_name_covers_all_four_combinations(self, playground: Any) -> None:
         deep, residual = playground._DL_ARCHITECTURES
         assert playground.deep_estimator_name(deep, "regression") == "DeepMLPRegressor"
-        assert playground.deep_estimator_name(
-            deep, "classification") == "DeepMLPClassifier"
-        assert playground.deep_estimator_name(
-            residual, "regression") == "ResidualMLPRegressor"
-        assert playground.deep_estimator_name(
-            residual, "classification") == "ResidualMLPClassifier"
+        assert playground.deep_estimator_name(deep, "classification") == "DeepMLPClassifier"
+        assert playground.deep_estimator_name(residual, "regression") == "ResidualMLPRegressor"
+        assert playground.deep_estimator_name(residual, "classification") == "ResidualMLPClassifier"
         with pytest.raises(ValueError, match="architecture"):
             playground.deep_estimator_name("CNN", "regression")
         with pytest.raises(ValueError, match="task"):
@@ -2631,9 +2721,7 @@ class TestDeepLearningTab:
         assert playground._DL_ACTIVATIONS == _ACTIVATIONS
 
     # -- the dataset loader ------------------------------------------------ #
-    def test_example_dataset_loads_into_preview(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_example_dataset_loads_into_preview(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._dl_load_example()
         assert quiet_dialogs == []
         info = app._dl_info.cget("text")
@@ -2659,7 +2747,7 @@ class TestDeepLearningTab:
         assert "R²" in texts and "RMSE" in texts
         assert "epochs run" in texts and "best val loss" in texts
         assert "hidden layers" in texts and "8" in texts
-        assert app._dl_host._pg_figure is not None       # parity figure
+        assert app._dl_host._pg_figure is not None  # parity figure
         assert app._dl_hist_host._pg_figure is not None  # loss curves
         summary = app._dl_hist_summary.cget("text")
         assert "DeepMLPRegressor ·" in summary
@@ -2688,7 +2776,7 @@ class TestDeepLearningTab:
         # SMILES + compound_id are not numeric -> reported as dropped
         assert "dropped non-numeric" in texts
         assert "SMILES" in texts and "compound_id" in texts
-        assert app._dl_host._pg_figure is not None       # confusion matrix
+        assert app._dl_host._pg_figure is not None  # confusion matrix
         assert app._dl_hist_host._pg_figure is not None  # loss curves
 
     # -- batch normalisation (100x-90) --------------------------------------- #
@@ -2702,7 +2790,7 @@ class TestDeepLearningTab:
         assert self._drain_jobs(app), "network training hung"
         assert quiet_dialogs == []
         network = app._dl_last_run[0]
-        assert network.batchnorm is True          # the checkbox reached the net
+        assert network.batchnorm is True  # the checkbox reached the net
         assert app._dl_host._pg_figure is not None
         texts = self._metric_texts(app)
         assert "DeepMLPRegressor (regression)" in texts
@@ -2723,8 +2811,12 @@ class TestDeepLearningTab:
 
     # -- the history CSV export ---------------------------------------------- #
     def test_save_history_writes_the_exact_csv(
-        self, playground: Any, app: Any, quiet_dialogs: list[Any],
-        monkeypatch: Any, tmp_path: Path,
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
+        tmp_path: Path,
     ) -> None:
         self._configure_tiny(app)
         app._dl_load_example()
@@ -2732,7 +2824,8 @@ class TestDeepLearningTab:
         assert self._drain_jobs(app), "network training hung"
         out = tmp_path / "history.csv"
         monkeypatch.setattr(
-            playground.filedialog, "asksaveasfilename",
+            playground.filedialog,
+            "asksaveasfilename",
             lambda **kwargs: str(out),
         )
         app._dl_save_history()
@@ -2752,16 +2845,12 @@ class TestDeepLearningTab:
         titles = [call[1][0] for call in quiet_dialogs]
         assert "No dataset" in titles
 
-    def test_save_history_before_any_run_guards(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_save_history_before_any_run_guards(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._dl_save_history()
         titles = [call[1][0] for call in quiet_dialogs]
         assert "Nothing to save" in titles
 
-    def test_bad_hidden_layers_warns_not_crashes(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_bad_hidden_layers_warns_not_crashes(self, app: Any, quiet_dialogs: list[Any]) -> None:
         self._configure_tiny(app, hidden="64, zero")
         app._dl_load_example()
         app._dl_train()
@@ -2830,8 +2919,8 @@ class TestDefaultTargetColumn:
         # the last-column default trained a 420-class classifier on
         # compound_id; the walker must land on the real label instead.
         cases = {
-            "qsar_regression.csv": "pIC50",          # numeric, last column
-            "qsar_classification.csv": "activity",   # behind SMILES + ID
+            "qsar_regression.csv": "pIC50",  # numeric, last column
+            "qsar_classification.csv": "activity",  # behind SMILES + ID
             "qsar_multiclass.csv": "Target",
         }
         for name, expected in cases.items():
@@ -2843,21 +2932,23 @@ class TestDefaultTargetColumn:
         # unique STRING columns are treated as IDs.
         import pandas as pd
 
-        frame = pd.DataFrame({
-            "descr": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-            "pIC50": [5.1, 6.2, 7.3, 8.4, 5.5, 6.6, 7.7, 8.8],
-        })
+        frame = pd.DataFrame(
+            {
+                "descr": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+                "pIC50": [5.1, 6.2, 7.3, 8.4, 5.5, 6.6, 7.7, 8.8],
+            }
+        )
         assert playground.default_target_column(frame) == "pIC50"
 
-    def test_all_id_columns_fall_back_to_the_last_column(
-        self, playground: Any
-    ) -> None:
+    def test_all_id_columns_fall_back_to_the_last_column(self, playground: Any) -> None:
         import pandas as pd
 
-        frame = pd.DataFrame({
-            "lot_id": [f"L{i}" for i in range(8)],
-            "compound_id": [f"C{i}" for i in range(8)],
-        })
+        frame = pd.DataFrame(
+            {
+                "lot_id": [f"L{i}" for i in range(8)],
+                "compound_id": [f"C{i}" for i in range(8)],
+            }
+        )
         assert playground.default_target_column(frame) == "compound_id"
 
     def test_empty_frame_returns_none(self, playground: Any) -> None:
@@ -2904,18 +2995,16 @@ class TestNumericFeatureGuard:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
 
-    def test_numeric_feature_columns_splits_the_right_way(
-        self, playground: Any
-    ) -> None:
+    def test_numeric_feature_columns_splits_the_right_way(self, playground: Any) -> None:
         import pandas as pd
 
-        frame = pd.read_csv(
-            TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv")
+        frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv")
         numeric, dropped = playground.numeric_feature_columns(frame, "activity")
         assert numeric == [f"descr_{i:02d}" for i in range(8)]
         assert dropped == ["SMILES", "compound_id"]
@@ -2936,7 +3025,7 @@ class TestNumericFeatureGuard:
         assert "No numeric features" in titles
         message = quiet_dialogs[0][1][1]
         assert "molecule, series" in message  # the dropped columns, named
-        assert "feature factory" in message   # the remedy, pointed at
+        assert "feature factory" in message  # the remedy, pointed at
 
     def test_ml_train_guards_zero_numeric_features(
         self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
@@ -2991,7 +3080,8 @@ class TestTunerCard:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -3009,9 +3099,7 @@ class TestTunerCard:
         return False
 
     # -- pure helpers (no Tk, no pharmaml import needed) ------------------ #
-    def test_config_text_renders_sorted_compact_tokens(
-        self, playground: Any
-    ) -> None:
+    def test_config_text_renders_sorted_compact_tokens(self, playground: Any) -> None:
         text = playground.tune_config_text(
             {"units": 64, "alpha": 0.001, "batchnorm": True, "gamma": "scale"}
         )
@@ -3022,9 +3110,7 @@ class TestTunerCard:
         assert playground.tune_config_text({"n_layers": 2}) == "n_layers=2"
         assert playground.tune_config_text({}) == ""
 
-    def test_hypermodel_names_mirror_the_cli_registry(
-        self, playground: Any
-    ) -> None:
+    def test_hypermodel_names_mirror_the_cli_registry(self, playground: Any) -> None:
         # the GUI card and the CLI resolve the SAME hypermodels -- pinned
         # together so one surface cannot drift from the other (the
         # _DL_ACTIVATIONS pin pattern).
@@ -3061,7 +3147,12 @@ class TestTunerCard:
         rows = app._board_tree.get_children()
         assert len(rows) == 4  # one row per trial
         assert list(app._board_tree["columns"]) == [
-            "rank", "trial", "configuration", "score", "± std"]
+            "rank",
+            "trial",
+            "configuration",
+            "score",
+            "± std",
+        ]
         scores = [float(app._board_tree.item(row, "values")[3]) for row in rows]
         assert scores == sorted(scores, reverse=True)  # best first
         # the rank-1 row IS the winning trial (id, score, config text)
@@ -3117,7 +3208,13 @@ class TestTunerCard:
         rows = app._board_tree.get_children()
         assert len(rows) == 6
         assert list(app._board_tree["columns"]) == [
-            "rank", "trial", "configuration", "resource", "score", "± std"]
+            "rank",
+            "trial",
+            "configuration",
+            "resource",
+            "score",
+            "± std",
+        ]
         best = results.best_trial
         first = app._board_tree.item(rows[0], "values")
         assert first[0] == "1"
@@ -3125,8 +3222,7 @@ class TestTunerCard:
         assert first[3] == f"{best.resource:g}"  # the resource column
         assert first[4] == f"{best.score:.4f}"
         # every rendered resource cell matches its trial's rung
-        for row, trial in zip(rows, sorted(
-                results.trials, key=lambda t: t.score, reverse=True)):
+        for row, trial in zip(rows, sorted(results.trials, key=lambda t: t.score, reverse=True)):
             assert app._board_tree.item(row, "values")[3] == f"{trial.resource:g}"
 
         status = app._board_status.cget("text")
@@ -3179,9 +3275,7 @@ class TestTunerCard:
         titles = [call[1][0] for call in quiet_dialogs]
         assert "hsvr is regression-only" in titles
 
-    def test_hsvr_hyperband_guards_before_any_job(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_hsvr_hyperband_guards_before_any_job(self, app: Any, quiet_dialogs: list[Any]) -> None:
         # hsvr declares no resource slot -- the pre-flight mirrors the
         # library's resource_bounds error before any bracket starts.
         app._ml_load_example()
@@ -3203,9 +3297,7 @@ class TestTunerCard:
         titles = [call[1][0] for call in quiet_dialogs]
         assert titles.count("No search yet") == 2
 
-    def test_bad_search_settings_warn_not_crash(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_bad_search_settings_warn_not_crash(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._ml_load_example()
         app._tune_trials.set("2")  # below the minimum of 4
         app._ml_tune()
@@ -3215,8 +3307,12 @@ class TestTunerCard:
 
     # -- the trials CSV export ---------------------------------------------- #
     def test_save_trials_writes_the_full_table(
-        self, playground: Any, app: Any, quiet_dialogs: list[Any],
-        monkeypatch: Any, tmp_path: Path,
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
+        tmp_path: Path,
     ) -> None:
         app._ml_load_example()
         app._tune_trials.set("4")
@@ -3225,7 +3321,8 @@ class TestTunerCard:
         assert self._drain_jobs(app), "the search hung"
         out = tmp_path / "trials.csv"
         monkeypatch.setattr(
-            playground.filedialog, "asksaveasfilename",
+            playground.filedialog,
+            "asksaveasfilename",
             lambda **kwargs: str(out),
         )
         app._ml_tune_save_trials()
@@ -3255,7 +3352,8 @@ class TestTunerCard:
         assert quiet_dialogs == []
         # the whole Deep Learning tab is prefilled from the winner
         expected_hidden = ", ".join(
-            str(int(params["units"])) for _ in range(int(params["n_layers"])))
+            str(int(params["units"])) for _ in range(int(params["n_layers"]))
+        )
         assert app._dl_hidden_entry.get() == expected_hidden
         assert app._dl_dropout.get() == f"{float(params['dropout']):g}"
         assert app._dl_lr_entry.get() == f"{float(params['learning_rate']):g}"
@@ -3303,7 +3401,8 @@ class TestGenerativeRLCard:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -3320,8 +3419,15 @@ class TestGenerativeRLCard:
             time.sleep(0.02)
         return False
 
-    def _run_rl(self, app: Any, *, iterations: str = "6", batch: str = "16",
-                prior_epochs: str = "2", anchor: str = "0.1") -> None:
+    def _run_rl(
+        self,
+        app: Any,
+        *,
+        iterations: str = "6",
+        batch: str = "16",
+        prior_epochs: str = "2",
+        anchor: str = "0.1",
+    ) -> None:
         app._method_combo.set(self.RL)
         app._rl_iterations.set(iterations)
         app._rl_batch.set(batch)
@@ -3349,9 +3455,7 @@ class TestGenerativeRLCard:
         assert app._ga_frame.grid_info() != {}
         assert app._rl_frame.grid_info() == {}
 
-    def test_rl_negative_anchor_is_an_input_error(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_rl_negative_anchor_is_an_input_error(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._method_combo.set(self.RL)
         app._rl_anchor.delete(0, "end")
         app._rl_anchor.insert(0, "-0.5")
@@ -3363,9 +3467,7 @@ class TestGenerativeRLCard:
 
     # -- the RL run itself (needs torch + rdkit) --------------------------- #
 
-    @pytest.mark.skipif(
-        importlib.util.find_spec("torch") is None, reason="needs PyTorch"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="needs PyTorch")
     def test_rl_run_fills_the_card_with_introspection(
         self, app: Any, quiet_dialogs: list[Any]
     ) -> None:
@@ -3388,9 +3490,7 @@ class TestGenerativeRLCard:
         assert len(figure.get_axes()) == 4
         assert quiet_dialogs == []
 
-    @pytest.mark.skipif(
-        importlib.util.find_spec("torch") is None, reason="needs PyTorch"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="needs PyTorch")
     def test_rl_multiobjective_run_fills_the_pareto_card(
         self, app: Any, quiet_dialogs: list[Any]
     ) -> None:
@@ -3406,25 +3506,33 @@ class TestGenerativeRLCard:
 
     # -- the text formatter ------------------------------------------------ #
 
-    def test_format_rl_history_placeholder_without_history(
-        self, playground: Any
-    ) -> None:
+    def test_format_rl_history_placeholder_without_history(self, playground: Any) -> None:
         class _Empty:
             history = None
 
         assert "after a run" in playground._format_rl_history(_Empty())
 
-    def test_format_rl_history_first_and_last_rows(
-        self, playground: Any
-    ) -> None:
+    def test_format_rl_history_first_and_last_rows(self, playground: Any) -> None:
         class _Two:
             history: ClassVar[list[dict[str, float]]] = [
-                {"best_score": 0.2, "mean_score": 0.1, "valid_fraction": 0.5,
-                 "drift": 0.0, "entropy": 2.5, "agent_logprob": -20.0,
-                 "prior_logprob": -20.0},
-                {"best_score": 0.8, "mean_score": 0.5, "valid_fraction": 0.9,
-                 "drift": 4.0, "entropy": 2.0, "agent_logprob": -15.0,
-                 "prior_logprob": -20.0},
+                {
+                    "best_score": 0.2,
+                    "mean_score": 0.1,
+                    "valid_fraction": 0.5,
+                    "drift": 0.0,
+                    "entropy": 2.5,
+                    "agent_logprob": -20.0,
+                    "prior_logprob": -20.0,
+                },
+                {
+                    "best_score": 0.8,
+                    "mean_score": 0.5,
+                    "valid_fraction": 0.9,
+                    "drift": 4.0,
+                    "entropy": 2.0,
+                    "agent_logprob": -15.0,
+                    "prior_logprob": -20.0,
+                },
             ]
 
         text = playground._format_rl_history(_Two())
@@ -3461,7 +3569,8 @@ class TestMLReportBundle:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -3482,9 +3591,7 @@ class TestMLReportBundle:
     def test_fpdf_available_is_a_bool(self, playground: Any) -> None:
         assert isinstance(playground.fpdf_available(), bool)
 
-    def test_report_needs_a_run_first(
-        self, app: Any, dialogs: list[Any]
-    ) -> None:
+    def test_report_needs_a_run_first(self, app: Any, dialogs: list[Any]) -> None:
         app._ml_save_report()
         assert not app._busy  # the guard fired before any job started
         titles = [call[1][0] for call in dialogs]
@@ -3504,15 +3611,17 @@ class TestMLReportBundle:
         assert "pharmaml[reports]" in dialogs[0][1][1]  # the install hint
 
     def test_report_bundle_end_to_end(
-        self, app: Any, dialogs: list[Any], monkeypatch: Any,
-        playground: Any, tmp_path: Path,
+        self,
+        app: Any,
+        dialogs: list[Any],
+        monkeypatch: Any,
+        playground: Any,
+        tmp_path: Path,
     ) -> None:
         pypdf = pytest.importorskip("pypdf")
         target = tmp_path / "bundle"
-        monkeypatch.setattr(playground.filedialog, "askdirectory",
-                            lambda **k: str(target))
-        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
-                          / "qsar_classification.csv")
+        monkeypatch.setattr(playground.filedialog, "askdirectory", lambda **k: str(target))
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv")
         app._model_combo.set("logistic_regression")
         app._ml_train()
         assert self._drain(app), "training job did not finish"
@@ -3536,15 +3645,17 @@ class TestMLReportBundle:
         assert "logistic_regression" in first
 
     def test_report_html_only_when_pdf_unticked(
-        self, app: Any, dialogs: list[Any], monkeypatch: Any,
-        playground: Any, tmp_path: Path,
+        self,
+        app: Any,
+        dialogs: list[Any],
+        monkeypatch: Any,
+        playground: Any,
+        tmp_path: Path,
     ) -> None:
         # the default pin: unticked -> the bundle without report.pdf
         target = tmp_path / "bundle_html"
-        monkeypatch.setattr(playground.filedialog, "askdirectory",
-                            lambda **k: str(target))
-        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
-                          / "qsar_regression.csv")
+        monkeypatch.setattr(playground.filedialog, "askdirectory", lambda **k: str(target))
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
         app._ml_train()
         assert self._drain(app), "training job did not finish"
         app._ml_save_report()
@@ -3579,7 +3690,8 @@ class TestMLCheckCSV:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -3599,15 +3711,12 @@ class TestMLCheckCSV:
 
     @staticmethod
     def _train(app: Any) -> None:
-        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
-                          / "qsar_regression.csv")
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
         app._ml_train()
         assert TestMLCheckCSV._drain(app), "training job did not finish"
         assert app._ml_last_run is not None
 
-    def test_check_needs_a_run_first(
-        self, app: Any, dialogs: list[Any]
-    ) -> None:
+    def test_check_needs_a_run_first(self, app: Any, dialogs: list[Any]) -> None:
         app._ml_check_csv()
         assert not app._busy  # the guard fired before any job started
         titles = [call[1][0] for call in dialogs]
@@ -3618,8 +3727,7 @@ class TestMLCheckCSV:
         self, app: Any, monkeypatch: Any, playground: Any
     ) -> None:
         app._ml_last_run = (object(), object(), "regression", None, None, "pIC50")
-        monkeypatch.setattr(playground.filedialog, "askopenfilename",
-                            lambda **k: "")
+        monkeypatch.setattr(playground.filedialog, "askopenfilename", lambda **k: "")
         app._ml_check_csv()
         assert not app._busy  # the cancelled picker never queued work
 
@@ -3628,8 +3736,7 @@ class TestMLCheckCSV:
     ) -> None:
         self._train(app)
         csv = str(TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
-        monkeypatch.setattr(playground.filedialog, "askopenfilename",
-                            lambda **k: csv)
+        monkeypatch.setattr(playground.filedialog, "askopenfilename", lambda **k: csv)
         app._ml_check_csv()
         assert self._drain(app), "audit job did not finish"
 
@@ -3644,24 +3751,23 @@ class TestMLCheckCSV:
         assert "audit: OK" in app._job_label.cget("text")
 
     def test_check_audit_flags_drift(
-        self, app: Any, dialogs: list[Any], monkeypatch: Any,
-        playground: Any, tmp_path: Path,
+        self,
+        app: Any,
+        dialogs: list[Any],
+        monkeypatch: Any,
+        playground: Any,
+        tmp_path: Path,
     ) -> None:
         import pandas as pd
 
         self._train(app)
         # the months-later CSV: one feature dropped, one renamed.
-        frame = pd.read_csv(
-            TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv"
-        )
-        frame = frame.drop(columns=["descr_000"]).rename(
-            columns={"descr_001": "descr_1"}
-        )
+        frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
+        frame = frame.drop(columns=["descr_000"]).rename(columns={"descr_001": "descr_1"})
         drifted = tmp_path / "drifted.csv"
         frame.to_csv(drifted, index=False)
 
-        monkeypatch.setattr(playground.filedialog, "askopenfilename",
-                            lambda **k: str(drifted))
+        monkeypatch.setattr(playground.filedialog, "askopenfilename", lambda **k: str(drifted))
         app._ml_check_csv()
         assert self._drain(app), "audit job did not finish"
 
@@ -3702,7 +3808,8 @@ class TestDLCheckCSV:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -3727,15 +3834,12 @@ class TestDLCheckCSV:
         app._dl_hidden_entry.insert(0, "8")
         app._dl_epochs.set("20")
         app._dl_patience.set("3")
-        app._dl_load_path(TOOLKIT_ROOT / "examples" / "data"
-                          / "qsar_regression.csv")
+        app._dl_load_path(TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
         app._dl_train()
         assert cls._drain(app), "network training hung"
         assert app._dl_last_run is not None
 
-    def test_check_needs_a_run_first(
-        self, app: Any, dialogs: list[Any]
-    ) -> None:
+    def test_check_needs_a_run_first(self, app: Any, dialogs: list[Any]) -> None:
         app._dl_check_csv()
         assert not app._busy  # the guard fired before any job started
         titles = [call[1][0] for call in dialogs]
@@ -3745,10 +3849,8 @@ class TestDLCheckCSV:
     def test_check_cancelled_starts_no_job(
         self, app: Any, monkeypatch: Any, playground: Any
     ) -> None:
-        app._dl_last_run = (object(), "DeepMLPRegressor", "regression",
-                            None, "pIC50")
-        monkeypatch.setattr(playground.filedialog, "askopenfilename",
-                            lambda **k: "")
+        app._dl_last_run = (object(), "DeepMLPRegressor", "regression", None, "pIC50")
+        monkeypatch.setattr(playground.filedialog, "askopenfilename", lambda **k: "")
         app._dl_check_csv()
         assert not app._busy  # the cancelled picker never queued work
 
@@ -3757,8 +3859,7 @@ class TestDLCheckCSV:
     ) -> None:
         self._train(app)
         csv = str(TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
-        monkeypatch.setattr(playground.filedialog, "askopenfilename",
-                            lambda **k: csv)
+        monkeypatch.setattr(playground.filedialog, "askopenfilename", lambda **k: csv)
         app._dl_check_csv()
         assert self._drain(app), "audit job did not finish"
 
@@ -3774,24 +3875,23 @@ class TestDLCheckCSV:
         assert "audit: OK" in app._job_label.cget("text")
 
     def test_check_audit_flags_drift(
-        self, app: Any, dialogs: list[Any], monkeypatch: Any,
-        playground: Any, tmp_path: Path,
+        self,
+        app: Any,
+        dialogs: list[Any],
+        monkeypatch: Any,
+        playground: Any,
+        tmp_path: Path,
     ) -> None:
         import pandas as pd
 
         self._train(app)
         # the months-later CSV: one feature dropped, one renamed.
-        frame = pd.read_csv(
-            TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv"
-        )
-        frame = frame.drop(columns=["descr_000"]).rename(
-            columns={"descr_001": "descr_1"}
-        )
+        frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
+        frame = frame.drop(columns=["descr_000"]).rename(columns={"descr_001": "descr_1"})
         drifted = tmp_path / "drifted.csv"
         frame.to_csv(drifted, index=False)
 
-        monkeypatch.setattr(playground.filedialog, "askopenfilename",
-                            lambda **k: str(drifted))
+        monkeypatch.setattr(playground.filedialog, "askopenfilename", lambda **k: str(drifted))
         app._dl_check_csv()
         assert self._drain(app), "audit job did not finish"
 
@@ -3834,12 +3934,14 @@ class TestUtilitiesCoverageGui:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         for name in ("askyesno", "askokcancel"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)) or True,
             )
         return seen
@@ -3857,14 +3959,14 @@ class TestUtilitiesCoverageGui:
         return False
 
     # -- fixtures ----------------------------------------------------- #
-    LIGANDS_A = (
-        "Ligand,SMILES,score\n"
-        "lig1,CCO,1.5\nlig2,CCOCC,2.5\nlig3,c1ccccc1,3.5\n"
-    )
+    LIGANDS_A = "Ligand,SMILES,score\nlig1,CCO,1.5\nlig2,CCOCC,2.5\nlig3,c1ccccc1,3.5\n"
     LIGANDS_B = "Ligand,SMILES\nlig1,CCO\nlig4,CNC\n"
 
     def test_merge_picked_files_and_first_columns_reorder(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
         playground: Any,
     ) -> None:
         table_a = tmp_path / "ligands_a.csv"
@@ -3890,7 +3992,10 @@ class TestUtilitiesCoverageGui:
         assert next(iter(merged.columns)) == "score"
 
     def test_split_into_chunks(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
         playground: Any,
     ) -> None:
         big_csv = tmp_path / "big.csv"
@@ -3906,8 +4011,7 @@ class TestUtilitiesCoverageGui:
         app._util_merge_chunk.delete(0, "end")
         app._util_merge_chunk.insert(0, "10")
         monkey = pytest.MonkeyPatch()
-        monkey.setattr(playground.filedialog, "askdirectory",
-                       lambda **_k: str(parts_dir))
+        monkey.setattr(playground.filedialog, "askdirectory", lambda **_k: str(parts_dir))
         try:
             app._util_merge_run()
             assert self._drain_jobs(app), "split job hung"
@@ -3917,7 +4021,10 @@ class TestUtilitiesCoverageGui:
         assert len(parts) == 3  # 25 rows / 10 per chunk
 
     def test_compare_column_and_annotate_smiles(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
     ) -> None:
         table_a = tmp_path / "ligands_a.csv"
         table_a.write_text(self.LIGANDS_A, encoding="utf-8")
@@ -3944,7 +4051,10 @@ class TestUtilitiesCoverageGui:
         assert ann.loc[ann["Ligand"] == "lig1", "Ligand_SMILES"].iloc[0] == "CCO"
 
     def test_approved_drug_filter(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
     ) -> None:
         approval = tmp_path / "approvals.tsv"
         approval.write_text(
@@ -3960,16 +4070,19 @@ class TestUtilitiesCoverageGui:
         assert appr["drug"].tolist() == ["aspirin", "ibuprofen"]
 
     def test_campaign_tools_collect_list_distribute_cleanup(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
     ) -> None:
         camp = tmp_path / "campaign"
         for sub in ("lig1", "lig2", "lig3"):
             (camp / sub).mkdir(parents=True)
         (camp / "lig1" / "r.dlg").write_text("fake dlg", encoding="utf-8")
-        (camp / "lig2" / "r.dlg").write_text(
-            "fake dlg\nSuccessful Completion\n", encoding="utf-8")
+        (camp / "lig2" / "r.dlg").write_text("fake dlg\nSuccessful Completion\n", encoding="utf-8")
         (camp / "lig1" / "1.pdbqt").write_text(
-            "REMARK x\nTORSDOF 2\nBRANCH\nBRANCH\n", encoding="utf-8")
+            "REMARK x\nTORSDOF 2\nBRANCH\nBRANCH\n", encoding="utf-8"
+        )
         (camp / "stray.txt").write_text("stray", encoding="utf-8")
 
         # collect (dry run): filename ∪ pattern union
@@ -4010,18 +4123,25 @@ class TestUtilitiesCoverageGui:
         app._util_tool_dry_var.set(True)
         survivors = {p.name for p in camp.rglob("*") if p.is_file()}
         assert survivors <= {
-            "r.pdbqt", "r.dlg", "r.gpf", "r.dpf", "bin_marker.txt", "1.pdbqt",
+            "r.pdbqt",
+            "r.dlg",
+            "r.gpf",
+            "r.dpf",
+            "bin_marker.txt",
+            "1.pdbqt",
         }
         assert "stray.txt" not in survivors
         assert "1.pdbqt" in survivors  # the keep pattern kept it
 
     def test_reindex_dense_range(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
     ) -> None:
         sparse = tmp_path / "sparse.csv"
         sparse.write_text(
-            "ligand,energy\n5_result.dlg,-7.1\n6_result.dlg,-8.2\n"
-            "8_result.dlg,-6.0\n",
+            "ligand,energy\n5_result.dlg,-7.1\n6_result.dlg,-8.2\n8_result.dlg,-6.0\n",
             encoding="utf-8",
         )
         app._util_reindex_path = sparse
@@ -4036,11 +4156,12 @@ class TestUtilitiesCoverageGui:
         reindexed = app._util_frames.get("reindex")
         assert reindexed is not None and len(reindexed) == 4  # 5..8 dense
 
-    @pytest.mark.skipif(
-        importlib.util.find_spec("rdkit") is None, reason="needs RDKit"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("rdkit") is None, reason="needs RDKit")
     def test_converters_csv_sdf_smi_pic50(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
     ) -> None:
         table_a = tmp_path / "ligands_a.csv"
         table_a.write_text(self.LIGANDS_A, encoding="utf-8")
@@ -4056,8 +4177,7 @@ class TestUtilitiesCoverageGui:
 
         # .smi list -> CSV
         smi_out = tmp_path / "list.smi"
-        smi_out.write_text(
-            "CCO ethanol\nCC(C)CO isopropanol\n", encoding="utf-8")
+        smi_out.write_text("CCO ethanol\nCC(C)CO isopropanol\n", encoding="utf-8")
         smi_csv_out = tmp_path / "list.csv"
         app._conv_input = smi_out
         app._conv_output = smi_csv_out
@@ -4078,8 +4198,7 @@ class TestUtilitiesCoverageGui:
 
         # pIC50 column: censored + junk rows stay NaN (honesty rule)
         measure_csv = tmp_path / "measure.csv"
-        measure_csv.write_text(
-            "compound,IC50 (nM)\nA,100\nB,<10\nC,xyz\n", encoding="utf-8")
+        measure_csv.write_text("compound,IC50 (nM)\nA,100\nB,<10\nC,xyz\n", encoding="utf-8")
         app._conv_input = measure_csv
         app._conv_mode.set("append pIC50 column")
         app._conv_source_col.delete(0, "end")
@@ -4091,11 +4210,11 @@ class TestUtilitiesCoverageGui:
         assert int(pic_frame["pIC50"].notna().sum()) == 2
         assert abs(pic_frame.loc[0, "pIC50"] - 7.0) < 1e-9
 
-    @pytest.mark.skipif(
-        importlib.util.find_spec("rdkit") is None, reason="needs RDKit"
-    )
+    @pytest.mark.skipif(importlib.util.find_spec("rdkit") is None, reason="needs RDKit")
     def test_similarity_scan_matrix_threshold_topk(
-        self, app: Any, quiet_dialogs: list[Any],
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
     ) -> None:
         # matrix: 2 default references x 7 default library rows
         app._scan_mode.set("matrix: references × library")
@@ -4115,7 +4234,8 @@ class TestUtilitiesCoverageGui:
         scan_frame = app._scan_frame
         assert scan_frame is not None and len(scan_frame) == 2
         identity_pairs = {
-            (row.reference, row.target) for row in scan_frame.itertuples()
+            (row.reference, row.target)
+            for row in scan_frame.itertuples()
             if row.similarity >= 0.999
         }
         assert len(identity_pairs) == 2
@@ -4132,12 +4252,14 @@ class TestUtilitiesCoverageGui:
         assert top_frame["similarity"].iloc[0] >= top_frame["similarity"].iloc[-1]
 
     def test_clean_numeric_frame_keeps_smiles(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
     ) -> None:
         mixed = tmp_path / "mixed.csv"
         mixed.write_text(
-            "SMILES,name,MolWt,LogP,target\n"
-            "CCO,ethanol,46.1,-0.3,1.0\nCC(C)CO,iso,60.1,0.3,2.0\n",
+            "SMILES,name,MolWt,LogP,target\nCCO,ethanol,46.1,-0.3,1.0\nCC(C)CO,iso,60.1,0.3,2.0\n",
             encoding="utf-8",
         )
         app._ml_load_path(mixed)
@@ -4184,12 +4306,14 @@ class TestDockingCoverageGui:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         for name in ("askyesno", "askokcancel"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)) or True,
             )
         return seen
@@ -4211,14 +4335,17 @@ class TestDockingCoverageGui:
         for sub in ("lig1", "lig2", "lig3"):
             (camp / sub).mkdir(parents=True)
         (camp / "lig1" / "r.dlg").write_text("fake dlg", encoding="utf-8")
-        (camp / "lig2" / "r.dlg").write_text(
-            "fake dlg\nSuccessful Completion\n", encoding="utf-8")
+        (camp / "lig2" / "r.dlg").write_text("fake dlg\nSuccessful Completion\n", encoding="utf-8")
         (camp / "lig1" / "1.pdbqt").write_text(
-            "REMARK x\nTORSDOF 2\nBRANCH\nBRANCH\n", encoding="utf-8")
+            "REMARK x\nTORSDOF 2\nBRANCH\nBRANCH\n", encoding="utf-8"
+        )
         return camp
 
     def test_audit_card_gpf_torsion_completion(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
     ) -> None:
         camp = self._campaign_fixture(tmp_path)
         gpf = tmp_path / "r.gpf"
@@ -4246,8 +4373,7 @@ class TestDockingCoverageGui:
         assert self._drain_jobs(app), "torsion audit job hung"
         torsion_frame = app._dock_audit_frame
         assert torsion_frame is not None and len(torsion_frame) >= 1
-        assert {"ligand", "torsdof", "branches", "status"} <= set(
-            torsion_frame.columns)
+        assert {"ligand", "torsdof", "branches", "status"} <= set(torsion_frame.columns)
 
         # folder: completion check (lig2 OK, lig1 INCOMPLETE, lig3 MISSING_LOG)
         app._dock_audit_mode.set("folder: completion check")
@@ -4259,12 +4385,14 @@ class TestDockingCoverageGui:
         assert "MISSING_LOG" in statuses
 
     @pytest.mark.skipif(
-        importlib.util.find_spec("rdkit") is None
-        or importlib.util.find_spec("meeko") is None,
+        importlib.util.find_spec("rdkit") is None or importlib.util.find_spec("meeko") is None,
         reason="needs RDKit + Meeko",
     )
     def test_single_smiles_to_pdbqt(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
     ) -> None:
         smi_dir = tmp_path / "smi_out"
         app._dock_smi_out = smi_dir
@@ -4276,7 +4404,10 @@ class TestDockingCoverageGui:
         assert len(pdbqt) == 1
 
     def test_vina_config_batch_fake_engine(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
         monkeypatch: Any,
     ) -> None:
         import os
@@ -4288,32 +4419,31 @@ class TestDockingCoverageGui:
         fake_vina.write_text(
             "#!/bin/bash\n"
             "out=''; lig=''; prev=''\n"
-            "for arg in \"$@\"; do\n"
-            "  [ \"$prev\" = --out ] && out=\"$arg\"\n"
-            "  [ \"$prev\" = --ligand ] && lig=\"$arg\"\n"
-            "  prev=\"$arg\"\n"
+            'for arg in "$@"; do\n'
+            '  [ "$prev" = --out ] && out="$arg"\n'
+            '  [ "$prev" = --ligand ] && lig="$arg"\n'
+            '  prev="$arg"\n'
             "done\n"
             "{ echo 'REMARK VINA RESULT:    -8.2      0.000      0.000'\n"
             "  echo 'REMARK VINA RESULT:    -7.1      1.923      2.941'\n"
-            "  grep '^ATOM\\|^HETATM' \"$lig\"; } > \"$out\"\n"
+            '  grep \'^ATOM\\|^HETATM\' "$lig"; } > "$out"\n'
             "exit 0\n",
             encoding="utf-8",
         )
-        fake_vina.chmod(fake_vina.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP
-                        | stat.S_IXOTH)
-        monkeypatch.setenv(
-            "PATH", f"{binroot}{os.pathsep}{os.environ.get('PATH', '')}")
+        fake_vina.chmod(fake_vina.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        monkeypatch.setenv("PATH", f"{binroot}{os.pathsep}{os.environ.get('PATH', '')}")
 
         vbatch_dir = tmp_path / "vbatch"
         (vbatch_dir / "ligands").mkdir(parents=True)
         for name in ("l1", "l2"):
             (vbatch_dir / "ligands" / f"{name}.pdbqt").write_text(
                 "REMARK ok\nATOM      1  C   LIG A   1       0.000   0.000   "
-                "0.000  1.00  0.00           C\n", encoding="utf-8")
+                "0.000  1.00  0.00           C\n",
+                encoding="utf-8",
+            )
         (vbatch_dir / "r.pdbqt").write_text("ATOM receptor\n", encoding="utf-8")
         conf = vbatch_dir / "vina.conf"
-        conf.write_text(
-            "receptor = r.pdbqt\ncenter_x = 0\nsize_x = 20\n", encoding="utf-8")
+        conf.write_text("receptor = r.pdbqt\ncenter_x = 0\nsize_x = 20\n", encoding="utf-8")
         vout = vbatch_dir / "results"
 
         app._dock_vbatch_conf = conf
@@ -4328,21 +4458,22 @@ class TestDockingCoverageGui:
         assert len(app._dock_vbatch_frame) == 2
 
     def test_batch_gpf_dpf_campaign_and_receptor_types(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
         playground: Any,
     ) -> None:
         campaign = tmp_path / "campaign"
         for name in ("01_aspirin", "02_ibuprofen"):
             folder = campaign / name
             folder.mkdir(parents=True)
-            (folder / "l.pdbqt").write_text(
-                self.LIGAND_PDBQT, encoding="utf-8")
+            (folder / "l.pdbqt").write_text(self.LIGAND_PDBQT, encoding="utf-8")
         (campaign / "03_empty").mkdir()
 
         # batch over the campaign tree: 2/3 folders configured
         monkey = pytest.MonkeyPatch()
-        monkey.setattr(playground.filedialog, "askdirectory",
-                       lambda **_k: str(campaign))
+        monkey.setattr(playground.filedialog, "askdirectory", lambda **_k: str(campaign))
         try:
             app._dock_write_config_batch()
             assert self._drain_jobs(app), "batch config job hung"
@@ -4357,8 +4488,7 @@ class TestDockingCoverageGui:
         for name in ("01_aspirin", "02_ibuprofen"):
             for fname in ("r.gpf", "r.dpf"):
                 assert (campaign / name / fname).is_file()
-        gpf_text = (campaign / "01_aspirin" / "r.gpf").read_text(
-            encoding="utf-8")
+        gpf_text = (campaign / "01_aspirin" / "r.gpf").read_text(encoding="utf-8")
         assert "A C HD N NA OA SA" in gpf_text  # default receptor types
 
         # the receptor-types field feeds the single-ligand path too
@@ -4381,19 +4511,20 @@ class TestDockingCoverageGui:
         for name in ("01_aspirin", "02_ibuprofen"):
             (campaign / name / "r.gpf").unlink()  # force a fresh write
         app._dock_receptor_types_entry.insert(0, "A C HD N Ni OA SA")
-        monkey.setattr(playground.filedialog, "askdirectory",
-                       lambda **_k: str(campaign))
+        monkey.setattr(playground.filedialog, "askdirectory", lambda **_k: str(campaign))
         try:
             app._dock_write_config_batch()
             assert self._drain_jobs(app), "Ni batch config job hung"
         finally:
             monkey.undo()
-        batch_gpf = (campaign / "01_aspirin" / "r.gpf").read_text(
-            encoding="utf-8")
+        batch_gpf = (campaign / "01_aspirin" / "r.gpf").read_text(encoding="utf-8")
         assert "A C HD N Ni OA SA" in batch_gpf
 
     def test_scan_vina_results_folder(
-        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Path,
         playground: Any,
     ) -> None:
         vina_log = (
@@ -4403,16 +4534,12 @@ class TestDockingCoverageGui:
         )
         vina_root = tmp_path / "vina_results"
         (vina_root / "lig01").mkdir(parents=True)
-        (vina_root / "lig01" / "lig01.log").write_text(
-            vina_log, encoding="utf-8")
-        (vina_root / "lig02.log").write_text(
-            vina_log.replace("-7.051", "-8.35"), encoding="utf-8")
-        (vina_root / "crashed.log").write_text(
-            "Vina crashed before scoring\n", encoding="utf-8")
+        (vina_root / "lig01" / "lig01.log").write_text(vina_log, encoding="utf-8")
+        (vina_root / "lig02.log").write_text(vina_log.replace("-7.051", "-8.35"), encoding="utf-8")
+        (vina_root / "crashed.log").write_text("Vina crashed before scoring\n", encoding="utf-8")
 
         monkey = pytest.MonkeyPatch()
-        monkey.setattr(playground.filedialog, "askdirectory",
-                       lambda **_k: str(vina_root))
+        monkey.setattr(playground.filedialog, "askdirectory", lambda **_k: str(vina_root))
         try:
             app._dock_scan_vina()
             assert self._drain_jobs(app), "vina scan job hung"
@@ -4430,7 +4557,10 @@ class TestDockingCoverageGui:
         # the scan table is the active results frame (saveable/rescorable)
         assert app._dock_results_source == "vina"
         assert list(app._dock_results_frame.columns) == [
-            "ligand", "log", "best_affinity", "n_poses",
+            "ligand",
+            "log",
+            "best_affinity",
+            "n_poses",
         ]
 
 
@@ -4442,7 +4572,8 @@ class TestApplicabilityDomainGui:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -4469,22 +4600,19 @@ class TestApplicabilityDomainGui:
             time.sleep(0.02)
         return False
 
-    def test_source_line_tracks_training_runs(self, playground: Any, app: Any,
-                                              tmp_path: Path) -> None:
+    def test_source_line_tracks_training_runs(
+        self, playground: Any, app: Any, tmp_path: Path
+    ) -> None:
         assert "no run yet" in app._ad_source_info.cget("text")
-        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
-                          / "library_with_descriptors.csv")
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "library_with_descriptors.csv")
         app._model_combo.set("logistic_regression")
         app._ml_train()
         assert self._drain(app), "train job hung"
         info = app._ad_source_info.cget("text")
         assert "logistic_regression" in info and "query rows" in info
 
-    def test_full_analysis_renders_table_figure_and_status(
-        self, playground: Any, app: Any
-    ) -> None:
-        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
-                          / "library_with_descriptors.csv")
+    def test_full_analysis_renders_table_figure_and_status(self, playground: Any, app: Any) -> None:
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "library_with_descriptors.csv")
         app._model_combo.set("logistic_regression")
         app._ml_train()
         assert self._drain(app), "train job hung"
@@ -4503,8 +4631,7 @@ class TestApplicabilityDomainGui:
         assert any(ch in first for ch in "CNc#(")
 
     def test_knn_only_quick_pass(self, playground: Any, app: Any) -> None:
-        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
-                          / "library_with_descriptors.csv")
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "library_with_descriptors.csv")
         app._model_combo.set("logistic_regression")
         app._ml_train()
         assert self._drain(app), "train job hung"
@@ -4515,29 +4642,25 @@ class TestApplicabilityDomainGui:
         assert "kNN-only" in app._ad_status.cget("text")
         assert app._ml_ad_frame["reliable"].isna().all()
 
-    def test_bundle_mode_round_trip(self, playground: Any, app: Any,
-                                    monkeypatch: Any, quiet_dialogs: list[Any],
-                                    tmp_path: Path) -> None:
+    def test_bundle_mode_round_trip(
+        self, playground: Any, app: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
         import pandas as pd
 
-        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
-                          / "library_with_descriptors.csv")
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "library_with_descriptors.csv")
         app._model_combo.set("logistic_regression")
         app._ml_train()
         assert self._drain(app), "train job hung"
         bundle = tmp_path / "bundle.joblib"
-        monkeypatch.setattr(playground.filedialog, "asksaveasfilename",
-                            lambda **_k: str(bundle))
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename", lambda **_k: str(bundle))
         app._ml_save_model_bundle()
         assert self._drain(app), "bundle save hung"
         assert bundle.is_file()
-        monkeypatch.setattr(playground.filedialog, "askopenfilename",
-                            lambda **_k: str(bundle))
+        monkeypatch.setattr(playground.filedialog, "askopenfilename", lambda **_k: str(bundle))
         app._ml_load_model_bundle()
         assert self._drain(app), "bundle load hung"
 
-        frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data"
-                            / "library_with_descriptors.csv")
+        frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data" / "library_with_descriptors.csv")
         train_csv = tmp_path / "train.csv"
         test_csv = tmp_path / "test.csv"
         frame.iloc[:60].to_csv(train_csv, index=False)
@@ -4555,8 +4678,7 @@ class TestApplicabilityDomainGui:
         assert app._ml_ad_result.pred_mean is not None
         assert len(app._ad_tree.get_children()) == len(frame) - 60
 
-    def test_bundle_mode_visibility_toggles(self, playground: Any,
-                                             app: Any) -> None:
+    def test_bundle_mode_visibility_toggles(self, playground: Any, app: Any) -> None:
         app._ad_source_combo.set("loaded bundle")
         app._ml_ad_source_changed()
         assert app._ad_bundle_row.winfo_manager() == "grid"
@@ -4570,15 +4692,15 @@ class TestApplicabilityDomainGui:
         app._ml_ad_source_changed()
         assert "no bundle loaded" in app._ad_source_info.cget("text")
 
-    def test_no_run_and_bad_knob_warnings(self, playground: Any, app: Any,
-                                          quiet_dialogs: list[Any]) -> None:
+    def test_no_run_and_bad_knob_warnings(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
         seen = quiet_dialogs
         app._ml_last_run = None
         app._ml_ad_run()  # no run: warning, no job
         assert seen and any("Train a model" in str(a) for a in seen)
         # a bad knob: parse_int refuses before the job starts
-        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data"
-                          / "library_with_descriptors.csv")
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "library_with_descriptors.csv")
         app._model_combo.set("logistic_regression")
         app._ml_train()
         assert self._drain(app), "train job hung"
@@ -4607,7 +4729,8 @@ class TestCompletenessReviewGui:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -4646,21 +4769,17 @@ class TestCompletenessReviewGui:
         app._nca_run()
         assert self._drain(app), "NCA job hung"
         text = app._nca_result.cget("text")
-        assert "Vd 8.8519" in text, text   # 500 / 56.485
-        assert "CL 8.8519" in text, text   # 500 / 56.485 L/h
+        assert "Vd 8.8519" in text, text  # 500 / 56.485
+        assert "CL 8.8519" in text, text  # 500 / 56.485 L/h
         assert quiet_dialogs == []
 
-    def test_nca_series_length_mismatch_is_named(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_nca_series_length_mismatch_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._nca_concs.delete(0, "end")
         app._nca_concs.insert(0, "1, 2, 3")
         app._nca_run()
         assert any("matched pairs" in str(a) for a in quiet_dialogs)
 
-    def test_infusion_card_computes_rate_css_vd(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_infusion_card_computes_rate_css_vd(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._infusion_math()
         text = app._inf_result.cget("text")
         assert "rate for Css 8.0000 = 40.0000 mg/h" in text, text
@@ -4669,9 +4788,7 @@ class TestCompletenessReviewGui:
         assert "F =" not in text  # no EV/IV pairs typed
         assert quiet_dialogs == []
 
-    def test_infusion_card_bioavailability_pair(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_infusion_card_bioavailability_pair(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._bio_ev_dose.insert(0, "250 / 58.3")
         app._bio_iv_dose.insert(0, "250 / 96.5")
         app._infusion_math()
@@ -4679,18 +4796,14 @@ class TestCompletenessReviewGui:
         assert "F = 60.4145%" in text, text  # 58.3 / 96.5
         assert quiet_dialogs == []
 
-    def test_tdm_card_adjusts_the_dose(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_tdm_card_adjusts_the_dose(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._tdm_math()
         text = app._tdm_result.cget("text")
         assert "new dose 403.2258 mg" in text, text
         assert "floored" not in text
         assert quiet_dialogs == []
 
-    def test_pd_family_card_table_and_reverse(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_pd_family_card_table_and_reverse(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._pd_family_math()
         assert self._drain(app), "PD family job hung"
         rows = app._fam_tree.get_children()
@@ -4702,9 +4815,7 @@ class TestCompletenessReviewGui:
         assert "EC50 = 1.9977" in app._fam_result.cget("text")
         assert quiet_dialogs == []
 
-    def test_tautomer_card_and_maccs_card(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_tautomer_card_and_maccs_card(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._tautomer_run()
         assert app._taut_result.cget("text") == "CC(=O)Oc1ccccc1C(=O)O"
         app._maccs_run()
@@ -4776,7 +4887,8 @@ class TestReview120Gui:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -4800,9 +4912,7 @@ class TestReview120Gui:
         app._feat_plot_distributions()
         assert any("No features yet" in str(a) for a in quiet_dialogs)
 
-    def test_feat_distributions_after_compute(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_feat_distributions_after_compute(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._feat_k_entry.delete(0, "end")
         app._feat_k_entry.insert(0, "50")
         app._feat_ranker_combo.set("Variance (no target needed)")
@@ -4814,15 +4924,11 @@ class TestReview120Gui:
         assert quiet_dialogs == []
 
     # -- ML results: plot_learning_curve ------------------------------ #
-    def test_ml_learning_curve_needs_a_run(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_ml_learning_curve_needs_a_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._ml_plot_learning_curve()
         assert any("No trained model" in str(a) for a in quiet_dialogs)
 
-    def test_ml_learning_curve_after_training(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_ml_learning_curve_after_training(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._ml_load_example()
         app._model_combo.set("ridge")
         app._ml_refresh_hyperparam_panel()
@@ -4836,9 +4942,7 @@ class TestReview120Gui:
         assert "learning curve" in app._ml_result_note.cget("text")
         assert quiet_dialogs == []
 
-    def test_ml_learning_curve_bad_folds_is_named(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_ml_learning_curve_bad_folds_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._ml_load_example()
         app._model_combo.set("ridge")
         app._ml_refresh_hyperparam_panel()
@@ -4850,9 +4954,7 @@ class TestReview120Gui:
         assert any("CV folds" in str(a) for a in quiet_dialogs)
 
     # -- utilities: plot_table_comparison ------------------------------ #
-    def test_util_cmp_plot_needs_a_comparison(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_util_cmp_plot_needs_a_comparison(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._util_cmp_plot()
         assert any("No comparison yet" in str(a) for a in quiet_dialogs)
 
@@ -4878,9 +4980,7 @@ class TestReview120Gui:
         assert quiet_dialogs == []
 
     # -- docking: parse_vina_config ----------------------------------- #
-    def test_vbatch_parse_needs_a_config(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_vbatch_parse_needs_a_config(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._dock_vbatch_parse()
         assert any("No config picked" in str(a) for a in quiet_dialogs)
 
@@ -4914,17 +5014,14 @@ class TestReview120Gui:
         app._bio_rank_variable_genes()
         assert any("No expression table" in str(a) for a in quiet_dialogs)
 
-    def test_mad_ranking_on_the_example_table(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_mad_ranking_on_the_example_table(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._bio_load_expr_example()
         app._bio_rank_variable_genes()
         assert self._drain(app), "MAD ranking job hung"
         summary = app._bio_mad_summary.cget("text")
         assert "top 20 of 300 genes by MAD" in summary, summary
         dump = app._bio_mad_text.get("1.0", "end")
-        gene_rows = [line for line in dump.strip().splitlines()
-                     if line.startswith("GENE_")]
+        gene_rows = [line for line in dump.strip().splitlines() if line.startswith("GENE_")]
         assert len(gene_rows) == 20  # the two header rows are not genes
         assert quiet_dialogs == []
 
@@ -4945,12 +5042,12 @@ class TestReview120Gui:
         assert quiet_dialogs == []
 
     # -- docking: the single-folder AutoDock4 engine ------------------- #
-    def test_single_folder_engine_registered_and_labelled(
-        self, app: Any, playground: Any
-    ) -> None:
+    def test_single_folder_engine_registered_and_labelled(self, app: Any, playground: Any) -> None:
         assert "AutoDock4 single folder" in playground._DOCK_ENGINES
-        assert playground.docking_engine_binaries(
-            "AutoDock4 single folder") == ("autogrid4", "autodock4")
+        assert playground.docking_engine_binaries("AutoDock4 single folder") == (
+            "autogrid4",
+            "autodock4",
+        )
         # the folder picker's label is engine-aware
         app._dock_engine_combo.set("AutoDock4 single folder")
         app._dock_refresh_campaign_info()
@@ -4961,48 +5058,45 @@ class TestReview120Gui:
         assert "campaign root" in app._dock_campaign_info.cget("text")
 
     def test_single_folder_engine_run_without_folder_warns(
-        self, app: Any, quiet_dialogs: list[Any], monkeypatch: Any,
+        self,
+        app: Any,
+        quiet_dialogs: list[Any],
+        monkeypatch: Any,
         playground: Any,
     ) -> None:
         # bypass the binaries check (autogrid4 is not installed in CI)
-        monkeypatch.setattr(
-            playground, "docking_engine_binaries", lambda engine: ())
+        monkeypatch.setattr(playground, "docking_engine_binaries", lambda engine: ())
         app._dock_engine_combo.set("AutoDock4 single folder")
         app._dock_run()
         assert any("No ligand folder" in str(a) for a in quiet_dialogs)
 
     # -- the Ctrl+F card finder ---------------------------------------- #
-    def test_card_finder_lists_every_live_card(
-        self, app: Any, playground: Any
-    ) -> None:
+    def test_card_finder_lists_every_live_card(self, app: Any, playground: Any) -> None:
         cards = app._live_cards()
         assert len(cards) >= 55, f"expected >=55 live cards, got {len(cards)}"
         # every card resolves to a real tab index
         count = app._book.index("end")
         assert all(0 <= index < count for _t, _s, _sh, index in cards)
 
-    def test_card_finder_dialog_and_jump(
-        self, app: Any, playground: Any
-    ) -> None:
+    def test_card_finder_dialog_and_jump(self, app: Any, playground: Any) -> None:
         import tkinter as tkmod
 
         app._find_card_dialog()
-        dialogs = [child for child in app.winfo_children()
-                   if isinstance(child, tkmod.Toplevel)
-                   and child.title() == "Find a card"]
+        dialogs = [
+            child
+            for child in app.winfo_children()
+            if isinstance(child, tkmod.Toplevel) and child.title() == "Find a card"
+        ]
         assert len(dialogs) == 1
         win = dialogs[0]
-        tree = next(child for child in win.winfo_children()
-                    if child.winfo_class() == "Treeview")
+        tree = next(child for child in win.winfo_children() if child.winfo_class() == "Treeview")
         rows = tree.get_children()
         assert len(rows) >= 55
         # the first row is the home hero, on tab 0
         assert str(rows[0]).startswith("0:")
         win.destroy()
 
-    def test_jump_to_card_selects_flashes_and_unflashes(
-        self, app: Any, playground: Any
-    ) -> None:
+    def test_jump_to_card_selects_flashes_and_unflashes(self, app: Any, playground: Any) -> None:
         import tkinter as tkmod
 
         app._jump_to_tab(0)
@@ -5025,9 +5119,7 @@ class TestReview120Gui:
         app._unflash_card(shell)
         assert int(shell.cget("highlightthickness")) == 1
 
-    def test_hint_row_lists_the_card_finder_shortcut(
-        self, playground: Any
-    ) -> None:
+    def test_hint_row_lists_the_card_finder_shortcut(self, playground: Any) -> None:
         text = playground.shortcut_hints_text()
         assert "Ctrl+F find a card" in text
 
@@ -5050,7 +5142,8 @@ class TestReview121Gui:
         seen: list[Any] = []
         for name in ("showerror", "showwarning", "showinfo"):
             monkeypatch.setattr(
-                playground.messagebox, name,
+                playground.messagebox,
+                name,
                 lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
             )
         return seen
@@ -5081,9 +5174,7 @@ class TestReview121Gui:
         assert "mass: kg · g · mg" in app._uc_units_hint.cget("text")
         assert quiet_dialogs == []
 
-    def test_unit_converter_dimension_swap(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_unit_converter_dimension_swap(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._uc_dim_combo.set("concentration")
         app._uc_dimension_changed()
         assert app._uc_from.get() == "uM"
@@ -5094,16 +5185,12 @@ class TestReview121Gui:
         assert "concentration conversion" in text
         assert quiet_dialogs == []
 
-    def test_unit_converter_time_dimension_defaults(
-        self, app: Any
-    ) -> None:
+    def test_unit_converter_time_dimension_defaults(self, app: Any) -> None:
         app._uc_dim_combo.set("time")
         app._uc_dimension_changed()
         assert app._uc_from.get() == "h" and app._uc_to.get() == "min"
 
-    def test_unit_converter_unknown_unit_is_named(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_unit_converter_unknown_unit_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._uc_from.delete(0, "end")
         app._uc_from.insert(0, "stones")
         app._uc_convert()
@@ -5119,9 +5206,7 @@ class TestReview121Gui:
         app._uc_convert()
         assert any("Conversion failed" in str(a) for a in quiet_dialogs)
 
-    def test_unit_converter_bad_value_is_named(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_unit_converter_bad_value_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._uc_value.delete(0, "end")
         app._uc_value.insert(0, "not-a-number")
         app._uc_convert()
@@ -5129,8 +5214,7 @@ class TestReview121Gui:
 
     # -- export_table: the five-format save dialog --------------------- #
     def test_save_frame_dialog_offers_five_formats(
-        self, app: Any, playground: Any, monkeypatch: Any,
-        quiet_dialogs: list[Any], tmp_path: Path
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Path
     ) -> None:
         import pandas as pd
 
@@ -5140,8 +5224,7 @@ class TestReview121Gui:
             picked["filetypes"] = str(kwargs.get("filetypes", ""))
             return str(tmp_path / "out.csv")
 
-        monkeypatch.setattr(playground.filedialog, "asksaveasfilename",
-                            fake_ask)
+        monkeypatch.setattr(playground.filedialog, "asksaveasfilename", fake_ask)
         frame = pd.DataFrame({"a": [1, 2], "b": [3.5, 4.5]})
         app._save_frame_dialog(frame, "Save it", "out.csv", "The table")
         assert ".csv" in picked["filetypes"]
@@ -5153,18 +5236,16 @@ class TestReview121Gui:
         assert any("The table written" in str(a) for a in quiet_dialogs)
 
     def test_save_frame_dialog_writes_markdown_and_html(
-        self, app: Any, playground: Any, monkeypatch: Any,
-        quiet_dialogs: list[Any], tmp_path: Path
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Path
     ) -> None:
         import pandas as pd
 
-        frame = pd.DataFrame({"name": ["aspirin", "caffeine"],
-                              "score": [1.5, 2.5]})
+        frame = pd.DataFrame({"name": ["aspirin", "caffeine"], "score": [1.5, 2.5]})
         for suffix in ("md", "html"):
             target = tmp_path / f"table.{suffix}"
             monkeypatch.setattr(
-                playground.filedialog, "asksaveasfilename",
-                lambda t="", _p=target, **k: str(_p))
+                playground.filedialog, "asksaveasfilename", lambda t="", _p=target, **k: str(_p)
+            )
             app._save_frame_dialog(frame, "Save it", "table.csv", "The table")
             content = target.read_text(encoding="utf-8")
             assert "aspirin" in content and "caffeine" in content
@@ -5173,69 +5254,59 @@ class TestReview121Gui:
         assert quiet_dialogs, "the Saved confirmation did not fire"
 
     def test_export_table_routed_from_ml_predictions_save(
-        self, app: Any, playground: Any, monkeypatch: Any,
-        quiet_dialogs: list[Any], tmp_path: Path
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Path
     ) -> None:
         import pandas as pd
 
-        app._ml_predictions = pd.DataFrame({"SMILES": ["CCO"],
-                                            "prediction": [7.2]})
+        app._ml_predictions = pd.DataFrame({"SMILES": ["CCO"], "prediction": [7.2]})
         target = tmp_path / "preds.md"
         monkeypatch.setattr(
-            playground.filedialog, "asksaveasfilename",
-            lambda t="", **k: str(target))
+            playground.filedialog, "asksaveasfilename", lambda t="", **k: str(target)
+        )
         app._ml_save_predictions()
         assert target.exists()
         assert "CCO" in target.read_text(encoding="utf-8")
 
     def test_export_table_routed_from_nca_save(
-        self, app: Any, playground: Any, monkeypatch: Any,
-        quiet_dialogs: list[Any], tmp_path: Path
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Path
     ) -> None:
         from types import SimpleNamespace
 
         app._nca_summary = SimpleNamespace(
-            auc=55.0, aucm=410.0, mrt=7.45, c_max=12.0, t_max=0.5,
-            half_life_terminal=3.9)
+            auc=55.0, aucm=410.0, mrt=7.45, c_max=12.0, t_max=0.5, half_life_terminal=3.9
+        )
         target = tmp_path / "nca.json"
         monkeypatch.setattr(
-            playground.filedialog, "asksaveasfilename",
-            lambda t="", **k: str(target))
+            playground.filedialog, "asksaveasfilename", lambda t="", **k: str(target)
+        )
         app._nca_save()
         assert target.exists()
         assert "55" in target.read_text(encoding="utf-8")
 
-    def test_save_frame_dialog_no_frame_is_named(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_save_frame_dialog_no_frame_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._save_frame_dialog(None, "Save it", "out.csv")
         assert any("Nothing to save" in str(a) for a in quiet_dialogs)
 
     def test_rism_save_routes_through_the_shared_dialog(
-        self, app: Any, playground: Any, monkeypatch: Any,
-        quiet_dialogs: list[Any], tmp_path: Path
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Path
     ) -> None:
         import pandas as pd
 
         app._rism_frame = pd.DataFrame({"rism": [1.0]})
         target = tmp_path / "rism.tsv"
         monkeypatch.setattr(
-            playground.filedialog, "asksaveasfilename",
-            lambda t="", **k: str(target))
+            playground.filedialog, "asksaveasfilename", lambda t="", **k: str(target)
+        )
         app._rism_save()
         assert target.exists()
         assert "RISM-KH table written" in str(quiet_dialogs[-1][1])
 
     # -- Deep Learning: the size-vs-score learning curve --------------- #
-    def test_dl_learning_curve_needs_a_network(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_dl_learning_curve_needs_a_network(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._dl_plot_learning_curve()
         assert any("No network" in str(a) for a in quiet_dialogs)
 
-    def test_dl_learning_curve_after_training(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_dl_learning_curve_after_training(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._dl_load_example()
         app._dl_hidden_entry.delete(0, "end")
         app._dl_hidden_entry.insert(0, "8")
@@ -5250,9 +5321,7 @@ class TestReview121Gui:
         assert len(app._dl_curve_host.winfo_children()) == 1
         assert quiet_dialogs == []
 
-    def test_dl_learning_curve_bad_folds_is_named(
-        self, app: Any, quiet_dialogs: list[Any]
-    ) -> None:
+    def test_dl_learning_curve_bad_folds_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._dl_load_example()
         app._dl_hidden_entry.delete(0, "end")
         app._dl_hidden_entry.insert(0, "8")
@@ -5287,16 +5356,14 @@ class TestReview121Gui:
             "____________|_______________|_____|_____________|________________\n",
             encoding="utf-8",
         )
-        result = SimpleNamespace(ok=True, error="", seconds=12.5,
-                                 dlg=dlg)
+        result = SimpleNamespace(ok=True, error="", seconds=12.5, dlg=dlg)
         engine_holder: dict[str, str] = {}
 
         def fake_start_job(label: str, work: Any, render: Any) -> None:
             engine_holder["render"] = render  # type: ignore[assignment]
 
         monkeypatch.setattr(app, "_start_job", fake_start_job)
-        monkeypatch.setattr(
-            playground, "docking_engine_binaries", lambda engine: ())
+        monkeypatch.setattr(playground, "docking_engine_binaries", lambda engine: ())
         app._dock_engine_combo.set("AutoDock4 single folder")
         app._dock_campaign_root = tmp_path
         app._dock_run()
@@ -5308,51 +5375,396 @@ class TestReview121Gui:
         assert "best-populated -9.90 (n=52)" in text, text
 
     # -- the finder remembers its last query --------------------------- #
-    def test_finder_remembers_last_query_in_session_payload(
-        self, app: Any
-    ) -> None:
+    def test_finder_remembers_last_query_in_session_payload(self, app: Any) -> None:
         app._finder_last_query = "unit converter"
         payload = app._collect_session()
         assert payload["texts"]["finder"] == "unit converter"
 
-    def test_finder_restores_last_query_from_session(
-        self, app: Any
-    ) -> None:
+    def test_finder_restores_last_query_from_session(self, app: Any) -> None:
 
         # a raw session dict shaped like load_session's output
         app._session = {
-            "theme": "light", "geometry": "", "tab": 0,
-            "variables": {}, "families": {},
+            "theme": "light",
+            "geometry": "",
+            "tab": 0,
+            "variables": {},
+            "families": {},
             "texts": {"finder": "learning curve"},
         }
         app._restore_session()
         assert app._finder_last_query == "learning curve"
 
-    def test_finder_dialog_prefills_the_last_query(
-        self, app: Any
-    ) -> None:
+    def test_finder_dialog_prefills_the_last_query(self, app: Any) -> None:
         import tkinter as tkmod
 
         app._finder_last_query = "nca"
         app._find_card_dialog()
-        dialogs = [child for child in app.winfo_children()
-                   if isinstance(child, tkmod.Toplevel)
-                   and child.title() == "Find a card"]
+        dialogs = [
+            child
+            for child in app.winfo_children()
+            if isinstance(child, tkmod.Toplevel) and child.title() == "Find a card"
+        ]
         assert len(dialogs) == 1
         win = dialogs[0]
-        entry = next(child for child in win.winfo_children()
-                     if child.winfo_class() == "TEntry")
+        entry = next(child for child in win.winfo_children() if child.winfo_class() == "TEntry")
         assert entry.get() == "nca"
-        tree = next(child for child in win.winfo_children()
-                    if child.winfo_class() == "Treeview")
+        tree = next(child for child in win.winfo_children() if child.winfo_class() == "Treeview")
         # the prefill also filtered the list: NCA cards only
-        labels = [str(tree.item(row, "values")[0])
-                  for row in tree.get_children()]
+        labels = [str(tree.item(row, "values")[0]) for row in tree.get_children()]
         assert labels and all("NCA" in label for label in labels), labels
         win.destroy()
 
     # -- the home guide grew the Deep Learning blurb ------------------- #
-    def test_home_guide_lists_deep_learning(
+    def test_home_guide_lists_deep_learning(self, app: Any, playground: Any) -> None:
+        guide = None
+        for title, _subtitle, shell in playground._CARD_INDEX:
+            if title != "What lives where":
+                continue
+            try:
+                live = bool(shell.winfo_exists())
+            except Exception:  # noqa: BLE001 - destroyed earlier shell
+                live = False
+            if live:
+                guide = shell
+                break
+        assert guide is not None
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(guide)
+            if widget.winfo_class() == "TLabel"
+        )
+        assert "Deep Learning" in dump
+        assert "residual MLP" in dump
+        assert "unit converter" in dump
+
+    # -- the docstring records the round ------------------------------- #
+    def test_module_docstring_records_round_121(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "UnitConverter" in doc
+        assert "export_table" in doc
+        assert "100x-121" in doc
+
+
+class TestReview122Gui:
+    """Round 100x-122: the three reference objectives, molecule surgery,
+    and the session PDF report."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the objective combobox finally carries every bundled objective - #
+    def test_objective_kinds_carry_the_reference_driven_three(self, playground: Any) -> None:
+        assert "Similarity to reference SMILES" in playground._OBJECTIVE_KINDS
+        assert "Novelty vs corpus" in playground._OBJECTIVE_KINDS
+        assert "Contains substructure (SMARTS)" in playground._OBJECTIVE_KINDS
+        assert len(playground._OBJECTIVE_KINDS) == 9
+
+    def test_objective_combo_mirrors_kinds(self, app: Any, playground: Any) -> None:
+        assert list(app._objective_combo.cget("values")) == [
+            str(kind) for kind in playground._OBJECTIVE_KINDS
+        ]
+
+    def test_build_objective_similarity(self, playground: Any) -> None:
+        objective = playground.build_objective(
+            "Similarity to reference SMILES", 1.0, 3.0, reference="CC(=O)Oc1ccccc1C(=O)O"
+        )
+        from pharmaml.generative import SimilarityObjective
+
+        assert isinstance(objective, SimilarityObjective)
+        assert objective.score("CC(=O)Oc1ccccc1C(=O)O") == 1.0
+
+    def test_build_objective_novelty_with_and_without_corpus(self, playground: Any) -> None:
+        from pharmaml.generative import NoveltyObjective
+
+        objective = playground.build_objective("Novelty vs corpus", 1.0, 3.0, corpus=["CCO", "CCC"])
+        assert isinstance(objective, NoveltyObjective)
+        assert objective.score("CCO") == 0.0  # in corpus: not novel
+        default = playground.build_objective("Novelty vs corpus", 1.0, 3.0)
+        assert isinstance(default, NoveltyObjective)
+
+    def test_build_objective_substructure(self, playground: Any) -> None:
+        from pharmaml.generative import SubstructureObjective
+
+        objective = playground.build_objective(
+            "Contains substructure (SMARTS)", 1.0, 3.0, reference="c1ccccc1"
+        )
+        assert isinstance(objective, SubstructureObjective)
+        assert objective.score("CC(=O)Oc1ccccc1C(=O)O") == 1.0
+        assert objective.score("CCO") == 0.0
+
+    # -- the swapped-in reference row ---------------------------------- #
+    def test_reference_row_hidden_by_default(self, app: Any) -> None:
+        # grid_remove forgets the geometry entirely: an empty grid_info()
+        # IS the hidden state (the GA/RL frames use the same mechanism)
+        app._objective_hint()
+        assert app._obj_ref_frame.grid_info() == {}
+
+    def test_reference_row_swaps_for_similarity(self, app: Any) -> None:
+        app._objective_combo.set("Similarity to reference SMILES")
+        app._objective_hint()
+        assert app._obj_ref_label.cget("text") == "reference"
+        assert app._obj_ref_frame.grid_info() != {}
+        assert "Tanimoto similarity" in app._objective_hint_label.cget("text")
+
+    def test_reference_row_swaps_for_substructure(self, app: Any) -> None:
+        app._objective_combo.set("Contains substructure (SMARTS)")
+        app._objective_hint()
+        assert app._obj_ref_label.cget("text") == "SMARTS"
+        assert app._obj_ref_frame.grid_info() != {}
+        assert "pharmacophore constraint" in (app._objective_hint_label.cget("text"))
+
+    def test_reference_row_hidden_for_novelty(self, app: Any) -> None:
+        app._objective_combo.set("Similarity to reference SMILES")
+        app._objective_hint()
+        app._objective_combo.set("Novelty vs corpus")
+        app._objective_hint()
+        assert "corpus" in app._objective_hint_label.cget("text")
+        # novelty never needs the reference row
+        assert app._obj_ref_frame.grid_info() == {}
+
+    def test_similarity_without_reference_is_named(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._objective_combo.set("Similarity to reference SMILES")
+        app._objective_hint()
+        app._obj_ref.delete(0, "end")
+        app._run_evolution()
+        assert any("reference SMILES" in str(a) for a in quiet_dialogs)
+
+    def test_substructure_without_smart_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._objective_combo.set("Contains substructure (SMARTS)")
+        app._objective_hint()
+        app._obj_ref.delete(0, "end")
+        app._run_evolution()
+        assert any("SMARTS" in str(a) for a in quiet_dialogs)
+
+    # -- the molecule surgery cards ------------------------------------ #
+    def test_topology_moves_enumerates_piperidine(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        assert app._topo_smiles.get() == "C1CCNCC1"
+        app._gen_topology_moves()
+        assert self._drain(app), "topology job hung"
+        text = app._topo_text.get("1.0", "end").strip()
+        assert "C1CCCC1" in text  # the contraction
+        assert "C1CCCNCC1" in text  # the expansion
+        assert "C1CCNC1" in text  # the N-side contraction
+        summary = app._topo_summary.cget("text")
+        assert summary.startswith("3 distinct"), summary
+        assert quiet_dialogs == []
+
+    def test_topology_moves_aromatic_has_no_moves(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._topo_smiles.delete(0, "end")
+        app._topo_smiles.insert(0, "c1ccccc1")
+        app._gen_topology_moves()
+        assert self._drain(app), "topology job hung"
+        assert app._topo_text.get("1.0", "end").strip() == ""
+        summary = app._topo_summary.cget("text")
+        assert "no qualifying saturated ring" in summary, summary
+
+    def test_topology_moves_empty_input_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._topo_smiles.delete(0, "end")
+        app._gen_topology_moves()
+        assert any("Type a SMILES" in str(a) for a in quiet_dialogs)
+
+    def test_breed_defaults_produce_children(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        assert app._breed_a.get() == "CC(=O)Oc1ccccc1C(=O)O"
+        assert app._breed_b.get() == "CC(C)Cc1ccc(O)cc1"
+        app._gen_breed()
+        assert self._drain(app), "breed job hung"
+        text = app._breed_text.get("1.0", "end").strip()
+        assert text, "the litter is empty"
+        assert "\n" in text  # 4 children on 4 lines
+        summary = app._breed_summary.cget("text")
+        assert "viable children" in summary and "seed 42" in summary, summary
+        assert quiet_dialogs == []
+
+    def test_breed_missing_parent_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._breed_b.delete(0, "end")
+        app._gen_breed()
+        assert any("both parent SMILES" in str(a) for a in quiet_dialogs)
+
+    def test_breed_bad_count_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._breed_count.delete(0, "end")
+        app._breed_count.insert(0, "0")
+        app._gen_breed()
+        assert any("children" in str(a) for a in quiet_dialogs)
+
+    # -- the session PDF report ---------------------------------------- #
+    def test_file_menu_offers_session_report(self, app: Any) -> None:
+        import tkinter as tkmod
+
+        bar = app.nametowidget(app.cget("menu"))
+        assert isinstance(bar, tkmod.Menu)
+        labels: list[str] = []
+        # NB: menu.type() never raises past the end on this Tk build --
+        # index("end") is the only honest bound.
+        for index in range(bar.index("end") + 1):
+            if bar.type(index) != "cascade":
+                continue
+            if str(bar.entrycget(index, "label")).strip() != "File":
+                continue
+            sub = app.nametowidget(bar.entrycget(index, "menu"))
+            for j in range(sub.index("end") + 1):
+                if sub.type(j) == "command":
+                    labels.append(str(sub.entrycget(j, "label")))
+        assert any("session report" in label.lower() for label in labels), labels
+
+    def test_session_report_with_no_figures_is_an_info(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._menu_save_session_report()
+        assert any("No figures yet" in str(a) for a in quiet_dialogs)
+
+    @staticmethod
+    def _figure(app: Any, title: str) -> Any:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        figure = plt.figure()
+        axes = figure.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title(title)
+        return figure
+
+    def test_session_registry_tracks_and_replaces(self, app: Any) -> None:
+        first = self._figure(app, "first")
+        app._job_label_base = "parity plot"
+        app._render_figure(app._ml_host, first)
+        assert len(app._session_figures) == 1
+        assert app._session_figures[0][1] == "parity plot"
+        assert app._session_figures[0][2] is first
+        second = self._figure(app, "second")
+        app._render_figure(app._ml_host, second)
+        # one entry per HOST: the replacement keeps the order, swaps figure
+        assert len(app._session_figures) == 1
+        assert app._session_figures[0][2] is second
+        assert app._session_figures[0][1] == "parity plot"
+        other = self._figure(app, "other")
+        app._render_figure(app._feat_host, other)
+        assert len(app._session_figures) == 2
+        live = app._live_session_figures()
+        assert len(live) == 2
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_session_report_writes_pdf_and_keeps_figures(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Any
+    ) -> None:
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "session-report.pdf"
+        monkeypatch.setattr(
+            playground.filedialog,
+            "asksaveasfilename",
+            lambda **_kwargs: str(target),
+        )
+        figure_a = self._figure(app, "alpha")
+        figure_b = self._figure(app, "beta")
+        app._job_label_base = "figure alpha"
+        app._render_figure(app._ml_host, figure_a)
+        app._job_label_base = "figure beta"
+        app._render_figure(app._feat_host, figure_b)
+        assert len(app._live_session_figures()) == 2
+        app._menu_save_session_report()
+        assert self._drain(app), "report job hung"
+        assert target.is_file(), "the PDF was not written"
+        assert target.stat().st_size > 1_000
+        # close=False: the on-screen figures are still the live registry's
+        assert app._ml_host._pg_figure is figure_a
+        assert app._feat_host._pg_figure is figure_b
+        assert any("figure page(s) written" in str(a) for a in quiet_dialogs)
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_session_report_dedupes_titles(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Any
+    ) -> None:
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "dupe-report.pdf"
+        monkeypatch.setattr(
+            playground.filedialog,
+            "asksaveasfilename",
+            lambda **_kwargs: str(target),
+        )
+        first = self._figure(app, "one")
+        second = self._figure(app, "two")
+        # two hosts, same job label -> the report needs "figure (2)"
+        app._job_label_base = "same label"
+        app._render_figure(app._ml_host, first)
+        app._render_figure(app._feat_host, second)
+        app._menu_save_session_report()
+        assert self._drain(app), "report job hung"
+        assert target.is_file()
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    # -- the restore re-syncs the swapped rows ------------------------- #
+    def test_restore_resyncs_reference_row_and_ga_frames(self, app: Any) -> None:
+        app._session = {
+            "theme": "light",
+            "geometry": "",
+            "tab": 0,
+            "variables": {
+                "_objective_combo": "Similarity to reference SMILES",
+                "_method_combo": "reinforcement learning (RL)",
+            },
+            "families": {},
+            "texts": {},
+        }
+        app._restore_session()
+        assert app._objective_combo.get() == "Similarity to reference SMILES"
+        assert app._obj_ref_label.cget("text") == "reference"
+        assert app._obj_ref_frame.grid_info() != {}
+        # the latent bug fix: an RL selection no longer leaves the GA
+        # block visible (grid_remove empties the geometry info)
+        assert app._ga_frame.grid_info() == {}
+        assert app._rl_frame.grid_info() != {}
+
+    # -- the docstring + home guide record the round -------------------- #
+    def test_module_docstring_records_round_122(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-122" in doc
+        assert "save_pdf_report" in doc
+        assert "ring_topology_moves" in doc
+        assert "scaffold_hop_crossover" in doc
+        assert "SimilarityObjective" in doc
+
+    def test_home_guide_mentions_surgery_and_smart_objectives(
         self, app: Any, playground: Any
     ) -> None:
         guide = None
@@ -5368,17 +5780,9 @@ class TestReview121Gui:
                 break
         assert guide is not None
         dump = "\n".join(
-            str(widget.cget("text")) for widget in app._walk_widgets(guide)
-            if widget.winfo_class() == "TLabel")
-        assert "Deep Learning" in dump
-        assert "residual MLP" in dump
-        assert "unit converter" in dump
-
-    # -- the docstring records the round ------------------------------- #
-    def test_module_docstring_records_round_121(
-        self, playground: Any
-    ) -> None:
-        doc = playground.__doc__ or ""
-        assert "UnitConverter" in doc
-        assert "export_table" in doc
-        assert "100x-121" in doc
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(guide)
+            if widget.winfo_class() == "TLabel"
+        )
+        assert "similarity" in dump
+        assert "breed two parents" in dump

@@ -621,3 +621,45 @@ dataset — the deep twin of the ML Results button), the parsed
 line, and the Ctrl+F finder's session-persisted last query. Remaining
 zero-hit symbols (36, down from 38): the documented non-goals above
 minus `UnitConverter` and `export_table`.
+
+## Library coverage (100x-122) — round 7: the reference objectives + molecule surgery
+
+The seventh audit re-run (same method, after 1.2.60; every claimed
+absorption verified in source this time — `knn_applicability_domain`
+and `bootstrap_uncertainty` confirmed inside `applicability_domain`,
+`correlate_with_response` inside `sensitivity_associations`) found
+five more genuinely user-facing capabilities, all closed in **1.2.61**:
+
+| Library capability | playground.py surface since 1.2.61 |
+| --- | --- |
+| `generative.SimilarityObjective` | Generative → objective combobox (*Similarity to reference SMILES*) + the swapped-in reference row |
+| `generative.NoveltyObjective` | Generative → objective combobox (*Novelty vs corpus*; the card's corpus is the reference pool) |
+| `generative.SubstructureObjective` | Generative → objective combobox (*Contains substructure (SMARTS)*) + the swapped-in SMARTS row |
+| `generative.ring_topology_moves` | Generative → *Ring topology moves* card (the standalone one-step ring-size mutant enumerator) |
+| `generative.scaffold_hop_crossover` | Generative → *Breed two molecules* card (the standalone two-parent crossover) |
+
+Round 7 also composed `viz.save_pdf_report` into a first-class
+surface — `File ▸ Save session report (PDF)…` walks the new
+session-figure registry (one live entry per figure host) — and fixed
+the latent session-restore bug where a restored RL selection left the
+GA parameter block visible. Remaining zero-hit by the round-7 audit
+script (44, down from 51 at the round's start — the new script is
+stricter than the round-5/6 one: module constants like `ECFP_BITS`
+and internal helpers are counted, which the older "38 → 36" numbers
+excluded): the documented non-goal families — dataclass result
+containers riding inside composed calls (`PdbLigandReport`,
+`TableComparison`, `PKSummary`, `TrialResult`, `BootstrapUncertainty`,
+`ModelInputReport`, `GridParameters`, `TorsionCheck`, `HTMLReport`),
+module constants absorbed by the cards that use their values
+(`ECFP_BITS`, `RISM_DESCRIPTORS`, `MODEL_ALIASES`, `TABLE_FORMATS`,
+`PLOT_FORMATS`, …), internal plumbing (`build_preprocessor`,
+`split_features_target`, `tanimoto_from_sets`, `figure_to_base64`,
+`get_pyplot`, `require_matplotlib`, `aucm_trapezoid`), verified
+absorptions (`knn_applicability_domain` and `bootstrap_uncertainty`
+inside `applicability_domain`; `correlate_with_response` inside
+`sensitivity_associations`; `check_torsion_consistency` behind the
+torsion scan; `Deep/ResidualMLP*` behind the DL architecture
+combobox; `ring_topology_mutate` behind the GA's topology mutation;
+`run_genetic/rl_optimization` behind the class-based optimiser cards;
+`SmilesRnn` inside `ReinventOptimizer`; `ScoringObjective` the
+abstract base every concrete objective subclasses).

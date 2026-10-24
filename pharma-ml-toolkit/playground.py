@@ -96,14 +96,22 @@ A tabbed graphical interface opens with every calculation domain of the
   training target dropped automatically).
 * **Generative**    -- run the genetic algorithm OR the reinforcement
   learning optimiser on a SMILES corpus with any bundled objective (QED,
-  LogP window, ...); adaptive GA runs render the operator-mix learning
-  curve (``plot_operator_trajectory``), RL runs render the four-panel
-  prior-drift introspection (``plot_rl_introspection``: score trajectory,
-  agent-vs-prior log-probs, the anchored drift, the exploration entropy)
-  plus a first→last history table; and multi-objective runs fill the
-  Pareto front card: the audit line, the non-dominated table (with the
+  LogP window, ..., or the three reference-driven ones: Tanimoto
+  similarity to a reference molecule, structural novelty against the
+  corpus, a hard SMARTS substructure constraint); adaptive GA runs
+  render the operator-mix learning curve (``plot_operator_trajectory``),
+  RL runs render the four-panel prior-drift introspection
+  (``plot_rl_introspection``: score trajectory, agent-vs-prior
+  log-probs, the anchored drift, the exploration entropy) plus a
+  first→last history table; multi-objective runs fill the Pareto front
+  card: the audit line, the non-dominated table (with the
   crowding-distance column and the deepest hidden trade-off rank), the
-  objective-pair scatter and a CSV export of the front.
+  objective-pair scatter and a CSV export of the front; and the two
+  molecule-surgery cards answer what-if questions WITHOUT a run --
+  enumerate one molecule's one-step ring-size move set
+  (``ring_topology_moves``) or breed two parents into hybrid children
+  (``scaffold_hop_crossover``, the same operator the GA's crossover
+  combobox selects).
 * **Utilities**     -- the original archive's own file & table
   operations, the coverage audit's closing move (100x-110): merge
   picked tables or a whole folder (``CSV_merger`` / ``filemerger``),
@@ -202,6 +210,18 @@ Design notes
   carries the parsed DLG cluster summary, and the Ctrl+F finder
   remembers its last query across dialog opens AND restarts (the
   session file's ``finder`` text key).
+* Content review (100x-122): the objective combobox finally carries
+  EVERY bundled objective -- the three reference-driven ones
+  (``SimilarityObjective`` / ``NoveltyObjective`` /
+  ``SubstructureObjective``) with their swapped-in reference /
+  SMARTS row -- plus the two molecule-surgery cards
+  (``ring_topology_moves`` and ``scaffold_hop_crossover``) for
+  single-molecule what-ifs without a full run.  The UI gained its
+  reporting layer: ``File ▸ Save session report (PDF)…`` composes
+  ``save_pdf_report`` over every live figure on screen (one page per
+  figure, a title page with the census, the on-screen figures stay
+  alive via ``close=False``), and the session restore now re-syncs the
+  swapped GA/RL and reference rows to the restored selections.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -469,13 +489,13 @@ def load_session(raw: Any) -> dict[str, Any] | None:
     families = raw.get("families")
     if not isinstance(families, dict):
         families = {}
-    families = {str(name): checked for name, checked in families.items()
-                if isinstance(checked, bool)}
+    families = {
+        str(name): checked for name, checked in families.items() if isinstance(checked, bool)
+    }
     texts = raw.get("texts")
     if not isinstance(texts, dict):
         texts = {}
-    texts = {str(name): content for name, content in texts.items()
-             if isinstance(content, str)}
+    texts = {str(name): content for name, content in texts.items() if isinstance(content, str)}
     return {
         "format": SESSION_FORMAT,
         "theme": theme,
@@ -512,6 +532,7 @@ def read_json_file(path: str | Path) -> Any | None:
     except (OSError, ValueError):
         return None
 
+
 #: (import name, display label, why it matters, pip hint)
 _DEPENDENCIES: tuple[tuple[str, str, str, str], ...] = (
     ("numpy", "numpy", "array math behind every domain", "numpy"),
@@ -530,7 +551,20 @@ _OBJECTIVE_KINDS = (
     "TPSA window",
     "QED + LogP blend",
     "Multi-objective (QED \u00d7 MW \u00d7 TPSA)",
+    # (100x-122) the three reference-driven objectives the combobox
+    # skipped until now: every ScoringObjective subclass the library
+    # ships is finally selectable.
+    "Similarity to reference SMILES",
+    "Novelty vs corpus",
+    "Contains substructure (SMARTS)",
 )
+
+#: Objectives whose extra reference row (a SMILES or SMARTS entry) is
+#: shown in the Objective & evolution card; the label swaps per kind.
+_OBJECTIVE_REFERENCE_KINDS = {
+    "Similarity to reference SMILES": "reference",
+    "Contains substructure (SMARTS)": "SMARTS",
+}
 
 #: Resolved once on first figure render: the TkAgg canvas class, or None when
 #: the ``_tkagg`` acceleration cannot load on this Python build (e.g. a Tcl 9
@@ -693,9 +727,7 @@ def parse_typed_value(raw: str, default: Any) -> Any:
             try:
                 members.append(int(part))
             except ValueError as exc:
-                raise ValueError(
-                    f"{text!r} mixes non-integer widths ({part!r})"
-                ) from exc
+                raise ValueError(f"{text!r} mixes non-integer widths ({part!r})") from exc
         return tuple(members)
     if default is None:
         lowered = text.lower()
@@ -748,9 +780,12 @@ def _accepts_progress_argument(work: Callable[..., Any]) -> bool:
     except (TypeError, ValueError):  # builtins / C callables -- no report
         return False
     return any(
-        parameter.kind in (inspect.Parameter.POSITIONAL_ONLY,
-                           inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                           inspect.Parameter.VAR_POSITIONAL)
+        parameter.kind
+        in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.VAR_POSITIONAL,
+        )
         for parameter in parameters
     )
 
@@ -782,12 +817,9 @@ def parse_int_triple(
     """
     parts = _split_triple(raw)
     if len(parts) != 3:
-        raise ValueError(
-            f"{field}: {raw!r} must be three whole numbers, e.g. '60 60 60'"
-        )
+        raise ValueError(f"{field}: {raw!r} must be three whole numbers, e.g. '60 60 60'")
     first, second, third = (
-        parse_int(part, field, minimum=minimum, maximum=maximum)
-        for part in parts
+        parse_int(part, field, minimum=minimum, maximum=maximum) for part in parts
     )
     return (first, second, third)
 
@@ -815,8 +847,7 @@ def _split_pair(raw: str) -> tuple[float, float]:
 
 
 #: The Docking tab's campaign-runner engines (combobox values).
-_DOCK_ENGINES = ("AutoDock4 campaign", "AutoDock4 single folder",
-                  "Vina single ligand")
+_DOCK_ENGINES = ("AutoDock4 campaign", "AutoDock4 single folder", "Vina single ligand")
 
 #: The SMILES-array card's engines (dock_smiles_array tokens).
 _SMILES_DOCK_ENGINES = ("vina", "autodock4")
@@ -877,31 +908,31 @@ _DOCK_AUDIT_MODES = (
 
 #: The similarity scan card's default reference / query molecules.
 _SCAN_DEFAULT_REFS = (
-    "CC(=O)Oc1ccccc1C(=O)O",          # aspirin
-    "CC(=O)Nc1ccc(O)cc1",             # paracetamol
+    "CC(=O)Oc1ccccc1C(=O)O",  # aspirin
+    "CC(=O)Nc1ccc(O)cc1",  # paracetamol
 )
 
 #: The similarity scan card's default pasted library (the trivial-name
 #: drugs the example campaign ships, plus two decoys).
 _SCAN_DEFAULT_LIB = (
-    "CC(=O)Oc1ccccc1C(=O)O",          # aspirin
-    "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",   # caffeine
-    "CC(=O)Nc1ccc(O)cc1",             # paracetamol
-    "CC(C)Cc1ccc(cc1)C(C)C(=O)O",     # ibuprofen
-    "COc1ccc2cc(ccc2c1)C(C)C(=O)O",    # naproxen
-    "CCCCNC(=O)c1ccccc1",             # lidocaine-ish decoy
-    "c1ccccc1",                       # benzene decoy
+    "CC(=O)Oc1ccccc1C(=O)O",  # aspirin
+    "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",  # caffeine
+    "CC(=O)Nc1ccc(O)cc1",  # paracetamol
+    "CC(C)Cc1ccc(cc1)C(C)C(=O)O",  # ibuprofen
+    "COc1ccc2cc(ccc2c1)C(C)C(=O)O",  # naproxen
+    "CCCCNC(=O)c1ccccc1",  # lidocaine-ish decoy
+    "c1ccccc1",  # benzene decoy
 )
 
 #: The SMILES-array card's default pasted array: the trivial-name drugs
 #: the example campaign ships (matched to folder names by the library's
 #: own trivial-name table).
 _DOCK_SMILES_DEFAULTS = (
-    "CC(=O)Oc1ccccc1C(=O)O",          # aspirin
-    "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",   # caffeine
-    "CC(=O)Nc1ccc(O)cc1",             # paracetamol
-    "CC(C)Cc1ccc(cc1)C(C)C(=O)O",     # ibuprofen
-    "COc1ccc2cc(ccc2c1)C(C)C(=O)O",    # naproxen
+    "CC(=O)Oc1ccccc1C(=O)O",  # aspirin
+    "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",  # caffeine
+    "CC(=O)Nc1ccc(O)cc1",  # paracetamol
+    "CC(C)Cc1ccc(cc1)C(C)C(=O)O",  # ibuprofen
+    "COc1ccc2cc(ccc2c1)C(C)C(=O)O",  # naproxen
 )
 
 #: PK / PD tab -- the PD model explorer card's models (the pharma.pd
@@ -957,8 +988,7 @@ def docking_engine_binaries(engine: str) -> tuple[str, ...]:
     binary.  Used to pre-empt the workflow module's own RuntimeError
     with a friendly install hint before any job is started.
     """
-    if engine in ("AutoDock4 campaign", "AutoDock4 single folder",
-                  "autodock4"):
+    if engine in ("AutoDock4 campaign", "AutoDock4 single folder", "autodock4"):
         return ("autogrid4", "autodock4")
     return ("vina",)
 
@@ -1052,9 +1082,9 @@ _FEAT_TASK_METHODS: dict[str, str] = {
 
 #: The card's default pasted corpus: three well-known drugs.
 _FEAT_DEFAULT_SMILES = (
-    "CC(=O)Oc1ccccc1C(=O)O",          # aspirin
-    "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",   # caffeine
-    "CC(=O)Nc1ccc(O)cc1",             # paracetamol
+    "CC(=O)Oc1ccccc1C(=O)O",  # aspirin
+    "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",  # caffeine
+    "CC(=O)Nc1ccc(O)cc1",  # paracetamol
 )
 
 #: Plain-language meaning + unit of every RISM-KH descriptor column
@@ -1137,11 +1167,7 @@ def default_target_column(frame: Any) -> str | None:
         if smiles is not None and column == smiles:
             continue
         series = frame[column]
-        if (
-            rows > 6
-            and str(series.dtype) == "object"
-            and series.nunique() == rows
-        ):
+        if rows > 6 and str(series.dtype) == "object" and series.nunique() == rows:
             continue  # unique-per-row strings: an ID, not a label
         return column
     return columns[-1]
@@ -1158,12 +1184,12 @@ def numeric_feature_columns(frame: Any, target: str) -> tuple[list[str], list[st
     import pandas as pd
 
     numeric = [
-        column for column in frame.columns
+        column
+        for column in frame.columns
         if column != target and pd.api.types.is_numeric_dtype(frame[column])
     ]
     dropped = [
-        str(column) for column in frame.columns
-        if column != target and column not in numeric
+        str(column) for column in frame.columns if column != target and column not in numeric
     ]
     return numeric, dropped
 
@@ -1182,13 +1208,27 @@ def format_number(value: float, digits: int = 4) -> str:
     return f"{value:,.{digits}f}"
 
 
-def build_objective(kind: str, lo: float, hi: float) -> Any:
-    """Instantiate a generative objective selected by its GUI label."""
+def build_objective(
+    kind: str,
+    lo: float,
+    hi: float,
+    reference: str = "",
+    corpus: list[str] | tuple[str, ...] | None = None,
+) -> Any:
+    """Instantiate a generative objective selected by its GUI label.
+
+    (100x-122) ``reference`` carries the similarity seed / SMARTS pattern
+    for the three reference-driven objectives; ``corpus`` is the Novelty
+    objective's reference pool (the card's own corpus text).
+    """
     from pharmaml.generative import (
         LogPBandObjective,
         MolecularWeightBandObjective,
         MultiObjective,
+        NoveltyObjective,
         QedObjective,
+        SimilarityObjective,
+        SubstructureObjective,
         TpsaBandObjective,
     )
 
@@ -1200,6 +1240,12 @@ def build_objective(kind: str, lo: float, hi: float) -> Any:
         return MolecularWeightBandObjective(lo, hi)
     if kind == "TPSA window":
         return TpsaBandObjective(lo, hi)
+    if kind == "Similarity to reference SMILES":
+        return SimilarityObjective(reference)
+    if kind == "Novelty vs corpus":
+        return NoveltyObjective(list(corpus) if corpus else None)
+    if kind == "Contains substructure (SMARTS)":
+        return SubstructureObjective(reference)
     if kind == "Multi-objective (QED \u00d7 MW \u00d7 TPSA)":
         # the CLI's 'druglike' recipe: equal-weight triple whose blended
         # leaderboard hides the trade-offs the Pareto front card surfaces.
@@ -1210,9 +1256,7 @@ def build_objective(kind: str, lo: float, hi: float) -> Any:
                 TpsaBandObjective(30, 90),
             ]
         )
-    return MultiObjective(
-        [QedObjective(), LogPBandObjective(lo, hi)], weights=[0.7, 0.3]
-    )
+    return MultiObjective([QedObjective(), LogPBandObjective(lo, hi)], weights=[0.7, 0.3])
 
 
 #: Deep-learning tab (100x-61): architecture labels the combobox offers.
@@ -1266,9 +1310,7 @@ def parse_hidden_layers(raw: str) -> tuple[int, ...]:
         try:
             width = int(float(token))  # "64" and "64.0" both parse
         except ValueError as exc:
-            raise ValueError(
-                f"hidden layer widths must be numbers, got {token!r}"
-            ) from exc
+            raise ValueError(f"hidden layer widths must be numbers, got {token!r}") from exc
         if width < 1:
             raise ValueError(f"hidden layer widths must be >= 1, got {token!r}")
         widths.append(width)
@@ -1519,22 +1561,20 @@ def make_card(
     Every shell is also appended to :data:`_CARD_INDEX` (title,
     subtitle, shell) -- the Ctrl+F card finder's directory (100x-120).
     """
-    shell = tk.Frame(parent, background=CARD, highlightbackground=BORDER,
-                     highlightthickness=1)
+    shell = tk.Frame(parent, background=CARD, highlightbackground=BORDER, highlightthickness=1)
     _CARD_INDEX.append((title, subtitle, shell))
-    shell.grid(row=row, column=column, columnspan=span, sticky="nsew",
-               padx=6, pady=6)
+    shell.grid(row=row, column=column, columnspan=span, sticky="nsew", padx=6, pady=6)
     header = ttk.Frame(shell, style="Card.TFrame", padding=(14, 10, 14, 0))
     header.pack(fill="x")
     title_row = ttk.Frame(header, style="Card.TFrame")
     title_row.pack(fill="x")
     strip = tk.Frame(title_row, width=3, background=ACCENT)
     strip.pack(side="left", fill="y", padx=(0, 8))
-    ttk.Label(title_row, text=title, style="CardTitle.TLabel").pack(
-        side="left", anchor="w")
+    ttk.Label(title_row, text=title, style="CardTitle.TLabel").pack(side="left", anchor="w")
     if subtitle:
-        ttk.Label(header, text=subtitle, style="CardMuted.TLabel",
-                  wraplength=620, justify="left").pack(anchor="w", pady=(2, 0))
+        ttk.Label(
+            header, text=subtitle, style="CardMuted.TLabel", wraplength=620, justify="left"
+        ).pack(anchor="w", pady=(2, 0))
     content = ttk.Frame(shell, style="Card.TFrame", padding=(14, 8, 14, 12))
     content.pack(fill="both", expand=True)
     content.columnconfigure(1, weight=1)
@@ -1550,17 +1590,22 @@ def form_row(parent: Any, label: str, widget: Any) -> None:
     widget.grid(row=row, column=1, sticky="ew", pady=3)
 
 
-def grid_append(parent: Any, widget: Any, *, columnspan: int = 2,
-                sticky: str = "w", pady: tuple[int, int] = (0, 0),
-                weight: bool = False) -> int:
+def grid_append(
+    parent: Any,
+    widget: Any,
+    *,
+    columnspan: int = 2,
+    sticky: str = "w",
+    pady: tuple[int, int] = (0, 0),
+    weight: bool = False,
+) -> int:
     """Append ``widget`` on the next free row of a card's content grid.
 
     Card content frames are grid-managed (``form_row`` siblings), so
     every child must use grid -- never pack -- inside them.
     """
     row = parent.grid_size()[1]
-    widget.grid(row=row, column=0, columnspan=columnspan, sticky=sticky,
-                pady=pady)
+    widget.grid(row=row, column=0, columnspan=columnspan, sticky=sticky, pady=pady)
     if weight:
         parent.rowconfigure(row, weight=1)
     return row
@@ -1595,6 +1640,7 @@ def _grid_text(parent: Any, height: int = 6, mono: Any = None) -> Any:
 if tk is not None:
     _TkBase: Any = tk.Tk
 else:  # allow `import playground` on tkinter-less builds (probe path)
+
     class _TkBase:  # type: ignore[no-redef]
         """Placeholder superclass when tkinter is unavailable."""
 
@@ -1602,8 +1648,9 @@ else:  # allow `import playground` on tkinter-less builds (probe path)
 class PlaygroundApp(_TkBase):  # type: ignore[misc]
     """The playground window: one notebook, eight tabs, one worker."""
 
-    def __init__(self, dependencies: dict[str, bool] | None = None,
-                 persist_session: bool = True) -> None:
+    def __init__(
+        self, dependencies: dict[str, bool] | None = None, persist_session: bool = True
+    ) -> None:
         """Build the window.
 
         ``persist_session`` switches the whole session machinery on or
@@ -1640,6 +1687,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._job_label_base = ""
         self._action_buttons: list[Any] = []
         self._last_figure: Any = None
+        # -- session figure registry (100x-122): one live entry per figure
+        # host -- [host, title, figure].  _render_figure updates entries in
+        # place (a re-rendered card replaces its figure; the old one is
+        # closed), and File ▸ Save session report (PDF) walks it to compose
+        # pharmaml.viz.save_pdf_report over everything on screen.
+        self._session_figures: list[list] = []
         self._ml_frame: Any = None
         self._ml_path: Path | None = None
         # -- Data & ML report state (100x-76, extended 100x-79/118) -- #
@@ -1659,61 +1712,62 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._desc_rows: list[tuple[str, str, str]] = []
         self._ga_result: Any = None
         # -- Generative Pareto card state (100x-58) ------------------ #
-        self._pareto_front: Any = None      # ParetoFront of the last run
-        self._pareto_result: Any = None     # the GenerationResult it came from
+        self._pareto_front: Any = None  # ParetoFront of the last run
+        self._pareto_result: Any = None  # the GenerationResult it came from
         # -- Cell Lines tab state ----------------------------------- #
-        self._bio_screen: Any = None          # ResponseScreen (maybe collapsed)
+        self._bio_screen: Any = None  # ResponseScreen (maybe collapsed)
         self._bio_screen_path: Path | None = None
         self._bio_collapsed = False
-        self._bio_matrix: Any = None           # cell line x compound DataFrame
+        self._bio_matrix: Any = None  # cell line x compound DataFrame
         self._bio_matrix_metric: str | None = None
-        self._bio_expr: Any = None             # raw expression frame
-        self._bio_expr_norm: Any = None        # normalize + impute cache
+        self._bio_expr: Any = None  # raw expression frame
+        self._bio_expr_norm: Any = None  # normalize + impute cache
         # -- Docking tab state --------------------------------------- #
-        self._dock_library: Any = None         # LigandLibrary from the CSV
+        self._dock_library: Any = None  # LigandLibrary from the CSV
         self._dock_lib_path: Path | None = None
         self._dock_out_dir: Path | None = None  # ligand campaign output root
-        self._dock_report: Any = None          # LigandPreparationReport
+        self._dock_report: Any = None  # LigandPreparationReport
         self._dock_receptor_source: Path | None = None  # PDB / CIF / PDBQT in
         self._dock_protein_report: Any = None  # ProteinReport
-        self._dock_receptor_path: Path | None = None    # prepared receptor out
-        self._dock_ligand_path: Path | None = None      # reference ligand PDBQT
-        self._dock_box: Any = None             # GridBox
-        self._dock_results_frame: Any = None   # current results table
-        self._dock_rescore_last: tuple[Any, list[str], list[float] | None,
-                                       dict[str, bool], str] | None = None
+        self._dock_receptor_path: Path | None = None  # prepared receptor out
+        self._dock_ligand_path: Path | None = None  # reference ligand PDBQT
+        self._dock_box: Any = None  # GridBox
+        self._dock_results_frame: Any = None  # current results table
+        self._dock_rescore_last: (
+            tuple[Any, list[str], list[float] | None, dict[str, bool], str] | None
+        ) = None
         # (rescored frame, evidence columns, weights, higher overrides,
         #  source label) — the Save report… payload
-        self._dock_results_source: str | None = None    # campaign / dlg / vina / smiles
-        self._dock_campaign_root: Path | None = None    # AutoDock4 batch root
+        self._dock_results_source: str | None = None  # campaign / dlg / vina / smiles
+        self._dock_campaign_root: Path | None = None  # AutoDock4 batch root
         self._dock_vina_receptor: Path | None = None
         self._dock_vina_ligand: Path | None = None
         # -- SMILES array docking state (the one-call batch card) ---- #
         self._dock_smiles_receptor: Path | None = None  # picked receptor PDBQT
-        self._dock_smiles_out: Path | None = None       # campaign output root
-        self._dock_smiles_last: Any = None              # ranked DataFrame
+        self._dock_smiles_out: Path | None = None  # campaign output root
+        self._dock_smiles_last: Any = None  # ranked DataFrame
         # -- Feature factory state (Chemistry tab) ------------------- #
-        self._feat_frame: Any = None            # full computed feature frame
-        self._feat_report: Any = None           # FeatureReport of the last run
-        self._feat_selection: Any = None        # FeatureSelection of the last run
-        self._feat_smiles: list[str] = []       # valid SMILES, frame row order
+        self._feat_frame: Any = None  # full computed feature frame
+        self._feat_report: Any = None  # FeatureReport of the last run
+        self._feat_selection: Any = None  # FeatureSelection of the last run
+        self._feat_smiles: list[str] = []  # valid SMILES, frame row order
         self._feat_target_series: list[float] | None = None  # aligned target
         self._feat_target_name: str | None = None  # target column name (or None)
-        self._feat_k: int = 0                   # K requested by the last run
-        self._feat_csv_frame: Any = None        # the loaded source CSV frame
+        self._feat_k: int = 0  # K requested by the last run
+        self._feat_csv_frame: Any = None  # the loaded source CSV frame
         self._feat_csv_path: Path | None = None
         self._feat_smiles_column: str | None = None
         self._feat_descriptor_count: int = _FEATURE_DESCRIPTORS_FALLBACK
         # -- RISM-KH solvation card state ----------------------------- #
-        self._rism_frame: Any = None            # last computed descriptor frame
+        self._rism_frame: Any = None  # last computed descriptor frame
         # -- Ensemble-builder + model-persistence state (ML tab) ------ #
         self._ml_bundle: tuple[Any, dict[str, Any], Path] | None = None
-        self._ml_predictions: Any = None        # last bundle prediction frame
+        self._ml_predictions: Any = None  # last bundle prediction frame
         # -- Applicability-domain card state (100x-118: the upload) --- #
-        self._ml_ad_result: Any = None          # ApplicabilityDomainResult
-        self._ml_ad_frame: Any = None           # its reliability table
+        self._ml_ad_result: Any = None  # ApplicabilityDomainResult
+        self._ml_ad_frame: Any = None  # its reliability table
         self._ml_ad_train_path: Path | None = None  # bundle-mode train CSV
-        self._ml_ad_test_path: Path | None = None   # bundle-mode test CSV
+        self._ml_ad_test_path: Path | None = None  # bundle-mode test CSV
 
         # -- session + theme state ------------------------------------- #
         self._persist_session = persist_session
@@ -1721,10 +1775,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if persist_session:
             self._session = load_session(self._read_session_file())
         self._theme = self._session["theme"] if self._session else "light"
-        self._theme_var: Any = None          # built by _build_menu (View menu)
-        self._menu_tints: list[Any] = []     # menus to recolour on theme flip
-        apply_theme(self._resolve_auto_theme() if self._theme == "auto"
-                    else self._theme)
+        self._theme_var: Any = None  # built by _build_menu (View menu)
+        self._menu_tints: list[Any] = []  # menus to recolour on theme flip
+        apply_theme(self._resolve_auto_theme() if self._theme == "auto" else self._theme)
 
         self.title("PharmaML Playground")
         self.configure(background=BG)
@@ -1791,107 +1844,180 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         style.configure("TFrame", background=BG)
         style.configure("Tab.TFrame", background=BG)
         style.configure("Card.TFrame", background=CARD)
-        style.configure("CardTitle.TLabel", background=CARD, foreground=INK,
-                        font=("TkDefaultFont", 11, "bold"))
-        style.configure("CardMuted.TLabel", background=CARD, foreground=MUTED,
-                        font=("TkDefaultFont", 9))
+        style.configure(
+            "CardTitle.TLabel", background=CARD, foreground=INK, font=("TkDefaultFont", 11, "bold")
+        )
+        style.configure(
+            "CardMuted.TLabel", background=CARD, foreground=MUTED, font=("TkDefaultFont", 9)
+        )
         style.configure("Field.TLabel", background=CARD, foreground=INK)
         style.configure("Result.TLabel", background=CARD, foreground=ACCENT_DARK)
-        style.configure("Title.TLabel", background=CARD, foreground=INK,
-                        font=("TkDefaultFont", 15, "bold"))
-        style.configure("Primary.TButton", background=ACCENT, foreground="#ffffff",
-                        borderwidth=0, focusthickness=1, focuscolor="#ffffff",
-                        padding=(16, 7), font=("TkDefaultFont", 10, "bold"))
-        style.map("Primary.TButton",
-                  background=[("active", ACCENT_DARK), ("disabled", BUTTON_DISABLED)],
-                  foreground=[("disabled", BUTTON_DISABLED_INK)])
-        style.configure("TButton", padding=(10, 5), background=BUTTON_FACE,
-                        foreground=INK)
-        style.map("TButton",
-                  background=[("active", ACCENT_SOFT), ("disabled", BG)],
-                  foreground=[("disabled", MUTED)])
+        style.configure(
+            "Title.TLabel", background=CARD, foreground=INK, font=("TkDefaultFont", 15, "bold")
+        )
+        style.configure(
+            "Primary.TButton",
+            background=ACCENT,
+            foreground="#ffffff",
+            borderwidth=0,
+            focusthickness=1,
+            focuscolor="#ffffff",
+            padding=(16, 7),
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        style.map(
+            "Primary.TButton",
+            background=[("active", ACCENT_DARK), ("disabled", BUTTON_DISABLED)],
+            foreground=[("disabled", BUTTON_DISABLED_INK)],
+        )
+        style.configure("TButton", padding=(10, 5), background=BUTTON_FACE, foreground=INK)
+        style.map(
+            "TButton",
+            background=[("active", ACCENT_SOFT), ("disabled", BG)],
+            foreground=[("disabled", MUTED)],
+        )
         # the quiet tab-footer reset button (100x-55): flat on the page
         # background, muted until hovered -- an affordance, not an action
-        style.configure("Ghost.TButton", background=BG, foreground=MUTED,
-                        borderwidth=0, lightcolor=BG, darkcolor=BG,
-                        focusthickness=1, focuscolor=MUTED, padding=(8, 2),
-                        font=("TkDefaultFont", 9))
-        style.map("Ghost.TButton",
-                  background=[("active", BG), ("disabled", BG)],
-                  foreground=[("active", ACCENT), ("disabled", BORDER)],
-                  lightcolor=[("pressed", BG)],
-                  darkcolor=[("pressed", BG)])
+        style.configure(
+            "Ghost.TButton",
+            background=BG,
+            foreground=MUTED,
+            borderwidth=0,
+            lightcolor=BG,
+            darkcolor=BG,
+            focusthickness=1,
+            focuscolor=MUTED,
+            padding=(8, 2),
+            font=("TkDefaultFont", 9),
+        )
+        style.map(
+            "Ghost.TButton",
+            background=[("active", BG), ("disabled", BG)],
+            foreground=[("active", ACCENT), ("disabled", BORDER)],
+            lightcolor=[("pressed", BG)],
+            darkcolor=[("pressed", BG)],
+        )
         # the home tab's quick-jump chips (100x-119): flat pills that lift
         # to the accent on hover -- navigation, not actions
-        style.configure("Chip.TButton", background=TAB, foreground=INK,
-                        borderwidth=0, lightcolor=TAB, darkcolor=TAB,
-                        focusthickness=1, focuscolor=ACCENT, padding=(12, 4),
-                        font=("TkDefaultFont", 9, "bold"))
-        style.map("Chip.TButton",
-                  background=[("active", ACCENT_SOFT), ("disabled", TAB)],
-                  foreground=[("active", ACCENT_DARK), ("disabled", MUTED)],
-                  lightcolor=[("pressed", BORDER)],
-                  darkcolor=[("pressed", BORDER)])
-        style.configure("TNotebook", background=BG, borderwidth=0,
-                        tabmargins=(10, 6, 12, 0))
-        style.configure("TNotebook.Tab", background=TAB, foreground=MUTED,
-                        padding=(16, 8), font=("TkDefaultFont", 10, "bold"))
-        style.map("TNotebook.Tab",
-                  background=[("selected", CARD)],
-                  foreground=[("selected", ACCENT)])
-        style.configure("Treeview", background=CARD, fieldbackground=CARD,
-                        foreground=INK, rowheight=26, borderwidth=0)
-        style.map("Treeview",
-                  background=[("selected", ACCENT_SOFT)],
-                  foreground=[("selected", INK)])
-        style.configure("Treeview.Heading", background=HEADING, foreground=INK,
-                        font=("TkDefaultFont", 9, "bold"), relief="flat")
-        style.configure("TEntry", fieldbackground=CARD, bordercolor=BORDER,
-                        lightcolor=BORDER, darkcolor=BORDER, padding=4)
-        style.configure("TCombobox", fieldbackground=CARD, background=CARD,
-                        arrowcolor=ACCENT, bordercolor=BORDER, padding=3)
-        style.configure("TSpinbox", fieldbackground=CARD, bordercolor=BORDER,
-                        arrowcolor=ACCENT, padding=3)
-        style.configure("TCheckbutton", background=CARD, foreground=INK,
-                        focuscolor=ACCENT)
+        style.configure(
+            "Chip.TButton",
+            background=TAB,
+            foreground=INK,
+            borderwidth=0,
+            lightcolor=TAB,
+            darkcolor=TAB,
+            focusthickness=1,
+            focuscolor=ACCENT,
+            padding=(12, 4),
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        style.map(
+            "Chip.TButton",
+            background=[("active", ACCENT_SOFT), ("disabled", TAB)],
+            foreground=[("active", ACCENT_DARK), ("disabled", MUTED)],
+            lightcolor=[("pressed", BORDER)],
+            darkcolor=[("pressed", BORDER)],
+        )
+        style.configure("TNotebook", background=BG, borderwidth=0, tabmargins=(10, 6, 12, 0))
+        style.configure(
+            "TNotebook.Tab",
+            background=TAB,
+            foreground=MUTED,
+            padding=(16, 8),
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        style.map(
+            "TNotebook.Tab", background=[("selected", CARD)], foreground=[("selected", ACCENT)]
+        )
+        style.configure(
+            "Treeview",
+            background=CARD,
+            fieldbackground=CARD,
+            foreground=INK,
+            rowheight=26,
+            borderwidth=0,
+        )
+        style.map(
+            "Treeview", background=[("selected", ACCENT_SOFT)], foreground=[("selected", INK)]
+        )
+        style.configure(
+            "Treeview.Heading",
+            background=HEADING,
+            foreground=INK,
+            font=("TkDefaultFont", 9, "bold"),
+            relief="flat",
+        )
+        style.configure(
+            "TEntry",
+            fieldbackground=CARD,
+            bordercolor=BORDER,
+            lightcolor=BORDER,
+            darkcolor=BORDER,
+            padding=4,
+        )
+        style.configure(
+            "TCombobox",
+            fieldbackground=CARD,
+            background=CARD,
+            arrowcolor=ACCENT,
+            bordercolor=BORDER,
+            padding=3,
+        )
+        style.configure(
+            "TSpinbox", fieldbackground=CARD, bordercolor=BORDER, arrowcolor=ACCENT, padding=3
+        )
+        style.configure("TCheckbutton", background=CARD, foreground=INK, focuscolor=ACCENT)
         style.map("TCheckbutton", background=[("active", CARD)])
-        style.configure("Horizontal.TProgressbar", background=ACCENT,
-                        troughcolor=TAB, borderwidth=0, thickness=8)
+        style.configure(
+            "Horizontal.TProgressbar",
+            background=ACCENT,
+            troughcolor=TAB,
+            borderwidth=0,
+            thickness=8,
+        )
         style.configure("TProgressbar", background=ACCENT, troughcolor=TAB)
         style.configure("Status.TFrame", background=STATUS)
-        style.configure("Status.TLabel", background=STATUS, foreground=MUTED,
-                        font=("TkDefaultFont", 9))
+        style.configure(
+            "Status.TLabel", background=STATUS, foreground=MUTED, font=("TkDefaultFont", 9)
+        )
         # clam's state maps and trough colours ship full of light defaults
         # (readonly combobox fields, focus borders, pressed buttons,
         # scrollbar troughs).  ``style.map`` REPLACES the whole map for
         # each option, so this block pins every reachable state to the
         # active palette -- without it dark mode keeps bright stragglers.
-        style.configure("TScrollbar", troughcolor=TAB, background=BUTTON_FACE,
-                        arrowcolor=MUTED, lightcolor=BORDER, darkcolor=BORDER,
-                        bordercolor=BORDER)
-        style.map("TScrollbar",
-                  background=[("active", ACCENT_SOFT),
-                              ("pressed", ACCENT_SOFT)])
+        style.configure(
+            "TScrollbar",
+            troughcolor=TAB,
+            background=BUTTON_FACE,
+            arrowcolor=MUTED,
+            lightcolor=BORDER,
+            darkcolor=BORDER,
+            bordercolor=BORDER,
+        )
+        style.map("TScrollbar", background=[("active", ACCENT_SOFT), ("pressed", ACCENT_SOFT)])
         style.configure("TEntry", insertcolor=INK)
-        style.map("TEntry",
-                  background=[("readonly", BG)],
-                  fieldbackground=[("readonly", CARD)],
-                  bordercolor=[("focus", ACCENT)])
-        style.map("TCombobox",
-                  fieldbackground=[("readonly", CARD)],
-                  foreground=[("readonly", INK)],
-                  bordercolor=[("focus", ACCENT)])
-        style.map("TSpinbox",
-                  background=[("readonly", BG)],
-                  fieldbackground=[("readonly", CARD)],
-                  bordercolor=[("focus", ACCENT)])
-        style.map("TButton",
-                  darkcolor=[("pressed", BORDER)],
-                  lightcolor=[("pressed", BORDER)])
+        style.map(
+            "TEntry",
+            background=[("readonly", BG)],
+            fieldbackground=[("readonly", CARD)],
+            bordercolor=[("focus", ACCENT)],
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", CARD)],
+            foreground=[("readonly", INK)],
+            bordercolor=[("focus", ACCENT)],
+        )
+        style.map(
+            "TSpinbox",
+            background=[("readonly", BG)],
+            fieldbackground=[("readonly", CARD)],
+            bordercolor=[("focus", ACCENT)],
+        )
+        style.map("TButton", darkcolor=[("pressed", BORDER)], lightcolor=[("pressed", BORDER)])
         style.map("Treeview", bordercolor=[("focus", BORDER)])
         for name in ("TEntry", "TCombobox", "TSpinbox"):
-            style.configure(name, selectbackground=ACCENT_SOFT,
-                            selectforeground=INK)
+            style.configure(name, selectbackground=ACCENT_SOFT, selectforeground=INK)
         for key, value in (
             ("*TCombobox*Listbox.background", CARD),
             ("*TCombobox*Listbox.foreground", INK),
@@ -1903,51 +2029,51 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _build_menu(self) -> None:
         bar = tk.Menu(self)
         file_menu = tk.Menu(bar, tearoff=0)
-        file_menu.add_command(label="Open CSV…", accelerator="Ctrl+O",
-                              command=self._menu_open_csv)
-        file_menu.add_command(label="Save last figure…", accelerator="Ctrl+S",
-                              command=self._menu_save_figure)
+        file_menu.add_command(label="Open CSV…", accelerator="Ctrl+O", command=self._menu_open_csv)
+        file_menu.add_command(
+            label="Save last figure…", accelerator="Ctrl+S", command=self._menu_save_figure
+        )
+        file_menu.add_command(
+            label="Save session report (PDF)…", command=self._menu_save_session_report
+        )
         file_menu.add_separator()
-        file_menu.add_command(label="Save session now", accelerator="Ctrl+Shift+S",
-                              command=self._save_session_now)
-        file_menu.add_command(label="Clear saved session…",
-                              command=self._clear_saved_session)
-        file_menu.add_command(label="Export session…",
-                              command=self._export_session)
-        file_menu.add_command(label="Import session…",
-                              command=self._import_session)
-        file_menu.add_command(label="Reset current tab to defaults",
-                              accelerator="Ctrl+Shift+R",
-                              command=self._reset_current_tab)
+        file_menu.add_command(
+            label="Save session now", accelerator="Ctrl+Shift+S", command=self._save_session_now
+        )
+        file_menu.add_command(label="Clear saved session…", command=self._clear_saved_session)
+        file_menu.add_command(label="Export session…", command=self._export_session)
+        file_menu.add_command(label="Import session…", command=self._import_session)
+        file_menu.add_command(
+            label="Reset current tab to defaults",
+            accelerator="Ctrl+Shift+R",
+            command=self._reset_current_tab,
+        )
         file_menu.add_separator()
-        file_menu.add_command(label="Exit", accelerator="Ctrl+Q",
-                              command=self._on_close)
+        file_menu.add_command(label="Exit", accelerator="Ctrl+Q", command=self._on_close)
         bar.add_cascade(label="File", menu=file_menu)
 
         view_menu = tk.Menu(bar, tearoff=0)
         # the card finder (100x-120): Ctrl+F, also bound below
-        view_menu.add_command(label="Find a card…", accelerator="Ctrl+F",
-                              command=self._find_card_dialog)
+        view_menu.add_command(
+            label="Find a card…", accelerator="Ctrl+F", command=self._find_card_dialog
+        )
         view_menu.add_separator()
         self._theme_var = tk.StringVar(value=self._theme)
-        for label, value in (("Follow system", "auto"), ("Light", "light"),
-                             ("Dark", "dark")):
-            view_menu.add_radiobutton(label=label, value=value,
-                                       variable=self._theme_var,
-                                       command=self._on_theme_change)
+        for label, value in (("Follow system", "auto"), ("Light", "light"), ("Dark", "dark")):
+            view_menu.add_radiobutton(
+                label=label, value=value, variable=self._theme_var, command=self._on_theme_change
+            )
         # Shortcut-hint row visibility (100x-65): a plain tk.Variable, so
         # the generic session machinery persists it for free.
         self._hints_var = tk.BooleanVar(value=True)
         view_menu.add_checkbutton(
-            label="Shortcut hints", variable=self._hints_var,
-            command=self._apply_hint_visibility)
+            label="Shortcut hints", variable=self._hints_var, command=self._apply_hint_visibility
+        )
         bar.add_cascade(label="View", menu=view_menu)
 
         help_menu = tk.Menu(bar, tearoff=0)
-        help_menu.add_command(label="About PharmaML Playground",
-                              command=self._show_about)
-        help_menu.add_command(label="Dependency report",
-                              command=self._show_dependency_report)
+        help_menu.add_command(label="About PharmaML Playground", command=self._show_about)
+        help_menu.add_command(label="Dependency report", command=self._show_dependency_report)
         bar.add_cascade(label="Help", menu=help_menu)
         self.configure(menu=bar)
         self._menu_tints = [bar, file_menu, view_menu, help_menu]
@@ -1971,8 +2097,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self.pharmaml is not None:
             left = f"pharmaml {self.pharmaml.__version__} · toolkit v{__version__}"
         else:
-            left = ("pharmaml not loaded -- run from the toolkit root or "
-                    f"pip install -e . · toolkit v{__version__}")
+            left = (
+                "pharmaml not loaded -- run from the toolkit root or "
+                f"pip install -e . · toolkit v{__version__}"
+            )
         ttk.Label(bar, text=left, style="Status.TLabel").pack(side="left")
         self._job_label = ttk.Label(bar, text="idle", style="Status.TLabel")
         self._job_label.pack(side="right", padx=(12, 0))
@@ -1991,19 +2119,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         which pins it directly above the status line.
         """
         bar = ttk.Frame(self, style="Status.TFrame", padding=(12, 2))
-        label = ttk.Label(bar, text=shortcut_hints_text(),
-                          style="Status.TLabel")
+        label = ttk.Label(bar, text=shortcut_hints_text(), style="Status.TLabel")
         label.pack(side="left")
-        Tooltip(label,
-                "The global keyboard shortcuts, also listed in the File "
-                "menu.  View \u25b8 Shortcut hints re-enables this row "
-                "after hiding it (the preference is saved with the "
-                "session).")
-        hide = ttk.Button(bar, text="Hide", style="Ghost.TButton",
-                          command=self._hide_hints)
+        Tooltip(
+            label,
+            "The global keyboard shortcuts, also listed in the File "
+            "menu.  View \u25b8 Shortcut hints re-enables this row "
+            "after hiding it (the preference is saved with the "
+            "session).",
+        )
+        hide = ttk.Button(bar, text="Hide", style="Ghost.TButton", command=self._hide_hints)
         hide.pack(side="right", padx=(12, 0))
-        Tooltip(hide, "Hide the shortcut hint row (View \u25b8 Shortcut "
-                      "hints brings it back).")
+        Tooltip(hide, "Hide the shortcut hint row (View \u25b8 Shortcut hints brings it back).")
         self._hint_bar = bar
         bar.pack(side="bottom", fill="x")
         self._apply_hint_visibility()
@@ -2076,8 +2203,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _live_cards(self) -> list[tuple[str, str, Any, int]]:
         """The card index filtered to shells of THIS app's live tabs."""
         try:
-            pages = [self._book.nametowidget(tab)
-                     for tab in self._book.tabs()]
+            pages = [self._book.nametowidget(tab) for tab in self._book.tabs()]
         except tk.TclError:  # pragma: no cover - no notebook yet
             return []
         live: list[tuple[str, str, Any, int]] = []
@@ -2110,9 +2236,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             win.geometry(f"+{self.winfo_rootx() + 140}+{self.winfo_rooty() + 110}")
         except tk.TclError:  # pragma: no cover - unmapped parent
             pass
-        ttk.Label(win, text="Type words from a card's title or subtitle — "
-                            "Enter jumps to it.", style="CardMuted.TLabel"
-                  ).pack(anchor="w", padx=14, pady=(12, 4))
+        ttk.Label(
+            win,
+            text="Type words from a card's title or subtitle — Enter jumps to it.",
+            style="CardMuted.TLabel",
+        ).pack(anchor="w", padx=14, pady=(12, 4))
         entry = ttk.Entry(win, width=54)
         # 100x-121: the finder remembers its last query -- prefilled here,
         # persisted with the session ("finder" text key).
@@ -2120,16 +2248,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if last_query:
             entry.insert(0, last_query)
         entry.pack(fill="x", padx=14, pady=(0, 8))
-        tree = ttk.Treeview(win, columns=("card", "tab"), show="headings",
-                            height=12)
+        tree = ttk.Treeview(win, columns=("card", "tab"), show="headings", height=12)
         tree.heading("card", text="card")
         tree.heading("tab", text="tab")
         tree.column("card", width=360)
         tree.column("tab", width=130)
         tree.pack(fill="both", expand=True, padx=14, pady=(0, 4))
-        ttk.Label(win, text="Enter jump · double-click jump · Esc close",
-                  style="CardMuted.TLabel").pack(anchor="w", padx=14,
-                                                 pady=(0, 10))
+        ttk.Label(
+            win, text="Enter jump · double-click jump · Esc close", style="CardMuted.TLabel"
+        ).pack(anchor="w", padx=14, pady=(0, 10))
 
         def refresh() -> None:
             query = entry.get().strip().lower()
@@ -2143,8 +2270,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     tab_name = str(self._book.tab(index, "text")).strip()
                 except tk.TclError:  # pragma: no cover - tab vanished
                     continue
-                tree.insert("", "end", values=(title, tab_name),
-                            iid=f"{index}:{title}")
+                tree.insert("", "end", values=(title, tab_name), iid=f"{index}:{title}")
 
         def jump(item: str | None = None) -> None:
             picked = item or (tree.selection() or [None])[0]
@@ -2174,16 +2300,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     continue
             except tk.TclError:
                 continue
-            if self._card_tab_index(
-                    shell, [self._book.nametowidget(tab)
-                            for tab in self._book.tabs()]) != tab_index:
+            if (
+                self._card_tab_index(
+                    shell, [self._book.nametowidget(tab) for tab in self._book.tabs()]
+                )
+                != tab_index
+            ):
                 continue
             page = self._book.nametowidget(self._book.tabs()[tab_index])
             canvas = getattr(page, "_canvas", None)
             if canvas is not None:
                 body_height = int(page.body.winfo_reqheight() or 1)
-                fraction = max(0.0, min(0.99, (shell.winfo_y() - 12)
-                                        / max(1, body_height)))
+                fraction = max(0.0, min(0.99, (shell.winfo_y() - 12) / max(1, body_height)))
                 canvas.yview_moveto(fraction)
             shell.configure(highlightbackground=ACCENT, highlightthickness=3)
             self.after(1200, lambda s=shell: self._unflash_card(s))
@@ -2209,32 +2337,49 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # is the last one.  Pinned in the non-scrolling footer so it
             # stays reachable without scrolling back up.
             index = len(self._book.tabs()) - 1
-            button = ttk.Button(page.footer, text="Reset this tab to defaults",
-                                style="Ghost.TButton",
-                                command=lambda idx=index: self._reset_tab(idx))
+            button = ttk.Button(
+                page.footer,
+                text="Reset this tab to defaults",
+                style="Ghost.TButton",
+                command=lambda idx=index: self._reset_tab(idx),
+            )
             button.pack(side="right", padx=(0, 14), pady=(4, 5))
-            Tooltip(button, "Restore only THIS tab's inputs to their launch "
-                            "defaults -- every other tab keeps its live "
-                            "values (same as File \u25b8 Reset current tab).")
+            Tooltip(
+                button,
+                "Restore only THIS tab's inputs to their launch "
+                "defaults -- every other tab keeps its live "
+                "values (same as File \u25b8 Reset current tab).",
+            )
             # per-tab copy button (100x-60): the same ownership map, read
             # LIVE -- a share-lite JSON snippet of this tab's inputs on
             # the clipboard (paste into an issue, a script, or a message).
-            copy_button = ttk.Button(page.footer, text="Copy inputs as JSON",
-                                     style="Ghost.TButton",
-                                     command=lambda idx=index:
-                                         self._copy_tab_inputs(idx))
+            copy_button = ttk.Button(
+                page.footer,
+                text="Copy inputs as JSON",
+                style="Ghost.TButton",
+                command=lambda idx=index: self._copy_tab_inputs(idx),
+            )
             copy_button.pack(side="right", padx=(0, 6), pady=(4, 5))
-            Tooltip(copy_button,
-                    "Copy THIS tab's live inputs as a JSON snippet -- the "
-                    "same fields the session file stores, for one tab. "
-                    "Paste it into an issue report or a colleague's "
-                    "import (File \u25b8 Import session takes full files).")
+            Tooltip(
+                copy_button,
+                "Copy THIS tab's live inputs as a JSON snippet -- the "
+                "same fields the session file stores, for one tab. "
+                "Paste it into an issue report or a colleague's "
+                "import (File \u25b8 Import session takes full files).",
+            )
         return page
 
-    def _action_button(self, parent: Any, text: str, command: Callable[[], None],
-                       tooltip: str = "", primary: bool = False) -> Any:
-        button = ttk.Button(parent, text=text, command=command,
-                            style="Primary.TButton" if primary else "TButton")
+    def _action_button(
+        self,
+        parent: Any,
+        text: str,
+        command: Callable[[], None],
+        tooltip: str = "",
+        primary: bool = False,
+    ) -> Any:
+        button = ttk.Button(
+            parent, text=text, command=command, style="Primary.TButton" if primary else "TButton"
+        )
         if tooltip:
             Tooltip(button, tooltip)
         self._action_buttons.append(button)
@@ -2249,9 +2394,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         """Gate a feature on a probed dependency with an install hint."""
         if self.deps.get(module):
             return True
-        pip_hint = next(
-            hint for name, _l, _p, hint in _DEPENDENCIES if name == module
-        )
+        pip_hint = next(hint for name, _l, _p, hint in _DEPENDENCIES if name == module)
         messagebox.showwarning(
             f"{feature} needs {module}",
             f"{feature} needs the {module} package, which is not installed.\n\n"
@@ -2266,8 +2409,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         messagebox.showerror("pharmaml not loaded", _PHARMAML_HINT)
         return False
 
-    def _start_job(self, label: str, work: Callable[..., Any],
-                   on_done: Callable[[Any], None] | None = None) -> None:
+    def _start_job(
+        self, label: str, work: Callable[..., Any], on_done: Callable[[Any], None] | None = None
+    ) -> None:
         """Run ``work`` in a worker thread; render via ``on_done``.
 
         Progress (100x-106): a ``work`` that *accepts an argument*
@@ -2298,16 +2442,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         def runner() -> None:
             try:
-                self._jobs.put(
-                    (_call_work(work, self._report_progress), None)
-                )
+                self._jobs.put((_call_work(work, self._report_progress), None))
             except BaseException as exc:  # noqa: BLE001 - surfaced in the UI
                 self._jobs.put((None, exc))
 
         threading.Thread(target=runner, name="playground-job", daemon=True).start()
 
-    def _report_progress(self, done: int, total: int | None = None,
-                         note: str = "") -> None:
+    def _report_progress(self, done: int, total: int | None = None, note: str = "") -> None:
         """Worker-thread progress feed (thread-safe: queue → poller).
 
         Called from inside ``work`` for every completed unit -- a tuner
@@ -2377,19 +2518,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         elapsed = time.monotonic() - self._job_started
         label = getattr(self, "_job_label_base", "") or "job"
         if error is not None:
-            self._job_label.configure(text=f"{label} FAILED after "
-                                           f"{_fmt_duration(elapsed)}")
+            self._job_label.configure(text=f"{label} FAILED after {_fmt_duration(elapsed)}")
         else:
-            self._job_label.configure(
-                text=f"{label} — done in {_fmt_duration(elapsed)}")
+            self._job_label.configure(text=f"{label} — done in {_fmt_duration(elapsed)}")
         for button in self._action_buttons:
             if button.winfo_exists():
                 button.state(["!disabled"])
         if error is not None:
             traceback.print_exception(type(error), error, error.__traceback__)
-            messagebox.showerror(
-                "Calculation failed", f"{type(error).__name__}: {error}"
-            )
+            messagebox.showerror("Calculation failed", f"{type(error).__name__}: {error}")
         elif self._on_done is not None:
             try:
                 self._on_done(result)
@@ -2407,8 +2544,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self.clipboard_clear()
         self.clipboard_append(text)
         self._job_label.configure(text="copied to clipboard")
-        self.after(1400, lambda: self._job_label.configure(
-            text="busy…" if self._busy else "idle"))
+        self.after(1400, lambda: self._job_label.configure(text="busy…" if self._busy else "idle"))
 
     def _close_embedded(self, host: Any) -> None:
         figure = getattr(host, "_pg_figure", None)
@@ -2443,8 +2579,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         Prefers the live TkAgg canvas; when the TkAgg acceleration cannot
         load (some Tcl 9 builds), falls back to rendering the figure with
         the Agg backend and displaying the PNG directly -- same figures,
-        every machine.
+        every machine.  (100x-122) every render also feeds the session
+        figure registry the File ▸ Save session report walks.
         """
+        self._register_session_figure(host, figure)
         self._close_embedded(host)
         for child in host.winfo_children():
             child.destroy()
@@ -2476,6 +2614,35 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         host.pack_propagate(False)
         return host
 
+    def _register_session_figure(self, host: Any, figure: Any) -> None:
+        """Track one live ``(title, figure)`` per host for the session report.
+
+        Called from :meth:`_render_figure` BEFORE the prior figure is
+        closed: an existing host entry is replaced in place (order kept --
+        the report reads top-of-session first), a new host appends.  The
+        title is the running job's label, the honest provenance of what
+        drew the figure.
+        """
+        title = self._job_label_base or "figure"
+        for entry in self._session_figures:
+            if entry[0] is host:
+                entry[1] = title
+                entry[2] = figure
+                return
+        self._session_figures.append([host, title, figure])
+
+    def _live_session_figures(self) -> list[list]:
+        """Registry entries whose host AND figure are both still alive."""
+        live: list[list] = []
+        for entry in self._session_figures:
+            host, _title, figure = entry
+            if not host.winfo_exists():
+                continue  # the card's tab was rebuilt (defensive)
+            if getattr(host, "_pg_figure", None) is not figure:
+                continue  # superseded inside the host (defensive)
+            live.append(entry)
+        return live
+
     # -- session + theme ------------------------------------------------- #
     def _read_session_file(self) -> Any:
         """Parse the session file, or ``None`` when absent/corrupt."""
@@ -2502,8 +2669,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         """View-menu callback: flip the palette across the live window."""
         choice = self._theme_var.get()
         self._theme = choice if choice in _THEMES else "light"
-        self._set_theme(self._resolve_auto_theme() if self._theme == "auto"
-                        else self._theme)
+        self._set_theme(self._resolve_auto_theme() if self._theme == "auto" else self._theme)
 
     def _set_theme(self, resolved: str) -> None:
         """Apply a resolved palette and recolour every live widget."""
@@ -2533,6 +2699,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         canvases (also ``Canvas``/white in light mode) safely alone: the
         scroll canvases use ``BG``, never ``CARD``.
         """
+
         def walk(widget: Any) -> None:
             for child in widget.winfo_children():
                 klass = child.winfo_class()
@@ -2568,8 +2735,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     variables[name] = value.get()
             elif isinstance(value, ttk.Entry):  # covers Spinbox/Combobox
                 variables[name] = value.get()
-        families = {family: bool(var.get())
-                    for family, var in self._feat_family_vars.items()}
+        families = {family: bool(var.get()) for family, var in self._feat_family_vars.items()}
         texts = {
             "pasted": self._feat_pasted_text.get("1.0", "end-1c"),
             "corpus": self._corpus_text.get("1.0", "end-1c"),
@@ -2586,9 +2752,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             tab = self._book.index(self._book.select())
         except tk.TclError:  # pragma: no cover - no tab selected yet
             tab = 0
-        return dump_session(theme=self._theme, geometry=self.geometry(),
-                            tab=tab, variables=variables, families=families,
-                            texts=texts)
+        return dump_session(
+            theme=self._theme,
+            geometry=self.geometry(),
+            tab=tab,
+            variables=variables,
+            families=families,
+            texts=texts,
+        )
 
     def _write_session_file(self) -> bool:
         """Persist the current session; ``True`` when the file landed."""
@@ -2606,8 +2777,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._persist_session:
             return
         if self._write_session_file():
-            self._job_label.configure(
-                text=f"session saved · {session_path()}")
+            self._job_label.configure(text=f"session saved · {session_path()}")
         else:
             self._job_label.configure(text="session NOT saved (path unwritable)")
 
@@ -2623,9 +2793,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if messagebox is not None:
             messagebox.showinfo(
                 "Session cleared",
-                "The saved session was removed.\n"
-                "Fresh defaults return on the next launch." if removed else
-                "No saved session file existed.")
+                "The saved session was removed.\nFresh defaults return on the next launch."
+                if removed
+                else "No saved session file existed.",
+            )
 
     def _export_session(self) -> None:
         """File ▸ Export session -- write a shareable session file."""
@@ -2642,8 +2813,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if export_session(self._collect_session(), target):
             self._job_label.configure(text=f"session exported · {target}")
         else:
-            self._job_label.configure(
-                text="session NOT exported (path unwritable)")
+            self._job_label.configure(text="session NOT exported (path unwritable)")
 
     def _import_session(self) -> None:
         """File ▸ Import session -- apply a shareable session file."""
@@ -2660,8 +2830,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if messagebox is not None:
                 messagebox.showerror(
                     "Invalid session file",
-                    "That file is not a playground session (format marker "
-                    "missing or unreadable).")
+                    "That file is not a playground session (format marker missing or unreadable).",
+                )
             return
         self._session = session
         self._restore_session()
@@ -2670,8 +2840,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if self._theme_var is not None:
                 with contextlib.suppress(tk.TclError):
                     self._theme_var.set(self._theme)
-            self._set_theme(self._resolve_auto_theme()
-                            if self._theme == "auto" else self._theme)
+            self._set_theme(self._resolve_auto_theme() if self._theme == "auto" else self._theme)
         self._job_label.configure(text=f"session imported · {source}")
 
     def _reset_current_tab(self) -> None:
@@ -2692,15 +2861,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         """
         names = self._tab_input_owners.get(index, set())
         defaults = self._session_defaults
-        text_widgets = {"pasted": self._feat_pasted_text,
-                        "corpus": self._corpus_text,
-                        "smiles": getattr(self, "_dock_smiles_text", None),
-                        "rism": getattr(self, "_rism_text", None),
-                        "maccs": getattr(self, "_maccs_text", None)}
+        text_widgets = {
+            "pasted": self._feat_pasted_text,
+            "corpus": self._corpus_text,
+            "smiles": getattr(self, "_dock_smiles_text", None),
+            "rism": getattr(self, "_rism_text", None),
+            "maccs": getattr(self, "_maccs_text", None),
+        }
         applied = 0
         for name in sorted(names):
             if name.startswith("family:"):
-                family = name[len("family:"):]
+                family = name[len("family:") :]
                 var = self._feat_family_vars.get(family)
                 if family in defaults["families"] and var is not None:
                     with contextlib.suppress(tk.TclError):
@@ -2708,7 +2879,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         applied += 1
                 continue
             if name.startswith("text:"):
-                key = name[len("text:"):]
+                key = name[len("text:") :]
                 widget = text_widgets.get(key)
                 if key in defaults["texts"] and widget is not None:
                     widget.delete("1.0", "end")
@@ -2743,7 +2914,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             with contextlib.suppress(Exception):  # best effort
                 self._ml_refresh_hyperparam_panel()
         self._job_label.configure(
-            text=f"{label.lower()} tab reset · {applied} inputs back to defaults")
+            text=f"{label.lower()} tab reset · {applied} inputs back to defaults"
+        )
 
     def _copy_tab_inputs(self, index: int) -> None:
         """Copy ONE tab's live inputs as a share-lite JSON snippet.
@@ -2755,25 +2927,27 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         into an issue report, a script, or a message.
         """
         names = self._tab_input_owners.get(index, set())
-        text_widgets = {"pasted": self._feat_pasted_text,
-                        "corpus": self._corpus_text,
-                        "smiles": getattr(self, "_dock_smiles_text", None),
-                        "rism": getattr(self, "_rism_text", None),
-                        "scan_refs": getattr(self, "_scan_ref_text", None),
-                        "scan_lib": getattr(self, "_scan_lib_text", None)}
+        text_widgets = {
+            "pasted": self._feat_pasted_text,
+            "corpus": self._corpus_text,
+            "smiles": getattr(self, "_dock_smiles_text", None),
+            "rism": getattr(self, "_rism_text", None),
+            "scan_refs": getattr(self, "_scan_ref_text", None),
+            "scan_lib": getattr(self, "_scan_lib_text", None),
+        }
         variables: dict[str, Any] = {}
         families: dict[str, bool] = {}
         texts: dict[str, str] = {}
         for name in sorted(names):
             if name.startswith("family:"):
-                family = name[len("family:"):]
+                family = name[len("family:") :]
                 var = self._feat_family_vars.get(family)
                 if var is not None:
                     with contextlib.suppress(tk.TclError):
                         families[family] = bool(var.get())
                 continue
             if name.startswith("text:"):
-                key = name[len("text:"):]
+                key = name[len("text:") :]
                 widget = text_widgets.get(key)
                 if widget is not None:
                     texts[key] = widget.get("1.0", "end-1c")
@@ -2793,8 +2967,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         }
         items = len(variables) + len(families) + len(texts)
         self._copy(json.dumps(payload, indent=2, sort_keys=True))
-        self._job_label.configure(
-            text=f"{label.lower()} inputs copied as JSON · {items} items")
+        self._job_label.configure(text=f"{label.lower()} inputs copied as JSON · {items} items")
 
     def _walk_widgets(self, widget: Any) -> Iterator[Any]:
         """Yield ``widget`` and every descendant (the GUI-tree walk)."""
@@ -2822,12 +2995,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 var_by_tcl_name[str(value)] = name
             elif isinstance(value, ttk.Entry):
                 entry_by_id[id(value)] = name
-        family_by_tcl_name = {str(var): f"family:{family}"
-                               for family, var in self._feat_family_vars.items()}
-        text_by_id = {id(self._feat_pasted_text): "text:pasted",
-                      id(self._corpus_text): "text:corpus",
-                      id(getattr(self, "_dock_smiles_text", None)): "text:smiles",
-                      id(getattr(self, "_rism_text", None)): "text:rism"}
+        family_by_tcl_name = {
+            str(var): f"family:{family}" for family, var in self._feat_family_vars.items()
+        }
+        text_by_id = {
+            id(self._feat_pasted_text): "text:pasted",
+            id(self._corpus_text): "text:corpus",
+            id(getattr(self, "_dock_smiles_text", None)): "text:smiles",
+            id(getattr(self, "_rism_text", None)): "text:rism",
+        }
         owners: dict[int, set[str]] = {}
         with contextlib.suppress(tk.TclError):
             for index, tab_id in enumerate(self._book.tabs()):
@@ -2842,8 +3018,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                             names.add(var_by_tcl_name[linked])
                         elif id(widget) in entry_by_id:
                             names.add(entry_by_id[id(widget)])
-                    elif isinstance(widget, (ttk.Checkbutton, ttk.Radiobutton,
-                                             tk.Checkbutton, tk.Radiobutton)):
+                    elif isinstance(
+                        widget, (ttk.Checkbutton, ttk.Radiobutton, tk.Checkbutton, tk.Radiobutton)
+                    ):
                         linked = str(widget.cget("variable"))
                         if linked in var_by_tcl_name:
                             names.add(var_by_tcl_name[linked])
@@ -2883,13 +3060,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # the hint row's visibility rides a tk.Variable, so a restored
         # session may have flipped it -- re-apply after the variables.
         self._apply_hint_visibility()
-        text_widgets = {"pasted": self._feat_pasted_text,
-                        "corpus": self._corpus_text,
-                        "smiles": getattr(self, "_dock_smiles_text", None),
-                        "rism": getattr(self, "_rism_text", None),
-                        "maccs": getattr(self, "_maccs_text", None),
-                        "scan_refs": getattr(self, "_scan_ref_text", None),
-                        "scan_lib": getattr(self, "_scan_lib_text", None)}
+        text_widgets = {
+            "pasted": self._feat_pasted_text,
+            "corpus": self._corpus_text,
+            "smiles": getattr(self, "_dock_smiles_text", None),
+            "rism": getattr(self, "_rism_text", None),
+            "maccs": getattr(self, "_maccs_text", None),
+            "scan_refs": getattr(self, "_scan_ref_text", None),
+            "scan_lib": getattr(self, "_scan_lib_text", None),
+        }
         for key, content in session["texts"].items():
             if key == "finder":
                 # 100x-121: the finder's last query -- an attribute, not a
@@ -2909,21 +3088,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             width, height, x, y = parsed
             width = min(width, self.winfo_screenwidth())
             height = min(height, self.winfo_screenheight())
-            on_screen = (0 <= x < self.winfo_screenwidth()
-                         and 0 <= y < self.winfo_screenheight())
+            on_screen = 0 <= x < self.winfo_screenwidth() and 0 <= y < self.winfo_screenheight()
             spec = f"{width}x{height}" + (f"+{x}+{y}" if on_screen else "")
             with contextlib.suppress(tk.TclError):
                 self.geometry(spec)
                 restored_geometry = True
         if session["variables"] or session["texts"]:
-            self._job_label.configure(
-                text="session restored · File ▸ Clear saved session resets")
+            self._job_label.configure(text="session restored · File ▸ Clear saved session resets")
         # the ML tab's manual-hyperparameter card is DYNAMIC (rebuilt
         # per model selection, values carried by the JSON variable the
         # loop above already restored) -- rebuild it once, after the
         # comboboxes hold their restored selections (100x-106).
         with contextlib.suppress(Exception):  # never block restore
             self._ml_refresh_hyperparam_panel()
+        # (100x-122) same discipline for the swapped rows: a restored RL
+        # method or reference-driven objective must re-sync its frames
+        # (fixes the latent restore bug where the GA block stayed visible
+        # under an RL selection, and hides/shows the reference row).
+        with contextlib.suppress(Exception):  # never block restore
+            self._on_method_change()
+            self._objective_hint()
         return restored_geometry
 
     def _on_close(self) -> None:
@@ -2962,9 +3146,75 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save the figure", exc)
 
+    def _menu_save_session_report(self) -> None:
+        """File ▸ Save session report -- one PDF of every figure on screen.
+
+        (100x-122) Composes :func:`pharmaml.viz.save_pdf_report` over the
+        session figure registry: a title page with the census and stamp,
+        then one page per live figure (a figure replaced on its card is
+        gone -- the host now shows the newer render, and the report says
+        so honestly).  ``close=False``: the on-screen figures stay alive.
+        """
+        live = self._live_session_figures()
+        if not live:
+            messagebox.showinfo(
+                "No figures yet",
+                "Run a calculation that draws a figure first -- the report "
+                "collects every figure currently on screen (one page each).",
+            )
+            return
+        if not self._require_pharmaml() or not fpdf_available():
+            if self.pharmaml is not None:
+                messagebox.showwarning(
+                    "Session report needs fpdf",
+                    "The multi-page PDF report needs the fpdf package "
+                    "(the fpdf2 wheel, extras: reports).\n\n"
+                    "    pip install fpdf2\n\n"
+                    "Install it, then restart the playground.",
+                )
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save session report",
+            defaultextension=".pdf",
+            filetypes=[("PDF report", "*.pdf")],
+        )
+        if not path:
+            return
+        figures: dict[str, Any] = {}
+        for _host, title, figure in live:
+            name = title
+            suffix = 2
+            while name in figures:  # unique page titles
+                name = f"{title} ({suffix})"
+                suffix += 1
+            figures[name] = figure
+        stamp = time.strftime("%Y-%m-%d %H:%M")
+
+        def work() -> Any:
+            from pharmaml.viz import save_pdf_report
+
+            return save_pdf_report(
+                figures,
+                out_path=path,
+                title="PharmaML Playground session",
+                subtitle=(
+                    f"{len(figures)} figure page(s) · generated {stamp} · playground {__version__}"
+                ),
+                close=False,
+            )
+
+        def render(saved: Any) -> None:
+            messagebox.showinfo(
+                "Session report saved",
+                f"{len(figures)} figure page(s) written to\n{saved}",
+            )
+
+        self._start_job("session report", work, render)
+
     def _show_about(self) -> None:
         pharmaml_line = (
-            f"pharmaml {self.pharmaml.__version__}" if self.pharmaml is not None
+            f"pharmaml {self.pharmaml.__version__}"
+            if self.pharmaml is not None
             else "pharmaml: NOT LOADED (run from the toolkit root)"
         )
         messagebox.showinfo(
@@ -2992,11 +3242,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _build_home_tab(self) -> None:
         page = self._new_page("Home", reset=False)  # no inputs to reset
         hero = make_card(
-            page.grid, "PharmaML Playground", span=2, row=0, column=0,
+            page.grid,
+            "PharmaML Playground",
+            span=2,
+            row=0,
+            column=0,
             subtitle="One window for the whole toolkit -- chemistry, PK/PD dosing, "
-                     "cell-line biology, molecular docking, QSAR modelling, "
-                     "deep learning and the generative GA, without touching "
-                     "a terminal.",
+            "cell-line biology, molecular docking, QSAR modelling, "
+            "deep learning and the generative GA, without touching "
+            "a terminal.",
         )
         version_line = (
             f"playground {__version__} · pharmaml {self.pharmaml.__version__}"
@@ -3011,172 +3265,232 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         jump_row = ttk.Frame(hero, style="Card.TFrame")
         jump_row.grid(row=1, column=0, sticky="w", pady=(8, 0))
         ttk.Label(jump_row, text="jump to:", style="CardMuted.TLabel").pack(
-            side="left", padx=(0, 8))
+            side="left", padx=(0, 8)
+        )
         for index, name in enumerate(
-                ("Chemistry", "PK / PD", "Cell Lines", "Docking",
-                 "Data & ML", "Deep Learning", "Generative", "Utilities")):
+            (
+                "Chemistry",
+                "PK / PD",
+                "Cell Lines",
+                "Docking",
+                "Data & ML",
+                "Deep Learning",
+                "Generative",
+                "Utilities",
+            )
+        ):
             chip = ttk.Button(
-                jump_row, text=name, style="Chip.TButton",
-                command=lambda idx=index + 1: self._jump_to_tab(idx))
+                jump_row,
+                text=name,
+                style="Chip.TButton",
+                command=lambda idx=index + 1: self._jump_to_tab(idx),
+            )
             chip.pack(side="left", padx=(0, 6))
             Tooltip(chip, f"Switch straight to the {name} tab.")
 
-        status = make_card(page.grid, "Dependency status", span=2, row=1, column=0,
-                           subtitle="Each tab degrades politely and tells you the pip line it wants.")
+        status = make_card(
+            page.grid,
+            "Dependency status",
+            span=2,
+            row=1,
+            column=0,
+            subtitle="Each tab degrades politely and tells you the pip line it wants.",
+        )
         grid = ttk.Frame(status, style="Card.TFrame")
         grid_append(status, grid, sticky="ew")
         grid.columnconfigure(2, weight=1)
-        rows = [(label, module, purpose, pip) for module, label, purpose, pip
-                in _DEPENDENCIES]
+        rows = [(label, module, purpose, pip) for module, label, purpose, pip in _DEPENDENCIES]
         rows.append(("tkinter", "tkinter", "the GUI itself (stdlib)", "python3-tk"))
         for label, module, purpose, pip in rows:
             row = grid.grid_size()[1]
             ok = self.deps.get(module, tk is not None)
-            dot = tk.Label(grid, text="●", background=CARD,
-                           foreground=GOOD if ok else BAD,
-                           font=("TkDefaultFont", 12))
+            dot = tk.Label(
+                grid,
+                text="●",
+                background=CARD,
+                foreground=GOOD if ok else BAD,
+                font=("TkDefaultFont", 12),
+            )
             dot.grid(row=row, column=0, sticky="w", padx=(0, 8))
             ttk.Label(grid, text=label, style="Field.TLabel").grid(
-                row=row, column=1, sticky="w", padx=(0, 10))
+                row=row, column=1, sticky="w", padx=(0, 10)
+            )
             ttk.Label(grid, text=purpose, style="CardMuted.TLabel").grid(
-                row=row, column=2, sticky="w")
+                row=row, column=2, sticky="w"
+            )
             state = "installed" if ok else f"missing → pip install {pip}"
             ttk.Label(grid, text=state, style="CardMuted.TLabel").grid(
-                row=row, column=3, sticky="e")
-        missing = [pip for module, _l, _p, pip in _DEPENDENCIES
-                   if not self.deps.get(module)]
+                row=row, column=3, sticky="e"
+            )
+        missing = [pip for module, _l, _p, pip in _DEPENDENCIES if not self.deps.get(module)]
         if self.pharmaml is None:
             missing.append("-e .")
         if missing:
-            grid_append(status, ttk.Label(status, style="CardMuted.TLabel",
-                          justify="left", text=(
-                "To light up every tab, from the toolkit root:\n"
-                "    pip install -e . numpy pandas scikit-learn scipy matplotlib rdkit"
-            )), pady=(8, 0))
+            grid_append(
+                status,
+                ttk.Label(
+                    status,
+                    style="CardMuted.TLabel",
+                    justify="left",
+                    text=(
+                        "To light up every tab, from the toolkit root:\n"
+                        "    pip install -e . numpy pandas scikit-learn scipy matplotlib rdkit"
+                    ),
+                ),
+                pady=(8, 0),
+            )
         else:
-            grid_append(status, ttk.Label(status, style="CardMuted.TLabel",
-                          text="Everything is available -- every tab is fully armed."
-                          ), pady=(8, 0))
+            grid_append(
+                status,
+                ttk.Label(
+                    status,
+                    style="CardMuted.TLabel",
+                    text="Everything is available -- every tab is fully armed.",
+                ),
+                pady=(8, 0),
+            )
 
         guide = make_card(page.grid, "What lives where", span=2, row=2, column=0)
         entries = [
             (
                 "Chemistry",
-                ("IC50/Ki → pIC50/pKi, molar mass, the 200+ descriptor table for "
-                 "any SMILES, Tanimoto similarity, the RISM-KH solvation "
-                 "card (ten solvation-theory descriptors), the feature "
-                 "factory: 10,000+ descriptor/fingerprint columns ranked to "
-                 "a top-K (with the distribution-histogram grid), the "
-                 "structure & table converters (CSV → 3D SDF, "
-                 "SMI ↔ CSV, SDF → table, batch pIC50), the library "
-                 "similarity scan (matrix / threshold / top-k, now with the "
-                 "labelled heat-map figure), the canonical-tautomer & "
-                 "3D-PDB writer and the 167-key MACCS fingerprint."),
+                (
+                    "IC50/Ki → pIC50/pKi, molar mass, the 200+ descriptor table for "
+                    "any SMILES, Tanimoto similarity, the RISM-KH solvation "
+                    "card (ten solvation-theory descriptors), the feature "
+                    "factory: 10,000+ descriptor/fingerprint columns ranked to "
+                    "a top-K (with the distribution-histogram grid), the "
+                    "structure & table converters (CSV → 3D SDF, "
+                    "SMI ↔ CSV, SDF → table, batch pIC50), the library "
+                    "similarity scan (matrix / threshold / top-k, now with the "
+                    "labelled heat-map figure), the canonical-tautomer & "
+                    "3D-PDB writer and the 167-key MACCS fingerprint."
+                ),
                 "RDKit + pandas",
             ),
             (
                 "PK / PD",
-                ("Half-life, accumulation, IV bolus decay and Emax curves, "
-                 "Cockcroft–Gault, loading/maintenance and pediatric dosing — "
-                 "plus non-compartmental analysis over any pasted "
-                 "concentration-time series (AUC/AUMC/MRT/Cmax/t½ with the "
-                 "profile figure), IV infusion & steady state, Vd and "
-                 "bioavailability, the TDM trough dose adjustment, the "
-                 "full PD model family (sigmoid Emax / inhibitory Emax / "
-                 "linear) with the reverse EC50-for-target-effect solver, "
-                 "and the dimension-aware unit converter."),
+                (
+                    "Half-life, accumulation, IV bolus decay and Emax curves, "
+                    "Cockcroft–Gault, loading/maintenance and pediatric dosing — "
+                    "plus non-compartmental analysis over any pasted "
+                    "concentration-time series (AUC/AUMC/MRT/Cmax/t½ with the "
+                    "profile figure), IV infusion & steady state, Vd and "
+                    "bioavailability, the TDM trough dose adjustment, the "
+                    "full PD model family (sigmoid Emax / inhibitory Emax / "
+                    "linear) with the reverse EC50-for-target-effect solver, "
+                    "and the dimension-aware unit converter."
+                ),
                 "numpy",
             ),
             (
                 "Cell Lines",
-                ("Drug-response screens: audit (plus the replicate-variability "
-                 "and per-compound summary readouts), the sensitivity "
-                 "matrix, sensitive vs resistant calls, MAD-ranked variable "
-                 "genes on the expression table, and biomarker discovery."),
+                (
+                    "Drug-response screens: audit (plus the replicate-variability "
+                    "and per-compound summary readouts), the sensitivity "
+                    "matrix, sensitive vs resistant calls, MAD-ranked variable "
+                    "genes on the expression table, and biomarker discovery."
+                ),
                 "pandas + scipy",
             ),
             (
                 "Docking",
-                ("Ligand library and receptor preparation into PDBQT (bad "
-                 "residues auto-removed, atom-type census figure included), "
-                 "the grid box with GPF/DPF "
-                 "configs — one ligand or the whole campaign at once, "
-                 "custom receptor types included — DLG / Vina result "
-                 "parsing (single logs or a full Vina results folder, "
-                 "top-ligand bars included), "
-                 "batch campaign runs and the single-folder AutoDock4 "
-                 "engine (with skip-completed resume), the SMILES array "
-                 "card: paste a "
-                 "list, dock every molecule simultaneously with Vina or "
-                 "AutoDock4 -- plus the audit card (GPF parameters, "
-                 "ligand_types, torsion consistency, completion), the "
-                 "Vina config batch (parsed keys shown, box copied into "
-                 "the single-run form) and one-ligand SMILES → PDBQT."),
+                (
+                    "Ligand library and receptor preparation into PDBQT (bad "
+                    "residues auto-removed, atom-type census figure included), "
+                    "the grid box with GPF/DPF "
+                    "configs — one ligand or the whole campaign at once, "
+                    "custom receptor types included — DLG / Vina result "
+                    "parsing (single logs or a full Vina results folder, "
+                    "top-ligand bars included), "
+                    "batch campaign runs and the single-folder AutoDock4 "
+                    "engine (with skip-completed resume), the SMILES array "
+                    "card: paste a "
+                    "list, dock every molecule simultaneously with Vina or "
+                    "AutoDock4 -- plus the audit card (GPF parameters, "
+                    "ligand_types, torsion consistency, completion), the "
+                    "Vina config batch (parsed keys shown, box copied into "
+                    "the single-run form) and one-ligand SMILES → PDBQT."
+                ),
                 "RDKit + pandas",
             ),
             (
                 "Data & ML",
-                ("Open a CSV (or a bundled example), drop the non-numeric "
-                 "columns, train a model, read the metrics (classification "
-                 "runs gain the calibration reliability diagram; both "
-                 "tasks gain the learning-curve figure — should you assay "
-                 "more compounds?), browse the "
-                 "cross-validation leaderboard (with the bar figure), build "
-                 "voting / stacking ensembles by hand, and save the trained "
-                 "model as a bundle you can load back and predict with (PDF "
-                 "report included)."),
+                (
+                    "Open a CSV (or a bundled example), drop the non-numeric "
+                    "columns, train a model, read the metrics (classification "
+                    "runs gain the calibration reliability diagram; both "
+                    "tasks gain the learning-curve figure — should you assay "
+                    "more compounds?), browse the "
+                    "cross-validation leaderboard (with the bar figure), build "
+                    "voting / stacking ensembles by hand, and save the trained "
+                    "model as a bundle you can load back and predict with (PDF "
+                    "report included)."
+                ),
                 "pandas + sklearn",
             ),
             (
                 "Deep Learning",
-                ("The PyTorch estimators behind one card: pick the "
-                 "architecture (feed-forward or residual MLP), the hidden "
-                 "widths, dropout, Adam's learning rate / weight decay and "
-                 "the early-stopping patience, then watch the held-out "
-                 "metrics, the parity / confusion figure and the "
-                 "epoch-by-epoch loss curves — with the size-vs-score "
-                 "learning curve (are more rows still buying accuracy?) "
-                 "and the ml check CSV audit beside them."),
+                (
+                    "The PyTorch estimators behind one card: pick the "
+                    "architecture (feed-forward or residual MLP), the hidden "
+                    "widths, dropout, Adam's learning rate / weight decay and "
+                    "the early-stopping patience, then watch the held-out "
+                    "metrics, the parity / confusion figure and the "
+                    "epoch-by-epoch loss curves — with the size-vs-score "
+                    "learning curve (are more rows still buying accuracy?) "
+                    "and the ml check CSV audit beside them."
+                ),
                 "torch",
             ),
             (
                 "Generative",
-                ("Evolve molecules against QED / LogP objectives with the GA "
-                 "or reinforcement learning; adaptive runs show the "
-                 "operator-mix learning curve, RL runs the prior-drift "
-                 "introspection."),
+                (
+                    "Evolve molecules against QED / LogP / similarity / novelty / "
+                    "SMARTS objectives with the GA or reinforcement learning; "
+                    "adaptive runs show the operator-mix learning curve, RL runs "
+                    "the prior-drift introspection, and the surgery cards "
+                    "enumerate one molecule's ring moves or breed two parents."
+                ),
                 "RDKit (+ torch for RL)",
             ),
             (
                 "Utilities",
-                ("The archive's own file & table operations: merge or split "
-                 "tables, compare / annotate ligand columns (with the "
-                 "three-way reconciliation figure), filter "
-                 "approved drugs into a CSV or Word report, the campaign "
-                 "file tools (collect / list / distribute / delete / "
-                 "cleanup, dry-run first) and the reindex-by-number table."),
+                (
+                    "The archive's own file & table operations: merge or split "
+                    "tables, compare / annotate ligand columns (with the "
+                    "three-way reconciliation figure), filter "
+                    "approved drugs into a CSV or Word report, the campaign "
+                    "file tools (collect / list / distribute / delete / "
+                    "cleanup, dry-run first) and the reindex-by-number table."
+                ),
                 "pandas",
             ),
         ]
         for name, blurb, needs in entries:
             row = ttk.Frame(guide, style="Card.TFrame")
             grid_append(guide, row, sticky="ew", pady=2)
-            ttk.Label(row, text=name, style="Field.TLabel",
-                      font=("TkDefaultFont", 10, "bold")).pack(side="left")
-            ttk.Label(row, text=f" — {blurb}", style="CardMuted.TLabel",
-                      wraplength=560, justify="left").pack(side="left", padx=(8, 0))
-            ttk.Label(row, text=f"[{needs}]", style="CardMuted.TLabel").pack(
-                side="right")
+            ttk.Label(
+                row, text=name, style="Field.TLabel", font=("TkDefaultFont", 10, "bold")
+            ).pack(side="left")
+            ttk.Label(
+                row, text=f" — {blurb}", style="CardMuted.TLabel", wraplength=560, justify="left"
+            ).pack(side="left", padx=(8, 0))
+            ttk.Label(row, text=f"[{needs}]", style="CardMuted.TLabel").pack(side="right")
 
         if self.pharmaml is None:
-            broken = make_card(page.grid, "pharmaml could not be imported",
-                               span=2, row=3, column=0)
-            grid_append(broken, ttk.Label(broken, text=self.pharmaml_error,
-                                           style="CardMuted.TLabel",
-                                           wraplength=620))
-            grid_append(broken, ttk.Label(broken, text=_PHARMAML_HINT,
-                                          style="CardMuted.TLabel",
-                                          justify="left"), pady=(6, 0))
+            broken = make_card(page.grid, "pharmaml could not be imported", span=2, row=3, column=0)
+            grid_append(
+                broken,
+                ttk.Label(
+                    broken, text=self.pharmaml_error, style="CardMuted.TLabel", wraplength=620
+                ),
+            )
+            grid_append(
+                broken,
+                ttk.Label(broken, text=_PHARMAML_HINT, style="CardMuted.TLabel", justify="left"),
+                pady=(6, 0),
+            )
 
     # ------------------------------------------------------------------ #
     # Chemistry tab
@@ -3185,124 +3499,165 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         page = self._new_page("Chemistry")
 
         conv = make_card(
-            page.grid, "Affinity conversion", row=0, column=0,
+            page.grid,
+            "Affinity conversion",
+            row=0,
+            column=0,
             subtitle="IC50/Ki → pIC50/pKi. Censored entries like '<100' are handled.",
         )
-        self._aff_mode = ttk.Combobox(conv, state="readonly", width=22,
-                                      values=("IC50 → pIC50", "Ki → pKi"))
+        self._aff_mode = ttk.Combobox(
+            conv, state="readonly", width=22, values=("IC50 → pIC50", "Ki → pKi")
+        )
         self._aff_mode.set("IC50 → pIC50")
         form_row(conv, "Endpoint", self._aff_mode)
         self._aff_value = ttk.Entry(conv, width=22)
         self._aff_value.insert(0, "100")
         form_row(conv, "Value", self._aff_value)
-        self._aff_unit = ttk.Combobox(conv, state="readonly", width=22,
-                                      values=("nM", "uM", "µM", "mM", "M", "pM"))
+        self._aff_unit = ttk.Combobox(
+            conv, state="readonly", width=22, values=("nM", "uM", "µM", "mM", "M", "pM")
+        )
         self._aff_unit.set("nM")
         form_row(conv, "Unit", self._aff_unit)
-        button = self._action_button(conv, "Convert", self._convert_affinity,
-                                     tooltip="-log10 of the value converted to molar units.")
+        button = self._action_button(
+            conv,
+            "Convert",
+            self._convert_affinity,
+            tooltip="-log10 of the value converted to molar units.",
+        )
         button.grid(row=conv.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._aff_result = ttk.Label(conv, text="—", style="Result.TLabel",
-                                     font=self._mono_result)
-        self._aff_result.grid(row=button.grid_info()["row"], column=1,
-                              sticky="w", padx=(10, 0))
+        self._aff_result = ttk.Label(conv, text="—", style="Result.TLabel", font=self._mono_result)
+        self._aff_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._aff_value, button)
-        copy_btn = self._action_button(conv, "Copy", lambda: self._copy(
-            self._aff_result.cget("text")))
+        copy_btn = self._action_button(
+            conv, "Copy", lambda: self._copy(self._aff_result.cget("text"))
+        )
         copy_btn.grid(row=conv.grid_size()[1], column=0, sticky="w")
 
-        mass = make_card(page.grid, "Molar mass", row=0, column=1,
-                         subtitle="Formula → g/mol (works with no heavy dependencies installed).")
+        mass = make_card(
+            page.grid,
+            "Molar mass",
+            row=0,
+            column=1,
+            subtitle="Formula → g/mol (works with no heavy dependencies installed).",
+        )
         self._formula = ttk.Entry(mass, width=22)
         self._formula.insert(0, "C8H10N4O2")
         form_row(mass, "Formula", self._formula)
-        button = self._action_button(mass, "Weigh", self._molar_mass,
-                                     tooltip="Supports hydrates (MgSO4.7H2O) and groups like Ca(OH)2.")
+        button = self._action_button(
+            mass,
+            "Weigh",
+            self._molar_mass,
+            tooltip="Supports hydrates (MgSO4.7H2O) and groups like Ca(OH)2.",
+        )
         button.grid(row=mass.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._mass_result = ttk.Label(mass, text="—", style="Result.TLabel",
-                                      font=self._mono_result)
-        self._mass_result.grid(row=button.grid_info()["row"], column=1,
-                               sticky="w", padx=(10, 0))
+        self._mass_result = ttk.Label(mass, text="—", style="Result.TLabel", font=self._mono_result)
+        self._mass_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._formula, button)
 
-        desc = make_card(page.grid, "SMILES inspector", row=1, column=0,
-                         subtitle="Every RDKit 2D descriptor for one molecule (type to filter).")
+        desc = make_card(
+            page.grid,
+            "SMILES inspector",
+            row=1,
+            column=0,
+            subtitle="Every RDKit 2D descriptor for one molecule (type to filter).",
+        )
         self._smiles_entry = ttk.Entry(desc, width=34)
         self._smiles_entry.insert(0, "CC(=O)Oc1ccccc1C(=O)O")
         form_row(desc, "SMILES", self._smiles_entry)
-        button = self._action_button(desc, "Analyse", self._analyse_smiles, primary=True,
-                                     tooltip="Computes the ~200 RDKit descriptors in a worker thread.")
+        button = self._action_button(
+            desc,
+            "Analyse",
+            self._analyse_smiles,
+            primary=True,
+            tooltip="Computes the ~200 RDKit descriptors in a worker thread.",
+        )
         button.grid(row=desc.grid_size()[1], column=0, sticky="w", pady=(4, 0))
-        self._smiles_summary = ttk.Label(desc, text="—", style="CardMuted.TLabel",
-                                         wraplength=420, justify="left")
-        self._smiles_summary.grid(row=button.grid_info()["row"], column=1,
-                                  sticky="w", padx=(10, 0))
+        self._smiles_summary = ttk.Label(
+            desc, text="—", style="CardMuted.TLabel", wraplength=420, justify="left"
+        )
+        self._smiles_summary.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._smiles_entry, button)
         self._desc_search = ttk.Entry(desc, width=24)
         self._desc_search.insert(0, "")
         self._desc_search.bind("<KeyRelease>", self._filter_descriptors)
         form_row(desc, "Filter", self._desc_search)
         tree_frame = ttk.Frame(desc, style="Card.TFrame")
-        tree_frame.grid(row=desc.grid_size()[1], column=0, columnspan=2,
-                        sticky="nsew", pady=(4, 0))
+        tree_frame.grid(row=desc.grid_size()[1], column=0, columnspan=2, sticky="nsew", pady=(4, 0))
         desc.rowconfigure(tree_frame.grid_info()["row"], weight=1)
-        self._desc_tree = ttk.Treeview(tree_frame, columns=("descriptor", "value"),
-                                       show="headings", height=9)
+        self._desc_tree = ttk.Treeview(
+            tree_frame, columns=("descriptor", "value"), show="headings", height=9
+        )
         self._desc_tree.heading("descriptor", text="descriptor")
         self._desc_tree.heading("value", text="value")
         self._desc_tree.column("descriptor", width=200, stretch=True)
         self._desc_tree.column("value", width=130, stretch=False)
-        desc_bar = ttk.Scrollbar(tree_frame, orient="vertical",
-                                 command=self._desc_tree.yview)
+        desc_bar = ttk.Scrollbar(tree_frame, orient="vertical", command=self._desc_tree.yview)
         self._desc_tree.configure(yscrollcommand=desc_bar.set)
         self._desc_tree.pack(side="left", fill="both", expand=True)
         desc_bar.pack(side="right", fill="y")
-        save_btn = self._action_button(desc, "Save descriptors as CSV…",
-                                       self._save_descriptors)
-        save_btn.grid(row=desc.grid_size()[1], column=0, columnspan=2, sticky="w",
-                      pady=(6, 0))
+        save_btn = self._action_button(desc, "Save descriptors as CSV…", self._save_descriptors)
+        save_btn.grid(row=desc.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0))
 
-        tani = make_card(page.grid, "Tanimoto similarity", row=1, column=1,
-                         subtitle="Morgan fingerprint overlap between two molecules.")
+        tani = make_card(
+            page.grid,
+            "Tanimoto similarity",
+            row=1,
+            column=1,
+            subtitle="Morgan fingerprint overlap between two molecules.",
+        )
         self._tani_a = ttk.Entry(tani, width=34)
         self._tani_a.insert(0, "CC(=O)Oc1ccccc1C(=O)O")
         form_row(tani, "SMILES A", self._tani_a)
         self._tani_b = ttk.Entry(tani, width=34)
         self._tani_b.insert(0, "CC(=O)Nc1ccc(O)cc1")
         form_row(tani, "SMILES B", self._tani_b)
-        button = self._action_button(tani, "Compare", self._compare_similarity,
-                                     tooltip="1.0 = identical fingerprint, 0.0 = nothing shared.")
+        button = self._action_button(
+            tani,
+            "Compare",
+            self._compare_similarity,
+            tooltip="1.0 = identical fingerprint, 0.0 = nothing shared.",
+        )
         button.grid(row=tani.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._tani_result = ttk.Label(tani, text="—", style="Result.TLabel",
-                                      font=self._mono_result)
-        self._tani_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
-                               padx=(10, 0))
-        self._tani_verdict = ttk.Label(tani, text="", style="CardMuted.TLabel",
-                                       wraplength=300, justify="left")
-        self._tani_verdict.grid(row=tani.grid_size()[1], column=0, columnspan=2,
-                                sticky="w", pady=(6, 0))
+        self._tani_result = ttk.Label(tani, text="—", style="Result.TLabel", font=self._mono_result)
+        self._tani_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
+        self._tani_verdict = ttk.Label(
+            tani, text="", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
+        self._tani_verdict.grid(
+            row=tani.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
         bind_enter(self._tani_b, button)
 
         # -- feature factory: the rar's own ML pipeline ------------------ #
         factory = make_card(
-            page.grid, "Feature factory", row=2, column=0, span=2,
+            page.grid,
+            "Feature factory",
+            row=2,
+            column=0,
+            span=2,
             subtitle="The rar's own ML pipeline as a card: 8 descriptor / "
-                     "fingerprint families (~10,810 columns per molecule), "
-                     "ranked and cut to the top K you keep -- now including "
-                     "the RISM-KH solvation family.",
+            "fingerprint families (~10,810 columns per molecule), "
+            "ranked and cut to the top K you keep -- now including "
+            "the RISM-KH solvation family.",
         )
         source_row = ttk.Frame(factory, style="Card.TFrame")
         grid_append(factory, source_row, sticky="w")
         ttk.Label(source_row, text="Source", style="Field.TLabel").pack(side="left")
         self._feat_source_var = tk.StringVar(value="Pasted SMILES")
         csv_radio = ttk.Radiobutton(
-            source_row, text="CSV file", value="CSV file",
-            variable=self._feat_source_var, command=self._feat_refresh_source,
+            source_row,
+            text="CSV file",
+            value="CSV file",
+            variable=self._feat_source_var,
+            command=self._feat_refresh_source,
         )
         csv_radio.pack(side="left", padx=(12, 0))
         pasted_radio = ttk.Radiobutton(
-            source_row, text="Pasted SMILES", value="Pasted SMILES",
-            variable=self._feat_source_var, command=self._feat_refresh_source,
+            source_row,
+            text="Pasted SMILES",
+            value="Pasted SMILES",
+            variable=self._feat_source_var,
+            command=self._feat_refresh_source,
         )
         pasted_radio.pack(side="left", padx=(8, 0))
 
@@ -3310,24 +3665,29 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         grid_append(factory, self._feat_csv_box, sticky="ew", pady=(6, 0))
         csv_buttons = ttk.Frame(self._feat_csv_box, style="Card.TFrame")
         csv_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
-        csv_open_btn = self._action_button(csv_buttons, "Open CSV…",
-                                           self._feat_open_csv)
+        csv_open_btn = self._action_button(csv_buttons, "Open CSV…", self._feat_open_csv)
         csv_open_btn.pack(side="left")
         csv_example_btn = self._action_button(
-            csv_buttons, "Load example", self._feat_load_example,
+            csv_buttons,
+            "Load example",
+            self._feat_load_example,
             tooltip="examples/data/library_with_descriptors.csv -- 77 drugs "
-                    "with SMILES, 8 numeric descriptor columns and an activity "
-                    "label.",
+            "with SMILES, 8 numeric descriptor columns and an activity "
+            "label.",
         )
         csv_example_btn.pack(side="left", padx=(10, 0))
         self._feat_source_info = ttk.Label(
-            self._feat_csv_box, text="no CSV loaded", style="CardMuted.TLabel",
-            wraplength=520, justify="left",
+            self._feat_csv_box,
+            text="no CSV loaded",
+            style="CardMuted.TLabel",
+            wraplength=520,
+            justify="left",
         )
-        self._feat_source_info.grid(row=1, column=0, columnspan=2, sticky="w",
-                                    pady=(4, 0))
+        self._feat_source_info.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self._feat_target_combo = ttk.Combobox(
-            self._feat_csv_box, state="readonly", width=30,
+            self._feat_csv_box,
+            state="readonly",
+            width=30,
             values=(_FEAT_NO_TARGET,),
         )
         self._feat_target_combo.set(_FEAT_NO_TARGET)
@@ -3335,14 +3695,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         self._feat_pasted_box = ttk.Frame(factory, style="Card.TFrame")
         grid_append(factory, self._feat_pasted_box, sticky="ew", pady=(6, 0))
-        self._feat_pasted_text = _grid_text(self._feat_pasted_box, height=4,
-                                            mono=self._mono)
+        self._feat_pasted_text = _grid_text(self._feat_pasted_box, height=4, mono=self._mono)
         self._feat_pasted_text.insert("1.0", "\n".join(_FEAT_DEFAULT_SMILES))
         grid_append(self._feat_pasted_box, self._feat_pasted_text, sticky="ew")
-        grid_append(self._feat_pasted_box, ttk.Label(
-            self._feat_pasted_box, style="CardMuted.TLabel",
-            text="one SMILES per line; comments with # are ignored",
-        ), pady=(2, 0))
+        grid_append(
+            self._feat_pasted_box,
+            ttk.Label(
+                self._feat_pasted_box,
+                style="CardMuted.TLabel",
+                text="one SMILES per line; comments with # are ignored",
+            ),
+            pady=(2, 0),
+        )
 
         families_box = ttk.Frame(factory, style="Card.TFrame")
         grid_append(factory, families_box, sticky="ew", pady=(6, 0))
@@ -3351,68 +3715,76 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             family_var = tk.BooleanVar(value=True)
             self._feat_family_vars[family] = family_var
             family_check = ttk.Checkbutton(
-                families_box, text=label, variable=family_var,
+                families_box,
+                text=label,
+                variable=family_var,
                 command=self._feat_update_width,
             )
-            family_check.grid(row=index // 2, column=index % 2, sticky="w",
-                              padx=(0, 24), pady=2)
+            family_check.grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 24), pady=2)
 
         self._feat_k_entry = ttk.Entry(factory, width=10)
         self._feat_k_entry.insert(0, "1000")  # the rar pipeline's own default
         Tooltip(self._feat_k_entry, _FEAT_K_PRESETS)
         form_row(factory, "Features to keep (K)", self._feat_k_entry)
-        self._feat_ranker_combo = ttk.Combobox(factory, state="readonly", width=28,
-                                               values=_FEAT_RANKERS)
+        self._feat_ranker_combo = ttk.Combobox(
+            factory, state="readonly", width=28, values=_FEAT_RANKERS
+        )
         self._feat_ranker_combo.set(_FEAT_RANKERS[0])
         form_row(factory, "Ranker", self._feat_ranker_combo)
-        self._feat_task_combo = ttk.Combobox(factory, state="readonly", width=28,
-                                             values=_FEAT_TASKS)
+        self._feat_task_combo = ttk.Combobox(
+            factory, state="readonly", width=28, values=_FEAT_TASKS
+        )
         self._feat_task_combo.set(_FEAT_TASKS[0])
         form_row(factory, "Task", self._feat_task_combo)
         self._feat_descriptor_count = _FEATURE_DESCRIPTORS_FALLBACK
         try:
             from rdkit.Chem import rdMolDescriptors
 
-            self._feat_descriptor_count = len(
-                rdMolDescriptors.Properties.GetAvailableProperties()
-            )
+            self._feat_descriptor_count = len(rdMolDescriptors.Properties.GetAvailableProperties())
         except Exception:  # noqa: BLE001 - estimate only; the run gates RDKit
             self._feat_descriptor_count = _FEATURE_DESCRIPTORS_FALLBACK
         self._feat_width_label = ttk.Label(factory, text="", style="CardMuted.TLabel")
         grid_append(factory, self._feat_width_label, sticky="w")
 
         feat_btn = self._action_button(
-            factory, "Compute & select features", self._feat_compute, primary=True,
+            factory,
+            "Compute & select features",
+            self._feat_compute,
+            primary=True,
             tooltip="Computes the ticked families in a worker thread, ranks "
-                    "every column, keeps the per-family median survivors, "
-                    "then the top K.",
+            "every column, keeps the per-family median survivors, "
+            "then the top K.",
         )
         feat_btn.grid(row=factory.grid_size()[1], column=0, sticky="w", pady=(6, 0))
         self._feat_summary = ttk.Label(
-            factory, text="—", style="CardMuted.TLabel", wraplength=560,
+            factory,
+            text="—",
+            style="CardMuted.TLabel",
+            wraplength=560,
             justify="left",
         )
-        self._feat_summary.grid(row=feat_btn.grid_info()["row"], column=1,
-                                sticky="w", padx=(10, 0))
-        self._feat_family_label = ttk.Label(factory, text="",
-                                            style="CardMuted.TLabel",
-                                            wraplength=620, justify="left")
+        self._feat_summary.grid(row=feat_btn.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
+        self._feat_family_label = ttk.Label(
+            factory, text="", style="CardMuted.TLabel", wraplength=620, justify="left"
+        )
         grid_append(factory, self._feat_family_label, sticky="w")
         feat_tree_frame = ttk.Frame(factory, style="Card.TFrame")
-        grid_append(factory, feat_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
+        grid_append(factory, feat_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
         self._feat_tree = ttk.Treeview(
-            feat_tree_frame, columns=("rank", "feature", "family", "importance"),
-            show="headings", height=10,
+            feat_tree_frame,
+            columns=("rank", "feature", "family", "importance"),
+            show="headings",
+            height=10,
         )
         for column, width in (
-            ("rank", 56), ("feature", 210), ("family", 140), ("importance", 120),
+            ("rank", 56),
+            ("feature", 210),
+            ("family", 140),
+            ("importance", 120),
         ):
             self._feat_tree.heading(column, text=column)
-            self._feat_tree.column(column, width=width, minwidth=48,
-                                   stretch=(column == "feature"))
-        feat_bar = ttk.Scrollbar(feat_tree_frame, orient="vertical",
-                                 command=self._feat_tree.yview)
+            self._feat_tree.column(column, width=width, minwidth=48, stretch=(column == "feature"))
+        feat_bar = ttk.Scrollbar(feat_tree_frame, orient="vertical", command=self._feat_tree.yview)
         self._feat_tree.configure(yscrollcommand=feat_bar.set)
         self._feat_tree.pack(side="left", fill="both", expand=True)
         feat_bar.pack(side="right", fill="y")
@@ -3421,26 +3793,31 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         feat_export_buttons = ttk.Frame(factory, style="Card.TFrame")
         grid_append(factory, feat_export_buttons, sticky="w", pady=(2, 0))
         feat_csv_btn = self._action_button(
-            feat_export_buttons, "Save selected features CSV…", self._feat_save_csv,
+            feat_export_buttons,
+            "Save selected features CSV…",
+            self._feat_save_csv,
             tooltip="The rar-style output: SMILES, the target column (if any) "
-                    "and the K selected features in rank order.",
+            "and the K selected features in rank order.",
         )
         feat_csv_btn.pack(side="left")
         feat_json_btn = self._action_button(
-            feat_export_buttons, "Save metadata JSON…", self._feat_save_json,
+            feat_export_buttons,
+            "Save metadata JSON…",
+            self._feat_save_json,
             tooltip="selection_metadata: selected features, family counts, "
-                    "fingerprint sizes, K and method.",
+            "fingerprint sizes, K and method.",
         )
         feat_json_btn.pack(side="left", padx=(10, 0))
         # 100x-120: the descriptor-distribution figure (the last viz
         # straggler) -- a histogram grid over the computed frame.
         feat_dist_btn = self._action_button(
-            feat_export_buttons, "Plot distributions",
+            feat_export_buttons,
+            "Plot distributions",
             self._feat_plot_distributions,
             tooltip="A histogram grid over the numeric columns of the "
-                    "computed frame (plot_descriptor_distributions) -- the "
-                    "honest first look at skew, bimodality and outliers "
-                    "before any model sees the numbers.",
+            "computed frame (plot_descriptor_distributions) -- the "
+            "honest first look at skew, bimodality and outliers "
+            "before any model sees the numbers.",
         )
         feat_dist_btn.pack(side="left", padx=(10, 0))
         self._feat_host = self._figure_host(factory, height=300)
@@ -3449,13 +3826,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         # -- RISM-KH solvation descriptors (the 3D surrogate card) ------ #
         rism = make_card(
-            page.grid, "RISM-KH solvation", row=3, column=0, span=2,
+            page.grid,
+            "RISM-KH solvation",
+            row=3,
+            column=0,
+            span=2,
             subtitle="Ten 3D-RISM-KH-inspired solvation descriptors per "
-                     "molecule (KH-closure pair distributions over an "
-                     "embedded 3D geometry): solvation free energy split "
-                     "into Lennard-Jones and Coulomb parts, water-site "
-                     "distribution peaks, first-shell coordination numbers, "
-                     "excluded volume, dipole and charge asymmetry.",
+            "molecule (KH-closure pair distributions over an "
+            "embedded 3D geometry): solvation free energy split "
+            "into Lennard-Jones and Coulomb parts, water-site "
+            "distribution peaks, first-shell coordination numbers, "
+            "excluded volume, dipole and charge asymmetry.",
         )
         rism_left = ttk.Frame(rism, style="Card.TFrame")
         rism_left.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
@@ -3465,55 +3846,65 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         rism_run_row = ttk.Frame(rism_left, style="Card.TFrame")
         rism_run_row.pack(fill="x", pady=(6, 0))
         rism_btn = self._action_button(
-            rism_run_row, "Compute RISM-KH", self._rism_run, primary=True,
+            rism_run_row,
+            "Compute RISM-KH",
+            self._rism_run,
+            primary=True,
             tooltip="Embeds every SMILES in 3D (ETKDGv3 + MMFF/UFF, fixed "
-                    "seed), applies the KH closure pair distributions "
-                    "against the chosen water model and integrates the "
-                    "same quantities a full 3D-RISM-KH solve reports -- "
-                    "milliseconds per molecule instead of grid hours.",
+            "seed), applies the KH closure pair distributions "
+            "against the chosen water model and integrates the "
+            "same quantities a full 3D-RISM-KH solve reports -- "
+            "milliseconds per molecule instead of grid hours.",
         )
         rism_btn.pack(side="left")
         self._rism_summary = ttk.Label(
-            rism_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=430, justify="left")
+            rism_run_row, text="—", style="CardMuted.TLabel", wraplength=430, justify="left"
+        )
         self._rism_summary.pack(side="left", padx=(10, 0))
 
         rism_right = ttk.Frame(rism, style="Card.TFrame")
         rism_right.grid(row=0, column=1, sticky="n")
         rism_right.columnconfigure(1, weight=1)
         self._rism_solvent_combo = ttk.Combobox(
-            rism_right, state="readonly", width=16, values=("spc", "tip3p"))
+            rism_right, state="readonly", width=16, values=("spc", "tip3p")
+        )
         self._rism_solvent_combo.set("spc")
-        Tooltip(self._rism_solvent_combo,
-                "The water model's site charges / LJ parameters: SPC or "
-                "TIP3P (both keep the surrogate solvent charge-neutral).")
+        Tooltip(
+            self._rism_solvent_combo,
+            "The water model's site charges / LJ parameters: SPC or "
+            "TIP3P (both keep the surrogate solvent charge-neutral).",
+        )
         form_row(rism_right, "water model", self._rism_solvent_combo)
         self._rism_temp_entry = ttk.Entry(rism_right, width=16)
         self._rism_temp_entry.insert(0, "298.15")
         form_row(rism_right, "temperature (K)", self._rism_temp_entry)
         rism_save_btn = self._action_button(
-            rism_right, "Save descriptors CSV…", self._rism_save,
+            rism_right,
+            "Save descriptors CSV…",
+            self._rism_save,
             tooltip="SMILES + the ten RISM-KH descriptor columns, ready "
-                    "for the feature factory or a QSAR table.",
+            "for the feature factory or a QSAR table.",
         )
-        rism_save_btn.grid(row=rism_right.grid_size()[1], column=0,
-                           columnspan=2, sticky="w", pady=(6, 0))
+        rism_save_btn.grid(
+            row=rism_right.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
         rism_tree_frame = ttk.Frame(rism, style="Card.TFrame")
-        grid_append(rism, rism_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
+        grid_append(rism, rism_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
         self._rism_tree = ttk.Treeview(
-            rism_tree_frame, columns=("molecule", "descriptor", "value", "meaning"),
-            show="headings", height=9,
+            rism_tree_frame,
+            columns=("molecule", "descriptor", "value", "meaning"),
+            show="headings",
+            height=9,
         )
         for column, width in (
-            ("molecule", 150), ("descriptor", 170), ("value", 90),
+            ("molecule", 150),
+            ("descriptor", 170),
+            ("value", 90),
             ("meaning", 230),
         ):
             self._rism_tree.heading(column, text=column)
-            self._rism_tree.column(column, width=width, minwidth=56,
-                                   stretch=(column == "meaning"))
-        rism_bar = ttk.Scrollbar(rism_tree_frame, orient="vertical",
-                                 command=self._rism_tree.yview)
+            self._rism_tree.column(column, width=width, minwidth=56, stretch=(column == "meaning"))
+        rism_bar = ttk.Scrollbar(rism_tree_frame, orient="vertical", command=self._rism_tree.yview)
         self._rism_tree.configure(yscrollcommand=rism_bar.set)
         self._rism_tree.pack(side="left", fill="both", expand=True)
         rism_bar.pack(side="right", fill="y")
@@ -3522,31 +3913,38 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # The rar's Convert CSV to SDF / Convert SMI to CSV / Sdf reading
         # notebook / Convert IC50(nM) to pIC50 -- one card, five modes.
         convert = make_card(
-            page.grid, "Structure & table converters", row=4, column=0,
+            page.grid,
+            "Structure & table converters",
+            row=4,
+            column=0,
             span=2,
             subtitle="The rar's converter scripts, one card: a SMILES "
-                     "table becomes a 3D SDF (AddHs → ETKDG → UFF, every "
-                     "column an SD tag), a .smi list becomes CSV, an SDF "
-                     "becomes a table back, a table becomes .smi, or a "
-                     "measurement column gains pIC50 (censored '<100' "
-                     "entries handled, never fabricated).",
+            "table becomes a 3D SDF (AddHs → ETKDG → UFF, every "
+            "column an SD tag), a .smi list becomes CSV, an SDF "
+            "becomes a table back, a table becomes .smi, or a "
+            "measurement column gains pIC50 (censored '<100' "
+            "entries handled, never fabricated).",
         )
-        self._conv_mode = ttk.Combobox(
-            convert, state="readonly", width=30, values=_CONVERTER_MODES)
+        self._conv_mode = ttk.Combobox(convert, state="readonly", width=30, values=_CONVERTER_MODES)
         self._conv_mode.set(_CONVERTER_MODES[0])
         form_row(convert, "mode", self._conv_mode)
         conv_pick = ttk.Frame(convert, style="Card.TFrame")
         grid_append(convert, conv_pick, sticky="w")
         for label, command in (
-                ("Input…", self._conv_pick_input),
-                ("Output…", self._conv_pick_output)):
+            ("Input…", self._conv_pick_input),
+            ("Output…", self._conv_pick_output),
+        ):
             button = self._action_button(conv_pick, label, command)
             button.pack(side="left")
         self._conv_input: Path | None = None
         self._conv_output: Path | None = None
         self._conv_info = ttk.Label(
-            convert, text="pick an input (and an output for the file modes)",
-            style="CardMuted.TLabel", wraplength=620, justify="left")
+            convert,
+            text="pick an input (and an output for the file modes)",
+            style="CardMuted.TLabel",
+            wraplength=620,
+            justify="left",
+        )
         grid_append(convert, self._conv_info, sticky="w", pady=(4, 0))
         conv_opts = ttk.Frame(convert, style="Card.TFrame")
         grid_append(convert, conv_opts, sticky="w")
@@ -3556,53 +3954,61 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(conv_opts, "SMILES column", self._conv_smiles_col)
         self._conv_name_col = ttk.Entry(conv_opts, width=18)
         self._conv_name_col.insert(0, "")
-        Tooltip(self._conv_name_col,
-                "Optional name/title column (SDF titles and .smi names); "
-                "blank uses the SMILES or the row index.")
+        Tooltip(
+            self._conv_name_col,
+            "Optional name/title column (SDF titles and .smi names); "
+            "blank uses the SMILES or the row index.",
+        )
         form_row(conv_opts, "name column", self._conv_name_col)
         self._conv_source_col = ttk.Entry(conv_opts, width=18)
         self._conv_source_col.insert(0, "IC50 (nM)")
-        Tooltip(self._conv_source_col,
-                "pIC50 mode: the measurement column to convert "
-                "(qualifiers like '<' / '>' are respected).")
+        Tooltip(
+            self._conv_source_col,
+            "pIC50 mode: the measurement column to convert "
+            "(qualifiers like '<' / '>' are respected).",
+        )
         form_row(conv_opts, "measure column (pIC50)", self._conv_source_col)
         self._conv_unit = ttk.Combobox(
-            conv_opts, state="readonly", width=8,
-            values=("nM", "uM", "µM", "mM", "M", "pM"))
+            conv_opts, state="readonly", width=8, values=("nM", "uM", "µM", "mM", "M", "pM")
+        )
         self._conv_unit.set("nM")
         form_row(conv_opts, "unit (pIC50)", self._conv_unit)
         self._conv_embed_var = tk.BooleanVar(value=True)
         embed_check = ttk.Checkbutton(
-            conv_opts, text="embed 3D + UFF (SDF)", variable=self._conv_embed_var)
+            conv_opts, text="embed 3D + UFF (SDF)", variable=self._conv_embed_var
+        )
         form_row(conv_opts, "geometry", embed_check)
         conv_run_row = ttk.Frame(convert, style="Card.TFrame")
         grid_append(convert, conv_run_row, sticky="w", pady=(6, 0))
         conv_run_btn = self._action_button(
-            conv_run_row, "Convert", self._conv_run, primary=True,
+            conv_run_row,
+            "Convert",
+            self._conv_run,
+            primary=True,
             tooltip="Runs in a worker thread; invalid SMILES are counted "
-                    "(never abort the batch) and the report names every "
-                    "non-fatal note.")
+            "(never abort the batch) and the report names every "
+            "non-fatal note.",
+        )
         conv_run_btn.pack(side="left")
         self._conv_summary = ttk.Label(
-            conv_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=520, justify="left")
+            conv_run_row, text="—", style="CardMuted.TLabel", wraplength=520, justify="left"
+        )
         self._conv_summary.pack(side="left", padx=(10, 0))
         conv_save_btn = self._action_button(
-            conv_run_row, "Save table CSV…", self._conv_save_table,
-            tooltip="Writes the last table-shaped result (SDF→table or "
-                    "pIC50) as CSV.")
+            conv_run_row,
+            "Save table CSV…",
+            self._conv_save_table,
+            tooltip="Writes the last table-shaped result (SDF→table or pIC50) as CSV.",
+        )
         conv_save_btn.pack(side="left", padx=(10, 0))
         conv_tree_frame = ttk.Frame(convert, style="Card.TFrame")
-        grid_append(convert, conv_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
-        self._conv_tree = ttk.Treeview(conv_tree_frame, show="headings",
-                                       height=6)
-        conv_bar = ttk.Scrollbar(conv_tree_frame, orient="vertical",
-                                 command=self._conv_tree.yview)
-        conv_bar_x = ttk.Scrollbar(conv_tree_frame, orient="horizontal",
-                                   command=self._conv_tree.xview)
-        self._conv_tree.configure(yscrollcommand=conv_bar.set,
-                                  xscrollcommand=conv_bar_x.set)
+        grid_append(convert, conv_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._conv_tree = ttk.Treeview(conv_tree_frame, show="headings", height=6)
+        conv_bar = ttk.Scrollbar(conv_tree_frame, orient="vertical", command=self._conv_tree.yview)
+        conv_bar_x = ttk.Scrollbar(
+            conv_tree_frame, orient="horizontal", command=self._conv_tree.xview
+        )
+        self._conv_tree.configure(yscrollcommand=conv_bar.set, xscrollcommand=conv_bar_x.set)
         self._conv_tree.pack(side="left", fill="both", expand=True)
         conv_bar.pack(side="right", fill="y")
         conv_bar_x.pack(side="bottom", fill="x")
@@ -3612,49 +4018,60 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # The rar's Tanimoto calculator / Tanimoto-edited pair: the
         # reference × library matrix, the threshold scan and top-k.
         scan = make_card(
-            page.grid, "Library similarity scan", row=5, column=0, span=2,
+            page.grid,
+            "Library similarity scan",
+            row=5,
+            column=0,
+            span=2,
             subtitle="The rar's Tanimoto calculator & Tanimoto-edited: "
-                     "paste references on the left and a library on the "
-                     "right (or load one from a CSV) -- the all-vs-all "
-                     "Tanimoto matrix, the pairs-above-threshold scan, "
-                     "or the top-k nearest neighbours of one query.",
+            "paste references on the left and a library on the "
+            "right (or load one from a CSV) -- the all-vs-all "
+            "Tanimoto matrix, the pairs-above-threshold scan, "
+            "or the top-k nearest neighbours of one query.",
         )
         scan.columnconfigure(0, weight=1)
         scan.columnconfigure(1, weight=1)
         scan_left = ttk.Frame(scan, style="Card.TFrame")
         scan_left.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
-        ttk.Label(scan_left, text="references / query (one SMILES per line)",
-                  style="CardMuted.TLabel").pack(anchor="w")
+        ttk.Label(
+            scan_left, text="references / query (one SMILES per line)", style="CardMuted.TLabel"
+        ).pack(anchor="w")
         self._scan_ref_text = _grid_text(scan_left, height=5, mono=self._mono)
         self._scan_ref_text.insert("1.0", "\n".join(_SCAN_DEFAULT_REFS))
         self._scan_ref_text.pack(fill="both", expand=True, pady=(4, 0))
         scan_right = ttk.Frame(scan, style="Card.TFrame")
         scan_right.grid(row=0, column=1, sticky="nsew")
-        ttk.Label(scan_right, text="library (SMILES per line, or pick a CSV)",
-                  style="CardMuted.TLabel").pack(anchor="w")
+        ttk.Label(
+            scan_right, text="library (SMILES per line, or pick a CSV)", style="CardMuted.TLabel"
+        ).pack(anchor="w")
         self._scan_lib_text = _grid_text(scan_right, height=5, mono=self._mono)
         self._scan_lib_text.insert("1.0", "\n".join(_SCAN_DEFAULT_LIB))
         self._scan_lib_text.pack(fill="both", expand=True, pady=(4, 0))
         scan_lib_pick = self._action_button(
-            scan_right, "Load library CSV…", self._scan_pick_library,
-            tooltip="A CSV with a SMILES column (auto-detected); it "
-                    "replaces the pasted library.")
+            scan_right,
+            "Load library CSV…",
+            self._scan_pick_library,
+            tooltip="A CSV with a SMILES column (auto-detected); it replaces the pasted library.",
+        )
         scan_lib_pick.pack(anchor="w", pady=(6, 0))
         self._scan_lib_info = ttk.Label(
-            scan_right, text="", style="CardMuted.TLabel",
-            wraplength=300, justify="left")
+            scan_right, text="", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
         self._scan_lib_info.pack(anchor="w")
         scan_controls = ttk.Frame(scan, style="Card.TFrame")
         grid_append(scan, scan_controls, sticky="ew", pady=(8, 0))
         scan_controls.columnconfigure(1, weight=1)
         self._scan_mode = ttk.Combobox(
-            scan_controls, state="readonly", width=28, values=_SCAN_MODES)
+            scan_controls, state="readonly", width=28, values=_SCAN_MODES
+        )
         self._scan_mode.set(_SCAN_MODES[0])
-        Tooltip(self._scan_mode,
-                "matrix: every reference × every library (the Tanimoto "
-                "calculator table); scan: the pairs at or above the "
-                "threshold (Tanimoto-edited); top-k: the nearest library "
-                "entries of the FIRST reference.")
+        Tooltip(
+            self._scan_mode,
+            "matrix: every reference × every library (the Tanimoto "
+            "calculator table); scan: the pairs at or above the "
+            "threshold (Tanimoto-edited); top-k: the nearest library "
+            "entries of the FIRST reference.",
+        )
         form_row(scan_controls, "mode", self._scan_mode)
         self._scan_threshold = ttk.Entry(scan_controls, width=10)
         self._scan_threshold.insert(0, "0.9")
@@ -3663,8 +4080,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._scan_k.insert(0, "10")
         form_row(scan_controls, "k (top matches)", self._scan_k)
         self._scan_kind = ttk.Combobox(
-            scan_controls, state="readonly", width=16,
-            values=("rdkit", "morgan", "atom_pair", "avalon"))
+            scan_controls,
+            state="readonly",
+            width=16,
+            values=("rdkit", "morgan", "atom_pair", "avalon"),
+        )
         self._scan_kind.set("rdkit")
         form_row(scan_controls, "fingerprint", self._scan_kind)
         self._scan_bits = ttk.Entry(scan_controls, width=10)
@@ -3676,48 +4096,58 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         scan_run_row = ttk.Frame(scan, style="Card.TFrame")
         grid_append(scan, scan_run_row, sticky="w", pady=(6, 0))
         scan_run_btn = self._action_button(
-            scan_run_row, "Scan", self._scan_run, primary=True,
+            scan_run_row,
+            "Scan",
+            self._scan_run,
+            primary=True,
             tooltip="Fingerprints both sides with the chosen kind and "
-                    "computes the Tanimoto relation in a worker thread.")
+            "computes the Tanimoto relation in a worker thread.",
+        )
         scan_run_btn.pack(side="left")
         self._scan_summary = ttk.Label(
-            scan_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=520, justify="left")
+            scan_run_row, text="—", style="CardMuted.TLabel", wraplength=520, justify="left"
+        )
         self._scan_summary.pack(side="left", padx=(10, 0))
         scan_save_btn = self._action_button(
-            scan_run_row, "Save result CSV…", self._scan_save,
-            tooltip="The last scan/matrix/top-k table.")
+            scan_run_row,
+            "Save result CSV…",
+            self._scan_save,
+            tooltip="The last scan/matrix/top-k table.",
+        )
         scan_save_btn.pack(side="left", padx=(10, 0))
         scan_heat_btn = self._action_button(
-            scan_run_row, "Plot heatmap", self._scan_plot_heatmap,
+            scan_run_row,
+            "Plot heatmap",
+            self._scan_plot_heatmap,
             tooltip="The matrix mode's labelled heat-map figure "
-                    "(plot_similarity_heatmap) — run a matrix scan first.")
+            "(plot_similarity_heatmap) — run a matrix scan first.",
+        )
         scan_heat_btn.pack(side="left", padx=(10, 0))
         scan_tree_frame = ttk.Frame(scan, style="Card.TFrame")
-        grid_append(scan, scan_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
-        self._scan_tree = ttk.Treeview(scan_tree_frame, show="headings",
-                                       height=7)
-        scan_bar = ttk.Scrollbar(scan_tree_frame, orient="vertical",
-                                 command=self._scan_tree.yview)
-        scan_bar_x = ttk.Scrollbar(scan_tree_frame, orient="horizontal",
-                                   command=self._scan_tree.xview)
-        self._scan_tree.configure(yscrollcommand=scan_bar.set,
-                                  xscrollcommand=scan_bar_x.set)
+        grid_append(scan, scan_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._scan_tree = ttk.Treeview(scan_tree_frame, show="headings", height=7)
+        scan_bar = ttk.Scrollbar(scan_tree_frame, orient="vertical", command=self._scan_tree.yview)
+        scan_bar_x = ttk.Scrollbar(
+            scan_tree_frame, orient="horizontal", command=self._scan_tree.xview
+        )
+        self._scan_tree.configure(yscrollcommand=scan_bar.set, xscrollcommand=scan_bar_x.set)
         self._scan_tree.pack(side="left", fill="both", expand=True)
         scan_bar.pack(side="right", fill="y")
         scan_bar_x.pack(side="bottom", fill="x")
         self._scan_host = self._figure_host(scan, height=280)
         self._scan_frame: Any = None
-        self._scan_matrix: Any = None   # (matrix, refs, libs) — heatmap fuel
+        self._scan_matrix: Any = None  # (matrix, refs, libs) — heatmap fuel
 
         # -- tautomer & 3D structure (the library's canonicalize_tautomer
         #    + smiles_to_pdb — the 100x-119 completeness review) --------- #
         taut = make_card(
-            page.grid, "Tautomer & 3D structure", row=6, column=0,
+            page.grid,
+            "Tautomer & 3D structure",
+            row=6,
+            column=0,
             subtitle="Canonical tautomer form (RDKit's tautomer "
-                     "canonicalization) and a multi-conformer 3D PDB "
-                     "written to disk (ETKDG embedding + UFF relaxation).",
+            "canonicalization) and a multi-conformer 3D PDB "
+            "written to disk (ETKDG embedding + UFF relaxation).",
         )
         self._taut_smiles = ttk.Entry(taut, width=26)
         self._taut_smiles.insert(0, "CC(=O)Oc1ccccc1C(=O)O")
@@ -3728,35 +4158,49 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         taut_buttons = ttk.Frame(taut, style="Card.TFrame")
         grid_append(taut, taut_buttons, sticky="w", pady=(6, 0))
         taut_btn = self._action_button(
-            taut_buttons, "Canonical tautomer", self._tautomer_run,
+            taut_buttons,
+            "Canonical tautomer",
+            self._tautomer_run,
             tooltip="The canonical tautomer form of the SMILES — the form "
-                    "the descriptor calculations should agree on.",
+            "the descriptor calculations should agree on.",
         )
         taut_btn.pack(side="left")
         taut_pdb_btn = self._action_button(
-            taut_buttons, "Write 3D PDB…", self._smiles_3d_run, primary=True,
+            taut_buttons,
+            "Write 3D PDB…",
+            self._smiles_3d_run,
+            primary=True,
             tooltip="Embeds the requested number of conformers, relaxes "
-                    "them with UFF and writes a multi-model PDB (asks "
-                    "where to save).",
+            "them with UFF and writes a multi-model PDB (asks "
+            "where to save).",
         )
         taut_pdb_btn.pack(side="left", padx=(10, 0))
-        self._taut_result = ttk.Label(taut, text="—", style="Result.TLabel",
-                                      font=self._mono_result, wraplength=320,
-                                      justify="left")
+        self._taut_result = ttk.Label(
+            taut,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=320,
+            justify="left",
+        )
         grid_append(taut, self._taut_result, sticky="w")
         self._taut_report = _grid_text(taut, height=6, mono=self._mono)
         self._taut_report.insert(
-            "1.0", "the 3D writer's report appears here (conformers, atoms, energies)")
+            "1.0", "the 3D writer's report appears here (conformers, atoms, energies)"
+        )
         grid_append(taut, self._taut_report, sticky="ew", pady=(6, 0))
         bind_enter(self._taut_smiles, taut_btn)
 
         # -- MACCS keys (the library's compute_maccs — 167 structural  #
         #    keys as a fingerprint matrix; the 100x-119 review) --------- #
         maccs = make_card(
-            page.grid, "MACCS key fingerprint", row=6, column=1,
+            page.grid,
+            "MACCS key fingerprint",
+            row=6,
+            column=1,
             subtitle="The 167-bit MACCS structural-key count for a pasted "
-                     "list of SMILES — the classic substructure "
-                     "fingerprint, one bit per structural rule.",
+            "list of SMILES — the classic substructure "
+            "fingerprint, one bit per structural rule.",
         )
         self._maccs_text = _grid_text(maccs, height=6, mono=self._mono)
         self._maccs_text.insert("1.0", "\n".join(_FEAT_DEFAULT_SMILES))
@@ -3764,31 +4208,33 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         maccs_buttons = ttk.Frame(maccs, style="Card.TFrame")
         grid_append(maccs, maccs_buttons, sticky="w", pady=(6, 0))
         maccs_btn = self._action_button(
-            maccs_buttons, "Compute MACCS", self._maccs_run, primary=True,
-            tooltip="compute_maccs: the 167-bit key vector per molecule, "
-                    "mean on-bits summarised.",
+            maccs_buttons,
+            "Compute MACCS",
+            self._maccs_run,
+            primary=True,
+            tooltip="compute_maccs: the 167-bit key vector per molecule, mean on-bits summarised.",
         )
         maccs_btn.pack(side="left")
-        self._maccs_result = ttk.Label(maccs_buttons, text="—",
-                                       style="CardMuted.TLabel",
-                                       wraplength=300, justify="left")
+        self._maccs_result = ttk.Label(
+            maccs_buttons, text="—", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
         self._maccs_result.pack(side="left", padx=(10, 0))
 
     def _rism_run(self) -> None:
         """Compute the RISM-KH solvation descriptors for the pasted array."""
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "RISM-KH descriptors") or not self._require(
-                "rdkit", "RISM-KH descriptors"):
+        if (
+            not self._require_pharmaml()
+            or not self._require("pandas", "RISM-KH descriptors")
+            or not self._require("rdkit", "RISM-KH descriptors")
+        ):
             return
         smiles = parse_smiles_lines(self._rism_text.get("1.0", "end"))
         if not smiles:
-            messagebox.showwarning(
-                "Empty array", "Paste at least one SMILES (one per line).")
+            messagebox.showwarning("Empty array", "Paste at least one SMILES (one per line).")
             return
         solvent = self._rism_solvent_combo.get()
         try:
-            temperature = parse_float(self._rism_temp_entry.get(),
-                                      "temperature (K)")
+            temperature = parse_float(self._rism_temp_entry.get(), "temperature (K)")
             if temperature <= 0:
                 raise ValueError("temperature (K) must be positive")
         except ValueError as exc:
@@ -3799,7 +4245,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.chem.rism import compute_rism_descriptors
 
             return compute_rism_descriptors(
-                smiles, solvent=solvent, temperature=temperature,
+                smiles,
+                solvent=solvent,
+                temperature=temperature,
                 progress=False,
             )
 
@@ -3811,16 +4259,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 molecule = str(row["SMILES"])
                 for descriptor, (meaning, unit) in _RISM_MEANINGS.items():
                     value = row[descriptor]
-                    tree.insert("", "end", values=(
-                        _cell_text(molecule, limit=24), descriptor,
-                        _cell_text(value, limit=14),
-                        f"{meaning} ({unit})",
-                    ))
+                    tree.insert(
+                        "",
+                        "end",
+                        values=(
+                            _cell_text(molecule, limit=24),
+                            descriptor,
+                            _cell_text(value, limit=14),
+                            f"{meaning} ({unit})",
+                        ),
+                    )
             gsolv = frame["RISM_Gsolv_kcalmol"]
             self._rism_summary.configure(
-                text=(f"{len(frame)} molecule(s) · {solvent.upper()} water · "
-                      f"{temperature:.2f} K · Gsolv "
-                      f"{gsolv.min():+.2f} … {gsolv.max():+.2f} kcal/mol"),
+                text=(
+                    f"{len(frame)} molecule(s) · {solvent.upper()} water · "
+                    f"{temperature:.2f} K · Gsolv "
+                    f"{gsolv.min():+.2f} … {gsolv.max():+.2f} kcal/mol"
+                ),
                 style="Field.TLabel",
             )
 
@@ -3829,18 +4284,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _rism_save(self) -> None:
         frame = getattr(self, "_rism_frame", None)
         if frame is None:
-            messagebox.showinfo("Nothing to save",
-                                "Compute the RISM-KH descriptors first.")
+            messagebox.showinfo("Nothing to save", "Compute the RISM-KH descriptors first.")
             return
-        self._save_frame_dialog(frame, "Save the RISM-KH descriptors",
-                                "rism_kh.csv", "RISM-KH table")
+        self._save_frame_dialog(
+            frame, "Save the RISM-KH descriptors", "rism_kh.csv", "RISM-KH table"
+        )
 
     # -- structure & table converters (100x-110) ------------------------ #
     def _conv_pick_input(self) -> None:
         path = filedialog.askopenfilename(
             title="Pick the converter input",
-            filetypes=[("Tables & structures", "*.csv *.tsv *.xlsx *.sdf *.smi"),
-                       ("All files", "*.*")],
+            filetypes=[
+                ("Tables & structures", "*.csv *.tsv *.xlsx *.sdf *.smi"),
+                ("All files", "*.*"),
+            ],
         )
         if not path:
             return
@@ -3855,12 +4312,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "pIC50 mode",
                 "The pIC50 mode keeps everything in memory -- use the "
                 "'Save table CSV…' button after the run instead of an "
-                "output file.")
+                "output file.",
+            )
             return
-        extension = ".sdf" if "SDF" in mode and mode.startswith("CSV") else (
-            ".csv" if "CSV" in mode else ".smi")
+        extension = (
+            ".sdf"
+            if "SDF" in mode and mode.startswith("CSV")
+            else (".csv" if "CSV" in mode else ".smi")
+        )
         path = filedialog.asksaveasfilename(
-            title="Pick the converter output", defaultextension=extension,
+            title="Pick the converter output",
+            defaultextension=extension,
             filetypes=[("Output file", f"*{extension}"), ("All files", "*.*")],
         )
         if not path:
@@ -3871,8 +4333,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _conv_run(self) -> None:
         """Run the selected structure/table conversion (worker thread)."""
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "structure conversion"):
+        if not self._require_pharmaml() or not self._require("pandas", "structure conversion"):
             return
         mode = self._conv_mode.get()
         if self._conv_input is None:
@@ -3892,25 +4353,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 from pharmaml.utils.io import read_table
 
                 frame = read_table(input_path)
-                return add_pic50_column(frame, source_col=source_col,
-                                        out_col="pIC50", unit=unit,
-                                        drop_invalid=False)
+                return add_pic50_column(
+                    frame, source_col=source_col, out_col="pIC50", unit=unit, drop_invalid=False
+                )
 
             def render(frame: Any) -> None:
                 self._conv_frame = frame
                 self._fill_dynamic_tree(self._conv_tree, frame)
                 valid = int(frame["pIC50"].notna().sum()) if "pIC50" in frame else 0
                 self._conv_summary.configure(
-                    text=(f"{len(frame):,} rows · {valid} pIC50 value(s) · "
-                          f"{len(frame) - valid} unconvertible (kept as NaN, "
-                          f"never fabricated)"), style="Field.TLabel")
+                    text=(
+                        f"{len(frame):,} rows · {valid} pIC50 value(s) · "
+                        f"{len(frame) - valid} unconvertible (kept as NaN, "
+                        f"never fabricated)"
+                    ),
+                    style="Field.TLabel",
+                )
 
             self._start_job(f"appending pIC50 to {input_path.name}", work, render)
             return
 
         if self._conv_output is None:
-            messagebox.showwarning(
-                "No output", "Pick the output file for this mode first.")
+            messagebox.showwarning("No output", "Pick the output file for this mode first.")
             return
         output_path = self._conv_output
 
@@ -3921,9 +4385,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             def work() -> Any:
                 from pharmaml.chem import table_to_sdf
 
-                return table_to_sdf(input_path, output_path,
-                                    smiles_col=smiles_col, name_col=name_col,
-                                    embed3d=embed_uff, uff=embed_uff)
+                return table_to_sdf(
+                    input_path,
+                    output_path,
+                    smiles_col=smiles_col,
+                    name_col=name_col,
+                    embed3d=embed_uff,
+                    uff=embed_uff,
+                )
 
             def render(report: Any) -> None:
                 self._conv_frame = None
@@ -3933,19 +4402,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 tree.heading("report", text="report")
                 tree.column("report", width=340, stretch=True)
                 for line in (
-                        f"written: {report.output_sdf}",
-                        f"molecules: {report.molecules}",
-                        f"invalid SMILES rows: {report.failures}",
-                        f"3D-embedded: {report.embedded_3d}",
-                        *(f"note: {note}" for note in report.notes[:6]),
+                    f"written: {report.output_sdf}",
+                    f"molecules: {report.molecules}",
+                    f"invalid SMILES rows: {report.failures}",
+                    f"3D-embedded: {report.embedded_3d}",
+                    *(f"note: {note}" for note in report.notes[:6]),
                 ):
                     tree.insert("", "end", values=(line,))
                 self._conv_summary.configure(
-                    text=(f"{report.molecules} molecule(s) → "
-                          f"{Path(report.output_sdf).name} · "
-                          f"{report.failures} invalid · "
-                          f"{report.embedded_3d} embedded"),
-                    style="Field.TLabel")
+                    text=(
+                        f"{report.molecules} molecule(s) → "
+                        f"{Path(report.output_sdf).name} · "
+                        f"{report.failures} invalid · "
+                        f"{report.embedded_3d} embedded"
+                    ),
+                    style="Field.TLabel",
+                )
 
             self._start_job(f"writing {output_path.name}", work, render)
             return
@@ -3966,8 +4438,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 tree.column("report", width=340, stretch=True)
                 tree.insert("", "end", values=(f"written: {written}",))
                 self._conv_summary.configure(
-                    text=f"SMILES list converted to {Path(written).name}",
-                    style="Field.TLabel")
+                    text=f"SMILES list converted to {Path(written).name}", style="Field.TLabel"
+                )
 
             self._start_job(f"converting {input_path.name}", work, render)
             return
@@ -3983,9 +4455,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._conv_frame = frame
                 self._fill_dynamic_tree(self._conv_tree, frame)
                 self._conv_summary.configure(
-                    text=(f"{len(frame):,} record(s) → table · "
-                          f"{len(frame.columns)} columns (tags + SMILES + "
-                          f"name)"), style="Field.TLabel")
+                    text=(
+                        f"{len(frame):,} record(s) → table · "
+                        f"{len(frame.columns)} columns (tags + SMILES + "
+                        f"name)"
+                    ),
+                    style="Field.TLabel",
+                )
 
             self._start_job(f"reading {input_path.name}", work, render)
             return
@@ -3994,8 +4470,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def work() -> Any:
             from pharmaml.chem import table_to_smi
 
-            return table_to_smi(input_path, output_path,
-                                smiles_col=smiles_col, name_col=name_col)
+            return table_to_smi(input_path, output_path, smiles_col=smiles_col, name_col=name_col)
 
         def render(written: Any) -> None:
             self._conv_frame = None
@@ -4006,8 +4481,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             tree.column("report", width=340, stretch=True)
             tree.insert("", "end", values=(f"written: {written}",))
             self._conv_summary.configure(
-                text=f"table exported as {Path(written).name}",
-                style="Field.TLabel")
+                text=f"table exported as {Path(written).name}", style="Field.TLabel"
+            )
 
         self._start_job(f"writing {output_path.name}", work, render)
 
@@ -4017,15 +4492,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo(
                 "Nothing to save",
                 "The last conversion produced no in-memory table (file "
-                "modes write directly; SDF→table and pIC50 do).")
+                "modes write directly; SDF→table and pIC50 do).",
+            )
             return
-        self._save_frame_dialog(frame, "Save the converted table",
-                                "converted.csv")
+        self._save_frame_dialog(frame, "Save the converted table", "converted.csv")
 
     # -- library similarity scan (100x-110) ------------------------------ #
     def _scan_pick_library(self) -> None:
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "library loading"):
+        if not self._require_pharmaml() or not self._require("pandas", "library loading"):
             return
         path = filedialog.askopenfilename(
             title="Open the library CSV",
@@ -4042,37 +4516,39 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if column is None:
                 raise ValueError(
                     "no SMILES column found -- expected a column named "
-                    "SMILES/smiles/canonical_smiles holding molecules")
+                    "SMILES/smiles/canonical_smiles holding molecules"
+                )
             return frame[column].astype(str).tolist()
 
         def render(smiles: Any) -> None:
             self._scan_lib_text.delete("1.0", "end")
             self._scan_lib_text.insert("1.0", "\n".join(smiles))
             self._scan_lib_info.configure(
-                text=f"{len(smiles)} SMILES loaded from {Path(path).name}")
+                text=f"{len(smiles)} SMILES loaded from {Path(path).name}"
+            )
 
         self._start_job(f"loading {Path(path).name}", work, render)
 
     def _scan_run(self) -> None:
         """Compute the chosen Tanimoto relation (matrix / scan / top-k)."""
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "similarity scan") or not self._require(
-                "rdkit", "similarity scan"):
+        if (
+            not self._require_pharmaml()
+            or not self._require("pandas", "similarity scan")
+            or not self._require("rdkit", "similarity scan")
+        ):
             return
         references = parse_smiles_lines(self._scan_ref_text.get("1.0", "end"))
         library = parse_smiles_lines(self._scan_lib_text.get("1.0", "end"))
         if not references or not library:
             messagebox.showwarning(
-                "Empty input",
-                "Paste reference SMILES and a library (or load a CSV).")
+                "Empty input", "Paste reference SMILES and a library (or load a CSV)."
+            )
             return
         mode = self._scan_mode.get()
         kind = self._scan_kind.get()
         try:
-            n_bits = parse_int(self._scan_bits.get(), "bits", minimum=32,
-                               maximum=65536)
-            radius = parse_int(self._scan_radius.get(), "radius", minimum=0,
-                               maximum=16)
+            n_bits = parse_int(self._scan_bits.get(), "bits", minimum=32, maximum=65536)
+            radius = parse_int(self._scan_radius.get(), "radius", minimum=0, maximum=16)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -4088,27 +4564,31 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             def work() -> Any:
                 from pharmaml.chem import top_matches
 
-                return top_matches(query, library, k=k, fingerprint=kind,
-                                   n_bits=n_bits, radius=radius)
+                return top_matches(
+                    query, library, k=k, fingerprint=kind, n_bits=n_bits, radius=radius
+                )
 
             def render(frame: Any) -> None:
                 self._scan_frame = frame
-                self._fill_dynamic_tree(self._scan_tree, frame,
-                                        widths={"target": 200,
-                                                "similarity": 90})
+                self._fill_dynamic_tree(
+                    self._scan_tree, frame, widths={"target": 200, "similarity": 90}
+                )
                 best = frame["similarity"].max() if len(frame) else float("nan")
                 self._scan_summary.configure(
-                    text=(f"top {len(frame)} of the library for the first "
-                          f"reference · best Tanimoto {best:.3f} "
-                          f"({kind}, {n_bits}-bit)"), style="Field.TLabel")
+                    text=(
+                        f"top {len(frame)} of the library for the first "
+                        f"reference · best Tanimoto {best:.3f} "
+                        f"({kind}, {n_bits}-bit)"
+                    ),
+                    style="Field.TLabel",
+                )
 
             self._start_job("scanning top matches", work, render)
             return
 
         if mode.startswith("scan"):
             try:
-                threshold = parse_float(self._scan_threshold.get(),
-                                        "threshold")
+                threshold = parse_float(self._scan_threshold.get(), "threshold")
                 if not 0.0 <= threshold <= 1.0:
                     raise ValueError("threshold must be within 0..1")
             except ValueError as exc:
@@ -4118,19 +4598,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             def work() -> Any:
                 from pharmaml.chem import similarity_scan
 
-                return similarity_scan(references, library,
-                                       threshold=threshold, fingerprint=kind,
-                                       n_bits=n_bits, radius=radius)
+                return similarity_scan(
+                    references,
+                    library,
+                    threshold=threshold,
+                    fingerprint=kind,
+                    n_bits=n_bits,
+                    radius=radius,
+                )
 
             def render(frame: Any) -> None:
                 self._scan_frame = frame
-                self._fill_dynamic_tree(self._scan_tree, frame,
-                                        widths={"reference": 180,
-                                                "target": 180})
+                self._fill_dynamic_tree(
+                    self._scan_tree, frame, widths={"reference": 180, "target": 180}
+                )
                 self._scan_summary.configure(
-                    text=(f"{len(frame)} pair(s) ≥ {threshold:.2f} "
-                          f"({len(references)} refs × {len(library)} "
-                          f"library, {kind})"), style="Field.TLabel")
+                    text=(
+                        f"{len(frame)} pair(s) ≥ {threshold:.2f} "
+                        f"({len(references)} refs × {len(library)} "
+                        f"library, {kind})"
+                    ),
+                    style="Field.TLabel",
+                )
 
             self._start_job(f"scanning pairs ≥ {threshold:.2f}", work, render)
             return
@@ -4142,32 +4631,40 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.chem import compute_fingerprints, tanimoto_matrix
 
             ref_bits, ref_ok = compute_fingerprints(
-                references, kind=kind, radius=radius, n_bits=n_bits)
+                references, kind=kind, radius=radius, n_bits=n_bits
+            )
             lib_bits, lib_ok = compute_fingerprints(
-                library, kind=kind, radius=radius, n_bits=n_bits)
+                library, kind=kind, radius=radius, n_bits=n_bits
+            )
             matrix = tanimoto_matrix(ref_bits, lib_bits)
             frame = np.round(matrix, 4)
-            return frame, [references[i] for i in ref_ok], [
-                library[i] for i in lib_ok]
+            return frame, [references[i] for i in ref_ok], [library[i] for i in lib_ok]
 
         def render(result: Any) -> None:
             import pandas as pd
 
             matrix, refs, libs = result
             self._scan_matrix = (matrix, refs, libs)
-            frame = pd.DataFrame(
-                matrix,
-                index=[f"ref {i + 1}: {s[:20]}" for i, s in enumerate(refs)],
-                columns=[f"lib {i + 1}: {s[:16]}" for i, s in enumerate(libs)],
-            ).reset_index().rename(columns={"index": "reference"})
+            frame = (
+                pd.DataFrame(
+                    matrix,
+                    index=[f"ref {i + 1}: {s[:20]}" for i, s in enumerate(refs)],
+                    columns=[f"lib {i + 1}: {s[:16]}" for i, s in enumerate(libs)],
+                )
+                .reset_index()
+                .rename(columns={"index": "reference"})
+            )
             self._scan_frame = frame
             self._fill_dynamic_tree(self._scan_tree, frame)
             flat = matrix.reshape(-1)
             self._scan_summary.configure(
-                text=(f"{len(refs)} ref × {len(libs)} library matrix · "
-                      f"min {flat.min():.3f} · mean {flat.mean():.3f} · "
-                      f"max {flat.max():.3f} ({kind}, {n_bits}-bit)"),
-                style="Field.TLabel")
+                text=(
+                    f"{len(refs)} ref × {len(libs)} library matrix · "
+                    f"min {flat.min():.3f} · mean {flat.mean():.3f} · "
+                    f"max {flat.max():.3f} ({kind}, {n_bits}-bit)"
+                ),
+                style="Field.TLabel",
+            )
 
         self._start_job("computing the similarity matrix", work, render)
 
@@ -4176,8 +4673,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if frame is None:
             messagebox.showinfo("Nothing to save", "Run a scan first.")
             return
-        self._save_frame_dialog(frame, "Save the similarity result",
-                                "similarity.csv")
+        self._save_frame_dialog(frame, "Save the similarity result", "similarity.csv")
 
     def _scan_plot_heatmap(self) -> None:
         """The matrix scan's labelled heat-map (plot_similarity_heatmap)."""
@@ -4186,18 +4682,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo(
                 "No matrix yet",
                 "Run a matrix-mode scan first — the heat-map needs the "
-                "references × library Tanimoto matrix.")
+                "references × library Tanimoto matrix.",
+            )
             return
         if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the similarity heat-map"):
+            "matplotlib", "the similarity heat-map"
+        ):
             return
         _matrix, refs, libs = stashed
         kind = self._scan_kind.get()
         try:
-            n_bits = parse_int(self._scan_bits.get(), "bits", minimum=32,
-                               maximum=65536)
-            radius = parse_int(self._scan_radius.get(), "radius", minimum=0,
-                               maximum=16)
+            n_bits = parse_int(self._scan_bits.get(), "bits", minimum=32, maximum=65536)
+            radius = parse_int(self._scan_radius.get(), "radius", minimum=0, maximum=16)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -4211,16 +4707,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # combined refs+library self-similarity (the §9 walkthrough
             # demo's shape: ref-ref, ref-lib and lib-lib blocks in one
             # picture)
-            bits, ok = compute_fingerprints(combined, kind=kind,
-                                            radius=radius, n_bits=n_bits)
+            bits, ok = compute_fingerprints(combined, kind=kind, radius=radius, n_bits=n_bits)
             square = tanimoto_matrix(bits, bits)
             labels = [combined[i] for i in ok]
             labels = [f"{s[:18]}…" if len(s) > 18 else s for s in labels]
             annotate = len(labels) <= 10
-            return plot_similarity_heatmap(square, labels=labels,
-                                           annotate=annotate,
-                                           title="Tanimoto similarity "
-                                                 "(references + library)")
+            return plot_similarity_heatmap(
+                square,
+                labels=labels,
+                annotate=annotate,
+                title="Tanimoto similarity (references + library)",
+            )
 
         def render(figure: Any) -> None:
             self._render_figure(self._scan_host, figure)
@@ -4229,8 +4726,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _tautomer_run(self) -> None:
         """Canonical tautomer of the card's SMILES (canonicalize_tautomer)."""
-        if not self._require_pharmaml() or not self._require(
-                "rdkit", "tautomer canonicalization"):
+        if not self._require_pharmaml() or not self._require("rdkit", "tautomer canonicalization"):
             return
         smiles = self._taut_smiles.get().strip()
         if not smiles:
@@ -4247,21 +4743,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _smiles_3d_run(self) -> None:
         """Multi-conformer 3D PDB writer (chem.smiles_to_pdb)."""
-        if not self._require_pharmaml() or not self._require(
-                "rdkit", "the 3D embedder"):
+        if not self._require_pharmaml() or not self._require("rdkit", "the 3D embedder"):
             return
         smiles = self._taut_smiles.get().strip()
         if not smiles:
             messagebox.showwarning("Empty SMILES", "Type a SMILES string first.")
             return
         try:
-            num_confs = parse_int(self._taut_confs.get(), "conformers",
-                                  minimum=1, maximum=1000)
+            num_confs = parse_int(self._taut_confs.get(), "conformers", minimum=1, maximum=1000)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
         path = filedialog.asksaveasfilename(
-            title="Write 3D PDB", defaultextension=".pdb",
+            title="Write 3D PDB",
+            defaultextension=".pdb",
             initialfile="ligand_3d.pdb",
             filetypes=[("PDB file", "*.pdb")],
         )
@@ -4274,25 +4769,32 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return smiles_to_pdb(smiles, path, num_confs=num_confs)
 
         def render(report: Any) -> None:
-            lines = [f"3D PDB written → {report.output_path}",
-                     f"conformers         {report.num_conformers}",
-                     f"atoms / bonds      {report.num_atoms} / {report.num_bonds}",
-                     f"force field        {report.forcefield}",
-                     f"name               {report.name}"]
+            lines = [
+                f"3D PDB written → {report.output_path}",
+                f"conformers         {report.num_conformers}",
+                f"atoms / bonds      {report.num_atoms} / {report.num_bonds}",
+                f"force field        {report.forcefield}",
+                f"name               {report.name}",
+            ]
             self._taut_report.delete("1.0", "end")
             self._taut_report.insert("1.0", "\n".join(lines))
             self._taut_result.configure(
-                text=(f"{report.num_conformers} conformers · "
-                      f"{report.num_atoms} atoms · {report.forcefield} → "
-                      f"{report.output_path}"))
+                text=(
+                    f"{report.num_conformers} conformers · "
+                    f"{report.num_atoms} atoms · {report.forcefield} → "
+                    f"{report.output_path}"
+                )
+            )
 
         self._start_job("3D embedding + UFF", work, render)
 
     def _maccs_run(self) -> None:
         """MACCS structural-key fingerprint card (compute_maccs)."""
-        if not self._require_pharmaml() or not self._require(
-                "numpy", "MACCS keys") or not self._require(
-                "rdkit", "MACCS keys"):
+        if (
+            not self._require_pharmaml()
+            or not self._require("numpy", "MACCS keys")
+            or not self._require("rdkit", "MACCS keys")
+        ):
             return
         smiles = parse_smiles_lines(self._maccs_text.get("1.0", "end"))
         if not smiles:
@@ -4309,17 +4811,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             matrix, kept = payload
             on_bits = matrix.sum(axis=1) if matrix.size else []
             if len(kept):
-                per = "  ·  ".join(
-                    f"{s[:16]}: {int(bits)}/167" for s, bits in zip(kept, on_bits))
+                per = "  ·  ".join(f"{s[:16]}: {int(bits)}/167" for s, bits in zip(kept, on_bits))
                 mean = float(on_bits.mean())
                 self._maccs_result.configure(
-                    text=(f"{len(kept)} molecule(s) · mean {mean:.1f}/167 "
-                          f"keys set\n{per}"),
-                    style="Field.TLabel", justify="left")
+                    text=(f"{len(kept)} molecule(s) · mean {mean:.1f}/167 keys set\n{per}"),
+                    style="Field.TLabel",
+                    justify="left",
+                )
             dropped = len(smiles) - len(kept)
             if dropped:
                 self._maccs_result.configure(
-                    text=f"{dropped} SMILES failed to parse — no MACCS keys")
+                    text=f"{dropped} SMILES failed to parse — no MACCS keys"
+                )
 
         self._start_job("MACCS keys", work, render)
 
@@ -4365,8 +4868,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             return compute_descriptors([smiles], progress=False)
 
-        self._start_job(f"descriptors for {smiles[:28]}…", work,
-                        self._render_descriptors)
+        self._start_job(f"descriptors for {smiles[:28]}…", work, self._render_descriptors)
 
     def _render_descriptors(self, frame: Any) -> None:
         self._desc_frame = frame
@@ -4378,12 +4880,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             item = self._desc_tree.insert("", "end", values=(name, text))
             self._desc_rows.append((item, str(name), text))
         highlights = {
-            "MolWt": "MW", "MolLogP": "LogP", "TPSA": "TPSA",
-            "NumHBD": "H-bond donors", "NumHBA": "H-bond acceptors",
-            "NumRotatableBonds": "rotatable bonds", "RingCount": "rings",
+            "MolWt": "MW",
+            "MolLogP": "LogP",
+            "TPSA": "TPSA",
+            "NumHBD": "H-bond donors",
+            "NumHBA": "H-bond acceptors",
+            "NumRotatableBonds": "rotatable bonds",
+            "RingCount": "rings",
         }
-        found = [f"{short} {format_number(frame.iloc[0][key])}"
-                 for key, short in highlights.items() if key in frame.columns]
+        found = [
+            f"{short} {format_number(frame.iloc[0][key])}"
+            for key, short in highlights.items()
+            if key in frame.columns
+        ]
         self._smiles_summary.configure(
             text=("  ·  ".join(found) if found else f"{len(items)} descriptors")
         )
@@ -4401,8 +4910,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self._desc_frame is None:
             messagebox.showinfo("Nothing to save", "Analyse a SMILES string first.")
             return
-        self._save_frame_dialog(self._desc_frame, "Save descriptors",
-                                "descriptors.csv", "Descriptor table")
+        self._save_frame_dialog(
+            self._desc_frame, "Save descriptors", "descriptors.csv", "Descriptor table"
+        )
 
     def _compare_similarity(self) -> None:
         if not self._require_pharmaml() or not self._require("rdkit", "fingerprints"):
@@ -4421,9 +4931,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         if len(valid) < 2:
             self._tani_result.configure(text="invalid SMILES")
-            self._tani_verdict.configure(
-                text="One of the two strings is not valid RDKit input."
-            )
+            self._tani_verdict.configure(text="One of the two strings is not valid RDKit input.")
             return
         score = float(tanimoto_from_bitarrays(prints[0], prints[1]))
         if score >= 0.85:
@@ -4450,23 +4958,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _feat_update_width(self) -> None:
         """Re-pin the estimated column count from the ticked families."""
         selected = [
-            family for family, _label in _FEATURE_FAMILY_LABELS
+            family
+            for family, _label in _FEATURE_FAMILY_LABELS
             if self._feat_family_vars[family].get()
         ]
         if not selected:
-            self._feat_width_label.configure(
-                text="no families selected — tick at least one"
-            )
+            self._feat_width_label.configure(text="no families selected — tick at least one")
             return
         width = feature_factory_width(selected, self._feat_descriptor_count)
         self._feat_width_label.configure(
-            text=(f"{len(selected)} families selected · ~{width:,} columns "
-                  "will be computed")
+            text=(f"{len(selected)} families selected · ~{width:,} columns will be computed")
         )
 
     def _feat_open_csv(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                             "CSV loading"):
+        if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
             return
         path = filedialog.askopenfilename(
             title="Open a SMILES CSV",
@@ -4476,8 +4981,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._feat_load_path(Path(path))
 
     def _feat_load_example(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                             "CSV loading"):
+        if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
             return
         path = EXAMPLES_DIR / "library_with_descriptors.csv"
         if not path.is_file():
@@ -4510,9 +5014,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         import pandas as pd
 
         candidates = [
-            str(column) for column in frame.columns
-            if str(column) != smiles_column
-            and pd.api.types.is_numeric_dtype(frame[column])
+            str(column)
+            for column in frame.columns
+            if str(column) != smiles_column and pd.api.types.is_numeric_dtype(frame[column])
         ]
         self._feat_csv_frame = frame
         self._feat_csv_path = path
@@ -4520,15 +5024,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._feat_target_combo["values"] = (_FEAT_NO_TARGET, *candidates)
         self._feat_target_combo.set(_FEAT_NO_TARGET)
         self._feat_source_info.configure(
-            text=(f"{len(frame):,} rows · SMILES column '{smiles_column}' · "
-                  f"{len(candidates)} numeric target candidates — {path.name}")
+            text=(
+                f"{len(frame):,} rows · SMILES column '{smiles_column}' · "
+                f"{len(candidates)} numeric target candidates — {path.name}"
+            )
         )
 
     def _feat_compute(self) -> None:
         if not self._require_pharmaml():
             return
         if not self._require("rdkit", "the feature factory") or not self._require(
-                "pandas", "the feature factory"):
+            "pandas", "the feature factory"
+        ):
             return
         source = self._feat_source_var.get()
         target_frame: Any = None
@@ -4537,13 +5044,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if self._feat_csv_frame is None or self._feat_smiles_column is None:
                 messagebox.showwarning(
                     "No CSV loaded",
-                    "Open a SMILES CSV first (or switch the source to Pasted "
-                    "SMILES).",
+                    "Open a SMILES CSV first (or switch the source to Pasted SMILES).",
                 )
                 return
             smiles = [
-                str(value)
-                for value in self._feat_csv_frame[self._feat_smiles_column].tolist()
+                str(value) for value in self._feat_csv_frame[self._feat_smiles_column].tolist()
             ]
             picked = self._feat_target_combo.get()
             if picked and picked != _FEAT_NO_TARGET:
@@ -4552,22 +5057,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         else:
             smiles = parse_smiles_lines(self._feat_pasted_text.get("1.0", "end"))
         if not smiles:
-            messagebox.showwarning(
-                "No SMILES", "The selected source holds no SMILES to compute."
-            )
+            messagebox.showwarning("No SMILES", "The selected source holds no SMILES to compute.")
             return
         families = [
-            family for family, _label in _FEATURE_FAMILY_LABELS
+            family
+            for family, _label in _FEATURE_FAMILY_LABELS
             if self._feat_family_vars[family].get()
         ]
         if not families:
-            messagebox.showwarning(
-                "No families", "Tick at least one feature family."
-            )
+            messagebox.showwarning("No families", "Tick at least one feature family.")
             return
         try:
-            k = parse_int(self._feat_k_entry.get(), "features to keep (K)",
-                          minimum=1, maximum=100000)
+            k = parse_int(
+                self._feat_k_entry.get(), "features to keep (K)", minimum=1, maximum=100000
+            )
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -4597,19 +5100,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if target_frame is not None:
                 # align against the frame's original-row index (dropped
                 # molecules take their target row with them)
-                target_values = [
-                    float(value) for value in target_frame.iloc[list(frame.index)]
-                ]
+                target_values = [float(value) for value in target_frame.iloc[list(frame.index)]]
             ranked = rank_features(frame, target_values, method=method, task=task)
             # select_top_features demands the scores in frame column order
             scores = ranked.reindex(frame.columns)
-            selection = select_top_features(frame, scores, k,
-                                            median_prefilter=True, method=method)
+            selection = select_top_features(frame, scores, k, median_prefilter=True, method=method)
             # k >= the candidate count returns every median survivor, so the
             # survivor count for the summary comes from the same public call
-            survivors = len(
-                select_top_features(frame, scores, len(frame.columns)).selected
-            )
+            survivors = len(select_top_features(frame, scores, len(frame.columns)).selected)
             return frame, report, selection, survivors, target_values
 
         def render(payload: Any) -> None:
@@ -4618,8 +5116,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         label = f"computing {len(families)} families over {len(smiles)} molecules"
         self._start_job(label, work, render)
 
-    def _feat_render(self, payload: Any, k: int,
-                     target_name: str | None) -> None:
+    def _feat_render(self, payload: Any, k: int, target_name: str | None) -> None:
         frame, report, selection, survivors, target_values = payload
         self._feat_frame = frame
         self._feat_report = report
@@ -4632,8 +5129,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         tree.delete(*tree.get_children())
         if report.n_valid == 0:
             self._feat_summary.configure(
-                text=(f"{report.total_columns:,} features · 0 valid molecules "
-                      f"({len(report.dropped)} dropped) — check the SMILES source"),
+                text=(
+                    f"{report.total_columns:,} features · 0 valid molecules "
+                    f"({len(report.dropped)} dropped) — check the SMILES source"
+                ),
                 style="Field.TLabel",
             )
             self._feat_family_label.configure(text="selected per family: (none)")
@@ -4644,37 +5143,44 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         dropped_note = f" ({len(report.dropped)} dropped)" if report.dropped else ""
         method_label = str(selection.method).replace("_", " ")
         self._feat_summary.configure(
-            text=(f"{report.total_columns:,} features · {report.n_valid} "
-                  f"molecules{dropped_note} · kept top "
-                  f"{len(selection.selected):,} of {survivors:,} "
-                  f"median-survivors · {method_label}"),
+            text=(
+                f"{report.total_columns:,} features · {report.n_valid} "
+                f"molecules{dropped_note} · kept top "
+                f"{len(selection.selected):,} of {survivors:,} "
+                f"median-survivors · {method_label}"
+            ),
             style="Field.TLabel",
         )
         family_line = " · ".join(
-            f"{family} {count}"
-            for family, count in selection.family_counts.items()
+            f"{family} {count}" for family, count in selection.family_counts.items()
         )
         self._feat_family_label.configure(
-            text=(f"selected per family: {family_line}" if family_line
-                  else "selected per family: (none)")
+            text=(
+                f"selected per family: {family_line}"
+                if family_line
+                else "selected per family: (none)"
+            )
         )
         shown = list(selection.selected[:300])
         for rank, column in enumerate(shown, start=1):
             tree.insert(
-                "", "end",
-                values=(rank, column, family_of_column(column),
-                        format_number(float(selection.scores[column]))),
+                "",
+                "end",
+                values=(
+                    rank,
+                    column,
+                    family_of_column(column),
+                    format_number(float(selection.scores[column])),
+                ),
             )
         hidden = len(selection.selected) - len(shown)
         self._feat_more_label.configure(
-            text=(f"+{hidden:,} more rows — save the CSV for the full list"
-                  if hidden > 0 else "")
+            text=(f"+{hidden:,} more rows — save the CSV for the full list" if hidden > 0 else "")
         )
 
     def _feat_save_csv(self) -> None:
         if self._feat_selection is None:
-            messagebox.showinfo("Nothing to save",
-                                "Compute a feature selection first.")
+            messagebox.showinfo("Nothing to save", "Compute a feature selection first.")
             return
         if not self._require_pharmaml():
             return
@@ -4682,27 +5188,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             import pandas as pd
 
             out = pd.DataFrame({"SMILES": list(self._feat_smiles)})
-            if (self._feat_target_name is not None
-                    and self._feat_target_series is not None):
+            if self._feat_target_name is not None and self._feat_target_series is not None:
                 out[self._feat_target_name] = list(self._feat_target_series)
             for column in self._feat_selection.selected:
                 out[column] = self._feat_frame[column].tolist()
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not build the table", exc)
             return
-        self._save_frame_dialog(out, "Save the selected features",
-                                "selected_features.csv",
-                                "Selected-feature table")
+        self._save_frame_dialog(
+            out, "Save the selected features", "selected_features.csv", "Selected-feature table"
+        )
 
     def _feat_save_json(self) -> None:
         if self._feat_selection is None:
-            messagebox.showinfo("Nothing to save",
-                                "Compute a feature selection first.")
+            messagebox.showinfo("Nothing to save", "Compute a feature selection first.")
             return
         if not self._require_pharmaml():
             return
         path = filedialog.asksaveasfilename(
-            title="Save the selection metadata", defaultextension=".json",
+            title="Save the selection metadata",
+            defaultextension=".json",
             initialfile="selection_metadata.json",
             filetypes=[("JSON metadata", "*.json")],
         )
@@ -4711,8 +5216,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         try:
             from pharmaml.chem.features import selection_metadata
 
-            meta = selection_metadata(self._feat_selection, self._feat_report,
-                                      k=self._feat_k)
+            meta = selection_metadata(self._feat_selection, self._feat_report, k=self._feat_k)
             if self._feat_target_name is not None:
                 meta["target_column"] = self._feat_target_name
             with open(path, "w", encoding="utf-8") as handle:
@@ -4734,12 +5238,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if frame is None or len(frame) == 0 or len(frame.columns) == 0:
             messagebox.showinfo(
                 "No features yet",
-                "Compute & select features first -- the histogram grid "
-                "needs the computed frame.",
+                "Compute & select features first -- the histogram grid needs the computed frame.",
             )
             return
         if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the distribution histograms"):
+            "matplotlib", "the distribution histograms"
+        ):
             return
         n_rows, n_cols = len(frame), len(frame.columns)
 
@@ -4748,8 +5252,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             return plot_descriptor_distributions(
                 frame,
-                title=(f"Descriptor distributions — {n_rows} molecules · "
-                       f"{n_cols:,} columns (first grid)"),
+                title=(
+                    f"Descriptor distributions — {n_rows} molecules · "
+                    f"{n_cols:,} columns (first grid)"
+                ),
             )
 
         def render(figure: Any) -> None:
@@ -4763,163 +5269,269 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _build_pk_tab(self) -> None:
         page = self._new_page("PK / PD")
 
-        half = make_card(page.grid, "Half-life ↔ elimination", row=0, column=0,
-                         subtitle="k(e) = ln2 / t½  ·  accumulation over a dosing interval.")
-        self._thalf_a = ttk.Entry(half, width=14); self._thalf_a.insert(0, "4")
+        half = make_card(
+            page.grid,
+            "Half-life ↔ elimination",
+            row=0,
+            column=0,
+            subtitle="k(e) = ln2 / t½  ·  accumulation over a dosing interval.",
+        )
+        self._thalf_a = ttk.Entry(half, width=14)
+        self._thalf_a.insert(0, "4")
         form_row(half, "t½ (h)", self._thalf_a)
         self._ke_a = ttk.Entry(half, width=14)
         form_row(half, "k(e) (1/h)", self._ke_a)
-        self._tau_a = ttk.Entry(half, width=14); self._tau_a.insert(0, "6")
+        self._tau_a = ttk.Entry(half, width=14)
+        self._tau_a.insert(0, "6")
         form_row(half, "dosing interval τ (h)", self._tau_a)
-        button = self._action_button(half, "Compute", self._halflife_math,
-                                     tooltip="Derives k(e), accumulation ratio and time to steady state.")
+        button = self._action_button(
+            half,
+            "Compute",
+            self._halflife_math,
+            tooltip="Derives k(e), accumulation ratio and time to steady state.",
+        )
         button.grid(row=half.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._half_result = ttk.Label(half, text="—", style="Result.TLabel",
-                                      font=self._mono_result, wraplength=330, justify="left")
-        self._half_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
-                               padx=(10, 0))
+        self._half_result = ttk.Label(
+            half,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=330,
+            justify="left",
+        )
+        self._half_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._tau_a, button)
 
-        ivp = make_card(page.grid, "IV bolus concentration profile", row=0, column=1,
-                        subtitle="C(t) = C0·e^(−k(e)·t) with half-life reference lines.")
-        self._iv_c0 = ttk.Entry(ivp, width=14); self._iv_c0.insert(0, "10")
+        ivp = make_card(
+            page.grid,
+            "IV bolus concentration profile",
+            row=0,
+            column=1,
+            subtitle="C(t) = C0·e^(−k(e)·t) with half-life reference lines.",
+        )
+        self._iv_c0 = ttk.Entry(ivp, width=14)
+        self._iv_c0.insert(0, "10")
         form_row(ivp, "C0 (mg/L)", self._iv_c0)
-        self._iv_thalf = ttk.Entry(ivp, width=14); self._iv_thalf.insert(0, "4")
+        self._iv_thalf = ttk.Entry(ivp, width=14)
+        self._iv_thalf.insert(0, "4")
         form_row(ivp, "t½ (h)", self._iv_thalf)
-        self._iv_hours = ttk.Entry(ivp, width=14); self._iv_hours.insert(0, "24")
+        self._iv_hours = ttk.Entry(ivp, width=14)
+        self._iv_hours.insert(0, "24")
         form_row(ivp, "horizon (h)", self._iv_hours)
-        button = self._action_button(ivp, "Plot profile", self._plot_iv_bolus, primary=True,
-                                     tooltip="Draws the decay curve with 1·t½, 2·t½, 3·t½ markers.")
+        button = self._action_button(
+            ivp,
+            "Plot profile",
+            self._plot_iv_bolus,
+            primary=True,
+            tooltip="Draws the decay curve with 1·t½, 2·t½, 3·t½ markers.",
+        )
         button.grid(row=ivp.grid_size()[1], column=0, sticky="w", pady=(6, 0))
         self._iv_host = self._figure_host(ivp)
 
-        oral = make_card(page.grid, "Oral absorption PK", row=1, column=0,
-                         subtitle="One-compartment first-order absorption.")
-        self._po_dose = ttk.Entry(oral, width=14); self._po_dose.insert(0, "250")
+        oral = make_card(
+            page.grid,
+            "Oral absorption PK",
+            row=1,
+            column=0,
+            subtitle="One-compartment first-order absorption.",
+        )
+        self._po_dose = ttk.Entry(oral, width=14)
+        self._po_dose.insert(0, "250")
         form_row(oral, "dose (mg)", self._po_dose)
-        self._po_ka = ttk.Entry(oral, width=14); self._po_ka.insert(0, "1.2")
+        self._po_ka = ttk.Entry(oral, width=14)
+        self._po_ka.insert(0, "1.2")
         form_row(oral, "k(a) (1/h)", self._po_ka)
-        self._po_ke = ttk.Entry(oral, width=14); self._po_ke.insert(0, "0.173")
+        self._po_ke = ttk.Entry(oral, width=14)
+        self._po_ke.insert(0, "0.173")
         form_row(oral, "k(e) (1/h)", self._po_ke)
-        self._po_vd = ttk.Entry(oral, width=14); self._po_vd.insert(0, "40")
+        self._po_vd = ttk.Entry(oral, width=14)
+        self._po_vd.insert(0, "40")
         form_row(oral, "Vd (L)", self._po_vd)
-        self._po_f = ttk.Entry(oral, width=14); self._po_f.insert(0, "90")
+        self._po_f = ttk.Entry(oral, width=14)
+        self._po_f.insert(0, "90")
         form_row(oral, "bioavailability F (%)", self._po_f)
         button = self._action_button(oral, "Compute", self._oral_pk)
         button.grid(row=oral.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._oral_result = ttk.Label(oral, text="—", style="Result.TLabel",
-                                      font=self._mono_result, wraplength=320, justify="left")
-        self._oral_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
-                               padx=(10, 0))
+        self._oral_result = ttk.Label(
+            oral,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=320,
+            justify="left",
+        )
+        self._oral_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._po_f, button)
 
-        crcl = make_card(page.grid, "Cockcroft–Gault creatinine clearance", row=1,
-                         column=1, subtitle="Plus the renal dose adjustment for a normal regimen.")
-        self._cg_age = ttk.Entry(crcl, width=14); self._cg_age.insert(0, "55")
+        crcl = make_card(
+            page.grid,
+            "Cockcroft–Gault creatinine clearance",
+            row=1,
+            column=1,
+            subtitle="Plus the renal dose adjustment for a normal regimen.",
+        )
+        self._cg_age = ttk.Entry(crcl, width=14)
+        self._cg_age.insert(0, "55")
         form_row(crcl, "age (years)", self._cg_age)
-        self._cg_weight = ttk.Entry(crcl, width=14); self._cg_weight.insert(0, "70")
+        self._cg_weight = ttk.Entry(crcl, width=14)
+        self._cg_weight.insert(0, "70")
         form_row(crcl, "weight (kg)", self._cg_weight)
-        self._cg_scr = ttk.Entry(crcl, width=14); self._cg_scr.insert(0, "1.0")
+        self._cg_scr = ttk.Entry(crcl, width=14)
+        self._cg_scr.insert(0, "1.0")
         form_row(crcl, "serum creatinine (mg/dL)", self._cg_scr)
-        self._cg_sex = ttk.Combobox(crcl, state="readonly", width=12,
-                                    values=("male", "female"))
+        self._cg_sex = ttk.Combobox(crcl, state="readonly", width=12, values=("male", "female"))
         self._cg_sex.set("male")
         form_row(crcl, "sex", self._cg_sex)
-        self._cg_dose = ttk.Entry(crcl, width=14); self._cg_dose.insert(0, "500")
+        self._cg_dose = ttk.Entry(crcl, width=14)
+        self._cg_dose.insert(0, "500")
         form_row(crcl, "normal dose (mg)", self._cg_dose)
         button = self._action_button(crcl, "Compute", self._creatinine_math)
         button.grid(row=crcl.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._cg_result = ttk.Label(crcl, text="—", style="Result.TLabel",
-                                    font=self._mono_result, wraplength=300, justify="left")
-        self._cg_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
-                             padx=(10, 0))
+        self._cg_result = ttk.Label(
+            crcl,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=300,
+            justify="left",
+        )
+        self._cg_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._cg_dose, button)
 
         doses = make_card(page.grid, "Loading & maintenance dosing", row=2, column=0)
-        self._md_cl = ttk.Entry(doses, width=14); self._md_cl.insert(0, "5")
+        self._md_cl = ttk.Entry(doses, width=14)
+        self._md_cl.insert(0, "5")
         form_row(doses, "clearance CL (L/h)", self._md_cl)
-        self._md_css = ttk.Entry(doses, width=14); self._md_css.insert(0, "8")
+        self._md_css = ttk.Entry(doses, width=14)
+        self._md_css.insert(0, "8")
         form_row(doses, "target Css (mg/L)", self._md_css)
-        self._md_tau = ttk.Entry(doses, width=14); self._md_tau.insert(0, "8")
+        self._md_tau = ttk.Entry(doses, width=14)
+        self._md_tau.insert(0, "8")
         form_row(doses, "interval τ (h)", self._md_tau)
-        self._md_f = ttk.Entry(doses, width=14); self._md_f.insert(0, "90")
+        self._md_f = ttk.Entry(doses, width=14)
+        self._md_f.insert(0, "90")
         form_row(doses, "bioavailability F (%)", self._md_f)
-        self._ld_vd = ttk.Entry(doses, width=14); self._ld_vd.insert(0, "40")
+        self._ld_vd = ttk.Entry(doses, width=14)
+        self._ld_vd.insert(0, "40")
         form_row(doses, "Vd (L) — loading", self._ld_vd)
-        self._ld_target = ttk.Entry(doses, width=14); self._ld_target.insert(0, "2")
+        self._ld_target = ttk.Entry(doses, width=14)
+        self._ld_target.insert(0, "2")
         form_row(doses, "target C (mg/L)", self._ld_target)
         button = self._action_button(doses, "Compute both", self._dose_design)
         button.grid(row=doses.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._dose_result = ttk.Label(doses, text="—", style="Result.TLabel",
-                                      font=self._mono_result, wraplength=320, justify="left")
-        self._dose_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
-                               padx=(10, 0))
+        self._dose_result = ttk.Label(
+            doses,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=320,
+            justify="left",
+        )
+        self._dose_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._ld_target, button)
 
-        bsa = make_card(page.grid, "BSA & weight-based dosing", row=2, column=1,
-                        subtitle="Mosteller BSA; optional maximum doses cap the result.")
-        self._bsa_height = ttk.Entry(bsa, width=14); self._bsa_height.insert(0, "175")
+        bsa = make_card(
+            page.grid,
+            "BSA & weight-based dosing",
+            row=2,
+            column=1,
+            subtitle="Mosteller BSA; optional maximum doses cap the result.",
+        )
+        self._bsa_height = ttk.Entry(bsa, width=14)
+        self._bsa_height.insert(0, "175")
         form_row(bsa, "height (cm)", self._bsa_height)
-        self._bsa_weight = ttk.Entry(bsa, width=14); self._bsa_weight.insert(0, "70")
+        self._bsa_weight = ttk.Entry(bsa, width=14)
+        self._bsa_weight.insert(0, "70")
         form_row(bsa, "weight (kg)", self._bsa_weight)
-        self._bsa_per_m2 = ttk.Entry(bsa, width=14); self._bsa_per_m2.insert(0, "100")
+        self._bsa_per_m2 = ttk.Entry(bsa, width=14)
+        self._bsa_per_m2.insert(0, "100")
         form_row(bsa, "dose per m²", self._bsa_per_m2)
         self._bsa_max = ttk.Entry(bsa, width=14)
         form_row(bsa, "max dose (optional)", self._bsa_max)
-        self._wt_per_kg = ttk.Entry(bsa, width=14); self._wt_per_kg.insert(0, "15")
+        self._wt_per_kg = ttk.Entry(bsa, width=14)
+        self._wt_per_kg.insert(0, "15")
         form_row(bsa, "dose per kg", self._wt_per_kg)
         button = self._action_button(bsa, "Compute", self._bsa_math)
         button.grid(row=bsa.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._bsa_result = ttk.Label(bsa, text="—", style="Result.TLabel",
-                                     font=self._mono_result, wraplength=300, justify="left")
-        self._bsa_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
-                              padx=(10, 0))
+        self._bsa_result = ttk.Label(
+            bsa,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=300,
+            justify="left",
+        )
+        self._bsa_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._wt_per_kg, button)
 
-        peds = make_card(page.grid, "Pediatric dose rules", row=3, column=0,
-                         subtitle="Young's rule (age) and Clark's rule (weight in lb).")
-        self._young_age = ttk.Entry(peds, width=14); self._young_age.insert(0, "6")
+        peds = make_card(
+            page.grid,
+            "Pediatric dose rules",
+            row=3,
+            column=0,
+            subtitle="Young's rule (age) and Clark's rule (weight in lb).",
+        )
+        self._young_age = ttk.Entry(peds, width=14)
+        self._young_age.insert(0, "6")
         form_row(peds, "child age (years)", self._young_age)
-        self._clark_lb = ttk.Entry(peds, width=14); self._clark_lb.insert(0, "40")
+        self._clark_lb = ttk.Entry(peds, width=14)
+        self._clark_lb.insert(0, "40")
         form_row(peds, "child weight (lb)", self._clark_lb)
-        self._adult_dose = ttk.Entry(peds, width=14); self._adult_dose.insert(0, "500")
+        self._adult_dose = ttk.Entry(peds, width=14)
+        self._adult_dose.insert(0, "500")
         form_row(peds, "adult dose (mg)", self._adult_dose)
         button = self._action_button(peds, "Compute both", self._pediatric_math)
         button.grid(row=peds.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._ped_result = ttk.Label(peds, text="—", style="Result.TLabel",
-                                     font=self._mono_result, wraplength=320, justify="left")
-        self._ped_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
-                              padx=(10, 0))
+        self._ped_result = ttk.Label(
+            peds,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=320,
+            justify="left",
+        )
+        self._ped_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._adult_dose, button)
 
-        emax = make_card(page.grid, "Emax pharmacodynamics", row=3, column=1,
-                         subtitle="E = E0 + Emax·C/(EC50 + C) — table plus the full curve.")
-        self._pd_e0 = ttk.Entry(emax, width=14); self._pd_e0.insert(0, "5")
+        emax = make_card(
+            page.grid,
+            "Emax pharmacodynamics",
+            row=3,
+            column=1,
+            subtitle="E = E0 + Emax·C/(EC50 + C) — table plus the full curve.",
+        )
+        self._pd_e0 = ttk.Entry(emax, width=14)
+        self._pd_e0.insert(0, "5")
         form_row(emax, "baseline E0", self._pd_e0)
-        self._pd_emax = ttk.Entry(emax, width=14); self._pd_emax.insert(0, "60")
+        self._pd_emax = ttk.Entry(emax, width=14)
+        self._pd_emax.insert(0, "60")
         form_row(emax, "Emax", self._pd_emax)
-        self._pd_ec50 = ttk.Entry(emax, width=14); self._pd_ec50.insert(0, "2.5")
+        self._pd_ec50 = ttk.Entry(emax, width=14)
+        self._pd_ec50.insert(0, "2.5")
         form_row(emax, "EC50", self._pd_ec50)
         self._pd_concs = ttk.Entry(emax, width=24)
         self._pd_concs.insert(0, "0.5, 1, 2.5, 5, 10, 25")
         form_row(emax, "concentrations (comma list)", self._pd_concs)
         button = self._action_button(emax, "Compute & plot", self._emax_math, primary=True)
         button.grid(row=emax.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._pd_result = ttk.Label(emax, text="—", style="CardMuted.TLabel",
-                                    wraplength=300, justify="left")
-        self._pd_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
-                             padx=(10, 0))
+        self._pd_result = ttk.Label(
+            emax, text="—", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
+        self._pd_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         self._pd_host = self._figure_host(emax, height=300)
         bind_enter(self._pd_concs, button)
 
         # -- non-compartmental analysis (the library's pharma.pk NCA) -- #
         nca = make_card(
-            page.grid, "Non-compartmental analysis (NCA)", row=4, column=0,
+            page.grid,
+            "Non-compartmental analysis (NCA)",
+            row=4,
+            column=0,
             span=2,
             subtitle="Paste a concentration-time series (both comma lists, "
-                     "matched pairs): AUC / AUMC by the linear trapezoid, "
-                     "MRT, Cmax / Tmax, the terminal half-life — plus Vd and "
-                     "CL when a dose is given (Vd = dose / AUC after IV).",
+            "matched pairs): AUC / AUMC by the linear trapezoid, "
+            "MRT, Cmax / Tmax, the terminal half-life — plus Vd and "
+            "CL when a dose is given (Vd = dose / AUC after IV).",
         )
         self._nca_times = ttk.Entry(nca, width=34)
         self._nca_times.insert(0, _NCA_DEFAULT_TIMES)
@@ -4932,44 +5544,62 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         nca_buttons = ttk.Frame(nca, style="Card.TFrame")
         grid_append(nca, nca_buttons, sticky="w", pady=(6, 0))
         nca_btn = self._action_button(
-            nca_buttons, "Analyse", self._nca_run, primary=True,
+            nca_buttons,
+            "Analyse",
+            self._nca_run,
+            primary=True,
             tooltip="Validates the series (sorted times, non-negative "
-                    "concentrations), then runs the trapezoid NCA.",
+            "concentrations), then runs the trapezoid NCA.",
         )
         nca_btn.pack(side="left")
         nca_plot_btn = self._action_button(
-            nca_buttons, "Plot profile", self._nca_plot,
-            tooltip="The concentration-time profile with the AUC shaded "
-                    "under the curve.",
+            nca_buttons,
+            "Plot profile",
+            self._nca_plot,
+            tooltip="The concentration-time profile with the AUC shaded under the curve.",
         )
         nca_plot_btn.pack(side="left", padx=(10, 0))
         nca_save_btn = self._action_button(
-            nca_buttons, "Save summary CSV…", self._nca_save,
+            nca_buttons,
+            "Save summary CSV…",
+            self._nca_save,
             tooltip="The NCA metrics as a one-row table.",
         )
         nca_save_btn.pack(side="left", padx=(10, 0))
-        self._nca_result = ttk.Label(nca, text="—", style="Result.TLabel",
-                                     font=self._mono_result, wraplength=620,
-                                     justify="left")
+        self._nca_result = ttk.Label(
+            nca,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=620,
+            justify="left",
+        )
         grid_append(nca, self._nca_result, sticky="w")
         self._nca_host = self._figure_host(nca, height=260)
         bind_enter(self._nca_concs, nca_btn)
 
         # -- IV infusion, steady state, Vd & bioavailability -------------- #
         infusion = make_card(
-            page.grid, "IV infusion & distribution", row=5, column=0,
+            page.grid,
+            "IV infusion & distribution",
+            row=5,
+            column=0,
             subtitle="The infusion rate that holds a target Css "
-                     "(rate = CL·Css), the steady state a given rate "
-                     "reaches, Vd = CL / k(e), and absolute "
-                     "bioavailability F from paired EV/IV AUCs.",
+            "(rate = CL·Css), the steady state a given rate "
+            "reaches, Vd = CL / k(e), and absolute "
+            "bioavailability F from paired EV/IV AUCs.",
         )
-        self._inf_cl = ttk.Entry(infusion, width=14); self._inf_cl.insert(0, "5")
+        self._inf_cl = ttk.Entry(infusion, width=14)
+        self._inf_cl.insert(0, "5")
         form_row(infusion, "clearance CL (L/h)", self._inf_cl)
-        self._inf_target = ttk.Entry(infusion, width=14); self._inf_target.insert(0, "8")
+        self._inf_target = ttk.Entry(infusion, width=14)
+        self._inf_target.insert(0, "8")
         form_row(infusion, "target Css (mg/L)", self._inf_target)
-        self._inf_rate = ttk.Entry(infusion, width=14); self._inf_rate.insert(0, "40")
+        self._inf_rate = ttk.Entry(infusion, width=14)
+        self._inf_rate.insert(0, "40")
         form_row(infusion, "infusion rate (mg/h)", self._inf_rate)
-        self._vd_ke = ttk.Entry(infusion, width=14); self._vd_ke.insert(0, "0.173")
+        self._vd_ke = ttk.Entry(infusion, width=14)
+        self._vd_ke.insert(0, "0.173")
         form_row(infusion, "k(e) (1/h) — for Vd", self._vd_ke)
         self._bio_ev_dose = ttk.Entry(infusion, width=14)
         form_row(infusion, "EV dose / AUC (optional)", self._bio_ev_dose)
@@ -4977,22 +5607,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(infusion, "IV dose / AUC (optional)", self._bio_iv_dose)
         button = self._action_button(infusion, "Compute", self._infusion_math)
         button.grid(row=infusion.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._inf_result = ttk.Label(infusion, text="—", style="Result.TLabel",
-                                     font=self._mono_result, wraplength=320,
-                                     justify="left")
-        self._inf_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
-                              padx=(10, 0))
+        self._inf_result = ttk.Label(
+            infusion,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=320,
+            justify="left",
+        )
+        self._inf_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         acc_row = ttk.Frame(infusion, style="Card.TFrame")
         grid_append(infusion, acc_row, sticky="w", pady=(8, 0))
-        self._acc_dose = ttk.Entry(acc_row, width=10); self._acc_dose.insert(0, "250")
+        self._acc_dose = ttk.Entry(acc_row, width=10)
+        self._acc_dose.insert(0, "250")
         self._acc_dose.pack(side="left")
-        ttk.Label(acc_row, text="mg dose", style="CardMuted.TLabel").pack(
-            side="left", padx=(4, 12))
+        ttk.Label(acc_row, text="mg dose", style="CardMuted.TLabel").pack(side="left", padx=(4, 12))
         acc_btn = self._action_button(
-            acc_row, "Plot repeated dosing", self._plot_accumulation,
+            acc_row,
+            "Plot repeated dosing",
+            self._plot_accumulation,
             tooltip="The classic approach-to-steady-state picture: peaks "
-                    "and troughs over the dosing interval from t½ and τ "
-                    "(plot_dose_accumulation).",
+            "and troughs over the dosing interval from t½ and τ "
+            "(plot_dose_accumulation).",
         )
         acc_btn.pack(side="left")
         self._acc_host = self._figure_host(infusion, height=240)
@@ -5000,87 +5636,117 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         # -- therapeutic drug monitoring --------------------------------- #
         tdm = make_card(
-            page.grid, "TDM trough adjustment", row=5, column=1,
+            page.grid,
+            "TDM trough adjustment",
+            row=5,
+            column=1,
             subtitle="Dose individualisation from one measured trough: the "
-                     "linear-proportional new dose (with an optional floor).",
+            "linear-proportional new dose (with an optional floor).",
         )
-        self._tdm_dose = ttk.Entry(tdm, width=14); self._tdm_dose.insert(0, "250")
+        self._tdm_dose = ttk.Entry(tdm, width=14)
+        self._tdm_dose.insert(0, "250")
         form_row(tdm, "current dose (mg)", self._tdm_dose)
-        self._tdm_measured = ttk.Entry(tdm, width=14); self._tdm_measured.insert(0, "6.2")
+        self._tdm_measured = ttk.Entry(tdm, width=14)
+        self._tdm_measured.insert(0, "6.2")
         form_row(tdm, "measured trough", self._tdm_measured)
-        self._tdm_target = ttk.Entry(tdm, width=14); self._tdm_target.insert(0, "10")
+        self._tdm_target = ttk.Entry(tdm, width=14)
+        self._tdm_target.insert(0, "10")
         form_row(tdm, "target trough", self._tdm_target)
-        self._tdm_min = ttk.Entry(tdm, width=14); self._tdm_min.insert(0, "25")
+        self._tdm_min = ttk.Entry(tdm, width=14)
+        self._tdm_min.insert(0, "25")
         form_row(tdm, "minimum dose (mg)", self._tdm_min)
         button = self._action_button(tdm, "Adjust dose", self._tdm_math)
         button.grid(row=tdm.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._tdm_result = ttk.Label(tdm, text="—", style="Result.TLabel",
-                                     font=self._mono_result, wraplength=300,
-                                     justify="left")
-        self._tdm_result.grid(row=button.grid_info()["row"], column=1, sticky="w",
-                              padx=(10, 0))
+        self._tdm_result = ttk.Label(
+            tdm,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=300,
+            justify="left",
+        )
+        self._tdm_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._tdm_target, button)
 
         # -- PD model explorer (the full pharma.pd model family) --------- #
         family = make_card(
-            page.grid, "PD model explorer", row=6, column=0, span=2,
+            page.grid,
+            "PD model explorer",
+            row=6,
+            column=0,
+            span=2,
             subtitle="The pharmacodynamic family beyond plain Emax: the "
-                     "sigmoid Emax with its Hill slope, the inhibitory Emax, "
-                     "and the linear effect — table, curve, and the reverse "
-                     "question (which concentration reaches a target "
-                     "effect?).",
+            "sigmoid Emax with its Hill slope, the inhibitory Emax, "
+            "and the linear effect — table, curve, and the reverse "
+            "question (which concentration reaches a target "
+            "effect?).",
         )
         family.columnconfigure(0, weight=1)
         family.columnconfigure(1, weight=1)
         fam_left = ttk.Frame(family, style="Card.TFrame")
         fam_left.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
         self._pd_family_combo = ttk.Combobox(
-            fam_left, state="readonly", width=24, values=_PD_FAMILY_MODES)
+            fam_left, state="readonly", width=24, values=_PD_FAMILY_MODES
+        )
         self._pd_family_combo.set(_PD_FAMILY_MODES[0])
-        Tooltip(self._pd_family_combo,
-                "sigmoid Emax: E = E0 + Emax·C^h/(EC50^h + C^h); inhibitory "
-                "Emax: E = E0 − Imax·C^h/(IC50^h + C^h); linear: E = "
-                "slope·C + intercept.")
+        Tooltip(
+            self._pd_family_combo,
+            "sigmoid Emax: E = E0 + Emax·C^h/(EC50^h + C^h); inhibitory "
+            "Emax: E = E0 − Imax·C^h/(IC50^h + C^h); linear: E = "
+            "slope·C + intercept.",
+        )
         form_row(fam_left, "model", self._pd_family_combo)
-        self._fam_e0 = ttk.Entry(fam_left, width=12); self._fam_e0.insert(0, "5")
+        self._fam_e0 = ttk.Entry(fam_left, width=12)
+        self._fam_e0.insert(0, "5")
         form_row(fam_left, "E0 (baseline)", self._fam_e0)
-        self._fam_max = ttk.Entry(fam_left, width=12); self._fam_max.insert(0, "60")
+        self._fam_max = ttk.Entry(fam_left, width=12)
+        self._fam_max.insert(0, "60")
         form_row(fam_left, "Emax / Imax", self._fam_max)
-        self._fam_c50 = ttk.Entry(fam_left, width=12); self._fam_c50.insert(0, "2.5")
+        self._fam_c50 = ttk.Entry(fam_left, width=12)
+        self._fam_c50.insert(0, "2.5")
         form_row(fam_left, "EC50 / IC50", self._fam_c50)
-        self._fam_hill = ttk.Entry(fam_left, width=12); self._fam_hill.insert(0, "1.5")
+        self._fam_hill = ttk.Entry(fam_left, width=12)
+        self._fam_hill.insert(0, "1.5")
         form_row(fam_left, "Hill slope h", self._fam_hill)
-        self._fam_slope = ttk.Entry(fam_left, width=12); self._fam_slope.insert(0, "4")
+        self._fam_slope = ttk.Entry(fam_left, width=12)
+        self._fam_slope.insert(0, "4")
         form_row(fam_left, "slope (linear)", self._fam_slope)
         fam_right = ttk.Frame(family, style="Card.TFrame")
         fam_right.grid(row=0, column=1, sticky="nsew")
         self._fam_concs = ttk.Entry(fam_right, width=24)
         self._fam_concs.insert(0, "0.5, 1, 2.5, 5, 10, 25")
         form_row(fam_right, "concentrations (comma list)", self._fam_concs)
-        self._fam_target = ttk.Entry(fam_right, width=12); self._fam_target.insert(0, "30")
+        self._fam_target = ttk.Entry(fam_right, width=12)
+        self._fam_target.insert(0, "30")
         form_row(fam_right, "target effect (reverse EC50)", self._fam_target)
         fam_buttons = ttk.Frame(family, style="Card.TFrame")
         grid_append(family, fam_buttons, sticky="w", pady=(6, 0))
         fam_btn = self._action_button(
-            fam_buttons, "Compute & plot", self._pd_family_math, primary=True,
-            tooltip="Fills the effect table and draws the model curve over "
-                    "the concentration grid.",
+            fam_buttons,
+            "Compute & plot",
+            self._pd_family_math,
+            primary=True,
+            tooltip="Fills the effect table and draws the model curve over the concentration grid.",
         )
         fam_btn.pack(side="left")
         fam_rev_btn = self._action_button(
-            fam_buttons, "Solve EC50 for target", self._pd_target_ec50,
+            fam_buttons,
+            "Solve EC50 for target",
+            self._pd_target_ec50,
             tooltip="The reverse question: which EC50 puts the model "
-                    "through the target effect at the given EC50 "
-                    "reference concentration?",
+            "through the target effect at the given EC50 "
+            "reference concentration?",
         )
         fam_rev_btn.pack(side="left", padx=(10, 0))
-        self._fam_result = ttk.Label(family, text="—", style="CardMuted.TLabel",
-                                     wraplength=560, justify="left")
+        self._fam_result = ttk.Label(
+            family, text="—", style="CardMuted.TLabel", wraplength=560, justify="left"
+        )
         grid_append(family, self._fam_result, sticky="w")
         fam_tree_frame = ttk.Frame(family, style="Card.TFrame")
         grid_append(family, fam_tree_frame, sticky="nsew", pady=(4, 0), weight=True)
-        self._fam_tree = ttk.Treeview(fam_tree_frame, show="headings", height=6,
-                                      columns=("concentration", "effect"))
+        self._fam_tree = ttk.Treeview(
+            fam_tree_frame, show="headings", height=6, columns=("concentration", "effect")
+        )
         self._fam_tree.heading("concentration", text="concentration")
         self._fam_tree.heading("effect", text="effect")
         self._fam_tree.column("concentration", width=160, anchor="e")
@@ -5091,24 +5757,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         # -- unit converter (UnitConverter, dimension-aware; 100x-121) -- #
         units_card = make_card(
-            page.grid, "Unit converter", row=7, column=0,
+            page.grid,
+            "Unit converter",
+            row=7,
+            column=0,
             subtitle="Dimension-aware pharmaceutical unit conversion "
-                     "(UnitConverter): mass, volume, amount, concentration "
-                     "and time -- 500 mg → 0.5 g, 1 µM → 1000 nM -- with "
-                     "the honest UnitConversionError when a unit is unknown "
-                     "or the dimensions disagree.",
+            "(UnitConverter): mass, volume, amount, concentration "
+            "and time -- 500 mg → 0.5 g, 1 µM → 1000 nM -- with "
+            "the honest UnitConversionError when a unit is unknown "
+            "or the dimensions disagree.",
         )
         self._uc_dim_combo = ttk.Combobox(
-            units_card, state="readonly", width=16,
-            values=list(_UNIT_DIMENSIONS))
+            units_card, state="readonly", width=16, values=list(_UNIT_DIMENSIONS)
+        )
         self._uc_dim_combo.set(_UNIT_DIMENSIONS[0])
-        self._uc_dim_combo.bind(
-            "<<ComboboxSelected>>", lambda _e: self._uc_dimension_changed())
-        Tooltip(self._uc_dim_combo,
-                "Picking a dimension loads its units into both comboboxes "
-                "(the entries stay editable -- a typo or a cross-dimension "
-                "pick surfaces the library's own error, naming every "
-                "supported unit).")
+        self._uc_dim_combo.bind("<<ComboboxSelected>>", lambda _e: self._uc_dimension_changed())
+        Tooltip(
+            self._uc_dim_combo,
+            "Picking a dimension loads its units into both comboboxes "
+            "(the entries stay editable -- a typo or a cross-dimension "
+            "pick surfaces the library's own error, naming every "
+            "supported unit).",
+        )
         form_row(units_card, "dimension", self._uc_dim_combo)
         self._uc_value = ttk.Entry(units_card, width=14)
         self._uc_value.insert(0, "500")
@@ -5120,20 +5790,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._uc_to.set("g")
         form_row(units_card, "to unit", self._uc_to)
         uc_btn = self._action_button(
-            units_card, "Convert", self._uc_convert, primary=True,
+            units_card,
+            "Convert",
+            self._uc_convert,
+            primary=True,
             tooltip="UnitConverter.convert(value, from, to) -- "
-                    "dimension-checked, with the conversion factor shown.")
-        uc_btn.grid(row=units_card.grid_size()[1], column=0,
-                    sticky="w", pady=(6, 0))
-        self._uc_result = ttk.Label(units_card, text="—",
-                                    style="Result.TLabel",
-                                    font=self._mono_result, wraplength=320,
-                                    justify="left")
-        self._uc_result.grid(row=uc_btn.grid_info()["row"], column=1,
-                             sticky="w", padx=(10, 0))
-        self._uc_units_hint = ttk.Label(units_card, text="",
-                                        style="CardMuted.TLabel",
-                                        wraplength=360, justify="left")
+            "dimension-checked, with the conversion factor shown.",
+        )
+        uc_btn.grid(row=units_card.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._uc_result = ttk.Label(
+            units_card,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=320,
+            justify="left",
+        )
+        self._uc_result.grid(row=uc_btn.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
+        self._uc_units_hint = ttk.Label(
+            units_card, text="", style="CardMuted.TLabel", wraplength=360, justify="left"
+        )
         grid_append(units_card, self._uc_units_hint, sticky="w", pady=(2, 0))
         bind_enter(self._uc_value, uc_btn)
         bind_enter(self._uc_to, uc_btn)
@@ -5158,8 +5834,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             else:
                 self._uc_from.set(choices[0])
                 self._uc_to.set(choices[1] if len(choices) > 1 else choices[0])
-        self._uc_units_hint.configure(
-            text=f"{dimension}: " + " · ".join(choices))
+        self._uc_units_hint.configure(text=f"{dimension}: " + " · ".join(choices))
 
     def _uc_convert(self) -> None:
         """One dimension-checked conversion (UnitConverter.convert)."""
@@ -5177,8 +5852,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._show_error("Conversion failed", exc)
             return
         factor = (converted / value) if value else None
-        lines = [f"{value:g} {source}  =  {converted:.6g} {target}",
-                 f"{dimension} conversion"]
+        lines = [f"{value:g} {source}  =  {converted:.6g} {target}", f"{dimension} conversion"]
         if factor is not None:
             lines.append(f"factor  ×{factor:.6g}")
         self._uc_result.configure(text="\n".join(lines))
@@ -5205,7 +5879,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ]
             raw_ke = self._ke_a.get().strip()
             if raw_ke:
-                lines.append(f"t½ from k(e) = {half_life(parse_float(raw_ke, 'k(e)', minimum=1e-12)):.2f} h")
+                lines.append(
+                    f"t½ from k(e) = {half_life(parse_float(raw_ke, 'k(e)', minimum=1e-12)):.2f} h"
+                )
             self._half_result.configure(text="\n".join(lines))
         except Exception as exc:  # noqa: BLE001
             self._show_error("Calculation failed", exc)
@@ -5256,8 +5932,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     )
             ax.set_xlabel("time (h)")
             ax.set_ylabel("concentration (mg/L)")
-            ax.set_title(f"IV bolus decay — t½ {t_half:g} h, k(e) {ke:.3f} 1/h",
-                         loc="left")
+            ax.set_title(f"IV bolus decay — t½ {t_half:g} h, k(e) {ke:.3f} 1/h", loc="left")
             ax.legend(frameon=False, fontsize=8)
             self._render_figure(self._iv_host, fig)
 
@@ -5278,9 +5953,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 raise ValueError("k(a) must exceed k(e) for a peak to exist")
             t_max = oral_tmax(ka, ke)
             c_max = oral_cmax(dose, ka, ke, vd, f=bio)
-            self._oral_result.configure(
-                text=f"t(max) = {t_max:.2f} h\nC(max)  = {c_max:.3f} mg/L"
-            )
+            self._oral_result.configure(text=f"t(max) = {t_max:.2f} h\nC(max)  = {c_max:.3f} mg/L")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Calculation failed", exc)
 
@@ -5299,8 +5972,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             clearance = creatinine_clearance(age, weight, scr, sex)
             adjusted = renal_dose_adjustment(dose, clearance)
             self._cg_result.configure(
-                text=(f"CrCl = {clearance:.1f} mL/min\n"
-                      f"adjusted dose = {adjusted:.1f} mg")
+                text=(f"CrCl = {clearance:.1f} mL/min\nadjusted dose = {adjusted:.1f} mg")
             )
         except Exception as exc:  # noqa: BLE001
             self._show_error("Calculation failed", exc)
@@ -5320,8 +5992,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             maintenance = maintenance_dose(clearance, css, tau, f=bio)
             loading = loading_dose(vd, target, f=bio)
             self._dose_result.configure(
-                text=(f"maintenance = {maintenance:.1f} mg per τ\n"
-                      f"loading      = {loading:.1f} mg")
+                text=(f"maintenance = {maintenance:.1f} mg per τ\nloading      = {loading:.1f} mg")
             )
         except Exception as exc:  # noqa: BLE001
             self._show_error("Calculation failed", exc)
@@ -5341,12 +6012,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             area = bsa_mosteller(height, weight)
             by_bsa = dose_by_bsa(per_m2, height, weight, max_dose=cap)
             by_weight = dose_by_weight(per_kg, weight, max_dose=cap)
-            capped = " (capped)" if cap is not None and (
-                by_bsa == cap or by_weight == cap) else ""
+            capped = " (capped)" if cap is not None and (by_bsa == cap or by_weight == cap) else ""
             self._bsa_result.configure(
-                text=(f"BSA = {area:.2f} m²\n"
-                      f"BSA dose = {by_bsa:.1f} mg\n"
-                      f"weight dose = {by_weight:.1f} mg{capped}")
+                text=(
+                    f"BSA = {area:.2f} m²\n"
+                    f"BSA dose = {by_bsa:.1f} mg\n"
+                    f"weight dose = {by_weight:.1f} mg{capped}"
+                )
             )
         except Exception as exc:  # noqa: BLE001
             self._show_error("Calculation failed", exc)
@@ -5375,8 +6047,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             e0 = parse_float(self._pd_e0.get(), "E0")
             emax = parse_float(self._pd_emax.get(), "Emax")
             ec50 = parse_float(self._pd_ec50.get(), "EC50", minimum=1e-12)
-            concs = [parse_float(part, "concentration", minimum=0.0)
-                     for part in self._pd_concs.get().split(",") if part.strip()]
+            concs = [
+                parse_float(part, "concentration", minimum=0.0)
+                for part in self._pd_concs.get().split(",")
+                if part.strip()
+            ]
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -5390,8 +6065,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             from pharmaml.pharma.pd import emax_effect
 
-            effects = np.asarray(emax_effect(np.asarray(concs), e0, emax, ec50),
-                                 dtype=float)
+            effects = np.asarray(emax_effect(np.asarray(concs), e0, emax, ec50), dtype=float)
             grid = np.linspace(0.0, max(concs) * 1.15 or ec50 * 20, 240)
             curve = np.asarray(emax_effect(grid, e0, emax, ec50), dtype=float)
             return effects, grid, curve
@@ -5399,8 +6073,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(payload: Any) -> None:
             effects, grid, curve = payload
             table = "  ·  ".join(
-                f"C {format_number(c)} → E {format_number(e, 2)}"
-                for c, e in zip(concs, effects)
+                f"C {format_number(c)} → E {format_number(e, 2)}" for c, e in zip(concs, effects)
             )
             self._pd_result.configure(text=table)
             if not want_plot:
@@ -5410,11 +6083,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
                 fig, ax = new_figure(figsize=(5.2, 2.9))
                 ax.plot(grid, curve, color=PALETTE[0], lw=2.2, label="E(C)")
-                ax.scatter(concs, effects, color=PALETTE[1], zorder=3,
-                           label="your points")
+                ax.scatter(concs, effects, color=PALETTE[1], zorder=3, label="your points")
                 ax.axvline(ec50, color=MUTED, ls=":", lw=1.0)
-                ax.annotate("EC50", xy=(ec50, e0 + emax * 0.5), xytext=(5, -2),
-                            textcoords="offset points", fontsize=8, color=MUTED)
+                ax.annotate(
+                    "EC50",
+                    xy=(ec50, e0 + emax * 0.5),
+                    xytext=(5, -2),
+                    textcoords="offset points",
+                    fontsize=8,
+                    color=MUTED,
+                )
                 ax.set_xlabel("concentration")
                 ax.set_ylabel("effect")
                 ax.set_title("Emax model", loc="left")
@@ -5428,16 +6106,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     # -- NCA / infusion / TDM / PD-family cards (the 100x-119 review) -- #
     def _nca_series(self) -> tuple[list[float], list[float]]:
         """Parse + validate the NCA card's time/concentration lists."""
-        times = [parse_float(part, "time") for part
-                 in self._nca_times.get().split(",") if part.strip()]
-        concs = [parse_float(part, "concentration") for part
-                 in self._nca_concs.get().split(",") if part.strip()]
+        times = [
+            parse_float(part, "time") for part in self._nca_times.get().split(",") if part.strip()
+        ]
+        concs = [
+            parse_float(part, "concentration")
+            for part in self._nca_concs.get().split(",")
+            if part.strip()
+        ]
         if not times or not concs:
             raise ValueError("give at least one time and one concentration")
         if len(times) != len(concs):
             raise ValueError(
                 f"{len(times)} times but {len(concs)} concentrations -- the "
-                "two lists must be matched pairs")
+                "two lists must be matched pairs"
+            )
         return times, concs
 
     def _nca_run(self) -> None:
@@ -5481,14 +6164,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 clearance = dose / summary.auc if summary.auc else float("nan")
                 parts.append(f"Vd {format_number(vd)} L")
                 parts.append(f"CL {format_number(clearance)} L/h")
-            self._nca_result.configure(
-                text=f"{len(t)} points · " + "  ·  ".join(parts))
+            self._nca_result.configure(text=f"{len(t)} points · " + "  ·  ".join(parts))
             if self.deps.get("matplotlib"):
                 try:
                     from pharmaml.viz import plot_concentration_profile
 
-                    figure = plot_concentration_profile(
-                        t, c, summary=summary, auc=summary.auc)
+                    figure = plot_concentration_profile(t, c, summary=summary, auc=summary.auc)
                     self._render_figure(self._nca_host, figure)
                 except Exception as exc:  # noqa: BLE001
                     self._show_error("Plot failed", exc)
@@ -5497,9 +6178,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _nca_plot(self) -> None:
         """Draw the concentration-time profile (AUC shaded) standalone."""
-        if not self._require_pharmaml() or not self._require(
-                "numpy", "NCA") or not self._require(
-                "matplotlib", "the concentration profile"):
+        if (
+            not self._require_pharmaml()
+            or not self._require("numpy", "NCA")
+            or not self._require("matplotlib", "the concentration profile")
+        ):
             return
         try:
             times, concs = self._nca_series()
@@ -5534,16 +6217,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         import pandas as pd
 
-        frame = pd.DataFrame([{
-            "auc_mg_h_L": summary.auc,
-            "aucm_mg_h2_L": summary.aucm,
-            "mrt_h": summary.mrt,
-            "c_max": summary.c_max,
-            "t_max": summary.t_max,
-            "half_life_terminal_h": summary.half_life_terminal,
-        }])
-        self._save_frame_dialog(frame, "Save NCA summary", "nca_summary.csv",
-                                "NCA summary")
+        frame = pd.DataFrame(
+            [
+                {
+                    "auc_mg_h_L": summary.auc,
+                    "aucm_mg_h2_L": summary.aucm,
+                    "mrt_h": summary.mrt,
+                    "c_max": summary.c_max,
+                    "t_max": summary.t_max,
+                    "half_life_terminal_h": summary.half_life_terminal,
+                }
+            ]
+        )
+        self._save_frame_dialog(frame, "Save NCA summary", "nca_summary.csv", "NCA summary")
 
     def _infusion_math(self) -> None:
         """Infusion rate / steady state / Vd / bioavailability card."""
@@ -5568,8 +6254,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if bio_pair and iv_pair:
                 ev_dose, ev_auc = _split_pair(bio_pair)
                 iv_dose, iv_auc = _split_pair(iv_pair)
-                for name, value in (("EV dose", ev_dose), ("EV AUC", ev_auc),
-                                    ("IV dose", iv_dose), ("IV AUC", iv_auc)):
+                for name, value in (
+                    ("EV dose", ev_dose),
+                    ("EV AUC", ev_auc),
+                    ("IV dose", iv_dose),
+                    ("IV AUC", iv_auc),
+                ):
                     if value <= 0:
                         raise ValueError(f"{name} must be positive")
                 bio = (ev_dose, ev_auc, iv_dose, iv_auc)
@@ -5589,10 +6279,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             css = iv_infusion_steady_state(rate, clearance)
             vd = volume_of_distribution(clearance, ke)
             parts = [
-                (f"rate for Css {format_number(target)} = "
-                 f"{format_number(need_rate)} mg/h"),
-                (f"Css at {format_number(rate)} mg/h = "
-                 f"{format_number(css)} mg/L"),
+                (f"rate for Css {format_number(target)} = {format_number(need_rate)} mg/h"),
+                (f"Css at {format_number(rate)} mg/h = {format_number(css)} mg/L"),
                 f"Vd = {format_number(vd)} L",
             ]
             if bio is not None:
@@ -5605,8 +6293,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _plot_accumulation(self) -> None:
         """Repeated-dosing approach to steady state (plot_dose_accumulation)."""
-        if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the accumulation plot"):
+        if not self._require_pharmaml() or not self._require("matplotlib", "the accumulation plot"):
             return
         try:
             dose = parse_float(self._acc_dose.get(), "dose")
@@ -5621,8 +6308,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             clearance = parse_float(self._inf_cl.get(), "clearance CL")
             ke = parse_float(self._vd_ke.get(), "k(e)")
             if clearance <= 0 or ke <= 0:
-                raise ValueError("clearance and k(e) must be positive "
-                                 "(they set Vd for the accumulation plot)")
+                raise ValueError(
+                    "clearance and k(e) must be positive (they set Vd for the accumulation plot)"
+                )
             vd = clearance / ke
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
@@ -5631,8 +6319,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def work() -> Any:
             from pharmaml.viz import plot_dose_accumulation
 
-            return plot_dose_accumulation(dose, tau, t_half=thalf, vd=vd,
-                                          n_doses=8)
+            return plot_dose_accumulation(dose, tau, t_half=thalf, vd=vd, n_doses=8)
 
         def render(figure: Any) -> None:
             self._render_figure(self._acc_host, figure)
@@ -5658,13 +6345,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         try:
             from pharmaml.pharma.dosage import tdm_trough_adjustment
 
-            new_dose = tdm_trough_adjustment(
-                dose, measured, target, min_dose=min_dose)
-            capped = (min_dose is not None and new_dose == min_dose
-                      and dose * target / measured < min_dose)
+            new_dose = tdm_trough_adjustment(dose, measured, target, min_dose=min_dose)
+            capped = (
+                min_dose is not None
+                and new_dose == min_dose
+                and dose * target / measured < min_dose
+            )
             self._tdm_result.configure(
-                text=(f"new dose {format_number(new_dose)} mg"
-                      + ("  (floored at the minimum)" if capped else "")))
+                text=(
+                    f"new dose {format_number(new_dose)} mg"
+                    + ("  (floored at the minimum)" if capped else "")
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             self._show_error("Computation failed", exc)
 
@@ -5681,8 +6373,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if hill <= 0:
                 raise ValueError("Hill slope must be positive")
             slope = parse_float(self._fam_slope.get(), "slope")
-            concs = [parse_float(part, "concentration", minimum=0.0)
-                     for part in self._fam_concs.get().split(",") if part.strip()]
+            concs = [
+                parse_float(part, "concentration", minimum=0.0)
+                for part in self._fam_concs.get().split(",")
+                if part.strip()
+            ]
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -5709,8 +6404,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 def fn(c: Any) -> Any:
                     return sigmoid_emax_effect(c, e0, top, c50, hill)
 
-                label = (f"E = {format_number(e0)} + {format_number(top)}·C^{format_number(hill)}"
-                         f"/({format_number(c50)}^{format_number(hill)} + C^{format_number(hill)})")
+                label = (
+                    f"E = {format_number(e0)} + {format_number(top)}·C^{format_number(hill)}"
+                    f"/({format_number(c50)}^{format_number(hill)} + C^{format_number(hill)})"
+                )
             elif model.startswith("inhibitory"):
                 from pharmaml.pharma.pd import inhibitory_emax_effect
 
@@ -5719,8 +6416,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 def fn(c: Any) -> Any:  # type: ignore[no-redef]
                     return inhibitory_emax_effect(c, e0, top, c50, hill)
 
-                label = (f"E = {format_number(e0)} − {format_number(top)}·C^{format_number(hill)}"
-                         f"/({format_number(c50)}^{format_number(hill)} + C^{format_number(hill)})")
+                label = (
+                    f"E = {format_number(e0)} − {format_number(top)}·C^{format_number(hill)}"
+                    f"/({format_number(c50)}^{format_number(hill)} + C^{format_number(hill)})"
+                )
             else:
                 from pharmaml.pharma.pd import linear_effect
 
@@ -5744,10 +6443,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._fam_tree.delete(*self._fam_tree.get_children())
             for conc, effect in zip(concs, effects):
                 self._fam_tree.insert(
-                    "", "end",
-                    values=(format_number(conc), format_number(effect, 2)))
-            self._fam_result.configure(
-                text=f"{model} · {label}", style="CardMuted.TLabel")
+                    "", "end", values=(format_number(conc), format_number(effect, 2))
+                )
+            self._fam_result.configure(text=f"{model} · {label}", style="CardMuted.TLabel")
             if not want_plot:
                 return
             try:
@@ -5755,8 +6453,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
                 fig, ax = new_figure(figsize=(5.2, 2.9))
                 ax.plot(grid, curve, color=PALETTE[0], lw=2.2, label=label)
-                ax.scatter(concs, effects, color=PALETTE[1], zorder=3,
-                           label="your points")
+                ax.scatter(concs, effects, color=PALETTE[1], zorder=3, label="your points")
                 if not model.startswith("linear"):
                     ax.axvline(c50, color=MUTED, ls=":", lw=1.0)
                 ax.set_xlabel("concentration")
@@ -5791,19 +6488,25 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             needed = ec50_for_target_effect(target, c50, e0, top, hill)
             if needed is None or not math.isfinite(needed) or needed <= 0:
                 self._fam_result.configure(
-                    text=(f"target {format_number(target, 2)} is outside the "
-                          f"model's reachable range (E0 {format_number(e0)} "
-                          f"→ plateau {format_number(e0 + top)}) — no EC50 "
-                          "exists"),
-                    style="CardMuted.TLabel")
+                    text=(
+                        f"target {format_number(target, 2)} is outside the "
+                        f"model's reachable range (E0 {format_number(e0)} "
+                        f"→ plateau {format_number(e0 + top)}) — no EC50 "
+                        "exists"
+                    ),
+                    style="CardMuted.TLabel",
+                )
                 return
             self._fam_result.configure(
-                text=(f"to reach E = {format_number(target, 2)}: "
-                      f"EC50 = {format_number(needed)} "
-                      f"(with E0 {format_number(e0)}, "
-                      f"{'Emax' if top >= 0 else 'Imax'} {format_number(top)}, "
-                      f"h {format_number(hill)})"),
-                style="CardMuted.TLabel")
+                text=(
+                    f"to reach E = {format_number(target, 2)}: "
+                    f"EC50 = {format_number(needed)} "
+                    f"(with E0 {format_number(e0)}, "
+                    f"{'Emax' if top >= 0 else 'Imax'} {format_number(top)}, "
+                    f"h {format_number(hill)})"
+                ),
+                style="CardMuted.TLabel",
+            )
         except Exception as exc:  # noqa: BLE001
             self._show_error("Computation failed", exc)
 
@@ -5815,43 +6518,52 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._bio_compound_var = tk.StringVar()
 
         screen = make_card(
-            page.grid, "Response screen", span=2, row=0, column=0,
+            page.grid,
+            "Response screen",
+            span=2,
+            row=0,
+            column=0,
             subtitle="A GDSC/CCLE-style long table: one row per cell line × "
-                     "compound, one metric column (LN_IC50, AUC, ...).",
+            "compound, one metric column (LN_IC50, AUC, ...).",
         )
         screen_buttons = ttk.Frame(screen, style="Card.TFrame")
         screen_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
         open_btn = self._action_button(screen_buttons, "Open CSV…", self._bio_open_csv)
         open_btn.pack(side="left")
         example_btn = self._action_button(
-            screen_buttons, "Load example", self._bio_load_example,
-            tooltip="The bundled 23-line × 8-compound screen "
-                    "(examples/data/cellline_screen.csv).",
+            screen_buttons,
+            "Load example",
+            self._bio_load_example,
+            tooltip="The bundled 23-line × 8-compound screen (examples/data/cellline_screen.csv).",
         )
         example_btn.pack(side="left", padx=(10, 0))
         bio_rep_btn = self._action_button(
-            screen_buttons, "Replicate variability", self._bio_replicate_variability,
+            screen_buttons,
+            "Replicate variability",
+            self._bio_replicate_variability,
             tooltip="Per cell-line × compound pair with replicates: the "
-                    "metric's spread (range / CV) across the replicate "
-                    "measurements — the honest quality readout before "
-                    "collapsing them to a median.",
+            "metric's spread (range / CV) across the replicate "
+            "measurements — the honest quality readout before "
+            "collapsing them to a median.",
         )
         bio_rep_btn.pack(side="left", padx=(10, 0))
         bio_sum_btn = self._action_button(
-            screen_buttons, "Compound summary", self._bio_summarize_compounds,
+            screen_buttons,
+            "Compound summary",
+            self._bio_summarize_compounds,
             tooltip="Per-compound statistics over the loaded metric (mean / "
-                    "median / std / min / max / n) — the one-table overview "
-                    "of the panel.",
+            "median / std / min / max / n) — the one-table overview "
+            "of the panel.",
         )
         bio_sum_btn.pack(side="left", padx=(10, 0))
         self._bio_collapse_var = tk.BooleanVar(value=True)
         collapse_check = ttk.Checkbutton(
-            screen, text="collapse replicates (median per duplicated pair)",
+            screen,
+            text="collapse replicates (median per duplicated pair)",
             variable=self._bio_collapse_var,
         )
         collapse_check.grid(row=0, column=1, sticky="e")
-        self._bio_info = ttk.Label(screen, text="no screen loaded",
-                                   style="CardMuted.TLabel")
+        self._bio_info = ttk.Label(screen, text="no screen loaded", style="CardMuted.TLabel")
         self._bio_info.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
         self._bio_audit_text = _grid_text(screen, height=6, mono=self._mono)
         self._bio_audit_text.insert(
@@ -5860,33 +6572,43 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         grid_append(screen, self._bio_audit_text, sticky="ew", pady=(6, 0))
 
         matrix = make_card(
-            page.grid, "Sensitivity matrix", span=2, row=1, column=0,
+            page.grid,
+            "Sensitivity matrix",
+            span=2,
+            row=1,
+            column=0,
             subtitle="Pivot one metric into the classic cell line × compound table.",
         )
         self._bio_metric_combo = ttk.Combobox(matrix, state="readonly", width=22)
         form_row(matrix, "metric", self._bio_metric_combo)
         build_btn = self._action_button(
-            matrix, "Build matrix", self._bio_build_matrix, primary=True,
-            tooltip="Rows are cell lines, columns compounds; untested pairs stay "
-                    "blank.",
+            matrix,
+            "Build matrix",
+            self._bio_build_matrix,
+            primary=True,
+            tooltip="Rows are cell lines, columns compounds; untested pairs stay blank.",
         )
         build_btn.grid(row=matrix.grid_size()[1], column=0, sticky="w", pady=(6, 0))
         self._bio_matrix_info = ttk.Label(
-            matrix, text="no matrix yet — load a screen and press Build matrix",
+            matrix,
+            text="no matrix yet — load a screen and press Build matrix",
             style="CardMuted.TLabel",
         )
-        self._bio_matrix_info.grid(row=build_btn.grid_info()["row"], column=1,
-                                   sticky="w", padx=(10, 0))
+        self._bio_matrix_info.grid(
+            row=build_btn.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
         matrix_frame = ttk.Frame(matrix, style="Card.TFrame")
         grid_append(matrix, matrix_frame, sticky="nsew", weight=True)
-        self._bio_matrix_tree = ttk.Treeview(matrix_frame, show="tree headings",
-                                             height=10)
-        matrix_bar_x = ttk.Scrollbar(matrix_frame, orient="horizontal",
-                                     command=self._bio_matrix_tree.xview)
-        matrix_bar_y = ttk.Scrollbar(matrix_frame, orient="vertical",
-                                     command=self._bio_matrix_tree.yview)
-        self._bio_matrix_tree.configure(xscrollcommand=matrix_bar_x.set,
-                                        yscrollcommand=matrix_bar_y.set)
+        self._bio_matrix_tree = ttk.Treeview(matrix_frame, show="tree headings", height=10)
+        matrix_bar_x = ttk.Scrollbar(
+            matrix_frame, orient="horizontal", command=self._bio_matrix_tree.xview
+        )
+        matrix_bar_y = ttk.Scrollbar(
+            matrix_frame, orient="vertical", command=self._bio_matrix_tree.yview
+        )
+        self._bio_matrix_tree.configure(
+            xscrollcommand=matrix_bar_x.set, yscrollcommand=matrix_bar_y.set
+        )
         self._bio_matrix_tree.heading("#0", text="cell line")
         self._bio_matrix_tree.column("#0", width=110, stretch=True)
         self._bio_matrix_tree.pack(side="left", fill="both", expand=True)
@@ -5894,7 +6616,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         matrix_bar_x.pack(side="bottom", fill="x")
 
         calls = make_card(
-            page.grid, "Sensitive vs resistant", row=2, column=0,
+            page.grid,
+            "Sensitive vs resistant",
+            row=2,
+            column=0,
             subtitle="Threshold one compound's panel into sensitivity calls.",
         )
         self._bio_compound_combo = ttk.Combobox(
@@ -5909,67 +6634,84 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(calls, "resistant quantile", self._bio_q2)
         self._bio_lower_var = tk.BooleanVar(value=True)
         lower_check = ttk.Checkbutton(
-            calls, text="lower value = more sensitive (LN_IC50)",
+            calls,
+            text="lower value = more sensitive (LN_IC50)",
             variable=self._bio_lower_var,
         )
         form_row(calls, "direction", lower_check)
         call_btn = self._action_button(calls, "Call", self._bio_call_sensitive)
         call_btn.grid(row=calls.grid_size()[1], column=0, sticky="w", pady=(6, 0))
-        self._bio_calls_summary = ttk.Label(calls, text="—", style="CardMuted.TLabel",
-                                            wraplength=300, justify="left")
-        self._bio_calls_summary.grid(row=call_btn.grid_info()["row"], column=1,
-                                     sticky="w", padx=(10, 0))
+        self._bio_calls_summary = ttk.Label(
+            calls, text="—", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
+        self._bio_calls_summary.grid(
+            row=call_btn.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
         calls_frame = ttk.Frame(calls, style="Card.TFrame")
         grid_append(calls, calls_frame, sticky="nsew", weight=True)
-        self._bio_calls_tree = ttk.Treeview(calls_frame, columns=("call",),
-                                            show="tree headings", height=10)
+        self._bio_calls_tree = ttk.Treeview(
+            calls_frame, columns=("call",), show="tree headings", height=10
+        )
         self._bio_calls_tree.heading("#0", text="cell line")
         self._bio_calls_tree.heading("call", text="call")
         self._bio_calls_tree.column("#0", width=130, stretch=True)
         self._bio_calls_tree.column("call", width=110, stretch=False)
-        calls_bar = ttk.Scrollbar(calls_frame, orient="vertical",
-                                  command=self._bio_calls_tree.yview)
+        calls_bar = ttk.Scrollbar(
+            calls_frame, orient="vertical", command=self._bio_calls_tree.yview
+        )
         self._bio_calls_tree.configure(yscrollcommand=calls_bar.set)
         self._bio_calls_tree.pack(side="left", fill="both", expand=True)
         calls_bar.pack(side="right", fill="y")
 
         convert = make_card(
-            page.grid, "LN_IC50 ↔ pIC50", row=2, column=1,
+            page.grid,
+            "LN_IC50 ↔ pIC50",
+            row=2,
+            column=1,
             subtitle="The GDSC and the chemist's scale, one number at a time.",
         )
         self._bio_ic50_entry = ttk.Entry(convert, width=22)
         self._bio_ic50_entry.insert(0, "0")
         form_row(convert, "value", self._bio_ic50_entry)
         convert_buttons = ttk.Frame(convert, style="Card.TFrame")
-        convert_buttons.grid(row=convert.grid_size()[1], column=0, columnspan=2,
-                             sticky="w", pady=(6, 0))
-        ln_btn = self._action_button(convert_buttons, "LN_IC50 → pIC50",
-                                     self._bio_ln_to_pic50)
+        convert_buttons.grid(
+            row=convert.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+        ln_btn = self._action_button(convert_buttons, "LN_IC50 → pIC50", self._bio_ln_to_pic50)
         ln_btn.pack(side="left")
-        pi_btn = self._action_button(convert_buttons, "pIC50 → LN_IC50",
-                                     self._bio_pic50_to_ln)
+        pi_btn = self._action_button(convert_buttons, "pIC50 → LN_IC50", self._bio_pic50_to_ln)
         pi_btn.pack(side="left", padx=(10, 0))
         bind_enter(self._bio_ic50_entry, ln_btn)
         result_row = ttk.Frame(convert, style="Card.TFrame")
-        result_row.grid(row=convert.grid_size()[1], column=0, columnspan=2,
-                        sticky="w", pady=(6, 0))
-        self._bio_ic50_result = ttk.Label(result_row, text="—",
-                                          style="Result.TLabel",
-                                          font=self._mono_result)
+        result_row.grid(row=convert.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self._bio_ic50_result = ttk.Label(
+            result_row, text="—", style="Result.TLabel", font=self._mono_result
+        )
         self._bio_ic50_result.pack(side="left")
         copy_btn = self._action_button(
             result_row, "Copy", lambda: self._copy(self._bio_ic50_result.cget("text"))
         )
         copy_btn.pack(side="left", padx=(10, 0))
-        grid_append(convert, ttk.Label(
-            convert, style="CardMuted.TLabel", wraplength=300, justify="left",
-            text="GDSC convention: LN_IC50 = ln(IC50 in µM), so 0 → pIC50 6.",
-        ), pady=(4, 0))
+        grid_append(
+            convert,
+            ttk.Label(
+                convert,
+                style="CardMuted.TLabel",
+                wraplength=300,
+                justify="left",
+                text="GDSC convention: LN_IC50 = ln(IC50 in µM), so 0 → pIC50 6.",
+            ),
+            pady=(4, 0),
+        )
 
         expression = make_card(
-            page.grid, "Expression table", span=2, row=3, column=0,
+            page.grid,
+            "Expression table",
+            span=2,
+            row=3,
+            column=0,
             subtitle="Rows are cell lines, columns genes (log2 counts or "
-                     "intensities — normalisation happens inside the analysis).",
+            "intensities — normalisation happens inside the analysis).",
         )
         expression_buttons = ttk.Frame(expression, style="Card.TFrame")
         expression_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
@@ -5978,57 +6720,67 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         expr_open_btn.pack(side="left")
         expr_example_btn = self._action_button(
-            expression_buttons, "Load example", self._bio_load_expr_example,
-            tooltip="The bundled 23-line × 300-gene table "
-                    "(examples/data/cellline_expression.csv).",
+            expression_buttons,
+            "Load example",
+            self._bio_load_expr_example,
+            tooltip="The bundled 23-line × 300-gene table (examples/data/cellline_expression.csv).",
         )
         expr_example_btn.pack(side="left", padx=(10, 0))
-        self._bio_expr_info = ttk.Label(expression, text="no expression table loaded",
-                                        style="CardMuted.TLabel")
-        self._bio_expr_info.grid(row=1, column=0, columnspan=2, sticky="w",
-                                 pady=(6, 0))
+        self._bio_expr_info = ttk.Label(
+            expression, text="no expression table loaded", style="CardMuted.TLabel"
+        )
+        self._bio_expr_info.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
         # 100x-120: the MAD variability ranking (most_variable_genes) --
         # which genes carry signal at all, inspectable without a screen.
         expr_var_row = ttk.Frame(expression, style="Card.TFrame")
-        expr_var_row.grid(row=2, column=0, columnspan=2, sticky="w",
-                          pady=(6, 0))
+        expr_var_row.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
         expr_var_btn = self._action_button(
-            expr_var_row, "Rank variable genes (MAD)",
+            expr_var_row,
+            "Rank variable genes (MAD)",
             self._bio_rank_variable_genes,
             tooltip="The N genes with the highest median absolute deviation "
-                    "across the panel (most_variable_genes) -- the classic "
-                    "pre-filter before correlating 20,000 probes against a "
-                    "drug response.")
+            "across the panel (most_variable_genes) -- the classic "
+            "pre-filter before correlating 20,000 probes against a "
+            "drug response.",
+        )
         expr_var_btn.pack(side="left")
-        ttk.Label(expr_var_row, text="top N", style="CardMuted.TLabel"
-                  ).pack(side="left", padx=(10, 4))
+        ttk.Label(expr_var_row, text="top N", style="CardMuted.TLabel").pack(
+            side="left", padx=(10, 4)
+        )
         self._bio_mad_n = ttk.Entry(expr_var_row, width=7)
         self._bio_mad_n.insert(0, "20")
         self._bio_mad_n.pack(side="left")
         self._bio_mad_summary = ttk.Label(
-            expr_var_row, text="", style="CardMuted.TLabel", wraplength=420,
-            justify="left")
+            expr_var_row, text="", style="CardMuted.TLabel", wraplength=420, justify="left"
+        )
         self._bio_mad_summary.pack(side="left", padx=(8, 0))
         self._bio_mad_text = _grid_text(expression, height=5, mono=self._mono)
         self._bio_mad_text.insert(
-            "1.0", "the MAD-ranked gene list appears here "
-                   "(most variable first)")
-        self._bio_mad_text.grid(row=3, column=0, columnspan=2, sticky="ew",
-                                pady=(6, 0))
+            "1.0", "the MAD-ranked gene list appears here (most variable first)"
+        )
+        self._bio_mad_text.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
         biomarkers = make_card(
-            page.grid, "Biomarker discovery", span=2, row=4, column=0,
+            page.grid,
+            "Biomarker discovery",
+            span=2,
+            row=4,
+            column=0,
             subtitle="Correlate every gene's expression with one drug's response "
-                     "(Benjamini–Hochberg FDR control) — the EGFR / erlotinib "
-                     "story on the example data.",
+            "(Benjamini–Hochberg FDR control) — the EGFR / erlotinib "
+            "story on the example data.",
         )
         self._bio_marker_compound_combo = ttk.Combobox(
-            biomarkers, state="readonly", width=22,
+            biomarkers,
+            state="readonly",
+            width=22,
             textvariable=self._bio_compound_var,
         )
         form_row(biomarkers, "compound", self._bio_marker_compound_combo)
         self._bio_method_combo = ttk.Combobox(
-            biomarkers, state="readonly", width=22,
+            biomarkers,
+            state="readonly",
+            width=22,
             values=("spearman", "pearson"),
         )
         self._bio_method_combo.set("spearman")
@@ -6038,41 +6790,53 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(biomarkers, "top N genes", self._bio_topn_entry)
         self._bio_marker_lower_var = tk.BooleanVar(value=True)
         marker_lower_check = ttk.Checkbutton(
-            biomarkers, text="lower response = more sensitive (LN_IC50)",
+            biomarkers,
+            text="lower response = more sensitive (LN_IC50)",
             variable=self._bio_marker_lower_var,
         )
         form_row(biomarkers, "direction", marker_lower_check)
         marker_btn = self._action_button(
-            biomarkers, "Discover biomarkers", self._bio_discover_biomarkers,
+            biomarkers,
+            "Discover biomarkers",
+            self._bio_discover_biomarkers,
             primary=True,
             tooltip="Normalises + imputes the expression table, correlates every "
-                    "gene against the compound's response column, ranks by |rho|.",
+            "gene against the compound's response column, ranks by |rho|.",
         )
-        marker_btn.grid(row=biomarkers.grid_size()[1], column=0, sticky="w",
-                        pady=(6, 0))
+        marker_btn.grid(row=biomarkers.grid_size()[1], column=0, sticky="w", pady=(6, 0))
         self._bio_marker_summary = ttk.Label(
             biomarkers,
             text="no discovery yet — load a screen and an expression table",
-            style="CardMuted.TLabel", wraplength=620, justify="left",
+            style="CardMuted.TLabel",
+            wraplength=620,
+            justify="left",
         )
-        self._bio_marker_summary.grid(row=marker_btn.grid_info()["row"], column=1,
-                                      sticky="w", padx=(10, 0))
+        self._bio_marker_summary.grid(
+            row=marker_btn.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
         marker_frame = ttk.Frame(biomarkers, style="Card.TFrame")
         grid_append(biomarkers, marker_frame, sticky="nsew", weight=True)
         self._bio_marker_tree = ttk.Treeview(
             marker_frame,
             columns=("gene", "rho", "p_value", "fdr", "significant", "direction"),
-            show="headings", height=10,
+            show="headings",
+            height=10,
         )
         for column, width in (
-            ("gene", 110), ("rho", 90), ("p_value", 110), ("fdr", 110),
-            ("significant", 90), ("direction", 240),
+            ("gene", 110),
+            ("rho", 90),
+            ("p_value", 110),
+            ("fdr", 110),
+            ("significant", 90),
+            ("direction", 240),
         ):
             self._bio_marker_tree.heading(column, text=column)
-            self._bio_marker_tree.column(column, width=width, minwidth=64,
-                                         stretch=(column == "direction"))
-        marker_bar_y = ttk.Scrollbar(marker_frame, orient="vertical",
-                                     command=self._bio_marker_tree.yview)
+            self._bio_marker_tree.column(
+                column, width=width, minwidth=64, stretch=(column == "direction")
+            )
+        marker_bar_y = ttk.Scrollbar(
+            marker_frame, orient="vertical", command=self._bio_marker_tree.yview
+        )
         self._bio_marker_tree.configure(yscrollcommand=marker_bar_y.set)
         self._bio_marker_tree.pack(side="left", fill="both", expand=True)
         marker_bar_y.pack(side="right", fill="y")
@@ -6092,8 +6856,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         path = EXAMPLES_DIR / "cellline_screen.csv"
         if not path.is_file():
-            messagebox.showwarning("Missing example",
-                                   "examples/data/cellline_screen.csv was not found.")
+            messagebox.showwarning(
+                "Missing example", "examples/data/cellline_screen.csv was not found."
+            )
             return
         self._bio_load_path(path)
 
@@ -6135,8 +6900,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             rows_note += f" ({len(screen.frame):,} after collapsing replicates)"
         metrics = ", ".join(screen.metrics)
         self._bio_info.configure(
-            text=(f"{path.name} — {rows_note} · {len(screen.cell_lines)} cell lines · "
-                  f"{len(screen.compounds)} compounds · metric(s): {metrics}")
+            text=(
+                f"{path.name} — {rows_note} · {len(screen.cell_lines)} cell lines · "
+                f"{len(screen.compounds)} compounds · metric(s): {metrics}"
+            )
         )
         self._bio_metric_combo["values"] = list(screen.metrics)
         if screen.metrics:
@@ -6161,8 +6928,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             # replicates must be audited BEFORE any collapsing -- reload
             # the raw table (the loaded screen may already be collapsed)
-            raw = (load_response_table(path) if path is not None
-                   else self._bio_screen)
+            raw = load_response_table(path) if path is not None else self._bio_screen
             return replicate_variability(raw)
 
         def render(frame: Any) -> None:
@@ -6171,12 +6937,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._bio_audit_text.insert(
                     "1.0",
                     "replicate variability: no duplicated cell-line × "
-                    "compound pairs in this screen — nothing to compare")
+                    "compound pairs in this screen — nothing to compare",
+                )
                 return
             self._bio_audit_text.insert(
                 "1.0",
                 "replicate variability (per duplicated pair, "
-                "before any collapsing):\n\n" + frame.to_string(index=False))
+                "before any collapsing):\n\n" + frame.to_string(index=False),
+            )
 
         self._start_job("replicate variability", work, render)
 
@@ -6197,13 +6965,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.biology import summarize_compounds
 
             return summarize_compounds(
-                self._bio_screen, metric,
-                higher_is_more_sensitive=not lower_is_sensitive)
+                self._bio_screen, metric, higher_is_more_sensitive=not lower_is_sensitive
+            )
 
         def render(frame: Any) -> None:
             self._bio_audit_text.delete("1.0", "end")
-            header = (f"compound summary — {metric} "
-                      f"({'lower = more sensitive' if lower_is_sensitive else 'higher = more sensitive'}):\n\n")
+            header = (
+                f"compound summary — {metric} "
+                f"({'lower = more sensitive' if lower_is_sensitive else 'higher = more sensitive'}):\n\n"
+            )
             self._bio_audit_text.insert("1.0", header + frame.to_string(index=False))
 
         self._start_job(f"compound summary ({metric})", work, render)
@@ -6242,14 +7012,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             tree.column(column, width=96, minwidth=72, stretch=True)
         for cell_line, row in matrix.iterrows():
             values = [
-                "" if isinstance(value, float) and math.isnan(value)
-                else _cell_text(value)
+                "" if isinstance(value, float) and math.isnan(value) else _cell_text(value)
                 for value in row.tolist()
             ]
             tree.insert("", "end", text=str(cell_line), values=values)
         self._bio_matrix_info.configure(
-            text=(f"{len(matrix.index)} cell lines × {len(matrix.columns)} compounds · "
-                  f"untested pairs blank · metric {metric}")
+            text=(
+                f"{len(matrix.index)} cell lines × {len(matrix.columns)} compounds · "
+                f"untested pairs blank · metric {metric}"
+            )
         )
 
     def _bio_call_sensitive(self) -> None:
@@ -6263,14 +7034,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showwarning("No compound", "Pick the compound to call.")
             return
         try:
-            sensitive_q = parse_float(self._bio_q1.get(), "sensitive quantile",
-                                      minimum=0.0, maximum=1.0)
-            resistant_q = parse_float(self._bio_q2.get(), "resistant quantile",
-                                      minimum=0.0, maximum=1.0)
+            sensitive_q = parse_float(
+                self._bio_q1.get(), "sensitive quantile", minimum=0.0, maximum=1.0
+            )
+            resistant_q = parse_float(
+                self._bio_q2.get(), "resistant quantile", minimum=0.0, maximum=1.0
+            )
             if sensitive_q >= resistant_q:
-                raise ValueError(
-                    "the sensitive quantile must be below the resistant quantile"
-                )
+                raise ValueError("the sensitive quantile must be below the resistant quantile")
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -6295,8 +7066,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._bio_render_matrix(matrix, used_metric)
             counts = calls.value_counts()
             labels = ("sensitive", "intermediate", "resistant", "not tested")
-            summary = " · ".join(f"{int(counts.get(label, 0))} {label}"
-                                 for label in labels)
+            summary = " · ".join(f"{int(counts.get(label, 0))} {label}" for label in labels)
             self._bio_calls_summary.configure(
                 text=f"{used_compound}: {summary}", style="Field.TLabel"
             )
@@ -6305,8 +7075,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             for cell_line, call in sorted(
                 calls.items(), key=lambda item: (rank.get(item[1], 99), str(item[0]))
             ):
-                self._bio_calls_tree.insert("", "end", text=str(cell_line),
-                                            values=(call,))
+                self._bio_calls_tree.insert("", "end", text=str(cell_line), values=(call,))
 
         self._start_job(f"sensitivity calls ({compound})", work, render)
 
@@ -6323,9 +7092,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         try:
             value = parse_float(self._bio_ic50_entry.get(), "value")
-            result = (
-                ln_ic50_to_pic50(value) if direction == "ln" else pic50_to_ln_ic50(value)
-            )
+            result = ln_ic50_to_pic50(value) if direction == "ln" else pic50_to_ln_ic50(value)
         except Exception as exc:  # noqa: BLE001
             self._show_error("Conversion failed", exc)
             return
@@ -6383,18 +7150,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         the classic pre-filter question ("which probes carry signal
         at all?") answerable without loading a screen.
         """
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "the MAD ranking"):
+        if not self._require_pharmaml() or not self._require("pandas", "the MAD ranking"):
             return
         frame = getattr(self, "_bio_expr", None)
         if frame is None:
             messagebox.showwarning(
-                "No expression table",
-                "Open an expression CSV (or load the example) first.")
+                "No expression table", "Open an expression CSV (or load the example) first."
+            )
             return
         try:
-            top_n = parse_int(self._bio_mad_n.get(), "top N genes",
-                              minimum=1, maximum=100000)
+            top_n = parse_int(self._bio_mad_n.get(), "top N genes", minimum=1, maximum=100000)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -6417,9 +7182,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._bio_mad_text.delete("1.0", "end")
             self._bio_mad_text.insert("1.0", ranked.to_string())
             self._bio_mad_summary.configure(
-                text=(f"top {len(ranked)} of {n_genes:,} genes by MAD — "
-                      f"most variable: {ranked.index[0]}"),
-                style="Field.TLabel")
+                text=(
+                    f"top {len(ranked)} of {n_genes:,} genes by MAD — "
+                    f"most variable: {ranked.index[0]}"
+                ),
+                style="Field.TLabel",
+            )
 
         self._start_job("MAD gene ranking", work, render)
 
@@ -6442,8 +7210,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         method = self._bio_method_combo.get() or "spearman"
         try:
-            top_n = parse_int(self._bio_topn_entry.get(), "top N genes",
-                              minimum=1, maximum=500)
+            top_n = parse_int(self._bio_topn_entry.get(), "top N genes", minimum=1, maximum=500)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -6466,9 +7233,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             built = matrix is None or self._bio_matrix_metric != metric
             if built:
                 matrix = response_matrix(self._bio_screen, metric)
-            associations = sensitivity_associations(
-                norm, matrix[compound], method=method
-            )
+            associations = sensitivity_associations(norm, matrix[compound], method=method)
             top = top_biomarkers(associations, n=top_n)
             return top, associations, norm, matrix, metric, built, compound
 
@@ -6482,9 +7247,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             n_significant = int(associations["significant"].sum())
             strongest = float(associations["rho"].abs().max())
             self._bio_marker_summary.configure(
-                text=(f"{len(associations):,} genes correlated · "
-                      f"{n_significant} significant at FDR < 0.05 · "
-                      f"strongest |rho| {strongest:.3f} — {used_compound}"),
+                text=(
+                    f"{len(associations):,} genes correlated · "
+                    f"{n_significant} significant at FDR < 0.05 · "
+                    f"strongest |rho| {strongest:.3f} — {used_compound}"
+                ),
                 style="Field.TLabel",
             )
             self._bio_marker_tree.delete(*self._bio_marker_tree.get_children())
@@ -6494,16 +7261,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 except (TypeError, ValueError):
                     rho = float("nan")
                 self._bio_marker_tree.insert(
-                    "", "end",
+                    "",
+                    "end",
                     values=(
                         _cell_text(row["gene"], limit=18),
                         format_number(rho),
                         _cell_text(row["p_value"]),
                         _cell_text(row["fdr"]),
                         "Yes" if bool(row["significant"]) else "No",
-                        direction_of_association(
-                            rho, lower_is_sensitive=lower
-                        ),
+                        direction_of_association(rho, lower_is_sensitive=lower),
                     ),
                 )
 
@@ -6517,121 +7283,158 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         # -- card 1: ligand library -> PDBQT campaign -------------------- #
         ligands = make_card(
-            page.grid, "Ligand library → PDBQT", row=0, column=0,
+            page.grid,
+            "Ligand library → PDBQT",
+            row=0,
+            column=0,
             subtitle="A SMILES CSV becomes one folder per ligand, each with a "
-                     "3D l.pdbqt (Meeko + RDKit).",
+            "3D l.pdbqt (Meeko + RDKit).",
         )
         lib_buttons = ttk.Frame(ligands, style="Card.TFrame")
         lib_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
-        lib_open_btn = self._action_button(lib_buttons, "Open CSV…",
-                                           self._dock_open_csv)
+        lib_open_btn = self._action_button(lib_buttons, "Open CSV…", self._dock_open_csv)
         lib_open_btn.pack(side="left")
         lib_example_btn = self._action_button(
-            lib_buttons, "Load example", self._dock_load_example,
+            lib_buttons,
+            "Load example",
+            self._dock_load_example,
             tooltip="The bundled 10-row library (8 valid SMILES, 2 broken "
-                    "rows on purpose) -- examples/data/ligand_library.csv.",
+            "rows on purpose) -- examples/data/ligand_library.csv.",
         )
         lib_example_btn.pack(side="left", padx=(10, 0))
-        self._dock_lib_info = ttk.Label(ligands, text="no library loaded",
-                                        style="CardMuted.TLabel")
-        self._dock_lib_info.grid(row=1, column=0, columnspan=2, sticky="w",
-                                 pady=(6, 0))
+        self._dock_lib_info = ttk.Label(ligands, text="no library loaded", style="CardMuted.TLabel")
+        self._dock_lib_info.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
         out_buttons = ttk.Frame(ligands, style="Card.TFrame")
         out_buttons.grid(row=2, column=0, columnspan=2, sticky="w")
-        out_btn = self._action_button(out_buttons, "Choose output folder…",
-                                      self._dock_choose_out_dir)
+        out_btn = self._action_button(
+            out_buttons, "Choose output folder…", self._dock_choose_out_dir
+        )
         out_btn.pack(side="left")
-        self._dock_out_info = ttk.Label(out_buttons, text="no output folder chosen",
-                                        style="CardMuted.TLabel", wraplength=280,
-                                        justify="left")
+        self._dock_out_info = ttk.Label(
+            out_buttons,
+            text="no output folder chosen",
+            style="CardMuted.TLabel",
+            wraplength=280,
+            justify="left",
+        )
         self._dock_out_info.pack(side="left", padx=(10, 0))
         prep_btn = self._action_button(
-            ligands, "Prepare ligands", self._dock_prepare_ligands, primary=True,
+            ligands,
+            "Prepare ligands",
+            self._dock_prepare_ligands,
+            primary=True,
             tooltip="Embeds and atom-types every valid SMILES in a worker "
-                    "thread; one sub-folder per ligand under the output root.",
+            "thread; one sub-folder per ligand under the output root.",
         )
         prep_btn.grid(row=ligands.grid_size()[1], column=0, sticky="w", pady=(6, 0))
         self._dock_prep_summary = ttk.Label(
-            ligands, text="—", style="CardMuted.TLabel", wraplength=300,
+            ligands,
+            text="—",
+            style="CardMuted.TLabel",
+            wraplength=300,
             justify="left",
         )
-        self._dock_prep_summary.grid(row=prep_btn.grid_info()["row"], column=1,
-                                     sticky="w", padx=(10, 0))
+        self._dock_prep_summary.grid(
+            row=prep_btn.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
         lib_tree_frame = ttk.Frame(ligands, style="Card.TFrame")
         grid_append(ligands, lib_tree_frame, sticky="nsew", weight=True)
         self._dock_lib_tree = ttk.Treeview(
             lib_tree_frame,
             columns=("folder", "name", "ok", "atoms", "torsdof", "error"),
-            show="headings", height=8,
+            show="headings",
+            height=8,
         )
         for column, width in (
-            ("folder", 120), ("name", 100), ("ok", 44), ("atoms", 60),
-            ("torsdof", 66), ("error", 170),
+            ("folder", 120),
+            ("name", 100),
+            ("ok", 44),
+            ("atoms", 60),
+            ("torsdof", 66),
+            ("error", 170),
         ):
             self._dock_lib_tree.heading(column, text=column)
-            self._dock_lib_tree.column(column, width=width, minwidth=44,
-                                       stretch=(column == "error"))
-        lib_bar = ttk.Scrollbar(lib_tree_frame, orient="vertical",
-                                command=self._dock_lib_tree.yview)
+            self._dock_lib_tree.column(
+                column, width=width, minwidth=44, stretch=(column == "error")
+            )
+        lib_bar = ttk.Scrollbar(
+            lib_tree_frame, orient="vertical", command=self._dock_lib_tree.yview
+        )
         self._dock_lib_tree.configure(yscrollcommand=lib_bar.set)
         self._dock_lib_tree.pack(side="left", fill="both", expand=True)
         lib_bar.pack(side="right", fill="y")
-        lib_save_btn = self._action_button(ligands, "Save report CSV…",
-                                           self._dock_save_ligand_report)
-        lib_save_btn.grid(row=ligands.grid_size()[1], column=0, columnspan=2,
-                          sticky="w", pady=(6, 0))
+        lib_save_btn = self._action_button(
+            ligands, "Save report CSV…", self._dock_save_ligand_report
+        )
+        lib_save_btn.grid(
+            row=ligands.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
 
         # -- card 2: receptor preparation -------------------------------- #
         receptor = make_card(
-            page.grid, "Receptor preparation", row=0, column=1,
+            page.grid,
+            "Receptor preparation",
+            row=0,
+            column=1,
             subtitle="PDB / CIF / PDBQT → a docking-ready receptor PDBQT "
-                     "(waters out, atom types in).",
+            "(waters out, atom types in).",
         )
         rec_buttons = ttk.Frame(receptor, style="Card.TFrame")
         rec_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
-        rec_open_btn = self._action_button(rec_buttons,
-                                           "Open PDB / CIF / PDBQT…",
-                                           self._dock_open_receptor)
+        rec_open_btn = self._action_button(
+            rec_buttons, "Open PDB / CIF / PDBQT…", self._dock_open_receptor
+        )
         rec_open_btn.pack(side="left")
         rec_example_btn = self._action_button(
-            rec_buttons, "Load example", self._dock_load_receptor_example,
-            tooltip="The bundled hen egg-white lysozyme "
-                    "(examples/data/lysozyme_1aki.pdb).",
+            rec_buttons,
+            "Load example",
+            self._dock_load_receptor_example,
+            tooltip="The bundled hen egg-white lysozyme (examples/data/lysozyme_1aki.pdb).",
         )
         rec_example_btn.pack(side="left", padx=(10, 0))
         self._dock_receptor_info = ttk.Label(
-            receptor, text="no receptor source selected",
-            style="CardMuted.TLabel", wraplength=300, justify="left",
+            receptor,
+            text="no receptor source selected",
+            style="CardMuted.TLabel",
+            wraplength=300,
+            justify="left",
         )
-        self._dock_receptor_info.grid(row=1, column=0, columnspan=2, sticky="w",
-                                      pady=(6, 0))
+        self._dock_receptor_info.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
         self._dock_remove_waters_var = tk.BooleanVar(value=True)
-        waters_check = ttk.Checkbutton(receptor, text="remove waters",
-                                       variable=self._dock_remove_waters_var)
+        waters_check = ttk.Checkbutton(
+            receptor, text="remove waters", variable=self._dock_remove_waters_var
+        )
         form_row(receptor, "waters", waters_check)
         self._dock_keep_hetatm_var = tk.BooleanVar(value=False)
-        hetatm_check = ttk.Checkbutton(receptor, text="keep HETATM ligands/ions",
-                                       variable=self._dock_keep_hetatm_var)
+        hetatm_check = ttk.Checkbutton(
+            receptor, text="keep HETATM ligands/ions", variable=self._dock_keep_hetatm_var
+        )
         form_row(receptor, "HETATM", hetatm_check)
         self._dock_strip_h_var = tk.BooleanVar(value=True)
-        strip_check = ttk.Checkbutton(receptor, text="strip hydrogens",
-                                      variable=self._dock_strip_h_var)
+        strip_check = ttk.Checkbutton(
+            receptor, text="strip hydrogens", variable=self._dock_strip_h_var
+        )
         form_row(receptor, "hydrogens", strip_check)
         self._dock_bad_res_var = tk.BooleanVar(value=True)
         bad_res_check = ttk.Checkbutton(
-            receptor, text="auto-remove bad residues", variable=self._dock_bad_res_var)
-        Tooltip(bad_res_check,
-                "When Meeko's templates cannot match a residue (broken "
-                "density, non-standard chemistry), delete that residue and "
-                "retry instead of failing -- Meeko CLI's --delete_bad_res, "
-                "checkbox edition. Removed residues are named in the report.")
+            receptor, text="auto-remove bad residues", variable=self._dock_bad_res_var
+        )
+        Tooltip(
+            bad_res_check,
+            "When Meeko's templates cannot match a residue (broken "
+            "density, non-standard chemistry), delete that residue and "
+            "retry instead of failing -- Meeko CLI's --delete_bad_res, "
+            "checkbox edition. Removed residues are named in the report.",
+        )
         form_row(receptor, "bad residues", bad_res_check)
         self._dock_chain_entry = ttk.Entry(receptor, width=10)
         form_row(receptor, "chain (blank = all)", self._dock_chain_entry)
         rec_btn = self._action_button(
-            receptor, "Prepare receptor", self._dock_prepare_receptor, primary=True,
-            tooltip="Asks where to save the PDBQT, then prepares it in a "
-                    "worker thread.",
+            receptor,
+            "Prepare receptor",
+            self._dock_prepare_receptor,
+            primary=True,
+            tooltip="Asks where to save the PDBQT, then prepares it in a worker thread.",
         )
         rec_btn.grid(row=receptor.grid_size()[1], column=0, sticky="w", pady=(6, 0))
         self._dock_protein_text = _grid_text(receptor, height=10, mono=self._mono)
@@ -6642,40 +7445,53 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         dist_buttons = ttk.Frame(receptor, style="Card.TFrame")
         grid_append(receptor, dist_buttons, sticky="w", pady=(6, 0))
         dist_btn = self._action_button(
-            dist_buttons, "Distribute into campaign…",
+            dist_buttons,
+            "Distribute into campaign…",
             self._dock_distribute_receptor,
-            tooltip="Copies the prepared receptor into every ligand folder "
-                    "of a campaign root.",
+            tooltip="Copies the prepared receptor into every ligand folder of a campaign root.",
         )
         dist_btn.pack(side="left")
         rec_plot_btn = self._action_button(
-            dist_buttons, "Plot atom types", self._dock_plot_atom_types,
+            dist_buttons,
+            "Plot atom types",
+            self._dock_plot_atom_types,
             tooltip="The prepared receptor's AutoDock atom-type census as "
-                    "chemistry-coloured bars (plot_receptor_atom_types) — "
-                    "a missing polar-hydrogen population is visible at a "
-                    "glance.")
+            "chemistry-coloured bars (plot_receptor_atom_types) — "
+            "a missing polar-hydrogen population is visible at a "
+            "glance.",
+        )
         rec_plot_btn.pack(side="left", padx=(10, 0))
         self._dock_receptor_host = self._figure_host(receptor, height=240)
         self._dock_distribute_info = ttk.Label(
-            dist_buttons, text="", style="CardMuted.TLabel", wraplength=260,
+            dist_buttons,
+            text="",
+            style="CardMuted.TLabel",
+            wraplength=260,
             justify="left",
         )
         self._dock_distribute_info.pack(side="left", padx=(10, 0))
 
         # -- card 3: grid box & docking configs -------------------------- #
         grid_card = make_card(
-            page.grid, "Grid box & docking configs", row=1, column=0,
+            page.grid,
+            "Grid box & docking configs",
+            row=1,
+            column=0,
             subtitle="Enclose a reference ligand, then write the AutoDock4 "
-                     "r.gpf / r.dpf pair next to it.",
+            "r.gpf / r.dpf pair next to it.",
         )
         lig_buttons = ttk.Frame(grid_card, style="Card.TFrame")
         lig_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
-        lig_open_btn = self._action_button(lig_buttons, "Open reference ligand PDBQT…",
-                                           self._dock_open_ligand)
+        lig_open_btn = self._action_button(
+            lig_buttons, "Open reference ligand PDBQT…", self._dock_open_ligand
+        )
         lig_open_btn.pack(side="left")
         self._dock_ligand_info = ttk.Label(
-            lig_buttons, text="no ligand selected", style="CardMuted.TLabel",
-            wraplength=220, justify="left",
+            lig_buttons,
+            text="no ligand selected",
+            style="CardMuted.TLabel",
+            wraplength=220,
+            justify="left",
         )
         self._dock_ligand_info.pack(side="left", padx=(10, 0))
         self._dock_padding_entry = ttk.Entry(grid_card, width=10)
@@ -6697,48 +7513,54 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_ga_pop_entry.insert(0, "150")
         form_row(grid_card, "ga population", self._dock_ga_pop_entry)
         self._dock_receptor_types_entry = ttk.Entry(grid_card, width=20)
-        form_row(grid_card, "receptor types (blank = default)",
-                 self._dock_receptor_types_entry)
+        form_row(grid_card, "receptor types (blank = default)", self._dock_receptor_types_entry)
         grid_btn = self._action_button(
-            grid_card, "Compute box & write GPF/DPF", self._dock_compute_grid,
+            grid_card,
+            "Compute box & write GPF/DPF",
+            self._dock_compute_grid,
             primary=True,
             tooltip="Grid box from the ligand plus padding; GPF and DPF land "
-                    "in the ligand's own folder.",
+            "in the ligand's own folder.",
         )
-        grid_btn.grid(row=grid_card.grid_size()[1], column=0, columnspan=2,
-                      sticky="w", pady=(6, 0))
+        grid_btn.grid(row=grid_card.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0))
         batch_btn = self._action_button(
-            grid_card, "Batch GPF/DPF for campaign…",
+            grid_card,
+            "Batch GPF/DPF for campaign…",
             self._dock_write_config_batch,
             tooltip="Every sub-folder's ligand PDBQT gets its own r.gpf/"
-                    "r.dpf pair — the gpfer/dpfer batch loop, one row per "
-                    "folder. Set receptor types for Ni-bearing receptors "
-                    "(gpferreceptorni.py).",
+            "r.dpf pair — the gpfer/dpfer batch loop, one row per "
+            "folder. Set receptor types for Ni-bearing receptors "
+            "(gpferreceptorni.py).",
         )
-        batch_btn.grid(row=grid_card.grid_size()[1], column=0, columnspan=2,
-                       sticky="w", pady=(6, 0))
+        batch_btn.grid(
+            row=grid_card.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
         self._dock_grid_text = _grid_text(grid_card, height=10, mono=self._mono)
         self._dock_grid_text.insert(
-            "1.0", "box centre / size, ligand atom types and the written "
-                   "paths appear here"
+            "1.0", "box centre / size, ligand atom types and the written paths appear here"
         )
         grid_append(grid_card, self._dock_grid_text, sticky="ew", pady=(6, 0))
 
         # -- card 4: docking results (one tree, three sources) ----------- #
         results = make_card(
-            page.grid, "Docking results", row=1, column=1,
+            page.grid,
+            "Docking results",
+            row=1,
+            column=1,
             subtitle="One tree, three sources: a campaign scan, an AutoDock4 "
-                     "DLG cluster table, or a Vina mode table.",
+            "DLG cluster table, or a Vina mode table.",
         )
         scan_buttons = ttk.Frame(results, style="Card.TFrame")
         scan_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
-        scan_btn = self._action_button(scan_buttons, "Scan campaign folder…",
-                                       self._dock_scan_campaign)
+        scan_btn = self._action_button(
+            scan_buttons, "Scan campaign folder…", self._dock_scan_campaign
+        )
         scan_btn.pack(side="left")
         scan_example_btn = self._action_button(
-            scan_buttons, "Load example campaign", self._dock_load_example_campaign,
-            tooltip="The bundled 14-folder campaign "
-                    "(examples/data/docking_campaign).",
+            scan_buttons,
+            "Load example campaign",
+            self._dock_load_example_campaign,
+            tooltip="The bundled 14-folder campaign (examples/data/docking_campaign).",
         )
         scan_example_btn.pack(side="left", padx=(10, 0))
         dlg_buttons = ttk.Frame(results, style="Card.TFrame")
@@ -6746,91 +7568,116 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         dlg_btn = self._action_button(dlg_buttons, "Open DLG…", self._dock_open_dlg)
         dlg_btn.pack(side="left")
         dlg_example_btn = self._action_button(
-            dlg_buttons, "Open example DLG", self._dock_open_example_dlg,
-            tooltip="The aspirin run of the example campaign "
-                    "(01_aspirin/r.dlg): five clusters.",
+            dlg_buttons,
+            "Open example DLG",
+            self._dock_open_example_dlg,
+            tooltip="The aspirin run of the example campaign (01_aspirin/r.dlg): five clusters.",
         )
         dlg_example_btn.pack(side="left", padx=(10, 0))
         self._dock_heavyatoms_entry = ttk.Entry(dlg_buttons, width=6)
         self._dock_heavyatoms_entry.pack(side="left", padx=(10, 0))
-        ttk.Label(dlg_buttons, text="heavy atoms (adds ligand efficiency)",
-                  style="CardMuted.TLabel").pack(side="left", padx=(4, 0))
+        ttk.Label(
+            dlg_buttons, text="heavy atoms (adds ligand efficiency)", style="CardMuted.TLabel"
+        ).pack(side="left", padx=(4, 0))
         vina_row = ttk.Frame(results, style="Card.TFrame")
         vina_row.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
-        vina_btn = self._action_button(vina_row, "Open Vina output…",
-                                       self._dock_open_vina)
+        vina_btn = self._action_button(vina_row, "Open Vina output…", self._dock_open_vina)
         vina_btn.pack(side="left")
         vina_scan_btn = self._action_button(
-            vina_row, "Scan Vina results folder…", self._dock_scan_vina,
+            vina_row,
+            "Scan Vina results folder…",
+            self._dock_scan_vina,
             tooltip="Every .log under a results tree, best affinity per "
-                    "ligand, strongest binder first (vina_reader.py).",
+            "ligand, strongest binder first (vina_reader.py).",
         )
         vina_scan_btn.pack(side="left", padx=(10, 0))
         self._dock_results_info = ttk.Label(
-            results, text="no results yet — scan a campaign or open a log",
-            style="CardMuted.TLabel", wraplength=320, justify="left",
+            results,
+            text="no results yet — scan a campaign or open a log",
+            style="CardMuted.TLabel",
+            wraplength=320,
+            justify="left",
         )
-        self._dock_results_info.grid(row=3, column=0, columnspan=2, sticky="w",
-                                     pady=(6, 0))
+        self._dock_results_info.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
         results_tree_frame = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, results_tree_frame, sticky="nsew", weight=True)
-        self._dock_results_tree = ttk.Treeview(results_tree_frame, show="headings",
-                                               height=8)
-        results_bar = ttk.Scrollbar(results_tree_frame, orient="vertical",
-                                    command=self._dock_results_tree.yview)
+        self._dock_results_tree = ttk.Treeview(results_tree_frame, show="headings", height=8)
+        results_bar = ttk.Scrollbar(
+            results_tree_frame, orient="vertical", command=self._dock_results_tree.yview
+        )
         self._dock_results_tree.configure(yscrollcommand=results_bar.set)
         self._dock_results_tree.pack(side="left", fill="both", expand=True)
         results_bar.pack(side="right", fill="y")
-        results_save_btn = self._action_button(results, "Save results CSV…",
-                                               self._dock_save_results)
-        results_save_btn.grid(row=results.grid_size()[1], column=0, columnspan=2,
-                              sticky="w", pady=(6, 0))
+        results_save_btn = self._action_button(
+            results, "Save results CSV…", self._dock_save_results
+        )
+        results_save_btn.grid(
+            row=results.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
         top_ligands_btn = self._action_button(
-            results, "Plot top ligands", self._dock_plot_top_ligands,
+            results,
+            "Plot top ligands",
+            self._dock_plot_top_ligands,
             tooltip="The strongest binders of the last campaign scan as "
-                    "energy-annotated horizontal bars (plot_top_ligands).")
-        top_ligands_btn.grid(row=results.grid_size()[1], column=0, columnspan=2,
-                             sticky="w", pady=(2, 0))
+            "energy-annotated horizontal bars (plot_top_ligands).",
+        )
+        top_ligands_btn.grid(
+            row=results.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(2, 0)
+        )
         self._dock_results_host = self._figure_host(results, height=260)
 
         # -- card 5: campaign runner ------------------------------------- #
         runner = make_card(
-            page.grid, "Campaign runner", row=2, column=0,
+            page.grid,
+            "Campaign runner",
+            row=2,
+            column=0,
             subtitle="autogrid4 + autodock4 over every prepared ligand folder, "
-                     "or one AutoDock Vina run.",
+            "or one AutoDock Vina run.",
         )
-        self._dock_engine_combo = ttk.Combobox(runner, state="readonly", width=22,
-                                               values=_DOCK_ENGINES)
+        self._dock_engine_combo = ttk.Combobox(
+            runner, state="readonly", width=22, values=_DOCK_ENGINES
+        )
         self._dock_engine_combo.set(_DOCK_ENGINES[0])
         form_row(runner, "engine", self._dock_engine_combo)
         # 100x-120: the single-folder mode re-uses the same folder picker
         # ("the campaign root" is simply "the ONE ligand folder" there);
         # the info label tells the two apart.
         self._dock_engine_combo.bind(
-            "<<ComboboxSelected>>", lambda _e: self._dock_refresh_campaign_info())
+            "<<ComboboxSelected>>", lambda _e: self._dock_refresh_campaign_info()
+        )
         root_buttons = ttk.Frame(runner, style="Card.TFrame")
-        root_buttons.grid(row=runner.grid_size()[1], column=0, columnspan=2,
-                          sticky="w")
-        root_btn = self._action_button(root_buttons, "Choose campaign root…",
-                                       self._dock_choose_campaign_root)
+        root_buttons.grid(row=runner.grid_size()[1], column=0, columnspan=2, sticky="w")
+        root_btn = self._action_button(
+            root_buttons, "Choose campaign root…", self._dock_choose_campaign_root
+        )
         root_btn.pack(side="left")
         self._dock_campaign_info = ttk.Label(
-            root_buttons, text="no campaign root chosen", style="CardMuted.TLabel",
-            wraplength=240, justify="left",
+            root_buttons,
+            text="no campaign root chosen",
+            style="CardMuted.TLabel",
+            wraplength=240,
+            justify="left",
         )
         self._dock_campaign_info.pack(side="left", padx=(10, 0))
         vina_in_buttons = ttk.Frame(runner, style="Card.TFrame")
-        vina_in_buttons.grid(row=runner.grid_size()[1], column=0, columnspan=2,
-                             sticky="w", pady=(4, 0))
-        vina_rec_btn = self._action_button(vina_in_buttons, "Receptor PDBQT…",
-                                           self._dock_open_vina_receptor)
+        vina_in_buttons.grid(
+            row=runner.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(4, 0)
+        )
+        vina_rec_btn = self._action_button(
+            vina_in_buttons, "Receptor PDBQT…", self._dock_open_vina_receptor
+        )
         vina_rec_btn.pack(side="left")
-        vina_lig_btn = self._action_button(vina_in_buttons, "Ligand PDBQT…",
-                                           self._dock_open_vina_ligand)
+        vina_lig_btn = self._action_button(
+            vina_in_buttons, "Ligand PDBQT…", self._dock_open_vina_ligand
+        )
         vina_lig_btn.pack(side="left", padx=(10, 0))
         self._dock_vina_info = ttk.Label(
-            vina_in_buttons, text="no receptor / ligand chosen",
-            style="CardMuted.TLabel", wraplength=240, justify="left",
+            vina_in_buttons,
+            text="no receptor / ligand chosen",
+            style="CardMuted.TLabel",
+            wraplength=240,
+            justify="left",
         )
         self._dock_vina_info.pack(side="left", padx=(10, 0))
         self._dock_center_entry = ttk.Entry(runner, width=12)
@@ -6847,96 +7694,119 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(runner, "workers (AutoDock4)", self._dock_workers_entry)
         self._dock_skip_existing_var = tk.BooleanVar(value=True)
         skip_check = ttk.Checkbutton(
-            runner, text="skip completed folders (reuse .glg/.dlg)",
-            variable=self._dock_skip_existing_var)
-        Tooltip(skip_check,
-                "Reuse existing outputs: a .glg present is trusted, an "
-                "existing .dlg only when it carries AutoDock's Successful "
-                "Completion sentinel -- an interrupted run is re-run, never "
-                "trusted blindly (run_autodock4's skip_existing).")
+            runner,
+            text="skip completed folders (reuse .glg/.dlg)",
+            variable=self._dock_skip_existing_var,
+        )
+        Tooltip(
+            skip_check,
+            "Reuse existing outputs: a .glg present is trusted, an "
+            "existing .dlg only when it carries AutoDock's Successful "
+            "Completion sentinel -- an interrupted run is re-run, never "
+            "trusted blindly (run_autodock4's skip_existing).",
+        )
         form_row(runner, "resume", skip_check)
         run_btn = self._action_button(
-            runner, "Run docking", self._dock_run, primary=True,
+            runner,
+            "Run docking",
+            self._dock_run,
+            primary=True,
             tooltip="Real docking takes minutes to hours per ligand -- the "
-                    "window stays responsive and the run lands in the logs.",
+            "window stays responsive and the run lands in the logs.",
         )
         run_btn.grid(row=runner.grid_size()[1], column=0, sticky="w", pady=(6, 0))
         self._dock_run_summary = ttk.Label(
-            runner, text="—", style="CardMuted.TLabel", wraplength=320,
+            runner,
+            text="—",
+            style="CardMuted.TLabel",
+            wraplength=320,
             justify="left",
         )
-        self._dock_run_summary.grid(row=run_btn.grid_info()["row"], column=1,
-                                    sticky="w", padx=(10, 0))
+        self._dock_run_summary.grid(
+            row=run_btn.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
 
         # -- card 6: consensus rescore (the explainable ranking) -------- #
         rescore = make_card(
-            page.grid, "Consensus rescore", row=2, column=1,
+            page.grid,
+            "Consensus rescore",
+            row=2,
+            column=1,
             subtitle="Combine the loaded table's evidence into one 0–1 "
-                     "consensus, with the per-column units that explain "
-                     "the winner (the docking rescore CLI, mouse edition).",
+            "consensus, with the per-column units that explain "
+            "the winner (the docking rescore CLI, mouse edition).",
         )
         rescore_buttons = ttk.Frame(rescore, style="Card.TFrame")
         rescore_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
         rescore_csv_btn = self._action_button(
-            rescore_buttons, "Open summary CSV…", self._dock_open_rescore_csv,
+            rescore_buttons,
+            "Open summary CSV…",
+            self._dock_open_rescore_csv,
             tooltip="Any summary table (a saved scan, a rescored CSV, an "
-                    "enriched export) -- the --data twin.",
+            "enriched export) -- the --data twin.",
         )
         rescore_csv_btn.pack(side="left")
         self._dock_rescore_info = ttk.Label(
-            rescore_buttons, text="rescores the results table above",
-            style="CardMuted.TLabel", wraplength=240, justify="left",
+            rescore_buttons,
+            text="rescores the results table above",
+            style="CardMuted.TLabel",
+            wraplength=240,
+            justify="left",
         )
         self._dock_rescore_info.pack(side="left", padx=(10, 0))
         self._dock_rescore_columns_entry = ttk.Entry(rescore, width=32)
-        self._dock_rescore_columns_entry.insert(
-            0, "best_lowest_energy, best_num_in_cluster")
+        self._dock_rescore_columns_entry.insert(0, "best_lowest_energy, best_num_in_cluster")
         form_row(rescore, "evidence columns", self._dock_rescore_columns_entry)
         self._dock_rescore_weights_entry = ttk.Entry(rescore, width=32)
-        form_row(rescore, "weights (blank = uniform)",
-                 self._dock_rescore_weights_entry)
+        form_row(rescore, "weights (blank = uniform)", self._dock_rescore_weights_entry)
         self._dock_rescore_higher_entry = ttk.Entry(rescore, width=32)
-        form_row(rescore, "higher-is-better (blank = auto)",
-                 self._dock_rescore_higher_entry)
+        form_row(rescore, "higher-is-better (blank = auto)", self._dock_rescore_higher_entry)
         rescore_btn = self._action_button(
-            rescore, "Rescore table", self._dock_rescore, primary=True,
+            rescore,
+            "Rescore table",
+            self._dock_rescore,
+            primary=True,
             tooltip="consensus_rescore's explainable twin: one 0–1 _norm "
-                    "unit per evidence column plus the consensus. The "
-                    "leaderboard replaces the results tree; Save results "
-                    "CSV… writes the rescored table.",
+            "unit per evidence column plus the consensus. The "
+            "leaderboard replaces the results tree; Save results "
+            "CSV… writes the rescored table.",
         )
-        rescore_btn.grid(row=rescore.grid_size()[1], column=0, sticky="w",
-                         pady=(6, 0))
+        rescore_btn.grid(row=rescore.grid_size()[1], column=0, sticky="w", pady=(6, 0))
         report_btn = self._action_button(
-            rescore, "Save report…", self._dock_save_report,
+            rescore,
+            "Save report…",
+            self._dock_save_report,
             tooltip="Write the last rescore as the one-click visual "
-                    "bundle -- report.html + the consensus-ranking figure "
-                    "+ the breakdown table (the CLI --plots/--pdf-report "
-                    "story, mouse edition).",
+            "bundle -- report.html + the consensus-ranking figure "
+            "+ the breakdown table (the CLI --plots/--pdf-report "
+            "story, mouse edition).",
         )
-        report_btn.grid(row=rescore_btn.grid_info()["row"], column=1,
-                        sticky="w", padx=(10, 0))
+        report_btn.grid(row=rescore_btn.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         self._dock_pdf_var = tk.BooleanVar(value=False)
-        pdf_check = ttk.Checkbutton(
-            rescore, text="include report.pdf", variable=self._dock_pdf_var)
-        Tooltip(pdf_check, "Also write the multi-page PDF document -- "
-                           "needs fpdf (pharmaml[reports])")
+        pdf_check = ttk.Checkbutton(rescore, text="include report.pdf", variable=self._dock_pdf_var)
+        Tooltip(
+            pdf_check, "Also write the multi-page PDF document -- needs fpdf (pharmaml[reports])"
+        )
         grid_append(rescore, pdf_check, sticky="w", pady=(2, 0))
         self._dock_rescore_text = _grid_text(rescore, height=7, mono=self._mono)
         self._dock_rescore_text.insert(
-            "1.0", "the evidence recipe and the driving-evidence verdict "
-                   "appear here",
+            "1.0",
+            "the evidence recipe and the driving-evidence verdict appear here",
         )
         grid_append(rescore, self._dock_rescore_text, sticky="ew", pady=(6, 0))
 
         # -- card 7: SMILES array docking (the one-call batch) ---------- #
         array = make_card(
-            page.grid, "SMILES array docking", span=2, row=3, column=0,
+            page.grid,
+            "SMILES array docking",
+            span=2,
+            row=3,
+            column=0,
             subtitle="Paste a whole SMILES array and dock every molecule "
-                     "against one receptor in a single run — each ligand is "
-                     "prepared (Meeko + RDKit), the engine runs "
-                     "simultaneously across workers, and the best affinities "
-                     "land in the results table above.",
+            "against one receptor in a single run — each ligand is "
+            "prepared (Meeko + RDKit), the engine runs "
+            "simultaneously across workers, and the best affinities "
+            "land in the results table above.",
         )
         array.columnconfigure(0, weight=3)
         array.columnconfigure(1, weight=2)
@@ -6946,48 +7816,60 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_smiles_text.insert("1.0", "\n".join(_DOCK_SMILES_DEFAULTS))
         self._dock_smiles_text.pack(fill="both", expand=True)
         smiles_example_btn = self._action_button(
-            array_left, "Fill example array", self._dock_smiles_example,
+            array_left,
+            "Fill example array",
+            self._dock_smiles_example,
             tooltip="The bundled trivial-name drugs (aspirin, caffeine, "
-                    "paracetamol, ibuprofen, ...).",
+            "paracetamol, ibuprofen, ...).",
         )
         smiles_example_btn.pack(anchor="w", pady=(6, 0))
-        ttk.Label(array_left, text="one SMILES per line · # comments ignored",
-                  style="CardMuted.TLabel").pack(anchor="w", pady=(4, 0))
+        ttk.Label(
+            array_left, text="one SMILES per line · # comments ignored", style="CardMuted.TLabel"
+        ).pack(anchor="w", pady=(4, 0))
 
         array_right = ttk.Frame(array, style="Card.TFrame")
         array_right.grid(row=0, column=1, sticky="n")
         array_right.columnconfigure(1, weight=1)
         self._dock_smiles_engine_combo = ttk.Combobox(
-            array_right, state="readonly", width=20, values=_SMILES_DOCK_ENGINES)
+            array_right, state="readonly", width=20, values=_SMILES_DOCK_ENGINES
+        )
         self._dock_smiles_engine_combo.set(_SMILES_DOCK_ENGINES[0])
-        Tooltip(self._dock_smiles_engine_combo,
-                "vina = one Vina process per ligand (fast, the default); "
-                "autodock4 = the full classic stack per ligand (receptor "
-                "distributed, GPF + DPF written, autogrid4 + autodock4). "
-                "Both run simultaneously across the workers below.")
+        Tooltip(
+            self._dock_smiles_engine_combo,
+            "vina = one Vina process per ligand (fast, the default); "
+            "autodock4 = the full classic stack per ligand (receptor "
+            "distributed, GPF + DPF written, autogrid4 + autodock4). "
+            "Both run simultaneously across the workers below.",
+        )
         form_row(array_right, "engine", self._dock_smiles_engine_combo)
         smiles_rec_buttons = ttk.Frame(array_right, style="Card.TFrame")
-        smiles_rec_buttons.grid(row=array_right.grid_size()[1],
-                                column=0, columnspan=2, sticky="w")
-        smiles_rec_btn = self._action_button(smiles_rec_buttons,
-                                             "Receptor PDBQT…",
-                                             self._dock_smiles_open_receptor)
+        smiles_rec_buttons.grid(row=array_right.grid_size()[1], column=0, columnspan=2, sticky="w")
+        smiles_rec_btn = self._action_button(
+            smiles_rec_buttons, "Receptor PDBQT…", self._dock_smiles_open_receptor
+        )
         smiles_rec_btn.pack(side="left")
         self._dock_smiles_receptor_info = ttk.Label(
-            smiles_rec_buttons, text="none — pick one (or prepare it above)",
-            style="CardMuted.TLabel", wraplength=240, justify="left",
+            smiles_rec_buttons,
+            text="none — pick one (or prepare it above)",
+            style="CardMuted.TLabel",
+            wraplength=240,
+            justify="left",
         )
         self._dock_smiles_receptor_info.pack(side="left", padx=(10, 0))
         smiles_out_buttons = ttk.Frame(array_right, style="Card.TFrame")
-        smiles_out_buttons.grid(row=array_right.grid_size()[1],
-                                column=0, columnspan=2, sticky="w", pady=(4, 0))
-        smiles_out_btn = self._action_button(smiles_out_buttons,
-                                             "Output folder…",
-                                             self._dock_smiles_choose_out)
+        smiles_out_buttons.grid(
+            row=array_right.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(4, 0)
+        )
+        smiles_out_btn = self._action_button(
+            smiles_out_buttons, "Output folder…", self._dock_smiles_choose_out
+        )
         smiles_out_btn.pack(side="left")
         self._dock_smiles_out_info = ttk.Label(
-            smiles_out_buttons, text="no output folder chosen",
-            style="CardMuted.TLabel", wraplength=240, justify="left",
+            smiles_out_buttons,
+            text="no output folder chosen",
+            style="CardMuted.TLabel",
+            wraplength=240,
+            justify="left",
         )
         self._dock_smiles_out_info.pack(side="left", padx=(10, 0))
         self._dock_smiles_center_entry = ttk.Entry(array_right, width=12)
@@ -6998,28 +7880,36 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(array_right, "size (x y z)", self._dock_smiles_size_entry)
         self._dock_smiles_exhaust_entry = ttk.Entry(array_right, width=10)
         self._dock_smiles_exhaust_entry.insert(0, "8")
-        form_row(array_right, "exhaustiveness (Vina)",
-                 self._dock_smiles_exhaust_entry)
+        form_row(array_right, "exhaustiveness (Vina)", self._dock_smiles_exhaust_entry)
         self._dock_smiles_workers_entry = ttk.Entry(array_right, width=10)
         self._dock_smiles_workers_entry.insert(0, "4")
-        Tooltip(self._dock_smiles_workers_entry,
-                "Engine subprocesses to run simultaneously — real docking "
-                "takes minutes per ligand, so 4 workers ≈ 4× throughput.")
+        Tooltip(
+            self._dock_smiles_workers_entry,
+            "Engine subprocesses to run simultaneously — real docking "
+            "takes minutes per ligand, so 4 workers ≈ 4× throughput.",
+        )
         form_row(array_right, "workers", self._dock_smiles_workers_entry)
         smiles_run_row = ttk.Frame(array_right, style="Card.TFrame")
-        smiles_run_row.grid(row=array_right.grid_size()[1], column=0,
-                            columnspan=2, sticky="w", pady=(6, 0))
+        smiles_run_row.grid(
+            row=array_right.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
         smiles_run_btn = self._action_button(
-            smiles_run_row, "Dock the array", self._dock_smiles_run, primary=True,
+            smiles_run_row,
+            "Dock the array",
+            self._dock_smiles_run,
+            primary=True,
             tooltip="Prepares every SMILES into its own campaign folder, then "
-                    "docks them all with the chosen engine (simultaneously "
-                    "across workers); the ranked best-affinity table lands in "
-                    "the results card above and Save results CSV… writes it.",
+            "docks them all with the chosen engine (simultaneously "
+            "across workers); the ranked best-affinity table lands in "
+            "the results card above and Save results CSV… writes it.",
         )
         smiles_run_btn.pack(side="left")
         self._dock_smiles_summary = ttk.Label(
-            smiles_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=280, justify="left",
+            smiles_run_row,
+            text="—",
+            style="CardMuted.TLabel",
+            wraplength=280,
+            justify="left",
         )
         self._dock_smiles_summary.pack(side="left", padx=(10, 0))
 
@@ -7027,61 +7917,70 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # The rar's GPF reader, the campaign completion checker and the
         # torsion-consistency auditor, one card.
         audit = make_card(
-            page.grid, "Grid, torsion & completion audit", row=4, column=0,
+            page.grid,
+            "Grid, torsion & completion audit",
+            row=4,
+            column=0,
             subtitle="gpfreader / checker / niggamatch / mismatch2: parse "
-                     "one GPF into its typed parameters, list every "
-                     "sub-folder's ligand_types, audit TORSDOF vs active "
-                     "REMARKs vs BRANCH counts of prepared ligands, or "
-                     "check a campaign tree for missing / incomplete "
-                     "AutoDock4 runs.",
+            "one GPF into its typed parameters, list every "
+            "sub-folder's ligand_types, audit TORSDOF vs active "
+            "REMARKs vs BRANCH counts of prepared ligands, or "
+            "check a campaign tree for missing / incomplete "
+            "AutoDock4 runs.",
         )
         self._dock_audit_mode = ttk.Combobox(
-            audit, state="readonly", width=30, values=_DOCK_AUDIT_MODES)
+            audit, state="readonly", width=30, values=_DOCK_AUDIT_MODES
+        )
         self._dock_audit_mode.set(_DOCK_AUDIT_MODES[0])
         form_row(audit, "mode", self._dock_audit_mode)
         audit_pick = ttk.Frame(audit, style="Card.TFrame")
         grid_append(audit, audit_pick, sticky="w")
-        audit_gpf_btn = self._action_button(audit_pick, "GPF file…",
-                                            self._dock_audit_pick_gpf)
+        audit_gpf_btn = self._action_button(audit_pick, "GPF file…", self._dock_audit_pick_gpf)
         audit_gpf_btn.pack(side="left")
-        audit_folder_btn = self._action_button(audit_pick, "Folder…",
-                                               self._dock_audit_pick_folder)
+        audit_folder_btn = self._action_button(audit_pick, "Folder…", self._dock_audit_pick_folder)
         audit_folder_btn.pack(side="left", padx=(10, 0))
         self._dock_audit_gpf: Path | None = None
         self._dock_audit_folder: Path | None = None
         self._dock_audit_info = ttk.Label(
-            audit, text="pick a GPF file (parameters mode) or a campaign "
-                        "folder (the scan modes)",
-            style="CardMuted.TLabel", wraplength=300, justify="left")
+            audit,
+            text="pick a GPF file (parameters mode) or a campaign folder (the scan modes)",
+            style="CardMuted.TLabel",
+            wraplength=300,
+            justify="left",
+        )
         grid_append(audit, self._dock_audit_info, sticky="w", pady=(4, 0))
         self._dock_audit_log = ttk.Entry(audit, width=16)
         self._dock_audit_log.insert(0, "r.dlg")
-        Tooltip(self._dock_audit_log,
-                "Completion mode: the log file each sub-folder must carry "
-                "(AutoDock4's r.dlg by default).")
+        Tooltip(
+            self._dock_audit_log,
+            "Completion mode: the log file each sub-folder must carry "
+            "(AutoDock4's r.dlg by default).",
+        )
         form_row(audit, "log name (completion)", self._dock_audit_log)
         audit_run_row = ttk.Frame(audit, style="Card.TFrame")
         grid_append(audit, audit_run_row, sticky="w", pady=(6, 0))
         audit_run_btn = self._action_button(
-            audit_run_row, "Audit", self._dock_audit_run, primary=True,
+            audit_run_row,
+            "Audit",
+            self._dock_audit_run,
+            primary=True,
             tooltip="Reads the GPF or walks the tree in a worker thread; "
-                    "the typed parameter list or the per-folder status "
-                    "table lands below and Save CSV… writes it.")
+            "the typed parameter list or the per-folder status "
+            "table lands below and Save CSV… writes it.",
+        )
         audit_run_btn.pack(side="left")
         self._dock_audit_summary = ttk.Label(
-            audit_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=300, justify="left")
+            audit_run_row, text="—", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
         self._dock_audit_summary.pack(side="left", padx=(8, 0))
-        audit_save_btn = self._action_button(
-            audit_run_row, "Save CSV…", self._dock_audit_save)
+        audit_save_btn = self._action_button(audit_run_row, "Save CSV…", self._dock_audit_save)
         audit_save_btn.pack(side="left", padx=(8, 0))
         audit_tree_frame = ttk.Frame(audit, style="Card.TFrame")
-        grid_append(audit, audit_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
-        self._dock_audit_tree = ttk.Treeview(
-            audit_tree_frame, show="headings", height=7)
-        audit_bar = ttk.Scrollbar(audit_tree_frame, orient="vertical",
-                                  command=self._dock_audit_tree.yview)
+        grid_append(audit, audit_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._dock_audit_tree = ttk.Treeview(audit_tree_frame, show="headings", height=7)
+        audit_bar = ttk.Scrollbar(
+            audit_tree_frame, orient="vertical", command=self._dock_audit_tree.yview
+        )
         self._dock_audit_tree.configure(yscrollcommand=audit_bar.set)
         self._dock_audit_tree.pack(side="left", fill="both", expand=True)
         audit_bar.pack(side="right", fill="y")
@@ -7089,67 +7988,78 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         # -- vina config batch (100x-110): vinar_multiple.py ---------- #
         vbatch = make_card(
-            page.grid, "Vina config batch", row=4, column=1,
+            page.grid,
+            "Vina config batch",
+            row=4,
+            column=1,
             subtitle="vinar_multiple.py: one Vina config file docks "
-                     "every .pdbqt under a ligand tree (recursively, "
-                     "the receptor resolved relative to the config), "
-                     "several engine processes running simultaneously.",
+            "every .pdbqt under a ligand tree (recursively, "
+            "the receptor resolved relative to the config), "
+            "several engine processes running simultaneously.",
         )
         vbatch_pick = ttk.Frame(vbatch, style="Card.TFrame")
         grid_append(vbatch, vbatch_pick, sticky="w")
-        vbatch_conf_btn = self._action_button(vbatch_pick, "Config…",
-                                              self._dock_vbatch_pick_conf)
+        vbatch_conf_btn = self._action_button(vbatch_pick, "Config…", self._dock_vbatch_pick_conf)
         vbatch_conf_btn.pack(side="left")
-        vbatch_lig_btn = self._action_button(vbatch_pick, "Ligands folder…",
-                                             self._dock_vbatch_pick_ligands)
+        vbatch_lig_btn = self._action_button(
+            vbatch_pick, "Ligands folder…", self._dock_vbatch_pick_ligands
+        )
         vbatch_lig_btn.pack(side="left", padx=(10, 0))
-        vbatch_out_btn = self._action_button(vbatch_pick, "Output…",
-                                             self._dock_vbatch_pick_out)
+        vbatch_out_btn = self._action_button(vbatch_pick, "Output…", self._dock_vbatch_pick_out)
         vbatch_out_btn.pack(side="left", padx=(10, 0))
         self._dock_vbatch_conf: Path | None = None
         self._dock_vbatch_ligands: Path | None = None
         self._dock_vbatch_out: Path | None = None
         self._dock_vbatch_info = ttk.Label(
-            vbatch, text="pick a Vina config (with receptor = ...), a "
-                         "ligand tree and an output folder",
-            style="CardMuted.TLabel", wraplength=300, justify="left")
+            vbatch,
+            text="pick a Vina config (with receptor = ...), a ligand tree and an output folder",
+            style="CardMuted.TLabel",
+            wraplength=300,
+            justify="left",
+        )
         grid_append(vbatch, self._dock_vbatch_info, sticky="w", pady=(4, 0))
         self._dock_vbatch_workers = ttk.Entry(vbatch, width=10)
         self._dock_vbatch_workers.insert(0, "2")
-        Tooltip(self._dock_vbatch_workers,
-                "Engine subprocesses running simultaneously (real docking "
-                "takes minutes per ligand).")
+        Tooltip(
+            self._dock_vbatch_workers,
+            "Engine subprocesses running simultaneously (real docking takes minutes per ligand).",
+        )
         form_row(vbatch, "workers", self._dock_vbatch_workers)
         vbatch_run_row = ttk.Frame(vbatch, style="Card.TFrame")
         grid_append(vbatch, vbatch_run_row, sticky="w", pady=(6, 0))
         vbatch_run_btn = self._action_button(
-            vbatch_run_row, "Dock the batch", self._dock_vbatch_run,
+            vbatch_run_row,
+            "Dock the batch",
+            self._dock_vbatch_run,
             primary=True,
             tooltip="Every ligand PDBQT found under the tree is docked "
-                    "with the config itself (--config); outputs and logs "
-                    "land in the output folder and the per-ligand table "
-                    "below.")
+            "with the config itself (--config); outputs and logs "
+            "land in the output folder and the per-ligand table "
+            "below.",
+        )
         vbatch_run_btn.pack(side="left")
         # 100x-120: parse the picked config (parse_vina_config) -- the
         # key\u2192value dump plus a one-click fill of the single-run form.
         vbatch_parse_btn = self._action_button(
-            vbatch_run_row, "Parse config", self._dock_vbatch_parse,
+            vbatch_run_row,
+            "Parse config",
+            self._dock_vbatch_parse,
             tooltip="Parses the picked Vina config (parse_vina_config) and "
-                    "shows every key\u2192value pair -- plus a button's worth "
-                    "of convenience: centre / size / exhaustiveness are "
-                    "copied into the Campaign runner's single-ligand form.")
+            "shows every key\u2192value pair -- plus a button's worth "
+            "of convenience: centre / size / exhaustiveness are "
+            "copied into the Campaign runner's single-ligand form.",
+        )
         vbatch_parse_btn.pack(side="left", padx=(10, 0))
         self._dock_vbatch_summary = ttk.Label(
-            vbatch_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=300, justify="left")
+            vbatch_run_row, text="—", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
         self._dock_vbatch_summary.pack(side="left", padx=(8, 0))
         vbatch_tree_frame = ttk.Frame(vbatch, style="Card.TFrame")
-        grid_append(vbatch, vbatch_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
-        self._dock_vbatch_tree = ttk.Treeview(
-            vbatch_tree_frame, show="headings", height=7)
-        vbatch_bar = ttk.Scrollbar(vbatch_tree_frame, orient="vertical",
-                                   command=self._dock_vbatch_tree.yview)
+        grid_append(vbatch, vbatch_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._dock_vbatch_tree = ttk.Treeview(vbatch_tree_frame, show="headings", height=7)
+        vbatch_bar = ttk.Scrollbar(
+            vbatch_tree_frame, orient="vertical", command=self._dock_vbatch_tree.yview
+        )
         self._dock_vbatch_tree.configure(yscrollcommand=vbatch_bar.set)
         self._dock_vbatch_tree.pack(side="left", fill="both", expand=True)
         vbatch_bar.pack(side="right", fill="y")
@@ -7157,11 +8067,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         # -- single SMILES -> PDBQT (100x-110): smilestopdbqt/smiqt --- #
         smi_pdbqt = make_card(
-            page.grid, "SMILES → PDBQT (single ligand)", row=5, column=0,
+            page.grid,
+            "SMILES → PDBQT (single ligand)",
+            row=5,
+            column=0,
             span=2,
             subtitle="smilestopdbqt.py / smiqt.py: one SMILES embedded in "
-                     "3D (ETKDG + MMFF), written as a docking-ready "
-                     "PDBQT with Meeko and repaired to AD4 atom types.",
+            "3D (ETKDG + MMFF), written as a docking-ready "
+            "PDBQT with Meeko and repaired to AD4 atom types.",
         )
         smi_pdbqt.columnconfigure(1, weight=1)
         self._dock_smi_entry = ttk.Entry(smi_pdbqt, width=34)
@@ -7169,38 +8082,42 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(smi_pdbqt, "SMILES", self._dock_smi_entry)
         self._dock_smi_name = ttk.Entry(smi_pdbqt, width=18)
         self._dock_smi_name.insert(0, "ligand")
-        Tooltip(self._dock_smi_name,
-                "Base filename (ligand.pdbqt); blank uses a safe SMILES "
-                "slug.")
+        Tooltip(self._dock_smi_name, "Base filename (ligand.pdbqt); blank uses a safe SMILES slug.")
         form_row(smi_pdbqt, "name", self._dock_smi_name)
         smi_out_row = ttk.Frame(smi_pdbqt, style="Card.TFrame")
         grid_append(smi_pdbqt, smi_out_row, sticky="w")
-        smi_out_btn = self._action_button(smi_out_row, "Output folder…",
-                                          self._dock_smi_pick_out)
+        smi_out_btn = self._action_button(smi_out_row, "Output folder…", self._dock_smi_pick_out)
         smi_out_btn.pack(side="left")
         self._dock_smi_info = ttk.Label(
-            smi_out_row, text="no output folder chosen",
-            style="CardMuted.TLabel", wraplength=380, justify="left")
+            smi_out_row,
+            text="no output folder chosen",
+            style="CardMuted.TLabel",
+            wraplength=380,
+            justify="left",
+        )
         self._dock_smi_info.pack(side="left", padx=(10, 0))
         self._dock_smi_out: Path | None = None
         smi_run_row = ttk.Frame(smi_pdbqt, style="Card.TFrame")
         grid_append(smi_pdbqt, smi_run_row, sticky="w", pady=(6, 0))
         smi_run_btn = self._action_button(
-            smi_run_row, "Prepare ligand", self._dock_smi_run, primary=True,
+            smi_run_row,
+            "Prepare ligand",
+            self._dock_smi_run,
+            primary=True,
             tooltip="Embeds with a fixed seed, MMFF-optimises and writes "
-                    "the PDBQT (needs Meeko, part of pharmaml's docking "
-                    "extras); the torsion report follows the file name.")
+            "the PDBQT (needs Meeko, part of pharmaml's docking "
+            "extras); the torsion report follows the file name.",
+        )
         smi_run_btn.pack(side="left")
         self._dock_smi_summary = ttk.Label(
-            smi_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=380, justify="left")
+            smi_run_row, text="—", style="CardMuted.TLabel", wraplength=380, justify="left"
+        )
         self._dock_smi_summary.pack(side="left", padx=(10, 0))
         bind_enter(self._dock_smi_entry, smi_run_btn)
 
     # -- ligand library card ------------------------------------------- #
     def _dock_open_csv(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "library loading"):
+        if not self._require_pharmaml() or not self._require("pandas", "library loading"):
             return
         path = filedialog.askopenfilename(
             title="Open a ligand library",
@@ -7210,8 +8127,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dock_load_lib_path(Path(path))
 
     def _dock_load_example(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "library loading"):
+        if not self._require_pharmaml() or not self._require("pandas", "library loading"):
             return
         path = EXAMPLES_DIR / "ligand_library.csv"
         if not path.is_file():
@@ -7236,8 +8152,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_lib_path = path
         valid = int((library.frame["status"] == "valid").sum())
         self._dock_lib_info.configure(
-            text=(f"{path.name} — {len(library.frame)} rows · {valid} valid "
-                  f"SMILES · {len(library.frame) - valid} invalid")
+            text=(
+                f"{path.name} — {len(library.frame)} rows · {valid} valid "
+                f"SMILES · {len(library.frame) - valid} invalid"
+            )
         )
 
     def _dock_choose_out_dir(self) -> None:
@@ -7250,7 +8168,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._require_pharmaml():
             return
         if not self._require("pandas", "ligand preparation") or not self._require(
-                "rdkit", "ligand preparation"):
+            "rdkit", "ligand preparation"
+        ):
             return
         if self._dock_library is None:
             messagebox.showwarning("No library", "Load a ligand library first.")
@@ -7280,15 +8199,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ok_count = int(frame["ok"].sum())
         failed = len(frame) - ok_count
         self._dock_prep_summary.configure(
-            text=(f"{ok_count}/{len(frame)} prepared · {failed} failed · "
-                  f"campaign at {report.root}"),
+            text=(
+                f"{ok_count}/{len(frame)} prepared · {failed} failed · campaign at {report.root}"
+            ),
             style="Field.TLabel",
         )
         tree = self._dock_lib_tree
         tree.delete(*tree.get_children())
         for row in frame.to_dict("records"):
             tree.insert(
-                "", "end",
+                "",
+                "end",
                 values=(
                     _cell_text(row["folder"], limit=22),
                     _cell_text(row["name"], limit=16),
@@ -7303,26 +8224,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self._dock_report is None:
             messagebox.showinfo("Nothing to save", "Prepare a ligand library first.")
             return
-        self._save_frame_dialog(self._dock_report.frame,
-                                "Save the ligand preparation report",
-                                "ligand_report.csv", "Preparation report")
+        self._save_frame_dialog(
+            self._dock_report.frame,
+            "Save the ligand preparation report",
+            "ligand_report.csv",
+            "Preparation report",
+        )
 
     # -- receptor card -------------------------------------------------- #
     def _dock_open_receptor(self) -> None:
-        if not self._require_pharmaml() or not self._require("rdkit",
-                                                            "receptor preparation"):
+        if not self._require_pharmaml() or not self._require("rdkit", "receptor preparation"):
             return
         path = filedialog.askopenfilename(
             title="Open a receptor structure",
-            filetypes=[("Structure files", "*.pdb *.cif *.pdbqt"),
-                       ("All files", "*.*")],
+            filetypes=[("Structure files", "*.pdb *.cif *.pdbqt"), ("All files", "*.*")],
         )
         if path:
             self._dock_set_receptor_source(Path(path))
 
     def _dock_load_receptor_example(self) -> None:
-        if not self._require_pharmaml() or not self._require("rdkit",
-                                                            "receptor preparation"):
+        if not self._require_pharmaml() or not self._require("rdkit", "receptor preparation"):
             return
         path = EXAMPLES_DIR / "lysozyme_1aki.pdb"
         if not path.is_file():
@@ -7337,17 +8258,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_receptor_info.configure(text=f"{path.name}")
 
     def _dock_prepare_receptor(self) -> None:
-        if not self._require_pharmaml() or not self._require("rdkit",
-                                                            "receptor preparation"):
+        if not self._require_pharmaml() or not self._require("rdkit", "receptor preparation"):
             return
         if self._dock_receptor_source is None:
-            messagebox.showwarning(
-                "No receptor", "Open a PDB / CIF / PDBQT structure first."
-            )
+            messagebox.showwarning("No receptor", "Open a PDB / CIF / PDBQT structure first.")
             return
         source = self._dock_receptor_source
         output_pdbqt = filedialog.asksaveasfilename(
-            title="Save the prepared receptor", defaultextension=".pdbqt",
+            title="Save the prepared receptor",
+            defaultextension=".pdbqt",
             initialfile="receptor.pdbqt",
             filetypes=[("PDBQT receptor", "*.pdbqt")],
         )
@@ -7364,9 +8283,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.docking import prepare_protein
 
             return prepare_protein(
-                source, output_pdbqt=target,
-                remove_waters=remove_waters, keep_hetatm=keep_hetatm,
-                chain=chain, strip_hydrogens=strip_hydrogens,
+                source,
+                output_pdbqt=target,
+                remove_waters=remove_waters,
+                keep_hetatm=keep_hetatm,
+                chain=chain,
+                strip_hydrogens=strip_hydrogens,
                 allow_bad_res=allow_bad_res,
             )
 
@@ -7382,34 +8304,38 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # default too (its own explicit pick always wins)
         if self._dock_smiles_receptor is None:
             with contextlib.suppress(Exception):
-                self._dock_smiles_receptor_info.configure(
-                    text=f"prepared: {report.output_pdbqt}")
+                self._dock_smiles_receptor_info.configure(text=f"prepared: {report.output_pdbqt}")
         chains = ", ".join(report.chains) if report.chains else "—"
         types = " · ".join(
-            f"{name} {count:,}" for name, count in
-            sorted(report.atom_types.items(), key=lambda item: -item[1])
+            f"{name} {count:,}"
+            for name, count in sorted(report.atom_types.items(), key=lambda item: -item[1])
         )
         lines = [
             f"mode            {report.mode} ({report.source.suffix or 'input'})",
-            (f"input           {report.input_atoms:,} atoms · "
-             f"{report.input_hetatms:,} HETATM"),
-            (f"removed         {report.waters_removed:,} waters · "
-             f"{report.hetatm_removed:,} HETATM · "
-             f"{report.altloc_removed:,} altloc · "
-             f"{report.hydrogens_removed:,} hydrogens"
-             + (f" · {report.bad_residues_removed} bad residues "
-                f"({', '.join(report.bad_residue_ids)})"
-                if getattr(report, "bad_residue_ids", None) else "")),
+            (f"input           {report.input_atoms:,} atoms · {report.input_hetatms:,} HETATM"),
+            (
+                f"removed         {report.waters_removed:,} waters · "
+                f"{report.hetatm_removed:,} HETATM · "
+                f"{report.altloc_removed:,} altloc · "
+                f"{report.hydrogens_removed:,} hydrogens"
+                + (
+                    f" · {report.bad_residues_removed} bad residues "
+                    f"({', '.join(report.bad_residue_ids)})"
+                    if getattr(report, "bad_residue_ids", None)
+                    else ""
+                )
+            ),
             f"chains          {chains}",
             f"residues        {report.residues:,}",
             f"output          {report.output_atoms:,} atoms ({types})",
-            (f"charges         {report.charge_min:+.3f} … {report.charge_max:+.3f} "
-             f"(mean {report.charge_mean:+.4f})"),
+            (
+                f"charges         {report.charge_min:+.3f} … {report.charge_max:+.3f} "
+                f"(mean {report.charge_mean:+.4f})"
+            ),
             f"written to      {report.output_pdbqt}",
         ]
         if report.notes:
-            lines.append("notes           " + " · ".join(str(note) for note in
-                                                         report.notes))
+            lines.append("notes           " + " · ".join(str(note) for note in report.notes))
         else:
             lines.append("notes           (none)")
         self._dock_protein_text.delete("1.0", "end")
@@ -7445,7 +8371,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(copies: Any) -> None:
             self._dock_distribute_info.configure(
                 text=f"receptor copied into {len(copies)} folders "
-                     f"({receptor.name} → {campaign_root})",
+                f"({receptor.name} → {campaign_root})",
                 style="Field.TLabel",
             )
 
@@ -7470,23 +8396,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._require_pharmaml():
             return
         if self._dock_ligand_path is None:
-            messagebox.showwarning(
-                "No ligand", "Open a reference ligand PDBQT first."
-            )
+            messagebox.showwarning("No ligand", "Open a reference ligand PDBQT first.")
             return
         ligand = self._dock_ligand_path
         try:
-            padding = parse_float(self._dock_padding_entry.get(), "padding",
-                                  minimum=0.0)
+            padding = parse_float(self._dock_padding_entry.get(), "padding", minimum=0.0)
             npts = parse_int_triple(self._dock_npts_entry.get(), "npts", minimum=1)
-            spacing = parse_float(self._dock_spacing_entry.get(), "spacing",
-                                  minimum=0.01)
+            spacing = parse_float(self._dock_spacing_entry.get(), "spacing", minimum=0.01)
             receptor_file = self._dock_receptor_name_entry.get().strip()
             if not receptor_file:
                 raise ValueError("receptor file: pick a file name (e.g. r.pdbqt)")
             ga_run = parse_int(self._dock_ga_run_entry.get(), "ga_run", minimum=1)
-            ga_pop = parse_int(self._dock_ga_pop_entry.get(), "ga population",
-                               minimum=1)
+            ga_pop = parse_int(self._dock_ga_pop_entry.get(), "ga population", minimum=1)
             receptor_types = self._dock_receptor_types_entry.get().strip() or None
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
@@ -7500,8 +8421,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 write_gpf,
             )
 
-            box = compute_grid_box(ligand, padding=padding, npts=npts,
-                                   spacing=spacing)
+            box = compute_grid_box(ligand, padding=padding, npts=npts, spacing=spacing)
             atom_types = extract_pdbqt_atom_types(ligand)
             gpf_kwargs: dict[str, Any] = {
                 "receptor_file": receptor_file,
@@ -7511,9 +8431,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if receptor_types is not None:
                 gpf_kwargs["receptor_types"] = receptor_types
             gpf = write_gpf(ligand, **gpf_kwargs)
-            dpf = write_dpf(ligand, receptor_file=receptor_file,
-                            output_path=ligand.parent / "r.dpf",
-                            ga_run=ga_run, ga_pop_size=ga_pop)
+            dpf = write_dpf(
+                ligand,
+                receptor_file=receptor_file,
+                output_path=ligand.parent / "r.dpf",
+                ga_run=ga_run,
+                ga_pop_size=ga_pop,
+            )
             return box, atom_types, gpf, dpf, ga_run, ga_pop, receptor_types
 
         def render(payload: Any) -> None:
@@ -7522,41 +8446,41 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             centre = (box.center_x, box.center_y, box.center_z)
             size = box.size
             self._dock_grid_text.delete("1.0", "end")
-            self._dock_grid_text.insert("1.0", "\n".join([
-                (f"box centre     ({centre[0]:.3f}, {centre[1]:.3f}, "
-                 f"{centre[2]:.3f}) Å"),
-                (f"box size       ({size[0]:.3f}, {size[1]:.3f}, {size[2]:.3f}) Å "
-                 f"· npts {box.npts} at {box.spacing:g} Å"),
-                f"ligand types   {' '.join(atom_types)}",
-                (f"receptor types {used_types or 'A C HD N NA OA SA (default)'}"),
-                f"r.gpf          {gpf}",
-                f"r.dpf          {dpf}   (ga_run {used_run} · pop {used_pop})",
-            ]))
+            self._dock_grid_text.insert(
+                "1.0",
+                "\n".join(
+                    [
+                        (f"box centre     ({centre[0]:.3f}, {centre[1]:.3f}, {centre[2]:.3f}) Å"),
+                        (
+                            f"box size       ({size[0]:.3f}, {size[1]:.3f}, {size[2]:.3f}) Å "
+                            f"· npts {box.npts} at {box.spacing:g} Å"
+                        ),
+                        f"ligand types   {' '.join(atom_types)}",
+                        (f"receptor types {used_types or 'A C HD N NA OA SA (default)'}"),
+                        f"r.gpf          {gpf}",
+                        f"r.dpf          {dpf}   (ga_run {used_run} · pop {used_pop})",
+                    ]
+                ),
+            )
 
         self._start_job(f"grid box for {ligand.name}", work, render)
 
     def _dock_write_config_batch(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "the config batch"):
+        if not self._require_pharmaml() or not self._require("pandas", "the config batch"):
             return
-        path = filedialog.askdirectory(
-            title="Choose the campaign root (one sub-folder per ligand)"
-        )
+        path = filedialog.askdirectory(title="Choose the campaign root (one sub-folder per ligand)")
         if not path:
             return
         root = Path(path)
         try:
-            padding = parse_float(self._dock_padding_entry.get(), "padding",
-                                  minimum=0.0)
+            padding = parse_float(self._dock_padding_entry.get(), "padding", minimum=0.0)
             npts = parse_int_triple(self._dock_npts_entry.get(), "npts", minimum=1)
-            spacing = parse_float(self._dock_spacing_entry.get(), "spacing",
-                                  minimum=0.01)
+            spacing = parse_float(self._dock_spacing_entry.get(), "spacing", minimum=0.01)
             receptor_file = self._dock_receptor_name_entry.get().strip()
             if not receptor_file:
                 raise ValueError("receptor file: pick a file name (e.g. r.pdbqt)")
             ga_run = parse_int(self._dock_ga_run_entry.get(), "ga_run", minimum=1)
-            ga_pop = parse_int(self._dock_ga_pop_entry.get(), "ga population",
-                               minimum=1)
+            ga_pop = parse_int(self._dock_ga_pop_entry.get(), "ga population", minimum=1)
             receptor_types = self._dock_receptor_types_entry.get().strip() or None
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
@@ -7566,9 +8490,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.docking import write_config_batch
 
             return write_config_batch(
-                root, receptor_file=receptor_file, padding=padding, npts=npts,
-                spacing=spacing, receptor_types=receptor_types,
-                ga_run=ga_run, ga_pop_size=ga_pop,
+                root,
+                receptor_file=receptor_file,
+                padding=padding,
+                npts=npts,
+                spacing=spacing,
+                receptor_types=receptor_types,
+                ga_run=ga_run,
+                ga_pop_size=ga_pop,
             )
 
         def render(report: Any) -> None:
@@ -7578,10 +8507,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             failed = int(report["status"].str.startswith("failed").sum())
             lines = [
                 f"campaign root  {root}",
-                (f"configured      {ok}/{len(report)} folders"
-                 + (f" · {skipped} skipped (r.gpf exists)" if skipped else "")
-                 + (f" · {no_ligand} without a ligand" if no_ligand else "")
-                 + (f" · {failed} failed" if failed else "")),
+                (
+                    f"configured      {ok}/{len(report)} folders"
+                    + (f" · {skipped} skipped (r.gpf exists)" if skipped else "")
+                    + (f" · {no_ligand} without a ligand" if no_ligand else "")
+                    + (f" · {failed} failed" if failed else "")
+                ),
             ]
             for row in report.to_dict("records"):
                 centre = str(row.get("centre") or "")
@@ -7596,16 +8527,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     # -- docking results card -------------------------------------------- #
     def _dock_scan_campaign(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "the campaign scan"):
+        if not self._require_pharmaml() or not self._require("pandas", "the campaign scan"):
             return
         path = filedialog.askdirectory(title="Choose the campaign root to scan")
         if path:
             self._dock_scan_campaign_path(Path(path))
 
     def _dock_load_example_campaign(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "the campaign scan"):
+        if not self._require_pharmaml() or not self._require("pandas", "the campaign scan"):
             return
         path = EXAMPLES_DIR / "docking_campaign"
         if not path.is_dir():
@@ -7626,25 +8555,33 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dock_results_source = "campaign"
             tree = self._dock_results_tree
             tree.delete(*tree.get_children())
-            columns = ["folder", "n_clusters", "top_lowest_energy",
-                       "best_lowest_energy", "status"]
+            columns = ["folder", "n_clusters", "top_lowest_energy", "best_lowest_energy", "status"]
             tree["columns"] = columns
             for column in columns:
                 tree.heading(column, text=column)
-                tree.column(column, width=150 if column == "folder" else 130,
-                            minwidth=80, stretch=(column == "folder"))
+                tree.column(
+                    column,
+                    width=150 if column == "folder" else 130,
+                    minwidth=80,
+                    stretch=(column == "folder"),
+                )
             for _, row in frame.iterrows():
                 values = [
-                    _cell_text(None if (isinstance(row[column], float)
-                                        and math.isnan(row[column]))
-                               else row[column], limit=48)
+                    _cell_text(
+                        None
+                        if (isinstance(row[column], float) and math.isnan(row[column]))
+                        else row[column],
+                        limit=48,
+                    )
                     for column in columns
                 ]
                 tree.insert("", "end", values=values)
             ok = int((frame["status"] == "OK").sum())
             self._dock_results_info.configure(
-                text=(f"{len(frame)} folders scanned · {ok} OK · "
-                      f"{len(frame) - ok} incomplete — {root.name}"),
+                text=(
+                    f"{len(frame)} folders scanned · {ok} OK · "
+                    f"{len(frame) - ok} incomplete — {root.name}"
+                ),
                 style="Field.TLabel",
             )
             self._dock_rescore_prefill()
@@ -7652,8 +8589,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._start_job(f"scanning {root.name}", work, render)
 
     def _dock_open_dlg(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "DLG parsing"):
+        if not self._require_pharmaml() or not self._require("pandas", "DLG parsing"):
             return
         path = filedialog.askopenfilename(
             title="Open an AutoDock4 DLG log",
@@ -7663,8 +8599,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dock_parse_dlg_path(Path(path))
 
     def _dock_open_example_dlg(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "DLG parsing"):
+        if not self._require_pharmaml() or not self._require("pandas", "DLG parsing"):
             return
         path = EXAMPLES_DIR / "docking_campaign" / "01_aspirin" / "r.dlg"
         if not path.is_file():
@@ -7680,8 +8615,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         heavy_atoms: int | None = None
         if heavy_raw:
             try:
-                heavy_atoms = parse_int(heavy_raw, "heavy atoms", minimum=1,
-                                        maximum=500)
+                heavy_atoms = parse_int(heavy_raw, "heavy atoms", minimum=1, maximum=500)
             except ValueError as exc:
                 messagebox.showerror("Input", str(exc))
                 return
@@ -7697,12 +8631,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             clusters = parse_dlg_cluster_table(path)
             summary = parse_dlg_summary(path)
-            frame = pd.DataFrame([
-                {"rank": cluster.rank, "lowest_energy": cluster.lowest_energy,
-                 "mean_energy": cluster.mean_energy,
-                 "num_in_cluster": cluster.num_in_cluster}
-                for cluster in clusters
-            ])
+            frame = pd.DataFrame(
+                [
+                    {
+                        "rank": cluster.rank,
+                        "lowest_energy": cluster.lowest_energy,
+                        "mean_energy": cluster.mean_energy,
+                        "num_in_cluster": cluster.num_in_cluster,
+                    }
+                    for cluster in clusters
+                ]
+            )
             if heavy_atoms is not None:
                 frame["n_heavy"] = heavy_atoms
                 frame["LE (kcal/mol/atom)"] = ligand_efficiency_series(
@@ -7716,27 +8655,35 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dock_results_source = "dlg"
             tree = self._dock_results_tree
             tree.delete(*tree.get_children())
-            columns = [str(column) for column in frame.columns
-                       if column != "n_heavy"]
+            columns = [str(column) for column in frame.columns if column != "n_heavy"]
             tree["columns"] = columns
             for column in columns:
                 tree.heading(column, text=column)
-                tree.column(column, width=170 if column.startswith("LE") else 120,
-                            minwidth=80, stretch=False)
+                tree.column(
+                    column,
+                    width=170 if column.startswith("LE") else 120,
+                    minwidth=80,
+                    stretch=False,
+                )
             for row in frame.to_dict("records"):
                 values = [
-                    _cell_text(None if (isinstance(row[column], float)
-                                        and math.isnan(row[column]))
-                               else row[column], limit=40)
+                    _cell_text(
+                        None
+                        if (isinstance(row[column], float) and math.isnan(row[column]))
+                        else row[column],
+                        limit=40,
+                    )
                     for column in columns
                 ]
                 tree.insert("", "end", values=values)
-            info = (f"{summary['n_clusters']} clusters · top cluster rank "
-                    f"{summary['top_rank']} at "
-                    f"{summary['top_lowest_energy']:.2f} kcal/mol "
-                    f"({summary['top_num_in_cluster']} poses) · largest cluster "
-                    f"rank {summary['best_rank']} "
-                    f"({summary['best_num_in_cluster']} poses)")
+            info = (
+                f"{summary['n_clusters']} clusters · top cluster rank "
+                f"{summary['top_rank']} at "
+                f"{summary['top_lowest_energy']:.2f} kcal/mol "
+                f"({summary['top_num_in_cluster']} poses) · largest cluster "
+                f"rank {summary['best_rank']} "
+                f"({summary['best_num_in_cluster']} poses)"
+            )
             if used_atoms is not None:
                 info += f" · LE over {used_atoms} heavy atoms"
             self._dock_results_info.configure(text=info, style="Field.TLabel")
@@ -7745,12 +8692,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._start_job(f"parsing {path.name}", work, render)
 
     def _dock_scan_vina(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "Vina scanning"):
+        if not self._require_pharmaml() or not self._require("pandas", "Vina scanning"):
             return
-        path = filedialog.askdirectory(
-            title="Choose the Vina results root to scan"
-        )
+        path = filedialog.askdirectory(title="Choose the Vina results root to scan")
         if not path:
             return
         root = Path(path)
@@ -7772,19 +8716,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 tree.column(column, width=120, minwidth=80, stretch=False)
             for row in frame.to_dict("records"):
                 tree.insert(
-                    "", "end",
+                    "",
+                    "end",
                     values=[_cell_text(row[column]) for column in columns],
                 )
             n_logs = len(frame)
             if n_logs and frame["best_affinity"].notna().any():
                 best = float(frame["best_affinity"].min())
-                best_ligand = str(frame.loc[frame["best_affinity"].idxmin(),
-                                            "ligand"])
-                info = (f"{n_logs} Vina logs · best {best:.2f} kcal/mol "
-                        f"({best_ligand}) — strongest binder first")
+                best_ligand = str(frame.loc[frame["best_affinity"].idxmin(), "ligand"])
+                info = (
+                    f"{n_logs} Vina logs · best {best:.2f} kcal/mol "
+                    f"({best_ligand}) — strongest binder first"
+                )
             elif n_logs:
-                info = (f"{n_logs} Vina logs · none scored a pose "
-                        "(check the logs for crashes)")
+                info = f"{n_logs} Vina logs · none scored a pose (check the logs for crashes)"
             else:
                 info = "no Vina logs found under the chosen folder"
             self._dock_results_info.configure(text=info, style="Field.TLabel")
@@ -7793,13 +8738,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._start_job(f"scanning {root.name} for Vina logs", work, render)
 
     def _dock_open_vina(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "Vina parsing"):
+        if not self._require_pharmaml() or not self._require("pandas", "Vina parsing"):
             return
         path = filedialog.askopenfilename(
             title="Open a Vina output",
-            filetypes=[("Vina output", "*.pdbqt *.log *.txt"),
-                       ("All files", "*.*")],
+            filetypes=[("Vina output", "*.pdbqt *.log *.txt"), ("All files", "*.*")],
         )
         if path:
             self._dock_parse_vina_path(Path(path))
@@ -7811,11 +8754,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.docking import parse_vina_output
 
             poses = parse_vina_output(path)
-            frame = pd.DataFrame([
-                {"mode": pose.mode, "affinity": pose.affinity,
-                 "rmsd_ub": pose.rmsd_ub, "rmsd_lb": pose.rmsd_lb}
-                for pose in poses
-            ])
+            frame = pd.DataFrame(
+                [
+                    {
+                        "mode": pose.mode,
+                        "affinity": pose.affinity,
+                        "rmsd_ub": pose.rmsd_ub,
+                        "rmsd_lb": pose.rmsd_lb,
+                    }
+                    for pose in poses
+                ]
+            )
             return frame
 
         def render(frame: Any) -> None:
@@ -7830,13 +8779,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 tree.column(column, width=120, minwidth=80, stretch=False)
             for row in frame.to_dict("records"):
                 tree.insert(
-                    "", "end",
+                    "",
+                    "end",
                     values=[_cell_text(row[column]) for column in columns],
                 )
             best = float(frame["affinity"].min()) if len(frame) else float("nan")
             self._dock_results_info.configure(
-                text=f"{len(frame)} modes · best affinity {best:.2f} kcal/mol "
-                     f"— {path.name}",
+                text=f"{len(frame)} modes · best affinity {best:.2f} kcal/mol — {path.name}",
                 style="Field.TLabel",
             )
             self._dock_rescore_prefill()
@@ -7845,12 +8794,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _dock_save_results(self) -> None:
         if self._dock_results_frame is None:
-            messagebox.showinfo("Nothing to save",
-                                "Scan a campaign or parse a log first.")
+            messagebox.showinfo("Nothing to save", "Scan a campaign or parse a log first.")
             return
-        self._save_frame_dialog(self._dock_results_frame,
-                                "Save the docking results",
-                                "docking_results.csv", "Results")
+        self._save_frame_dialog(
+            self._dock_results_frame, "Save the docking results", "docking_results.csv", "Results"
+        )
 
     # -- receptor atom-type census + top-ligand bars (100x-119) -------- #
     def _dock_plot_atom_types(self) -> None:
@@ -7859,11 +8807,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if report is None:
             messagebox.showinfo(
                 "No receptor yet",
-                "Prepare a receptor first — the atom-type census needs "
-                "the prepared PDBQT.")
+                "Prepare a receptor first — the atom-type census needs the prepared PDBQT.",
+            )
             return
-        if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the atom-type chart"):
+        if not self._require_pharmaml() or not self._require("matplotlib", "the atom-type chart"):
             return
 
         def work() -> Any:
@@ -7882,18 +8829,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if frame is None:
             messagebox.showinfo(
                 "No results yet",
-                "Scan a campaign first — the top-ligand bars need the "
-                "ranked summary table.")
+                "Scan a campaign first — the top-ligand bars need the ranked summary table.",
+            )
             return
         if "folder" not in [str(c) for c in frame.columns]:
             messagebox.showinfo(
                 "Campaign scans only",
                 "The top-ligand bars need a campaign-scan table (the "
                 "folder-ranked summary). Scan a campaign folder first — a "
-                "DLG cluster table or a Vina log has no ligand ranking.")
+                "DLG cluster table or a Vina log has no ligand ranking.",
+            )
             return
-        if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the top-ligand chart"):
+        if not self._require_pharmaml() or not self._require("matplotlib", "the top-ligand chart"):
             return
 
         def work() -> Any:
@@ -7908,8 +8855,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     # -- consensus rescore card ------------------------------------------ #
     def _dock_open_rescore_csv(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "summary loading"):
+        if not self._require_pharmaml() or not self._require("pandas", "summary loading"):
             return
         path = filedialog.askopenfilename(
             title="Open a docking summary table",
@@ -7936,13 +8882,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             tree["columns"] = columns
             for column in columns:
                 tree.heading(column, text=column)
-                tree.column(column, width=150 if column == columns[0] else 120,
-                            minwidth=80, stretch=(column == columns[0]))
+                tree.column(
+                    column,
+                    width=150 if column == columns[0] else 120,
+                    minwidth=80,
+                    stretch=(column == columns[0]),
+                )
             for row in frame.to_dict("records"):
                 values = [
-                    _cell_text(None if (isinstance(row[column], float)
-                                        and math.isnan(row[column]))
-                               else row[column], limit=40)
+                    _cell_text(
+                        None
+                        if (isinstance(row[column], float) and math.isnan(row[column]))
+                        else row[column],
+                        limit=40,
+                    )
                     for column in columns
                 ]
                 tree.insert("", "end", values=values)
@@ -7964,8 +8917,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if frame is None:
             return
         available = {str(column) for column in frame.columns}
-        preferred = [name for name in _RESCORE_PREFERRED_COLUMNS
-                     if name in available]
+        preferred = [name for name in _RESCORE_PREFERRED_COLUMNS if name in available]
         if not preferred:
             preferred = [str(column) for column in frame.columns[1:8]]
         if preferred:
@@ -7974,8 +8926,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             entry.insert(0, ", ".join(preferred[:6]))
 
     def _dock_rescore(self) -> None:
-        if not self._require_pharmaml() or not self._require("pandas",
-                                                            "consensus rescoring"):
+        if not self._require_pharmaml() or not self._require("pandas", "consensus rescoring"):
             return
         frame = self._dock_results_frame
         if frame is None:
@@ -7985,9 +8936,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "first -- the rescore ranks the loaded results table.",
             )
             return
-        columns = [name.strip() for name in
-                   self._dock_rescore_columns_entry.get().split(",")
-                   if name.strip()]
+        columns = [
+            name.strip()
+            for name in self._dock_rescore_columns_entry.get().split(",")
+            if name.strip()
+        ]
         if not columns:
             messagebox.showerror("Input", "name at least one evidence column")
             return
@@ -7995,22 +8948,27 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         raw_weights = self._dock_rescore_weights_entry.get().strip()
         if raw_weights:
             try:
-                weights = [parse_float(raw, "weight", minimum=0.0, maximum=100.0)
-                           for raw in raw_weights.split(",")]
+                weights = [
+                    parse_float(raw, "weight", minimum=0.0, maximum=100.0)
+                    for raw in raw_weights.split(",")
+                ]
             except ValueError as exc:
                 messagebox.showerror("Input", str(exc))
                 return
         higher_is_better: dict[str, bool] = {}
         raw_higher = self._dock_rescore_higher_entry.get().strip()
         if raw_higher:
-            higher_is_better = {name.strip(): True for name in
-                                raw_higher.split(",") if name.strip()}
+            higher_is_better = {
+                name.strip(): True for name in raw_higher.split(",") if name.strip()
+            }
 
         def work() -> Any:
             from pharmaml.docking import consensus_breakdown
 
             breakdown = consensus_breakdown(
-                frame, columns, weights=weights,
+                frame,
+                columns,
+                weights=weights,
                 higher_is_better=higher_is_better or None,
             )
             rescored = frame.copy()
@@ -8023,28 +8981,42 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(rescored: Any) -> None:
             self._dock_results_frame = rescored
             self._dock_results_source = "rescore"
-            source_label = (self._dock_results_info.cget("text")
-                            if self._dock_results_info.winfo_exists()
-                            else "loaded table")
+            source_label = (
+                self._dock_results_info.cget("text")
+                if self._dock_results_info.winfo_exists()
+                else "loaded table"
+            )
             self._dock_rescore_last = (
-                rescored, columns, weights, dict(higher_is_better), source_label,
+                rescored,
+                columns,
+                weights,
+                dict(higher_is_better),
+                source_label,
             )
             tree = self._dock_results_tree
             tree.delete(*tree.get_children())
             identity = str(rescored.columns[0])
             norm_columns = [f"{column}_norm" for column in columns]
-            show = [identity] + [column for column in norm_columns + ["consensus"]
-                                 if column != identity]
+            show = [identity] + [
+                column for column in norm_columns + ["consensus"] if column != identity
+            ]
             tree["columns"] = show
             for column in show:
                 tree.heading(column, text=column)
-                tree.column(column, width=150 if column == identity else 130,
-                            minwidth=80, stretch=(column == identity))
+                tree.column(
+                    column,
+                    width=150 if column == identity else 130,
+                    minwidth=80,
+                    stretch=(column == identity),
+                )
             for row in rescored.to_dict("records"):
                 values = [
-                    _cell_text(None if (isinstance(row[column], float)
-                                        and math.isnan(row[column]))
-                               else row[column], limit=40)
+                    _cell_text(
+                        None
+                        if (isinstance(row[column], float) and math.isnan(row[column]))
+                        else row[column],
+                        limit=40,
+                    )
                     for column in show
                 ]
                 tree.insert("", "end", values=values)
@@ -8052,9 +9024,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             directions = higher_is_better or {}
             recipe = ", ".join(
                 f"{column} ("
-                + ("higher" if directions.get(
-                    column, not column.endswith(("energy", "affinity")))
-                   else "lower")
+                + (
+                    "higher"
+                    if directions.get(column, not column.endswith(("energy", "affinity")))
+                    else "lower"
+                )
                 + "=better"
                 + (f", weight {weight:g}" if weights else "")
                 + ")"
@@ -8074,8 +9048,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 identity_value = rescored[identity].iloc[top_index]
                 top_consensus = float(rescored["consensus"].iloc[top_index])
                 top_norms = {
-                    column: float(rescored[column].iloc[top_index])
-                    for column in norm_columns
+                    column: float(rescored[column].iloc[top_index]) for column in norm_columns
                 }
                 driver = max(top_norms, key=lambda name: top_norms[name])
                 lines.append(
@@ -8087,12 +9060,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dock_rescore_text.insert("1.0", "\n".join(lines))
             self._dock_rescore_info.configure(
                 text=f"rescored · {len(rescored)} row(s) · {len(columns)} "
-                     f"evidence column(s) -- Save results CSV… writes the table",
+                f"evidence column(s) -- Save results CSV… writes the table",
                 style="Field.TLabel",
             )
             self._dock_results_info.configure(
                 text=f"{len(rescored)} row(s) · consensus ranking "
-                     f"({len(columns)} evidence columns)",
+                f"({len(columns)} evidence columns)",
                 style="Field.TLabel",
             )
 
@@ -8109,8 +9082,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         the package's forced-Agg backend inside the worker thread; they
         never touch Tk.
         """
-        if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the report figures"):
+        if not self._require_pharmaml() or not self._require("matplotlib", "the report figures"):
             return
         if self._dock_rescore_last is None:
             messagebox.showwarning(
@@ -8134,9 +9106,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         target = filedialog.askdirectory(title="Choose the report folder")
         if not target:
             return
-        rescored, columns, weights, higher_is_better, source_label = (
-            self._dock_rescore_last
-        )
+        rescored, columns, weights, higher_is_better, source_label = self._dock_rescore_last
         directions = higher_is_better or {}
 
         def work() -> Any:
@@ -8147,23 +9117,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 save_visual_bundle,
             )
 
-            figures: dict[str, Any] = {
-                "consensus_ranking": plot_consensus_ranking(rescored)
-            }
+            figures: dict[str, Any] = {"consensus_ranking": plot_consensus_ranking(rescored)}
             try:
                 # scan-shaped tables also carry the energy landscape; a
                 # consensus-only table simply skips it (the CLI's skip
                 # pattern, byte for byte).
-                figures["energy_distribution"] = plot_energy_distribution(
-                    rescored
-                )
+                figures["energy_distribution"] = plot_energy_distribution(rescored)
             except DataValidationError:
                 pass
             recipe = ", ".join(
                 f"{column} ("
-                + ("higher" if directions.get(
-                    column, not column.endswith(("energy", "affinity")))
-                   else "lower")
+                + (
+                    "higher"
+                    if directions.get(column, not column.endswith(("energy", "affinity")))
+                    else "lower"
+                )
                 + "=better"
                 + (f", weight {weight:g}" if weights else "")
                 + ")"
@@ -8173,8 +9141,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 figures,
                 tables={"consensus_breakdown": rescored},
                 out_dir=target,
-                title=(f"playground docking rescore — "
-                       f"{len(columns)} evidence column(s)"),
+                title=(f"playground docking rescore — {len(columns)} evidence column(s)"),
                 subtitle=f"{recipe} — {source_label}",
                 pdf_report=want_pdf,
             )
@@ -8182,9 +9149,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(written: Any) -> None:
             names = [path.name for path in written]
             extra = " + report.pdf" if want_pdf else ""
-            self._job_label.configure(
-                text=f"report saved · {target} ({len(written)} files{extra})"
-            )
+            self._job_label.configure(text=f"report saved · {target} ({len(written)} files{extra})")
             messagebox.showinfo(
                 "Report saved",
                 f"{len(written)} files written to {target}:\n"
@@ -8196,9 +9161,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     # -- campaign runner card -------------------------------------------- #
     def _dock_choose_campaign_root(self) -> None:
-        title = ("Choose the AutoDock4 campaign root"
-                 if self._dock_engine_combo.get() != "AutoDock4 single folder"
-                 else "Choose the ONE ligand folder (r.gpf / r.dpf)")
+        title = (
+            "Choose the AutoDock4 campaign root"
+            if self._dock_engine_combo.get() != "AutoDock4 single folder"
+            else "Choose the ONE ligand folder (r.gpf / r.dpf)"
+        )
         path = filedialog.askdirectory(title=title)
         if path:
             self._dock_campaign_root = Path(path)
@@ -8212,12 +9179,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         """
         root = self._dock_campaign_root
         if self._dock_engine_combo.get() == "AutoDock4 single folder":
-            text = (f"ligand folder: {root}" if root is not None
-                    else "no ligand folder chosen — pick the ONE folder "
-                         "holding r.gpf / r.dpf")
+            text = (
+                f"ligand folder: {root}"
+                if root is not None
+                else "no ligand folder chosen — pick the ONE folder holding r.gpf / r.dpf"
+            )
         else:
-            text = (f"campaign root: {root}" if root is not None
-                    else "no campaign root chosen")
+            text = f"campaign root: {root}" if root is not None else "no campaign root chosen"
         try:
             self._dock_campaign_info.configure(text=text)
         except tk.TclError:  # pragma: no cover - label not built yet
@@ -8242,18 +9210,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dock_refresh_vina_info()
 
     def _dock_refresh_vina_info(self) -> None:
-        receptor = (self._dock_vina_receptor.name
-                    if self._dock_vina_receptor else "—")
-        ligand = (self._dock_vina_ligand.name
-                  if self._dock_vina_ligand else "—")
-        self._dock_vina_info.configure(
-            text=f"receptor {receptor} · ligand {ligand}"
-        )
+        receptor = self._dock_vina_receptor.name if self._dock_vina_receptor else "—"
+        ligand = self._dock_vina_ligand.name if self._dock_vina_ligand else "—"
+        self._dock_vina_info.configure(text=f"receptor {receptor} · ligand {ligand}")
 
     def _dock_missing_engine_dialog(self, engine: str) -> None:
         binaries = ", ".join(docking_engine_binaries(engine))
-        if engine in ("AutoDock4 campaign", "AutoDock4 single folder",
-                      "autodock4"):
+        if engine in ("AutoDock4 campaign", "AutoDock4 single folder", "autodock4"):
             hint = (
                 f"AutoDock4 docking needs the {binaries} binaries on "
                 "PATH (Scripps AutoDock Tools, or conda-forge):\n\n"
@@ -8273,16 +9236,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _dock_audit_pick_gpf(self) -> None:
         path = filedialog.askopenfilename(
             title="Open the GPF file",
-            filetypes=[("AutoDock grid parameter file", "*.gpf"),
-                       ("All files", "*.*")],
+            filetypes=[("AutoDock grid parameter file", "*.gpf"), ("All files", "*.*")],
         )
         if not path:
             return
         self._dock_audit_gpf = Path(path)
         self._dock_audit_info.configure(
-            text=f"GPF: {path}" + (
-                f"\nfolder: {self._dock_audit_folder}"
-                if self._dock_audit_folder else ""))
+            text=f"GPF: {path}"
+            + (f"\nfolder: {self._dock_audit_folder}" if self._dock_audit_folder else "")
+        )
 
     def _dock_audit_pick_folder(self) -> None:
         path = filedialog.askdirectory(title="Pick the campaign folder")
@@ -8290,14 +9252,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         self._dock_audit_folder = Path(path)
         self._dock_audit_info.configure(
-            text=f"folder: {path}" + (
-                f"\nGPF: {self._dock_audit_gpf}"
-                if self._dock_audit_gpf else ""))
+            text=f"folder: {path}"
+            + (f"\nGPF: {self._dock_audit_gpf}" if self._dock_audit_gpf else "")
+        )
 
     def _dock_audit_run(self) -> None:
         """Run the selected audit (GPF params / scans / completion)."""
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "the docking audit"):
+        if not self._require_pharmaml() or not self._require("pandas", "the docking audit"):
             return
         mode = self._dock_audit_mode.get()
 
@@ -8316,9 +9277,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     ("receptor_types", " ".join(params["receptor_types"])),
                     ("npts", " ".join(str(n) for n in params["npts"])),
                     ("spacing", str(params["spacing"])),
-                    ("gridcenter", (
-                        " ".join(f"{v:g}" for v in params["gridcenter"])
-                        if params["gridcenter"] is not None else "absent")),
+                    (
+                        "gridcenter",
+                        (
+                            " ".join(f"{v:g}" for v in params["gridcenter"])
+                            if params["gridcenter"] is not None
+                            else "absent"
+                        ),
+                    ),
                     ("receptor", str(params["receptor"])),
                     ("maps", " ".join(params["maps"])),
                     ("smooth", str(params["smooth"])),
@@ -8335,22 +9301,25 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     tree.heading(column, text=column)
                     tree.column(column, width=width, stretch=(column == "value"))
                 for _, row in frame.iterrows():
-                    tree.insert("", "end", values=(
-                        str(row["parameter"]), _cell_text(row["value"], limit=48)))
+                    tree.insert(
+                        "",
+                        "end",
+                        values=(str(row["parameter"]), _cell_text(row["value"], limit=48)),
+                    )
                 self._dock_audit_summary.configure(
-                    text=f"{gpf_path.name} parsed ({len(frame)} parameters)",
-                    style="Field.TLabel")
+                    text=f"{gpf_path.name} parsed ({len(frame)} parameters)", style="Field.TLabel"
+                )
 
             self._start_job(f"reading {gpf_path.name}", work, render)
             return
 
         if self._dock_audit_folder is None:
-            messagebox.showwarning(
-                "No folder", "Pick the campaign folder for the scan modes.")
+            messagebox.showwarning("No folder", "Pick the campaign folder for the scan modes.")
             return
         folder = self._dock_audit_folder
 
         if mode.startswith("folder: ligand_types"):
+
             def work() -> Any:
                 from pharmaml.docking import scan_gpf_ligand_types
 
@@ -8358,19 +9327,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             def render(frame: Any) -> None:
                 self._dock_audit_frame = frame
-                self._fill_dynamic_tree(self._dock_audit_tree, frame,
-                                        widths={"folder": 120,
-                                                "ligand_types": 200})
-                found = int(frame["ligand_types"].astype(
-                    str).ne("not found").sum()) if len(frame) else 0
+                self._fill_dynamic_tree(
+                    self._dock_audit_tree, frame, widths={"folder": 120, "ligand_types": 200}
+                )
+                found = (
+                    int(frame["ligand_types"].astype(str).ne("not found").sum())
+                    if len(frame)
+                    else 0
+                )
                 self._dock_audit_summary.configure(
-                    text=(f"{len(frame)} sub-folder(s) · {found} with a "
-                          f"parsed r.gpf"), style="Field.TLabel")
+                    text=(f"{len(frame)} sub-folder(s) · {found} with a parsed r.gpf"),
+                    style="Field.TLabel",
+                )
 
             self._start_job("scanning ligand_types", work, render)
             return
 
         if mode.startswith("folder: torsion"):
+
             def work() -> Any:
                 from pharmaml.docking import scan_torsion_consistency
 
@@ -8378,13 +9352,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             def render(frame: Any) -> None:
                 self._dock_audit_frame = frame
-                self._fill_dynamic_tree(self._dock_audit_tree, frame,
-                                        widths={"ligand": 200})
+                self._fill_dynamic_tree(self._dock_audit_tree, frame, widths={"ligand": 200})
                 ok = int((frame["status"] == "OK").sum()) if len(frame) else 0
                 self._dock_audit_summary.configure(
-                    text=(f"{len(frame)} ligand(s) audited · {ok} "
-                          f"consistent · {len(frame) - ok} mismatch"),
-                    style="Field.TLabel")
+                    text=(
+                        f"{len(frame)} ligand(s) audited · {ok} "
+                        f"consistent · {len(frame) - ok} mismatch"
+                    ),
+                    style="Field.TLabel",
+                )
 
             self._start_job("auditing torsion consistency", work, render)
             return
@@ -8399,13 +9375,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         def render(frame: Any) -> None:
             self._dock_audit_frame = frame
-            self._fill_dynamic_tree(self._dock_audit_tree, frame,
-                                    widths={"folder": 200, "status": 110})
+            self._fill_dynamic_tree(
+                self._dock_audit_tree, frame, widths={"folder": 200, "status": 110}
+            )
             ok = int((frame["status"] == "OK").sum()) if len(frame) else 0
             self._dock_audit_summary.configure(
-                text=(f"{len(frame)} sub-folder(s) · {ok} OK · "
-                      f"{len(frame) - ok} incomplete / missing "
-                      f"'{log_name}'"), style="Field.TLabel")
+                text=(
+                    f"{len(frame)} sub-folder(s) · {ok} OK · "
+                    f"{len(frame) - ok} incomplete / missing "
+                    f"'{log_name}'"
+                ),
+                style="Field.TLabel",
+            )
 
         self._start_job("checking completion", work, render)
 
@@ -8440,11 +9421,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _dock_vbatch_refresh_info(self) -> None:
         conf = self._dock_vbatch_conf.name if self._dock_vbatch_conf else "—"
-        lig = (self._dock_vbatch_ligands.name
-               if self._dock_vbatch_ligands else "—")
+        lig = self._dock_vbatch_ligands.name if self._dock_vbatch_ligands else "—"
         out = self._dock_vbatch_out.name if self._dock_vbatch_out else "—"
-        self._dock_vbatch_info.configure(
-            text=f"config: {conf}\nligands: {lig}\noutput: {out}")
+        self._dock_vbatch_info.configure(text=f"config: {conf}\nligands: {lig}\noutput: {out}")
 
     def _dock_vbatch_parse(self) -> None:
         """Parse the picked Vina config and show it (100x-120).
@@ -8458,8 +9437,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._require_pharmaml():
             return
         if self._dock_vbatch_conf is None:
-            messagebox.showwarning(
-                "No config picked", "Pick the Vina config first.")
+            messagebox.showwarning("No config picked", "Pick the Vina config first.")
             return
         try:
             from pharmaml.docking import parse_vina_config
@@ -8469,18 +9447,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._show_error("Could not parse the config", exc)
             return
         pairs = [f"{key} = {value}" for key, value in parsed.items()]
-        shown = "\n".join(pairs[:10]) + (f"\n… (+{len(pairs) - 10} more)"
-                                        if len(pairs) > 10 else "")
+        shown = "\n".join(pairs[:10]) + (
+            f"\n… (+{len(pairs) - 10} more)" if len(pairs) > 10 else ""
+        )
         self._dock_vbatch_info.configure(
-            text=f"config: {self._dock_vbatch_conf.name} — parsed "
-                 f"{len(parsed)} keys\n{shown}")
+            text=f"config: {self._dock_vbatch_conf.name} — parsed {len(parsed)} keys\n{shown}"
+        )
         # convenience: copy the box into the single-run form
         filled: list[str] = []
         try:
-            center = (parsed.get("center_x"), parsed.get("center_y"),
-                      parsed.get("center_z"))
-            size = (parsed.get("size_x"), parsed.get("size_y"),
-                    parsed.get("size_z"))
+            center = (parsed.get("center_x"), parsed.get("center_y"), parsed.get("center_z"))
+            size = (parsed.get("size_x"), parsed.get("size_y"), parsed.get("size_z"))
             if all(part is not None for part in center):
                 self._dock_center_entry.delete(0, "end")
                 self._dock_center_entry.insert(0, " ".join(center))
@@ -8497,80 +9474,83 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             filled.clear()
         if filled:
             self._dock_vbatch_summary.configure(
-                text=f"copied {' · '.join(filled)} into the single-ligand "
-                     f"form",
-                style="Field.TLabel")
+                text=f"copied {' · '.join(filled)} into the single-ligand form",
+                style="Field.TLabel",
+            )
 
     def _dock_vbatch_run(self) -> None:
         """Dock every PDBQT under the ligand tree with one Vina config."""
         if not self._require_pharmaml():
             return
-        if (self._dock_vbatch_conf is None
-                or self._dock_vbatch_ligands is None
-                or self._dock_vbatch_out is None):
+        if (
+            self._dock_vbatch_conf is None
+            or self._dock_vbatch_ligands is None
+            or self._dock_vbatch_out is None
+        ):
             messagebox.showwarning(
                 "Missing paths",
-                "Pick the Vina config, the ligand folder and the output "
-                "folder first.")
+                "Pick the Vina config, the ligand folder and the output folder first.",
+            )
             return
         if shutil.which("vina") is None:
             self._dock_missing_engine_dialog("vina")
             return
         try:
-            workers = parse_int(self._dock_vbatch_workers.get(), "workers",
-                                minimum=1, maximum=64)
+            workers = parse_int(self._dock_vbatch_workers.get(), "workers", minimum=1, maximum=64)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
-        conf, ligands, out = (self._dock_vbatch_conf,
-                              self._dock_vbatch_ligands, self._dock_vbatch_out)
+        conf, ligands, out = (
+            self._dock_vbatch_conf,
+            self._dock_vbatch_ligands,
+            self._dock_vbatch_out,
+        )
 
         def work() -> Any:
             from pharmaml.docking import run_vina_batch
 
-            return run_vina_batch(conf, ligands, out_dir=out,
-                                  max_parallel=workers)
+            return run_vina_batch(conf, ligands, out_dir=out, max_parallel=workers)
 
         def render(results: Any) -> None:
             rows = [
-                (Path(r.directory).name, "OK" if r.ok else "FAILED",
-                 f"{r.seconds:.1f}s",
-                 _cell_text(Path(r.log_file).name if r.log_file else
-                            (r.error or ""), limit=28))
+                (
+                    Path(r.directory).name,
+                    "OK" if r.ok else "FAILED",
+                    f"{r.seconds:.1f}s",
+                    _cell_text(Path(r.log_file).name if r.log_file else (r.error or ""), limit=28),
+                )
                 for r in results
             ]
-            frame = _frame_from_records(
-                ("ligand", "status", "time", "log / error"), rows)
+            frame = _frame_from_records(("ligand", "status", "time", "log / error"), rows)
             self._dock_vbatch_frame = frame
-            self._fill_dynamic_tree(self._dock_vbatch_tree, frame,
-                                    widths={"ligand": 150, "status": 70,
-                                            "time": 60, "log / error": 150})
+            self._fill_dynamic_tree(
+                self._dock_vbatch_tree,
+                frame,
+                widths={"ligand": 150, "status": 70, "time": 60, "log / error": 150},
+            )
             ok = sum(1 for r in results if r.ok)
             self._dock_vbatch_summary.configure(
-                text=(f"{ok}/{len(results)} ligand(s) docked into "
-                      f"{out.name}"), style="Field.TLabel")
+                text=(f"{ok}/{len(results)} ligand(s) docked into {out.name}"), style="Field.TLabel"
+            )
 
         self._start_job(f"vina batch ({workers} workers)", work, render)
 
     def _dock_smi_pick_out(self) -> None:
-        path = filedialog.askdirectory(
-            title="Pick the PDBQT output folder")
+        path = filedialog.askdirectory(title="Pick the PDBQT output folder")
         if path:
             self._dock_smi_out = Path(path)
             self._dock_smi_info.configure(text=f"output: {path}")
 
     def _dock_smi_run(self) -> None:
         """Prepare one SMILES as a docking-ready PDBQT ligand."""
-        if not self._require_pharmaml() or not self._require(
-                "rdkit", "ligand preparation"):
+        if not self._require_pharmaml() or not self._require("rdkit", "ligand preparation"):
             return
         smiles = self._dock_smi_entry.get().strip()
         if not smiles:
             messagebox.showwarning("Empty SMILES", "Type a SMILES first.")
             return
         if self._dock_smi_out is None:
-            messagebox.showwarning(
-                "No output folder", "Pick the output folder first.")
+            messagebox.showwarning("No output folder", "Pick the output folder first.")
             return
         name = self._dock_smi_name.get().strip() or None
         out_dir = self._dock_smi_out
@@ -8581,12 +9561,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return smiles_to_pdbqt(smiles, out_dir, name=name)
 
         def render(written: Any) -> None:
-            size_kb = Path(written).stat().st_size / 1024 if Path(
-                written).exists() else 0.0
+            size_kb = Path(written).stat().st_size / 1024 if Path(written).exists() else 0.0
             self._dock_smi_summary.configure(
-                text=(f"written {Path(written).name} "
-                      f"({size_kb:.1f} KB) in {out_dir.name}"),
-                style="Field.TLabel")
+                text=(f"written {Path(written).name} ({size_kb:.1f} KB) in {out_dir.name}"),
+                style="Field.TLabel",
+            )
 
         self._start_job("preparing the ligand", work, render)
 
@@ -8610,8 +9589,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 )
                 return
             try:
-                workers = parse_int(self._dock_workers_entry.get(), "workers",
-                                    minimum=1, maximum=64)
+                workers = parse_int(
+                    self._dock_workers_entry.get(), "workers", minimum=1, maximum=64
+                )
             except ValueError as exc:
                 messagebox.showerror("Input", str(exc))
                 return
@@ -8627,9 +9607,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 failed_runs = len(results) - ok_runs
                 total_seconds = sum(result.seconds for result in results)
                 self._dock_run_summary.configure(
-                    text=(f"{len(results)} folders docked · {ok_runs} ok · "
-                          f"{failed_runs} failed · {total_seconds:.0f} s total "
-                          f"— {root.name}"),
+                    text=(
+                        f"{len(results)} folders docked · {ok_runs} ok · "
+                        f"{failed_runs} failed · {total_seconds:.0f} s total "
+                        f"— {root.name}"
+                    ),
                     style="Field.TLabel",
                 )
 
@@ -8671,18 +9653,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                             f"top {summary['top_lowest_energy']:.2f} "
                             f"(n={summary['top_num_in_cluster']}) · "
                             f"best-populated {summary['best_lowest_energy']:.2f} "
-                            f"(n={summary['best_num_in_cluster']})")
+                            f"(n={summary['best_num_in_cluster']})"
+                        )
                     except Exception:  # noqa: BLE001 - best effort note
                         cluster_note = ""
                 self._dock_run_summary.configure(
-                    text=(f"autogrid4+autodock4 {state} · "
-                          f"{result.seconds:.1f} s{dlg_note}{cluster_note}"
-                          f" — {root.name}"),
+                    text=(
+                        f"autogrid4+autodock4 {state} · "
+                        f"{result.seconds:.1f} s{dlg_note}{cluster_note}"
+                        f" — {root.name}"
+                    ),
                     style="Field.TLabel",
                 )
 
-            self._start_job(f"AutoDock4 single ({root.name})",
-                            work_single, render_single)
+            self._start_job(f"AutoDock4 single ({root.name})", work_single, render_single)
             return
 
         # -- Vina single ligand ------------------------------------------ #
@@ -8694,8 +9678,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         try:
             center = parse_float_triple(self._dock_center_entry.get(), "centre")
             size = parse_float_triple(self._dock_size_entry.get(), "size")
-            exhaustiveness = parse_int(self._dock_exhaust_entry.get(),
-                                       "exhaustiveness", minimum=1, maximum=256)
+            exhaustiveness = parse_int(
+                self._dock_exhaust_entry.get(), "exhaustiveness", minimum=1, maximum=256
+            )
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -8705,14 +9690,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def work() -> Any:
             from pharmaml.docking import run_vina
 
-            return run_vina(receptor, ligand, out=out, center=center, size=size,
-                            exhaustiveness=exhaustiveness)
+            return run_vina(
+                receptor, ligand, out=out, center=center, size=size, exhaustiveness=exhaustiveness
+            )
 
         def render(result: Any) -> None:
             state = "ok" if result.ok else f"FAILED — {result.error}"
             self._dock_run_summary.configure(
-                text=(f"Vina run {state} · {result.seconds:.1f} s · "
-                      f"output {out}"),
+                text=(f"Vina run {state} · {result.seconds:.1f} s · output {out}"),
                 style="Field.TLabel",
             )
 
@@ -8724,7 +9709,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_smiles_text.delete("1.0", "end")
         self._dock_smiles_text.insert("1.0", "\n".join(_DOCK_SMILES_DEFAULTS))
         self._dock_smiles_summary.configure(
-            text=f"{len(_DOCK_SMILES_DEFAULTS)} example SMILES loaded")
+            text=f"{len(_DOCK_SMILES_DEFAULTS)} example SMILES loaded"
+        )
 
     def _dock_smiles_open_receptor(self) -> None:
         path = filedialog.askopenfilename(
@@ -8737,8 +9723,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_smiles_receptor_info.configure(text=path)
 
     def _dock_smiles_choose_out(self) -> None:
-        path = filedialog.askdirectory(
-            title="Choose the SMILES-array campaign output folder")
+        path = filedialog.askdirectory(title="Choose the SMILES-array campaign output folder")
         if not path:
             return
         self._dock_smiles_out = Path(path)
@@ -8752,22 +9737,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _dock_smiles_run(self) -> None:
         """Dock the whole pasted SMILES array with the chosen engine."""
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "SMILES docking") or not self._require(
-                "rdkit", "SMILES docking"):
+        if (
+            not self._require_pharmaml()
+            or not self._require("pandas", "SMILES docking")
+            or not self._require("rdkit", "SMILES docking")
+        ):
             return
         smiles = parse_smiles_lines(self._dock_smiles_text.get("1.0", "end"))
         if not smiles:
-            messagebox.showwarning(
-                "Empty array", "Paste at least one SMILES (one per line)."
-            )
+            messagebox.showwarning("Empty array", "Paste at least one SMILES (one per line).")
             return
         receptor = self._dock_smiles_receptor_or_none()
         if receptor is None:
             messagebox.showwarning(
                 "No receptor",
-                "Pick a prepared receptor PDBQT first (or prepare one in "
-                "the receptor card above).",
+                "Pick a prepared receptor PDBQT first (or prepare one in the receptor card above).",
             )
             return
         if self._dock_smiles_out is None:
@@ -8784,13 +9768,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dock_missing_engine_dialog(engine)
             return
         try:
-            center = parse_float_triple(self._dock_smiles_center_entry.get(),
-                                        "centre")
+            center = parse_float_triple(self._dock_smiles_center_entry.get(), "centre")
             size = parse_float_triple(self._dock_smiles_size_entry.get(), "size")
-            exhaustiveness = parse_int(self._dock_smiles_exhaust_entry.get(),
-                                       "exhaustiveness", minimum=1, maximum=256)
-            workers = parse_int(self._dock_smiles_workers_entry.get(),
-                                "workers", minimum=1, maximum=64)
+            exhaustiveness = parse_int(
+                self._dock_smiles_exhaust_entry.get(), "exhaustiveness", minimum=1, maximum=256
+            )
+            workers = parse_int(
+                self._dock_smiles_workers_entry.get(), "workers", minimum=1, maximum=64
+            )
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -8823,13 +9808,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             for column in columns:
                 width = 210 if column in ("smiles", "error") else 96
                 tree.heading(column, text=column)
-                tree.column(column, width=width, minwidth=56,
-                            stretch=(column in ("smiles", "error")))
+                tree.column(
+                    column, width=width, minwidth=56, stretch=(column in ("smiles", "error"))
+                )
             for row in frame.to_dict("records"):
                 values = [
-                    _cell_text(None if (isinstance(row[column], float)
-                                        and math.isnan(row[column]))
-                               else row[column], limit=52)
+                    _cell_text(
+                        None
+                        if (isinstance(row[column], float) and math.isnan(row[column]))
+                        else row[column],
+                        limit=52,
+                    )
                     for column in columns
                 ]
                 tree.insert("", "end", values=values)
@@ -8837,20 +9826,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             best = frame.loc[frame["ok"], "best_score"]
             best_text = f" · best {best.min():.2f} kcal/mol" if ok else ""
             self._dock_results_info.configure(
-                text=(f"{len(frame)} SMILES docked ({engine}) · {ok} ok · "
-                      f"{len(frame) - ok} failed{best_text} — {out_root.name}"),
+                text=(
+                    f"{len(frame)} SMILES docked ({engine}) · {ok} ok · "
+                    f"{len(frame) - ok} failed{best_text} — {out_root.name}"
+                ),
                 style="Field.TLabel",
             )
             self._dock_smiles_summary.configure(
-                text=(f"{ok}/{len(frame)} docked{best_text} · folders under "
-                      f"{out_root.name}"),
+                text=(f"{ok}/{len(frame)} docked{best_text} · folders under {out_root.name}"),
                 style="Field.TLabel",
             )
             self._dock_rescore_prefill()
 
         self._start_job(
             f"docking {len(smiles)} SMILES ({engine}, {workers} worker(s))",
-            work, render,
+            work,
+            render,
         )
 
     # ------------------------------------------------------------------ #
@@ -8860,18 +9851,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         page = self._new_page("Data & ML")
         self._ml_page = page
 
-        data = make_card(page.grid, "Dataset", span=2, row=0, column=0,
-                         subtitle="Any CSV the toolkit's read_table can sniff, or a bundled example.")
+        data = make_card(
+            page.grid,
+            "Dataset",
+            span=2,
+            row=0,
+            column=0,
+            subtitle="Any CSV the toolkit's read_table can sniff, or a bundled example.",
+        )
         open_btn = self._action_button(data, "Open CSV…", self._ml_open_csv)
         open_btn.grid(row=0, column=0, sticky="w")
         example_files = [
-            name for name in (
-                "qsar_regression.csv", "qsar_classification.csv",
-                "qsar_multiclass.csv", "cellline_screen.csv", "pk_profile.csv",
-            ) if (EXAMPLES_DIR / name).is_file()
+            name
+            for name in (
+                "qsar_regression.csv",
+                "qsar_classification.csv",
+                "qsar_multiclass.csv",
+                "cellline_screen.csv",
+                "pk_profile.csv",
+            )
+            if (EXAMPLES_DIR / name).is_file()
         ]
-        self._example_combo = ttk.Combobox(data, state="readonly", width=26,
-                                           values=example_files)
+        self._example_combo = ttk.Combobox(data, state="readonly", width=26, values=example_files)
         if example_files:
             self._example_combo.set(example_files[0])
         self._example_combo.grid(row=0, column=1, sticky="w", padx=(12, 0))
@@ -8886,101 +9887,130 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         clean_row.grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
         self._ml_keep_entry = ttk.Entry(clean_row, width=30)
         self._ml_keep_entry.insert(0, "SMILES,name,Ligand")
-        Tooltip(self._ml_keep_entry,
-                "Comma-separated metadata columns that survive the numeric "
-                "cleanup (case-insensitive; missing ones are simply "
-                "ignored) -- the SMILES column belongs in a QSAR table "
-                "even though it is not a feature.")
+        Tooltip(
+            self._ml_keep_entry,
+            "Comma-separated metadata columns that survive the numeric "
+            "cleanup (case-insensitive; missing ones are simply "
+            "ignored) -- the SMILES column belongs in a QSAR table "
+            "even though it is not a feature.",
+        )
         self._ml_keep_entry.pack(side="left")
         clean_btn = self._action_button(
-            clean_row, "Drop non-numeric columns", self._ml_clean_frame,
+            clean_row,
+            "Drop non-numeric columns",
+            self._ml_clean_frame,
             tooltip="The rar's 'Non-numerical data remover.py': every "
-                    "non-numeric column except the target and the keep "
-                    "list is dropped (names reported in the status line); "
-                    "'Save cleaned CSV…' then writes the numeric frame.")
+            "non-numeric column except the target and the keep "
+            "list is dropped (names reported in the status line); "
+            "'Save cleaned CSV…' then writes the numeric frame.",
+        )
         clean_btn.pack(side="left", padx=(10, 0))
         clean_save_btn = self._action_button(
-            clean_row, "Save cleaned CSV…", self._ml_clean_save,
+            clean_row,
+            "Save cleaned CSV…",
+            self._ml_clean_save,
             tooltip="The last cleaned frame (train immediately, or keep "
-                    "it as the numeric dataset).")
+            "it as the numeric dataset).",
+        )
         clean_save_btn.pack(side="left", padx=(10, 0))
         self._ml_cleaned_frame: Any = None
 
-        preview = make_card(page.grid, "Preview (first 12 rows)", span=2, row=1,
-                            column=0)
+        preview = make_card(page.grid, "Preview (first 12 rows)", span=2, row=1, column=0)
         tree_frame = ttk.Frame(preview, style="Card.TFrame")
         grid_append(preview, tree_frame, sticky="nsew", weight=True)
         self._preview_tree = ttk.Treeview(tree_frame, show="headings", height=8)
-        preview_bar_x = ttk.Scrollbar(tree_frame, orient="horizontal",
-                                      command=self._preview_tree.xview)
-        preview_bar_y = ttk.Scrollbar(tree_frame, orient="vertical",
-                                      command=self._preview_tree.yview)
-        self._preview_tree.configure(xscrollcommand=preview_bar_x.set,
-                                     yscrollcommand=preview_bar_y.set)
+        preview_bar_x = ttk.Scrollbar(
+            tree_frame, orient="horizontal", command=self._preview_tree.xview
+        )
+        preview_bar_y = ttk.Scrollbar(
+            tree_frame, orient="vertical", command=self._preview_tree.yview
+        )
+        self._preview_tree.configure(
+            xscrollcommand=preview_bar_x.set, yscrollcommand=preview_bar_y.set
+        )
         self._preview_tree.pack(side="left", fill="both", expand=True)
         preview_bar_y.pack(side="right", fill="y")
         preview_bar_x.pack(side="bottom", fill="x")
 
-        config = make_card(page.grid, "Train a model", span=2, row=2, column=0,
-                           subtitle="Features = the numeric columns except the target "
-                                    "(helpers like SMILES ids are dropped automatically).")
+        config = make_card(
+            page.grid,
+            "Train a model",
+            span=2,
+            row=2,
+            column=0,
+            subtitle="Features = the numeric columns except the target "
+            "(helpers like SMILES ids are dropped automatically).",
+        )
         self._target_combo = ttk.Combobox(config, state="readonly", width=26)
         form_row(config, "target column", self._target_combo)
-        self._task_combo = ttk.Combobox(config, state="readonly", width=26,
-                                        values=("auto", "regression", "classification"))
+        self._task_combo = ttk.Combobox(
+            config, state="readonly", width=26, values=("auto", "regression", "classification")
+        )
         self._task_combo.set("auto")
         form_row(config, "task", self._task_combo)
-        self._model_combo = ttk.Combobox(config, state="readonly", width=26,
-                                         values=("auto",))
+        self._model_combo = ttk.Combobox(config, state="readonly", width=26, values=("auto",))
         self._model_combo.set("auto")
         form_row(config, "model", self._model_combo)
         # manual model settings (100x-106): the CV fold count the
         # Train button threads into train_model (tune on) and the
         # leaderboard button's own 3-fold convention stays untouched.
-        self._ml_cv_spin = ttk.Spinbox(config, from_=2, to=10, increment=1,
-                                       width=10)
+        self._ml_cv_spin = ttk.Spinbox(config, from_=2, to=10, increment=1, width=10)
         self._ml_cv_spin.set("5")
-        Tooltip(self._ml_cv_spin,
-                "Cross-validation folds for Train & evaluate with the tune "
-                "tick on (and the CV columns of the saved report). The "
-                "leaderboard button keeps its own 3-fold convention.")
+        Tooltip(
+            self._ml_cv_spin,
+            "Cross-validation folds for Train & evaluate with the tune "
+            "tick on (and the CV columns of the saved report). The "
+            "leaderboard button keeps its own 3-fold convention.",
+        )
         form_row(config, "cv folds", self._ml_cv_spin)
         self._tune_var = tk.BooleanVar(value=False)
-        tune_check = ttk.Checkbutton(config, text="tune hyperparameters (grid search, slower)",
-                                     variable=self._tune_var)
+        tune_check = ttk.Checkbutton(
+            config, text="tune hyperparameters (grid search, slower)", variable=self._tune_var
+        )
         form_row(config, "options", tune_check)
         buttons = ttk.Frame(config, style="Card.TFrame")
-        buttons.grid(row=config.grid_size()[1], column=0, columnspan=2, sticky="w",
-                     pady=(8, 0))
-        train_btn = self._action_button(buttons, "Train & evaluate", self._ml_train,
-                                        primary=True,
-                                        tooltip="80/20 split, the toolkit's own preprocessing "
-                                                "pipeline, then held-out metrics + figure.")
+        buttons.grid(row=config.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0))
+        train_btn = self._action_button(
+            buttons,
+            "Train & evaluate",
+            self._ml_train,
+            primary=True,
+            tooltip="80/20 split, the toolkit's own preprocessing "
+            "pipeline, then held-out metrics + figure.",
+        )
         train_btn.pack(side="left")
-        compare_btn = self._action_button(buttons, "Compare models (3-fold CV)",
-                                          self._ml_compare,
-                                          tooltip="Cross-validated leaderboard over the "
-                                                  "available registry.")
+        compare_btn = self._action_button(
+            buttons,
+            "Compare models (3-fold CV)",
+            self._ml_compare,
+            tooltip="Cross-validated leaderboard over the available registry.",
+        )
         compare_btn.pack(side="left", padx=(10, 0))
         self._ml_pdf_var = tk.BooleanVar(value=False)
-        pdf_check = ttk.Checkbutton(
-            buttons, text="include report.pdf", variable=self._ml_pdf_var)
-        Tooltip(pdf_check, "Also write the multi-page PDF document -- "
-                           "needs fpdf (pharmaml[reports])")
+        pdf_check = ttk.Checkbutton(buttons, text="include report.pdf", variable=self._ml_pdf_var)
+        Tooltip(
+            pdf_check, "Also write the multi-page PDF document -- needs fpdf (pharmaml[reports])"
+        )
         pdf_check.pack(side="left", padx=(10, 0))
         report_btn = self._action_button(
-            buttons, "Save report…", self._ml_save_report,
+            buttons,
+            "Save report…",
+            self._ml_save_report,
             tooltip="Write the last training run as the one-click visual "
-                    "bundle -- report.html + figures + tables (+ report.pdf "
-                    "when ticked), the CLI --plots/--pdf-report story.")
+            "bundle -- report.html + figures + tables (+ report.pdf "
+            "when ticked), the CLI --plots/--pdf-report story.",
+        )
         report_btn.pack(side="left", padx=(10, 0))
         check_btn = self._action_button(
-            buttons, "Check CSV…", self._ml_check_csv,
+            buttons,
+            "Check CSV…",
+            self._ml_check_csv,
             tooltip="Audit any CSV against the last trained model before "
-                    "predicting -- missing features, extra columns, "
-                    "reordering and version drift, all named (the ml check "
-                    "story, mouse edition; the training target is dropped "
-                    "automatically when present).")
+            "predicting -- missing features, extra columns, "
+            "reordering and version drift, all named (the ml check "
+            "story, mouse edition; the training target is dropped "
+            "automatically when present).",
+        )
         check_btn.pack(side="left", padx=(10, 0))
 
         # picking a concrete task re-lists the models for it, and any
@@ -8995,82 +10025,107 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
 
         manual = make_card(
-            page.grid, "Manual hyperparameters", span=2, row=3, column=0,
+            page.grid,
+            "Manual hyperparameters",
+            span=2,
+            row=3,
+            column=0,
             subtitle="The selected model's registry knobs, editable by hand "
-                     "— each field starts at the estimator's own default; "
-                     "blank keeps that default. Pinned keys are excluded "
-                     "from the grid search, so tick 'tune' to search only "
-                     "the slots you leave blank. Per-model values persist "
-                     "with the session.",
+            "— each field starts at the estimator's own default; "
+            "blank keeps that default. Pinned keys are excluded "
+            "from the grid search, so tick 'tune' to search only "
+            "the slots you leave blank. Per-model values persist "
+            "with the session.",
         )
         self._ml_params_var = tk.StringVar(value="{}")
         self._ml_params_host = ttk.Frame(manual, style="Card.TFrame")
         grid_append(manual, self._ml_params_host, sticky="ew")
         self._ml_param_entries: dict[str, ttk.Entry] = {}
         self._ml_params_status = ttk.Label(
-            manual, text="pick a model to edit its hyperparameters",
-            style="CardMuted.TLabel", wraplength=620, justify="left")
+            manual,
+            text="pick a model to edit its hyperparameters",
+            style="CardMuted.TLabel",
+            wraplength=620,
+            justify="left",
+        )
         grid_append(manual, self._ml_params_status, sticky="w", pady=(6, 0))
         manual_buttons = ttk.Frame(manual, style="Card.TFrame")
         grid_append(manual, manual_buttons, sticky="w", pady=(8, 0))
         reset_params_btn = self._action_button(
-            manual_buttons, "Reset to defaults", self._ml_params_reset,
+            manual_buttons,
+            "Reset to defaults",
+            self._ml_params_reset,
             tooltip="Clear every field back to the estimator's own "
-                    "defaults (the blank state — nothing is pinned, the "
-                    "grid search gets all its slots back).")
+            "defaults (the blank state — nothing is pinned, the "
+            "grid search gets all its slots back).",
+        )
         reset_params_btn.pack(side="left")
 
         tuner = make_card(
-            page.grid, "Hyperparameter search", span=2, row=4, column=0,
+            page.grid,
+            "Hyperparameter search",
+            span=2,
+            row=4,
+            column=0,
             subtitle="The ml tune story, mouse edition: a keras-tuner-style "
-                     "search over a whole estimator family (not the "
-                     "per-model grid search above). RandomSearch samples "
-                     "full-budget trials; Hyperband starts brackets of "
-                     "configs at a fraction of the resource budget (ann's "
-                     "max_iter, dnn's epochs -- the ladder is the family's "
-                     "own declared grid) and keeps only the top 1/η per "
-                     "rung. Every trial is scored by mean CV on the SAME "
-                     "shuffled folds; the family's defaults are scored too "
-                     "-- the number the search has to beat; the winner is "
-                     "refit and scored on the held-out 20%."
+            "search over a whole estimator family (not the "
+            "per-model grid search above). RandomSearch samples "
+            "full-budget trials; Hyperband starts brackets of "
+            "configs at a fraction of the resource budget (ann's "
+            "max_iter, dnn's epochs -- the ladder is the family's "
+            "own declared grid) and keeps only the top 1/η per "
+            "rung. Every trial is scored by mean CV on the SAME "
+            "shuffled folds; the family's defaults are scored too "
+            "-- the number the search has to beat; the winner is "
+            "refit and scored on the held-out 20%.",
         )
-        self._tune_estimator_combo = ttk.Combobox(tuner, state="readonly", width=26,
-                                                  values=_TUNE_ESTIMATORS)
+        self._tune_estimator_combo = ttk.Combobox(
+            tuner, state="readonly", width=26, values=_TUNE_ESTIMATORS
+        )
         self._tune_estimator_combo.set("ann")
-        Tooltip(self._tune_estimator_combo,
-                "ann = the sklearn MLP hypermodel; dnn = the torch deep MLP "
-                "(batchnorm searchable, needs torch); hsvr = the hierarchical "
-                "SVR (regression only). The same families the CLI's "
-                "ml tune --estimator accepts.")
+        Tooltip(
+            self._tune_estimator_combo,
+            "ann = the sklearn MLP hypermodel; dnn = the torch deep MLP "
+            "(batchnorm searchable, needs torch); hsvr = the hierarchical "
+            "SVR (regression only). The same families the CLI's "
+            "ml tune --estimator accepts.",
+        )
         form_row(tuner, "estimator", self._tune_estimator_combo)
         self._tune_searcher_combo = ttk.Combobox(
-            tuner, state="readonly", width=26, values=_TUNE_SEARCHERS)
+            tuner, state="readonly", width=26, values=_TUNE_SEARCHERS
+        )
         self._tune_searcher_combo.set("random")
-        Tooltip(self._tune_searcher_combo,
-                "random = RandomSearch, every trial at the full budget "
-                "(the trials spinbox decides how many); hyperband = "
-                "successive halving over the family's resource slot -- "
-                "brackets start many configs at a small budget and keep "
-                "only the top 1/η per rung, so the trials spinbox is "
-                "ignored (the brackets decide; ann and dnn only -- hsvr "
-                "declares no resource slot). The same tokens the CLI's "
-                "ml tune --searcher accepts.")
+        Tooltip(
+            self._tune_searcher_combo,
+            "random = RandomSearch, every trial at the full budget "
+            "(the trials spinbox decides how many); hyperband = "
+            "successive halving over the family's resource slot -- "
+            "brackets start many configs at a small budget and keep "
+            "only the top 1/η per rung, so the trials spinbox is "
+            "ignored (the brackets decide; ann and dnn only -- hsvr "
+            "declares no resource slot). The same tokens the CLI's "
+            "ml tune --searcher accepts.",
+        )
         form_row(tuner, "searcher", self._tune_searcher_combo)
         self._tune_trials = ttk.Spinbox(tuner, from_=4, to=40, increment=1, width=10)
         self._tune_trials.set("8")
-        Tooltip(self._tune_trials,
-                "RandomSearch only: how many full-budget trials to draw. "
-                "Hyperband ignores this -- its brackets fix the trial "
-                "count from η and the resource ladder.")
+        Tooltip(
+            self._tune_trials,
+            "RandomSearch only: how many full-budget trials to draw. "
+            "Hyperband ignores this -- its brackets fix the trial "
+            "count from η and the resource ladder.",
+        )
         form_row(tuner, "trials", self._tune_trials)
         self._tune_eta = ttk.Spinbox(tuner, from_=2, to=4, increment=1, width=10)
         self._tune_eta.set("3")
-        Tooltip(self._tune_eta,
-                "Hyperband only: the halving factor η -- every rung keeps "
-                "the top ceil(n/η) configs and multiplies their budget by "
-                "η. Bigger η = more brackets, more trials at tiny budgets; "
-                "smaller η = fewer, deeper brackets. RandomSearch ignores "
-                "this.")
+        Tooltip(
+            self._tune_eta,
+            "Hyperband only: the halving factor η -- every rung keeps "
+            "the top ceil(n/η) configs and multiplies their budget by "
+            "η. Bigger η = more brackets, more trials at tiny budgets; "
+            "smaller η = fewer, deeper brackets. RandomSearch ignores "
+            "this.",
+        )
         form_row(tuner, "η (hyperband)", self._tune_eta)
         self._tune_cv = ttk.Spinbox(tuner, from_=2, to=5, increment=1, width=10)
         self._tune_cv.set("3")
@@ -9078,112 +10133,147 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         tune_buttons = ttk.Frame(tuner, style="Card.TFrame")
         grid_append(tuner, tune_buttons, sticky="w", pady=(8, 0))
         search_btn = self._action_button(
-            tune_buttons, "Run search", self._ml_tune,
+            tune_buttons,
+            "Run search",
+            self._ml_tune,
             tooltip="Search the chosen family's space -- RandomSearch "
-                    "samples full-budget trials, Hyperband halves the "
-                    "resource rung by rung; trials ranked by mean CV score "
-                    "on the leaderboard card below; the summary line "
-                    "carries best vs defaults (the gain) and the held-out "
-                    "verdict. Deterministic end-to-end (the same seed "
-                    "folds the same way twice).")
+            "samples full-budget trials, Hyperband halves the "
+            "resource rung by rung; trials ranked by mean CV score "
+            "on the leaderboard card below; the summary line "
+            "carries best vs defaults (the gain) and the held-out "
+            "verdict. Deterministic end-to-end (the same seed "
+            "folds the same way twice).",
+        )
         search_btn.pack(side="left")
         apply_btn = self._action_button(
-            tune_buttons, "Apply best", self._ml_tune_apply,
+            tune_buttons,
+            "Apply best",
+            self._ml_tune_apply,
             tooltip="Carry the winning configuration forward: ann/hsvr point "
-                    "the model combobox at the family; dnn prefills the whole "
-                    "Deep Learning tab (layers, dropout, learning rate, "
-                    "activation, batchnorm, epochs) and switches to it.")
+            "the model combobox at the family; dnn prefills the whole "
+            "Deep Learning tab (layers, dropout, learning rate, "
+            "activation, batchnorm, epochs) and switches to it.",
+        )
         apply_btn.pack(side="left", padx=(10, 0))
         save_trials_btn = self._action_button(
-            tune_buttons, "Save trials CSV…", self._ml_tune_save_trials,
+            tune_buttons,
+            "Save trials CSV…",
+            self._ml_tune_save_trials,
             tooltip="Write the full trials table (one row per trial: score, "
-                    "std, every hyperparameter) -- the CLI --out story.")
+            "std, every hyperparameter) -- the CLI --out story.",
+        )
         save_trials_btn.pack(side="left", padx=(10, 0))
         self._tune_summary = ttk.Label(
-            tuner, text="no search yet — pick an estimator family and run it",
-            style="CardMuted.TLabel", wraplength=620, justify="left")
+            tuner,
+            text="no search yet — pick an estimator family and run it",
+            style="CardMuted.TLabel",
+            wraplength=620,
+            justify="left",
+        )
         grid_append(tuner, self._tune_summary, sticky="w", pady=(6, 0))
 
         results = make_card(page.grid, "Results", span=2, row=5, column=0)
         ml_result_buttons = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, ml_result_buttons, sticky="w")
         calib_btn = self._action_button(
-            ml_result_buttons, "Calibration curve", self._ml_plot_calibration,
+            ml_result_buttons,
+            "Calibration curve",
+            self._ml_plot_calibration,
             tooltip="The reliability diagram of the last trained "
-                    "CLASSIFIER (plot_calibration_curve): predicted "
-                    "probability vs observed frequency per bin -- the "
-                    "honest answer to 'can I trust p = 0.7?'.")
+            "CLASSIFIER (plot_calibration_curve): predicted "
+            "probability vs observed frequency per bin -- the "
+            "honest answer to 'can I trust p = 0.7?'.",
+        )
         calib_btn.pack(side="left")
         self._calib_bins = ttk.Entry(ml_result_buttons, width=5)
         self._calib_bins.insert(0, "10")
         self._calib_bins.pack(side="left", padx=(8, 0))
-        ttk.Label(ml_result_buttons, text="bins",
-                  style="CardMuted.TLabel").pack(side="left", padx=(2, 0))
+        ttk.Label(ml_result_buttons, text="bins", style="CardMuted.TLabel").pack(
+            side="left", padx=(2, 0)
+        )
         # 100x-120: the learning-curve figure -- "should we assay more
         # compounds?" answered with a picture instead of a guess.
         curve_btn = self._action_button(
-            ml_result_buttons, "Learning curve", self._ml_plot_learning_curve,
+            ml_result_buttons,
+            "Learning curve",
+            self._ml_plot_learning_curve,
             tooltip="Train-set size vs CV score (plot_learning_curve): the "
-                    "honest answer to 'should we assay 500 more compounds?' "
-                    "-- a curve still climbing means yes, a plateau means "
-                    "the model has extracted what this chemistry can give.")
+            "honest answer to 'should we assay 500 more compounds?' "
+            "-- a curve still climbing means yes, a plateau means "
+            "the model has extracted what this chemistry can give.",
+        )
         curve_btn.pack(side="left", padx=(10, 0))
         self._curve_cv = ttk.Entry(ml_result_buttons, width=4)
         self._curve_cv.insert(0, "5")
         self._curve_cv.pack(side="left", padx=(8, 0))
-        ttk.Label(ml_result_buttons, text="folds",
-                  style="CardMuted.TLabel").pack(side="left", padx=(2, 0))
+        ttk.Label(ml_result_buttons, text="folds", style="CardMuted.TLabel").pack(
+            side="left", padx=(2, 0)
+        )
         ml_result_note = ttk.Label(
-            ml_result_buttons, text="", style="CardMuted.TLabel",
-            wraplength=430, justify="left")
+            ml_result_buttons, text="", style="CardMuted.TLabel", wraplength=430, justify="left"
+        )
         ml_result_note.pack(side="left", padx=(10, 0))
         self._ml_result_note = ml_result_note
         self._ml_metrics = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, self._ml_metrics, sticky="ew")
-        ttk.Label(self._ml_metrics, text="train a model to see metrics",
-                  style="CardMuted.TLabel").pack(anchor="w")
+        ttk.Label(
+            self._ml_metrics, text="train a model to see metrics", style="CardMuted.TLabel"
+        ).pack(anchor="w")
         self._ml_host = self._figure_host(results, height=330)
 
         board = make_card(
-            page.grid, "Leaderboard", span=2, row=6, column=0,
+            page.grid,
+            "Leaderboard",
+            span=2,
+            row=6,
+            column=0,
             subtitle="Compare models fills it with the cross-validated "
-                     "registry ranking; a hyperparameter search fills it "
-                     "with the trial ranking, best first."
+            "registry ranking; a hyperparameter search fills it "
+            "with the trial ranking, best first.",
         )
         self._board_status = ttk.Label(
-            board, text="empty — run Compare models or a hyperparameter search",
-            style="CardMuted.TLabel", wraplength=620, justify="left")
+            board,
+            text="empty — run Compare models or a hyperparameter search",
+            style="CardMuted.TLabel",
+            wraplength=620,
+            justify="left",
+        )
         grid_append(board, self._board_status, sticky="w")
         board_frame = ttk.Frame(board, style="Card.TFrame")
         grid_append(board, board_frame, sticky="nsew", weight=True)
         self._board_tree = ttk.Treeview(board_frame, show="headings", height=6)
-        board_bar = ttk.Scrollbar(board_frame, orient="vertical",
-                                  command=self._board_tree.yview)
+        board_bar = ttk.Scrollbar(board_frame, orient="vertical", command=self._board_tree.yview)
         self._board_tree.configure(yscrollcommand=board_bar.set)
         self._board_tree.pack(side="left", fill="both", expand=True)
         board_bar.pack(side="right", fill="y")
         board_buttons = ttk.Frame(board, style="Card.TFrame")
         grid_append(board, board_buttons, sticky="w", pady=(6, 0))
         board_plot_btn = self._action_button(
-            board_buttons, "Plot leaderboard", self._ml_plot_leaderboard,
+            board_buttons,
+            "Plot leaderboard",
+            self._ml_plot_leaderboard,
             tooltip="The leaderboard as horizontal bars "
-                    "(plot_model_comparison) -- the cross-validated score "
-                    "per model, error bars where the table carries them.")
+            "(plot_model_comparison) -- the cross-validated score "
+            "per model, error bars where the table carries them.",
+        )
         board_plot_btn.pack(side="left")
         self._board_host = self._figure_host(board, height=300)
 
         # -- ensemble builder (voting + stacking, members by hand) ---- #
         ensemble = make_card(
-            page.grid, "Ensemble builder (voting & stacking)", span=2, row=7,
+            page.grid,
+            "Ensemble builder (voting & stacking)",
+            span=2,
+            row=7,
             column=0,
             subtitle="Combine several registry models into one ensemble: "
-                     "voting averages the members' predictions (soft = "
-                     "probability averaging, hard = majority vote; "
-                     "regression always averages), stacking trains a "
-                     "meta-learner on the members' cross-validated "
-                     "predictions. The same ensembles are registry models "
-                     "too (pick 'voting' / 'stacking' in the model "
-                     "combobox above for the default RF + SVM + KNN trio).",
+            "voting averages the members' predictions (soft = "
+            "probability averaging, hard = majority vote; "
+            "regression always averages), stacking trains a "
+            "meta-learner on the members' cross-validated "
+            "predictions. The same ensembles are registry models "
+            "too (pick 'voting' / 'stacking' in the model "
+            "combobox above for the default RF + SVM + KNN trio).",
         )
         ens_members = ttk.Frame(ensemble, style="Card.TFrame")
         grid_append(ensemble, ens_members, sticky="ew")
@@ -9191,136 +10281,174 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         for index, (token, label) in enumerate(_ENSEMBLE_MEMBER_LABELS):
             member_var = tk.BooleanVar(value=token in _ENSEMBLE_DEFAULT_MEMBERS)
             self._ens_member_vars[token] = member_var
-            member_check = ttk.Checkbutton(
-                ens_members, text=label, variable=member_var)
-            member_check.grid(row=index // 6, column=index % 6, sticky="w",
-                              padx=(0, 16), pady=2)
+            member_check = ttk.Checkbutton(ens_members, text=label, variable=member_var)
+            member_check.grid(row=index // 6, column=index % 6, sticky="w", padx=(0, 16), pady=2)
         ens_controls = ttk.Frame(ensemble, style="Card.TFrame")
         grid_append(ensemble, ens_controls, sticky="ew", pady=(6, 0))
         ens_controls.columnconfigure(1, weight=1)
         self._ens_kind_combo = ttk.Combobox(
-            ens_controls, state="readonly", width=18, values=("voting", "stacking"))
+            ens_controls, state="readonly", width=18, values=("voting", "stacking")
+        )
         self._ens_kind_combo.set("voting")
-        Tooltip(self._ens_kind_combo,
-                "voting = averaged predictions (the Voting.py family); "
-                "stacking = a meta-learner over the members' "
-                "cross-validated predictions (the Stacking.py family).")
+        Tooltip(
+            self._ens_kind_combo,
+            "voting = averaged predictions (the Voting.py family); "
+            "stacking = a meta-learner over the members' "
+            "cross-validated predictions (the Stacking.py family).",
+        )
         form_row(ens_controls, "kind", self._ens_kind_combo)
         self._ens_voting_combo = ttk.Combobox(
-            ens_controls, state="readonly", width=18, values=("soft", "hard"))
+            ens_controls, state="readonly", width=18, values=("soft", "hard")
+        )
         self._ens_voting_combo.set("soft")
-        Tooltip(self._ens_voting_combo,
-                "Classification only: soft averages class probabilities, "
-                "hard takes the majority vote. Regression ignores this.")
+        Tooltip(
+            self._ens_voting_combo,
+            "Classification only: soft averages class probabilities, "
+            "hard takes the majority vote. Regression ignores this.",
+        )
         form_row(ens_controls, "voting rule", self._ens_voting_combo)
-        self._ens_meta_combo = ttk.Combobox(
-            ens_controls, state="readonly", width=18)
+        self._ens_meta_combo = ttk.Combobox(ens_controls, state="readonly", width=18)
         self._ens_meta_combo.set("auto")
-        Tooltip(self._ens_meta_combo,
-                "Stacking only: the level-1 blender -- 'auto' picks "
-                "logistic_regression (classification) or ridge "
-                "(regression).")
+        Tooltip(
+            self._ens_meta_combo,
+            "Stacking only: the level-1 blender -- 'auto' picks "
+            "logistic_regression (classification) or ridge "
+            "(regression).",
+        )
         form_row(ens_controls, "meta model", self._ens_meta_combo)
         self._ens_meta_combo["values"] = ["auto"] + [
             token for token, _label in _ENSEMBLE_MEMBER_LABELS
         ]
         ens_buttons = ttk.Frame(ens_controls, style="Card.TFrame")
-        ens_buttons.grid(row=ens_controls.grid_size()[1], column=0,
-                         columnspan=2, sticky="w", pady=(8, 0))
+        ens_buttons.grid(
+            row=ens_controls.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
         ens_train_btn = self._action_button(
-            ens_buttons, "Train ensemble", self._ens_train, primary=True,
+            ens_buttons,
+            "Train ensemble",
+            self._ens_train,
+            primary=True,
             tooltip="Builds the ensemble from the ticked members with the "
-                    "chosen rule / meta-learner, fits it on the same 80/20 "
-                    "split as Train & evaluate, and renders the held-out "
-                    "metrics + figure in the Results card (Save report… "
-                    "and Save model bundle… then work on it too).",
+            "chosen rule / meta-learner, fits it on the same 80/20 "
+            "split as Train & evaluate, and renders the held-out "
+            "metrics + figure in the Results card (Save report… "
+            "and Save model bundle… then work on it too).",
         )
         ens_train_btn.pack(side="left")
         self._ens_summary = ttk.Label(
-            ens_buttons, text="—", style="CardMuted.TLabel",
-            wraplength=520, justify="left")
+            ens_buttons, text="—", style="CardMuted.TLabel", wraplength=520, justify="left"
+        )
         self._ens_summary.pack(side="left", padx=(10, 0))
 
         # -- model persistence (save trained bundles, reuse them) ----- #
         persist = make_card(
-            page.grid, "Model persistence (save & reuse)", span=2, row=8,
+            page.grid,
+            "Model persistence (save & reuse)",
+            span=2,
+            row=8,
             column=0,
             subtitle="One half saves the last trained model as a "
-                     "provenance-carrying bundle (joblib + metadata: "
-                     "feature order, hyperparameters, metrics, library "
-                     "versions, timestamp); the other half loads any "
-                     "bundle back, audits new data against its feature "
-                     "contract and predicts.",
+            "provenance-carrying bundle (joblib + metadata: "
+            "feature order, hyperparameters, metrics, library "
+            "versions, timestamp); the other half loads any "
+            "bundle back, audits new data against its feature "
+            "contract and predicts.",
         )
         persist.columnconfigure(0, weight=1)
         persist.columnconfigure(1, weight=1)
         save_side = ttk.Frame(persist, style="Card.TFrame")
         save_side.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
-        ttk.Label(save_side, text="Save the last trained model",
-                  style="CardTitle.TLabel").pack(anchor="w")
-        ttk.Label(save_side,
-                  text="writes <name>.joblib + a human-readable "
-                       "<name>.json sidecar",
-                  style="CardMuted.TLabel", wraplength=430,
-                  justify="left").pack(anchor="w", pady=(2, 0))
+        ttk.Label(save_side, text="Save the last trained model", style="CardTitle.TLabel").pack(
+            anchor="w"
+        )
+        ttk.Label(
+            save_side,
+            text="writes <name>.joblib + a human-readable <name>.json sidecar",
+            style="CardMuted.TLabel",
+            wraplength=430,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 0))
         save_bundle_btn = self._action_button(
-            save_side, "Save model bundle…", self._ml_save_model_bundle,
+            save_side,
+            "Save model bundle…",
+            self._ml_save_model_bundle,
             primary=True,
             tooltip="The ml save CLI story, mouse edition: the fitted "
-                    "estimator plus its provenance metadata (name, task, "
-                    "feature order, best hyperparameters, held-out "
-                    "metrics, pharmaml/sklearn/numpy versions, UTC "
-                    "timestamp) -- everything a model loaded two years "
-                    "later needs to know about itself.",
+            "estimator plus its provenance metadata (name, task, "
+            "feature order, best hyperparameters, held-out "
+            "metrics, pharmaml/sklearn/numpy versions, UTC "
+            "timestamp) -- everything a model loaded two years "
+            "later needs to know about itself.",
         )
         save_bundle_btn.pack(anchor="w", pady=(8, 0))
         self._ml_save_info = ttk.Label(
-            save_side, text="no run yet — train a model (or an ensemble) first",
-            style="CardMuted.TLabel", wraplength=430, justify="left")
+            save_side,
+            text="no run yet — train a model (or an ensemble) first",
+            style="CardMuted.TLabel",
+            wraplength=430,
+            justify="left",
+        )
         self._ml_save_info.pack(anchor="w", pady=(4, 0))
 
         load_side = ttk.Frame(persist, style="Card.TFrame")
         load_side.grid(row=0, column=1, sticky="nsew")
-        ttk.Label(load_side, text="Load a bundle & predict",
-                  style="CardTitle.TLabel").pack(anchor="w")
-        ttk.Label(load_side,
-                  text="any bundle this toolkit (or the CLI) ever wrote",
-                  style="CardMuted.TLabel", wraplength=430,
-                  justify="left").pack(anchor="w", pady=(2, 0))
+        ttk.Label(load_side, text="Load a bundle & predict", style="CardTitle.TLabel").pack(
+            anchor="w"
+        )
+        ttk.Label(
+            load_side,
+            text="any bundle this toolkit (or the CLI) ever wrote",
+            style="CardMuted.TLabel",
+            wraplength=430,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 0))
         load_buttons = ttk.Frame(load_side, style="Card.TFrame")
         load_buttons.pack(anchor="w", pady=(8, 0))
         load_bundle_btn = self._action_button(
-            load_buttons, "Open model bundle…", self._ml_load_model_bundle,
+            load_buttons,
+            "Open model bundle…",
+            self._ml_load_model_bundle,
             tooltip="Loads the estimator and its metadata sidecar; the "
-                    "card shows the provenance summary (name, task, "
-                    "trained-at, versions, feature count).")
+            "card shows the provenance summary (name, task, "
+            "trained-at, versions, feature count).",
+        )
         load_bundle_btn.pack(side="left")
         predict_csv_btn = self._action_button(
-            load_buttons, "Predict on CSV…", self._ml_predict_with_bundle,
+            load_buttons,
+            "Predict on CSV…",
+            self._ml_predict_with_bundle,
             tooltip="Opens a CSV, audits every column against the "
-                    "bundle's recorded feature contract (missing / extra "
-                    "/ reordered features are named up front), predicts "
-                    "with the loaded estimator and shows the result "
-                    "table; Save predictions CSV… writes it.")
+            "bundle's recorded feature contract (missing / extra "
+            "/ reordered features are named up front), predicts "
+            "with the loaded estimator and shows the result "
+            "table; Save predictions CSV… writes it.",
+        )
         predict_csv_btn.pack(side="left", padx=(10, 0))
         self._ml_bundle_info = ttk.Label(
-            load_side, text="no bundle loaded", style="CardMuted.TLabel",
-            wraplength=430, justify="left")
+            load_side,
+            text="no bundle loaded",
+            style="CardMuted.TLabel",
+            wraplength=430,
+            justify="left",
+        )
         self._ml_bundle_info.pack(anchor="w", pady=(4, 0))
         predict_buttons = ttk.Frame(load_side, style="Card.TFrame")
         predict_buttons.pack(anchor="w", pady=(4, 0))
         save_pred_btn = self._action_button(
-            predict_buttons, "Save predictions CSV…", self._ml_save_predictions,
+            predict_buttons,
+            "Save predictions CSV…",
+            self._ml_save_predictions,
             tooltip="The last bundle prediction table -- input columns "
-                    "plus the prediction column (probabilities too for "
-                    "classifiers).")
+            "plus the prediction column (probabilities too for "
+            "classifiers).",
+        )
         save_pred_btn.pack(side="left")
         self._predict_tree_frame = ttk.Frame(load_side, style="Card.TFrame")
         self._predict_tree_frame.pack(fill="both", expand=True, pady=(6, 0))
-        self._predict_tree = ttk.Treeview(self._predict_tree_frame,
-                                          show="headings", height=7)
-        predict_bar = ttk.Scrollbar(self._predict_tree_frame, orient="vertical",
-                                    command=self._predict_tree.yview)
+        self._predict_tree = ttk.Treeview(self._predict_tree_frame, show="headings", height=7)
+        predict_bar = ttk.Scrollbar(
+            self._predict_tree_frame, orient="vertical", command=self._predict_tree.yview
+        )
         self._predict_tree.configure(yscrollcommand=predict_bar.set)
         self._predict_tree.pack(side="left", fill="both", expand=True)
         predict_bar.pack(side="right", fill="y")
@@ -9328,109 +10456,145 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # -- applicability domain (100x-118: the uploaded script as a
         #    first-class card) ------------------------------------------ #
         ad = make_card(
-            page.grid, "Applicability domain & prediction reliability",
-            span=2, row=9, column=0,
+            page.grid,
+            "Applicability domain & prediction reliability",
+            span=2,
+            row=9,
+            column=0,
             subtitle="The uploaded Applicability_domain_analysis.py: is the "
-                     "query compound inside the training descriptor space "
-                     "(mean kNN distance vs a percentile threshold), and how "
-                     "much does the model's answer wobble under bootstrap "
-                     "resampling (ensemble spread vs its own training-side "
-                     "threshold)? Both answers fold into one reliable / "
-                     "not-reliable verdict per compound.",
+            "query compound inside the training descriptor space "
+            "(mean kNN distance vs a percentile threshold), and how "
+            "much does the model's answer wobble under bootstrap "
+            "resampling (ensemble spread vs its own training-side "
+            "threshold)? Both answers fold into one reliable / "
+            "not-reliable verdict per compound.",
         )
         ad_source_row = ttk.Frame(ad, style="Card.TFrame")
         grid_append(ad, ad_source_row, sticky="ew")
-        ttk.Label(ad_source_row, text="model source",
-                  style="CardMuted.TLabel").pack(side="left")
+        ttk.Label(ad_source_row, text="model source", style="CardMuted.TLabel").pack(side="left")
         self._ad_source_combo = ttk.Combobox(
-            ad_source_row, state="readonly", width=22,
-            values=("last trained model", "loaded bundle"))
-        Tooltip(self._ad_source_combo,
-                "The last trained model (or ensemble) carries its own "
-                "80/20 split -- the query set is its held-out rows, no "
-                "file picking needed. A loaded bundle (the persistence "
-                "card) needs the original train and test CSVs, exactly "
-                "like the uploaded script's optimized train/test sets.")
+            ad_source_row,
+            state="readonly",
+            width=22,
+            values=("last trained model", "loaded bundle"),
+        )
+        Tooltip(
+            self._ad_source_combo,
+            "The last trained model (or ensemble) carries its own "
+            "80/20 split -- the query set is its held-out rows, no "
+            "file picking needed. A loaded bundle (the persistence "
+            "card) needs the original train and test CSVs, exactly "
+            "like the uploaded script's optimized train/test sets.",
+        )
         self._ad_source_combo.set("last trained model")
         self._ad_source_combo.pack(side="left", padx=(8, 0))
-        self._ad_source_combo.bind("<<ComboboxSelected>>",
-                                   self._ml_ad_source_changed)
-        self._ad_source_info = ttk.Label(ad_source_row, text="no run yet",
-                                         style="CardMuted.TLabel",
-                                         wraplength=560, justify="left")
+        self._ad_source_combo.bind("<<ComboboxSelected>>", self._ml_ad_source_changed)
+        self._ad_source_info = ttk.Label(
+            ad_source_row,
+            text="no run yet",
+            style="CardMuted.TLabel",
+            wraplength=560,
+            justify="left",
+        )
         self._ad_source_info.pack(side="left", padx=(12, 0))
         # bundle-mode file pickers (only meaningful for the bundle source)
         self._ad_bundle_row = ttk.Frame(ad, style="Card.TFrame")
         grid_append(ad, self._ad_bundle_row, sticky="ew", pady=(6, 0))
         ad_train_btn = self._action_button(
-            self._ad_bundle_row, "Open train CSV…", self._ml_ad_pick_train_csv,
+            self._ad_bundle_row,
+            "Open train CSV…",
+            self._ml_ad_pick_train_csv,
             tooltip="The bundle mode's training table -- the descriptor "
-                    "columns the domain is measured in and the target the "
-                    "bootstrap ensemble refits on (the upload's "
-                    "Optimized_Train_set CSV).")
+            "columns the domain is measured in and the target the "
+            "bootstrap ensemble refits on (the upload's "
+            "Optimized_Train_set CSV).",
+        )
         ad_train_btn.pack(side="left")
-        self._ad_train_label = ttk.Label(self._ad_bundle_row, text="no file",
-                                         style="CardMuted.TLabel",
-                                         wraplength=200, justify="left")
+        self._ad_train_label = ttk.Label(
+            self._ad_bundle_row,
+            text="no file",
+            style="CardMuted.TLabel",
+            wraplength=200,
+            justify="left",
+        )
         self._ad_train_label.pack(side="left", padx=(8, 0))
         ad_test_btn = self._action_button(
-            self._ad_bundle_row, "Open test CSV…", self._ml_ad_pick_test_csv,
+            self._ad_bundle_row,
+            "Open test CSV…",
+            self._ml_ad_pick_test_csv,
             tooltip="The bundle mode's query table -- the compounds judged "
-                    "inside/outside the domain (the upload's "
-                    "Optimized_Test_set CSV).")
+            "inside/outside the domain (the upload's "
+            "Optimized_Test_set CSV).",
+        )
         ad_test_btn.pack(side="left", padx=(14, 0))
-        self._ad_test_label = ttk.Label(self._ad_bundle_row, text="no file",
-                                        style="CardMuted.TLabel",
-                                        wraplength=200, justify="left")
+        self._ad_test_label = ttk.Label(
+            self._ad_bundle_row,
+            text="no file",
+            style="CardMuted.TLabel",
+            wraplength=200,
+            justify="left",
+        )
         self._ad_test_label.pack(side="left", padx=(8, 0))
         ad_knobs = ttk.Frame(ad, style="Card.TFrame")
         grid_append(ad, ad_knobs, sticky="ew", pady=(6, 0))
-        self._ad_k_spin = ttk.Spinbox(ad_knobs, from_=1, to=20, increment=1,
-                                      width=8)
+        self._ad_k_spin = ttk.Spinbox(ad_knobs, from_=1, to=20, increment=1, width=8)
         self._ad_k_spin.set("5")
-        Tooltip(self._ad_k_spin,
-                "Nearest neighbours of the distance domain (the upload's "
-                "k = 5). Training distances exclude each point's own "
-                "self-match, so the threshold is not deflated.")
+        Tooltip(
+            self._ad_k_spin,
+            "Nearest neighbours of the distance domain (the upload's "
+            "k = 5). Training distances exclude each point's own "
+            "self-match, so the threshold is not deflated.",
+        )
         form_row(ad_knobs, "k (neighbours)", self._ad_k_spin)
-        self._ad_pct_spin = ttk.Spinbox(ad_knobs, from_=50.0, to=99.9,
-                                        increment=0.5, width=8)
+        self._ad_pct_spin = ttk.Spinbox(ad_knobs, from_=50.0, to=99.9, increment=0.5, width=8)
         self._ad_pct_spin.set("95.0")
-        Tooltip(self._ad_pct_spin,
-                "Percentile of the training distances (and of the "
-                "training-side ensemble spread) both thresholds are cut "
-                "at -- the upload's 95th.")
+        Tooltip(
+            self._ad_pct_spin,
+            "Percentile of the training distances (and of the "
+            "training-side ensemble spread) both thresholds are cut "
+            "at -- the upload's 95th.",
+        )
         form_row(ad_knobs, "threshold percentile", self._ad_pct_spin)
-        self._ad_boot_spin = ttk.Spinbox(ad_knobs, from_=0, to=200,
-                                         increment=1, width=8)
+        self._ad_boot_spin = ttk.Spinbox(ad_knobs, from_=0, to=200, increment=1, width=8)
         self._ad_boot_spin.set("30")
-        Tooltip(self._ad_boot_spin,
-                "Bootstrap ensemble size for the uncertainty half (the "
-                "upload's 30 CatBoost models -- here clones of the trained "
-                "estimator itself). 0 = kNN-only quick pass, no extra fits. "
-                "Every member predicts on the query AND training rows in "
-                "one pass, so this costs half the upload's 2 x n fits.")
+        Tooltip(
+            self._ad_boot_spin,
+            "Bootstrap ensemble size for the uncertainty half (the "
+            "upload's 30 CatBoost models -- here clones of the trained "
+            "estimator itself). 0 = kNN-only quick pass, no extra fits. "
+            "Every member predicts on the query AND training rows in "
+            "one pass, so this costs half the upload's 2 x n fits.",
+        )
         form_row(ad_knobs, "bootstrap models", self._ad_boot_spin)
         ad_buttons = ttk.Frame(ad, style="Card.TFrame")
         grid_append(ad, ad_buttons, sticky="ew", pady=(8, 0))
         ad_run_btn = self._action_button(
-            ad_buttons, "Analyse applicability domain", self._ml_ad_run,
+            ad_buttons,
+            "Analyse applicability domain",
+            self._ml_ad_run,
             primary=True,
             tooltip="Runs the upload's workflow end-to-end: standardise the "
-                    "descriptor space, kNN distances + percentile "
-                    "threshold, bootstrap-ensemble spread + its own "
-                    "threshold, then the per-compound reliability table "
-                    "and the combined two-panel figure. The status bar "
-                    "carries per-member progress for the bootstrap fits.")
+            "descriptor space, kNN distances + percentile "
+            "threshold, bootstrap-ensemble spread + its own "
+            "threshold, then the per-compound reliability table "
+            "and the combined two-panel figure. The status bar "
+            "carries per-member progress for the bootstrap fits.",
+        )
         ad_run_btn.pack(side="left")
         ad_save_btn = self._action_button(
-            ad_buttons, "Save AD results CSV…", self._ml_ad_save,
-            tooltip="The last reliability table -- the upload's "
-                    "Applicability_Domain_Results.csv.")
+            ad_buttons,
+            "Save AD results CSV…",
+            self._ml_ad_save,
+            tooltip="The last reliability table -- the upload's Applicability_Domain_Results.csv.",
+        )
         ad_save_btn.pack(side="left", padx=(10, 0))
         self._ad_status = ttk.Label(
-            ad_buttons, text="run the analysis to see the verdict",
-            style="CardMuted.TLabel", wraplength=520, justify="left")
+            ad_buttons,
+            text="run the analysis to see the verdict",
+            style="CardMuted.TLabel",
+            wraplength=520,
+            justify="left",
+        )
         self._ad_status.pack(side="left", padx=(10, 0))
         ad_results = ttk.Frame(ad, style="Card.TFrame")
         grid_append(ad, ad_results, sticky="nsew", pady=(6, 0), weight=True)
@@ -9442,8 +10606,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ad_table_frame = ttk.Frame(ad_results, style="Card.TFrame")
         ad_table_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         self._ad_tree = ttk.Treeview(ad_table_frame, show="headings", height=8)
-        ad_bar = ttk.Scrollbar(ad_table_frame, orient="vertical",
-                               command=self._ad_tree.yview)
+        ad_bar = ttk.Scrollbar(ad_table_frame, orient="vertical", command=self._ad_tree.yview)
         self._ad_tree.configure(yscrollcommand=ad_bar.set)
         self._ad_tree.pack(side="left", fill="both", expand=True)
         ad_bar.pack(side="right", fill="y")
@@ -9472,55 +10635,58 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         frame can become the active dataset with one confirmation, so
         the next Train run uses exactly what the rar script produced.
         """
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "the numeric cleanup"):
+        if not self._require_pharmaml() or not self._require("pandas", "the numeric cleanup"):
             return
         if getattr(self, "_ml_frame", None) is None:
             messagebox.showwarning("No dataset", "Load a dataset first.")
             return
         frame = self._ml_frame
-        keep_raw = [token.strip() for token in
-                    self._ml_keep_entry.get().split(",") if token.strip()]
-        lower_map = {str(column).lower(): column
-                     for column in frame.columns}
-        keep_cols = [lower_map[token.lower()] for token in keep_raw
-                     if token.lower() in lower_map]
+        keep_raw = [
+            token.strip() for token in self._ml_keep_entry.get().split(",") if token.strip()
+        ]
+        lower_map = {str(column).lower(): column for column in frame.columns}
+        keep_cols = [lower_map[token.lower()] for token in keep_raw if token.lower() in lower_map]
         target = self._target_combo.get() or None
 
         def work() -> Any:
             from pharmaml.ml import clean_numeric_frame
 
-            return clean_numeric_frame(frame, target_col=target,
-                                       keep_cols=keep_cols)
+            return clean_numeric_frame(frame, target_col=target, keep_cols=keep_cols)
 
         def render(cleaned: Any) -> None:
             self._ml_cleaned_frame = cleaned
-            dropped = [str(column) for column in frame.columns
-                       if column not in list(cleaned.columns)]
+            dropped = [
+                str(column) for column in frame.columns if column not in list(cleaned.columns)
+            ]
             self._ml_info.configure(
-                text=(f"cleaned: {len(cleaned):,} rows × "
-                      f"{len(cleaned.columns)} numeric columns · dropped "
-                      f"{len(dropped)}"
-                      + (f": {', '.join(dropped[:8])}"
-                         + (" …" if len(dropped) > 8 else "")
-                         if dropped else " (already numeric)")))
+                text=(
+                    f"cleaned: {len(cleaned):,} rows × "
+                    f"{len(cleaned.columns)} numeric columns · dropped "
+                    f"{len(dropped)}"
+                    + (
+                        f": {', '.join(dropped[:8])}" + (" …" if len(dropped) > 8 else "")
+                        if dropped
+                        else " (already numeric)"
+                    )
+                )
+            )
             if dropped and messagebox.askyesno(
-                    "Use the cleaned frame?",
-                    f"Dropped {len(dropped)} non-numeric column(s).\n\n"
-                    "Make the cleaned numeric frame the active dataset\n"
-                    "(the next Train / leaderboard run uses it)?"):
+                "Use the cleaned frame?",
+                f"Dropped {len(dropped)} non-numeric column(s).\n\n"
+                "Make the cleaned numeric frame the active dataset\n"
+                "(the next Train / leaderboard run uses it)?",
+            ):
                 self._ml_frame = cleaned
                 columns = [str(column) for column in cleaned.columns]
                 self._preview_tree.delete(*self._preview_tree.get_children())
                 self._preview_tree["columns"] = columns
                 for column in columns:
                     self._preview_tree.heading(column, text=column)
-                    self._preview_tree.column(column, width=96, minwidth=64,
-                                              stretch=True)
+                    self._preview_tree.column(column, width=96, minwidth=64, stretch=True)
                 for _, row in cleaned.head(12).iterrows():
                     self._preview_tree.insert(
-                        "", "end",
-                        values=[_cell_text(value) for value in row.tolist()])
+                        "", "end", values=[_cell_text(value) for value in row.tolist()]
+                    )
                 chosen = default_target_column(cleaned) or columns[-1]
                 self._target_combo["values"] = columns
                 self._target_combo.set(chosen)
@@ -9531,11 +10697,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _ml_clean_save(self) -> None:
         frame = getattr(self, "_ml_cleaned_frame", None)
         if frame is None:
-            messagebox.showinfo(
-                "Nothing to save", "Run the numeric cleanup first.")
+            messagebox.showinfo("Nothing to save", "Run the numeric cleanup first.")
             return
-        self._save_frame_dialog(frame, "Save the cleaned dataset",
-                                "cleaned_dataset.csv")
+        self._save_frame_dialog(frame, "Save the cleaned dataset", "cleaned_dataset.csv")
 
     def _ml_load_example(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
@@ -9573,9 +10737,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._target_combo["values"] = columns
         chosen = default_target_column(frame) or columns[-1]
         self._target_combo.set(chosen)
-        self._ml_info.configure(
-            text=f"{path.name} — {len(frame):,} rows × {len(columns)} columns"
-        )
+        self._ml_info.configure(text=f"{path.name} — {len(frame):,} rows × {len(columns)} columns")
         self._refresh_model_choices(self._infer_task(chosen, frame))
 
     def _infer_task(self, target: str, frame: Any = None) -> str:
@@ -9673,8 +10835,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if selection == "auto" or task not in ("regression", "classification"):
             self._ml_params_status.configure(
                 text="pick a model to edit its hyperparameters"
-                     + ("" if selection != "auto"
-                        else " (the model combobox above)"))
+                + ("" if selection != "auto" else " (the model combobox above)")
+            )
             return
         try:
             from pharmaml.ml.models import (
@@ -9688,20 +10850,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             grid = dict(spec.param_grid)
         except Exception as exc:  # noqa: BLE001 - unusable model, say so
             self._ml_params_status.configure(
-                text=f"{selection} could not be built here ({exc}) — "
-                     "its defaults are used as-is")
+                text=f"{selection} could not be built here ({exc}) — its defaults are used as-is"
+            )
             return
         if not grid:
             self._ml_params_status.configure(
                 text=f"{spec.name} exposes no registry search grid — its "
-                     "estimator defaults are used as-is")
+                "estimator defaults are used as-is"
+            )
             return
         saved = self._ml_params_saved().get(selection, {})
         for index, key in enumerate(grid):
             row = ttk.Frame(host, style="Card.TFrame")
             row.grid(row=index, column=0, sticky="ew", pady=(0, 4))
-            ttk.Label(row, text=key, style="Field.TLabel").grid(
-                row=0, column=0, sticky="w")
+            ttk.Label(row, text=key, style="Field.TLabel").grid(row=0, column=0, sticky="w")
             entry = ttk.Entry(row, width=16)
             entry.grid(row=0, column=1, sticky="w", padx=(10, 0))
             # BLANK means "keep the estimator's default" — the hint
@@ -9718,14 +10880,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ttk.Label(
                 row,
                 text=f"default {default_text} · grid {grid_hint}",
-                style="CardMuted.TLabel", wraplength=430, justify="left",
+                style="CardMuted.TLabel",
+                wraplength=430,
+                justify="left",
             ).grid(row=0, column=2, sticky="w", padx=(10, 0))
-        pinned = sum(1 for key, entry in self._ml_param_entries.items()
-                     if entry.get().strip())
+        pinned = sum(1 for key, entry in self._ml_param_entries.items() if entry.get().strip())
         self._ml_params_status.configure(
             text=f"{spec.name} · {len(grid)} knob(s) · blank = default · "
-                 f"{pinned} pinned · pinned keys are excluded from the "
-                 "grid search")
+            f"{pinned} pinned · pinned keys are excluded from the "
+            "grid search"
+        )
 
     def _ml_params_reset(self) -> None:
         """The manual card's own reset — every field back to default.
@@ -9741,7 +10905,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._ml_refresh_hyperparam_panel()
         if getattr(self, "_ml_param_entries", {}):
             self._ml_params_status.configure(
-                text="manual values cleared — estimator defaults in effect")
+                text="manual values cleared — estimator defaults in effect"
+            )
 
     def _ml_manual_params(self, model_name: str, task: str) -> dict[str, Any] | None:
         """Parse the manual fields into ``train_model``'s pinned values.
@@ -9775,7 +10940,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._require_pharmaml():
             return
         if not self._require("pandas", "model training") or not self._require(
-                "sklearn", "model training"
+            "sklearn", "model training"
         ):
             return
         if self._ml_frame is None:
@@ -9809,8 +10974,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # pre-flight convention.
         try:
             model_params = self._ml_manual_params(model_name, task)
-            cv = parse_int(self._ml_cv_spin.get(), "cv folds",
-                           minimum=2, maximum=10)
+            cv = parse_int(self._ml_cv_spin.get(), "cv folds", minimum=2, maximum=10)
         except ValueError as exc:
             messagebox.showwarning("Check the manual settings", str(exc))
             return
@@ -9826,11 +10990,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 frame[numeric], y, random_state=42
             )
             trained = train_model(
-                model_name, task, x_train, y_train, tune=tune, cv=cv, n_jobs=1,
+                model_name,
+                task,
+                x_train,
+                y_train,
+                tune=tune,
+                cv=cv,
+                n_jobs=1,
                 model_params=model_params,
             )
             report = evaluate_model(
-                trained.model, x_test, y_test, task,
+                trained.model,
+                x_test,
+                y_test,
+                task,
                 keep_predictions=(task == "regression"),
             )
             return trained, report, task, dropped, x_train, y_train, x_test, y_test
@@ -9841,8 +11014,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # the Check-CSV button audits new data against it (the training
             # target rides along as the automatic --target drop); the AD
             # card reuses the split for the domain + query sets.
-            self._ml_last_run = (trained, report, task, x_train, y_train,
-                                 x_test, y_test, target)
+            self._ml_last_run = (trained, report, task, x_train, y_train, x_test, y_test, target)
             gp = self._ml_gp_sigma(trained, x_test)
             self._fill_ml_metrics(trained, report, task, dropped, gp=gp)
             self._ml_ad_refresh_source()
@@ -9881,9 +11053,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                             },
                         )
                 else:
-                    figure = plot_confusion_matrix(
-                        report.confusion, labels=report.labels
-                    )
+                    figure = plot_confusion_matrix(report.confusion, labels=report.labels)
                 self._render_figure(self._ml_host, figure)
             except Exception as exc:  # noqa: BLE001
                 self._show_error("Plot failed", exc)
@@ -9896,7 +11066,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._require_pharmaml():
             return
         if not self._require("pandas", "ensemble training") or not self._require(
-                "sklearn", "ensemble training"
+            "sklearn", "ensemble training"
         ):
             return
         if self._ml_frame is None:
@@ -9914,12 +11084,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "first (the Chemistry tab's feature factory).",
             )
             return
-        members = [token for token, var in self._ens_member_vars.items()
-                   if var.get()]
+        members = [token for token, var in self._ens_member_vars.items() if var.get()]
         if not members:
-            messagebox.showwarning(
-                "No members", "Tick at least one base model for the ensemble."
-            )
+            messagebox.showwarning("No members", "Tick at least one base model for the ensemble.")
             return
         kind = self._ens_kind_combo.get()
         voting_rule = self._ens_voting_combo.get()
@@ -9947,8 +11114,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             else:
                 meta = meta_token if meta_token != "auto" else None
                 estimator = build_stacking(task, members, meta_model=meta)
-                name = (f"stacking ({'+'.join(members)}"
-                        f" → {meta_token})")
+                name = f"stacking ({'+'.join(members)} → {meta_token})"
             import time as _time
 
             started = _time.perf_counter()
@@ -9965,27 +11131,31 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 fit_seconds=fit_seconds,
             )
             report = evaluate_model(
-                estimator, x_test, y_test, task,
+                estimator,
+                x_test,
+                y_test,
+                task,
                 keep_predictions=(task == "regression"),
             )
             return trained, report, task, dropped, x_train, y_train, x_test, y_test
 
         def render(payload: Any) -> None:
             trained, report, task, dropped, x_train, y_train, x_test, y_test = payload
-            self._ml_last_run = (trained, report, task, x_train, y_train,
-                                 x_test, y_test, target)
+            self._ml_last_run = (trained, report, task, x_train, y_train, x_test, y_test, target)
             self._fill_ml_metrics(trained, report, task, dropped)
             self._ml_ad_refresh_source()
             members_named = "+".join(members)
             self._ens_summary.configure(
-                text=(f"{kind} ({members_named}) trained — metrics in the "
-                      "Results card; Save report… / Save model bundle… "
-                      "carry it forward"),
+                text=(
+                    f"{kind} ({members_named}) trained — metrics in the "
+                    "Results card; Save report… / Save model bundle… "
+                    "carry it forward"
+                ),
                 style="Field.TLabel",
             )
             self._ml_save_info.configure(
-                text=(f"last run: {trained.name} — ready to save as a "
-                      "bundle"))
+                text=(f"last run: {trained.name} — ready to save as a bundle")
+            )
             if not self.deps.get("matplotlib"):
                 return
             try:
@@ -10005,15 +11175,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         },
                     )
                 else:
-                    figure = plot_confusion_matrix(
-                        report.confusion, labels=report.labels
-                    )
+                    figure = plot_confusion_matrix(report.confusion, labels=report.labels)
                 self._render_figure(self._ml_host, figure)
             except Exception as exc:  # noqa: BLE001
                 self._show_error("Plot failed", exc)
 
-        self._start_job(f"training {kind} ensemble ({len(members)} members)",
-                        work, render)
+        self._start_job(f"training {kind} ensemble ({len(members)} members)", work, render)
 
     # -- model persistence card ----------------------------------------- #
     def _ml_save_model_bundle(self) -> None:
@@ -10037,11 +11204,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not path:
             return
         frame = self._ml_frame
-        numeric, _dropped = numeric_feature_columns(frame, target) if (
-            frame is not None) else ([], [])
+        numeric, _dropped = (
+            numeric_feature_columns(frame, target) if (frame is not None) else ([], [])
+        )
         metrics: dict[str, Any] = {}
-        for key in ("r2", "rmse", "mae", "accuracy", "balanced_accuracy",
-                    "precision_macro", "recall_macro", "mcc", "roc_auc"):
+        for key in (
+            "r2",
+            "rmse",
+            "mae",
+            "accuracy",
+            "balanced_accuracy",
+            "precision_macro",
+            "recall_macro",
+            "mcc",
+            "roc_auc",
+        ):
             value = getattr(report, key, None)
             if isinstance(value, (int, float)):
                 metrics[key] = float(value)
@@ -10065,14 +11242,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(payload: Any) -> None:
             written, sidecar = payload
             self._ml_save_info.configure(
-                text=(f"bundle written: {written.name} (+ {sidecar.name}) — "
-                      "load it back below or with the CLI"),
+                text=(
+                    f"bundle written: {written.name} (+ {sidecar.name}) — "
+                    "load it back below or with the CLI"
+                ),
                 style="Field.TLabel",
             )
             messagebox.showinfo(
                 "Saved",
-                f"Model bundle written to\n{written}\n\n"
-                f"Provenance sidecar: {sidecar}",
+                f"Model bundle written to\n{written}\n\nProvenance sidecar: {sidecar}",
             )
 
         self._start_job("saving model bundle", work, render)
@@ -10099,14 +11277,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             model, metadata = payload
             self._ml_bundle = (model, metadata, bundle_path)
             features = metadata.get("features")
-            feature_text = (f"{len(features)} features"
-                            if features else "feature count contract")
+            feature_text = f"{len(features)} features" if features else "feature count contract"
             self._ml_bundle_info.configure(
-                text=(f"{metadata.get('name', '?')} · {metadata.get('task', '?')}"
-                      f" · trained {str(metadata.get('trained_at', '?'))[:19]}"
-                      f" · {feature_text} · pharmaml "
-                      f"{metadata.get('pharmaml_version', '?')} · sklearn "
-                      f"{metadata.get('sklearn_version', '?')}"),
+                text=(
+                    f"{metadata.get('name', '?')} · {metadata.get('task', '?')}"
+                    f" · trained {str(metadata.get('trained_at', '?'))[:19]}"
+                    f" · {feature_text} · pharmaml "
+                    f"{metadata.get('pharmaml_version', '?')} · sklearn "
+                    f"{metadata.get('sklearn_version', '?')}"
+                ),
                 style="Field.TLabel",
             )
             self._ml_predictions = None
@@ -10116,12 +11295,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _ml_predict_with_bundle(self) -> None:
         """Audit a CSV against the loaded bundle's contract and predict."""
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "bundle prediction"):
+        if not self._require_pharmaml() or not self._require("pandas", "bundle prediction"):
             return
         if self._ml_bundle is None:
-            messagebox.showwarning(
-                "No bundle", "Open a model bundle first (the button above).")
+            messagebox.showwarning("No bundle", "Open a model bundle first (the button above).")
             return
         path = filedialog.askopenfilename(
             title="Open the data to predict on",
@@ -10147,8 +11324,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             audit = validate_bundle_input(bundle_path, frame)
             if not audit.ok:
                 raise ValueError(
-                    "the CSV does not satisfy the bundle's feature "
-                    f"contract:\n{audit}"
+                    f"the CSV does not satisfy the bundle's feature contract:\n{audit}"
                 )
             features = metadata.get("features")
             if features:
@@ -10175,16 +11351,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             for column in columns:
                 width = 190 if column.lower() in ("smiles", "prediction") else 110
                 tree.heading(column, text=column)
-                tree.column(column, width=width, minwidth=56,
-                            stretch=(column.lower() in ("smiles", "prediction")))
+                tree.column(
+                    column,
+                    width=width,
+                    minwidth=56,
+                    stretch=(column.lower() in ("smiles", "prediction")),
+                )
             for row in result.head(30).to_dict("records"):
-                tree.insert("", "end", values=[
-                    _cell_text(row[column], limit=40) for column in columns
-                ])
+                tree.insert(
+                    "", "end", values=[_cell_text(row[column], limit=40) for column in columns]
+                )
             self._ml_bundle_info.configure(
-                text=(f"predicted {len(result)} row(s) — audit OK "
-                      f"({bundle_path.name}); Save predictions CSV… writes "
-                      "the full table"),
+                text=(
+                    f"predicted {len(result)} row(s) — audit OK "
+                    f"({bundle_path.name}); Save predictions CSV… writes "
+                    "the full table"
+                ),
                 style="Field.TLabel",
             )
 
@@ -10193,11 +11375,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _ml_save_predictions(self) -> None:
         frame = getattr(self, "_ml_predictions", None)
         if frame is None:
-            messagebox.showinfo(
-                "Nothing to save", "Predict with a loaded bundle first.")
+            messagebox.showinfo("Nothing to save", "Predict with a loaded bundle first.")
             return
-        self._save_frame_dialog(frame, "Save the predictions",
-                                "predictions.csv", "Predictions")
+        self._save_frame_dialog(frame, "Save the predictions", "predictions.csv", "Predictions")
 
     # -- applicability-domain card (100x-118: the upload) ------------- #
     def _ml_ad_refresh_source(self) -> None:
@@ -10217,27 +11397,35 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not bundle_mode:
             if self._ml_last_run is None:
                 self._ad_source_info.configure(
-                    text="no run yet — train a model (or an ensemble) first")
+                    text="no run yet — train a model (or an ensemble) first"
+                )
             else:
                 trained = self._ml_last_run[0]
                 x_train, x_test = self._ml_last_run[3], self._ml_last_run[5]
                 self._ad_source_info.configure(
-                    text=(f"{trained.name} — {len(x_train)} train / "
-                          f"{len(x_test)} held-out query rows (its own "
-                          "80/20 split)"),
-                    style="Field.TLabel")
+                    text=(
+                        f"{trained.name} — {len(x_train)} train / "
+                        f"{len(x_test)} held-out query rows (its own "
+                        "80/20 split)"
+                    ),
+                    style="Field.TLabel",
+                )
             return
         if self._ml_bundle is None:
             self._ad_source_info.configure(
-                text="no bundle loaded — open one in the persistence card above")
+                text="no bundle loaded — open one in the persistence card above"
+            )
             return
         _model, metadata, _path = self._ml_bundle
         features = metadata.get("features")
         self._ad_source_info.configure(
-            text=(f"{metadata.get('name', '?')} · {metadata.get('task', '?')}"
-                  f" · {len(features) if features else '?'} features — pick "
-                  "the original train + test CSVs below"),
-            style="Field.TLabel")
+            text=(
+                f"{metadata.get('name', '?')} · {metadata.get('task', '?')}"
+                f" · {len(features) if features else '?'} features — pick "
+                "the original train + test CSVs below"
+            ),
+            style="Field.TLabel",
+        )
 
     def _ml_ad_source_changed(self, _event: Any = None) -> None:
         """Combobox callback — re-render the source line."""
@@ -10252,8 +11440,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not path:
             return
         self._ml_ad_train_path = Path(path)
-        self._ad_train_label.configure(text=Path(path).name,
-                                        style="Field.TLabel")
+        self._ad_train_label.configure(text=Path(path).name, style="Field.TLabel")
 
     def _ml_ad_pick_test_csv(self) -> None:
         """Pick the bundle mode's query CSV."""
@@ -10264,8 +11451,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not path:
             return
         self._ml_ad_test_path = Path(path)
-        self._ad_test_label.configure(text=Path(path).name,
-                                      style="Field.TLabel")
+        self._ad_test_label.configure(text=Path(path).name, style="Field.TLabel")
 
     def _ml_ad_bundle_frames(self) -> tuple[Any, Any, Any, Any, Any]:
         """Load + contract-check the bundle mode's train/test CSVs.
@@ -10285,14 +11471,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self._ml_ad_train_path is None or self._ml_ad_test_path is None:
             raise ValueError(
                 "pick both the training and the test CSV first (the "
-                "bundle mode needs the original tables).")
+                "bundle mode needs the original tables)."
+            )
         train_frame = pd.read_csv(self._ml_ad_train_path)
         test_frame = pd.read_csv(self._ml_ad_test_path)
         target = metadata.get("target")
         if target is None or target not in train_frame.columns:
             raise ValueError(
                 "the training CSV must carry the bundle's target column "
-                f"({target!r}) -- the bootstrap ensemble refits on it.")
+                f"({target!r}) -- the bootstrap ensemble refits on it."
+            )
         y_train = train_frame[target]
         features = metadata.get("features")
         if features:
@@ -10301,7 +11489,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if missing_train or missing_test:
                 raise ValueError(
                     "the CSVs are missing recorded feature column(s): "
-                    f"train {missing_train or '—'} · test {missing_test or '—'}")
+                    f"train {missing_train or '—'} · test {missing_test or '—'}"
+                )
             # selecting by the recorded names IS the contract (missing /
             # extra / reordered all resolved); the SMILES column survives
             # outside the matrices as table metadata
@@ -10313,13 +11502,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             audit = validate_bundle_input(bundle_path, train_features)
             if not audit.ok:
                 raise ValueError(
-                    "the training CSV does not satisfy the bundle's feature "
-                    f"contract:\n{audit}")
+                    f"the training CSV does not satisfy the bundle's feature contract:\n{audit}"
+                )
             audit = validate_bundle_input(bundle_path, test_frame.select_dtypes("number"))
             if not audit.ok:
                 raise ValueError(
-                    "the test CSV does not satisfy the bundle's feature "
-                    f"contract:\n{audit}")
+                    f"the test CSV does not satisfy the bundle's feature contract:\n{audit}"
+                )
             x_train = train_features.select_dtypes("number")
             x_test = test_frame.select_dtypes("number")
         return model, x_train, y_train, x_test, test_frame
@@ -10327,28 +11516,32 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _ml_ad_run(self) -> None:
         """The uploaded workflow, one click (see the card subtitle)."""
         if not self._require_pharmaml() or not self._require(
-                "sklearn", "applicability-domain analysis"):
+            "sklearn", "applicability-domain analysis"
+        ):
             return
         mode = self._ad_source_combo.get()
         if mode == "loaded bundle" and self._ml_bundle is None:
             messagebox.showwarning(
-                "No bundle", "Open a model bundle first (the persistence "
-                "card above), or switch the source to the last trained model.")
+                "No bundle",
+                "Open a model bundle first (the persistence "
+                "card above), or switch the source to the last trained model.",
+            )
             return
         if mode != "loaded bundle" and self._ml_last_run is None:
             messagebox.showwarning(
                 "No run yet",
                 "Train a model (or an ensemble) first -- the analysis "
-                "reuses its split, or switch the source to a loaded bundle.")
+                "reuses its split, or switch the source to a loaded bundle.",
+            )
             return
         try:
-            k = parse_int(self._ad_k_spin.get(), "k (neighbours)",
-                          minimum=1, maximum=20)
-            percentile = parse_float(self._ad_pct_spin.get(),
-                                     "threshold percentile",
-                                     minimum=50.0, maximum=99.9)
-            n_models = parse_int(self._ad_boot_spin.get(), "bootstrap models",
-                                 minimum=0, maximum=200)
+            k = parse_int(self._ad_k_spin.get(), "k (neighbours)", minimum=1, maximum=20)
+            percentile = parse_float(
+                self._ad_pct_spin.get(), "threshold percentile", minimum=50.0, maximum=99.9
+            )
+            n_models = parse_int(
+                self._ad_boot_spin.get(), "bootstrap models", minimum=0, maximum=200
+            )
         except ValueError as exc:
             messagebox.showwarning("Check the settings", str(exc))
             return
@@ -10375,8 +11568,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             label = f"{trained.name} ({task})"
         else:
             try:
-                model, x_train, y_train, x_test, test_frame = \
-                    self._ml_ad_bundle_frames()
+                model, x_train, y_train, x_test, test_frame = self._ml_ad_bundle_frames()
             except ValueError as exc:
                 messagebox.showwarning("Bundle mode", str(exc))
                 return
@@ -10390,7 +11582,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showwarning(
                 "Too few training rows",
                 f"k={k} needs at least {k + 1} training rows; only "
-                f"{len(x_train)} available -- lower k or skip the analysis.")
+                f"{len(x_train)} available -- lower k or skip the analysis.",
+            )
             return
 
         def work(report: Any) -> Any:
@@ -10400,9 +11593,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 report(done, total, f"bootstrap member {done}/{total}")
 
             return applicability_domain(
-                model, x_train, y_train, x_test,
-                k=k, percentile=percentile, n_models=max(n_models, 1),
-                uncertainty=n_models > 0, progress=on_fit,
+                model,
+                x_train,
+                y_train,
+                x_test,
+                k=k,
+                percentile=percentile,
+                n_models=max(n_models, 1),
+                uncertainty=n_models > 0,
+                progress=on_fit,
             )
 
         def render(payload: Any) -> None:
@@ -10410,10 +11609,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             table = payload.to_frame(names=query_names)
             self._ml_ad_frame = table
             self._fill_dynamic_tree(
-                self._ad_tree, table, max_rows=200,
-                widths={"name": 200, "predicted": 90, "prediction_sd": 90,
-                        "knn_distance": 100, "inside_ad": 80,
-                        "low_uncertainty": 100, "reliable": 80},
+                self._ad_tree,
+                table,
+                max_rows=200,
+                widths={
+                    "name": 200,
+                    "predicted": 90,
+                    "prediction_sd": 90,
+                    "knn_distance": 100,
+                    "inside_ad": 80,
+                    "low_uncertainty": 100,
+                    "reliable": 80,
+                },
             )
             inside = int(payload.inside_ad.sum())
             total = int(payload.inside_ad.size)
@@ -10421,29 +11628,34 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 reliable = int(payload.reliable.sum())
                 low = int(payload.low_uncertainty.sum())
                 self._ad_status.configure(
-                    text=(f"distance threshold {payload.distance_threshold:.3g} "
-                          f"(p{percentile:g}, k={k}) — {inside}/{total} inside AD · "
-                          f"{payload.n_models}-member ensemble in "
-                          f"{payload.fit_seconds:.1f} s · uncertainty threshold "
-                          f"{payload.uncertainty_threshold:.3g} — {low}/{total} "
-                          f"low-uncertainty · {reliable}/{total} reliable"),
-                    style="Field.TLabel")
+                    text=(
+                        f"distance threshold {payload.distance_threshold:.3g} "
+                        f"(p{percentile:g}, k={k}) — {inside}/{total} inside AD · "
+                        f"{payload.n_models}-member ensemble in "
+                        f"{payload.fit_seconds:.1f} s · uncertainty threshold "
+                        f"{payload.uncertainty_threshold:.3g} — {low}/{total} "
+                        f"low-uncertainty · {reliable}/{total} reliable"
+                    ),
+                    style="Field.TLabel",
+                )
             else:
                 self._ad_status.configure(
-                    text=(f"distance threshold {payload.distance_threshold:.3g} "
-                          f"(p{percentile:g}, k={k}) — {inside}/{total} inside AD "
-                          "(kNN-only pass: bootstrap models = 0)"),
-                    style="Field.TLabel")
+                    text=(
+                        f"distance threshold {payload.distance_threshold:.3g} "
+                        f"(p{percentile:g}, k={k}) — {inside}/{total} inside AD "
+                        "(kNN-only pass: bootstrap models = 0)"
+                    ),
+                    style="Field.TLabel",
+                )
             if not self.deps.get("matplotlib"):
                 return
             try:
                 from pharmaml.viz import plot_applicability_domain
 
-                y_label = (f"predicted {target}" if task == "regression"
-                           else "predicted P(positive)")
+                y_label = f"predicted {target}" if task == "regression" else "predicted P(positive)"
                 figure = plot_applicability_domain(
-                    payload, y_label=y_label,
-                    title=f"Applicability domain — {label}")
+                    payload, y_label=y_label, title=f"Applicability domain — {label}"
+                )
                 self._render_figure(self._ad_host, figure)
             except Exception as exc:  # noqa: BLE001
                 self._show_error("AD plot failed", exc)
@@ -10454,12 +11666,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         """Save the last reliability table (the upload's results CSV)."""
         frame = getattr(self, "_ml_ad_frame", None)
         if frame is None:
-            messagebox.showinfo(
-                "Nothing to save", "Run the applicability-domain analysis first.")
+            messagebox.showinfo("Nothing to save", "Run the applicability-domain analysis first.")
             return
         self._save_frame_dialog(
-            frame, "Save the applicability-domain results",
-            "Applicability_Domain_Results.csv")
+            frame, "Save the applicability-domain results", "Applicability_Domain_Results.csv"
+        )
 
     def _ml_gp_sigma(self, trained: Any, x_test: Any) -> tuple[Any, Any] | None:
         """Predictive ``(mean, sigma)`` when the run's model is a GP.
@@ -10489,8 +11700,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         picks.  Figures are created under the package's forced-Agg
         backend inside the worker thread; they never touch Tk.
         """
-        if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the report figures"):
+        if not self._require_pharmaml() or not self._require("matplotlib", "the report figures"):
             return
         if self._ml_last_run is None:
             messagebox.showwarning(
@@ -10530,17 +11740,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             figures: dict[str, Any] = {}
             tables: dict[str, Any] = {}
             if task == "classification":
-                figures["confusion_matrix"] = ml_plots.plot_confusion_matrix(
-                    report
-                )
+                figures["confusion_matrix"] = ml_plots.plot_confusion_matrix(report)
                 if hasattr(trained.model, "predict_proba"):
-                    figures["roc_curves"] = ml_plots.plot_roc_curves(
-                        trained.model, x_test, y_test
-                    )
+                    figures["roc_curves"] = ml_plots.plot_roc_curves(trained.model, x_test, y_test)
                 counts = pd.Series(y_test).value_counts(sort=False).to_dict()
-                figures["class_distribution"] = ml_plots.plot_class_distribution(
-                    counts
-                )
+                figures["class_distribution"] = ml_plots.plot_class_distribution(counts)
                 tables["class_counts"] = pd.DataFrame(
                     {"class": list(counts), "count": list(counts.values())}
                 )
@@ -10560,9 +11764,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if trained.cv_scores is not None:
                 figures["cv_scores"] = ml_plots.plot_cv_scores(trained)
             try:
-                figures["feature_importance"] = ml_plots.plot_feature_importance(
-                    trained.model
-                )
+                figures["feature_importance"] = ml_plots.plot_feature_importance(trained.model)
             except DataValidationError:  # kernel SVM / KNN: no importances
                 pass
             tables["held_out_metrics"] = metrics_to_dataframe(report)
@@ -10579,9 +11781,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(written: Any) -> None:
             names = [path.name for path in written]
             extra = " + report.pdf" if want_pdf else ""
-            self._job_label.configure(
-                text=f"report saved · {target} ({len(written)} files{extra})"
-            )
+            self._job_label.configure(text=f"report saved · {target} ({len(written)} files{extra})")
             messagebox.showinfo(
                 "Report saved",
                 f"{len(written)} files written to {target}:\n"
@@ -10605,8 +11805,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         difference named.  The temp bundle is deleted with its directory;
         nothing touches the user's tree.
         """
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "CSV auditing"):
+        if not self._require_pharmaml() or not self._require("pandas", "CSV auditing"):
             return
         if self._ml_last_run is None:
             messagebox.showwarning(
@@ -10624,7 +11823,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not chosen:
             return
         path = Path(chosen)
-        trained, _report, task, _x_train, _y_train, x_test, _y_test, train_target = self._ml_last_run
+        trained, _report, task, _x_train, _y_train, x_test, _y_test, train_target = (
+            self._ml_last_run
+        )
         model_name = trained.name
 
         def work() -> Any:
@@ -10641,8 +11842,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             with tempfile.TemporaryDirectory() as tmp:
                 bundle = Path(tmp) / "playground_model.joblib"
                 save_model(
-                    trained.model, bundle,
-                    name=trained.name, task=task,
+                    trained.model,
+                    bundle,
+                    name=trained.name,
+                    task=task,
                     features=list(x_test.columns),
                 )
                 return validate_bundle_input(bundle, frame)
@@ -10662,9 +11865,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         self._start_job(f"auditing {path.name}", work, render)
 
-    def _fill_ml_metrics(self, trained: Any, report: Any, task: str,
-                         dropped: list[str],
-                         gp: tuple[Any, Any] | None = None) -> None:
+    def _fill_ml_metrics(
+        self,
+        trained: Any,
+        report: Any,
+        task: str,
+        dropped: list[str],
+        gp: tuple[Any, Any] | None = None,
+    ) -> None:
         for child in self._ml_metrics.winfo_children():
             child.destroy()
         cv_line = "no CV"
@@ -10687,9 +11895,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 import numpy as _np
 
                 sigma = _np.asarray(gp[1], dtype=float)
-                pairs.append(
-                    ("predictive σ (median)", format_number(float(_np.median(sigma))))
-                )
+                pairs.append(("predictive σ (median)", format_number(float(_np.median(sigma)))))
         else:
             auc = getattr(report, "roc_auc", None)
             pairs = [
@@ -10709,8 +11915,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ttk.Label(self._ml_metrics, text=name, style="CardMuted.TLabel").grid(
                 row=index // 4, column=(index % 4) * 2, sticky="w", padx=(0, 6)
             )
-            ttk.Label(self._ml_metrics, text=value, style="Field.TLabel",
-                      font=self._mono).grid(
+            ttk.Label(self._ml_metrics, text=value, style="Field.TLabel", font=self._mono).grid(
                 row=index // 4, column=(index % 4) * 2 + 1, sticky="w", padx=(0, 18)
             )
 
@@ -10733,9 +11938,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         """
         if not self._require_pharmaml():
             return
-        if not self._require("pandas", "the search") or not self._require(
-                "sklearn", "the search"
-        ):
+        if not self._require("pandas", "the search") or not self._require("sklearn", "the search"):
             return
         if self._ml_frame is None:
             messagebox.showwarning("No dataset", "Open a CSV or load an example first.")
@@ -10782,12 +11985,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
             return
         try:
-            max_trials = parse_int(self._tune_trials.get(), "trials",
-                                   minimum=4, maximum=40)
-            cv = parse_int(self._tune_cv.get(), "cv folds",
-                           minimum=2, maximum=5)
-            eta = parse_int(self._tune_eta.get(), "eta",
-                            minimum=2, maximum=4)
+            max_trials = parse_int(self._tune_trials.get(), "trials", minimum=4, maximum=40)
+            cv = parse_int(self._tune_cv.get(), "cv folds", minimum=2, maximum=5)
+            eta = parse_int(self._tune_eta.get(), "eta", minimum=2, maximum=4)
         except ValueError as exc:
             messagebox.showwarning("Check the search settings", str(exc))
             return
@@ -10833,14 +12033,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 r_min, r_max = resource_bounds(hypermodel, resource or "epochs")
                 ladder = (r_min, r_max)
                 tuner: Any = Hyperband(
-                    hypermodel, objective=objective, resource=resource or "epochs",
-                    max_resource=r_max, min_resource=r_min, eta=eta,
-                    cv=cv, task=task, seed=42, on_trial=on_trial,
+                    hypermodel,
+                    objective=objective,
+                    resource=resource or "epochs",
+                    max_resource=r_max,
+                    min_resource=r_min,
+                    eta=eta,
+                    cv=cv,
+                    task=task,
+                    seed=42,
+                    on_trial=on_trial,
                 )
             else:
                 tuner = RandomSearch(
-                    hypermodel, objective=objective, max_trials=max_trials,
-                    cv=cv, task=task, seed=42, on_trial=on_trial,
+                    hypermodel,
+                    objective=objective,
+                    max_trials=max_trials,
+                    cv=cv,
+                    task=task,
+                    seed=42,
+                    on_trial=on_trial,
                 )
             results = tuner.search(x_train, y_train)
             # the baseline: the hypermodel's defaults under the tuner's
@@ -10848,13 +12060,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # the configuration differs).
             defaults = hypermodel(HyperParameters())
             base = cross_val_score(
-                defaults, x_train, y_train, scoring=objective,
+                defaults,
+                x_train,
+                y_train,
+                scoring=objective,
                 cv=make_cv_splitter(task, y_train, cv),
             )
             # the held-out verdict: the winner was refit on the train
             # split inside search(); score it like any trained model.
             report = evaluate_model(
-                results.best_estimator, x_test, y_test, task,
+                results.best_estimator,
+                x_test,
+                y_test,
+                task,
                 keep_predictions=False,
             )
             return results, float(base.mean()), float(base.std()), report, objective, ladder
@@ -10867,14 +12085,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             gain = results.best_score - base_mean
             self._tune_summary.configure(
                 text=f"best {results.best_score:.4f} ± "
-                     f"{results.best_trial.score_std:.4f} CV {objective} · "
-                     f"defaults {base_mean:.4f} ± {base_std:.4f} → gain "
-                     f"{gain:+.4f} · {held_label} {held_out:.4f} · winner: "
-                     + tune_config_text(results.best_params)
+                f"{results.best_trial.score_std:.4f} CV {objective} · "
+                f"defaults {base_mean:.4f} ± {base_std:.4f} → gain "
+                f"{gain:+.4f} · {held_label} {held_out:.4f} · winner: "
+                + tune_config_text(results.best_params)
             )
             ranked = sorted(
                 (t for t in results.trials if not t.failed),
-                key=lambda t: t.score, reverse=True,
+                key=lambda t: t.score,
+                reverse=True,
             )
             failed = [t for t in results.trials if t.failed]
             self._board_tree.delete(*self._board_tree.get_children())
@@ -10888,26 +12107,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._board_tree.column(column, width=140, minwidth=72, stretch=True)
 
             def row_values(rank: int | str, trial: Any) -> list[str]:
-                cells = [str(rank), str(trial.trial_id),
-                         _cell_text(tune_config_text(trial.hyperparameters), limit=52)]
+                cells = [
+                    str(rank),
+                    str(trial.trial_id),
+                    _cell_text(tune_config_text(trial.hyperparameters), limit=52),
+                ]
                 if ladder is not None:
-                    cells.append("" if trial.resource is None
-                                 else f"{trial.resource:g}")
+                    cells.append("" if trial.resource is None else f"{trial.resource:g}")
                 cells.append(f"{trial.score:.4f}")
                 cells.append(f"{trial.score_std:.4f}")
                 return cells
 
             for rank, trial in enumerate(ranked, start=1):
-                self._board_tree.insert(
-                    "", "end", values=row_values(rank, trial))
+                self._board_tree.insert("", "end", values=row_values(rank, trial))
             for trial in failed:
-                self._board_tree.insert(
-                    "", "end", values=row_values("—", trial))
+                self._board_tree.insert("", "end", values=row_values("—", trial))
             if ladder is None:
                 self._board_status.configure(
                     text=f"RandomSearch over {estimator} ({task}) — "
-                         f"{len(results.trials)} trial(s), objective {objective}; "
-                         f"ranked by mean CV score, failed trials last"
+                    f"{len(results.trials)} trial(s), objective {objective}; "
+                    f"ranked by mean CV score, failed trials last"
                 )
             else:
                 r_min, r_max = ladder
@@ -10916,11 +12135,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 saved = 100.0 * (1.0 - spent / naive) if naive > 0 else 0.0
                 self._board_status.configure(
                     text=f"Hyperband over {estimator} ({task}) — "
-                         f"{len(results.trials)} trial(s), objective {objective} · "
-                         f"η {eta}, resource {resource} {r_min}–{r_max} · "
-                         f"budget {spent:g} of a naive {naive:g} {resource} "
-                         f"({saved:.0f}% saved) · ranked by mean CV score, "
-                         "failed trials last (promotions keep the top ⌈n/η⌉)"
+                    f"{len(results.trials)} trial(s), objective {objective} · "
+                    f"η {eta}, resource {resource} {r_min}–{r_max} · "
+                    f"budget {spent:g} of a naive {naive:g} {resource} "
+                    f"({saved:.0f}% saved) · ranked by mean CV score, "
+                    "failed trials last (promotions keep the top ⌈n/η⌉)"
                 )
 
         self._start_job(f"tuning {estimator} ({task})", work, render)
@@ -10957,8 +12176,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             units = int(params.get("units", 64))
             n_layers = int(params.get("n_layers", 2))
             self._dl_hidden_entry.delete(0, "end")
-            self._dl_hidden_entry.insert(
-                0, ", ".join(str(units) for _ in range(n_layers)))
+            self._dl_hidden_entry.insert(0, ", ".join(str(units) for _ in range(n_layers)))
             self._dl_dropout.set(f"{float(params.get('dropout', 0.1)):g}")
             self._dl_lr_entry.delete(0, "end")
             self._dl_lr_entry.insert(0, f"{float(params.get('learning_rate', 1e-3)):g}")
@@ -10970,7 +12188,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dl_patience.set("10")  # the hypermodel's own fixed value
             self._tune_summary.configure(
                 text="applied to the Deep Learning tab — hit Train & evaluate "
-                     "there for the loss curves and the report bundle")
+                "there for the loss curves and the report bundle"
+            )
             with contextlib.suppress(tk.TclError):
                 self._book.select(self._dl_page)
             return
@@ -10992,19 +12211,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._ml_sync_params_var()
         self._ml_params_status.configure(
             text=f"{len(entries)} knob(s) · {filled} pinned from the winning "
-                 "configuration · hit Train & evaluate to refit at these values"
+            "configuration · hit Train & evaluate to refit at these values"
         )
         self._tune_summary.configure(
             text=f"applied — model set to {estimator}; hit Train & evaluate "
-                 "for the full report pipeline (the winning config: "
-                 + tune_config_text(params)
-                 + "; the manual hyperparameters card carries it)"
+            "for the full report pipeline (the winning config: "
+            + tune_config_text(params)
+            + "; the manual hyperparameters card carries it)"
         )
 
     def _ml_tune_save_trials(self) -> None:
         """Write the last search's trials table (the CLI ``--out`` story)."""
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "the trials table"):
+        if not self._require_pharmaml() or not self._require("pandas", "the trials table"):
             return
         if self._tune_last is None:
             messagebox.showwarning(
@@ -11032,15 +12250,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._show_error("Could not write the trials table", exc)
             return
         self._job_label.configure(
-            text=f"trials saved · {Path(written).name} "
-                 f"({len(results.trials)} rows)"
+            text=f"trials saved · {Path(written).name} ({len(results.trials)} rows)"
         )
 
     def _ml_compare(self) -> None:
         if not self._require_pharmaml():
             return
         if not self._require("pandas", "cross-validation") or not self._require(
-                "sklearn", "cross-validation"
+            "sklearn", "cross-validation"
         ):
             return
         if self._ml_frame is None:
@@ -11078,8 +12295,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 # model name is the note, index/total the fraction.
                 report(info["index"], info["total"], info["model"])
 
-            return compare_models(frame[numeric], y, task, cv=3, n_jobs=1,
-                                  on_model=on_model)
+            return compare_models(frame[numeric], y, task, cv=3, n_jobs=1, on_model=on_model)
 
         def render(board: Any) -> None:
             self._board_frame = board
@@ -11095,7 +12311,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 )
             self._board_status.configure(
                 text="3-fold CV over the available registry — the score column "
-                     "is the task's objective (higher is better)"
+                "is the task's objective (higher is better)"
             )
 
         self._start_job(f"comparing models ({task})", work, render)
@@ -11105,22 +12321,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         """Reliability diagram of the last trained classifier."""
         run = getattr(self, "_ml_last_run", None)
         if run is None:
-            messagebox.showinfo(
-                "No trained model", "Train a classification model first.")
+            messagebox.showinfo("No trained model", "Train a classification model first.")
             return
         trained, _report, task, _x_tr, _y_tr, x_test, y_test, target = run
         if task != "classification":
             messagebox.showinfo(
                 "Classification only",
                 f"The last run trained a {task} model — the reliability "
-                "diagram needs predicted probabilities (a classifier).")
+                "diagram needs predicted probabilities (a classifier).",
+            )
             return
-        if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the calibration curve"):
+        if not self._require_pharmaml() or not self._require("matplotlib", "the calibration curve"):
             return
         try:
-            bins = parse_int(self._calib_bins.get(), "calibration bins",
-                             minimum=2, maximum=20)
+            bins = parse_int(self._calib_bins.get(), "calibration bins", minimum=2, maximum=20)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -11129,14 +12343,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.viz import plot_calibration_curve
 
             return plot_calibration_curve(
-                trained.model, x_test, y_test, n_bins=bins,
-                title=f"Calibration — {trained.name} ({target})")
+                trained.model,
+                x_test,
+                y_test,
+                n_bins=bins,
+                title=f"Calibration — {trained.name} ({target})",
+            )
 
         def render(figure: Any) -> None:
             self._render_figure(self._ml_host, figure)
             self._ml_result_note.configure(
                 text="reliability diagram replaces the parity figure — "
-                     "Train & evaluate brings it back")
+                "Train & evaluate brings it back"
+            )
 
         self._start_job("calibration curve", work, render)
 
@@ -11146,18 +12365,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if board is None:
             messagebox.showinfo(
                 "No leaderboard yet",
-                "Run Compare models first — the bar chart needs the "
-                "cross-validated ranking table.")
+                "Run Compare models first — the bar chart needs the cross-validated ranking table.",
+            )
             return
-        if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the leaderboard bars"):
+        if not self._require_pharmaml() or not self._require("matplotlib", "the leaderboard bars"):
             return
 
         def work() -> Any:
             from pharmaml.viz import plot_model_comparison
 
-            return plot_model_comparison(
-                board, title="Cross-validated model leaderboard")
+            return plot_model_comparison(board, title="Cross-validated model leaderboard")
 
         def render(figure: Any) -> None:
             self._render_figure(self._board_host, figure)
@@ -11176,18 +12393,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if run is None:
             messagebox.showinfo(
                 "No trained model",
-                "Train a model first -- the learning curve needs the "
-                "last run's data.")
+                "Train a model first -- the learning curve needs the last run's data.",
+            )
             return
         trained, _report, _task, x_train, y_train, x_test, y_test, target = run
-        if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the learning curve"):
+        if not self._require_pharmaml() or not self._require("matplotlib", "the learning curve"):
             return
         if not self._require("sklearn", "the learning curve"):
             return
         try:
-            folds = parse_int(self._curve_cv.get(), "CV folds",
-                              minimum=2, maximum=10)
+            folds = parse_int(self._curve_cv.get(), "CV folds", minimum=2, maximum=10)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -11201,22 +12416,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             if isinstance(x_train, pd.DataFrame):
                 full_x = pd.concat([x_train, x_test], ignore_index=True)
-                full_y = pd.concat([pd.Series(y_train), pd.Series(y_test)],
-                                   ignore_index=True)
+                full_y = pd.concat([pd.Series(y_train), pd.Series(y_test)], ignore_index=True)
             else:
-                full_x = np.concatenate([np.asarray(x_train),
-                                         np.asarray(x_test)], axis=0)
-                full_y = np.concatenate([np.asarray(y_train),
-                                         np.asarray(y_test)], axis=0)
+                full_x = np.concatenate([np.asarray(x_train), np.asarray(x_test)], axis=0)
+                full_y = np.concatenate([np.asarray(y_train), np.asarray(y_test)], axis=0)
             return plot_learning_curve(
-                trained.model, full_x, full_y, cv=folds,
-                title=f"Learning curve — {model_name} ({target})")
+                trained.model,
+                full_x,
+                full_y,
+                cv=folds,
+                title=f"Learning curve — {model_name} ({target})",
+            )
 
         def render(figure: Any) -> None:
             self._render_figure(self._ml_host, figure)
             self._ml_result_note.configure(
-                text="learning curve replaces the parity figure — "
-                     "Train & evaluate brings it back")
+                text="learning curve replaces the parity figure — Train & evaluate brings it back"
+            )
 
         self._start_job("learning curve", work, render)
 
@@ -11231,19 +12447,30 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dl_history: list[dict[str, Any]] = []
         self._dl_last_run: tuple[Any, str, str, Any, str] | None = None
 
-        data = make_card(page.grid, "Dataset", span=2, row=0, column=0,
-                         subtitle="Any CSV the toolkit's read_table can sniff, or a "
-                                  "bundled example. Features = the numeric columns "
-                                  "except the target (same rule as the Data & ML tab).")
+        data = make_card(
+            page.grid,
+            "Dataset",
+            span=2,
+            row=0,
+            column=0,
+            subtitle="Any CSV the toolkit's read_table can sniff, or a "
+            "bundled example. Features = the numeric columns "
+            "except the target (same rule as the Data & ML tab).",
+        )
         open_btn = self._action_button(data, "Open CSV…", self._dl_open_csv)
         open_btn.grid(row=0, column=0, sticky="w")
         example_files = [
-            name for name in (
-                "qsar_regression.csv", "qsar_classification.csv", "qsar_multiclass.csv",
-            ) if (EXAMPLES_DIR / name).is_file()
+            name
+            for name in (
+                "qsar_regression.csv",
+                "qsar_classification.csv",
+                "qsar_multiclass.csv",
+            )
+            if (EXAMPLES_DIR / name).is_file()
         ]
-        self._dl_example_combo = ttk.Combobox(data, state="readonly", width=26,
-                                              values=example_files)
+        self._dl_example_combo = ttk.Combobox(
+            data, state="readonly", width=26, values=example_files
+        )
         if example_files:
             self._dl_example_combo.set(example_files[0])
         self._dl_example_combo.grid(row=0, column=1, sticky="w", padx=(12, 0))
@@ -11251,45 +12478,56 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         load_btn.grid(row=0, column=2, sticky="w", padx=(12, 0))
         self._dl_target_combo = ttk.Combobox(data, state="readonly", width=26)
         form_row(data, "target column", self._dl_target_combo)
-        self._dl_task_combo = ttk.Combobox(data, state="readonly", width=26,
-                                           values=("auto", "regression", "classification"))
+        self._dl_task_combo = ttk.Combobox(
+            data, state="readonly", width=26, values=("auto", "regression", "classification")
+        )
         self._dl_task_combo.set("auto")
         form_row(data, "task", self._dl_task_combo)
         self._dl_info = ttk.Label(data, text="no dataset loaded", style="CardMuted.TLabel")
         self._dl_info.grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
-        preview = make_card(page.grid, "Preview (first 12 rows)", span=2, row=1,
-                            column=0)
+        preview = make_card(page.grid, "Preview (first 12 rows)", span=2, row=1, column=0)
         tree_frame = ttk.Frame(preview, style="Card.TFrame")
         grid_append(preview, tree_frame, sticky="nsew", weight=True)
         self._dl_preview_tree = ttk.Treeview(tree_frame, show="headings", height=8)
-        preview_bar_x = ttk.Scrollbar(tree_frame, orient="horizontal",
-                                      command=self._dl_preview_tree.xview)
-        preview_bar_y = ttk.Scrollbar(tree_frame, orient="vertical",
-                                      command=self._dl_preview_tree.yview)
-        self._dl_preview_tree.configure(xscrollcommand=preview_bar_x.set,
-                                        yscrollcommand=preview_bar_y.set)
+        preview_bar_x = ttk.Scrollbar(
+            tree_frame, orient="horizontal", command=self._dl_preview_tree.xview
+        )
+        preview_bar_y = ttk.Scrollbar(
+            tree_frame, orient="vertical", command=self._dl_preview_tree.yview
+        )
+        self._dl_preview_tree.configure(
+            xscrollcommand=preview_bar_x.set, yscrollcommand=preview_bar_y.set
+        )
         self._dl_preview_tree.pack(side="left", fill="both", expand=True)
         preview_bar_y.pack(side="right", fill="y")
         preview_bar_x.pack(side="bottom", fill="x")
 
-        net = make_card(page.grid, "Network & training", span=2, row=2, column=0,
-                        subtitle="The pharmaml.ml.neural estimators: Adam with weight "
-                                 "decay, per-feature standardisation and early stopping "
-                                 "on a held-out validation fraction. Hidden layers are "
-                                 "comma-separated widths -- empty = a single linear "
-                                 "layer, the regularised baseline. Batch norm (1.2.36) "
-                                 "inserts a BatchNorm1d between every hidden linear "
-                                 "map and its activation.")
-        self._dl_arch_combo = ttk.Combobox(net, state="readonly", width=26,
-                                           values=_DL_ARCHITECTURES)
+        net = make_card(
+            page.grid,
+            "Network & training",
+            span=2,
+            row=2,
+            column=0,
+            subtitle="The pharmaml.ml.neural estimators: Adam with weight "
+            "decay, per-feature standardisation and early stopping "
+            "on a held-out validation fraction. Hidden layers are "
+            "comma-separated widths -- empty = a single linear "
+            "layer, the regularised baseline. Batch norm (1.2.36) "
+            "inserts a BatchNorm1d between every hidden linear "
+            "map and its activation.",
+        )
+        self._dl_arch_combo = ttk.Combobox(
+            net, state="readonly", width=26, values=_DL_ARCHITECTURES
+        )
         self._dl_arch_combo.set(_DL_ARCHITECTURES[0])
         form_row(net, "architecture", self._dl_arch_combo)
         self._dl_hidden_entry = ttk.Entry(net, width=16)
         self._dl_hidden_entry.insert(0, "64, 32")
         form_row(net, "hidden layers", self._dl_hidden_entry)
-        self._dl_activation_combo = ttk.Combobox(net, state="readonly", width=16,
-                                                 values=_DL_ACTIVATIONS)
+        self._dl_activation_combo = ttk.Combobox(
+            net, state="readonly", width=16, values=_DL_ACTIVATIONS
+        )
         self._dl_activation_combo.set("relu")
         form_row(net, "activation", self._dl_activation_combo)
         self._dl_dropout = ttk.Spinbox(net, from_=0.0, to=0.9, increment=0.05, width=10)
@@ -11318,67 +12556,91 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(net, "random seed", self._dl_seed_entry)
         self._dl_batchnorm_var = tk.BooleanVar(value=False)
         batchnorm_check = ttk.Checkbutton(
-            net, text="batch normalisation between the hidden layers",
-            variable=self._dl_batchnorm_var)
-        Tooltip(batchnorm_check,
-                "batchnorm=True (1.2.36): a BatchNorm1d after every hidden "
-                "linear map, before its activation -- residual blocks "
-                "normalise BEFORE the skip add. Running statistics ride in "
-                "the portable weight dict, so predict/pickle work unchanged. "
-                "Needs batch size >= 2 (singleton tail batches are skipped "
-                "with a debug log).")
+            net,
+            text="batch normalisation between the hidden layers",
+            variable=self._dl_batchnorm_var,
+        )
+        Tooltip(
+            batchnorm_check,
+            "batchnorm=True (1.2.36): a BatchNorm1d after every hidden "
+            "linear map, before its activation -- residual blocks "
+            "normalise BEFORE the skip add. Running statistics ride in "
+            "the portable weight dict, so predict/pickle work unchanged. "
+            "Needs batch size >= 2 (singleton tail batches are skipped "
+            "with a debug log).",
+        )
         form_row(net, "batch norm", batchnorm_check)
         buttons = ttk.Frame(net, style="Card.TFrame")
-        buttons.grid(row=net.grid_size()[1], column=0, columnspan=2, sticky="w",
-                     pady=(8, 0))
+        buttons.grid(row=net.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0))
         train_btn = self._action_button(
-            buttons, "Train & evaluate", self._dl_train, primary=True,
+            buttons,
+            "Train & evaluate",
+            self._dl_train,
+            primary=True,
             tooltip="80/20 split, the estimator's own standardisation and "
-                    "stratified early stopping, then held-out metrics, the "
-                    "parity/confusion figure and the loss curves.")
+            "stratified early stopping, then held-out metrics, the "
+            "parity/confusion figure and the loss curves.",
+        )
         train_btn.pack(side="left")
         check_btn = self._action_button(
-            buttons, "Check CSV…", self._dl_check_csv,
+            buttons,
+            "Check CSV…",
+            self._dl_check_csv,
             tooltip="Audit any CSV against the last trained network before "
-                    "predicting -- missing features, extra columns, "
-                    "reordering and version drift, all named (the ml check "
-                    "story, deep edition; the training target is dropped "
-                    "automatically when present).")
+            "predicting -- missing features, extra columns, "
+            "reordering and version drift, all named (the ml check "
+            "story, deep edition; the training target is dropped "
+            "automatically when present).",
+        )
         check_btn.pack(side="left", padx=(10, 0))
 
         results = make_card(page.grid, "Results", span=2, row=3, column=0)
         self._dl_metrics = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, self._dl_metrics, sticky="ew")
-        ttk.Label(self._dl_metrics, text="train a network to see metrics",
-                  style="CardMuted.TLabel").pack(anchor="w")
+        ttk.Label(
+            self._dl_metrics, text="train a network to see metrics", style="CardMuted.TLabel"
+        ).pack(anchor="w")
         self._dl_host = self._figure_host(results, height=330)
 
-        hist = make_card(page.grid, "Training history", span=2, row=4, column=0,
-                         subtitle="Per-epoch training/validation loss -- the "
-                                  "early-stopping verdict rides on the figure title.")
+        hist = make_card(
+            page.grid,
+            "Training history",
+            span=2,
+            row=4,
+            column=0,
+            subtitle="Per-epoch training/validation loss -- the "
+            "early-stopping verdict rides on the figure title.",
+        )
         self._dl_hist_summary = ttk.Label(
-            hist, text="train a network to see the loss curves",
-            style="CardMuted.TLabel")
+            hist, text="train a network to see the loss curves", style="CardMuted.TLabel"
+        )
         grid_append(hist, self._dl_hist_summary, sticky="w")
         self._dl_hist_host = self._figure_host(hist, height=300)
         hist_buttons = ttk.Frame(hist, style="Card.TFrame")
         grid_append(hist, hist_buttons, sticky="w", pady=(6, 0))
         save_btn = self._action_button(
-            hist_buttons, "Save history as CSV…", self._dl_save_history,
+            hist_buttons,
+            "Save history as CSV…",
+            self._dl_save_history,
             tooltip="The exact per-epoch records the estimator kept -- "
-                    "epoch, train_loss, val_loss.")
+            "epoch, train_loss, val_loss.",
+        )
         save_btn.pack(side="left")
         ttk.Label(hist_buttons, text="CV folds", style="CardMuted.TLabel").pack(
-            side="left", padx=(14, 4))
+            side="left", padx=(14, 4)
+        )
         self._dl_cv_entry = ttk.Entry(hist_buttons, width=4)
         self._dl_cv_entry.insert(0, "5")
         self._dl_cv_entry.pack(side="left")
         curve_btn = self._action_button(
-            hist_buttons, "Learning curve…", self._dl_plot_learning_curve,
+            hist_buttons,
+            "Learning curve…",
+            self._dl_plot_learning_curve,
             tooltip="plot_learning_curve over the FULL dataset (100x-121): "
-                    "training-set size vs CV score -- are more rows still "
-                    "buying accuracy?  The estimator clones refit with the "
-                    "network's own epochs, so a big curve takes its time.")
+            "training-set size vs CV score -- are more rows still "
+            "buying accuracy?  The estimator clones refit with the "
+            "network's own epochs, so a big curve takes its time.",
+        )
         curve_btn.pack(side="left", padx=(10, 0))
         self._dl_curve_host = self._figure_host(hist, height=300)
 
@@ -11427,9 +12689,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
         self._dl_target_combo["values"] = columns
         self._dl_target_combo.set(default_target_column(frame) or columns[-1])
-        self._dl_info.configure(
-            text=f"{path.name} — {len(frame):,} rows × {len(columns)} columns"
-        )
+        self._dl_info.configure(text=f"{path.name} — {len(frame):,} rows × {len(columns)} columns")
 
     def _dl_train(self) -> None:
         if not self._require_pharmaml():
@@ -11460,14 +12720,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         try:
             hidden = parse_hidden_layers(self._dl_hidden_entry.get())
-            learning_rate = parse_float(self._dl_lr_entry.get(), "learning rate",
-                                        minimum=1e-8)
-            weight_decay = parse_float(self._dl_wd_entry.get(), "weight decay",
-                                       minimum=0.0)
-            dropout = parse_float(self._dl_dropout.get(), "dropout",
-                                  minimum=0.0, maximum=0.9)
-            val_split = parse_float(self._dl_valsplit.get(), "val split",
-                                    minimum=0.0, maximum=0.5)
+            learning_rate = parse_float(self._dl_lr_entry.get(), "learning rate", minimum=1e-8)
+            weight_decay = parse_float(self._dl_wd_entry.get(), "weight decay", minimum=0.0)
+            dropout = parse_float(self._dl_dropout.get(), "dropout", minimum=0.0, maximum=0.9)
+            val_split = parse_float(self._dl_valsplit.get(), "val split", minimum=0.0, maximum=0.5)
             epochs = parse_int(self._dl_epochs.get(), "epochs", minimum=1)
             batch_size = parse_int(self._dl_batch.get(), "batch size", minimum=1)
             patience = parse_int(self._dl_patience.get(), "patience", minimum=1)
@@ -11519,16 +12775,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
             estimator_cls = getattr(neural, estimator_name)
             network = estimator_cls(
-                hidden_layers=hidden, dropout=dropout, activation=activation,
-                epochs=epochs, batch_size=batch_size, learning_rate=learning_rate,
-                weight_decay=weight_decay, patience=patience, val_split=val_split,
-                batchnorm=batchnorm, random_state=seed,
+                hidden_layers=hidden,
+                dropout=dropout,
+                activation=activation,
+                epochs=epochs,
+                batch_size=batch_size,
+                learning_rate=learning_rate,
+                weight_decay=weight_decay,
+                patience=patience,
+                val_split=val_split,
+                batchnorm=batchnorm,
+                random_state=seed,
             )
             started = _time.perf_counter()
             network.fit(x_train, y_train, on_epoch=on_epoch)
             seconds = _time.perf_counter() - started
             report = evaluate_model(
-                network, x_test, y_test, task,
+                network,
+                x_test,
+                y_test,
+                task,
                 keep_predictions=(task == "regression"),
             )
             return network, report, task, dropped, y_test, seconds, x_test
@@ -11562,9 +12828,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         },
                     )
                 else:
-                    figure = plot_confusion_matrix(
-                        report.confusion, labels=report.labels
-                    )
+                    figure = plot_confusion_matrix(report.confusion, labels=report.labels)
                 self._render_figure(self._dl_host, figure)
                 history_figure = plot_training_history(
                     network.history_,
@@ -11576,16 +12840,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         self._start_job(f"training {estimator_name} ({task})", work, render)
 
-    def _fill_dl_metrics(self, network: Any, report: Any, task: str,
-                         dropped: list[str], seconds: float) -> None:
+    def _fill_dl_metrics(
+        self, network: Any, report: Any, task: str, dropped: list[str], seconds: float
+    ) -> None:
         """Fill the Results card's metric grid for a finished deep run."""
         for child in self._dl_metrics.winfo_children():
             child.destroy()
         hidden = network.get_params()["hidden_layers"]  # the sklearn contract
         pairs = [
             ("network", f"{type(network).__name__} ({task})"),
-            ("hidden layers", " × ".join(str(width) for width in hidden)
-             or "linear (none)"),
+            ("hidden layers", " × ".join(str(width) for width in hidden) or "linear (none)"),
             ("features", str(network.n_features_in_)),
         ]
         if task == "regression":
@@ -11607,8 +12871,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 best_val = float(value)
         pairs += [
             ("epochs run", str(network.n_iter_)),
-            ("best val loss", "n/a" if best_val is None
-             else format_number(best_val)),
+            ("best val loss", "n/a" if best_val is None else format_number(best_val)),
             ("fit time", f"{seconds:.2f} s"),
         ]
         if dropped:
@@ -11617,24 +12880,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ttk.Label(self._dl_metrics, text=name, style="CardMuted.TLabel").grid(
                 row=index // 4, column=(index % 4) * 2, sticky="w", padx=(0, 6)
             )
-            ttk.Label(self._dl_metrics, text=str(value), style="Field.TLabel",
-                      font=self._mono).grid(
-                row=index // 4, column=(index % 4) * 2 + 1, sticky="w", padx=(0, 18)
-            )
+            ttk.Label(
+                self._dl_metrics, text=str(value), style="Field.TLabel", font=self._mono
+            ).grid(row=index // 4, column=(index % 4) * 2 + 1, sticky="w", padx=(0, 18))
 
     def _fill_dl_history_summary(self, network: Any) -> None:
         """One muted line above the loss curves: what actually happened."""
-        val_losses = [entry.get("val_loss") for entry in network.history_
-                      if entry.get("val_loss") is not None]
+        val_losses = [
+            entry.get("val_loss") for entry in network.history_ if entry.get("val_loss") is not None
+        ]
         if val_losses:
             self._dl_hist_summary.configure(
                 text=f"{type(network).__name__} · {network.n_iter_} epochs run · "
-                     f"best val loss {format_number(min(val_losses))}"
+                f"best val loss {format_number(min(val_losses))}"
             )
         else:
             self._dl_hist_summary.configure(
                 text=f"{type(network).__name__} · {network.n_iter_} epochs run · "
-                     "no validation split (val split = 0)"
+                "no validation split (val split = 0)"
             )
 
     def _dl_save_history(self) -> None:
@@ -11644,8 +12907,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         import pandas as pd
 
         frame = pd.DataFrame(self._dl_history)
-        self._save_frame_dialog(frame, "Save training history",
-                                "dl_history.csv", "Training history")
+        self._save_frame_dialog(
+            frame, "Save training history", "dl_history.csv", "Training history"
+        )
 
     def _dl_plot_learning_curve(self) -> None:
         """Training-set size vs CV score for the last network (100x-121).
@@ -11659,8 +12923,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self._dl_last_run is None:
             messagebox.showinfo("No network", "Train a network first.")
             return
-        if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the learning curve"):
+        if not self._require_pharmaml() or not self._require("matplotlib", "the learning curve"):
             return
         network, _name, _task, _x_test, target = self._dl_last_run
         frame = self._dl_frame
@@ -11668,16 +12931,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("No dataset", "Open the training CSV again.")
             return
         try:
-            folds = parse_int(self._dl_cv_entry.get(), "CV folds",
-                              minimum=2, maximum=10)
+            folds = parse_int(self._dl_cv_entry.get(), "CV folds", minimum=2, maximum=10)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
         numeric, _dropped = numeric_feature_columns(frame, target)
         if not numeric:
-            messagebox.showwarning("No numeric features",
-                                   "The dataset no longer has numeric "
-                                   "feature columns.")
+            messagebox.showwarning(
+                "No numeric features", "The dataset no longer has numeric feature columns."
+            )
             return
         x_full = frame[numeric]
         y_full = frame[target]
@@ -11686,10 +12948,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.viz import plot_learning_curve
 
             return plot_learning_curve(
-                network, x_full, y_full, cv=folds,
-                title=(f"Learning curve — {type(network).__name__} · "
-                       f"{len(x_full)} rows × {len(numeric)} features · "
-                       f"{folds}-fold CV"),
+                network,
+                x_full,
+                y_full,
+                cv=folds,
+                title=(
+                    f"Learning curve — {type(network).__name__} · "
+                    f"{len(x_full)} rows × {len(numeric)} features · "
+                    f"{folds}-fold CV"
+                ),
             )
 
         def render(figure: Any) -> None:
@@ -11712,8 +12979,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         every difference named.  The temp bundle is deleted with its
         directory; nothing touches the user's tree.
         """
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "CSV auditing"):
+        if not self._require_pharmaml() or not self._require("pandas", "CSV auditing"):
             return
         if self._dl_last_run is None:
             messagebox.showwarning(
@@ -11747,8 +13013,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             with tempfile.TemporaryDirectory() as tmp:
                 bundle = Path(tmp) / "playground_model.joblib"
                 save_model(
-                    network, bundle,
-                    name=estimator_name, task=task,
+                    network,
+                    bundle,
+                    name=estimator_name,
+                    task=task,
                     features=list(x_test.columns),
                 )
                 return validate_bundle_input(bundle, frame)
@@ -11774,32 +13042,43 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _build_generative_tab(self) -> None:
         page = self._new_page("Generative")
 
-        corpus = make_card(page.grid, "Corpus / seed molecules", row=0, column=0,
-                           subtitle="One SMILES per line. Empty text = the bundled "
-                                    "244-molecule drug-like corpus.")
+        corpus = make_card(
+            page.grid,
+            "Corpus / seed molecules",
+            row=0,
+            column=0,
+            subtitle="One SMILES per line. Empty text = the bundled 244-molecule drug-like corpus.",
+        )
         self._corpus_text = _grid_text(corpus, height=9, mono=self._mono)
         grid_append(corpus, self._corpus_text, sticky="nsew", weight=True)
         corpus_buttons = ttk.Frame(corpus, style="Card.TFrame")
         grid_append(corpus, corpus_buttons, sticky="w", pady=(6, 0))
-        example_btn = self._action_button(corpus_buttons, "Load example corpus",
-                                          self._load_example_corpus,
-                                          tooltip="The 12 seed molecules shipped in examples/data.")
+        example_btn = self._action_button(
+            corpus_buttons,
+            "Load example corpus",
+            self._load_example_corpus,
+            tooltip="The 12 seed molecules shipped in examples/data.",
+        )
         example_btn.pack(side="left")
-        clear_btn = self._action_button(corpus_buttons, "Clear (built-in corpus)",
-                                        lambda: self._corpus_text.delete("1.0", "end"))
+        clear_btn = self._action_button(
+            corpus_buttons,
+            "Clear (built-in corpus)",
+            lambda: self._corpus_text.delete("1.0", "end"),
+        )
         clear_btn.pack(side="left", padx=(10, 0))
         self._seed_mode_var = tk.BooleanVar(value=False)
         seed_check = ttk.Checkbutton(
             corpus,
             text="treat the lines as seed molecules (seeded mode; otherwise they are "
-                 "the sampling pool)",
+            "the sampling pool)",
             variable=self._seed_mode_var,
         )
         grid_append(corpus, seed_check, pady=(4, 0))
 
         controls = make_card(page.grid, "Objective & evolution", row=0, column=1)
-        self._objective_combo = ttk.Combobox(controls, state="readonly", width=26,
-                                             values=_OBJECTIVE_KINDS)
+        self._objective_combo = ttk.Combobox(
+            controls, state="readonly", width=26, values=_OBJECTIVE_KINDS
+        )
         self._objective_combo.set(_OBJECTIVE_KINDS[0])
         self._objective_combo.bind("<<ComboboxSelected>>", self._objective_hint)
         form_row(controls, "objective", self._objective_combo)
@@ -11809,15 +13088,39 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._obj_hi = ttk.Entry(controls, width=12)
         self._obj_hi.insert(0, "3.0")
         form_row(controls, "window high", self._obj_hi)
-        self._objective_hint_label = ttk.Label(controls, text="", style="CardMuted.TLabel",
-                                               wraplength=280, justify="left")
-        self._objective_hint_label.grid(row=controls.grid_size()[1], column=0,
-                                        columnspan=2, sticky="w", pady=(2, 4))
+        # (100x-122) the reference row for the three new objectives: a
+        # SMILES seed (similarity) or a SMARTS pattern (substructure).
+        # Swapped out exactly like the GA/RL frames below -- grid_remove
+        # collapses the row, re-grid restores the remembered position.
+        obj_ref_frame = ttk.Frame(controls, style="Card.TFrame")
+        grid_append(controls, obj_ref_frame, sticky="ew")
+        obj_ref_frame.columnconfigure(1, weight=1)
+        self._obj_ref_label = ttk.Label(obj_ref_frame, text="reference", style="Field.TLabel")
+        self._obj_ref_label.grid(row=0, column=0, sticky="w", pady=(3, 2))
+        self._obj_ref = ttk.Entry(obj_ref_frame, width=26)
+        self._obj_ref.insert(0, "CC(=O)Oc1ccccc1C(=O)O")  # aspirin
+        self._obj_ref.grid(row=0, column=1, sticky="ew", pady=(3, 2))
+        Tooltip(
+            self._obj_ref,
+            "Similarity objective: the reference molecule.  Substructure "
+            "objective: the required SMARTS (e.g. c1ccccc1 for any "
+            "benzene ring).  Other objectives ignore this row.",
+        )
+        obj_ref_frame.grid_remove()  # window objectives do not need it
+        self._obj_ref_frame = obj_ref_frame
+        self._objective_hint_label = ttk.Label(
+            controls, text="", style="CardMuted.TLabel", wraplength=280, justify="left"
+        )
+        self._objective_hint_label.grid(
+            row=controls.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(2, 4)
+        )
         self._objective_hint()
         # the optimiser itself: the GA (structure-space search) or the RL
         # policy-gradient fine-tuning of an on-the-fly SMILES RNN prior
         self._method_combo = ttk.Combobox(
-            controls, state="readonly", width=26,
+            controls,
+            state="readonly",
+            width=26,
             values=("genetic algorithm", "reinforcement learning (RL)"),
         )
         self._method_combo.set("genetic algorithm")
@@ -11835,16 +13138,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._generations = ttk.Spinbox(ga_frame, from_=4, to=48, increment=4, width=10)
         self._generations.set("16")
         form_row(ga_frame, "generations", self._generations)
-        self._mutation_combo = ttk.Combobox(ga_frame, state="readonly", width=18,
-                                            values=("uniform", "scaffold", "topology"))
+        self._mutation_combo = ttk.Combobox(
+            ga_frame, state="readonly", width=18, values=("uniform", "scaffold", "topology")
+        )
         self._mutation_combo.set("topology")
         form_row(ga_frame, "mutation", self._mutation_combo)
-        self._crossover_combo = ttk.Combobox(ga_frame, state="readonly", width=18,
-                                             values=("splice", "scaffold_hop"))
+        self._crossover_combo = ttk.Combobox(
+            ga_frame, state="readonly", width=18, values=("splice", "scaffold_hop")
+        )
         self._crossover_combo.set("splice")
         form_row(ga_frame, "crossover", self._crossover_combo)
-        self._operator_combo = ttk.Combobox(ga_frame, state="readonly", width=18,
-                                            values=("uniform", "adaptive"))
+        self._operator_combo = ttk.Combobox(
+            ga_frame, state="readonly", width=18, values=("uniform", "adaptive")
+        )
         self._operator_combo.set("uniform")
         form_row(ga_frame, "operator selection", self._operator_combo)
         # RL-specific rows: swapped in when the optimiser combo says RL
@@ -11859,10 +13165,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(rl_frame, "batch size", self._rl_batch)
         self._rl_prior_epochs = ttk.Spinbox(rl_frame, from_=1, to=16, increment=1, width=10)
         self._rl_prior_epochs.set("8")
-        Tooltip(self._rl_prior_epochs,
-                "Epochs for the on-the-fly SMILES prior -- 8 is the library "
-                "default; fewer than ~6 undertrains it and the agent mostly "
-                "samples invalid strings (the run reports no valid molecules).")
+        Tooltip(
+            self._rl_prior_epochs,
+            "Epochs for the on-the-fly SMILES prior -- 8 is the library "
+            "default; fewer than ~6 undertrains it and the agent mostly "
+            "samples invalid strings (the run reports no valid molecules).",
+        )
         form_row(rl_frame, "prior epochs", self._rl_prior_epochs)
         self._rl_anchor = ttk.Entry(rl_frame, width=12)
         self._rl_anchor.insert(0, "0.1")
@@ -11873,18 +13181,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._ga_seed = ttk.Entry(controls, width=12)
         self._ga_seed.insert(0, "42")
         form_row(controls, "random seed", self._ga_seed)
-        run_btn = self._action_button(controls, "Run evolution", self._run_evolution,
-                                      primary=True,
-                                      tooltip="Runs in a worker thread; results appear below "
-                                              "with the leaderboard (and the learning curve "
-                                              "when adaptive).")
-        run_btn.grid(row=controls.grid_size()[1], column=0, columnspan=2, sticky="w",
-                     pady=(8, 0))
+        run_btn = self._action_button(
+            controls,
+            "Run evolution",
+            self._run_evolution,
+            primary=True,
+            tooltip="Runs in a worker thread; results appear below "
+            "with the leaderboard (and the learning curve "
+            "when adaptive).",
+        )
+        run_btn.grid(row=controls.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         results = make_card(page.grid, "Results", span=2, row=1, column=0)
-        self._ga_summary = ttk.Label(results, text="no run yet — pick an objective and press "
-                                                   "Run evolution", style="CardMuted.TLabel",
-                                    wraplength=640)
+        self._ga_summary = ttk.Label(
+            results,
+            text="no run yet — pick an objective and press Run evolution",
+            style="CardMuted.TLabel",
+            wraplength=640,
+        )
         grid_append(results, self._ga_summary)
         tree_frame = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, tree_frame, sticky="nsew", weight=True)
@@ -11898,82 +13212,260 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         grid_append(results, self._ga_stats_text, sticky="ew", pady=(4, 0))
         stats_buttons = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, stats_buttons, sticky="w", pady=(4, 0))
-        save_btn = self._action_button(stats_buttons, "Save leaderboard as CSV…",
-                                       self._save_ga_leaderboard)
+        save_btn = self._action_button(
+            stats_buttons, "Save leaderboard as CSV…", self._save_ga_leaderboard
+        )
         save_btn.pack(side="left")
         self._ga_host = self._figure_host(results, height=340)
 
         # -- Pareto front card (100x-58) ------------------------------ #
         pareto = make_card(
-            page.grid, "Pareto front", span=2, row=2, column=0,
+            page.grid,
+            "Pareto front",
+            span=2,
+            row=2,
+            column=0,
             subtitle="Molecules no other candidate dominates — the trade-offs "
-                     "a blended leaderboard hides. Filled after every "
-                     "multi-objective run."
+            "a blended leaderboard hides. Filled after every "
+            "multi-objective run.",
         )
         self._pareto_summary = ttk.Label(
-            pareto, text="no multi-objective run yet — pick 'QED + LogP blend' or "
-                         "'Multi-objective (QED × MW × TPSA)' and press Run evolution",
-            style="CardMuted.TLabel", wraplength=640, justify="left",
+            pareto,
+            text="no multi-objective run yet — pick 'QED + LogP blend' or "
+            "'Multi-objective (QED × MW × TPSA)' and press Run evolution",
+            style="CardMuted.TLabel",
+            wraplength=640,
+            justify="left",
         )
         grid_append(pareto, self._pareto_summary)
         pareto_tree_frame = ttk.Frame(pareto, style="Card.TFrame")
         grid_append(pareto, pareto_tree_frame, sticky="nsew", weight=True)
         self._pareto_tree = ttk.Treeview(pareto_tree_frame, show="headings", height=6)
-        pareto_bar = ttk.Scrollbar(pareto_tree_frame, orient="vertical",
-                                   command=self._pareto_tree.yview)
+        pareto_bar = ttk.Scrollbar(
+            pareto_tree_frame, orient="vertical", command=self._pareto_tree.yview
+        )
         self._pareto_tree.configure(yscrollcommand=pareto_bar.set)
         self._pareto_tree.pack(side="left", fill="both", expand=True)
         pareto_bar.pack(side="right", fill="y")
         pareto_buttons = ttk.Frame(pareto, style="Card.TFrame")
         grid_append(pareto, pareto_buttons, sticky="w", pady=(6, 0))
         ttk.Label(pareto_buttons, text="plot", style="Field.TLabel").pack(side="left")
-        self._pareto_x_combo = ttk.Combobox(pareto_buttons, state="readonly", width=14,
-                                            values=())
+        self._pareto_x_combo = ttk.Combobox(pareto_buttons, state="readonly", width=14, values=())
         self._pareto_x_combo.pack(side="left", padx=(6, 3))
         ttk.Label(pareto_buttons, text="×", style="CardMuted.TLabel").pack(side="left")
-        self._pareto_y_combo = ttk.Combobox(pareto_buttons, state="readonly", width=14,
-                                            values=())
+        self._pareto_y_combo = ttk.Combobox(pareto_buttons, state="readonly", width=14, values=())
         self._pareto_y_combo.pack(side="left", padx=(3, 6))
         plot_front_btn = self._action_button(
-            pareto_buttons, "Plot front", self._plot_pareto_front,
+            pareto_buttons,
+            "Plot front",
+            self._plot_pareto_front,
             tooltip="Scatter of the two selected objectives: dominated molecules "
-                    "muted, the front highlighted and connected.",
+            "muted, the front highlighted and connected.",
         )
         plot_front_btn.pack(side="left")
-        save_front_btn = self._action_button(pareto_buttons, "Save front as CSV…",
-                                             self._save_pareto_front)
+        save_front_btn = self._action_button(
+            pareto_buttons, "Save front as CSV…", self._save_pareto_front
+        )
         save_front_btn.pack(side="left", padx=(10, 0))
         self._pareto_host = self._figure_host(pareto, height=300)
+
+        # (100x-122) molecule surgery -- the two standalone what-if tools
+        # the GA absorbed until now: enumerate one molecule's ring-size
+        # move set, or breed two parents with the scaffold-hop crossover
+        # (the same operator the GA's crossover combobox selects).
+        moves = make_card(
+            page.grid,
+            "Ring topology moves",
+            row=3,
+            column=0,
+            subtitle="Every distinct one-step ring-size mutant of one "
+            "molecule — contraction and expansion over each "
+            "saturated ring (fused/spiro rings are never touched).",
+        )
+        self._topo_smiles = ttk.Entry(moves, width=30)
+        self._topo_smiles.insert(0, "C1CCNCC1")  # piperidine: 3 mutants
+        form_row(moves, "molecule", self._topo_smiles)
+        moves_buttons = ttk.Frame(moves, style="Card.TFrame")
+        grid_append(moves, moves_buttons, sticky="w", pady=(6, 0))
+        enumerate_btn = self._action_button(
+            moves_buttons,
+            "Enumerate mutants",
+            self._gen_topology_moves,
+            tooltip="One line per mutant, most first — the exact move set "
+            "the GA's 'topology' mutation draws from.",
+        )
+        enumerate_btn.pack(side="left")
+        self._topo_summary = ttk.Label(
+            moves, text="no enumeration yet", style="Field.TLabel", wraplength=300, justify="left"
+        )
+        grid_append(moves, self._topo_summary, pady=(6, 0))
+        self._topo_text = _grid_text(moves, height=6, mono=self._mono)
+
+        breed = make_card(
+            page.grid,
+            "Breed two molecules",
+            row=3,
+            column=1,
+            subtitle="Scaffold-hop crossover: homologous cuts on two parents "
+            "breed hybrid children — bridge, ring-merge and linker "
+            "transplant geometries compete for each draw.",
+        )
+        self._breed_a = ttk.Entry(breed, width=30)
+        self._breed_a.insert(0, "CC(=O)Oc1ccccc1C(=O)O")  # aspirin
+        form_row(breed, "parent A", self._breed_a)
+        self._breed_b = ttk.Entry(breed, width=30)
+        self._breed_b.insert(0, "CC(C)Cc1ccc(O)cc1")  # ibuprofen core
+        form_row(breed, "parent B", self._breed_b)
+        self._breed_count = ttk.Spinbox(breed, from_=1, to=8, increment=1, width=8)
+        self._breed_count.set("4")
+        form_row(breed, "children", self._breed_count)
+        self._breed_seed = ttk.Entry(breed, width=10)
+        self._breed_seed.insert(0, "42")
+        form_row(breed, "random seed", self._breed_seed)
+        breed_buttons = ttk.Frame(breed, style="Card.TFrame")
+        grid_append(breed, breed_buttons, sticky="w", pady=(6, 0))
+        breed_btn = self._action_button(
+            breed_buttons,
+            "Breed",
+            self._gen_breed,
+            primary=True,
+            tooltip="Each child is one crossover draw from the seeded rng — "
+            "change the seed for a different litter.  A draw can "
+            "honestly fail (no viable cut pair) and says so.",
+        )
+        breed_btn.pack(side="left")
+        self._breed_summary = ttk.Label(
+            breed, text="no children yet", style="Field.TLabel", wraplength=300, justify="left"
+        )
+        grid_append(breed, self._breed_summary, pady=(6, 0))
+        self._breed_text = _grid_text(breed, height=6, mono=self._mono)
 
     def _objective_hint(self, _event: Any = None) -> None:
         kind = self._objective_combo.get()
         hints = {
             "QED drug-likeness": "QED weights eight drug-likeness properties; the window "
-                                 "values are ignored.",
-            "LogP window": "Scores 1 inside the [low, high] LogP window, falling off "
-                           "outside.",
+            "values are ignored.",
+            "LogP window": "Scores 1 inside the [low, high] LogP window, falling off outside.",
             "Molecular weight window": "Target a molecular-weight band (e.g. 250–450).",
             "TPSA window": "Target a polar-surface-area band (e.g. 40–90 Å²).",
             "QED + LogP blend": "0.7 × QED + 0.3 × the LogP window.",
-            "Multi-objective (QED \u00d7 MW \u00d7 TPSA)":
-                "Equal-weight triple (MW 150–450, TPSA 30–90); the Pareto "
-                "front card below shows the trade-offs the blend hides.",
+            "Multi-objective (QED \u00d7 MW \u00d7 TPSA)": "Equal-weight triple (MW 150–450, TPSA 30–90); the Pareto "
+            "front card below shows the trade-offs the blend hides.",
+            "Similarity to reference SMILES": "Tanimoto similarity (Morgan) to the reference molecule — "
+            "analog exploration: stay close, let the operators vary "
+            "the rest.  Window values are ignored.",
+            "Novelty vs corpus": "1 − the best Tanimoto against the corpus above (built-in "
+            "corpus when empty): pushes evolution away from known "
+            "structures.  Window values are ignored.",
+            "Contains substructure (SMARTS)": "A hard pharmacophore constraint: 1.0 when the SMARTS "
+            "matches, 0.0 otherwise.  Window values are ignored.",
         }
         self._objective_hint_label.configure(text=hints.get(kind, ""))
+        # (100x-122) swap the reference row in only for the objectives
+        # that need it; the label names what to type (same grid_remove
+        # collapse as the GA/RL frames in _on_method_change).
+        ref_label = _OBJECTIVE_REFERENCE_KINDS.get(kind)
+        if ref_label is None:
+            self._obj_ref_frame.grid_remove()
+        else:
+            self._obj_ref_label.configure(text=ref_label)
+            self._obj_ref_frame.grid()
 
     def _load_example_corpus(self) -> None:
         path = EXAMPLES_DIR / "seed_molecules.csv"
         if not path.is_file():
-            messagebox.showinfo("Example missing",
-                                "examples/data/seed_molecules.csv was not found.")
+            messagebox.showinfo(
+                "Example missing", "examples/data/seed_molecules.csv was not found."
+            )
             return
         with path.open(newline="", encoding="utf-8") as handle:
-            smiles = [
-                (row.get("smiles") or "").strip() for row in csv.DictReader(handle)
-            ]
+            smiles = [(row.get("smiles") or "").strip() for row in csv.DictReader(handle)]
         smiles = [entry for entry in smiles if entry]
         self._corpus_text.delete("1.0", "end")
         self._corpus_text.insert("1.0", "\n".join(smiles))
+
+    # -- molecule surgery (100x-122) ---------------------------------- #
+    def _gen_topology_moves(self) -> None:
+        """Enumerate one molecule's one-step ring-size mutants."""
+        if not self._require_pharmaml() or not self._require("rdkit", "ring topology moves"):
+            return
+        smiles = self._topo_smiles.get().strip()
+        if not smiles:
+            messagebox.showerror("Input", "Type a SMILES in the molecule row first.")
+            return
+
+        def work() -> Any:
+            from pharmaml.generative import ring_topology_moves
+
+            return ring_topology_moves(smiles), smiles
+
+        def render(payload: tuple[list[str], str]) -> None:
+            mutants, source = payload
+            self._topo_text.delete("1.0", "end")
+            self._topo_text.insert("1.0", "\n".join(mutants))
+            if mutants:
+                self._topo_summary.configure(
+                    text=(
+                        f"{len(mutants)} distinct one-step ring-size "
+                        f"mutant(s) of {source} — contraction and "
+                        f"expansion candidates, sorted."
+                    ),
+                    style="Field.TLabel",
+                )
+            else:
+                self._topo_summary.configure(
+                    text=(
+                        f"{source} has no qualifying saturated ring — "
+                        f"aromatic or fused/spiro rings are never "
+                        f"re-sized, and acyclic molecules have no moves."
+                    ),
+                    style="Field.TLabel",
+                )
+
+        self._start_job("ring topology moves", work, render)
+
+    def _gen_breed(self) -> None:
+        """Breed children from two parents via scaffold-hop crossover."""
+        if not self._require_pharmaml() or not self._require("rdkit", "scaffold-hop crossover"):
+            return
+        try:
+            parent_a = self._breed_a.get().strip()
+            parent_b = self._breed_b.get().strip()
+            if not parent_a or not parent_b:
+                raise ValueError("both parent SMILES are required")
+            children = parse_int(self._breed_count.get(), "children", minimum=1, maximum=8)
+            seed = parse_int(self._breed_seed.get(), "seed", minimum=0)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            import random
+
+            from pharmaml.generative import scaffold_hop_crossover
+
+            rng = random.Random(seed)
+            litter: list[str | None] = []
+            for _ in range(children):
+                litter.append(scaffold_hop_crossover(parent_a, parent_b, rng))
+            return litter, children
+
+        def render(payload: tuple[list[str | None], int]) -> None:
+            litter, count = payload
+            viable = [child for child in litter if child]
+            self._breed_text.delete("1.0", "end")
+            lines = [child if child else "(no viable crossover on this draw)" for child in litter]
+            self._breed_text.insert("1.0", "\n".join(lines))
+            self._breed_summary.configure(
+                text=(
+                    f"{len(viable)}/{count} viable children — bridge / "
+                    f"ring-merge / linker-transplant cuts competed for "
+                    f"each draw (seed {seed})."
+                ),
+                style="Field.TLabel",
+            )
+
+        self._start_job("scaffold-hop crossover", work, render)
 
     def _on_method_change(self, _event: Any = None) -> None:
         """Swap the GA / RL parameter blocks (grid_remove collapses the row)."""
@@ -11987,9 +13479,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _run_evolution(self) -> None:
         method = self._method_combo.get()
         if method == "reinforcement learning (RL)":
-            if not self._require_pharmaml() or not self._require(
-                "torch", "the RL optimiser"
-            ):
+            if not self._require_pharmaml() or not self._require("torch", "the RL optimiser"):
                 return
         elif not self._require_pharmaml() or not self._require("rdkit", "the GA"):
             return
@@ -11999,20 +13489,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             hi = parse_float(self._obj_hi.get(), "window high")
             if lo > hi:
                 raise ValueError("window low exceeds window high")
+            # (100x-122) the reference-driven objectives need their extra
+            # row read and validated BEFORE the worker thread starts (Tk
+            # widgets are main-thread only -- the factory call itself
+            # moved into work() below with everything else).
+            reference = self._obj_ref.get().strip()
+            if kind == "Similarity to reference SMILES" and not reference:
+                raise ValueError(
+                    "the similarity objective needs a reference SMILES in the reference row"
+                )
+            if kind == "Contains substructure (SMARTS)" and not reference:
+                raise ValueError(
+                    "the substructure objective needs a SMARTS "
+                    "pattern in the SMARTS row (e.g. c1ccccc1)"
+                )
             seed = parse_int(self._ga_seed.get(), "seed", minimum=0)
             if method == "reinforcement learning (RL)":
-                iterations = parse_int(
-                    self._rl_iterations.get(), "iterations", minimum=1
-                )
-                batch_size = parse_int(
-                    self._rl_batch.get(), "batch size", minimum=1
-                )
-                prior_epochs = parse_int(
-                    self._rl_prior_epochs.get(), "prior epochs", minimum=1
-                )
-                anchor_weight = parse_float(
-                    self._rl_anchor.get(), "anchor weight"
-                )
+                iterations = parse_int(self._rl_iterations.get(), "iterations", minimum=1)
+                batch_size = parse_int(self._rl_batch.get(), "batch size", minimum=1)
+                prior_epochs = parse_int(self._rl_prior_epochs.get(), "prior epochs", minimum=1)
+                anchor_weight = parse_float(self._rl_anchor.get(), "anchor weight")
                 if anchor_weight < 0:
                     raise ValueError("anchor weight cannot be negative")
                 population = generations = 0
@@ -12030,13 +13526,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         lines = parse_smiles_lines(self._corpus_text.get("1.0", "end"))
         seed_mode = bool(self._seed_mode_var.get())
+        # the novelty objective's reference pool: the card's own corpus
+        # (None hands the library its built-in 244-molecule default)
+        novelty_corpus: Any = list(lines) if lines else None
         if method == "reinforcement learning (RL)":
             want_plot = bool(self.deps.get("matplotlib"))
         else:
             want_plot = operator_selection == "adaptive" and self.deps.get("matplotlib")
 
         def work() -> Any:
-            objective = build_objective(kind, lo, hi)
+            objective = build_objective(kind, lo, hi, reference=reference, corpus=novelty_corpus)
             if method == "reinforcement learning (RL)":
                 from pharmaml.generative import DEFAULT_CORPUS, ReinventOptimizer
 
@@ -12080,14 +13579,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._ga_result = result
             elapsed = result.metadata.get("elapsed_s")
             timing = f" · {elapsed:.1f} s" if isinstance(elapsed, (int, float)) else ""
-            mode = "seeded" if seed_mode and lines else (
-                "custom corpus" if lines else "built-in corpus"
+            mode = (
+                "seeded"
+                if seed_mode and lines
+                else ("custom corpus" if lines else "built-in corpus")
             )
             if method == "reinforcement learning (RL)":
                 mode = f"RL · {mode}"
             self._ga_summary.configure(
-                text=(f"best {result.best_score:.3f} — {result.best}   "
-                      f"({len(result.smiles)} unique molecules, {mode}{timing})"),
+                text=(
+                    f"best {result.best_score:.3f} — {result.best}   "
+                    f"({len(result.smiles)} unique molecules, {mode}{timing})"
+                ),
                 style="Field.TLabel",
             )
             frame = result.to_dataframe()
@@ -12100,7 +13603,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._ga_tree.column(column, width=width, stretch=(column == "smiles"))
             for _, row in frame.head(20).iterrows():
                 self._ga_tree.insert(
-                    "", "end",
+                    "",
+                    "end",
                     values=[_cell_text(value, limit=60) for value in row.tolist()],
                 )
             if method == "reinforcement learning (RL)":
@@ -12149,9 +13653,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self._ga_result is None:
             messagebox.showinfo("Nothing to save", "Run an evolution first.")
             return
-        self._save_frame_dialog(self._ga_result.to_dataframe(),
-                                "Save leaderboard", "ga_leaderboard.csv",
-                                "Leaderboard")
+        self._save_frame_dialog(
+            self._ga_result.to_dataframe(), "Save leaderboard", "ga_leaderboard.csv", "Leaderboard"
+        )
 
     # -- the Pareto front card (100x-58) ------------------------------- #
     def _render_pareto(self, result: Any) -> None:
@@ -12175,8 +13679,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not any(result.breakdown):
             self._pareto_summary.configure(
                 text="this run optimises a single objective — the Pareto front "
-                     "needs a multi-objective run ('QED + LogP blend' or "
-                     "'Multi-objective (QED × MW × TPSA)')",
+                "needs a multi-objective run ('QED + LogP blend' or "
+                "'Multi-objective (QED × MW × TPSA)')",
                 style="CardMuted.TLabel",
             )
             return
@@ -12186,14 +13690,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             front = pareto_front(result)
         except Exception as exc:  # noqa: BLE001 - surfaced inline, not modal
             self._pareto_summary.configure(
-                text=f"Pareto front unavailable: {exc}", style="CardMuted.TLabel")
+                text=f"Pareto front unavailable: {exc}", style="CardMuted.TLabel"
+            )
             return
         self._pareto_front = front
         self._pareto_result = result
         summary = str(front)
-        deepest = max(
-            (result.smiles.index(smiles) for smiles in front.smiles), default=0,
-        ) + 1
+        deepest = (
+            max(
+                (result.smiles.index(smiles) for smiles in front.smiles),
+                default=0,
+            )
+            + 1
+        )
         if deepest > 1:
             summary += (
                 "\ndeepest front member sits at leaderboard rank "
@@ -12210,7 +13719,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._pareto_tree.column(column, width=width, stretch=(column == "smiles"))
         for _, row in frame.head(24).iterrows():
             self._pareto_tree.insert(
-                "", "end",
+                "",
+                "end",
                 values=[_cell_text(value, limit=60) for value in row.tolist()],
             )
         self._pareto_x_combo["values"] = list(front.objectives)
@@ -12223,8 +13733,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _plot_pareto_front(self) -> None:
         """Draw the trade-off scatter for the selected objective pair."""
         if self._pareto_result is None or self._pareto_front is None:
-            messagebox.showinfo("Nothing to plot",
-                                "Run a multi-objective evolution first.")
+            messagebox.showinfo("Nothing to plot", "Run a multi-objective evolution first.")
             return
         if not self._require("matplotlib", "the Pareto plot"):
             return
@@ -12241,12 +13750,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _save_pareto_front(self) -> None:
         """Write the front table of the last multi-objective run (5 formats)."""
         if self._pareto_front is None:
-            messagebox.showinfo("Nothing to save",
-                                "Run a multi-objective evolution first.")
+            messagebox.showinfo("Nothing to save", "Run a multi-objective evolution first.")
             return
-        self._save_frame_dialog(self._pareto_front.to_dataframe(),
-                                "Save Pareto front", "pareto_front.csv",
-                                "Pareto front")
+        self._save_frame_dialog(
+            self._pareto_front.to_dataframe(),
+            "Save Pareto front",
+            "pareto_front.csv",
+            "Pareto front",
+        )
 
     # ------------------------------------------------------------------ #
     # Utilities tab -- the rar's own file & table operations, one by one
@@ -12280,123 +13791,160 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         # -- card 1: table merge & split -------------------------------- #
         merge = make_card(
-            page.grid, "Table merge & split", span=2, row=0, column=0,
+            page.grid,
+            "Table merge & split",
+            span=2,
+            row=0,
+            column=0,
             subtitle="The rar's CSV_merger / filemerger / Split CSV file "
-                     "trio: stack several tables into one (named columns "
-                     "first, the rest sorted), merge every table in a "
-                     "folder, or stream one big CSV into fixed-size parts.",
+            "trio: stack several tables into one (named columns "
+            "first, the rest sorted), merge every table in a "
+            "folder, or stream one big CSV into fixed-size parts.",
         )
         self._util_merge_mode = ttk.Combobox(
-            merge, state="readonly", width=24, values=_UTIL_MERGE_MODES)
+            merge, state="readonly", width=24, values=_UTIL_MERGE_MODES
+        )
         self._util_merge_mode.set(_UTIL_MERGE_MODES[0])
         self._util_merge_files: list[Path] = []
         self._util_merge_folder: Path | None = None
         self._util_merge_split_file: Path | None = None
         self._util_merge_mode.bind(
-            "<<ComboboxSelected>>", lambda _e: self._util_merge_mode_changed())
+            "<<ComboboxSelected>>", lambda _e: self._util_merge_mode_changed()
+        )
         form_row(merge, "mode", self._util_merge_mode)
         merge_pick = ttk.Frame(merge, style="Card.TFrame")
         grid_append(merge, merge_pick, sticky="w")
         for label, command in (
-                ("Pick tables…", self._util_merge_pick_files),
-                ("Pick folder…", self._util_merge_pick_folder),
-                ("Pick big CSV…", self._util_merge_pick_split_file)):
+            ("Pick tables…", self._util_merge_pick_files),
+            ("Pick folder…", self._util_merge_pick_folder),
+            ("Pick big CSV…", self._util_merge_pick_split_file),
+        ):
             button = self._action_button(merge_pick, label, command)
             button.pack(side="left")
         self._util_merge_info = ttk.Label(
-            merge, text="no tables, folder or file picked yet",
-            style="CardMuted.TLabel", wraplength=620, justify="left")
+            merge,
+            text="no tables, folder or file picked yet",
+            style="CardMuted.TLabel",
+            wraplength=620,
+            justify="left",
+        )
         grid_append(merge, self._util_merge_info, sticky="w", pady=(4, 0))
         self._util_merge_firstcols = ttk.Entry(merge, width=44)
         self._util_merge_firstcols.insert(0, "")
-        Tooltip(self._util_merge_firstcols,
-                "Comma-separated columns to keep first in the merged "
-                "output (the CSV_merger column-ordering contract); blank "
-                "keeps source order. Only used by the merge modes.")
+        Tooltip(
+            self._util_merge_firstcols,
+            "Comma-separated columns to keep first in the merged "
+            "output (the CSV_merger column-ordering contract); blank "
+            "keeps source order. Only used by the merge modes.",
+        )
         form_row(merge, "first columns", self._util_merge_firstcols)
         merge_opts = ttk.Frame(merge, style="Card.TFrame")
         grid_append(merge, merge_opts, sticky="w")
         merge_opts.columnconfigure(1, weight=1)
         self._util_merge_ext = ttk.Entry(merge_opts, width=8)
         self._util_merge_ext.insert(0, ".csv")
-        Tooltip(self._util_merge_ext,
-                "Folder-merge mode: the extension collected from the "
-                "folder (csv / xlsx / tsv ...).")
+        Tooltip(
+            self._util_merge_ext,
+            "Folder-merge mode: the extension collected from the folder (csv / xlsx / tsv ...).",
+        )
         form_row(merge_opts, "extension", self._util_merge_ext)
         self._util_merge_chunk = ttk.Entry(merge_opts, width=12)
         self._util_merge_chunk.insert(0, "1500000")
-        Tooltip(self._util_merge_chunk,
-                "Split mode: maximum rows per part file (the rar's "
-                "default was 1.5M; parts land in a folder you pick).")
+        Tooltip(
+            self._util_merge_chunk,
+            "Split mode: maximum rows per part file (the rar's "
+            "default was 1.5M; parts land in a folder you pick).",
+        )
         form_row(merge_opts, "rows per part", self._util_merge_chunk)
         merge_run_row = ttk.Frame(merge, style="Card.TFrame")
         grid_append(merge, merge_run_row, sticky="w", pady=(6, 0))
         merge_run_btn = self._action_button(
-            merge_run_row, "Run", self._util_merge_run, primary=True,
+            merge_run_row,
+            "Run",
+            self._util_merge_run,
+            primary=True,
             tooltip="Merging reads every picked table/folder entry and "
-                    "stacks them; splitting streams the big CSV lazily so "
-                    "memory stays flat no matter the file size.")
+            "stacks them; splitting streams the big CSV lazily so "
+            "memory stays flat no matter the file size.",
+        )
         merge_run_btn.pack(side="left")
         self._util_merge_summary = ttk.Label(
-            merge_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=520, justify="left")
+            merge_run_row, text="—", style="CardMuted.TLabel", wraplength=520, justify="left"
+        )
         self._util_merge_summary.pack(side="left", padx=(10, 0))
         self._util_merge_save_btn = self._action_button(
-            merge_run_row, "Save merged CSV…", self._util_merge_save,
-            tooltip="The merged table from the last run (merge modes only).")
+            merge_run_row,
+            "Save merged CSV…",
+            self._util_merge_save,
+            tooltip="The merged table from the last run (merge modes only).",
+        )
         self._util_merge_save_btn.pack(side="left", padx=(10, 0))
         merge_tree_frame = ttk.Frame(merge, style="Card.TFrame")
-        grid_append(merge, merge_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
-        self._util_merge_tree = ttk.Treeview(
-            merge_tree_frame, show="headings", height=7)
-        merge_bar = ttk.Scrollbar(merge_tree_frame, orient="vertical",
-                                  command=self._util_merge_tree.yview)
-        merge_bar_x = ttk.Scrollbar(merge_tree_frame, orient="horizontal",
-                                    command=self._util_merge_tree.xview)
-        self._util_merge_tree.configure(yscrollcommand=merge_bar.set,
-                                        xscrollcommand=merge_bar_x.set)
+        grid_append(merge, merge_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._util_merge_tree = ttk.Treeview(merge_tree_frame, show="headings", height=7)
+        merge_bar = ttk.Scrollbar(
+            merge_tree_frame, orient="vertical", command=self._util_merge_tree.yview
+        )
+        merge_bar_x = ttk.Scrollbar(
+            merge_tree_frame, orient="horizontal", command=self._util_merge_tree.xview
+        )
+        self._util_merge_tree.configure(
+            yscrollcommand=merge_bar.set, xscrollcommand=merge_bar_x.set
+        )
         self._util_merge_tree.pack(side="left", fill="both", expand=True)
         merge_bar.pack(side="right", fill="y")
         merge_bar_x.pack(side="bottom", fill="x")
 
         # -- card 2: table compare & annotate --------------------------- #
         compare = make_card(
-            page.grid, "Table compare & annotate", row=1, column=0,
+            page.grid,
+            "Table compare & annotate",
+            row=1,
+            column=0,
             subtitle="common_between_two_excel + notcommon + smilesgetter: "
-                     "reconcile one ligand-name column across two tables "
-                     "(common / only-A / only-B, name-normalised), or join "
-                     "SMILES onto name columns from a reference table.",
+            "reconcile one ligand-name column across two tables "
+            "(common / only-A / only-B, name-normalised), or join "
+            "SMILES onto name columns from a reference table.",
         )
         self._util_cmp_mode = ttk.Combobox(
-            compare, state="readonly", width=26, values=_UTIL_COMPARE_MODES)
+            compare, state="readonly", width=26, values=_UTIL_COMPARE_MODES
+        )
         self._util_cmp_mode.set(_UTIL_COMPARE_MODES[0])
         form_row(compare, "mode", self._util_cmp_mode)
         cmp_pick = ttk.Frame(compare, style="Card.TFrame")
         grid_append(compare, cmp_pick, sticky="w")
         for label, command in (
-                ("Table A…", self._util_cmp_pick_a),
-                ("Table B / reference…", self._util_cmp_pick_b)):
+            ("Table A…", self._util_cmp_pick_a),
+            ("Table B / reference…", self._util_cmp_pick_b),
+        ):
             button = self._action_button(cmp_pick, label, command)
             button.pack(side="left")
         self._util_cmp_a: Path | None = None
         self._util_cmp_b: Path | None = None
         self._util_cmp_info = ttk.Label(
-            compare, text="pick two tables (csv / tsv / xlsx)",
-            style="CardMuted.TLabel", wraplength=300, justify="left")
+            compare,
+            text="pick two tables (csv / tsv / xlsx)",
+            style="CardMuted.TLabel",
+            wraplength=300,
+            justify="left",
+        )
         grid_append(compare, self._util_cmp_info, sticky="w", pady=(4, 0))
         self._util_cmp_column = ttk.Entry(compare, width=26)
         self._util_cmp_column.insert(0, "Ligand")
-        Tooltip(self._util_cmp_column,
-                "Compare mode: the ligand-name column present in BOTH "
-                "tables (normalised before comparing, so 'LIG1.pdbqt' "
-                "equals 'lig1').")
+        Tooltip(
+            self._util_cmp_column,
+            "Compare mode: the ligand-name column present in BOTH "
+            "tables (normalised before comparing, so 'LIG1.pdbqt' "
+            "equals 'lig1').",
+        )
         form_row(compare, "compare column", self._util_cmp_column)
         self._util_cmp_names = ttk.Entry(compare, width=26)
         self._util_cmp_names.insert(0, "Ligand")
-        Tooltip(self._util_cmp_names,
-                "Annotate mode: comma-separated name columns in table A "
-                "that receive a '<column>_SMILES' companion column.")
+        Tooltip(
+            self._util_cmp_names,
+            "Annotate mode: comma-separated name columns in table A "
+            "that receive a '<column>_SMILES' companion column.",
+        )
         form_row(compare, "annotate columns", self._util_cmp_names)
         self._util_cmp_ref_name = ttk.Entry(compare, width=26)
         self._util_cmp_ref_name.insert(0, "Ligand")
@@ -12407,22 +13955,25 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         cmp_run_row = ttk.Frame(compare, style="Card.TFrame")
         grid_append(compare, cmp_run_row, sticky="w", pady=(6, 0))
         cmp_run_btn = self._action_button(
-            cmp_run_row, "Run", self._util_compare_run, primary=True,
+            cmp_run_row,
+            "Run",
+            self._util_compare_run,
+            primary=True,
             tooltip="Compare: the three-way reconciliation table; "
-                    "annotate: table A with the SMILES columns appended "
-                    "(empty string when a name is unknown).")
+            "annotate: table A with the SMILES columns appended "
+            "(empty string when a name is unknown).",
+        )
         cmp_run_btn.pack(side="left")
         self._util_cmp_summary = ttk.Label(
-            cmp_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=300, justify="left")
+            cmp_run_row, text="—", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
         self._util_cmp_summary.pack(side="left", padx=(8, 0))
         cmp_tree_frame = ttk.Frame(compare, style="Card.TFrame")
-        grid_append(compare, cmp_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
-        self._util_cmp_tree = ttk.Treeview(
-            cmp_tree_frame, show="headings", height=7)
-        cmp_bar = ttk.Scrollbar(cmp_tree_frame, orient="vertical",
-                                command=self._util_cmp_tree.yview)
+        grid_append(compare, cmp_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._util_cmp_tree = ttk.Treeview(cmp_tree_frame, show="headings", height=7)
+        cmp_bar = ttk.Scrollbar(
+            cmp_tree_frame, orient="vertical", command=self._util_cmp_tree.yview
+        )
         self._util_cmp_tree.configure(yscrollcommand=cmp_bar.set)
         self._util_cmp_tree.pack(side="left", fill="both", expand=True)
         cmp_bar.pack(side="right", fill="y")
@@ -12431,43 +13982,53 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         cmp_plot_row = ttk.Frame(compare, style="Card.TFrame")
         grid_append(compare, cmp_plot_row, sticky="w", pady=(6, 0))
         cmp_plot_btn = self._action_button(
-            cmp_plot_row, "Plot reconciliation", self._util_cmp_plot,
+            cmp_plot_row,
+            "Plot reconciliation",
+            self._util_cmp_plot,
             tooltip="The last three-way reconciliation as an overlap "
-                    "figure (plot_table_comparison): common / only-A / "
-                    "only-B counts -- the set story the table tells, "
-                    "told visually.")
+            "figure (plot_table_comparison): common / only-A / "
+            "only-B counts -- the set story the table tells, "
+            "told visually.",
+        )
         cmp_plot_btn.pack(side="left")
         self._util_cmp_plot_note = ttk.Label(
-            cmp_plot_row, text="", style="CardMuted.TLabel", wraplength=300,
-            justify="left")
+            cmp_plot_row, text="", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
         self._util_cmp_plot_note.pack(side="left", padx=(8, 0))
         self._util_cmp_host = self._figure_host(compare, height=260)
         self._util_cmp_last: Any = None
 
         # -- card 3: approved drugs ------------------------------------- #
         approved = make_card(
-            page.grid, "Approved drugs → report", row=1, column=1,
+            page.grid,
+            "Approved drugs → report",
+            row=1,
+            column=1,
             subtitle="approved.py: collect the drug names whose "
-                     "regulatory-approval column matches a status (a "
-                     "folder of TSV/CSV exports or several picked "
-                     "files), then write the list as CSV or as the "
-                     "rar's .docx -- now a real bordered Word table.",
+            "regulatory-approval column matches a status (a "
+            "folder of TSV/CSV exports or several picked "
+            "files), then write the list as CSV or as the "
+            "rar's .docx -- now a real bordered Word table.",
         )
         appr_pick = ttk.Frame(approved, style="Card.TFrame")
         grid_append(approved, appr_pick, sticky="w")
-        appr_btn = self._action_button(appr_pick, "Pick files…",
-                                       self._util_appr_pick_files)
+        appr_btn = self._action_button(appr_pick, "Pick files…", self._util_appr_pick_files)
         appr_btn.pack(side="left")
         self._util_appr_files: list[Path] = []
         self._util_appr_info = ttk.Label(
-            approved, text="no approval exports picked yet",
-            style="CardMuted.TLabel", wraplength=300, justify="left")
+            approved,
+            text="no approval exports picked yet",
+            style="CardMuted.TLabel",
+            wraplength=300,
+            justify="left",
+        )
         grid_append(approved, self._util_appr_info, sticky="w", pady=(4, 0))
         self._util_appr_drug = ttk.Entry(approved, width=26)
         self._util_appr_drug.insert(0, "drug")
-        Tooltip(self._util_appr_drug,
-                "Drug-name column (matched case-insensitively; the "
-                "DGIdb export header is 'drug').")
+        Tooltip(
+            self._util_appr_drug,
+            "Drug-name column (matched case-insensitively; the DGIdb export header is 'drug').",
+        )
         form_row(approved, "drug column", self._util_appr_drug)
         self._util_appr_col = ttk.Entry(approved, width=26)
         self._util_appr_col.insert(0, "regulatory approval")
@@ -12478,148 +14039,185 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         appr_run_row = ttk.Frame(approved, style="Card.TFrame")
         grid_append(approved, appr_run_row, sticky="w", pady=(6, 0))
         appr_run_btn = self._action_button(
-            appr_run_row, "Filter", self._util_approved_run, primary=True,
+            appr_run_row,
+            "Filter",
+            self._util_approved_run,
+            primary=True,
             tooltip="One pass over every picked file; the matched names "
-                    "land in the list below, deduplicated and sorted.")
+            "land in the list below, deduplicated and sorted.",
+        )
         appr_run_btn.pack(side="left")
         self._util_appr_summary = ttk.Label(
-            appr_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=300, justify="left")
+            appr_run_row, text="—", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
         self._util_appr_summary.pack(side="left", padx=(8, 0))
         appr_save_row = ttk.Frame(approved, style="Card.TFrame")
         grid_append(approved, appr_save_row, sticky="w", pady=(4, 0))
         appr_csv_btn = self._action_button(
-            appr_save_row, "Save names CSV…", self._util_approved_save_csv)
+            appr_save_row, "Save names CSV…", self._util_approved_save_csv
+        )
         appr_csv_btn.pack(side="left")
         appr_docx_btn = self._action_button(
-            appr_save_row, "Save report DOCX…", self._util_approved_save_docx,
+            appr_save_row,
+            "Save report DOCX…",
+            self._util_approved_save_docx,
             tooltip="The rar's .docx output, upgraded: a bordered Word "
-                    "table with a bold header row (needs python-docx, "
-                    "pharmaml[reports]).")
+            "table with a bold header row (needs python-docx, "
+            "pharmaml[reports]).",
+        )
         appr_docx_btn.pack(side="left", padx=(10, 0))
         appr_tree_frame = ttk.Frame(approved, style="Card.TFrame")
-        grid_append(approved, appr_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
+        grid_append(approved, appr_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
         self._util_appr_tree = ttk.Treeview(
-            appr_tree_frame, columns=("drug",), show="headings", height=7)
+            appr_tree_frame, columns=("drug",), show="headings", height=7
+        )
         self._util_appr_tree.heading("drug", text="drug")
         self._util_appr_tree.column("drug", width=220, stretch=True)
-        appr_bar = ttk.Scrollbar(appr_tree_frame, orient="vertical",
-                                 command=self._util_appr_tree.yview)
+        appr_bar = ttk.Scrollbar(
+            appr_tree_frame, orient="vertical", command=self._util_appr_tree.yview
+        )
         self._util_appr_tree.configure(yscrollcommand=appr_bar.set)
         self._util_appr_tree.pack(side="left", fill="both", expand=True)
         appr_bar.pack(side="right", fill="y")
 
         # -- card 4: campaign file tools -------------------------------- #
         tools = make_card(
-            page.grid, "Campaign file tools", row=2, column=0,
+            page.grid,
+            "Campaign file tools",
+            row=2,
+            column=0,
             subtitle="extaacter / dlg_extracter / ligand_pdbqt_extracter / "
-                     "Nameextracter / adder / deleter / delete: collect "
-                     "matching files out of a campaign tree, list a "
-                     "folder's names, distribute binaries into every "
-                     "sub-folder, delete strays, or clean a tree down to "
-                     "an allowlist -- destructive paths run dry-run "
-                     "first, always.",
+            "Nameextracter / adder / deleter / delete: collect "
+            "matching files out of a campaign tree, list a "
+            "folder's names, distribute binaries into every "
+            "sub-folder, delete strays, or clean a tree down to "
+            "an allowlist -- destructive paths run dry-run "
+            "first, always.",
         )
         self._util_tool_mode = ttk.Combobox(
-            tools, state="readonly", width=28, values=_UTIL_TOOL_MODES)
+            tools, state="readonly", width=28, values=_UTIL_TOOL_MODES
+        )
         self._util_tool_mode.set(_UTIL_TOOL_MODES[0])
-        self._util_tool_mode.bind(
-            "<<ComboboxSelected>>", lambda _e: self._util_tool_mode_changed())
+        self._util_tool_mode.bind("<<ComboboxSelected>>", lambda _e: self._util_tool_mode_changed())
         form_row(tools, "mode", self._util_tool_mode)
         tool_pick = ttk.Frame(tools, style="Card.TFrame")
         grid_append(tools, tool_pick, sticky="w")
         for label, command in (
-                ("Folder…", self._util_tool_pick_folder),
-                ("Files…", self._util_tool_pick_files),
-                ("Collect into…", self._util_tool_pick_out)):
+            ("Folder…", self._util_tool_pick_folder),
+            ("Files…", self._util_tool_pick_files),
+            ("Collect into…", self._util_tool_pick_out),
+        ):
             button = self._action_button(tool_pick, label, command)
             button.pack(side="left")
         self._util_tool_folder: Path | None = None
         self._util_tool_files: list[Path] = []
         self._util_tool_out: Path | None = None
         self._util_tool_info = ttk.Label(
-            tools, text="pick a campaign folder (and files for "
-                        "distribute, an output folder for collect)",
-            style="CardMuted.TLabel", wraplength=300, justify="left")
+            tools,
+            text="pick a campaign folder (and files for distribute, an output folder for collect)",
+            style="CardMuted.TLabel",
+            wraplength=300,
+            justify="left",
+        )
         grid_append(tools, self._util_tool_info, sticky="w", pady=(4, 0))
         self._util_tool_filename = ttk.Entry(tools, width=26)
         self._util_tool_filename.insert(0, "r.dlg")
-        Tooltip(self._util_tool_filename,
-                "Collect: exact filename to gather (r.dlg / r.gpf / "
-                "l.pdbqt ...); delete: the stray filename to remove "
-                "anywhere under the folder.")
+        Tooltip(
+            self._util_tool_filename,
+            "Collect: exact filename to gather (r.dlg / r.gpf / "
+            "l.pdbqt ...); delete: the stray filename to remove "
+            "anywhere under the folder.",
+        )
         form_row(tools, "filename", self._util_tool_filename)
         self._util_tool_pattern = ttk.Entry(tools, width=26)
         self._util_tool_pattern.insert(0, r"\d+\.pdbqt")
-        Tooltip(self._util_tool_pattern,
-                "Collect: a regex the filename must match (combine with "
-                "the exact name as a union); cleanup: the keep-pattern "
-                "filenames must match to survive.")
+        Tooltip(
+            self._util_tool_pattern,
+            "Collect: a regex the filename must match (combine with "
+            "the exact name as a union); cleanup: the keep-pattern "
+            "filenames must match to survive.",
+        )
         form_row(tools, "pattern", self._util_tool_pattern)
         self._util_tool_ext = ttk.Entry(tools, width=26)
         self._util_tool_ext.insert(0, ".csv")
         form_row(tools, "extension (list)", self._util_tool_ext)
         self._util_tool_keep = ttk.Entry(tools, width=26)
         self._util_tool_keep.insert(0, "r.pdbqt,r.dlg,r.gpf,r.dpf")
-        Tooltip(self._util_tool_keep,
-                "Cleanup: comma-separated filenames that survive; "
-                "everything else in the tree is a deletion candidate.")
+        Tooltip(
+            self._util_tool_keep,
+            "Cleanup: comma-separated filenames that survive; "
+            "everything else in the tree is a deletion candidate.",
+        )
         form_row(tools, "keep names (cleanup)", self._util_tool_keep)
         self._util_tool_dry_var = tk.BooleanVar(value=True)
         dry_check = ttk.Checkbutton(
-            tools, text="dry run (report only, nothing deleted)",
-            variable=self._util_tool_dry_var)
-        Tooltip(dry_check,
-                "On (the default): collect/delete/cleanup only report "
-                "what they would do. Untick and confirm to apply for "
-                "real -- the confirmation names the exact counts.")
+            tools, text="dry run (report only, nothing deleted)", variable=self._util_tool_dry_var
+        )
+        Tooltip(
+            dry_check,
+            "On (the default): collect/delete/cleanup only report "
+            "what they would do. Untick and confirm to apply for "
+            "real -- the confirmation names the exact counts.",
+        )
         form_row(tools, "safety", dry_check)
         tool_run_row = ttk.Frame(tools, style="Card.TFrame")
         grid_append(tools, tool_run_row, sticky="w", pady=(6, 0))
         tool_run_btn = self._action_button(
-            tool_run_row, "Run", self._util_tools_run, primary=True,
+            tool_run_row,
+            "Run",
+            self._util_tools_run,
+            primary=True,
             tooltip="Distribute copies the picked files into every "
-                    "immediate sub-folder of the campaign folder (the "
-                    "adder.py bin/receptor push); the rest read the "
-                    "tree and report.")
+            "immediate sub-folder of the campaign folder (the "
+            "adder.py bin/receptor push); the rest read the "
+            "tree and report.",
+        )
         tool_run_btn.pack(side="left")
         self._util_tool_summary = ttk.Label(
-            tool_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=300, justify="left")
+            tool_run_row, text="—", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
         self._util_tool_summary.pack(side="left", padx=(8, 0))
         tool_tree_frame = ttk.Frame(tools, style="Card.TFrame")
-        grid_append(tools, tool_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
-        self._util_tool_tree = ttk.Treeview(
-            tool_tree_frame, show="headings", height=7)
-        tool_bar = ttk.Scrollbar(tool_tree_frame, orient="vertical",
-                                 command=self._util_tool_tree.yview)
+        grid_append(tools, tool_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._util_tool_tree = ttk.Treeview(tool_tree_frame, show="headings", height=7)
+        tool_bar = ttk.Scrollbar(
+            tool_tree_frame, orient="vertical", command=self._util_tool_tree.yview
+        )
         self._util_tool_tree.configure(yscrollcommand=tool_bar.set)
         self._util_tool_tree.pack(side="left", fill="both", expand=True)
         tool_bar.pack(side="right", fill="y")
 
         # -- card 5: reindex by number ---------------------------------- #
         reindex = make_card(
-            page.grid, "Reindex by number", row=2, column=1,
+            page.grid,
+            "Reindex by number",
+            row=2,
+            column=1,
             subtitle="Prettier_extracted_dlgs: align sparse per-ligand "
-                     "rows onto the full number range so missing runs "
-                     "appear as gaps instead of silently vanishing; rows "
-                     "outside the range are dropped with a warning.",
+            "rows onto the full number range so missing runs "
+            "appear as gaps instead of silently vanishing; rows "
+            "outside the range are dropped with a warning.",
         )
         self._util_reindex_pick_btn = self._action_button(
-            reindex, "Pick CSV…", self._util_reindex_pick)
+            reindex, "Pick CSV…", self._util_reindex_pick
+        )
         self._util_reindex_pick_btn.grid(row=0, column=0, sticky="w")
         self._util_reindex_path: Path | None = None
         self._util_reindex_info = ttk.Label(
-            reindex, text="no table picked yet",
-            style="CardMuted.TLabel", wraplength=300, justify="left")
+            reindex,
+            text="no table picked yet",
+            style="CardMuted.TLabel",
+            wraplength=300,
+            justify="left",
+        )
         grid_append(reindex, self._util_reindex_info, sticky="w", pady=(4, 0))
         self._util_reindex_column = ttk.Entry(reindex, width=26)
         self._util_reindex_column.insert(0, "ligand")
-        Tooltip(self._util_reindex_column,
-                "Column carrying the numbered names (e.g. "
-                "'5_result.dlg'); its first number becomes the index.")
+        Tooltip(
+            self._util_reindex_column,
+            "Column carrying the numbered names (e.g. "
+            "'5_result.dlg'); its first number becomes the index.",
+        )
         form_row(reindex, "column", self._util_reindex_column)
         reindex_range = ttk.Frame(reindex, style="Card.TFrame")
         grid_append(reindex, reindex_range, sticky="w")
@@ -12632,31 +14230,36 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(reindex_range, "stop", self._util_reindex_stop)
         self._util_reindex_pattern = ttk.Entry(reindex, width=26)
         self._util_reindex_pattern.insert(0, r"(\d+)")
-        Tooltip(self._util_reindex_pattern,
-                "Regex whose first capture group extracts the ligand "
-                "number out of the column value.")
+        Tooltip(
+            self._util_reindex_pattern,
+            "Regex whose first capture group extracts the ligand number out of the column value.",
+        )
         form_row(reindex, "number pattern", self._util_reindex_pattern)
         reindex_run_row = ttk.Frame(reindex, style="Card.TFrame")
         grid_append(reindex, reindex_run_row, sticky="w", pady=(6, 0))
         reindex_run_btn = self._action_button(
-            reindex_run_row, "Reindex", self._util_reindex_run, primary=True,
+            reindex_run_row,
+            "Reindex",
+            self._util_reindex_run,
+            primary=True,
             tooltip="Left-joins the rows onto range(start, stop+1); the "
-                    "dense table previews below and Save CSV… writes it.")
+            "dense table previews below and Save CSV… writes it.",
+        )
         reindex_run_btn.pack(side="left")
         self._util_reindex_summary = ttk.Label(
-            reindex_run_row, text="—", style="CardMuted.TLabel",
-            wraplength=300, justify="left")
+            reindex_run_row, text="—", style="CardMuted.TLabel", wraplength=300, justify="left"
+        )
         self._util_reindex_summary.pack(side="left", padx=(8, 0))
         reindex_save_btn = self._action_button(
-            reindex_run_row, "Save CSV…", self._util_reindex_save)
+            reindex_run_row, "Save CSV…", self._util_reindex_save
+        )
         reindex_save_btn.pack(side="left", padx=(10, 0))
         reindex_tree_frame = ttk.Frame(reindex, style="Card.TFrame")
-        grid_append(reindex, reindex_tree_frame, sticky="nsew", pady=(6, 0),
-                    weight=True)
-        self._util_reindex_tree = ttk.Treeview(
-            reindex_tree_frame, show="headings", height=7)
-        reindex_bar = ttk.Scrollbar(reindex_tree_frame, orient="vertical",
-                                    command=self._util_reindex_tree.yview)
+        grid_append(reindex, reindex_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._util_reindex_tree = ttk.Treeview(reindex_tree_frame, show="headings", height=7)
+        reindex_bar = ttk.Scrollbar(
+            reindex_tree_frame, orient="vertical", command=self._util_reindex_tree.yview
+        )
         self._util_reindex_tree.configure(yscrollcommand=reindex_bar.set)
         self._util_reindex_tree.pack(side="left", fill="both", expand=True)
         reindex_bar.pack(side="right", fill="y")
@@ -12665,8 +14268,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._util_frames: dict[str, Any] = {}
 
     # -- utilities: shared helpers ------------------------------------- #
-    def _fill_dynamic_tree(self, tree: Any, frame: Any, max_rows: int = 200,
-                           widths: dict[str, int] | None = None) -> int:
+    def _fill_dynamic_tree(
+        self, tree: Any, frame: Any, max_rows: int = 200, widths: dict[str, int] | None = None
+    ) -> int:
         """Rebuild a Treeview from an arbitrary DataFrame.
 
         Returns the number of rows actually shown (capped at
@@ -12682,21 +14286,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             tree.column(column, width=width, minwidth=56, stretch=True)
         shown = 0
         for _, row in frame.head(max_rows).iterrows():
-            tree.insert("", "end",
-                        values=[_cell_text(v, limit=32) for v in row.tolist()])
+            tree.insert("", "end", values=[_cell_text(v, limit=32) for v in row.tolist()])
             shown += 1
         if len(frame) > max_rows:
             tree.insert(
-                "", "end",
+                "",
+                "end",
                 values=[
-                    (f"… {len(frame) - max_rows:,} more rows "
-                     f"(total {len(frame):,})"),
+                    (f"… {len(frame) - max_rows:,} more rows (total {len(frame):,})"),
                     *[""] * (len(columns) - 1),
-                ])
+                ],
+            )
         return shown
 
-    def _save_frame_dialog(self, frame: Any, title: str, name: str,
-                           subject: str = "table") -> None:
+    def _save_frame_dialog(self, frame: Any, title: str, name: str, subject: str = "table") -> None:
         """Ask a path and write ``frame`` (``export_table``, five formats).
 
         The library's visual export story owns the dialog (100x-121):
@@ -12709,7 +14312,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Nothing to save", "Run the tool first.")
             return
         path = filedialog.asksaveasfilename(
-            title=title, defaultextension=".csv",
+            title=title,
+            defaultextension=".csv",
             initialfile=name,
             filetypes=[
                 ("CSV table", "*.csv"),
@@ -12736,9 +14340,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         mode = self._util_merge_mode.get()
         picked = "no tables, folder or file picked yet"
         if mode.startswith("merge picked") and self._util_merge_files:
-            picked = (f"{len(self._util_merge_files)} table(s): "
-                      + ", ".join(p.name for p in self._util_merge_files[:4])
-                      + (" …" if len(self._util_merge_files) > 4 else ""))
+            picked = (
+                f"{len(self._util_merge_files)} table(s): "
+                + ", ".join(p.name for p in self._util_merge_files[:4])
+                + (" …" if len(self._util_merge_files) > 4 else "")
+            )
         elif mode.startswith("merge whole") and self._util_merge_folder:
             picked = f"folder: {self._util_merge_folder}"
         elif mode.startswith("split") and self._util_merge_split_file:
@@ -12748,8 +14354,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _util_merge_pick_files(self) -> None:
         paths = filedialog.askopenfilenames(
             title="Pick the tables to merge",
-            filetypes=[("Tables", "*.csv *.tsv *.xlsx"),
-                       ("All files", "*.*")],
+            filetypes=[("Tables", "*.csv *.tsv *.xlsx"), ("All files", "*.*")],
         )
         if not paths:
             return
@@ -12772,20 +14377,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._util_merge_mode_changed()
 
     def _util_merge_run(self) -> None:
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "table merge"):
+        if not self._require_pharmaml() or not self._require("pandas", "table merge"):
             return
         mode = self._util_merge_mode.get()
         first_columns = [
-            token.strip() for token in
-            self._util_merge_firstcols.get().split(",") if token.strip()
+            token.strip() for token in self._util_merge_firstcols.get().split(",") if token.strip()
         ] or None
 
         if mode.startswith("merge picked"):
             sources: list[Any] = list(getattr(self, "_util_merge_files", []))
             if not sources:
-                messagebox.showwarning(
-                    "No tables", "Pick the tables to merge first.")
+                messagebox.showwarning("No tables", "Pick the tables to merge first.")
                 return
             label = f"merging {len(sources)} table(s)"
             out_dir = None
@@ -12793,8 +14395,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         elif mode.startswith("merge whole"):
             folder = getattr(self, "_util_merge_folder", None)
             if folder is None:
-                messagebox.showwarning(
-                    "No folder", "Pick the folder to merge first.")
+                messagebox.showwarning("No folder", "Pick the folder to merge first.")
                 return
             extension = self._util_merge_ext.get().strip() or ".csv"
             sources = [folder]
@@ -12804,17 +14405,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         else:  # split
             big = getattr(self, "_util_merge_split_file", None)
             if big is None:
-                messagebox.showwarning(
-                    "No file", "Pick the big CSV to split first.")
+                messagebox.showwarning("No file", "Pick the big CSV to split first.")
                 return
             try:
-                chunk_rows = parse_int(self._util_merge_chunk.get(),
-                                       "rows per part", minimum=1)
+                chunk_rows = parse_int(self._util_merge_chunk.get(), "rows per part", minimum=1)
             except ValueError as exc:
                 messagebox.showerror("Input", str(exc))
                 return
-            out_dir = filedialog.askdirectory(
-                title="Pick the folder for the part files")
+            out_dir = filedialog.askdirectory(title="Pick the folder for the part files")
             if not out_dir:
                 return
             sources = [big]
@@ -12825,15 +14423,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.chem.converters import split_table_into_chunks
 
             if mode.startswith("merge picked"):
-                return {"kind": "merge",
-                        "frame": merge_tables(sources, first_columns=first_columns)}
+                return {
+                    "kind": "merge",
+                    "frame": merge_tables(sources, first_columns=first_columns),
+                }
             if mode.startswith("merge whole"):
-                return {"kind": "merge",
-                        "frame": merge_table_folder(
-                            sources[0], extension=extension,
-                            first_columns=first_columns)}
-            parts = split_table_into_chunks(
-                sources[0], Path(out_dir), chunk_rows=chunk_rows)
+                return {
+                    "kind": "merge",
+                    "frame": merge_table_folder(
+                        sources[0], extension=extension, first_columns=first_columns
+                    ),
+                }
+            parts = split_table_into_chunks(sources[0], Path(out_dir), chunk_rows=chunk_rows)
             return {"kind": "split", "parts": parts}
 
         def render(result: Any) -> None:
@@ -12843,9 +14444,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._fill_dynamic_tree(self._util_merge_tree, frame)
                 self._util_merge_save_btn.state(["!disabled"])
                 self._util_merge_summary.configure(
-                    text=(f"merged: {len(frame):,} rows × "
-                          f"{len(frame.columns)} columns"),
-                    style="Field.TLabel")
+                    text=(f"merged: {len(frame):,} rows × {len(frame.columns)} columns"),
+                    style="Field.TLabel",
+                )
             else:
                 parts = result["parts"]
                 self._util_frames.pop("merge", None)
@@ -12854,20 +14455,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     self._util_merge_tree,
                     _frame_from_records(
                         ("part", "rows", "bytes"),
-                        [(p.name, "?", p.stat().st_size if p.exists() else 0)
-                         for p in parts]),
+                        [(p.name, "?", p.stat().st_size if p.exists() else 0) for p in parts],
+                    ),
                 )
                 self._util_merge_summary.configure(
-                    text=(f"split into {len(parts)} part file(s) in "
-                          f"{Path(out_dir).name} · "
-                          f"≤{chunk_rows:,} rows each"),
-                    style="Field.TLabel")
+                    text=(
+                        f"split into {len(parts)} part file(s) in "
+                        f"{Path(out_dir).name} · "
+                        f"≤{chunk_rows:,} rows each"
+                    ),
+                    style="Field.TLabel",
+                )
 
         self._start_job(label, work, render)
 
     def _util_merge_save(self) -> None:
-        self._save_frame_dialog(self._util_frames.get("merge"),
-                                "Save the merged table", "merged_output.csv")
+        self._save_frame_dialog(
+            self._util_frames.get("merge"), "Save the merged table", "merged_output.csv"
+        )
 
     # -- utilities: compare & annotate ---------------------------------- #
     def _util_cmp_pick_a(self) -> None:
@@ -12894,12 +14499,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._util_cmp_info.configure(text=f"A: {a}\nB: {b}")
 
     def _util_compare_run(self) -> None:
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "table compare"):
+        if not self._require_pharmaml() or not self._require("pandas", "table compare"):
             return
         if self._util_cmp_a is None or self._util_cmp_b is None:
-            messagebox.showwarning(
-                "Two tables needed", "Pick table A and table B first.")
+            messagebox.showwarning("Two tables needed", "Pick table A and table B first.")
             return
         mode = self._util_cmp_mode.get()
         a_path, b_path = self._util_cmp_a, self._util_cmp_b
@@ -12929,25 +14532,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 frame = pd.DataFrame(records, columns=["section", "name"])
                 self._util_frames["compare"] = frame
                 self._fill_dynamic_tree(
-                    self._util_cmp_tree, frame, widths={"section": 90,
-                                                        "name": 180})
+                    self._util_cmp_tree, frame, widths={"section": 90, "name": 180}
+                )
                 self._util_cmp_summary.configure(
-                    text=(f"common {len(comparison.common)} · "
-                          f"only A {len(comparison.only_in_a)} · "
-                          f"only B {len(comparison.only_in_b)}"),
-                    style="Field.TLabel")
+                    text=(
+                        f"common {len(comparison.common)} · "
+                        f"only A {len(comparison.only_in_a)} · "
+                        f"only B {len(comparison.only_in_b)}"
+                    ),
+                    style="Field.TLabel",
+                )
 
             self._start_job(f"comparing '{column}'", work, render)
             return
 
         # annotate mode
         name_columns = [
-            token.strip() for token in
-            self._util_cmp_names.get().split(",") if token.strip()
+            token.strip() for token in self._util_cmp_names.get().split(",") if token.strip()
         ]
         if not name_columns:
-            messagebox.showwarning(
-                "Columns", "Name the columns to annotate (comma-separated).")
+            messagebox.showwarning("Columns", "Name the columns to annotate (comma-separated).")
             return
         ref_name = self._util_cmp_ref_name.get().strip() or "Ligand"
         ref_smiles = self._util_cmp_ref_smiles.get().strip() or "SMILES"
@@ -12958,23 +14562,30 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             frame = read_table(a_path)
             return annotate_with_smiles(
-                frame, b_path, name_columns,
+                frame,
+                b_path,
+                name_columns,
                 reference_name_column=ref_name,
-                reference_smiles_column=ref_smiles)
+                reference_smiles_column=ref_smiles,
+            )
 
         def render(frame: Any) -> None:
             self._util_frames["compare"] = frame
             self._util_cmp_last = None  # annotate mode has no comparison
             self._fill_dynamic_tree(self._util_cmp_tree, frame)
             joined = sum(
-                1 for column in name_columns
+                1
+                for column in name_columns
                 if column + "_SMILES" in frame.columns
                 and frame[column + "_SMILES"].astype(str).str.len().any()
             )
             self._util_cmp_summary.configure(
-                text=(f"{len(frame):,} rows · {len(name_columns)} name "
-                      f"column(s) annotated ({joined} found SMILES)"),
-                style="Field.TLabel")
+                text=(
+                    f"{len(frame):,} rows · {len(name_columns)} name "
+                    f"column(s) annotated ({joined} found SMILES)"
+                ),
+                style="Field.TLabel",
+            )
 
         self._start_job("annotating with SMILES", work, render)
 
@@ -12990,28 +14601,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo(
                 "No comparison yet",
                 "Run the compare mode first — the overlap figure needs "
-                "the last three-way reconciliation.")
+                "the last three-way reconciliation.",
+            )
             return
         if not self._require_pharmaml() or not self._require(
-                "matplotlib", "the reconciliation figure"):
+            "matplotlib", "the reconciliation figure"
+        ):
             return
-        a_name = (self._util_cmp_a.name if self._util_cmp_a is not None
-                  else "A")
-        b_name = (self._util_cmp_b.name if self._util_cmp_b is not None
-                  else "B")
+        a_name = self._util_cmp_a.name if self._util_cmp_a is not None else "A"
+        b_name = self._util_cmp_b.name if self._util_cmp_b is not None else "B"
 
         def work() -> Any:
             from pharmaml.viz import plot_table_comparison
 
             return plot_table_comparison(
-                comparison, labels=(a_name, b_name),
-                title="Ligand-set reconciliation")
+                comparison, labels=(a_name, b_name), title="Ligand-set reconciliation"
+            )
 
         def render(figure: Any) -> None:
             self._render_figure(self._util_cmp_host, figure)
             self._util_cmp_plot_note.configure(
-                text="reconciliation figure replaces the tree's width — "
-                     "Run refreshes the table")
+                text="reconciliation figure replaces the tree's width — Run refreshes the table"
+            )
 
         self._start_job("reconciliation figure", work, render)
 
@@ -13019,8 +14630,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _util_appr_pick_files(self) -> None:
         paths = filedialog.askopenfilenames(
             title="Pick the approval exports",
-            filetypes=[("Approval exports", "*.tsv *.csv *.tab"),
-                       ("All files", "*.*")],
+            filetypes=[("Approval exports", "*.tsv *.csv *.tab"), ("All files", "*.*")],
         )
         if not paths:
             return
@@ -13031,12 +14641,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._util_appr_info.configure(text=shown)
 
     def _util_approved_run(self) -> None:
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "approval filtering"):
+        if not self._require_pharmaml() or not self._require("pandas", "approval filtering"):
             return
         if not self._util_appr_files:
-            messagebox.showwarning(
-                "No files", "Pick the approval export files first.")
+            messagebox.showwarning("No files", "Pick the approval export files first.")
             return
         files = list(self._util_appr_files)
         drug_column = self._util_appr_drug.get().strip() or "drug"
@@ -13047,8 +14655,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.pharma import filter_approved_drugs
 
             return filter_approved_drugs(
-                [str(p) for p in files], drug_column=drug_column,
-                approval_column=approval_column, approval_status=status)
+                [str(p) for p in files],
+                drug_column=drug_column,
+                approval_column=approval_column,
+                approval_status=status,
+            )
 
         def render(names: Any) -> None:
             import pandas as pd
@@ -13061,25 +14672,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 tree.insert("", "end", values=(_cell_text(name, limit=40),))
             if len(names) > 500:
                 tree.insert(
-                    "", "end",
-                    values=((f"… {len(names) - 500:,} more "
-                             f"(total {len(names):,})"),))
+                    "", "end", values=((f"… {len(names) - 500:,} more (total {len(names):,})"),)
+                )
             self._util_appr_summary.configure(
-                text=(f"{len(names)} approved drug name(s) "
-                      f"(status '{status}')"), style="Field.TLabel")
+                text=(f"{len(names)} approved drug name(s) (status '{status}')"),
+                style="Field.TLabel",
+            )
 
         self._start_job(f"filtering {len(files)} file(s)", work, render)
 
     def _util_approved_save_csv(self) -> None:
-        self._save_frame_dialog(self._util_frames.get("approved"),
-                                "Save the approved-drug names",
-                                "approved_drugs.csv")
+        self._save_frame_dialog(
+            self._util_frames.get("approved"), "Save the approved-drug names", "approved_drugs.csv"
+        )
 
     def _util_approved_save_docx(self) -> None:
         frame = self._util_frames.get("approved")
         if frame is None:
-            messagebox.showinfo("Nothing to save",
-                                "Filter the approval files first.")
+            messagebox.showinfo("Nothing to save", "Filter the approval files first.")
             return
         if not self._require_pharmaml():
             return
@@ -13098,7 +14708,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
             return
         path = filedialog.asksaveasfilename(
-            title="Save the approved-drug report", defaultextension=".docx",
+            title="Save the approved-drug report",
+            defaultextension=".docx",
             initialfile="approved_drugs.docx",
             filetypes=[("Word document", "*.docx")],
         )
@@ -13122,14 +14733,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self._util_tool_folder is not None:
             parts.append(f"folder: {self._util_tool_folder.name}")
         if self._util_tool_files and mode.startswith("distribute"):
-            parts.append(f"{len(self._util_tool_files)} file(s): "
-                         + ", ".join(p.name for p in self._util_tool_files[:3]))
+            parts.append(
+                f"{len(self._util_tool_files)} file(s): "
+                + ", ".join(p.name for p in self._util_tool_files[:3])
+            )
         if self._util_tool_out is not None and mode.startswith("collect"):
             parts.append(f"collect into: {self._util_tool_out.name}")
         self._util_tool_info.configure(
-            text="\n".join(parts) or
-            "pick a campaign folder (and files for distribute, an "
-            "output folder for collect)")
+            text="\n".join(parts)
+            or "pick a campaign folder (and files for distribute, an output folder for collect)"
+        )
 
     def _util_tool_pick_folder(self) -> None:
         path = filedialog.askdirectory(title="Pick the campaign folder")
@@ -13153,19 +14766,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._util_tool_mode_changed()
 
     def _util_tools_run(self) -> None:
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "campaign tools"):
+        if not self._require_pharmaml() or not self._require("pandas", "campaign tools"):
             return
         mode = self._util_tool_mode.get()
         folder = self._util_tool_folder
         if folder is None and not mode.startswith("distribute"):
-            messagebox.showwarning(
-                "No folder", "Pick the campaign folder first.")
+            messagebox.showwarning("No folder", "Pick the campaign folder first.")
             return
         if folder is None and mode.startswith("distribute"):
             messagebox.showwarning(
-                "No target folder", "Pick the campaign folder whose "
-                "sub-folders receive the files.")
+                "No target folder", "Pick the campaign folder whose sub-folders receive the files."
+            )
             return
         dry_run = bool(self._util_tool_dry_var.get())
         filename = self._util_tool_filename.get().strip() or None
@@ -13175,35 +14786,38 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if mode.startswith("collect"):
             if not filename and not pattern:
                 messagebox.showwarning(
-                    "Nothing to match",
-                    "Give a filename and/or a pattern to collect.")
+                    "Nothing to match", "Give a filename and/or a pattern to collect."
+                )
                 return
             out_dir = self._util_tool_out or (folder / "collected")
 
             def work() -> Any:
                 from pharmaml.docking import collect_files
 
-                return collect_files(folder, filename=filename,
-                                     pattern=pattern, out_dir=out_dir,
-                                     dry_run=dry_run)
+                return collect_files(
+                    folder, filename=filename, pattern=pattern, out_dir=out_dir, dry_run=dry_run
+                )
 
             def render(frame: Any) -> None:
                 self._util_frames["tools"] = frame
                 self._fill_dynamic_tree(
-                    self._util_tool_tree, frame,
-                    widths={"source": 200, "destination": 200})
+                    self._util_tool_tree, frame, widths={"source": 200, "destination": 200}
+                )
                 copied = int(frame["copied"].sum()) if "copied" in frame else 0
                 verb = "would copy" if dry_run else "copied"
                 self._util_tool_summary.configure(
-                    text=(f"{len(frame)} match(es) · {verb} {copied} "
-                          f"into {out_dir.name}"
-                          + ("" if dry_run else " (dry run off)")),
-                    style="Field.TLabel")
+                    text=(
+                        f"{len(frame)} match(es) · {verb} {copied} "
+                        f"into {out_dir.name}" + ("" if dry_run else " (dry run off)")
+                    ),
+                    style="Field.TLabel",
+                )
 
             self._start_job("collecting files", work, render)
             return
 
         if mode.startswith("list"):
+
             def work() -> Any:
                 from pharmaml.docking import list_file_names
 
@@ -13214,11 +14828,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
                 frame = pd.DataFrame({"name": list(names)})
                 self._util_frames["tools"] = frame
-                self._fill_dynamic_tree(self._util_tool_tree, frame,
-                                        widths={"name": 220})
+                self._fill_dynamic_tree(self._util_tool_tree, frame, widths={"name": 220})
                 self._util_tool_summary.configure(
-                    text=f"{len(names)} {extension} name(s), sorted",
-                    style="Field.TLabel")
+                    text=f"{len(names)} {extension} name(s), sorted", style="Field.TLabel"
+                )
 
             self._start_job(f"listing {extension} files", work, render)
             return
@@ -13226,14 +14839,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if mode.startswith("distribute"):
             if not self._util_tool_files:
                 messagebox.showwarning(
-                    "No files", "Pick the files to distribute first "
-                    "(binaries, receptor, ...).")
+                    "No files", "Pick the files to distribute first (binaries, receptor, ...)."
+                )
                 return
             files = [str(p) for p in self._util_tool_files]
             if not dry_run and not messagebox.askyesno(
-                    "Distribute for real",
-                    f"Copy {len(files)} file(s) into EVERY immediate "
-                    f"sub-folder of\n{folder}?\n(existing copies are kept)"):
+                "Distribute for real",
+                f"Copy {len(files)} file(s) into EVERY immediate "
+                f"sub-folder of\n{folder}?\n(existing copies are kept)",
+            ):
                 return
 
             def work() -> Any:
@@ -13244,22 +14858,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             def render(copied: Any) -> None:
                 import pandas as pd
 
-                frame = pd.DataFrame(
-                    {"destination": [str(p) for p in copied]})
+                frame = pd.DataFrame({"destination": [str(p) for p in copied]})
                 self._util_frames["tools"] = frame
-                self._fill_dynamic_tree(self._util_tool_tree, frame,
-                                        widths={"destination": 260})
+                self._fill_dynamic_tree(self._util_tool_tree, frame, widths={"destination": 260})
                 self._util_tool_summary.configure(
-                    text=f"placed {len(copied)} copy/copies "
-                         f"across {folder.name}", style="Field.TLabel")
+                    text=f"placed {len(copied)} copy/copies across {folder.name}",
+                    style="Field.TLabel",
+                )
 
             self._start_job(f"distributing {len(files)} file(s)", work, render)
             return
 
         if mode.startswith("delete"):
             if not filename:
-                messagebox.showwarning(
-                    "Filename", "Name the stray file to delete.")
+                messagebox.showwarning("Filename", "Name the stray file to delete.")
                 return
 
             def work() -> Any:
@@ -13275,39 +14887,38 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 tree["columns"] = ("result",)
                 tree.heading("result", text="result")
                 tree.column("result", width=240, stretch=True)
-                tree.insert("", "end", values=(
-                    f"{verb} {count} '{filename}' file(s)",))
+                tree.insert("", "end", values=(f"{verb} {count} '{filename}' file(s)",))
                 self._util_tool_summary.configure(
-                    text=f"{verb} {count} file(s) under {folder.name}",
-                    style="Field.TLabel")
+                    text=f"{verb} {count} file(s) under {folder.name}", style="Field.TLabel"
+                )
 
             self._start_job(f"deleting '{filename}'", work, render)
             return
 
         if mode.startswith("cleanup"):
             keep = {
-                token.strip() for token in
-                self._util_tool_keep.get().split(",") if token.strip()
+                token.strip() for token in self._util_tool_keep.get().split(",") if token.strip()
             }
             if not dry_run and not messagebox.askyesno(
-                    "Cleanup for real",
-                    f"Delete every file under\n{folder}\nthat is NOT one "
-                    f"of the keep names / pattern?\n(empty folders can "
-                    f"remain; this cannot be undone)"):
+                "Cleanup for real",
+                f"Delete every file under\n{folder}\nthat is NOT one "
+                f"of the keep names / pattern?\n(empty folders can "
+                f"remain; this cannot be undone)",
+            ):
                 return
 
             def work() -> Any:
                 from pharmaml.docking import cleanup_tree
 
-                return cleanup_tree(folder, keep=keep,
-                                    keep_pattern=pattern, dry_run=dry_run)
+                return cleanup_tree(folder, keep=keep, keep_pattern=pattern, dry_run=dry_run)
 
             def render(frame: Any) -> None:
                 self._util_frames["tools"] = frame
                 self._fill_dynamic_tree(self._util_tool_tree, frame)
                 verb = "would delete" if dry_run else "deleted"
                 self._util_tool_summary.configure(
-                    text=f"{len(frame)} file(s) {verb}", style="Field.TLabel")
+                    text=f"{len(frame)} file(s) {verb}", style="Field.TLabel"
+                )
 
             self._start_job("cleaning the tree", work, render)
 
@@ -13322,8 +14933,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._util_reindex_info.configure(text=path)
 
     def _util_reindex_run(self) -> None:
-        if not self._require_pharmaml() or not self._require(
-                "pandas", "reindex"):
+        if not self._require_pharmaml() or not self._require("pandas", "reindex"):
             return
         if self._util_reindex_path is None:
             messagebox.showwarning("No table", "Pick the CSV first.")
@@ -13333,10 +14943,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showwarning("Column", "Name the number column.")
             return
         try:
-            start = parse_int(self._util_reindex_start.get(), "start",
-                              minimum=0)
-            stop = parse_int(self._util_reindex_stop.get(), "stop",
-                             minimum=0)
+            start = parse_int(self._util_reindex_start.get(), "start", minimum=0)
+            stop = parse_int(self._util_reindex_stop.get(), "stop", minimum=0)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -13351,27 +14959,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.utils.io import read_table
 
             frame = read_table(path)
-            return reindex_by_number(frame, column, start=start, stop=stop,
-                                     pattern=pattern)
+            return reindex_by_number(frame, column, start=start, stop=stop, pattern=pattern)
 
         def render(frame: Any) -> None:
             self._util_frames["reindex"] = frame
             self._fill_dynamic_tree(self._util_reindex_tree, frame)
-            missing = int(frame.iloc[:, 0].isna().sum()) if len(
-                frame.columns) else 0
+            missing = int(frame.iloc[:, 0].isna().sum()) if len(frame.columns) else 0
             self._util_reindex_summary.configure(
-                text=(f"dense {start}…{stop} · {len(frame)} rows · "
-                      f"{missing} gap row(s)"), style="Field.TLabel")
+                text=(f"dense {start}…{stop} · {len(frame)} rows · {missing} gap row(s)"),
+                style="Field.TLabel",
+            )
 
         self._start_job(f"reindexing {path.name}", work, render)
 
     def _util_reindex_save(self) -> None:
-        self._save_frame_dialog(self._util_frames.get("reindex"),
-                                "Save the dense table", "reindexed.csv")
+        self._save_frame_dialog(
+            self._util_frames.get("reindex"), "Save the dense table", "reindexed.csv"
+        )
 
 
-def _frame_from_records(columns: tuple[str, ...],
-                         records: list[tuple[Any, ...]]) -> Any:
+def _frame_from_records(columns: tuple[str, ...], records: list[tuple[Any, ...]]) -> Any:
     """Build a small DataFrame from records (lazy pandas import)."""
     import pandas as pd
 
@@ -13392,8 +14999,7 @@ def _format_operator_stats(metadata: dict[str, Any]) -> str:
             successes = info.get("successes", 0)
             probability = info.get("final_probability", 0.0)
             lines.append(
-                f"  {name:<18} draws {draws:>4}   successes {successes:>4}   "
-                f"p {probability:.3f}"
+                f"  {name:<18} draws {draws:>4}   successes {successes:>4}   p {probability:.3f}"
             )
     if not lines:
         return "operator statistics appear here on adaptive runs"
@@ -13449,10 +15055,7 @@ def print_banner(app: PlaygroundApp) -> None:
     else:
         print("  pharmaml NOT loaded:", app.pharmaml_error)
         print("  fix:", _PHARMAML_HINT.replace("\n", " "))
-    missing = [
-        label for module, label, _purpose, _pip in _DEPENDENCIES
-        if not app.deps.get(module)
-    ]
+    missing = [label for module, label, _purpose, _pip in _DEPENDENCIES if not app.deps.get(module)]
     if missing:
         print(f"  optional dependencies missing: {', '.join(missing)}")
         print("  (the tabs that need them explain their pip line when you use them)")
@@ -13487,7 +15090,7 @@ def self_test() -> int:
     app.update()
 
     # -- manual hyperparameters (100x-106) ---------------------------- #
-    app._ml_load_example()                       # qsar_regression.csv
+    app._ml_load_example()  # qsar_regression.csv
     assert app._model_combo.get() == "auto", "a fresh load resets the model"
     app._model_combo.set("ridge")
     app._ml_refresh_hyperparam_panel()
@@ -13510,7 +15113,7 @@ def self_test() -> int:
     except ValueError as exc:
         assert "alpha" in str(exc)
     entries["alpha"].delete(0, "end")
-    entries["alpha"].insert(0, "0.5")            # leave a pinned value
+    entries["alpha"].insert(0, "0.5")  # leave a pinned value
     app._ml_params_reset()
     assert app._ml_params_var.get() == "{}", "reset clears the JSON"
     assert app._ml_manual_params("ridge", "regression") is None
@@ -13528,7 +15131,7 @@ def self_test() -> int:
     assert _accepts_progress_argument(lambda: None) is False
     app._busy = True
     app._job_label_base = "probe"
-    app._job_started = time.monotonic() - 4.0    # 4 s "elapsed"
+    app._job_started = time.monotonic() - 4.0  # 4 s "elapsed"
     app._report_progress(3, 10, "best 0.71")
     app._poll_progress()
     assert str(app._progress.cget("mode")) == "determinate"
@@ -13537,17 +15140,19 @@ def self_test() -> int:
     assert label.startswith("probe — 3/10 · ~") and label.endswith("left · best 0.71"), (
         f"progress label: {label!r}"
     )
-    app._report_progress(2, None, "")            # total-less degradation
+    app._report_progress(2, None, "")  # total-less degradation
     app._poll_progress()
     assert app._job_label.cget("text") == "probe — 2"
     app._busy = False
-    app._report_progress(9, 10, "straggler")     # dropped when idle
+    app._report_progress(9, 10, "straggler")  # dropped when idle
     app._poll_progress()
     assert app._job_label.cget("text") == "probe — 2"
 
     app.destroy()
-    print("self-test: UI built, every tab visited, manual hyperparameters "
-          "+ progress/ETA verified, no errors")
+    print(
+        "self-test: UI built, every tab visited, manual hyperparameters "
+        "+ progress/ETA verified, no errors"
+    )
     return 0
 
 
@@ -13558,16 +15163,16 @@ def main(argv: list[str] | None = None) -> int:
         description="PharmaML Playground — the pharmaml toolkit behind one window.",
     )
     parser.add_argument(
-        "--self-test", action="store_true",
+        "--self-test",
+        action="store_true",
         help="build the UI, pump the event loop and exit (headless check)",
     )
     parser.add_argument(
-        "--probe", action="store_true",
+        "--probe",
+        action="store_true",
         help="print a dependency report and exit",
     )
-    parser.add_argument(
-        "--version", action="store_true", help="print versions and exit"
-    )
+    parser.add_argument("--version", action="store_true", help="print versions and exit")
     args = parser.parse_args(argv)
 
     if args.version:

@@ -10,6 +10,65 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.61] — 2026-10-24
+
+### Added — the round-7 full review (100x-122): the reference objectives, molecule surgery, the session PDF report
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a seventh time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: 51 zero-hit symbols re-examined one by one, every
+claimed absorption verified in source). Five genuine user-facing gaps
+surfaced; all closed in this release:
+
+| Library capability | playground.py surface since 1.2.61 |
+| --- | --- |
+| `generative.SimilarityObjective` | Generative → Objective & evolution — the combobox's new *Similarity to reference SMILES* entry (Tanimoto/Morgan to the reference molecule); the swapped-in reference row carries the seed SMILES |
+| `generative.NoveltyObjective` | Generative → Objective & evolution — *Novelty vs corpus*: 1 − the best Tanimoto against the card's own corpus (the library's built-in 244-molecule pool when the text is empty) |
+| `generative.SubstructureObjective` | Generative → Objective & evolution — *Contains substructure (SMARTS)*: the hard pharmacophore constraint; the swapped-in row becomes a SMARTS entry |
+| `generative.ring_topology_moves` | Generative → **Ring topology moves** card: one SMILES in, every distinct one-step ring-size mutant out (contraction + expansion over each saturated ring; fused/spiro never touched) — the what-if tool behind the GA's topology mutation |
+| `generative.scaffold_hop_crossover` | Generative → **Breed two molecules** card: two parent SMILES + children count + seed; bridge / ring-merge / linker-transplant cuts compete per draw; failed draws say so honestly |
+
+- **The objective combobox finally carries every bundled objective**
+  (nine entries): the three reference-driven ones above join the six
+  window/blend objectives, each with its hint text, and the reference
+  row swaps in exactly like the GA/RL parameter blocks
+  (`grid_remove` collapse) — label "reference" or "SMARTS". The
+  window values are honestly ignored where irrelevant (the hints say
+  so).
+- **The UI gained its reporting layer**: `File ▸ Save session report
+  (PDF)…` composes `viz.save_pdf_report` over every live figure on
+  screen — a title page with the census and timestamp, one page per
+  figure, `close=False` keeps the on-screen figures alive. The
+  registry (`_render_figure` feeds it) keeps one entry per figure
+  host: a re-rendered card replaces its entry instead of accumulating
+  dead references, and page titles dedupe ("parity plot (2)").
+- **A latent session-restore bug fixed**: a restored RL method
+  selection used to leave the GA parameter block visible (and
+  vice-versa); the restore now re-syncs the swapped GA/RL frames AND
+  the reference row after the comboboxes hold their restored values —
+  the same discipline the ML tab's hyperparameter panel already had.
+
+### Tests
+
+- 25 new GUI tests (`TestReview122Gui`): the objective tuple/combo
+  pin (nine kinds, mirrored), the factory contracts for all three
+  reference objectives (real `score()` calls: aspirin similarity 1.0,
+  corpus member novelty 0.0, benzene SMARTS hit), the reference row's
+  hidden-by-default / swap / re-hide states (via `grid_info()`
+  emptiness — the honest `grid_remove` check), the missing-reference
+  and missing-SMARTS input errors, both surgery cards (piperidine's
+  three mutants named, the aromatic no-move verdict, the 4/4 viable
+  aspirin × ibuprofen litter, the parent/count guards), the session
+  report (File-menu label, the no-figure info guard, registry
+  tracking + in-place replacement, a real two-figure PDF written with
+  the figures kept alive, title dedupe), the restore re-sync (the
+  latent RL/GA bug fix pinned), and the docstring/home-guide round
+  pins.
+- The E2E probe gained the 100x-122 section (objective row swap,
+  both surgery jobs, the guard + registry + real-PDF report path) —
+  the live-card census is now 68.
+
 ## [1.2.60] — 2026-10-24
 
 ### Added — the round-6 full review (100x-121): UnitConverter + export_table + the deep learning curve
