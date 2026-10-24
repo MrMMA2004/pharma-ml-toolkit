@@ -815,6 +815,70 @@ print("Pareto front grid: run + colours + registry + restore + guard OK")
 assert len(app._live_cards()) >= 68, f"live cards: {len(app._live_cards())}"
 print("card census:", len(app._live_cards()))
 
+# -- 100x-126 additions: the per-card save + the themed HTML report --- #
+# the front card's per-card export saves the figure THE CARD shows even
+# when another figure drew last somewhere else
+app._jump_to_tab(7)
+app._gen_draw_front()  # put the grid back on the host
+assert pump_until_idle(timeout=240), "draw-front job hung"
+_grid126 = getattr(app._pareto_host, "_pg_figure", None)
+assert _grid126 is not None, "the front grid never landed"
+import pharmaml.viz as _viz126
+
+_real_save126 = _viz126.save_figure
+_captured126: dict = {}
+
+
+def _spy126(figure, path, *args, **kwargs):
+    _captured126["figure"] = figure
+    return _real_save126(figure, path, *args, **kwargs)
+
+
+_viz126.save_figure = _spy126
+try:
+    import pathlib as _pl126
+
+    _export126 = _pl126.Path("/tmp/probe126-front-export.png")
+    playground.filedialog.asksaveasfilename = lambda **_k: str(_export126)
+    _decoy126, _decoy_axis126 = _plt.subplots()
+    _decoy_axis126.plot([0, 1], [1, 0])
+    app._last_figure = _decoy126  # another figure "drew last" elsewhere
+    app._save_pareto_figure()
+    assert _captured126["figure"] is _grid126, "saved a figure that is not the card's"
+    assert _captured126["figure"] is not _decoy126
+    assert _export126.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    assert any("Figure saved" in str(a) for a in DIALOGS), DIALOGS
+    _plt.close(_decoy126)
+    DIALOGS.clear()
+finally:
+    _viz126.save_figure = _real_save126
+# the guard: nothing on the host -> the honest info
+app._pareto_host._pg_figure = None
+app._save_pareto_figure()
+assert any("No figure on the card yet" in str(a) for a in DIALOGS), DIALOGS
+app._pareto_host._pg_figure = _grid126  # restore for the report below
+DIALOGS.clear()
+print("Pareto per-card save: card's figure over the decoy + guard OK")
+
+# the HTML report OPENS in the app's theme and carries the toggle
+app._theme_var.set("dark")
+_report126 = "/tmp/probe126-report.html"
+playground.filedialog.asksaveasfilename = lambda **_k: _report126
+app._menu_save_session_report_html()
+assert pump_until_idle(timeout=240), "the HTML report job hung"
+with open(_report126, encoding="utf-8") as _fh126:
+    _text126 = _fh126.read()
+assert "<html lang='en' data-theme='dark'>" in _text126
+assert "id='theme-toggle'" in _text126 and "localStorage" in _text126
+assert "pharmaml-report-theme" in _text126
+assert _text126.count("<script>") == 1
+assert "data:image/png;base64," in _text126
+assert "http://" not in _text126 and "https://" not in _text126
+assert any("cycles it per reader" in str(a) for a in DIALOGS), DIALOGS
+DIALOGS.clear()
+app._theme_var.set("auto")  # leave the app as we found it
+print("Themed HTML report: app theme baked + toggle + contract OK")
+
 app.destroy()
 assert not DIALOGS, f"unexpected dialogs: {DIALOGS}"
 print("PROBE_OK")

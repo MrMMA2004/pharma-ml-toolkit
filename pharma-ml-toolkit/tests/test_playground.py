@@ -6524,3 +6524,182 @@ class TestReview125Gui:
             if widget.winfo_class() == "TLabel"
         )
         assert "colour-coded" in dump and "boundary corners" in dump
+
+
+class TestReview126Gui:
+    """Round 100x-126: the HTML report's theme engine (the report OPENS
+    in the app's View ▸ theme setting and carries a per-reader toggle
+    button) and the Pareto front card's per-card "Save figure…" export
+    (the figure THIS card shows, not the last one drawn anywhere)."""
+
+    DRUGLIKE = "Multi-objective (QED × MW × TPSA)"
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _run_druglike(app: Any) -> None:
+        app._objective_combo.set(TestReview126Gui.DRUGLIKE)
+        app._pop_size.set("12")
+        app._generations.set("4")
+        app._run_evolution()
+        assert TestReview126Gui._drain(app), "evolution job hung"
+
+    # -- the Pareto card's per-card save --------------------------------- #
+    def test_save_pareto_figure_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        # nothing rendered on the host yet -> the honest info box
+        if getattr(app._pareto_host, "_pg_figure", None) is not None:
+            import matplotlib.pyplot as plt
+
+            plt.close("all")
+            app._pareto_host._pg_figure = None
+        app._save_pareto_figure()
+        assert any("No figure on the card yet" in str(a) for _n, a in quiet_dialogs)
+
+    def test_save_pareto_figure_saves_the_cards_figure(
+        self, app: Any, monkeypatch: Any, tmp_path: Any, playground: Any,
+        quiet_dialogs: list[Any],
+    ) -> None:
+        import matplotlib.pyplot as plt
+
+        target = tmp_path / "front.png"
+        monkeypatch.setattr(
+            playground.filedialog,
+            "asksaveasfilename",
+            lambda **_k: str(target),
+        )
+        # capture WHICH figure the button hands to save_figure (the
+        # import happens at call time, so the module attribute is read
+        # fresh -- the spy is picked up)
+        import pharmaml.viz as viz_module
+
+        real_save = viz_module.save_figure
+        captured: dict[str, Any] = {}
+
+        def spy(figure: Any, path: Any, *args: Any, **kwargs: Any) -> Any:
+            captured["figure"] = figure
+            return real_save(figure, path, *args, **kwargs)
+
+        monkeypatch.setattr(viz_module, "save_figure", spy)
+
+        self._run_druglike(app)
+        card_figure = app._pareto_host._pg_figure
+        assert card_figure is not None  # the run auto-plotted the scatter
+
+        # the honest distinction from Ctrl+S: another figure "draws
+        # last" somewhere else -- the per-card save must STILL save
+        # the front card's own figure, not the global _last_figure
+        decoy, decoy_axis = plt.subplots()
+        decoy_axis.plot([0, 1], [1, 0])
+        app._last_figure = decoy
+
+        app._save_pareto_figure()
+        assert self._drain(app), "the save job hung"
+        try:
+            assert captured["figure"] is card_figure, "saved a figure that is not the card's"
+            assert captured["figure"] is not decoy
+            assert target.exists(), "the PNG never landed"
+            assert target.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+            # the success dialog fired (patched -- an unpatched showinfo
+            # here would hang the suite, the round-123 trap)
+            assert any("Figure saved" in str(a) for _n, a in quiet_dialogs)
+        finally:
+            plt.close("all")
+
+    def test_pareto_card_carries_save_figure_button(self, app: Any) -> None:
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+            if widget.winfo_class() == "TButton"
+        )
+        assert "Save figure…" in dump
+        assert "Draw front" in dump and "Plot front" in dump
+
+    # -- the HTML report opens in the app's theme ------------------------ #
+    def test_html_report_bakes_app_theme(
+        self, app: Any, monkeypatch: Any, tmp_path: Any, playground: Any,
+        quiet_dialogs: list[Any],
+    ) -> None:
+        import matplotlib.pyplot as plt
+
+        target = tmp_path / "session.html"
+        monkeypatch.setattr(
+            playground.filedialog,
+            "asksaveasfilename",
+            lambda **_k: str(target),
+        )
+        # one live figure is enough for the report to have content
+        figure, axis = plt.subplots()
+        axis.plot([0, 1], [0, 1])
+        try:
+            app._render_figure(app._pareto_host, figure)
+            app._theme_var.set("dark")
+            app._menu_save_session_report_html()
+            assert self._drain(app), "the HTML report job hung"
+        finally:
+            plt.close("all")
+        text = target.read_text(encoding="utf-8")
+        assert "<html lang='en' data-theme='dark'>" in text
+        assert "id='theme-toggle'" in text
+        assert "localStorage" in text and "pharmaml-report-theme" in text
+        assert "data:image/png;base64," in text  # the figure embedded
+        # the completion dialog tells the reader about the toggle
+        assert any("cycles it per reader" in str(a) for _n, a in quiet_dialogs)
+
+    def test_module_docstring_records_round_126(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-126" in doc
+        assert "theme engine" in doc
+        assert "per-card" in doc
+
+    def test_home_guide_mentions_per_card_export(
+        self, app: Any, playground: Any
+    ) -> None:
+        guide = None
+        for title, _subtitle, shell in playground._CARD_INDEX:
+            if title != "What lives where":
+                continue
+            try:
+                live = bool(shell.winfo_exists())
+            except Exception:  # noqa: BLE001 - destroyed earlier shell
+                live = False
+            if live:
+                guide = shell
+                break
+        assert guide is not None
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(guide)
+            if widget.winfo_class() == "TLabel"
+        )
+        assert "per-card" in dump and "figure export" in dump

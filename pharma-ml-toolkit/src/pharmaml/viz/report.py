@@ -100,6 +100,7 @@ from pharmaml.utils.io import ensure_directory
 from pharmaml.viz._compat import close_figure, figure_to_base64, save_figure
 
 __all__ = [
+    "REPORT_THEMES",
     "TABLE_FORMATS",
     "HTMLReport",
     "export_docx",
@@ -115,38 +116,87 @@ _LOG = get_logger(__name__)
 TABLE_FORMATS: tuple[str, ...] = ("csv", "tsv", "md", "json", "html")
 
 _REPORT_CSS = """
-:root { color-scheme: light dark; }
+/* Theme engine (100x-126): 'auto' follows the OS (the original
+   prefers-color-scheme behaviour, palette preserved), 'light' and
+   'dark' pin one palette.  The baked attribute is the INITIAL state;
+   the in-report toggle button overrides it at runtime and remembers
+   the reader's choice per browser (localStorage).  Muted greys stay
+   fixed across themes (the shipped auto-dark never varied them). */
+:root { --bg: #FFFFFF; --fg: #1F2937; --muted: #6B7280; --faint: #9CA3AF;
+         --accent: #0F766E; --border: #E5E7EB; --panel: #F8FAFC;
+         --panel-2: #F1F5F9; --row: #F8FAFC;
+         color-scheme: light dark; }
+html[data-theme='light'] { color-scheme: light; }
+html[data-theme='dark'] { --bg: #0B1220; --fg: #E5E7EB; --accent: #14B8A6;
+                          --border: #1F2A44; --panel: #101B2D; --panel-2: #101B2D;
+                          --row: #0E1728; color-scheme: dark; }
+@media (prefers-color-scheme: dark) {
+  html[data-theme='auto'] { --bg: #0B1220; --fg: #E5E7EB; --accent: #14B8A6;
+                            --border: #1F2A44; --panel: #101B2D; --panel-2: #101B2D;
+                            --row: #0E1728; color-scheme: dark; }
+}
 body { font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
        margin: 0 auto; max-width: 960px; padding: 2rem 1.25rem 3rem;
-       color: #1F2937; background: #FFFFFF; line-height: 1.55; }
-h1 { font-size: 1.6rem; border-bottom: 2px solid #0F766E; padding-bottom: .4rem; }
-h2 { font-size: 1.15rem; margin-top: 2rem; color: #0F766E; }
-p.subtitle { color: #6B7280; margin-top: -0.6rem; }
+       color: var(--fg); background: var(--bg); line-height: 1.55; }
+h1 { font-size: 1.6rem; border-bottom: 2px solid var(--accent); padding-bottom: .4rem; }
+h2 { font-size: 1.15rem; margin-top: 2rem; color: var(--accent); }
+p.subtitle { color: var(--muted); margin-top: -0.6rem; }
 .metrics { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
-.metric { border: 1px solid #E5E7EB; border-radius: .5rem; padding: .5rem .9rem;
-          background: #F8FAFC; min-width: 7rem; }
-.metric b { display: block; font-size: 1.05rem; color: #0F766E; }
-.metric span { font-size: .75rem; color: #6B7280; text-transform: uppercase;
+.metric { border: 1px solid var(--border); border-radius: .5rem; padding: .5rem .9rem;
+          background: var(--panel); min-width: 7rem; }
+.metric b { display: block; font-size: 1.05rem; color: var(--accent); }
+.metric span { font-size: .75rem; color: var(--muted); text-transform: uppercase;
                letter-spacing: .04em; }
 table { border-collapse: collapse; width: 100%; font-size: .85rem; margin: .5rem 0 1rem; }
-th, td { border: 1px solid #E5E7EB; padding: .32rem .55rem; text-align: left; }
-th { background: #F1F5F9; }
-tbody tr:nth-child(even) { background: #F8FAFC; }
-img { max-width: 100%; height: auto; border: 1px solid #E5E7EB; border-radius: .4rem;
+th, td { border: 1px solid var(--border); padding: .32rem .55rem; text-align: left; }
+th { background: var(--panel-2); }
+tbody tr:nth-child(even) { background: var(--row); }
+img { max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: .4rem;
       margin: .35rem 0 1.1rem; }
-figcaption { font-size: .8rem; color: #6B7280; margin-top: -0.8rem; margin-bottom: 1rem; }
-footer { margin-top: 2.5rem; font-size: .75rem; color: #9CA3AF;
-         border-top: 1px solid #E5E7EB; padding-top: .6rem; }
-@media (prefers-color-scheme: dark) {
-  body { background: #0B1220; color: #E5E7EB; }
-  h1 { border-color: #14B8A6; } h2 { color: #14B8A6; }
-  .metric { background: #101B2D; border-color: #1F2A44; }
-  .metric b { color: #14B8A6; }
-  th { background: #101B2D; } td, th { border-color: #1F2A44; }
-  tbody tr:nth-child(even) { background: #0E1728; }
-  img { border-color: #1F2A44; }
-}
+figcaption { font-size: .8rem; color: var(--muted); margin-top: -0.8rem; margin-bottom: 1rem; }
+footer { margin-top: 2.5rem; font-size: .75rem; color: var(--faint);
+         border-top: 1px solid var(--border); padding-top: .6rem; }
+.theme-toggle { position: fixed; top: .8rem; right: 1rem; font: inherit; font-size: .78rem;
+  border: 1px solid var(--border); background: var(--panel); color: var(--fg);
+  border-radius: .4rem; padding: .28rem .65rem; cursor: pointer; opacity: .82;
+  letter-spacing: .02em; }
+.theme-toggle:hover, .theme-toggle:focus-visible { opacity: 1; border-color: var(--accent); }
 """
+
+#: Themes :class:`HTMLReport` understands (100x-126).
+REPORT_THEMES: tuple[str, ...] = ("auto", "light", "dark")
+
+#: Label the toggle button carries per theme (server-side fallback;
+#: the inline script relabels on load and on every cycle).
+_THEME_LABELS: dict[str, str] = {"auto": "\u25d0 auto", "light": "\u2600 light", "dark": "\u263d dark"}
+
+#: Inline engine of the theme toggle -- zero external assets (the
+#: self-contained contract holds: no network, no companion files).
+_THEME_SCRIPT = """(function () {
+  var root = document.documentElement;
+  var button = document.getElementById('theme-toggle');
+  var ORDER = ['auto', 'light', 'dark'];
+  function apply(mode) {
+    root.setAttribute('data-theme', mode);
+    if (button) {
+      button.textContent = ({auto: '\u25d0 auto', light: '\u2600 light',
+                             dark: '\u263d dark'})[mode] || mode;
+    }
+  }
+  var saved = null;
+  try { saved = window.localStorage.getItem('pharmaml-report-theme'); } catch (e) {}
+  if (saved === 'auto' || saved === 'light' || saved === 'dark') { apply(saved); }
+  if (button) {
+    button.addEventListener('click', function () {
+      var current = root.getAttribute('data-theme') || 'auto';
+      apply(ORDER[(ORDER.indexOf(current) + 1) % ORDER.length]);
+      try {
+        window.localStorage.setItem('pharmaml-report-theme',
+                                   root.getAttribute('data-theme'));
+      } catch (e) {}
+    });
+  }
+})();"""
 
 
 def _escape(value: Any) -> str:
@@ -511,11 +561,29 @@ class HTMLReport:
     The output file references **zero external resources** — figures are
     base64-embedded — so it renders identically offline and survives
     being moved or e-mailed.
+
+    (100x-126) Themes: ``theme`` pins the INITIAL palette — ``"auto"``
+    follows the reader's OS (the original ``prefers-color-scheme``
+    behaviour), ``"light"`` / ``"dark"`` force one — and every report
+    carries a small fixed toggle button (top-right) that cycles
+    auto → light → dark at reading time, remembered per browser via
+    ``localStorage``.  The script is inline, so the self-contained
+    contract holds.
     """
 
-    def __init__(self, title: str, subtitle: str | None = None) -> None:
+    def __init__(
+        self,
+        title: str,
+        subtitle: str | None = None,
+        theme: str = "auto",
+    ) -> None:
+        if theme not in REPORT_THEMES:
+            raise DataValidationError(
+                f"HTMLReport theme must be one of {REPORT_THEMES}, got {theme!r}"
+            )
         self.title = str(title)
         self.subtitle = subtitle
+        self.theme = theme
         self._blocks: list[str] = []
         self._figure_count = 0
 
@@ -582,14 +650,26 @@ class HTMLReport:
             f"<p class='subtitle'>{_escape(self.subtitle)}</p>" if self.subtitle else ""
         )
         body = "\n".join(self._blocks)
+        # the toggle's server-side label matches the baked theme (the
+        # script relabels on load and whenever the reader cycles); its
+        # title attribute explains the cycle order and the persistence.
+        toggle = (
+            f"<button id='theme-toggle' class='theme-toggle' type='button' "
+            f"aria-label='Toggle colour theme' "
+            f"title=\"Cycle theme: auto \u2192 light \u2192 dark (remembered by "
+            f"this browser)\">{_THEME_LABELS[self.theme]}</button>\n"
+        )
         return (
-            "<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta charset='utf-8'>\n"
-            f"<meta name='viewport' content='width=device-width, initial-scale=1'>\n"
+            "<!DOCTYPE html>\n"
+            f"<html lang='en' data-theme='{self.theme}'>\n<head>\n"
+            "<meta charset='utf-8'>\n"
+            "<meta name='viewport' content='width=device-width, initial-scale=1'>\n"
             f"<title>{_escape(self.title)}</title>\n<style>{_REPORT_CSS}</style>\n"
             "</head>\n<body>\n"
-            f"<h1>{_escape(self.title)}</h1>\n{subtitle}\n{body}\n"
+            f"{toggle}<h1>{_escape(self.title)}</h1>\n{subtitle}\n{body}\n"
             "<footer>PharmaML report — self-contained HTML (figures embedded, "
-            "no external assets)</footer>\n</body>\n</html>\n"
+            "no external assets)</footer>\n"
+            f"<script>{_THEME_SCRIPT}</script>\n</body>\n</html>\n"
         )
 
     def save(self, path: str | Path) -> Path:

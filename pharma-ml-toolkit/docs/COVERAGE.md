@@ -741,3 +741,31 @@ The 43 zero-hit are unchanged: containers, constants, and verified
 absorptions — the classification that has held for three consecutive
 re-audits. The rar/upload/notebook axes: 119/119, zero-hit 0, all
 three probes green after the round's edits.
+
+### Round 11 (100x-126) — the HTML report gains a theme engine; the Pareto card gains its own export
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **244 public symbols, 43 zero-hit — the
+documented floor, byte-identical to round 125's final set.** Two
+fresh-eye suspects from the 43 were re-verified as absorptions IN
+SOURCE this round: `check_torsion_consistency`/`TorsionCheck` are the
+single-file engine behind the ligand-audit card's
+`scan_torsion_consistency` folder walk (the audit's own per-file probe
+shows the pairing: `check_torsion_consistency:0
+scan_torsion_consistency:2` on niggamatch.py / mismatch2.py), and
+`PKSummary`/`aucm_trapezoid` are the return type + internal
+integrator behind the PK card's `summary.aucm` readouts
+(playground.py:6501/6568). The library axis holds; the round's
+genuine work was the two UI gaps round 125's handover named:
+
+| Surface | The 1.2.65 fix |
+| --- | --- |
+| `pharmaml.viz.HTMLReport` + every report | **Theme engine** — `theme="auto"/"light"/"dark"` baked as `data-theme`, CSS rebuilt on custom properties (auto keeps the original media-query behaviour palette-for-palette), and a per-reader toggle button (auto → light → dark, remembered via `localStorage`) in every report's top-right — verified end-to-end in a real browser incl. the saved-`light`-overrides-baked-`dark` reload |
+| Generative ▸ Pareto front card | **Save figure…** — the per-card export of the figure THE CARD shows (grid or scatter), the honest distinction from Ctrl+S which saves the last figure drawn anywhere; guard path included |
+
+The 43 zero-hit are unchanged (the same containers, constants, and
+verified absorptions). The rar/upload/notebook axes: 119/119,
+zero-hit 0, all three probes green after the round's edits. The
+GUI-axis census holds at 68 live cards (the new button joined an
+existing card).

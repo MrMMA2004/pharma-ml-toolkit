@@ -106,6 +106,7 @@ from pharmaml.viz.pharma_plots import (
     plot_dose_accumulation,
 )
 from pharmaml.viz.report import (
+    REPORT_THEMES,
     TABLE_FORMATS,
     HTMLReport,
     export_docx,
@@ -119,6 +120,7 @@ __all__ = [
     # backend
     "PALETTE",
     "PLOT_FORMATS",
+    "REPORT_THEMES",
     "TABLE_FORMATS",
     # reports & tables
     "HTMLReport",

@@ -1207,6 +1207,68 @@ class TestHTMLReport:
         assert "<h1>empty</h1>" in text and "footer" in text
 
 
+class TestHTMLReportTheme:
+    """(100x-126) The report's theme engine: a ``theme`` constructor
+    parameter bakes the initial ``data-theme``, every report carries a
+    toggle button that cycles auto → light → dark at reading time
+    (remembered per browser), and the CSS applies the dark palette via
+    ``[data-theme='dark']`` (forced) or the ``prefers-color-scheme``
+    media query (auto) — the self-contained contract holds."""
+
+    def test_theme_validation(self):
+        with pytest.raises(DataValidationError):
+            HTMLReport("t", theme="blue")
+        with pytest.raises(DataValidationError):
+            HTMLReport("t", theme="AUTO")  # case-sensitive
+
+    def test_baked_attribute_and_label_per_theme(self):
+        labels = {"auto": "\u25d0 auto", "light": "\u2600 light", "dark": "\u263d dark"}
+        for theme, label in labels.items():
+            text = HTMLReport("t", theme=theme).render()
+            assert f"<html lang='en' data-theme='{theme}'>" in text, theme
+            assert f">{label}</button>" in text, theme
+
+    def test_toggle_button_and_inline_engine(self):
+        text = HTMLReport("t").render()
+        assert "<button id='theme-toggle' class='theme-toggle'" in text
+        assert "aria-label='Toggle colour theme'" in text
+        # exactly ONE script, inline, and it persists the reader's pick
+        assert text.count("<script>") == 1
+        assert "localStorage" in text and "pharmaml-report-theme" in text
+        assert text.index("<script>") < text.index("</body>")
+
+    def test_css_engine_selectors(self):
+        text = HTMLReport("t").render()
+        # forced dark, the auto media query, and the explicit light pin
+        assert "html[data-theme='dark']" in text
+        assert "html[data-theme='auto']" in text
+        assert "html[data-theme='light']" in text
+        assert "@media (prefers-color-scheme: dark)" in text
+        # the dark palette values ride BOTH the forced block and the
+        # media block (auto keeps the original behaviour)
+        assert text.count("--bg: #0B1220") == 2
+        assert text.count("--accent: #14B8A6") == 2
+        # the toggle rides the same variables as everything else
+        assert ".theme-toggle { position: fixed;" in text
+        assert "border-color: var(--accent)" in text
+
+    def test_self_contained_contract_holds(self):
+        # the theme engine adds ZERO external references: no http(s)
+        # URLs anywhere, the only script is the inline engine
+        text = HTMLReport("t").add_text("body").render()
+        assert "http://" not in text and "https://" not in text
+        assert "src='http" not in text and "<link" not in text
+
+    def test_full_report_with_theme(self, trained_classifier, tmp_path):
+        _result, report, _X_test, _y_test = trained_classifier
+        page = HTMLReport("Themed", theme="dark").add_metrics(
+            metrics_to_dataframe(report).to_dict(orient="list")
+        )
+        out = page.save(tmp_path / "themed.html")
+        text = out.read_text()
+        assert "data-theme='dark'" in text and "\u263d dark</button>" in text
+
+
 class TestMetricsToDataFrame:
     def test_classification_report(self, trained_classifier):
         _, report, _, _ = trained_classifier

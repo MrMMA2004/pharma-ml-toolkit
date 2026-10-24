@@ -109,7 +109,9 @@ A tabbed graphical interface opens with every calculation domain of the
   objective-pair scatter, a CSV export of the front, and (100x-125) a
   colour-coded 2D structure grid of the front's molecules -- boundary
   corners accented teal, interior trade-offs muted, objective values
-  under every panel; and the two
+  under every panel, and (100x-126) a per-card "Save figure…" export
+  of whatever the card currently shows (grid or scatter -- unlike
+  Ctrl+S, which saves the last figure drawn anywhere); and the two
   molecule-surgery cards answer what-if questions WITHOUT a run --
   enumerate one molecule's one-step ring-size move set
   (``ring_topology_moves``) or breed two parents into hybrid children
@@ -235,7 +237,13 @@ Design notes
   (figures base64-embedded, tables as styled text, plus the builder's
   own metric cards carrying the session census), and the generative
   Results card draws its leaderboard's top molecules as a 2D
-  structure grid with a score row per panel.
+  structure grid with a score row per panel.  (100x-126) The HTML
+  report gained a theme engine: it OPENS in the app's View ▸ theme
+  setting (auto / light / dark baked as the initial ``data-theme``),
+  and a small toggle button in every report's top-right corner cycles
+  the palette per reader, remembered by the browser -- the CSS uses
+  custom properties, so 'auto' keeps the original
+  ``prefers-color-scheme`` behaviour byte-for-byte.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -3462,6 +3470,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         cards (``add_metrics`` -- the session census, which not even
         the library exercised) and an ``add_text`` provenance block.
         No fpdf dependency: one .html file, any browser.
+
+        (100x-126) The report OPENS in the app's own theme -- the View
+        ▸ theme radios (auto / light / dark) now do double duty: they
+        tint the playground AND bake the report's initial
+        ``data-theme``.  A small toggle button rides the top-right of
+        every report: one click cycles auto → light → dark at reading
+        time, remembered per browser (localStorage) -- the sender pins
+        a starting palette, the reader overrides it for themselves,
+        and neither touches the other's preference.
         """
         live = self._live_session_figures()
         tables = self._live_session_tables()
@@ -3484,6 +3501,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not path:
             return
         stamp = time.strftime("%Y-%m-%d %H:%M")
+        # captured on the MAIN thread (Tk variables are not safe to read
+        # from the worker); the app's theme radios pin the report's
+        # initial palette -- auto follows the READER's OS, not ours.
+        theme = self._theme_var.get()
         try:
             cards = len(self._live_cards())
         except Exception:  # noqa: BLE001 - the census is cosmetic
@@ -3513,6 +3534,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     f"{figure_count} figure(s) · {table_count} table(s) · "
                     f"generated {stamp} · playground {__version__}"
                 ),
+                theme=theme,
             )
             report.add_metrics(
                 {
@@ -3545,7 +3567,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 f"{figure_count} figure(s) + {table_count} table(s) written to\n"
                 f"{saved}\n\nSelf-contained HTML -- the figures are embedded, "
                 "so the file renders identically offline and survives "
-                "being moved or e-mailed.",
+                "being moved or e-mailed.\n\n"
+                f"Theme: opens {theme} (the app's setting); the button in "
+                "the report's top-right corner cycles it per reader.",
             )
 
         self._start_job("session report (HTML)", work, render)
@@ -3791,10 +3815,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "the prior-drift introspection, the leaderboard's top "
                     "molecules draw as a scored 2D structure grid, the Pareto "
                     "front's members draw colour-coded (boundary corners "
-                    "accented, interior trade-offs muted), and the "
-                    "surgery cards enumerate one molecule's ring moves or breed "
-                    "two parents -- then draw every mutant or child the same "
-                    "way."
+                    "accented, interior trade-offs muted) with a per-card "
+                    "figure export, and the surgery cards enumerate one "
+                    "molecule's ring moves or breed two parents -- then draw "
+                    "every mutant or child the same way."
                 ),
                 "RDKit (+ torch for RL)",
             ),
@@ -13638,6 +13662,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "front brings the scatter back.",
         )
         draw_front_btn.pack(side="left", padx=(10, 0))
+        # (100x-126) the front card had no per-card export: the colour
+        # grid (or the scatter) could only leave the app through the
+        # global Ctrl+S path, which silently saves whatever figure drew
+        # LAST anywhere.  This button saves the figure THIS card shows.
+        save_front_figure_btn = self._action_button(
+            pareto_buttons,
+            "Save figure…",
+            self._save_pareto_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "colour-coded structure grid or the objective scatter, "
+            "whichever drew last -- as PNG, SVG or PDF (unlike Ctrl+S, "
+            "which saves the last figure drawn anywhere).",
+        )
+        save_front_figure_btn.pack(side="left", padx=(10, 0))
         self._pareto_host = self._figure_host(pareto, height=300)
 
         # (100x-122) molecule surgery -- the two standalone what-if tools
@@ -14349,6 +14387,50 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._render_figure(self._pareto_host, figure)
 
         self._start_job("Pareto front structure grid", work, render)
+
+    def _save_pareto_figure(self) -> None:
+        """Save the front card's LIVE figure -- grid or scatter (100x-126).
+
+        The card renders two different figures into the same host (the
+        structure grid and the objective scatter, whichever drew last),
+        and until now neither had a per-card export: the only paths were
+        the global ``Ctrl+S`` (which saves whatever figure drew last
+        ANYWHERE -- run any other calculation in between and the front
+        is no longer what gets saved) and the session report (PDF/HTML
+        bundles).  This reads the host's ``_pg_figure`` -- the exact
+        object the card shows -- and saves it through the library's
+        ``save_figure`` with the same PNG/SVG/PDF filetypes as the menu
+        path.
+        """
+        figure = getattr(self._pareto_host, "_pg_figure", None)
+        if figure is None:
+            messagebox.showinfo(
+                "No figure on the card yet",
+                "Draw the front (the structure grid) or plot the objective "
+                "scatter first -- this saves the figure the card is "
+                "currently showing.",
+            )
+            return
+        if not self._require_pharmaml():
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save Pareto front figure",
+            defaultextension=".png",
+            filetypes=[
+                ("PNG figure", "*.png"),
+                ("SVG figure", "*.svg"),
+                ("PDF figure", "*.pdf"),
+            ],
+        )
+        if not path:
+            return
+        try:
+            from pharmaml.viz import save_figure
+
+            saved = save_figure(figure, path)
+            messagebox.showinfo("Figure saved", f"Written to\n{saved}")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not save the figure", exc)
 
     # ------------------------------------------------------------------ #
     # Utilities tab -- the rar's own file & table operations, one by one

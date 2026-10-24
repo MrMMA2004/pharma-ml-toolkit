@@ -10,6 +10,52 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.65] — 2026-10-24
+
+### Added — the round-11 full review (100x-126): the HTML report's theme engine and the Pareto card's per-card figure export
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited an eleventh time (the
+rar/upload contracts re-proven 119/119 first — 118 rar files:
+115 covered + 3 documented absorptions, 1 upload — then the
+library-axis audit re-run: **244 public symbols, 43 zero-hit at the
+documented floor**, byte-identical to round 125's final set; the two
+fresh-eye suspects were re-verified as absorptions in source:
+`check_torsion_consistency`/`TorsionCheck` are the single-file engine
+behind the ligand-audit card's `scan_torsion_consistency` folder walk
+(playground.py:9693), and `PKSummary`/`aucm_trapezoid` are the return
+type + internal integrator behind the PK card's `summary.aucm` readouts).
+The round's genuine work sits where round 125's handover pointed —
+both UI improvements, one on each side of the report path:
+
+| Surface | What 1.2.65 adds |
+| --- | --- |
+| `pharmaml.viz.HTMLReport` | **A theme engine.** The constructor gains `theme="auto" \| "light" \| "dark"` (validated, default `auto`), baked as the `<html data-theme=…>` attribute; the stylesheet was rebuilt on CSS custom properties so the dark palette applies via `html[data-theme='dark']` (forced) *or* the original `prefers-color-scheme` media query under `data-theme='auto'` — **the auto behaviour is preserved palette-for-palette** (muted greys stay fixed across themes exactly as the shipped auto-dark always rendered them; the one deliberate change: the footer's border joins the themed borders instead of staying light-on-dark) |
+| Every generated report | **A per-reader toggle button** rides the top-right: one click cycles auto → light → dark, the label (◐ / ☀ / ☽) follows, and the choice is remembered per browser via `localStorage` — the sender pins a starting palette, the reader overrides it for themselves. The script is inline: the self-contained contract (zero external resources, survives being moved or e-mailed) holds |
+| Playground ▸ File ▸ Save session report (HTML)… | The report now **opens in the app's own View ▸ theme setting** — the theme radios do double duty (they tint the playground AND bake the report's initial `data-theme`, captured on the main thread before the worker starts). The completion dialog tells the reader about the toggle |
+| Playground ▸ Generative ▸ Pareto front card | **Save figure…** — a per-card export of whatever the card currently shows (the colour-coded structure grid or the objective scatter, whichever drew last), through the library's `save_figure` with the same PNG/SVG/PDF filetypes as the menu path. The honest distinction from Ctrl+S: the global shortcut saves whatever figure drew last **anywhere** — run any other calculation in between and the front is no longer what gets saved; this button reads the host's `_pg_figure`, the exact object the card shows. Guard path included (nothing on the card → the honest info box) |
+
+- The theme engine is verified end-to-end in a real browser (agent-browser):
+  forced dark computes `rgb(11, 18, 32)` (#0B1220), the toggle cycles
+  dark → auto → light → dark with the background following at every
+  step, `localStorage` persists, and **a saved `light` overrides a
+  baked `dark` on reload** — the reader's choice beats the sender's
+  pin, exactly the designed semantics.
+- The browser-verified toggle screenshots passed VLM review (all QA
+  points clean: button visible, palette correct, metric cards and the
+  embedded figure readable, no layout defects).
+- `REPORT_THEMES` joins the public API (`pharmaml.viz.REPORT_THEMES`)
+  and `docs/INDEX.md` (regenerated; the docs-index test guard caught
+  the symbol the moment the suite ran — the guard works).
+
+### Fixed
+
+- Round 126's first test draft hit the round-123 modal-dialog trap
+  AGAIN (an unpatched success `showinfo` hung 400 s until the
+  faulthandler traceback pinned it at the exact line) — the test now
+  patches every dialog up front; recorded so the next round patches
+  dialogs BEFORE the first run, not after the hang.
+
 ## [1.2.64] — 2026-10-24
 
 ### Added — the round-10 full review (100x-125): the Pareto front's colour-coded structure grid and the web learning curve

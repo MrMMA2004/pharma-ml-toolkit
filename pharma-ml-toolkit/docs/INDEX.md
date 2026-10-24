@@ -285,6 +285,7 @@ after adding new public functions.
 |---|---|---|
 | `PALETTE` | constant |  |
 | `PLOT_FORMATS` | constant |  |
+| `REPORT_THEMES` | constant |  |
 | `TABLE_FORMATS` | constant |  |
 | `HTMLReport` | class | Builder for a self-contained HTML report. |
 | `close_figure` | function | Close a figure defensively (no-op when matplotlib is absent). |
