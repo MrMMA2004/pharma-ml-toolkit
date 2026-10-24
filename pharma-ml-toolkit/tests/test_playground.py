@@ -6703,3 +6703,241 @@ class TestReview126Gui:
             if widget.winfo_class() == "TLabel"
         )
         assert "per-card" in dump and "figure export" in dump
+
+
+class TestReview127Gui:
+    """Round 100x-127: the per-card "Save figure…" export generalised to
+    every Generative figure card (the two-host Results card picks the
+    figure that drew LAST on that card; both surgery cards carry their
+    own button), and the HTML report's bake guarded by the library's
+    public REPORT_THEMES contract."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the buttons exist ------------------------------------------------ #
+    def test_generative_tab_carries_four_save_figure_buttons(self, app: Any) -> None:
+        dump = [
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+            if widget.winfo_class() == "TButton"
+        ]
+        # Results, Pareto front, Ring topology moves, Breed two molecules
+        assert dump.count("Save figure…") == 4, dump.count("Save figure…")
+        assert "Draw top molecules" in dump and "Draw mutants" in dump
+        assert "Draw litter" in dump and "Draw front" in dump
+
+    # -- the honest guards ------------------------------------------------ #
+    def test_save_ga_figure_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        import matplotlib.pyplot as plt
+
+        for host in (app._ga_grid_host, app._ga_host):
+            if getattr(host, "_pg_figure", None) is not None:
+                host._pg_figure = None
+        plt.close("all")
+        app._save_ga_figure()
+        assert any("No figure on the card yet" in str(a) for _n, a in quiet_dialogs)
+
+    def test_save_topo_figure_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        import matplotlib.pyplot as plt
+
+        if getattr(app._topo_host, "_pg_figure", None) is not None:
+            app._topo_host._pg_figure = None
+        plt.close("all")
+        app._save_topo_figure()
+        assert any("No figure on the card yet" in str(a) for _n, a in quiet_dialogs)
+
+    def test_save_breed_figure_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        import matplotlib.pyplot as plt
+
+        if getattr(app._breed_host, "_pg_figure", None) is not None:
+            app._breed_host._pg_figure = None
+        plt.close("all")
+        app._save_breed_figure()
+        assert any("No figure on the card yet" in str(a) for _n, a in quiet_dialogs)
+
+    # -- the semantics: the CARD's figure, not the global last-drawn ----- #
+    def test_save_topo_figure_saves_the_cards_figure(
+        self, app: Any, monkeypatch: Any, tmp_path: Any, playground: Any,
+        quiet_dialogs: list[Any],
+    ) -> None:
+        import matplotlib.pyplot as plt
+
+        target = tmp_path / "mutants.png"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target),
+        )
+        import pharmaml.viz as viz_module
+
+        real_save = viz_module.save_figure
+        captured: dict[str, Any] = {}
+
+        def spy(figure: Any, path: Any, *args: Any, **kwargs: Any) -> Any:
+            captured["figure"] = figure
+            return real_save(figure, path, *args, **kwargs)
+
+        monkeypatch.setattr(viz_module, "save_figure", spy)
+
+        grid, axis = plt.subplots()
+        axis.set_title("mutant grid")
+        decoy, decoy_axis = plt.subplots()
+        decoy_axis.plot([0, 1], [1, 0])
+        try:
+            app._render_figure(app._topo_host, grid)
+            app._last_figure = decoy  # something else drew last ANYWHERE
+            app._save_topo_figure()
+            assert self._drain(app), "the save job hung"
+            assert captured["figure"] is grid, "saved a figure that is not the card's"
+            assert captured["figure"] is not decoy
+            assert target.exists(), "the PNG never landed"
+            assert target.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+            assert any("Figure saved" in str(a) for _n, a in quiet_dialogs)
+        finally:
+            plt.close("all")
+
+    # -- the two-host Results card: NEWEST of the card's own figures ----- #
+    def test_save_ga_figure_picks_the_newest_of_the_cards_hosts(
+        self, app: Any, monkeypatch: Any, tmp_path: Any, playground: Any,
+        quiet_dialogs: list[Any],
+    ) -> None:
+        import matplotlib.pyplot as plt
+
+        target = tmp_path / "results.png"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target),
+        )
+        import pharmaml.viz as viz_module
+
+        real_save = viz_module.save_figure
+        captured: dict[str, Any] = {}
+
+        def spy(figure: Any, path: Any, *args: Any, **kwargs: Any) -> Any:
+            captured["figure"] = figure
+            return real_save(figure, path, *args, **kwargs)
+
+        monkeypatch.setattr(viz_module, "save_figure", spy)
+
+        history, h_axis = plt.subplots()
+        h_axis.set_title("evolution history")
+        grid, g_axis = plt.subplots()
+        g_axis.set_title("leaderboard grid")
+        again, a_axis = plt.subplots()
+        a_axis.set_title("history again")
+        try:
+            # the run's auto-plot and the Draw-top button race: the save
+            # must follow whichever of the CARD's two hosts drew last.
+            app._render_figure(app._ga_host, history)
+            app._render_figure(app._ga_grid_host, grid)
+            app._save_ga_figure()
+            assert self._drain(app), "the save job hung"
+            assert captured["figure"] is grid, "the newest card figure did not win"
+
+            app._render_figure(app._ga_host, again)  # history re-drew last
+            app._save_ga_figure()
+            assert self._drain(app), "the second save job hung"
+            assert captured["figure"] is again, "the newest card figure did not win"
+            assert target.exists()
+            assert target.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+        finally:
+            plt.close("all")
+
+    # -- the render counter stamps every host ----------------------------- #
+    def test_render_figure_stamps_monotonic_sequence(self, app: Any) -> None:
+        import matplotlib.pyplot as plt
+
+        first, _f_axis = plt.subplots()
+        second, _s_axis = plt.subplots()
+        try:
+            before = app._figure_seq
+            app._render_figure(app._topo_host, first)
+            mid = app._figure_seq
+            app._render_figure(app._breed_host, second)
+            assert before < mid < app._figure_seq, "the render counter is monotonic"
+            assert app._topo_host._pg_figure_seq == mid
+            assert app._breed_host._pg_figure_seq == app._figure_seq
+        finally:
+            plt.close("all")
+
+    # -- the HTML report bake guards REPORT_THEMES ------------------------ #
+    def test_html_report_theme_guard_falls_back_to_auto(
+        self, app: Any, monkeypatch: Any, tmp_path: Any, playground: Any,
+        quiet_dialogs: list[Any],
+    ) -> None:
+        import matplotlib.pyplot as plt
+
+        target = tmp_path / "guarded.html"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target),
+        )
+        figure, axis = plt.subplots()
+        axis.plot([0, 1], [0, 1])
+        try:
+            app._render_figure(app._pareto_host, figure)
+            # a drifted/invalid theme value must NOT reach HTMLReport (it
+            # would raise mid-job) -- the guard falls back to auto.
+            app._theme_var.set("neon")
+            app._menu_save_session_report_html()
+            assert self._drain(app), "the HTML report job hung"
+        finally:
+            plt.close("all")
+            app._theme_var.set("auto")
+        text = target.read_text(encoding="utf-8")
+        assert "<html lang='en' data-theme='auto'>" in text
+        assert "data:image/png;base64," in text
+
+    def test_module_docstring_records_round_127(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-127" in doc
+        assert "every Generative figure card" in doc
+
+    def test_home_guide_mentions_every_figure_card_export(
+        self, app: Any, playground: Any
+    ) -> None:
+        guide = None
+        for title, _subtitle, shell in playground._CARD_INDEX:
+            if title != "What lives where":
+                continue
+            try:
+                live = bool(shell.winfo_exists())
+            except Exception:  # noqa: BLE001 - destroyed earlier shell
+                live = False
+            if live:
+                guide = shell
+                break
+        assert guide is not None
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(guide)
+            if widget.winfo_class() == "TLabel"
+        )
+        assert "Every figure card" in dump and "Save figure" in dump

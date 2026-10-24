@@ -21,6 +21,7 @@ import { LigandPrep } from "@/components/explorer/playground/ligand-prep";
 import { BatchConfigs } from "@/components/explorer/playground/batch-configs";
 import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
 import { LigandReconciler } from "@/components/explorer/playground/ligand-reconciler";
+import { SessionReport } from "@/components/explorer/playground/session-report";
 import { useToolkitStore } from "@/lib/store";
 
 /** Playground: pharma calculators / PK-PD explorer / ML training / cell line
@@ -95,6 +96,13 @@ export function Playground() {
           Ligand Sets
         </TabsTrigger>
       </TabsList>
+      {/* (100x-127) the session report strip — the web twin of the
+          desktop File ▸ Save session report (HTML): the collector walks
+          the persisted playground state on every sub-tab, so the card
+          rides above the tab content, not inside any one of them. */}
+      <div className="mt-4 sm:mt-6">
+        <SessionReport />
+      </div>
       <TabsContent value="calculators" className="mt-4 sm:mt-6">
         <PharmaCalcs />
       </TabsContent>

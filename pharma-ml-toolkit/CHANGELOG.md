@@ -10,6 +10,55 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.66] — 2026-10-24
+
+### Added — the round-12 full review (100x-127): the per-card figure export on every Generative figure card, and the web twin's session report
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a twelfth time (the
+rar/upload contracts re-proven 119/119 first — 118 rar files: 115
+covered + 3 documented absorptions, 1 upload — then the library-axis
+audit re-run: **245 public symbols, 44 zero-hit**; the +1 over round
+125's floor is `REPORT_THEMES` itself, exported with the round-126
+theme engine and until now consumed only inside the library — this
+round gives the GUI a real caller for it, below). The round's genuine
+work sits where round 126's handover pointed:
+
+| Surface | What 1.2.66 adds |
+| --- | --- |
+| Playground ▸ Generative ▸ Results card | **Save figure…** — the per-card export the Pareto card shipped in 1.2.65, now on the one card that holds **two** figure hosts (the leaderboard structure grid and the evolution history). `_render_figure` stamps every host with a monotonic `_pg_figure_seq`; the save exports whichever of the card's own figures drew **last** — still strictly narrower than the global Ctrl+S, which spans every card in the app |
+| Playground ▸ Generative ▸ Ring topology moves card | **Save figure…** — the mutant structure grid leaves the app through the card's own button, not the global last-drawn-anywhere shortcut |
+| Playground ▸ Generative ▸ Breed two molecules card | **Save figure…** — the parents-and-children grid, same honest contract (guard path included on all three: nothing on the card → the honest info box) |
+| `pharmaml.viz.REPORT_THEMES` | **A real GUI caller.** The HTML session report's bake now validates the app's theme against the library's own public contract — a drifted/invalid value falls back to `auto` instead of letting `HTMLReport` raise mid-job (the audit's only new zero-hit becomes a wiring, not a constant) |
+| Web ▸ Playground | **The session report twin** — the web mirror of the desktop's `File ▸ Save session report (HTML)…`. A "Session report" card rides above the eight sub-tabs with a live census ("4 figures · 2 tables · 2 metric cards ready"); one click collects the persisted session state (the last ML training result with its parity/decision series, the learning-curve run, the always-live PK/PD regimen, the NCA rows, the run history) and downloads a self-contained HTML file |
+| `/api/report/session` + `scripts/report_bridge.py` | The server side of the twin: the collector's section payload (line / band / class-scatter traces with the web boundary-dot opacity semantics) is composed into **real matplotlib figures** and assembled through the **same `HTMLReport` the desktop saves** — theme baked from the app's resolved palette, the per-reader toggle included, figures base64-embedded, zero external references |
+
+- The learning-curve result moved into the store (`lcResult`,
+  sessionStorage-persisted with the same light-structural validation
+  `mlResult` gets), so the collector walks it and the card survives
+  reloads identically.
+- Parity guard: `tests/test_web_parity.py::TestSessionReportContract`
+  runs the round trip from inside the suite — the SHIPPED TS collector
+  over a fixed fixture snapshot (census pinned: 4 figures / 2 tables /
+  2 metric cards; the parity figure's four-trace contract pinned in
+  order), its payload piped through the shipped bridge, and the
+  composed document asserted against the desktop report's own contract
+  (theme attribute, toggle + localStorage, 4 embedded PNGs, 2 tables,
+  no `<link>`, no external src/href). The bridge's 400 paths (invalid
+  theme, malformed sections, non-finite coordinates) fail cleanly with
+  one-line JSON errors.
+- 12 new tests: `TestReview127Gui` (10 — the four buttons pin, the
+  per-card guards, the topology save over a decoy `_last_figure`, the
+  two-host newest-wins semantics with the stamp ordering, the
+  REPORT_THEMES fallback to `auto`) + the 2 contract tests above.
+  Suite: **2402 collected = 2397 passed + 5 skipped / 0 failures**.
+- Browser-verified end-to-end (agent-browser): the card renders the
+  live census, the golden path (train → learning curve → download)
+  fires POST /api/report/session → 200, the downloaded HTML opens with
+  the baked theme + toggle + embedded figures, and the VLM review of
+  the three GUI screenshots (topology / breed / Results cards, each
+  with the new button over a real drawn grid) passed all QA points.
+
 ## [1.2.65] — 2026-10-24
 
 ### Added — the round-11 full review (100x-126): the HTML report's theme engine and the Pareto card's per-card figure export

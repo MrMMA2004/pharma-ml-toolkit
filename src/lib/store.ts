@@ -11,6 +11,7 @@ import type {
   TreeResponse,
   TreeStats,
   MLTrainResponse,
+  MLLearningCurveResponse,
   DatasetPreviewResponse,
   CsvSourceMeta,
 } from "@/lib/toolkit-types";
@@ -135,6 +136,10 @@ const ML_RESULT_STORAGE_KEY = "pharmaml.mlResult";
 
 /** Hard cap on the persisted ML result JSON size (bytes). */
 const ML_RESULT_MAX_BYTES = 400_000;
+
+/** sessionStorage key for the last learning-curve run (100x-127 — the
+ *  session-report collector walks it together with mlResult). */
+const LC_RESULT_STORAGE_KEY = "pharmaml.lcResult";
 
 /** sessionStorage key for the ML run history (newest first). */
 const ML_HISTORY_STORAGE_KEY = "pharmaml.mlHistory";
@@ -629,6 +634,57 @@ function saveMlResult(result: MLTrainResponse | null): void {
   }
 }
 
+/** Validate a persisted learning-curve payload (100x-127).  The light
+ *  structural check mirrors validateMlResult: a wrong shape restores as
+ *  "no curve yet" instead of crashing the report collector. */
+function validateLcResult(raw: unknown): MLLearningCurveResponse | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (r.task !== "regression" && r.task !== "classification") return null;
+  if (typeof r.model !== "string" || r.model.length > 40) return null;
+  if (typeof r.metricName !== "string" || r.metricName.length > 24) return null;
+  if (typeof r.gap !== "number" || !Number.isFinite(r.gap)) return null;
+  if (typeof r.verdict !== "string") return null;
+  if (!Array.isArray(r.fractions) || !Array.isArray(r.points)) return null;
+  if (r.fractions.length === 0 || r.points.length !== r.fractions.length) return null;
+  for (const point of r.points) {
+    if (typeof point !== "object" || point === null) return null;
+    const p = point as Record<string, unknown>;
+    for (const key of ["size", "trainMean", "trainStd", "valMean", "valStd"]) {
+      if (typeof p[key] !== "number" || !Number.isFinite(p[key] as number)) return null;
+    }
+  }
+  return raw as MLLearningCurveResponse;
+}
+
+/** Read the persisted learning-curve result (client only, failure-tolerant). */
+function loadLcResult(): MLLearningCurveResponse | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(LC_RESULT_STORAGE_KEY);
+    if (!raw) return null;
+    return validateLcResult(JSON.parse(raw));
+  } catch {
+    return null; // corrupted JSON / private mode — start fresh
+  }
+}
+
+/** Persist the learning-curve result (client only, size-capped, best-effort). */
+function saveLcResult(result: MLLearningCurveResponse | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (result === null) {
+      window.sessionStorage.removeItem(LC_RESULT_STORAGE_KEY);
+      return;
+    }
+    const json = JSON.stringify(result);
+    if (json.length > ML_RESULT_MAX_BYTES) return; // oversized — persistence is optional
+    window.sessionStorage.setItem(LC_RESULT_STORAGE_KEY, json);
+  } catch {
+    /* quota exceeded or private mode — persistence is optional */
+  }
+}
+
 /** Read the persisted playground snapshot (client only, failure-tolerant). */
 function loadPlayground(): Partial<PlaygroundPersisted> {
   if (typeof window === "undefined") return {};
@@ -794,6 +850,10 @@ interface ToolkitStore {
   /** Last training result (rendered until the config changes; survives reloads). */
   mlResult: MLTrainResponse | null;
   setMlResult: (result: MLTrainResponse | null) => void;
+  /** Last learning-curve run (100x-127 — survives sub-tab switches and
+   *  reloads so the session-report collector can walk it). */
+  lcResult: MLLearningCurveResponse | null;
+  setLcResult: (result: MLLearningCurveResponse | null) => void;
   /** Last dataset-preview payload. */
   mlPreview: DatasetPreviewResponse | null;
   setMlPreview: (preview: DatasetPreviewResponse | null) => void;
@@ -934,6 +994,11 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => {
   setMlResult: (result) => {
     set({ mlResult: result });
     saveMlResult(result);
+  },
+  lcResult: loadLcResult(),
+  setLcResult: (result) => {
+    set({ lcResult: result });
+    saveLcResult(result);
   },
   mlPreview: null,
   setMlPreview: (preview) => set({ mlPreview: preview }),

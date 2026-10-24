@@ -342,3 +342,102 @@ class TestLearningCurveContract:
             (2, 17, 5, 101.5, 0.5),
             (4, 19, 5, 101.5, 0.5),
         ]
+
+
+class TestSessionReportContract:
+    """session-report.ts (the web session collector) → the repo-root
+    report bridge → a REAL pharmaml.viz.HTMLReport (the 100x-127 pair).
+
+    The web twin's "Session report" card collects the persisted
+    playground state into a section payload; the bridge composes real
+    matplotlib figures and assembles them through the SAME
+    self-contained themed HTMLReport the desktop playground saves.
+    This guard runs the round trip from inside the suite: the SHIPPED
+    TS collector over a fixed fixture snapshot, its payload piped
+    through the shipped bridge script, and the composed document
+    asserted against the contract the desktop report pins — theme
+    baked as the ``data-theme`` attribute, the per-reader toggle with
+    its localStorage persistence, base64-embedded figures, zero
+    external references."""
+
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+    BRIDGE_PY = REPO_ROOT / "scripts" / "report_bridge.py"
+
+    @pytest.mark.skipif(
+        not COLLECTOR_TS.is_file() or not BRIDGE_PY.is_file() or BUN is None,
+        reason="web checkout (<repo>/src/lib/session-report.ts + "
+        "<repo>/scripts/report_bridge.py) + bun runtime required; the "
+        "zip-only tree skips — its probes live outside the shipped tree",
+    )
+    def test_session_report_round_trip(self) -> None:
+        # 1. the TS side: the SHIPPED collector over the fixed fixture
+        _run([BUN, "run", "scratch/probe_session_report_127.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_127.json").read_text())
+        payload = json.loads(Path("/tmp/sr_payload_127.json").read_text())
+
+        # 2. the census: the fixture session ships 4 figures (parity,
+        #    learning curve, PK profile, PD effect), 2 tables (NCA rows,
+        #    run history) and 2 metric cards (training + curve)
+        assert ts["census"] == {"figures": 4, "tables": 2, "metrics": 2}
+        assert "Predicted vs observed" in ts["sectionTitles"]
+        assert "Learning curve — R² vs training samples" in ts["sectionTitles"]
+        assert "PK regimen — concentration vs time" in ts["sectionTitles"]
+        assert "PD effect — emax model" in ts["sectionTitles"]
+        assert "NCA observed data" in ts["sectionTitles"]
+        assert "ML run history" in ts["sectionTitles"]
+        # the parity figure's trace contract: model line + ±band +
+        # test scatter + train scatter, in collector order
+        assert ts["parityTraceStyles"] == [
+            "model prediction:line",
+            "± band:band",
+            "test observations:scatter",
+            "train observations:scatter",
+        ]
+        # metric values format through the collector's fmtCell
+        assert ["model", "ridge"] in ts["firstMetrics"]
+        assert ["R²", "0.9123"] in ts["firstMetrics"]
+        assert ["RMSE", "0.2111"] in ts["firstMetrics"]
+
+        # 3. the bridge: the collector's payload composes into a real
+        #    HTMLReport (the same builder the desktop report walks)
+        result = subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=True,
+        )
+        composed = json.loads(result.stdout)
+        assert composed["figures"] == 4
+        assert composed["tables"] == 2
+        assert composed["theme"] == "dark"
+        html = composed["html"]
+        assert html.startswith("<!DOCTYPE html>")
+        assert "<html lang='en' data-theme='dark'>" in html
+        assert "id='theme-toggle'" in html
+        assert "localStorage" in html and "pharmaml-report-theme" in html
+        assert html.count("<img") == 4
+        assert html.count("<table") == 2
+        assert "data:image/png;base64," in html
+        # self-contained: no external stylesheet/script/image refs
+        assert "<link" not in html
+        assert "src='http" not in html and "href='http" not in html
+        assert "PharmaML web playground session" in html
+
+    @pytest.mark.skipif(
+        not BRIDGE_PY.is_file(),
+        reason="web checkout (<repo>/scripts/report_bridge.py) required",
+    )
+    def test_bridge_rejects_invalid_theme(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps({"theme": "neon", "sections": []}),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        assert result.returncode == 2
+        error = json.loads(result.stdout)
+        assert "theme" in error["error"]

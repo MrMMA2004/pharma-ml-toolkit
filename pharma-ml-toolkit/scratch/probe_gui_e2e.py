@@ -879,6 +879,127 @@ DIALOGS.clear()
 app._theme_var.set("auto")  # leave the app as we found it
 print("Themed HTML report: app theme baked + toggle + contract OK")
 
+# -- 100x-127 additions: the per-card export on EVERY Generative figure
+# card (two-host Results semantics + both surgery cards) and the
+# REPORT_THEMES bake guard ------------------------------------------ #
+# the ring-topology card: enumerate -> draw -> the CARD's own export
+app._topo_smiles.delete(0, "end")
+app._topo_smiles.insert(0, "C1CCNCC1")  # piperidine: 3 mutants
+app._gen_topology_moves()
+assert pump_until_idle(timeout=240), "topology job hung"
+app._gen_draw_topology()
+assert pump_until_idle(timeout=240), "draw-topology job hung"
+_topo_grid127 = getattr(app._topo_host, "_pg_figure", None)
+assert _topo_grid127 is not None, "the mutant grid never landed"
+_real_save127 = _viz126.save_figure
+_captured127: dict = {}
+
+
+def _spy127(figure, path, *args, **kwargs):
+    _captured127["figure"] = figure
+    return _real_save127(figure, path, *args, **kwargs)
+
+
+_viz126.save_figure = _spy127
+try:
+    _export_topo = "/tmp/probe127-topo-export.png"
+    playground.filedialog.asksaveasfilename = lambda **_k: _export_topo
+    _decoy127, _decoy_axis127 = _plt.subplots()
+    _decoy_axis127.plot([0, 1], [1, 0])
+    app._last_figure = _decoy127
+    app._save_topo_figure()
+    assert pump_until_idle(timeout=240), "topo save job hung"
+    assert _captured127["figure"] is _topo_grid127, "topo: not the card's figure"
+    assert _captured127["figure"] is not _decoy127
+    with open(_export_topo, "rb") as _fh127:
+        assert _fh127.read(8) == b"\x89PNG\r\n\x1a\n"
+    assert any("Figure saved" in str(a) for a in DIALOGS), DIALOGS
+    _plt.close(_decoy127)
+    DIALOGS.clear()
+finally:
+    _viz126.save_figure = _real_save127
+# the guard: breed card has no figure yet -> the honest info
+app._breed_host._pg_figure = None
+app._save_breed_figure()
+assert any("No figure on the card yet" in str(a) for a in DIALOGS), DIALOGS
+DIALOGS.clear()
+print("Surgery per-card saves: topo semantics over decoy + breed guard OK")
+
+# the Results card's TWO hosts: the save follows the newest of the
+# card's own figures (grid vs history), never the global last-drawn
+_hist127, _hist_axis127 = _plt.subplots()
+_hist_axis127.set_title("history")
+_grid127, _grid_axis127 = _plt.subplots()
+_grid_axis127.set_title("grid")
+_again127, _again_axis127 = _plt.subplots()
+_again_axis127.set_title("history again")
+try:
+    app._render_figure(app._ga_host, _hist127)
+    app._render_figure(app._ga_grid_host, _grid127)
+    # stamps: the render counter is monotonic and rides every host
+    assert (
+        getattr(app._ga_host, "_pg_figure_seq", 0)
+        < getattr(app._ga_grid_host, "_pg_figure_seq", 0)
+    ), "render stamps are not ordered"
+    _viz126.save_figure = _spy127
+    try:
+        _export_ga = "/tmp/probe127-ga-export.png"
+        playground.filedialog.asksaveasfilename = lambda **_k: _export_ga
+        app._last_figure = _decoy127  # a closed decoy: identity is what matters
+        app._save_ga_figure()
+        assert pump_until_idle(timeout=240), "ga save job hung"
+        assert _captured127["figure"] is _grid127, "newest card figure lost"
+        app._render_figure(app._ga_host, _again127)  # history re-drew last
+        app._save_ga_figure()
+        assert pump_until_idle(timeout=240), "ga save job hung"
+        assert _captured127["figure"] is _again127, "newest card figure lost"
+        with open(_export_ga, "rb") as _fh127:
+            assert _fh127.read(8) == b"\x89PNG\r\n\x1a\n"
+        assert any("Figure saved" in str(a) for a in DIALOGS), DIALOGS
+        DIALOGS.clear()
+    finally:
+        _viz126.save_figure = _real_save127
+    # the guard: both hosts empty -> the honest info
+    _saved_ga_grid = app._ga_grid_host._pg_figure
+    _saved_ga_host = app._ga_host._pg_figure
+    app._ga_grid_host._pg_figure = None
+    app._ga_host._pg_figure = None
+    app._save_ga_figure()
+    assert any("No figure on the card yet" in str(a) for a in DIALOGS), DIALOGS
+    app._ga_grid_host._pg_figure = _saved_ga_grid
+    app._ga_host._pg_figure = _saved_ga_host
+    DIALOGS.clear()
+finally:
+    _plt.close("all")
+print("Results two-host save: newest-of-card + stamps + guard OK")
+
+# the four buttons ride the Generative tab (one per figure card)
+_buttons127 = [
+    str(w.cget("text"))
+    for w in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+    if w.winfo_class() == "TButton"
+]
+assert _buttons127.count("Save figure…") == 4, _buttons127.count("Save figure…")
+
+# the HTML report bake guards the library's REPORT_THEMES contract: a
+# drifted theme value falls back to auto instead of raising mid-job
+app._theme_var.set("neon")
+_report127 = "/tmp/probe127-report.html"
+playground.filedialog.asksaveasfilename = lambda **_k: _report127
+app._menu_save_session_report_html()
+assert pump_until_idle(timeout=240), "the guarded HTML report job hung"
+with open(_report127, encoding="utf-8") as _fh127:
+    _text127 = _fh127.read()
+assert "<html lang='en' data-theme='auto'>" in _text127, "guard did not fall back to auto"
+assert "data:image/png;base64," in _text127
+app._theme_var.set("auto")
+DIALOGS.clear()
+print("REPORT_THEMES bake guard: drifted value -> auto OK")
+
+# the live-card census: the three buttons joined EXISTING cards
+assert len(app._live_cards()) >= 68, f"live cards: {len(app._live_cards())}"
+print("card census:", len(app._live_cards()))
+
 app.destroy()
 assert not DIALOGS, f"unexpected dialogs: {DIALOGS}"
 print("PROBE_OK")

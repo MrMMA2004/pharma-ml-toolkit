@@ -769,3 +769,27 @@ verified absorptions). The rar/upload/notebook axes: 119/119,
 zero-hit 0, all three probes green after the round's edits. The
 GUI-axis census holds at 68 live cards (the new button joined an
 existing card).
+
+### Round 12 (100x-127) — the per-card export on every Generative figure card; the web twin's session report
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **245 public symbols, 44 zero-hit.** The
++1 symbol over round 125's floor is `REPORT_THEMES` itself — exported
+with the round-126 theme engine and until now consumed only inside
+the library (`HTMLReport.__init__` validation); this round gives the
+GUI a real caller (the session-report bake validates the app's theme
+against it, a drifted value falls back to `auto`), so the 44th
+zero-hit is a wiring decision made honest rather than a gap. The
+library axis otherwise holds; the round's genuine work was round
+126's handover list:
+
+| Surface | The 1.2.66 fix |
+| --- | --- |
+| Generative ▸ Results / Ring topology / Breed cards | **Save figure…** on every remaining Generative figure card — the per-card export the Pareto card shipped in 1.2.65, generalised into `_save_card_figure` (the two-host Results card exports whichever of the card's own figures drew LAST, via the new monotonic `_pg_figure_seq` render stamp; still strictly narrower than the global Ctrl+S) |
+| `pharmaml.viz.REPORT_THEMES` | **A real GUI caller** — the HTML report bake validates against the library's public contract instead of trusting the Tk theme variable |
+| Web ▸ Playground | **The session report twin** — a "Session report" card above the sub-tabs (live census + one-click download), collecting the persisted session state into a section payload that `/api/report/session` + `scripts/report_bridge.py` compose into REAL matplotlib figures and assemble through the SAME self-contained themed `HTMLReport` the desktop saves; the learning-curve result moved into the store so the collector can walk it |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits. The GUI-axis census holds at 68 live
+cards (the three new buttons joined existing cards).

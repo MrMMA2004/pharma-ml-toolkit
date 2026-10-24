@@ -116,7 +116,10 @@ A tabbed graphical interface opens with every calculation domain of the
   enumerate one molecule's one-step ring-size move set
   (``ring_topology_moves``) or breed two parents into hybrid children
   (``scaffold_hop_crossover``, the same operator the GA's crossover
-  combobox selects).
+  combobox selects).  (100x-127) every Generative figure card -- the
+  evolution Results, both surgery cards, the front -- carries its own
+  "Save figure…" button, so a grid or plot leaves the app from the
+  card that shows it instead of racing the global Ctrl+S.
 * **Utilities**     -- the original archive's own file & table
   operations, the coverage audit's closing move (100x-110): merge
   picked tables or a whole folder (``CSV_merger`` / ``filemerger``),
@@ -1810,6 +1813,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._job_label_base = ""
         self._action_buttons: list[Any] = []
         self._last_figure: Any = None
+        # (100x-127) monotonically increasing render counter -- every
+        # _render_figure stamps it on the host as ``_pg_figure_seq`` so a
+        # card holding MORE than one figure host can export the figure
+        # that drew LAST on that card (the Results card carries both the
+        # leaderboard structure grid and the evolution history).
+        self._figure_seq: int = 0
         # -- session figure registry (100x-122): one live entry per figure
         # host -- [host, title, figure].  _render_figure updates entries in
         # place (a re-rendered card replaces its figure; the old one is
@@ -2721,6 +2730,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             widget = canvas.get_tk_widget()
             widget.configure(background=CARD, highlightthickness=0)
             widget.pack(fill="both", expand=True)
+            self._figure_seq += 1
+            host._pg_figure_seq = self._figure_seq
             host._pg_figure = figure
             self._last_figure = figure
             return
@@ -2763,6 +2774,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         label = tk.Label(host, image=photo, background=CARD)
         label.pack(fill="both", expand=True)
         label._pg_photo = photo  # keep a reference -- Tk frees unreferenced images
+        self._figure_seq += 1
+        host._pg_figure_seq = self._figure_seq
         host._pg_figure = figure
         self._last_figure = figure
 
@@ -3505,6 +3518,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # from the worker); the app's theme radios pin the report's
         # initial palette -- auto follows the READER's OS, not ours.
         theme = self._theme_var.get()
+        # (100x-127) the library's own public contract pins the valid
+        # themes (pharmaml.viz.REPORT_THEMES) -- guarding here keeps the
+        # Tk radios honest even if they ever drift from the library's
+        # accepted values, instead of letting HTMLReport raise mid-job.
+        try:
+            from pharmaml.viz import REPORT_THEMES
+
+            if theme not in REPORT_THEMES:
+                theme = "auto"
+        except ImportError:
+            pass  # the worker's HTMLReport import reports this honestly
         try:
             cards = len(self._live_cards())
         except Exception:  # noqa: BLE001 - the census is cosmetic
@@ -3818,7 +3842,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "accented, interior trade-offs muted) with a per-card "
                     "figure export, and the surgery cards enumerate one "
                     "molecule's ring moves or breed two parents -- then draw "
-                    "every mutant or child the same way."
+                    "every mutant or child the same way.  Every figure card "
+                    "carries its own Save figure… button: the grid leaves the "
+                    "app from the card that shows it, not the global Ctrl+S."
                 ),
                 "RDKit (+ torch for RL)",
             ),
@@ -13596,6 +13622,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "ranking becomes visible, not just tabulated.",
         )
         draw_top_btn.pack(side="left", padx=(10, 0))
+        # (100x-127) the per-card export the Pareto card shipped in round
+        # 126, now on the Results card too -- the ONLY card with two
+        # figure hosts, so the save takes whichever of the card's own
+        # figures drew last (grid or history), never the global
+        # Ctrl+S last-drawn-anywhere figure.
+        save_ga_figure_btn = self._action_button(
+            stats_buttons,
+            "Save figure…",
+            self._save_ga_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "leaderboard structure grid or the evolution history, "
+            "whichever drew last -- as PNG, SVG or PDF (unlike Ctrl+S, "
+            "which saves the last figure drawn anywhere).",
+        )
+        save_ga_figure_btn.pack(side="left", padx=(10, 0))
         self._ga_grid_host = self._figure_host(results, height=380)
         self._ga_host = self._figure_host(results, height=340)
 
@@ -13715,6 +13756,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "instead of a line of text.",
         )
         draw_topo_btn.pack(side="left", padx=(10, 0))
+        # (100x-127) the per-card figure export -- the mutant grid leaves
+        # the app through this card's own button, not just the global
+        # Ctrl+S (which would silently save some other card's figure).
+        save_topo_figure_btn = self._action_button(
+            moves_buttons,
+            "Save figure…",
+            self._save_topo_figure,
+            tooltip="Save the mutant structure grid this card is currently "
+            "showing as PNG, SVG or PDF (unlike Ctrl+S, which saves the "
+            "last figure drawn anywhere).",
+        )
+        save_topo_figure_btn.pack(side="left", padx=(10, 0))
         self._topo_summary = ttk.Label(
             moves, text="no enumeration yet", style="Field.TLabel", wraplength=300, justify="left"
         )
@@ -13766,6 +13819,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "geometry of each draw becomes visible.",
         )
         draw_breed_btn.pack(side="left", padx=(10, 0))
+        # (100x-127) the per-card figure export -- parents-and-litter
+        # grid out through this card's own button, same honest contract
+        # as the other figure cards.
+        save_breed_figure_btn = self._action_button(
+            breed_buttons,
+            "Save figure…",
+            self._save_breed_figure,
+            tooltip="Save the parents-and-children structure grid this card "
+            "is currently showing as PNG, SVG or PDF (unlike Ctrl+S, "
+            "which saves the last figure drawn anywhere).",
+        )
+        save_breed_figure_btn.pack(side="left", padx=(10, 0))
         self._breed_summary = ttk.Label(
             breed, text="no children yet", style="Field.TLabel", wraplength=300, justify="left"
         )
@@ -14388,33 +14453,43 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         self._start_job("Pareto front structure grid", work, render)
 
-    def _save_pareto_figure(self) -> None:
-        """Save the front card's LIVE figure -- grid or scatter (100x-126).
+    def _save_card_figure(
+        self, hosts: Any, *, dialog_title: str, empty_hint: str
+    ) -> None:
+        """Save ONE card's live figure -- the generalised per-card export (100x-127).
 
-        The card renders two different figures into the same host (the
-        structure grid and the objective scatter, whichever drew last),
-        and until now neither had a per-card export: the only paths were
-        the global ``Ctrl+S`` (which saves whatever figure drew last
-        ANYWHERE -- run any other calculation in between and the front
-        is no longer what gets saved) and the session report (PDF/HTML
-        bundles).  This reads the host's ``_pg_figure`` -- the exact
-        object the card shows -- and saves it through the library's
-        ``save_figure`` with the same PNG/SVG/PDF filetypes as the menu
-        path.
+        Round 126 shipped this for the Pareto front card alone; this is
+        the same honest contract, factored so every figure card can
+        carry it: read the figure the card's OWN host currently shows
+        (NOT the global ``Ctrl+S`` last-drawn-anywhere figure) and save
+        it through the library's ``save_figure`` with the menu path's
+        PNG/SVG/PDF filetypes.
+
+        A card may hold MORE than one figure host -- the Generative
+        Results card carries both the leaderboard structure grid and
+        the evolution history.  ``_render_figure`` stamps every host
+        with a monotonic ``_pg_figure_seq``; among the card's hosts
+        that hold a live figure, the NEWEST stamp wins (whichever drew
+        last on that card -- still strictly narrower than the global
+        shortcut, which spans every card in the app).
         """
-        figure = getattr(self._pareto_host, "_pg_figure", None)
-        if figure is None:
-            messagebox.showinfo(
-                "No figure on the card yet",
-                "Draw the front (the structure grid) or plot the objective "
-                "scatter first -- this saves the figure the card is "
-                "currently showing.",
-            )
+        live = [
+            (getattr(host, "_pg_figure_seq", 0), host)
+            for host in hosts
+            if getattr(host, "_pg_figure", None) is not None
+        ]
+        if not live:
+            messagebox.showinfo("No figure on the card yet", empty_hint)
+            return
+        live.sort(key=lambda pair: pair[0])
+        figure = getattr(live[-1][1], "_pg_figure", None)
+        if figure is None:  # unreachable -- kept for the type checker
+            messagebox.showinfo("No figure on the card yet", empty_hint)
             return
         if not self._require_pharmaml():
             return
         path = filedialog.asksaveasfilename(
-            title="Save Pareto front figure",
+            title=dialog_title,
             defaultextension=".png",
             filetypes=[
                 ("PNG figure", "*.png"),
@@ -14431,6 +14506,74 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Figure saved", f"Written to\n{saved}")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save the figure", exc)
+
+    def _save_pareto_figure(self) -> None:
+        """Save the front card's LIVE figure -- grid or scatter (100x-126).
+
+        The card renders two different figures into the same host (the
+        structure grid and the objective scatter, whichever drew last),
+        and until round 126 neither had a per-card export: the only
+        paths were the global ``Ctrl+S`` (which saves whatever figure
+        drew last ANYWHERE -- run any other calculation in between and
+        the front is no longer what gets saved) and the session report
+        (PDF/HTML bundles).  This reads the host's ``_pg_figure`` -- the
+        exact object the card shows -- and saves it through the
+        library's ``save_figure`` with the same PNG/SVG/PDF filetypes
+        as the menu path.  (100x-127) the mechanics moved into
+        :meth:`_save_card_figure`, shared with the other figure cards.
+        """
+        self._save_card_figure(
+            [self._pareto_host],
+            dialog_title="Save Pareto front figure",
+            empty_hint=(
+                "Draw the front (the structure grid) or plot the objective "
+                "scatter first -- this saves the figure the card is "
+                "currently showing."
+            ),
+        )
+
+    def _save_ga_figure(self) -> None:
+        """Save the Results card's live figure (100x-127).
+
+        The Results card is the one card that holds TWO figure hosts --
+        the leaderboard's structure grid (``Draw top molecules``) and
+        the evolution history the run auto-plots -- so the per-card
+        export saves whichever of the card's own figures drew LAST
+        (still the card's, never the global last-drawn-anywhere figure
+        ``Ctrl+S`` would catch after any other calculation ran).
+        """
+        self._save_card_figure(
+            [self._ga_grid_host, self._ga_host],
+            dialog_title="Save evolution results figure",
+            empty_hint=(
+                "Run an evolution (or press Draw top molecules) first -- "
+                "this saves the figure the Results card is currently "
+                "showing: the leaderboard structure grid or the evolution "
+                "history, whichever drew last."
+            ),
+        )
+
+    def _save_topo_figure(self) -> None:
+        """Save the ring-topology card's mutant structure grid (100x-127)."""
+        self._save_card_figure(
+            [self._topo_host],
+            dialog_title="Save ring topology figure",
+            empty_hint=(
+                "Enumerate mutants and press Draw mutants first -- this "
+                "saves the structure grid the card is currently showing."
+            ),
+        )
+
+    def _save_breed_figure(self) -> None:
+        """Save the breeding card's litter structure grid (100x-127)."""
+        self._save_card_figure(
+            [self._breed_host],
+            dialog_title="Save crossover litter figure",
+            empty_hint=(
+                "Breed two molecules and press Draw litter first -- this "
+                "saves the structure grid the card is currently showing."
+            ),
+        )
 
     # ------------------------------------------------------------------ #
     # Utilities tab -- the rar's own file & table operations, one by one

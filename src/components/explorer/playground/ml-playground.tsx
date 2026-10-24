@@ -2362,9 +2362,12 @@ export function MlPlayground() {
   const [adModels, setAdModels] = useState("20");
   /* Learning curve (100x-125): re-runs the LAST trained configuration
    * at growing train sizes — works for synthetic AND CSV runs (the
-   * curve judges the parked request, not just a loaded file). */
+   * curve judges the parked request, not just a loaded file).  The
+   * result lives in the store (100x-127) so the session-report
+   * collector can walk it; it still survives sub-tab switches. */
   const [lcStatus, setLcStatus] = useState<"idle" | "running" | "done" | "error">("idle");
-  const [lcResult, setLcResult] = useState<MLLearningCurveResponse | null>(null);
+  const lcResult = useToolkitStore((s) => s.lcResult);
+  const setLcResult = useToolkitStore((s) => s.setLcResult);
   const [lcError, setLcError] = useState<string | null>(null);
   const [lcFolds, setLcFolds] = useState("5");
   const lastTrainBodyRef = useRef<MLTrainRequest | null>(null);
