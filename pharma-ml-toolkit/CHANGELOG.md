@@ -10,6 +10,71 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.59] — 2026-10-24
+
+### Added — the round-5 full review (100x-120): the last library stragglers gain GUI surfaces
+
+The user's standing complaint — "playground.py content is incomplete"
+— was re-audited a fifth time (the library-axis audit re-run: every
+public symbol of every `pharmaml` module grepped against
+`playground.py`). Seven user-facing capabilities were still without a
+GUI surface; all closed in this release:
+
+| Library capability | playground.py surface since 1.2.59 |
+| --- | --- |
+| `viz.plot_descriptor_distributions` | Chemistry → Feature factory → *Plot distributions* (histogram grid over the computed frame, title carries rows × columns) |
+| `viz.plot_learning_curve` | Data & ML → Results → *Learning curve* (train-set size vs CV score over the last run's train+test rows; CV-folds knob 2–10; replaces the parity figure until the next train) |
+| `viz.plot_table_comparison` | Utilities → Table compare → *Plot reconciliation* (the three-way overlap figure, labels from the picked table names) |
+| `docking.parse_vina_config` | Docking → Vina config batch → *Parse config* (key→value dump in the card; centre/size/exhaustiveness copied into the Campaign runner's single-ligand form) |
+| `biology.most_variable_genes` | Cell Lines → Expression table → *Rank variable genes (MAD)* (top-N MAD-ranked list with values, inspectable without a screen) |
+| `pharma.effect_table` | PK / PD → PD model explorer — the sigmoid table now renders `effect_table`'s own parallel lists (parity with `sigmoid_emax_effect` pinned to the exact same values) |
+| `docking.run_autodock4` | Docking → Campaign runner — the new **AutoDock4 single folder** engine mode (one ligand folder instead of the whole campaign; skip-completed resume checkbox exposed; engine-aware folder picker label) |
+
+The remaining zero-hit symbols (38, down from 46) are the documented
+non-goals: dataclass result containers riding inside composed calls
+(`PKSummary`, `TableComparison`, `TrialResult`, …), internal plumbing
+(`build_preprocessor`, `split_features_target`,
+`correlate_with_response` inside `sensitivity_associations`,
+`check_torsion_consistency` inside the audit scan), wrappers absorbed
+by the class-based paths (`run_genetic_optimization`, the objective
+classes behind `build_objective`) and `viz` export plumbing
+(`save_pdf_report` inside `save_visual_bundle`).
+
+### Added — the Ctrl+F card finder (the UI round)
+
+A 65-card window needs navigation beyond tab hunting: **Ctrl+F** (or
+`View ▸ Find a card…`) opens a live finder — type words from any
+card's title or subtitle, Enter (or double-click) selects the card's
+tab, scrolls the card into view and flashes its accent border for
+1.2 s. Every card shell registers itself in a module-level index at
+build time (`make_card` appends to `_CARD_INDEX`); the finder filters
+the index live and resolves tabs through the live notebook so stale
+entries never match. The shortcut is bound, advertised in the hint row
+and pinned by tests together with every other accelerator.
+
+### Fixed
+
+- **Version drift**: `VERSION`/`pyproject.toml` said 1.2.58 while
+  `pharmaml/__init__.py` and the web app's
+  `SHIPPED_TOOLKIT_VERSION` still said 1.2.57 — all four carriers now
+  agree on 1.2.59 (the web badge and download panel had been showing
+  a stale version since the 1.2.58 bump).
+
+### Tests
+
+- 18 new GUI tests (`TestReview120Gui`): every new button's
+  no-data-first guard and its full job path (figure embedded, table
+  filled), the `effect_table` parity pins, the single-folder engine's
+  registration/label/warning, the card finder's live-card census
+  (≥ 55), dialog population, jump-select-flash-unflash, and the
+  Ctrl+F hint-row + binding pins (the accelerator contract grew to
+  six sequences).
+- The E2E probe (`scratch/probe_gui_e2e.py`) gained the 100x-120
+  section: learning curve, descriptor distributions, MAD ranking, the
+  finder dialog + jump + flash, the single-folder engine label, the
+  Vina-config parse round-trip. Suite: 2291 collected, 0 failures
+  (2286 passed + 5 skipped).
+
 ## [1.2.58] — 2026-10-23
 
 ### Added — the full-review completeness pass (100x-119): the library's own surface, fully in the GUI

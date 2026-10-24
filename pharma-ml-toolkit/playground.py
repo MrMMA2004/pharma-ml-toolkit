@@ -803,7 +803,8 @@ def _split_pair(raw: str) -> tuple[float, float]:
 
 
 #: The Docking tab's campaign-runner engines (combobox values).
-_DOCK_ENGINES = ("AutoDock4 campaign", "Vina single ligand")
+_DOCK_ENGINES = ("AutoDock4 campaign", "AutoDock4 single folder",
+                  "Vina single ligand")
 
 #: The SMILES-array card's engines (dock_smiles_array tokens).
 _SMILES_DOCK_ENGINES = ("vina", "autodock4")
@@ -930,7 +931,8 @@ def docking_engine_binaries(engine: str) -> tuple[str, ...]:
     binary.  Used to pre-empt the workflow module's own RuntimeError
     with a friendly install hint before any job is started.
     """
-    if engine in ("AutoDock4 campaign", "autodock4"):
+    if engine in ("AutoDock4 campaign", "AutoDock4 single folder",
+                  "autodock4"):
         return ("autogrid4", "autodock4")
     return ("vina",)
 
@@ -3024,7 +3026,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                  "any SMILES, Tanimoto similarity, the RISM-KH solvation "
                  "card (ten solvation-theory descriptors), the feature "
                  "factory: 10,000+ descriptor/fingerprint columns ranked to "
-                 "a top-K, the structure & table converters (CSV → 3D SDF, "
+                 "a top-K (with the distribution-histogram grid), the "
+                 "structure & table converters (CSV → 3D SDF, "
                  "SMI ↔ CSV, SDF → table, batch pIC50), the library "
                  "similarity scan (matrix / threshold / top-k, now with the "
                  "labelled heat-map figure), the canonical-tautomer & "
@@ -3047,8 +3050,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "Cell Lines",
                 ("Drug-response screens: audit (plus the replicate-variability "
                  "and per-compound summary readouts), the sensitivity "
-                 "matrix, sensitive vs resistant calls and expression "
-                 "biomarker discovery."),
+                 "matrix, sensitive vs resistant calls, MAD-ranked variable "
+                 "genes on the expression table, and biomarker discovery."),
                 "pandas + scipy",
             ),
             (
@@ -3060,18 +3063,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                  "custom receptor types included — DLG / Vina result "
                  "parsing (single logs or a full Vina results folder, "
                  "top-ligand bars included), "
-                 "batch campaign runs, the SMILES array card: paste a "
+                 "batch campaign runs and the single-folder AutoDock4 "
+                 "engine (with skip-completed resume), the SMILES array "
+                 "card: paste a "
                  "list, dock every molecule simultaneously with Vina or "
                  "AutoDock4 -- plus the audit card (GPF parameters, "
                  "ligand_types, torsion consistency, completion), the "
-                 "Vina config batch and one-ligand SMILES → PDBQT."),
+                 "Vina config batch (parsed keys shown, box copied into "
+                 "the single-run form) and one-ligand SMILES → PDBQT."),
                 "RDKit + pandas",
             ),
             (
                 "Data & ML",
                 ("Open a CSV (or a bundled example), drop the non-numeric "
                  "columns, train a model, read the metrics (classification "
-                 "runs gain the calibration reliability diagram), browse the "
+                 "runs gain the calibration reliability diagram; both "
+                 "tasks gain the learning-curve figure — should you assay "
+                 "more compounds?), browse the "
                  "cross-validation leaderboard (with the bar figure), build "
                  "voting / stacking ensembles by hand, and save the trained "
                  "model as a bundle you can load back and predict with (PDF "
@@ -3089,7 +3097,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             (
                 "Utilities",
                 ("The archive's own file & table operations: merge or split "
-                 "tables, compare / annotate ligand columns, filter "
+                 "tables, compare / annotate ligand columns (with the "
+                 "three-way reconciliation figure), filter "
                  "approved drugs into a CSV or Word report, the campaign "
                  "file tools (collect / list / distribute / delete / "
                  "cleanup, dry-run first) and the reindex-by-number table."),
@@ -5583,7 +5592,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             import numpy as np
 
             if model.startswith("sigmoid"):
-                from pharmaml.pharma.pd import sigmoid_emax_effect
+                from pharmaml.pharma.pd import (
+                    effect_table,
+                    sigmoid_emax_effect,
+                )
+
+                # 100x-120: the table itself comes from the library's own
+                # effect_table (the parallel-lists dict), the curve from
+                # the scalar model -- one story, two library calls.
+                table = effect_table(concs, e0, top, c50, hill)
+                table_effects = np.asarray(table["effect"], dtype=float)
 
                 def fn(c: Any) -> Any:
                     return sigmoid_emax_effect(c, e0, top, c50, hill)
@@ -5593,6 +5611,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             elif model.startswith("inhibitory"):
                 from pharmaml.pharma.pd import inhibitory_emax_effect
 
+                table = None
+
                 def fn(c: Any) -> Any:  # type: ignore[no-redef]
                     return inhibitory_emax_effect(c, e0, top, c50, hill)
 
@@ -5601,11 +5621,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             else:
                 from pharmaml.pharma.pd import linear_effect
 
+                table = None
+
                 def fn(c: Any) -> Any:  # type: ignore[no-redef]
                     return linear_effect(c, slope)
 
                 label = f"E = {format_number(slope)}·C + 0"
             effects = np.asarray(fn(np.asarray(concs)), dtype=float)
+            if table is not None:
+                # the sigmoid table is effect_table's own output -- the
+                # GUI renders the library's dict, not a recompute
+                effects = table_effects
             grid = np.linspace(0.0, max(concs) * 1.15 or c50 * 20, 240)
             curve = np.asarray(fn(grid), dtype=float)
             return effects, grid, curve, label
@@ -5858,6 +5884,34 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                                         style="CardMuted.TLabel")
         self._bio_expr_info.grid(row=1, column=0, columnspan=2, sticky="w",
                                  pady=(6, 0))
+        # 100x-120: the MAD variability ranking (most_variable_genes) --
+        # which genes carry signal at all, inspectable without a screen.
+        expr_var_row = ttk.Frame(expression, style="Card.TFrame")
+        expr_var_row.grid(row=2, column=0, columnspan=2, sticky="w",
+                          pady=(6, 0))
+        expr_var_btn = self._action_button(
+            expr_var_row, "Rank variable genes (MAD)",
+            self._bio_rank_variable_genes,
+            tooltip="The N genes with the highest median absolute deviation "
+                    "across the panel (most_variable_genes) -- the classic "
+                    "pre-filter before correlating 20,000 probes against a "
+                    "drug response.")
+        expr_var_btn.pack(side="left")
+        ttk.Label(expr_var_row, text="top N", style="CardMuted.TLabel"
+                  ).pack(side="left", padx=(10, 4))
+        self._bio_mad_n = ttk.Entry(expr_var_row, width=7)
+        self._bio_mad_n.insert(0, "20")
+        self._bio_mad_n.pack(side="left")
+        self._bio_mad_summary = ttk.Label(
+            expr_var_row, text="", style="CardMuted.TLabel", wraplength=420,
+            justify="left")
+        self._bio_mad_summary.pack(side="left", padx=(8, 0))
+        self._bio_mad_text = _grid_text(expression, height=5, mono=self._mono)
+        self._bio_mad_text.insert(
+            "1.0", "the MAD-ranked gene list appears here "
+                   "(most variable first)")
+        self._bio_mad_text.grid(row=3, column=0, columnspan=2, sticky="ew",
+                                pady=(6, 0))
 
         biomarkers = make_card(
             page.grid, "Biomarker discovery", span=2, row=4, column=0,
@@ -6216,6 +6270,55 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._bio_expr_info.configure(
             text=f"{path.name} — {len(frame):,} cell lines × {len(frame.columns):,} genes"
         )
+
+    def _bio_rank_variable_genes(self) -> None:
+        """The MAD variability ranking of the loaded table (100x-120).
+
+        ``most_variable_genes`` finally has its GUI surface: the N
+        genes with the highest median absolute deviation across the
+        panel, listed most-variable-first with their MAD values --
+        the classic pre-filter question ("which probes carry signal
+        at all?") answerable without loading a screen.
+        """
+        if not self._require_pharmaml() or not self._require(
+                "pandas", "the MAD ranking"):
+            return
+        frame = getattr(self, "_bio_expr", None)
+        if frame is None:
+            messagebox.showwarning(
+                "No expression table",
+                "Open an expression CSV (or load the example) first.")
+            return
+        try:
+            top_n = parse_int(self._bio_mad_n.get(), "top N genes",
+                              minimum=1, maximum=100000)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        n_genes = len(frame.columns)
+
+        def work() -> Any:
+            import pandas as pd
+
+            from pharmaml.biology import most_variable_genes
+
+            genes = most_variable_genes(frame, n=top_n)
+            # MAD per kept gene, ranked -- recompute honestly from the
+            # frame (the library returns names only)
+            mads = (frame[genes] - frame[genes].median()).abs().median()
+            ranked = pd.DataFrame({"gene": genes}).set_index("gene")
+            ranked["MAD"] = mads
+            return ranked
+
+        def render(ranked: Any) -> None:
+            self._bio_mad_text.delete("1.0", "end")
+            self._bio_mad_text.insert("1.0", ranked.to_string())
+            self._bio_mad_summary.configure(
+                text=(f"top {len(ranked)} of {n_genes:,} genes by MAD — "
+                      f"most variable: {ranked.index[0]}"),
+                style="Field.TLabel")
+
+        self._start_job("MAD gene ranking", work, render)
 
     def _bio_discover_biomarkers(self) -> None:
         if not self._require_pharmaml():
@@ -6597,6 +6700,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                                                values=_DOCK_ENGINES)
         self._dock_engine_combo.set(_DOCK_ENGINES[0])
         form_row(runner, "engine", self._dock_engine_combo)
+        # 100x-120: the single-folder mode re-uses the same folder picker
+        # ("the campaign root" is simply "the ONE ligand folder" there);
+        # the info label tells the two apart.
+        self._dock_engine_combo.bind(
+            "<<ComboboxSelected>>", lambda _e: self._dock_refresh_campaign_info())
         root_buttons = ttk.Frame(runner, style="Card.TFrame")
         root_buttons.grid(row=runner.grid_size()[1], column=0, columnspan=2,
                           sticky="w")
@@ -6634,6 +6742,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_workers_entry = ttk.Entry(runner, width=10)
         self._dock_workers_entry.insert(0, "4")
         form_row(runner, "workers (AutoDock4)", self._dock_workers_entry)
+        self._dock_skip_existing_var = tk.BooleanVar(value=True)
+        skip_check = ttk.Checkbutton(
+            runner, text="skip completed folders (reuse .glg/.dlg)",
+            variable=self._dock_skip_existing_var)
+        Tooltip(skip_check,
+                "Reuse existing outputs: a .glg present is trusted, an "
+                "existing .dlg only when it carries AutoDock's Successful "
+                "Completion sentinel -- an interrupted run is re-run, never "
+                "trusted blindly (run_autodock4's skip_existing).")
+        form_row(runner, "resume", skip_check)
         run_btn = self._action_button(
             runner, "Run docking", self._dock_run, primary=True,
             tooltip="Real docking takes minutes to hours per ligand -- the "
@@ -6909,6 +7027,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "land in the output folder and the per-ligand table "
                     "below.")
         vbatch_run_btn.pack(side="left")
+        # 100x-120: parse the picked config (parse_vina_config) -- the
+        # key\u2192value dump plus a one-click fill of the single-run form.
+        vbatch_parse_btn = self._action_button(
+            vbatch_run_row, "Parse config", self._dock_vbatch_parse,
+            tooltip="Parses the picked Vina config (parse_vina_config) and "
+                    "shows every key\u2192value pair -- plus a button's worth "
+                    "of convenience: centre / size / exhaustiveness are "
+                    "copied into the Campaign runner's single-ligand form.")
+        vbatch_parse_btn.pack(side="left", padx=(10, 0))
         self._dock_vbatch_summary = ttk.Label(
             vbatch_run_row, text="—", style="CardMuted.TLabel",
             wraplength=300, justify="left")
@@ -7990,10 +8117,32 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     # -- campaign runner card -------------------------------------------- #
     def _dock_choose_campaign_root(self) -> None:
-        path = filedialog.askdirectory(title="Choose the AutoDock4 campaign root")
+        title = ("Choose the AutoDock4 campaign root"
+                 if self._dock_engine_combo.get() != "AutoDock4 single folder"
+                 else "Choose the ONE ligand folder (r.gpf / r.dpf)")
+        path = filedialog.askdirectory(title=title)
         if path:
             self._dock_campaign_root = Path(path)
-            self._dock_campaign_info.configure(text=f"campaign root: {path}")
+            self._dock_refresh_campaign_info()
+
+    def _dock_refresh_campaign_info(self) -> None:
+        """The folder picker's label, engine-aware (100x-120).
+
+        Campaign mode names the root's sub-folders; single-folder mode
+        names the one folder ``run_autodock4`` will drive.
+        """
+        root = self._dock_campaign_root
+        if self._dock_engine_combo.get() == "AutoDock4 single folder":
+            text = (f"ligand folder: {root}" if root is not None
+                    else "no ligand folder chosen — pick the ONE folder "
+                         "holding r.gpf / r.dpf")
+        else:
+            text = (f"campaign root: {root}" if root is not None
+                    else "no campaign root chosen")
+        try:
+            self._dock_campaign_info.configure(text=text)
+        except tk.TclError:  # pragma: no cover - label not built yet
+            pass
 
     def _dock_open_vina_receptor(self) -> None:
         path = filedialog.askopenfilename(
@@ -8024,7 +8173,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _dock_missing_engine_dialog(self, engine: str) -> None:
         binaries = ", ".join(docking_engine_binaries(engine))
-        if engine in ("AutoDock4 campaign", "autodock4"):
+        if engine in ("AutoDock4 campaign", "AutoDock4 single folder",
+                      "autodock4"):
             hint = (
                 f"AutoDock4 docking needs the {binaries} binaries on "
                 "PATH (Scripps AutoDock Tools, or conda-forge):\n\n"
@@ -8217,6 +8367,61 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dock_vbatch_info.configure(
             text=f"config: {conf}\nligands: {lig}\noutput: {out}")
 
+    def _dock_vbatch_parse(self) -> None:
+        """Parse the picked Vina config and show it (100x-120).
+
+        ``parse_vina_config`` finally has its GUI surface: every
+        key\u2192value pair of the picked config is dumped into the info
+        label, and the centre / size / exhaustiveness keys are copied
+        into the Campaign runner's single-ligand form so a re-run of
+        one ligand needs zero retyping.
+        """
+        if not self._require_pharmaml():
+            return
+        if self._dock_vbatch_conf is None:
+            messagebox.showwarning(
+                "No config picked", "Pick the Vina config first.")
+            return
+        try:
+            from pharmaml.docking import parse_vina_config
+
+            parsed = parse_vina_config(self._dock_vbatch_conf)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not parse the config", exc)
+            return
+        pairs = [f"{key} = {value}" for key, value in parsed.items()]
+        shown = "\n".join(pairs[:10]) + (f"\n… (+{len(pairs) - 10} more)"
+                                        if len(pairs) > 10 else "")
+        self._dock_vbatch_info.configure(
+            text=f"config: {self._dock_vbatch_conf.name} — parsed "
+                 f"{len(parsed)} keys\n{shown}")
+        # convenience: copy the box into the single-run form
+        filled: list[str] = []
+        try:
+            center = (parsed.get("center_x"), parsed.get("center_y"),
+                      parsed.get("center_z"))
+            size = (parsed.get("size_x"), parsed.get("size_y"),
+                    parsed.get("size_z"))
+            if all(part is not None for part in center):
+                self._dock_center_entry.delete(0, "end")
+                self._dock_center_entry.insert(0, " ".join(center))
+                filled.append("centre")
+            if all(part is not None for part in size):
+                self._dock_size_entry.delete(0, "end")
+                self._dock_size_entry.insert(0, " ".join(size))
+                filled.append("size")
+            if parsed.get("exhaustiveness") is not None:
+                self._dock_exhaust_entry.delete(0, "end")
+                self._dock_exhaust_entry.insert(0, str(parsed["exhaustiveness"]))
+                filled.append("exhaustiveness")
+        except tk.TclError:  # pragma: no cover - form not built
+            filled.clear()
+        if filled:
+            self._dock_vbatch_summary.configure(
+                text=f"copied {' · '.join(filled)} into the single-ligand "
+                     f"form",
+                style="Field.TLabel")
+
     def _dock_vbatch_run(self) -> None:
         """Dock every PDBQT under the ligand tree with one Vina config."""
         if not self._require_pharmaml():
@@ -8350,6 +8555,36 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 )
 
             self._start_job(f"AutoDock4 campaign ({root.name})", work, render)
+            return
+
+        # -- AutoDock4 single folder (100x-120) -------------------------- #
+        if engine == "AutoDock4 single folder":
+            if self._dock_campaign_root is None:
+                messagebox.showwarning(
+                    "No ligand folder",
+                    "Choose the ONE ligand folder (holding r.gpf / r.dpf) "
+                    "first -- the same picker as the campaign root.",
+                )
+                return
+            skip_existing = bool(self._dock_skip_existing_var.get())
+            root = self._dock_campaign_root
+
+            def work_single() -> Any:
+                from pharmaml.docking import run_autodock4
+
+                return run_autodock4(root, skip_existing=skip_existing)
+
+            def render_single(result: Any) -> None:
+                state = "ok" if result.ok else f"FAILED — {result.error}"
+                dlg_note = f" · dlg {result.dlg.name}" if result.dlg else ""
+                self._dock_run_summary.configure(
+                    text=(f"autogrid4+autodock4 {state} · "
+                          f"{result.seconds:.1f} s{dlg_note} — {root.name}"),
+                    style="Field.TLabel",
+                )
+
+            self._start_job(f"AutoDock4 single ({root.name})",
+                            work_single, render_single)
             return
 
         # -- Vina single ligand ------------------------------------------ #
@@ -8785,6 +9020,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._calib_bins.insert(0, "10")
         self._calib_bins.pack(side="left", padx=(8, 0))
         ttk.Label(ml_result_buttons, text="bins",
+                  style="CardMuted.TLabel").pack(side="left", padx=(2, 0))
+        # 100x-120: the learning-curve figure -- "should we assay more
+        # compounds?" answered with a picture instead of a guess.
+        curve_btn = self._action_button(
+            ml_result_buttons, "Learning curve", self._ml_plot_learning_curve,
+            tooltip="Train-set size vs CV score (plot_learning_curve): the "
+                    "honest answer to 'should we assay 500 more compounds?' "
+                    "-- a curve still climbing means yes, a plateau means "
+                    "the model has extracted what this chemistry can give.")
+        curve_btn.pack(side="left", padx=(10, 0))
+        self._curve_cv = ttk.Entry(ml_result_buttons, width=4)
+        self._curve_cv.insert(0, "5")
+        self._curve_cv.pack(side="left", padx=(8, 0))
+        ttk.Label(ml_result_buttons, text="folds",
                   style="CardMuted.TLabel").pack(side="left", padx=(2, 0))
         ml_result_note = ttk.Label(
             ml_result_buttons, text="", style="CardMuted.TLabel",
@@ -10826,6 +11075,62 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         self._start_job("leaderboard bars", work, render)
 
+    def _ml_plot_learning_curve(self) -> None:
+        """Train-set size vs CV score for the last trained model (100x-120).
+
+        ``plot_learning_curve`` gains its GUI surface: the last run's
+        train+test rows are reassembled (the held-out rows are the most
+        honest extra points the curve can have) and refit at growing
+        train sizes -- the "should we assay more compounds?" figure.
+        """
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo(
+                "No trained model",
+                "Train a model first -- the learning curve needs the "
+                "last run's data.")
+            return
+        trained, _report, _task, x_train, y_train, x_test, y_test, target = run
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the learning curve"):
+            return
+        if not self._require("sklearn", "the learning curve"):
+            return
+        try:
+            folds = parse_int(self._curve_cv.get(), "CV folds",
+                              minimum=2, maximum=10)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        model_name = trained.name
+
+        def work() -> Any:
+            import numpy as np
+            import pandas as pd
+
+            from pharmaml.viz import plot_learning_curve
+
+            if isinstance(x_train, pd.DataFrame):
+                full_x = pd.concat([x_train, x_test], ignore_index=True)
+                full_y = pd.concat([pd.Series(y_train), pd.Series(y_test)],
+                                   ignore_index=True)
+            else:
+                full_x = np.concatenate([np.asarray(x_train),
+                                         np.asarray(x_test)], axis=0)
+                full_y = np.concatenate([np.asarray(y_train),
+                                         np.asarray(y_test)], axis=0)
+            return plot_learning_curve(
+                trained.model, full_x, full_y, cv=folds,
+                title=f"Learning curve — {model_name} ({target})")
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._ml_host, figure)
+            self._ml_result_note.configure(
+                text="learning curve replaces the parity figure — "
+                     "Train & evaluate brings it back")
+
+        self._start_job("learning curve", work, render)
+
     # ------------------------------------------------------------------ #
     # Deep Learning tab (100x-61) -- the pharmaml.ml.neural estimators
     # ------------------------------------------------------------------ #
@@ -12006,6 +12311,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._util_cmp_tree.configure(yscrollcommand=cmp_bar.set)
         self._util_cmp_tree.pack(side="left", fill="both", expand=True)
         cmp_bar.pack(side="right", fill="y")
+        # 100x-120: the reconciliation figure (plot_table_comparison) --
+        # the three-way overlap as a picture beside the tree.
+        cmp_plot_row = ttk.Frame(compare, style="Card.TFrame")
+        grid_append(compare, cmp_plot_row, sticky="w", pady=(6, 0))
+        cmp_plot_btn = self._action_button(
+            cmp_plot_row, "Plot reconciliation", self._util_cmp_plot,
+            tooltip="The last three-way reconciliation as an overlap "
+                    "figure (plot_table_comparison): common / only-A / "
+                    "only-B counts -- the set story the table tells, "
+                    "told visually.")
+        cmp_plot_btn.pack(side="left")
+        self._util_cmp_plot_note = ttk.Label(
+            cmp_plot_row, text="", style="CardMuted.TLabel", wraplength=300,
+            justify="left")
+        self._util_cmp_plot_note.pack(side="left", padx=(8, 0))
+        self._util_cmp_host = self._figure_host(compare, height=260)
+        self._util_cmp_last: Any = None
 
         # -- card 3: approved drugs ------------------------------------- #
         approved = make_card(
@@ -12465,6 +12787,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             def render(comparison: Any) -> None:
                 import pandas as pd
 
+                # 100x-120: keep the comparison object itself for the
+                # reconciliation figure button below the tree.
+                self._util_cmp_last = comparison
                 records = (
                     [("common", name) for name in comparison.common]
                     + [("only in A", name) for name in comparison.only_in_a]
@@ -12508,6 +12833,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         def render(frame: Any) -> None:
             self._util_frames["compare"] = frame
+            self._util_cmp_last = None  # annotate mode has no comparison
             self._fill_dynamic_tree(self._util_cmp_tree, frame)
             joined = sum(
                 1 for column in name_columns
@@ -12520,6 +12846,43 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 style="Field.TLabel")
 
         self._start_job("annotating with SMILES", work, render)
+
+    def _util_cmp_plot(self) -> None:
+        """The last three-way reconciliation as a figure (100x-120).
+
+        ``plot_table_comparison`` finally has its GUI surface: the
+        common / only-A / only-B counts of the last ``compare_tables``
+        run drawn as the toolkit's own overlap figure.
+        """
+        comparison = getattr(self, "_util_cmp_last", None)
+        if comparison is None:
+            messagebox.showinfo(
+                "No comparison yet",
+                "Run the compare mode first — the overlap figure needs "
+                "the last three-way reconciliation.")
+            return
+        if not self._require_pharmaml() or not self._require(
+                "matplotlib", "the reconciliation figure"):
+            return
+        a_name = (self._util_cmp_a.name if self._util_cmp_a is not None
+                  else "A")
+        b_name = (self._util_cmp_b.name if self._util_cmp_b is not None
+                  else "B")
+
+        def work() -> Any:
+            from pharmaml.viz import plot_table_comparison
+
+            return plot_table_comparison(
+                comparison, labels=(a_name, b_name),
+                title="Ligand-set reconciliation")
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._util_cmp_host, figure)
+            self._util_cmp_plot_note.configure(
+                text="reconciliation figure replaces the tree's width — "
+                     "Run refreshes the table")
+
+        self._start_job("reconciliation figure", work, render)
 
     # -- utilities: approved drugs -------------------------------------- #
     def _util_appr_pick_files(self) -> None:

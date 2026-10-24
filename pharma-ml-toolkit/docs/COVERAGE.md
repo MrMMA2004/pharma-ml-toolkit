@@ -564,21 +564,41 @@ closed in **1.2.58**:
 | `viz.plot_receptor_atom_types` | Docking → receptor card's *Plot atom types* |
 | `viz.plot_top_ligands` | Docking → results card's *Plot top ligands* |
 
-Remaining zero-hit symbols are the documented non-goals: internal
+## Library coverage (100x-120) — round 5: the last stragglers
+
+The re-run of the same audit after 1.2.58 found seven more user-facing
+capabilities without a GUI surface (and a stale version pin); all
+closed in **1.2.59**:
+
+| Library capability | playground.py surface since 1.2.59 |
+| --- | --- |
+| `viz.plot_descriptor_distributions` | Chemistry → Feature factory → *Plot distributions* |
+| `viz.plot_learning_curve` | Data & ML → Results → *Learning curve* (CV-folds knob) |
+| `viz.plot_table_comparison` | Utilities → Table compare → *Plot reconciliation* |
+| `docking.parse_vina_config` | Docking → Vina config batch → *Parse config* (dump + form fill) |
+| `biology.most_variable_genes` | Cell Lines → Expression table → *Rank variable genes (MAD)* |
+| `pharma.effect_table` | PK / PD → PD model explorer — the sigmoid table renders `effect_table`'s lists |
+| `docking.run_autodock4` | Docking → Campaign runner — the *AutoDock4 single folder* engine + resume checkbox |
+
+Remaining zero-hit symbols (38, down from 46) are the documented
+non-goals: internal
 plumbing (`build_preprocessor`, `split_features_target`,
 `has_categorical_columns` — inside `train_model`), single-object
 companions the composed call already covers
 (`knn_applicability_domain`/`bootstrap_uncertainty` inside the AD card's
-`applicability_domain`; `run_genetic_optimization`/`run_rl_optimization`
+`applicability_domain`; `correlate_with_response` inside
+`sensitivity_associations`; `run_genetic_optimization`/`run_rl_optimization`
 inside the generative tab's optimizer classes; `check_torsion_consistency`
-inside the audit card's `scan_torsion_consistency`; `parse_vina_config`
-inside `run_vina_batch`), pure helpers (`tanimoto_from_sets`,
-`safe_filename`, validators), `viz` export plumbing (`figure_to_base64`,
-`export_table` — the save dialogs call `write_table`/`save_figure`
-directly), and the figures whose data the GUI renders as tables instead
-(`plot_table_comparison`, `plot_descriptor_distributions`,
-`plot_energy_distribution`, `plot_class_distribution`, `plot_cv_scores`,
-`plot_learning_curve`, `plot_residuals`, `plot_feature_importance`,
-`plot_dose_accumulation`'s notebook twins). The audit method is
+inside the audit card's `scan_torsion_consistency`; `aucm_trapezoid`
+inside `nca_summary`; `save_pdf_report` inside `save_visual_bundle`),
+pure helpers (`tanimoto_from_sets`,
+`safe_filename`, validators), dataclass result containers riding inside
+composed calls (`PKSummary`, `TableComparison`, `TrialResult`,
+`ModelInputReport`, the deep/residual MLP estimator classes behind
+`build_deep_*`/`build_residual_*`, `SmilesRnn` behind the RNN trainer),
+and the report-bundle figures the GUI renders as tables or saves in the
+bundle (`plot_residuals`, `plot_roc_curves`, `plot_cv_scores`,
+`plot_feature_importance`, `plot_class_distribution` — all inside
+`save_visual_bundle`). The audit method is
 re-runnable: walk `inspect.getmembers(pharmaml.<module>)` and grep
 `playground.py` — a user-facing zero-hit is the next round's todo.

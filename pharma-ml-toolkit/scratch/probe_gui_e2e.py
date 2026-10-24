@@ -371,6 +371,88 @@ assert app._book.index(app._book.select()) == 2, "tab cycling failed"
 app._jump_to_tab(0)
 print("quick-jump + tab cycling: OK")
 
+# -- 100x-120 additions: the last library stragglers + card finder ------- #
+# learning curve on the trained classification model
+app._ml_plot_learning_curve()
+assert pump_until_idle(timeout=300), "learning-curve job hung"
+assert len(app._ml_host.winfo_children()) == 1, "learning-curve figure not embedded"
+assert "learning curve" in app._ml_result_note.cget("text")
+print("learning curve: embedded")
+
+# descriptor distributions on a feature-factory compute
+app._feat_k_entry.delete(0, "end")
+app._feat_k_entry.insert(0, "50")
+app._feat_ranker_combo.set("Variance (no target needed)")
+app._feat_compute()
+assert pump_until_idle(timeout=600), "feature factory job hung"
+app._feat_plot_distributions()
+assert pump_until_idle(timeout=180), "distributions job hung"
+assert len(app._feat_host.winfo_children()) == 1, "distribution figure not embedded"
+print("descriptor distributions: embedded")
+
+# MAD gene ranking on the example expression table
+app._bio_load_expr_example()
+app._bio_rank_variable_genes()
+assert pump_until_idle(timeout=180), "MAD ranking job hung"
+mad_summary = app._bio_mad_summary.cget("text")
+print("mad:", mad_summary[:80])
+assert "top 20 of 300 genes by MAD" in mad_summary, mad_summary
+
+# the card finder: dialog lists every card; a jump flashes the shell
+cards = app._live_cards()
+assert len(cards) >= 55, f"live cards: {len(cards)}"
+app._find_card_dialog()
+import tkinter as _tk
+
+_dialogs = [c for c in app.winfo_children()
+            if isinstance(c, _tk.Toplevel) and c.title() == "Find a card"]
+assert len(_dialogs) == 1, "finder dialog did not open"
+_win = _dialogs[0]
+_tree = next(c for c in _win.winfo_children()
+             if c.winfo_class() == "Treeview")
+assert len(_tree.get_children()) >= 55, "finder tree not populated"
+_win.destroy()
+app._jump_to_card(1, "Affinity conversion")
+assert app._book.index(app._book.select()) == 1
+_shell = None
+for _t, _s, _c in playground._CARD_INDEX:
+    if _t == "Affinity conversion":
+        try:
+            if bool(_c.winfo_exists()):
+                _shell = _c
+                break
+        except _tk.TclError:  # a destroyed earlier-app shell
+            continue
+assert _shell is not None
+assert int(_shell.cget("highlightthickness")) == 3, "flash border missing"
+app._unflash_card(_shell)
+print("card finder:", len(cards), "cards listed · jump + flash OK")
+
+# single-folder engine: label + registered binaries
+app._dock_engine_combo.set("AutoDock4 single folder")
+app._dock_refresh_campaign_info()
+assert "r.gpf" in app._dock_campaign_info.cget("text")
+assert playground.docking_engine_binaries(
+    "AutoDock4 single folder") == ("autogrid4", "autodock4")
+app._dock_engine_combo.set("AutoDock4 campaign")
+print("single-folder engine: registered, labelled")
+
+# Vina config parse: keys dumped + box copied into the single-run form
+_tmp = Path(tempfile.mkdtemp(prefix="probe120_"))
+_conf = _tmp / "batch.conf"
+_conf.write_text(
+    "receptor = r.pdbqt\ncenter_x = 2.5\ncenter_y = 3.5\ncenter_z = 4.5\n"
+    "size_x = 20\nsize_y = 22\nsize_z = 24\nexhaustiveness = 12\n",
+    encoding="utf-8")
+app._dock_vbatch_conf = _conf
+app._dock_vbatch_parse()
+_info = app._dock_vbatch_info.cget("text")
+assert "parsed 8 keys" in _info, _info
+assert app._dock_center_entry.get() == "2.5 3.5 4.5"
+assert app._dock_exhaust_entry.get() == "12"
+shutil.rmtree(_tmp, ignore_errors=True)
+print("vina config parse: 8 keys · form filled")
+
 app.destroy()
 assert not DIALOGS, f"unexpected dialogs: {DIALOGS}"
 print("PROBE_OK")

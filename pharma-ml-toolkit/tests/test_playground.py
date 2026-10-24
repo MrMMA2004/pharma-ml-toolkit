@@ -2457,6 +2457,7 @@ class TestShortcutHints:
         "Ctrl+S": "<Control-s>",
         "Ctrl+Shift+S": "<Control-Shift-S>",
         "Ctrl+Shift+R": "<Control-Shift-R>",
+        "Ctrl+F": "<Control-f>",
         "Ctrl+Q": "<Control-q>",
     }
 
@@ -2465,7 +2466,8 @@ class TestShortcutHints:
     ) -> None:
         # Ctrl+Shift+R was advertised in the File menu (and the module
         # docstring) since 100x-54 with NO binding behind it -- pressing
-        # it did nothing.  This pins all five sequences to real bindings.
+        # it did nothing.  This pins every advertised sequence (the
+        # card-finder Ctrl+F joined in 100x-120) to a real binding.
         app = playground.PlaygroundApp(persist_session=False)
         try:
             for label, sequence in self.ACCELERATORS.items():
@@ -4749,3 +4751,282 @@ class TestCompletenessReviewGui:
     def test_hint_row_lists_the_tab_cycling_shortcut(self, playground: Any) -> None:
         text = playground.shortcut_hints_text()
         assert "Ctrl+PgDn/PgUp next/previous tab" in text
+
+
+# --------------------------------------------------------------------- #
+# the 100x-120 full-review round: the last library stragglers gain GUI
+# surfaces (descriptor distributions, learning curve, reconciliation
+# figure, parsed Vina config, MAD gene ranking, effect_table, the
+# single-folder AutoDock4 engine) + the Ctrl+F card finder
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestReview120Gui:
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox, name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- feature factory: plot_descriptor_distributions ---------------- #
+    def test_feat_distributions_needs_a_compute_first(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._feat_plot_distributions()
+        assert any("No features yet" in str(a) for a in quiet_dialogs)
+
+    def test_feat_distributions_after_compute(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._feat_k_entry.delete(0, "end")
+        app._feat_k_entry.insert(0, "50")
+        app._feat_ranker_combo.set("Variance (no target needed)")
+        app._feat_compute()
+        assert self._drain(app), "feature factory job hung"
+        app._feat_plot_distributions()
+        assert self._drain(app), "distribution job hung"
+        assert len(app._feat_host.winfo_children()) == 1
+        assert quiet_dialogs == []
+
+    # -- ML results: plot_learning_curve ------------------------------ #
+    def test_ml_learning_curve_needs_a_run(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_plot_learning_curve()
+        assert any("No trained model" in str(a) for a in quiet_dialogs)
+
+    def test_ml_learning_curve_after_training(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain(app), "train job hung"
+        app._curve_cv.delete(0, "end")
+        app._curve_cv.insert(0, "4")
+        app._ml_plot_learning_curve()
+        assert self._drain(app), "learning-curve job hung"
+        assert len(app._ml_host.winfo_children()) == 1
+        assert "learning curve" in app._ml_result_note.cget("text")
+        assert quiet_dialogs == []
+
+    def test_ml_learning_curve_bad_folds_is_named(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain(app), "train job hung"
+        app._curve_cv.delete(0, "end")
+        app._curve_cv.insert(0, "1")
+        app._ml_plot_learning_curve()
+        assert any("CV folds" in str(a) for a in quiet_dialogs)
+
+    # -- utilities: plot_table_comparison ------------------------------ #
+    def test_util_cmp_plot_needs_a_comparison(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._util_cmp_plot()
+        assert any("No comparison yet" in str(a) for a in quiet_dialogs)
+
+    def test_util_cmp_plot_after_compare_run(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        table_a = tmp_path / "ligands_a.csv"
+        table_a.write_text(
+            "Ligand,SMILES,score\nlig1,CCO,1.5\nlig2,CCOCC,2.5\nlig3,c1ccccc1,3.5\n",
+            encoding="utf-8",
+        )
+        table_b = tmp_path / "ligands_b.csv"
+        table_b.write_text("Ligand,SMILES\nlig1,CCO\nlig4,CNC\n", encoding="utf-8")
+        app._util_cmp_a = table_a
+        app._util_cmp_b = table_b
+        app._util_cmp_mode.set("compare two tables")
+        app._util_compare_run()
+        assert self._drain(app), "compare job hung"
+        assert app._util_cmp_last is not None
+        app._util_cmp_plot()
+        assert self._drain(app), "reconciliation figure job hung"
+        assert len(app._util_cmp_host.winfo_children()) == 1
+        assert quiet_dialogs == []
+
+    # -- docking: parse_vina_config ----------------------------------- #
+    def test_vbatch_parse_needs_a_config(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_vbatch_parse()
+        assert any("No config picked" in str(a) for a in quiet_dialogs)
+
+    def test_vbatch_parse_dumps_keys_and_fills_the_form(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        conf = tmp_path / "batch.conf"
+        conf.write_text(
+            "receptor = r.pdbqt\ncenter_x = 2.5\ncenter_y = 3.5\ncenter_z = 4.5\n"
+            "size_x = 20\nsize_y = 22\nsize_z = 24\nexhaustiveness = 12\n",
+            encoding="utf-8",
+        )
+        app._dock_vbatch_conf = conf
+        app._dock_vbatch_parse()
+        info = app._dock_vbatch_info.cget("text")
+        assert "parsed 8 keys" in info, info
+        assert "receptor = r.pdbqt" in info
+        assert "exhaustiveness = 12" in info
+        # the box + exhaustiveness were copied into the single-run form
+        assert app._dock_center_entry.get() == "2.5 3.5 4.5"
+        assert app._dock_size_entry.get() == "20 22 24"
+        assert app._dock_exhaust_entry.get() == "12"
+        summary = app._dock_vbatch_summary.cget("text")
+        assert "centre" in summary and "exhaustiveness" in summary, summary
+        assert quiet_dialogs == []
+
+    # -- cell lines: most_variable_genes ------------------------------- #
+    def test_mad_ranking_needs_an_expression_table(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._bio_rank_variable_genes()
+        assert any("No expression table" in str(a) for a in quiet_dialogs)
+
+    def test_mad_ranking_on_the_example_table(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._bio_load_expr_example()
+        app._bio_rank_variable_genes()
+        assert self._drain(app), "MAD ranking job hung"
+        summary = app._bio_mad_summary.cget("text")
+        assert "top 20 of 300 genes by MAD" in summary, summary
+        dump = app._bio_mad_text.get("1.0", "end")
+        gene_rows = [line for line in dump.strip().splitlines()
+                     if line.startswith("GENE_")]
+        assert len(gene_rows) == 20  # the two header rows are not genes
+        assert quiet_dialogs == []
+
+    # -- PD explorer: effect_table drives the sigmoid table ------------ #
+    def test_pd_family_sigmoid_table_matches_effect_table(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._pd_family_math()
+        assert self._drain(app), "PD family job hung"
+        rows = app._fam_tree.get_children()
+        values = app._fam_tree.item(rows[0], "values")
+        assert values[0] == "0.5000" and values[1] == "9.93", values
+        # the inhibitory branch (table=None path) still computes
+        app._pd_family_combo.set(app._pd_family_combo["values"][1])
+        app._pd_family_math()
+        assert self._drain(app), "inhibitory PD job hung"
+        assert len(app._fam_tree.get_children()) == 6
+        assert quiet_dialogs == []
+
+    # -- docking: the single-folder AutoDock4 engine ------------------- #
+    def test_single_folder_engine_registered_and_labelled(
+        self, app: Any, playground: Any
+    ) -> None:
+        assert "AutoDock4 single folder" in playground._DOCK_ENGINES
+        assert playground.docking_engine_binaries(
+            "AutoDock4 single folder") == ("autogrid4", "autodock4")
+        # the folder picker's label is engine-aware
+        app._dock_engine_combo.set("AutoDock4 single folder")
+        app._dock_refresh_campaign_info()
+        text = app._dock_campaign_info.cget("text")
+        assert "ligand folder" in text and "r.gpf" in text, text
+        app._dock_engine_combo.set("AutoDock4 campaign")
+        app._dock_refresh_campaign_info()
+        assert "campaign root" in app._dock_campaign_info.cget("text")
+
+    def test_single_folder_engine_run_without_folder_warns(
+        self, app: Any, quiet_dialogs: list[Any], monkeypatch: Any,
+        playground: Any,
+    ) -> None:
+        # bypass the binaries check (autogrid4 is not installed in CI)
+        monkeypatch.setattr(
+            playground, "docking_engine_binaries", lambda engine: ())
+        app._dock_engine_combo.set("AutoDock4 single folder")
+        app._dock_run()
+        assert any("No ligand folder" in str(a) for a in quiet_dialogs)
+
+    # -- the Ctrl+F card finder ---------------------------------------- #
+    def test_card_finder_lists_every_live_card(
+        self, app: Any, playground: Any
+    ) -> None:
+        cards = app._live_cards()
+        assert len(cards) >= 55, f"expected >=55 live cards, got {len(cards)}"
+        # every card resolves to a real tab index
+        count = app._book.index("end")
+        assert all(0 <= index < count for _t, _s, _sh, index in cards)
+
+    def test_card_finder_dialog_and_jump(
+        self, app: Any, playground: Any
+    ) -> None:
+        import tkinter as tkmod
+
+        app._find_card_dialog()
+        dialogs = [child for child in app.winfo_children()
+                   if isinstance(child, tkmod.Toplevel)
+                   and child.title() == "Find a card"]
+        assert len(dialogs) == 1
+        win = dialogs[0]
+        tree = next(child for child in win.winfo_children()
+                    if child.winfo_class() == "Treeview")
+        rows = tree.get_children()
+        assert len(rows) >= 55
+        # the first row is the home hero, on tab 0
+        assert str(rows[0]).startswith("0:")
+        win.destroy()
+
+    def test_jump_to_card_selects_flashes_and_unflashes(
+        self, app: Any, playground: Any
+    ) -> None:
+        import tkinter as tkmod
+
+        app._jump_to_tab(0)
+        app._jump_to_card(1, "Affinity conversion")
+        assert app._book.index(app._book.select()) == 1
+        shell = None
+        for title, _subtitle, candidate in playground._CARD_INDEX:
+            if title != "Affinity conversion":
+                continue
+            try:
+                if not bool(candidate.winfo_exists()):
+                    continue
+            except tkmod.TclError:  # a destroyed earlier-test app's shell
+                continue
+            shell = candidate
+            break
+        assert shell is not None
+        assert int(shell.cget("highlightthickness")) == 3
+        assert str(shell.cget("highlightbackground")) == playground.ACCENT
+        app._unflash_card(shell)
+        assert int(shell.cget("highlightthickness")) == 1
+
+    def test_hint_row_lists_the_card_finder_shortcut(
+        self, playground: Any
+    ) -> None:
+        text = playground.shortcut_hints_text()
+        assert "Ctrl+F find a card" in text
