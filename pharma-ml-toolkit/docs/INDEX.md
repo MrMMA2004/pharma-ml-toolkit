@@ -284,6 +284,7 @@ after adding new public functions.
 | Symbol | Kind | Summary |
 |---|---|---|
 | `PALETTE` | constant |  |
+| `PDF_THEMES` | constant |  |
 | `PLOT_FORMATS` | constant |  |
 | `REPORT_THEMES` | constant |  |
 | `TABLE_FORMATS` | constant |  |

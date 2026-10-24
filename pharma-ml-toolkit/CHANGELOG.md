@@ -10,6 +10,103 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.68] — 2026-10-25
+
+### Added — the round-14 full review (100x-129): the PDF session report's dark-ink variant + the web twin's card finder
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a fourteenth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **245 public symbols, 43 zero-hit**, byte-identical to
+rounds 127/128's documented floor — the axis holds; no new gaps). The
+round's genuine work was round 128's handover items (a) and (d), both
+taken to completion.
+
+**The PDF session report gained its dark-ink variant, riding the View ▸
+theme radios** the same way the HTML report's palette does (1.2.60):
+save while the app is dark and the PDF comes out in the app's own dark
+palette — near-black pages, light ink and accent headings, every figure
+on a white plate (the bright-window look of the dark HTML report);
+save while light and it stays the classic white paper,
+**byte-identical to every prior release** (the light path never touches
+a colour operator — pinned by test). `auto` resolves through
+`_resolve_auto_theme` at save time, because a PDF's ink is frozen at
+write time — there is no reading-time toggle like the HTML twin's, and
+the library's new `PDF_THEMES = ("light", "dark")` contract says so on
+purpose (exported from `pharmaml.viz`, alongside `REPORT_THEMES`).
+`save_pdf_report(..., theme=...)` is the library surface
+(`src/pharmaml/viz/report.py`): an fpdf2 `set_page_background` page
+fill that follows the auto page break (a long dark table never bleeds
+white), explicit per-write text colours (ink / muted notes / accent
+headings — fpdf colours stick, so every dark-mode write passes its
+colour explicitly), and the white figure plate sized from the saved
+PNG's real pixel aspect (PIL — matplotlib's own hard dependency — with
+a missing-PIL fallback that drops the plate, never the figure). The
+playground wires it through `_menu_save_session_report`: the theme
+radio is read on the main thread (the HTML report's own pattern),
+`auto` is resolved first, the guard falls back to `light` if the radios
+ever drift from `PDF_THEMES`, the subtitle names the variant, the save
+dialog tells the user which ink they got and how to get the other one
+("Flip the View ▸ theme radio before saving"), and a quiet disabled
+caption under the radios — "(both session reports save in this
+theme)" — makes the double duty discoverable in the menu itself.
+
+**The web twin gained the card finder** — the Ctrl+F finder's own
+mirror (round 1.2.59 shipped the desktop one): `Ctrl/Cmd+Shift+F`
+(not plain Ctrl+F — the browser owns that one, and the dialog's footer
+says so) opens a fuzzy-filtered dialog over every always-rendered
+Playground card — 24 entries across all eight sub-tabs plus the
+session-report strip, each with its title, blurb and tab tag. Jumping
+switches the top tab (opening the finder from elsewhere lands you in
+the Playground first), the sub-tab and — for the PK / PD Explorer —
+the inner tab, then scrolls the card into view and flashes it
+(`pg-card-flash`: a primary ring + soft wash that settles out, the
+desktop finder's flash-and-jump semantics). The catalog lives in
+`card-directory.ts` (the hand-maintained twin of the desktop's
+`_CARD_INDEX`); the jump resolves each entry's match string against
+the live `[data-slot="card"]` elements — **title-first, panel-scoped**,
+and gated on the target tab actually being mounted, because the first
+draft's naive resolve hit a card from the tab you were LEAVING (an
+Overview blurb contains "Torsion QA" — the exit-animation race, caught
+by the E2E probe and fixed before shipping). A renamed card surfaces
+honestly as a "Card not found" toast instead of a silent wrong jump;
+cards that only appear after a run (ML results, the biology matrix)
+are deliberately absent — the finder lists what is on screen, the same
+honesty rule as the desktop finder.
+
+### Verified
+
+- **Library**: `PDF_THEMES` export + the `ValueError` guard (message
+  pins the frozen-at-write-time contract); a real dark vs light PDF
+  pair over a figure + table + metrics — the light output carries ZERO
+  colour operators (byte-classic), the dark output carries the page
+  fill `0.0824 0.102 0.0941 rg`, the accent `0.0863 0.6627 0.5412 rg`,
+  the light ink `0.9059 0.9255 0.9137 rg` and the plate `1 1 1 rg`
+  (asserted on the zlib-decompressed page streams — fpdf2 compresses).
+- **GUI**: `TestReview129Gui` (9 tests) — the library contract, the
+  dark/light/auto rides through the REAL menu (spy on
+  `save_pdf_report`'s kwargs + the written file's colour operators),
+  the View-menu caption pin, and the module/method docstring pins.
+- **Web**: `TestCardFinderParity` (2 tests) — the catalog cannot drift
+  (a bun probe imports the shipped `card-directory.ts` and checks
+  every match string + title against the component sources, JSX
+  entities normalized) and the wiring pins (page-level mount,
+  sub-tab-strip trigger, the hotkey contract, the flash keyframes).
+- **E2E**: `probe_gui_e2e.py` + the 100x-129 section (a REAL IV plot →
+  dark report: page fill + plate + light ink + the dialog hint; light
+  report: zero colour ops + different bytes; auto resolves) →
+  PROBE_OK; `probe_card_finder_129.sh` walks **all 24 catalog entries
+  through the live finder UI** — every jump lands on the right card,
+  the right sub-tab (inner PK tabs included), in viewport, from a
+  foreign top tab, 24/24 → PROBE129_OK; `smoke129.py` → SMOKE129_OK;
+  `shoot129.py` → the dark/light app screenshots + the round's own
+  `pg129-session-dark.pdf` / `pg129-session-light.pdf` artifacts, VLM
+  review of the exact figure-host crop: COMPLETE (the full-window
+  "clipped label"/"overlapping characters" claims were VLM misreads
+  of the en-dash in "Cockcroft–Gault" and the "…" in "Save figure…"
+  at small scale — the precise crop shows both axis titles fully
+  visible).
+
 ## [1.2.67] — 2026-10-25
 
 ### Added — the round-13 full review (100x-128): the per-card figure export closes app-wide

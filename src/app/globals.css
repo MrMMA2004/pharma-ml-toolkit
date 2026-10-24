@@ -244,6 +244,31 @@
   }
 }
 
+/* ---- (100x-129) Playground card finder: jump flash ----
+ * The web twin of the desktop finder's flash-and-jump: the target card
+ * pulses a primary ring + soft wash that settles out, drawing the eye
+ * to where the jump landed. */
+.pg-card-flash {
+  animation: pg-card-flash 1.8s ease-out 1 both;
+}
+@keyframes pg-card-flash {
+  0% {
+    box-shadow: 0 0 0 0 transparent;
+    background: color-mix(in oklch, var(--primary) 10%, transparent);
+  }
+  25% {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 55%, transparent);
+    background: color-mix(in oklch, var(--primary) 10%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 30%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    background: transparent;
+  }
+}
+
 /* ---- Code viewer: click-a-line permalink gutter ---- */
 .code-permalink .code-line {
   cursor: copy;

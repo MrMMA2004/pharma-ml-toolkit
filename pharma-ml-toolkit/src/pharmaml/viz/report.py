@@ -9,7 +9,9 @@
 * :func:`save_pdf_report` — a multi-page **PDF document** (title +
   metrics, one page per table, one page per figure) via fpdf — the
   legacy scripts' *only* report format, now first-class (non-latin-1
-  punctuation is transliterated so the built-in fonts never choke);
+  punctuation is transliterated so the built-in fonts never choke),
+  with a ``theme`` knob: the classic white paper or a ``dark``
+  dark-ink variant that matches the app the report left;
 * :func:`export_table` — the same DataFrame as ``csv``, ``tsv``,
   ``markdown``, ``json`` or ``html`` depending on the extension (the
   legacy scripts only ever wrote csv/xlsx);
@@ -100,6 +102,7 @@ from pharmaml.utils.io import ensure_directory
 from pharmaml.viz._compat import close_figure, figure_to_base64, save_figure
 
 __all__ = [
+    "PDF_THEMES",
     "REPORT_THEMES",
     "TABLE_FORMATS",
     "HTMLReport",
@@ -165,6 +168,27 @@ footer { margin-top: 2.5rem; font-size: .75rem; color: var(--faint);
 
 #: Themes :class:`HTMLReport` understands (100x-126).
 REPORT_THEMES: tuple[str, ...] = ("auto", "light", "dark")
+
+#: Themes :func:`save_pdf_report` understands (100x-129).  No ``auto``
+#: here, on purpose: a PDF's ink is frozen at WRITE time -- there is
+#: no reading-time toggle like the HTML report's -- so the caller
+#: resolves any OS preference before the call (the playground maps its
+#: theme radios through ``_resolve_auto_theme``).
+PDF_THEMES: tuple[str, ...] = ("light", "dark")
+
+#: The dark-ink variant's palette (100x-129) -- deliberately the
+#: playground's own dark theme, so a PDF saved while the app is dark
+#: matches the screen it left: page = the app's background, ink = the
+#: app's text, accent = the app's highlight.  Figures stay on a white
+#: plate (matplotlib renders them on white) -- the same bright-plate
+#: look the dark HTML report gives its embedded figures.
+_PDF_DARK: dict[str, tuple[int, int, int]] = {
+    "page": (21, 26, 24),  # #151a18 -- the playground dark BG
+    "ink": (231, 236, 233),  # #e7ece9 -- the playground dark INK
+    "muted": (157, 171, 164),  # #9daba4 -- the playground dark MUTED
+    "accent": (22, 169, 138),  # #16a98a -- the playground dark ACCENT
+    "plate": (255, 255, 255),
+}
 
 #: Label the toggle button carries per theme (server-side fallback;
 #: the inline script relabels on load and on every cycle).
@@ -360,7 +384,14 @@ def _plain_value(value: Any) -> str:
 _PDF_TABLE_MAX_ROWS = 38
 
 
-def _pdf_write(pdf: Any, text: str, size: int, style: str = "", h: float = 6.0) -> None:
+def _pdf_write(
+    pdf: Any,
+    text: str,
+    size: int,
+    style: str = "",
+    h: float = 6.0,
+    color: tuple[int, int, int] | None = None,
+) -> None:
     """Write one wrapping text block, pinned to the left margin.
 
     fpdf2's ``multi_cell`` leaves the x cursor at the RIGHT margin after
@@ -368,9 +399,17 @@ def _pdf_write(pdf: Any, text: str, size: int, style: str = "", h: float = 6.0) 
     would find zero width and raise "Not enough horizontal space";
     fpdf1 reset x to the left margin.  ``set_x(l_margin)`` before every
     block is the behaviour both versions share.
+
+    ``color`` (100x-129) is the dark-ink variant's knob: ``None`` (the
+    light paper default) never touches the text colour, so the classic
+    output stays byte-identical; a tuple is applied before the block,
+    and because fpdf colours STICK across writes, every dark-mode call
+    passes its colour explicitly -- nothing drifts back to a stale ink.
     """
     pdf.set_x(pdf.l_margin)
     pdf.set_font("Helvetica", style, size)
+    if color is not None:
+        pdf.set_text_color(*color)
     pdf.multi_cell(0, h, text)
 
 
@@ -382,6 +421,7 @@ def save_pdf_report(
     title: str = "PharmaML results",
     subtitle: str | None = None,
     close: bool = True,
+    theme: str = "light",
 ) -> Path:
     """Write a multi-page PDF document report (metrics, tables, figures).
 
@@ -413,6 +453,16 @@ def save_pdf_report(
         Title-page headings.
     close:
         Close the figures after writing (pass ``False`` to keep them).
+    theme:
+        (100x-129) Ink variant: ``"light"`` (default -- the classic
+        white paper, byte-identical to every prior release) or
+        ``"dark"`` -- near-black pages carrying the light ink, the
+        playground's own dark palette, so the PDF matches the app it
+        was saved from.  No ``"auto"`` here: a PDF's ink is frozen at
+        write time, so the caller resolves any OS preference first.
+        Figures stay readable in both variants -- in the dark one they
+        sit on a white plate, the same bright-plate look the dark HTML
+        report gives its embedded figures.
 
     Returns
     -------
@@ -423,7 +473,15 @@ def save_pdf_report(
     ------
     DependencyError
         If fpdf is not installed.
+    ValueError
+        If ``theme`` is not one of :data:`PDF_THEMES`.
     """
+    if theme not in PDF_THEMES:
+        raise ValueError(
+            f"theme must be one of {PDF_THEMES}, got {theme!r} -- a PDF's ink "
+            "is frozen at write time, so resolve any OS preference at the "
+            "caller (the playground maps its theme radios first)"
+        )
     for name in figures:
         _validate_bundle_name(name)
     for name in tables or {}:
@@ -439,33 +497,56 @@ def save_pdf_report(
     dest = Path(out_path)
     dest.parent.mkdir(parents=True, exist_ok=True)
 
+    dark = theme == "dark"
+    # Light never touches a colour (byte-identical classic output);
+    # dark carries the playground's own palette -- page fill, body ink,
+    # muted notes and accent headings.
+    ink: tuple[int, int, int] | None = _PDF_DARK["ink"] if dark else None
+    muted: tuple[int, int, int] | None = _PDF_DARK["muted"] if dark else None
+    accent: tuple[int, int, int] | None = _PDF_DARK["accent"] if dark else None
+
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
+    if dark:
+        # fpdf2 applies the page background to the current page AND
+        # every later one -- including pages the auto page break
+        # creates mid-table, so a long dark table never bleeds white.
+        pdf.set_page_background(_PDF_DARK["page"])
 
     # Title page: heading, optional subtitle, metrics as name: value.
     pdf.add_page()
-    _pdf_write(pdf, _latin1_safe(title), 16, style="B", h=10)
+    _pdf_write(pdf, _latin1_safe(title), 16, style="B", h=10, color=accent)
     if subtitle:
-        _pdf_write(pdf, _latin1_safe(subtitle), 11, style="I", h=7)
+        _pdf_write(pdf, _latin1_safe(subtitle), 11, style="I", h=7, color=muted)
     if metrics is not None:
         pdf.ln(4)
-        _pdf_write(pdf, "Metrics", 12, style="B", h=8)
+        _pdf_write(pdf, "Metrics", 12, style="B", h=8, color=accent)
         for row in metrics_to_dataframe(metrics).itertuples(index=False):
-            _pdf_write(pdf, _latin1_safe(f"{row[0]}: {_plain_value(row[1])}"), 10, h=6)
+            _pdf_write(
+                pdf, _latin1_safe(f"{row[0]}: {_plain_value(row[1])}"), 10, h=6, color=ink
+            )
 
     # One page per table: bold header row, then the body, 60 rows max.
     for name, frame in (tables or {}).items():
         pdf.add_page()
-        _pdf_write(pdf, _latin1_safe(name.replace("_", " ").title()), 13, style="B", h=9)
         _pdf_write(
-            pdf, _latin1_safe(" | ".join(str(col) for col in frame.columns)), 9, style="B"
+            pdf, _latin1_safe(name.replace("_", " ").title()), 13, style="B", h=9, color=accent
+        )
+        _pdf_write(
+            pdf,
+            _latin1_safe(" | ".join(str(col) for col in frame.columns)),
+            9,
+            style="B",
+            color=muted,
         )
         shown = frame.head(_PDF_TABLE_MAX_ROWS)
         for row in shown.itertuples(index=False):
             line = " | ".join(_plain_value(value) for value in row)
-            _pdf_write(pdf, _latin1_safe(line), 9, h=6)
+            _pdf_write(pdf, _latin1_safe(line), 9, h=6, color=ink)
         if len(frame) > _PDF_TABLE_MAX_ROWS:
-            _pdf_write(pdf, f"... ({len(frame) - _PDF_TABLE_MAX_ROWS} more rows)", 9, h=6)
+            _pdf_write(
+                pdf, f"... ({len(frame) - _PDF_TABLE_MAX_ROWS} more rows)", 9, h=6, color=muted
+            )
 
     # One page per figure: render to a temporary png (Agg, headless-safe)
     # and embed full-width -- fpdf reads the file at image() time, so the
@@ -475,7 +556,29 @@ def save_pdf_report(
             png_path = Path(tmp) / f"{name}.png"
             save_figure(figure, png_path)
             pdf.add_page()
-            _pdf_write(pdf, _latin1_safe(name.replace("_", " ").title()), 13, style="B", h=9)
+            _pdf_write(
+                pdf, _latin1_safe(name.replace("_", " ").title()), 13, style="B", h=9, color=accent
+            )
+            if dark:
+                # White plate under the figure: matplotlib renders on
+                # white, and a raw white png on a near-black page reads
+                # as a hole -- the plate frames it as a deliberate
+                # bright window (the dark HTML report's own look).
+                # PIL is matplotlib's hard dependency, but a missing
+                # PIL only drops the plate, never the figure.
+                plate_h: float | None = None
+                try:
+                    from PIL import Image
+
+                    with Image.open(png_path) as raster:
+                        px_w, px_h = raster.size
+                    if px_w:
+                        plate_h = 180.0 * float(px_h) / float(px_w)
+                except Exception:  # noqa: BLE001 - the plate is cosmetic
+                    plate_h = None
+                if plate_h is not None:
+                    pdf.set_fill_color(*_PDF_DARK["plate"])
+                    pdf.rect(12, pdf.get_y() + 1.5, 186, plate_h + 3.0, "F")
             pdf.image(str(png_path), x=15, w=180)
 
     pdf.output(str(dest))

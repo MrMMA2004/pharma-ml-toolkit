@@ -7166,3 +7166,269 @@ class TestReview128Gui:
         )
         assert "Every figure card" in dump
         assert "in the whole app" in dump
+
+
+class TestReview129Gui:
+    """Round 100x-129: the PDF session report's dark-ink variant, riding
+    the View ▸ theme radios the way the HTML report's palette does --
+    a dark app writes near-black pages with light ink (the app's own
+    palette, figures on white plates), a light app writes the classic
+    white paper, and auto resolves at save time because a PDF's ink is
+    frozen at write time."""
+
+    #: the exact operator strings fpdf2 emits for the variant's palette
+    PAGE_BG = b"0.0824 0.102 0.0941 rg"  # (21, 26, 24) -- the app dark BG
+    ACCENT = b"0.0863 0.6627 0.5412 rg"  # (22, 169, 138) -- headings
+    INK = b"0.9059 0.9255 0.9137 rg"  # (231, 236, 233) -- body text
+    PLATE = b"1 1 1 rg"  # the white plate under every figure
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _figure_static(title: str) -> Any:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure()
+        axes = fig.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title(title)
+        return fig
+
+    @staticmethod
+    def _content_streams(pdf_bytes: bytes) -> bytes:
+        """Decompress every page-content stream (fpdf2 zlib-compresses)."""
+        import re
+        import zlib
+
+        out: list[bytes] = []
+        for match in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf_bytes, re.DOTALL):
+            try:
+                out.append(zlib.decompress(match.group(1)))
+            except zlib.error:  # not a compressed stream (fonts, images)
+                pass
+        return b"\n".join(out)
+
+    # -- the library contract ---------------------------------------------- #
+    def test_pdf_themes_pin_the_frozen_ink_contract(self) -> None:
+        from pharmaml.viz import PDF_THEMES
+
+        assert PDF_THEMES == ("light", "dark")
+        assert "auto" not in PDF_THEMES, "a PDF's ink is frozen at write time"
+
+    def test_theme_guard_rejects_unknown_variant(self, tmp_path: Any) -> None:
+        from pharmaml.viz import save_pdf_report
+
+        with pytest.raises(ValueError, match="frozen at write time"):
+            save_pdf_report({}, out_path=tmp_path / "x.pdf", theme="sepia")
+
+    def test_light_paper_stays_colorless_and_dark_differs(self, tmp_path: Any) -> None:
+        import pandas as pd
+
+        from pharmaml.viz import save_pdf_report
+
+        figure = self._figure_static("ink probe")
+        table = pd.DataFrame({"metric": ["R2"], "value": [0.91]})
+        light_path = tmp_path / "light.pdf"
+        dark_path = tmp_path / "dark.pdf"
+        try:
+            save_pdf_report(
+                {"ink probe": figure}, tables={"metrics": table},
+                metrics={"R2": 0.91}, out_path=light_path, close=False,
+            )
+            save_pdf_report(
+                {"ink probe": figure}, tables={"metrics": table},
+                metrics={"R2": 0.91}, out_path=dark_path, close=False, theme="dark",
+            )
+            light_bytes = light_path.read_bytes()
+            dark_bytes = dark_path.read_bytes()
+            assert light_bytes[:5] == b"%PDF-" and dark_bytes[:5] == b"%PDF-"
+            assert light_bytes != dark_bytes, "the variant changed nothing"
+            light_ops = self._content_streams(light_bytes)
+            dark_ops = self._content_streams(dark_bytes)
+            # light NEVER touches a colour: byte-identical classic paper
+            assert b" rg" not in light_ops, "the light paper gained colour ops"
+            # dark carries the full palette: page fill, accent headings,
+            # light body ink and the white figure plate
+            for operator in (self.PAGE_BG, self.ACCENT, self.INK, self.PLATE):
+                assert operator in dark_ops, operator
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
+
+    # -- the playground wiring: the variant rides the theme radios -------- #
+    def _save_pdf_report_spy(
+        self, playground: Any, monkeypatch: Any, target: Any
+    ) -> dict[str, Any]:
+        """Patch filedialog + wrap save_pdf_report, capturing its kwargs."""
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        import pharmaml.viz as viz_module
+
+        real = viz_module.save_pdf_report
+        captured: dict[str, Any] = {}
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(viz_module, "save_pdf_report", spy)
+        return captured
+
+    def _seed_session(self, app: Any, figure: Any) -> None:
+        app._session_figures.clear()
+        app._render_figure(app._topo_host, figure)
+        app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+
+    def test_dark_radio_writes_the_dark_ink_variant(
+        self, app: Any, playground: Any, monkeypatch: Any,
+        quiet_dialogs: list[Any], tmp_path: Any,
+    ) -> None:
+        target = tmp_path / "session-dark.pdf"
+        captured = self._save_pdf_report_spy(playground, monkeypatch, target)
+        figure = self._figure_static("dark ride")
+        try:
+            app._theme_var.set("dark")
+            app._on_theme_change()  # the real radio path flips the palette
+            assert app._theme == "dark"
+            self._seed_session(app, figure)
+            app._menu_save_session_report()
+            assert self._drain(app), "the dark report job hung"
+            assert captured["kwargs"].get("theme") == "dark", captured["kwargs"]
+            assert target.is_file()
+            ops = self._content_streams(target.read_bytes())
+            assert self.PAGE_BG in ops, "the pages never went dark"
+            assert self.PLATE in ops, "the figure plate never landed"
+            # the subtitle names the variant on the title page
+            assert "dark ink variant" in captured["kwargs"].get("subtitle", "")
+            assert any(
+                "dark ink variant" in str(a) for _n, a in quiet_dialogs
+            ), "the save dialog never named the variant"
+            assert any(
+                "View" in str(a) for _n, a in quiet_dialogs
+            ), "the flip hint never fired"
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close("all")
+            app._desc_tree.delete(*app._desc_tree.get_children())
+
+    def test_light_radio_writes_the_classic_paper(
+        self, app: Any, playground: Any, monkeypatch: Any,
+        quiet_dialogs: list[Any], tmp_path: Any,
+    ) -> None:
+        target = tmp_path / "session-light.pdf"
+        captured = self._save_pdf_report_spy(playground, monkeypatch, target)
+        figure = self._figure_static("light ride")
+        try:
+            app._theme_var.set("light")
+            app._on_theme_change()
+            self._seed_session(app, figure)
+            app._menu_save_session_report()
+            assert self._drain(app), "the light report job hung"
+            assert captured["kwargs"].get("theme") == "light", captured["kwargs"]
+            ops = self._content_streams(target.read_bytes())
+            assert b" rg" not in ops, "the classic paper gained colour ops"
+            assert "classic light paper" in captured["kwargs"].get("subtitle", "")
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close("all")
+            app._desc_tree.delete(*app._desc_tree.get_children())
+
+    def test_auto_resolves_before_the_ink_freezes(
+        self, app: Any, playground: Any, monkeypatch: Any,
+        quiet_dialogs: list[Any], tmp_path: Any,
+    ) -> None:
+        target = tmp_path / "session-auto.pdf"
+        captured = self._save_pdf_report_spy(playground, monkeypatch, target)
+        monkeypatch.setattr(app, "_resolve_auto_theme", lambda: "dark")
+        figure = self._figure_static("auto ride")
+        try:
+            app._theme_var.set("auto")
+            self._seed_session(app, figure)
+            app._menu_save_session_report()
+            assert self._drain(app), "the auto report job hung"
+            # auto never reaches the library: the resolved OS preference
+            # froze into dark ink at write time
+            assert captured["kwargs"].get("theme") == "dark", captured["kwargs"]
+            assert "auto" != captured["kwargs"].get("theme")
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close("all")
+            app._desc_tree.delete(*app._desc_tree.get_children())
+
+    def test_view_menu_caption_tells_the_riding(
+        self, app: Any, playground: Any,
+    ) -> None:
+        import tkinter as tkmod
+
+        bar = app.nametowidget(app.cget("menu"))
+        assert isinstance(bar, tkmod.Menu)
+        labels: list[str] = []
+        for index in range(bar.index("end") + 1):
+            if bar.type(index) != "cascade":
+                continue
+            if str(bar.entrycget(index, "label")).strip() != "View":
+                continue
+            sub = app.nametowidget(bar.entrycget(index, "menu"))
+            for j in range(sub.index("end") + 1):
+                if sub.type(j) not in ("command", "radiobutton"):
+                    continue  # separators have no -label
+                labels.append(str(sub.entrycget(j, "label")))
+        assert any(
+            "session reports save in this theme" in label for label in labels
+        ), labels
+        # the radios themselves are still there
+        assert "Follow system" in labels and "Dark" in labels, labels
+
+    # -- the documentation pins -------------------------------------------- #
+    def test_module_docstring_records_round_129(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-129" in doc
+        assert "dark-ink variant" in doc
+        assert "frozen at write time" in doc
+        assert "_resolve_auto_theme" in doc
+
+    def test_method_docstring_records_the_ride(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._menu_save_session_report.__doc__ or ""
+        assert "100x-129" in doc
+        assert "INK VARIANT" in doc
+        assert "white plates" in doc

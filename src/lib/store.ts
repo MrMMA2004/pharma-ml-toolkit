@@ -821,6 +821,13 @@ interface ToolkitStore {
   playgroundTab: string;
   setPlaygroundTab: (tab: string) => void;
 
+  /** (100x-129) Card-finder dialog over the Playground's cards — the
+   * web twin of the desktop Ctrl+F finder. Ephemeral UI state (never
+   * persisted), opened by the trigger button or the Ctrl/Cmd+Shift+F
+   * hotkey from anywhere in the app. */
+  cardFinderOpen: boolean;
+  setCardFinderOpen: (open: boolean) => void;
+
   /** Active inner tab of the PK/PD Explorer ("regimen" | "pd" | "nca"). */
   pkInnerTab: string;
   setPkInnerTab: (tab: string) => void;
@@ -938,6 +945,9 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => {
     set({ playgroundTab: tab });
     persistPlayground();
   },
+
+  cardFinderOpen: false,
+  setCardFinderOpen: (open) => set({ cardFinderOpen: open }),
 
   pkInnerTab: persistedPlayground.pkInnerTab ?? "regimen",
   setPkInnerTab: (tab) => {

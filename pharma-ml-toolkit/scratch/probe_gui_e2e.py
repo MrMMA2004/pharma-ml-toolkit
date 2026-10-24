@@ -1118,6 +1118,84 @@ print("Button census: 19 Save figure… buttons app-wide (15 new + 4 Generative)
 assert len(app._live_cards()) >= 68, f"live cards: {len(app._live_cards())}"
 print("card census:", len(app._live_cards()))
 
+# -- 100x-129 additions: the PDF session report's dark-ink variant,
+# riding the View > theme radios (light stays byte-classic) ---------- #
+import re as _re129
+import zlib as _zlib129
+
+
+def _pdf_streams129(pdf_bytes: bytes) -> bytes:
+    """Decompress every page-content stream (fpdf2 zlib-compresses)."""
+    out: list[bytes] = []
+    for match in _re129.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf_bytes, _re129.S):
+        try:
+            out.append(_zlib129.decompress(match.group(1)))
+        except _zlib129.error:
+            pass
+    return b"\n".join(out)
+
+
+# a fresh live figure for the report walk (the 128 section closed all)
+app._iv_c0.delete(0, "end"); app._iv_c0.insert(0, "12")
+app._iv_thalf.delete(0, "end"); app._iv_thalf.insert(0, "6")
+app._iv_hours.delete(0, "end"); app._iv_hours.insert(0, "24")
+app._plot_iv_bolus()
+assert pump_until_idle(timeout=240), "IV profile job (129) hung"
+assert getattr(app._iv_host, "_pg_figure", None) is not None, "no live figure (129)"
+app._desc_tree.insert("", "end", values=("MolWt", "194.19"))
+
+# DARK: the radio picks the variant; the pages carry the palette
+app._theme_var.set("dark")
+app._on_theme_change()
+assert app._theme == "dark"
+_dark_pdf129 = "/tmp/probe129-session-dark.pdf"
+playground.filedialog.asksaveasfilename = lambda **_k: _dark_pdf129
+app._menu_save_session_report()
+assert pump_until_idle(timeout=240), "dark session report job hung"
+with open(_dark_pdf129, "rb") as _fh129:
+    _dark_bytes129 = _fh129.read()
+assert _dark_bytes129[:5] == b"%PDF-", "not a PDF"
+_dark_ops129 = _pdf_streams129(_dark_bytes129)
+assert b"0.0824 0.102 0.0941 rg" in _dark_ops129, "dark pages never filled"
+assert b"1 1 1 rg" in _dark_ops129, "the figure plate never landed"
+assert b"0.9059 0.9255 0.9137 rg" in _dark_ops129, "light body ink never landed"
+assert any("dark ink variant" in str(a) for a in DIALOGS), DIALOGS
+assert any("View" in str(a) for a in DIALOGS), "the flip hint never fired"
+DIALOGS.clear()
+print("Dark-ink session report: palette + plate + dialog hint OK")
+
+# LIGHT: the classic paper carries NO colour operators at all
+app._theme_var.set("light")
+app._on_theme_change()
+_light_pdf129 = "/tmp/probe129-session-light.pdf"
+playground.filedialog.asksaveasfilename = lambda **_k: _light_pdf129
+app._menu_save_session_report()
+assert pump_until_idle(timeout=240), "light session report job hung"
+with open(_light_pdf129, "rb") as _fh129:
+    _light_bytes129 = _fh129.read()
+assert _light_bytes129[:5] == b"%PDF-", "not a PDF"
+assert _light_bytes129 != _dark_bytes129, "the variant changed nothing"
+assert b" rg" not in _pdf_streams129(_light_bytes129), "light paper gained colour ops"
+assert any("classic light paper" in str(a) for a in DIALOGS), DIALOGS
+DIALOGS.clear()
+print("Classic light paper: byte-classic, zero colour ops OK")
+
+# AUTO resolves BEFORE the ink freezes (no reading-time toggle)
+app._theme_var.set("auto")
+app._resolve_auto_theme = lambda: "dark"
+_auto_pdf129 = "/tmp/probe129-session-auto.pdf"
+playground.filedialog.asksaveasfilename = lambda **_k: _auto_pdf129
+app._menu_save_session_report()
+assert pump_until_idle(timeout=240), "auto session report job hung"
+with open(_auto_pdf129, "rb") as _fh129:
+    _auto_ops129 = _pdf_streams129(_fh129.read())
+assert b"0.0824 0.102 0.0941 rg" in _auto_ops129, "auto did not resolve to dark ink"
+app._theme_var.set("light")
+app._on_theme_change()
+DIALOGS.clear()
+print("Auto ride: resolved through _resolve_auto_theme at save time OK")
+
+
 app.destroy()
 assert not DIALOGS, f"unexpected dialogs: {DIALOGS}"
 print("PROBE_OK")

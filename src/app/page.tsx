@@ -24,6 +24,7 @@ import {
   CommandPalette,
   CommandPaletteTrigger,
 } from "@/components/explorer/command-palette";
+import { CardFinder } from "@/components/explorer/playground/card-finder";
 import { TABS, useToolkitStore } from "@/lib/store";
 import type { TabId } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -56,7 +57,7 @@ function ThemeToggle() {
   );
 }
 
-const FALLBACK_STATS = { files: 325, lines: "142,670" };
+const FALLBACK_STATS = { files: 346, lines: "143,624" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
@@ -165,6 +166,11 @@ export default function Home() {
       {/* Global command palette (Ctrl/Cmd+K), mounted once at the page level. */}
       <CommandPalette />
 
+      {/* (100x-129) the Playground card finder (Ctrl/Cmd+Shift+F) — mounted
+          at the page level so the hotkey works from any top tab; opening it
+          from elsewhere switches to the Playground first. */}
+      <CardFinder />
+
       {/* ------------------------------ Footer ------------------------------ */}
       <footer className="mt-auto border-t bg-muted/30 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 md:flex-row md:items-start md:justify-between">
@@ -198,7 +204,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">2417 tests</span>
+            <span className="text-primary">2428 tests</span>
           </p>
         </div>
       </footer>

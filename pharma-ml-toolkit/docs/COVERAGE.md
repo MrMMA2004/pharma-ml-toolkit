@@ -814,3 +814,22 @@ The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
 green after the round's edits (notebooks re-executed with 1.2.67 via
 both drivers). The GUI-axis census holds at 68 live cards (the DL
 Results card's new row is a frame INSIDE the card, not a new card).
+
+### Round 14 (100x-129) — the PDF's dark ink + the web twin's card finder
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **245 public symbols, 43 zero-hit —
+byte-identical to rounds 127/128's documented floor.** The library
+axis holds; the round's genuine work was round 128's handover items
+(a) and (d), both taken to completion:
+
+| Surface | The 1.2.68 fix |
+| --- | --- |
+| `save_pdf_report(..., theme=)` | The PDF session report's **dark-ink variant**, riding the View ▸ theme radios the way the HTML report's palette does: a dark app writes near-black pages with light ink + accent headings, figures on white plates; a light app writes the classic paper — byte-identical (zero colour operators, pinned). New public `PDF_THEMES = ("light", "dark")` (no `auto`: the ink is frozen at write time, the caller resolves — the playground maps its radios through `_resolve_auto_theme`). |
+| The web twin's card finder | `Ctrl/Cmd+Shift+F` (the browser owns plain Ctrl+F) opens a fuzzy dialog over the 24 always-rendered Playground cards (catalog: `card-directory.ts`); the jump switches top tab + sub-tab + PK inner tab, scrolls, and flashes the card. Title-first, panel-scoped, mount-gated resolution (the exit-animation race — an Overview blurb contains "Torsion QA" — caught by the E2E probe and fixed); a rename surfaces as an honest "Card not found" toast. |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits. The GUI-axis census holds at 68 live
+cards (the round touched no card topology). The web catalog walk:
+24/24 entries through the live finder UI (probe_card_finder_129.sh).

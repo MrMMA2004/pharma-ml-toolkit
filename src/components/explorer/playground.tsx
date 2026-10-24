@@ -22,6 +22,7 @@ import { BatchConfigs } from "@/components/explorer/playground/batch-configs";
 import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
 import { LigandReconciler } from "@/components/explorer/playground/ligand-reconciler";
 import { SessionReport } from "@/components/explorer/playground/session-report";
+import { CardFinderTrigger } from "@/components/explorer/playground/card-finder";
 import { useToolkitStore } from "@/lib/store";
 
 /** Playground: pharma calculators / PK-PD explorer / ML training / cell line
@@ -38,7 +39,11 @@ export function Playground() {
       onValueChange={setPlaygroundTab}
       className="w-full"
     >
-      <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-3xl grid-cols-2 gap-1 overflow-x-auto p-1 sm:grid-cols-4 lg:grid-cols-8">
+      {/* The sub-tab strip with the card finder beside it (100x-129): the
+          web twin of the desktop Ctrl+F — the dialog itself is mounted at
+          the page level so the hotkey works from any top tab. */}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+      <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-3xl grid-cols-2 gap-1 overflow-x-auto p-1 sm:grid-cols-4 lg:max-w-fit lg:grid-cols-8">
         <TabsTrigger
           value="calculators"
           className="min-h-11 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm sm:px-3 sm:text-sm"
@@ -96,6 +101,8 @@ export function Playground() {
           Ligand Sets
         </TabsTrigger>
       </TabsList>
+        <CardFinderTrigger />
+      </div>
       {/* (100x-127) the session report strip — the web twin of the
           desktop File ▸ Save session report (HTML): the collector walks
           the persisted playground state on every sub-tab, so the card

@@ -441,3 +441,72 @@ class TestSessionReportContract:
         assert result.returncode == 2
         error = json.loads(result.stdout)
         assert "theme" in error["error"]
+
+
+class TestCardFinderParity:
+    """Round 100x-129: the web card finder's catalog cannot drift.
+
+    The finder jumps by matching each catalog entry's ``match`` string
+    against the live DOM, so a renamed card heading would silently
+    break its jump.  The paired TS probe imports the SHIPPED
+    ``card-directory.ts`` and checks every entry against the component
+    source that renders it (JSX entities normalized); this guard fails
+    the suite when the catalog and the components disagree.  The live
+    jump itself (every entry through the real finder UI) is walked by
+    ``scratch/probe_card_finder_129.sh`` — the E2E layer on top of
+    this static layer."""
+
+    CARD_DIRECTORY_TS = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-directory.ts"
+    CARD_FINDER_TS = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-finder.tsx"
+    PLAYGROUND_TSX = REPO_ROOT / "src" / "components" / "explorer" / "playground.tsx"
+    PAGE_TSX = REPO_ROOT / "src" / "app" / "page.tsx"
+
+    needs_card_finder = pytest.mark.skipif(
+        not CARD_DIRECTORY_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src card finder) + bun runtime required; "
+        "the zip-only tree skips — its probes live outside the shipped tree",
+    )
+
+    @needs_card_finder
+    def test_catalog_matches_the_component_sources(self) -> None:
+        # the TS probe exits non-zero AND prints its problem list on drift
+        result = subprocess.run(
+            [BUN, "run", "scratch/probe_card_directory_129.ts"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "CARD_DIRECTORY_OK" in result.stdout
+        # the census: 24 cards, 24 unique ids, zero problems
+        start = result.stdout.index("{")
+        end = result.stdout.index("}", start) + 1
+        report = json.loads(result.stdout[start:end])
+        assert report["entries"] == 24, report
+        assert report["ids"] == 24, report
+        assert report["problems"] == [], report
+
+    @needs_card_finder
+    def test_finder_wiring_pins(self) -> None:
+        # the dialog is mounted at the PAGE level (hotkey from any tab)
+        page = self.PAGE_TSX.read_text(encoding="utf-8")
+        assert 'from "@/components/explorer/playground/card-finder"' in page
+        assert "<CardFinder />" in page
+        # the trigger rides beside the Playground sub-tab strip
+        playground = self.PLAYGROUND_TSX.read_text(encoding="utf-8")
+        assert "<CardFinderTrigger />" in playground
+        # the hotkey is Ctrl/Cmd+Shift+F — never plain Ctrl+F (the
+        # browser owns that one), pinned by the finder's own footer
+        finder = self.CARD_FINDER_TS.read_text(encoding="utf-8")
+        assert 'e.key.toLowerCase() === "f"' in finder
+        assert "e.ctrlKey || e.metaKey" in finder
+        assert "the browser owns Ctrl+F" in finder
+        # the jump resolves against the shadcn card contract
+        assert '[data-slot="card"]' in finder
+        assert '[data-slot=card-title]' in finder
+        # the flash class exists in the stylesheet (globals.css)
+        styles = (REPO_ROOT / "src" / "app" / "globals.css").read_text(encoding="utf-8")
+        assert ".pg-card-flash" in styles
+        assert "@keyframes pg-card-flash" in styles

@@ -254,7 +254,17 @@ Design notes
   and a small toggle button in every report's top-right corner cycles
   the palette per reader, remembered by the browser -- the CSS uses
   custom properties, so 'auto' keeps the original
-  ``prefers-color-scheme`` behaviour byte-for-byte.
+  ``prefers-color-scheme`` behaviour byte-for-byte.  (100x-129) The
+  PDF twin rides the same radios: saving ``File ▸ Save session
+  report (PDF)…`` while the app is dark writes the library's new
+  dark-ink variant (near-black pages, light ink and accent headings
+  in the app's own palette, every figure on a white plate -- the
+  bright-window look of the dark HTML report), while a light app
+  writes the classic white paper, byte-identical to every prior
+  release; ``auto`` resolves through ``_resolve_auto_theme`` at save
+  time, because a PDF's ink is frozen at write time (no reading-time
+  toggle like the HTML twin's).  Flip the View ▸ theme radio before
+  saving to pick the other variant.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -2208,6 +2218,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             view_menu.add_radiobutton(
                 label=label, value=value, variable=self._theme_var, command=self._on_theme_change
             )
+        # (100x-129) the radios pick more than the window's palette:
+        # both session reports ride them (the HTML's initial data-theme
+        # and the PDF's ink variant), so say so right under them -- a
+        # disabled caption is the menu's own quiet affordance.
+        view_menu.add_command(
+            label="(both session reports save in this theme)",
+            state="disabled",
+        )
         # Shortcut-hint row visibility (100x-65): a plain tk.Variable, so
         # the generic session machinery persists it for free.
         self._hints_var = tk.BooleanVar(value=True)
@@ -3404,6 +3422,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ``save_pdf_report(tables=...)`` as REAL text pages -- searchable,
         selectable, the library's own truncation note and all -- so the
         PDF is the session's whole record, pictures AND numbers.
+
+        (100x-129) The report gained its INK VARIANT, riding the View ▸
+        theme radios the same way the HTML report's palette does: save
+        while the app is dark and the PDF comes out in the dark-ink
+        variant -- near-black pages, light ink, the app's own palette,
+        figures on white plates (the bright-window look of the dark
+        HTML report); save while light and it stays the classic white
+        paper.  ``auto`` is resolved through ``_resolve_auto_theme``
+        first -- a PDF's ink is frozen at write time, so there is no
+        reading-time toggle to defer to.  Flip the View ▸ theme radio
+        before saving to pick the other variant.
         """
         live = self._live_session_figures()
         tables = self._live_session_tables()
@@ -3453,6 +3482,30 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             frame = pd.DataFrame(rows, columns=headings)
             table_pages[unique_name(f"{title} table", table_pages, figures)] = frame
         stamp = time.strftime("%Y-%m-%d %H:%M")
+        # (100x-129) the ink variant rides the theme radios -- captured
+        # on the MAIN thread (Tk variables are not safe to read from the
+        # worker), auto resolved NOW because a PDF's ink is frozen at
+        # write time (no reading-time toggle like the HTML twin's).
+        variant = self._theme_var.get()
+        if variant == "auto":
+            variant = self._resolve_auto_theme()
+        # the library's own public contract pins the valid variants
+        # (pharmaml.viz.PDF_THEMES) -- guarding here keeps the Tk radios
+        # honest even if they ever drift from the library's accepted
+        # values, instead of letting save_pdf_report raise mid-job.
+        try:
+            from pharmaml.viz import PDF_THEMES
+
+            if variant not in PDF_THEMES:
+                variant = "light"
+        except ImportError:
+            if variant not in ("light", "dark"):
+                variant = "light"
+        variant_label = (
+            "dark ink variant (the View ▸ theme radios picked it)"
+            if variant == "dark"
+            else "classic light paper"
+        )
 
         def work() -> Any:
             from pharmaml.viz import save_pdf_report
@@ -3464,16 +3517,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 title="PharmaML Playground session",
                 subtitle=(
                     f"{len(figures)} figure page(s) · {len(table_pages)} table "
-                    f"page(s) · generated {stamp} · playground {__version__}"
+                    f"page(s) · generated {stamp} · playground {__version__} "
+                    f"· {variant_label.split(' (')[0]}"
                 ),
                 close=False,
+                theme=variant,
             )
 
         def render(saved: Any) -> None:
             messagebox.showinfo(
                 "Session report saved",
                 f"{len(figures)} figure page(s) + {len(table_pages)} table "
-                f"page(s) written to\n{saved}",
+                f"page(s) written to\n{saved}\n\nSaved in the {variant_label}. "
+                "Flip the View ▸ theme radio before saving to get the "
+                "other one.",
             )
 
         self._start_job("session report", work, render)
