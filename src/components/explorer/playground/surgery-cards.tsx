@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatChip } from "@/components/explorer/stat-chip";
 import { copyToClipboard, fmtNum } from "@/lib/format";
+import { useToolkitStore } from "@/lib/store";
 import type {
   SurgeryBreedResponse,
   SurgeryTopologyResponse,
@@ -97,6 +98,9 @@ export function TopologyMovesCard() {
   const [result, setResult] = useState<SurgeryTopologyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // (100x-131) a successful run feeds the session report — the latest
+  // surgery run wins, exactly like mlResult does for training.
+  const setSurgeryResult = useToolkitStore((s) => s.setSurgeryResult);
 
   const trimmed = smiles.trim();
   const running = status === "running";
@@ -115,6 +119,7 @@ export function TopologyMovesCard() {
         throw new Error("the bridge answered with an unexpected mode");
       }
       setResult(data);
+      setSurgeryResult(data);
       setStatus("done");
       if (data.mutants.length > 0) {
         toast.success(`Enumerated ${data.mutants.length} ring-size mutants`);
@@ -327,6 +332,9 @@ export function BreedMoleculesCard() {
   const [result, setResult] = useState<SurgeryBreedResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // (100x-131) a successful run feeds the session report — the latest
+  // surgery run wins, exactly like mlResult does for training.
+  const setSurgeryResult = useToolkitStore((s) => s.setSurgeryResult);
 
   const childrenParsed = Number.parseInt(children, 10);
   const childrenValid =
@@ -360,6 +368,7 @@ export function BreedMoleculesCard() {
         throw new Error("the bridge answered with an unexpected mode");
       }
       setResult(data);
+      setSurgeryResult(data);
       setStatus("done");
       if (data.viable > 0) {
         toast.success(`Bred ${data.viable}/${data.children} viable children`);

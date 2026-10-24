@@ -1288,7 +1288,81 @@ assert not any(label.startswith("Recently jumped") for label in _labels130)
 _win130b.destroy()
 print("Empty memory: no chip row OK")
 
+# -- 100x-131 additions: the finder row's "Clear" affordance -------- #
+import tkinter as _tk131
+
+# seed the memory, open the dialog, and Clear must ride the row
+app._jump_to_card(1, "Affinity conversion")
+app._jump_to_card(0, "PharmaML Playground")
+app._find_card_dialog()
+_dialogs131 = [
+    child
+    for child in app.winfo_children()
+    if isinstance(child, _tk131.Toplevel) and child.title() == "Find a card"
+]
+assert len(_dialogs131) == 1, "finder dialog did not open"
+_win131 = _dialogs131[0]
+_buttons131: list = []
+
+
+def _walk_buttons131(widget):
+    for child in widget.winfo_children():
+        if child.winfo_class() == "TButton":
+            _buttons131.append(child)
+        _walk_buttons131(child)
+
+
+_walk_buttons131(_win131)
+_clear131 = {str(b.cget("text")): b for b in _buttons131}.get("Clear")
+assert _clear131 is not None, "the Clear button is missing from the row"
+print("Clear affordance: rides the recency row OK")
+
+# one click: memory emptied, row collapsed in place, session follows
+_clear131.invoke()
+app.update()
+assert app._finder_recent == [], app._finder_recent
+_labels131: list = []
+
+
+def _walk_labels131(widget):
+    for child in widget.winfo_children():
+        if child.winfo_class() == "TLabel":
+            _labels131.append(str(child.cget("text")))
+        _walk_labels131(child)
+
+
+_walk_labels131(_win131)
+assert not any(label.startswith("Recently jumped") for label in _labels131)
+_payload131 = app._collect_session()
+assert json.loads(_payload131["texts"]["finder_recent"]) == []
+_win131.destroy()
+print("Clear click: memory emptied + row collapsed + session [] OK")
+
+# the next open renders no row and no Clear button at all
+app._find_card_dialog()
+_dialogs131b = [
+    child
+    for child in app.winfo_children()
+    if isinstance(child, _tk131.Toplevel) and child.title() == "Find a card"
+]
+_win131b = _dialogs131b[0]
+_buttons131b: list = []
+
+
+def _walk_buttons131b(widget):
+    for child in widget.winfo_children():
+        if child.winfo_class() == "TButton":
+            _buttons131b.append(child)
+        _walk_buttons131b(child)
+
+
+_walk_buttons131b(_win131b)
+assert "Clear" not in [str(b.cget("text")) for b in _buttons131b]
+_win131b.destroy()
+print("Next open: no row, no Clear button OK")
+
 
 app.destroy()
 assert not DIALOGS, f"unexpected dialogs: {DIALOGS}"
 print("PROBE_OK")
+

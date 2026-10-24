@@ -378,7 +378,12 @@ class TestSessionReportContract:
         # 2. the census: the fixture session ships 4 figures (parity,
         #    learning curve, PK profile, PD effect), 2 tables (NCA rows,
         #    run history) and 2 metric cards (training + curve)
-        assert ts["census"] == {"figures": 4, "tables": 2, "metrics": 2}
+        # (100x-131) the census gained the images axis (the surgery
+        # grids); this no-surgery fixture pins images: 0 — the 127
+        # contract otherwise unchanged
+        assert ts["census"] == {
+            "figures": 4, "tables": 2, "metrics": 2, "images": 0,
+        }
         assert "Predicted vs observed" in ts["sectionTitles"]
         assert "Learning curve — R² vs training samples" in ts["sectionTitles"]
         assert "PK regimen — concentration vs time" in ts["sectionTitles"]
@@ -441,6 +446,196 @@ class TestSessionReportContract:
         assert result.returncode == 2
         error = json.loads(result.stdout)
         assert "theme" in error["error"]
+
+
+class TestSessionReportSections:
+    """Round 100x-131: the session report's SECTION CONTROL + the
+    SURGERY feed, the full contract pair.
+
+    The TS side (the SHIPPED collector over a fixed fixture with one
+    topology surgery run) pins the per-group options semantics —
+    ``{pkpd: false}`` drops the two regimen figures, ``{surgery:
+    false}`` drops the three surgery sections, a surgery-only report
+    ships exactly those three, ``sessionGroupsAvailable`` tells the UI
+    which chips to render — and the Python side pipes the all-on
+    payload (WITH the surgery grid) through the SHIPPED report bridge,
+    pinning the new ``image`` section kind: decoded, PNG-magic-checked,
+    size-capped, re-composed as a full-bleed matplotlib figure and
+    embedded through the SAME ``add_figure`` contract every chart
+    rides.  The static wiring pins (store persistence + the cards'
+    feed + the UI's toggle chips + the clear-recent affordance) keep
+    the round's surfaces from silently disappearing between rounds."""
+
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+    BRIDGE_PY = REPO_ROOT / "scripts" / "report_bridge.py"
+    STORE_TS = REPO_ROOT / "src" / "lib" / "store.ts"
+    SURGERY_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "surgery-cards.tsx"
+    )
+    REPORT_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "session-report.tsx"
+    )
+    ROUTE_TS = REPO_ROOT / "src" / "app" / "api" / "report" / "session" / "route.ts"
+    CARD_FINDER_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-finder.tsx"
+    )
+
+    needs_round = pytest.mark.skipif(
+        not COLLECTOR_TS.is_file() or not BRIDGE_PY.is_file() or BUN is None,
+        reason="web checkout (<repo>/src + <repo>/scripts) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+
+    @needs_round
+    def test_collector_section_control_pins(self) -> None:
+        # the TS probe exits non-zero on drift and prints its censuses
+        _run([BUN, "run", "scratch/probe_session_report_131.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_131.json").read_text())
+        # all-on WITH the topology surgery run: the 127 census + the
+        # surgery's metrics card + mutants table + structure grid
+        assert ts["allOnCensus"] == {
+            "figures": 4, "tables": 3, "metrics": 3, "images": 1,
+        }
+        # pkpd off drops exactly the two regimen figures
+        assert ts["noPkpd"] == {
+            "figures": 2, "tables": 3, "metrics": 3, "images": 1,
+        }
+        # surgery off drops the metrics + table + image (the 127 census)
+        assert ts["noSurgery"] == {
+            "figures": 4, "tables": 2, "metrics": 2, "images": 0,
+        }
+        # a surgery-only report ships exactly the three sections
+        assert ts["surgeryOnlyCensus"] == {
+            "figures": 0, "tables": 1, "metrics": 1, "images": 1,
+        }
+        assert ts["surgeryOnlyTitles"] == [
+            "Ring topology moves",
+            "Ring topology mutants",
+            "Ring topology mutants — 3 structure panel(s)",
+        ]
+        # the honest availability map: a fresh session shows only PK / PD
+        assert ts["availableEmpty"] == {
+            "ml": False, "learningCurve": False, "pkpd": True,
+            "nca": False, "history": False, "surgery": False,
+        }
+        assert ts["available"]["surgery"] is True
+        # the image section carries the grid PNG data URI verbatim
+        assert ts["imageSection"]["kind"] == "image"
+        assert ts["imageSection"]["dataUri"].startswith("data:image/png;base64,")
+        # the mutants table pins the piperidine set (the bridge contract)
+        assert ts["mutantRows"] == [
+            [1, "C1CCCC1"], [2, "C1CCCNCC1"], [3, "C1CCNC1"],
+        ]
+
+    @needs_round
+    def test_bridge_composes_the_surgery_image_section(self) -> None:
+        payload = json.loads(Path("/tmp/sr_payload_131.json").read_text())
+        result = subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=True,
+        )
+        composed = json.loads(result.stdout)
+        # 4 chart figures + the surgery grid = 5 embedded <img> blocks
+        assert composed["figures"] == 5
+        assert composed["tables"] == 3
+        html = composed["html"]
+        assert html.count("<img") == 5
+        assert html.count("<table") == 3
+        # the surgery caption rides as the image's own figcaption
+        assert "Ring topology mutants — 3 structure panel(s)" in html
+        # self-contained: no external references
+        assert "<link" not in html
+        assert "src='http" not in html and "href='http" not in html
+
+    @pytest.mark.skipif(
+        not BRIDGE_PY.is_file(),
+        reason="web checkout (<repo>/scripts/report_bridge.py) required",
+    )
+    def test_bridge_rejects_broken_image_sections(self) -> None:
+        base = {
+            "kind": "image",
+            "title": "Surgery — ring topology mutants",
+        }
+        for data_uri, fragment in (
+            ("data:image/png;base64,not-valid-!!", "not valid base64"),
+            ("data:image/jpeg;base64,aGVsbG8=", "dataUri"),
+            ("data:image/png;base64," + "A" * 64, "PNG payload"),
+        ):
+            result = subprocess.run(
+                [sys.executable, str(self.BRIDGE_PY)],
+                input=json.dumps(
+                    {"theme": "light", "sections": [dict(base, dataUri=data_uri)]}
+                ),
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+            assert result.returncode == 2, data_uri[:40]
+            error = json.loads(result.stdout)["error"]
+            assert fragment in error, (data_uri[:40], error)
+
+    # -- the static wiring pins ------------------------------------------- #
+    @pytest.mark.skipif(
+        not STORE_TS.is_file(),
+        reason="web checkout (<repo>/src/lib/store.ts) required",
+    )
+    def test_store_persists_the_surgery_result(self) -> None:
+        store = self.STORE_TS.read_text(encoding="utf-8")
+        assert 'const SURGERY_RESULT_STORAGE_KEY = "pharmaml.surgeryResult";' in store
+        assert "surgeryResult: loadSurgeryResult()," in store
+        assert "setSurgeryResult" in store
+        assert "validateSurgeryResult" in store
+
+    @pytest.mark.skipif(
+        not SURGERY_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required",
+    )
+    def test_surgery_cards_feed_the_session(self) -> None:
+        surgery = self.SURGERY_TSX.read_text(encoding="utf-8")
+        # both cards persist a successful run (the latest run wins)
+        assert surgery.count("setSurgeryResult(data);") == 2
+        assert 's.setSurgeryResult' in surgery
+
+    @pytest.mark.skipif(
+        not REPORT_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required",
+    )
+    def test_report_card_carries_the_toggle_chips(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        assert "sessionGroupsAvailable" in report
+        assert "Include in report" in report
+        assert "aria-pressed" in report
+        assert 'const SECTION_TOGGLE_STORAGE_KEY = "pharmaml.reportSections";' in report
+        assert "surgeryResult" in report
+        assert "Nothing would ship" in report
+
+    @pytest.mark.skipif(
+        not ROUTE_TS.is_file(),
+        reason="web checkout (<repo>/src route) required",
+    )
+    def test_route_accepts_the_image_kind(self) -> None:
+        route = self.ROUTE_TS.read_text(encoding="utf-8")
+        assert 'z.literal("image")' in route
+        assert "startsWith" in route
+        assert "dataUri" in route
+
+    @pytest.mark.skipif(
+        not CARD_FINDER_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required",
+    )
+    def test_web_finder_clear_recent_pins(self) -> None:
+        finder = self.CARD_FINDER_TSX.read_text(encoding="utf-8")
+        assert "clearRecentIds" in finder
+        assert "setRecentCleared(true);" in finder
+        assert "recentCleared" in finder
+        # the affordance rides INSIDE the row (no row, no Clear)
+        assert "Forget every remembered jump" in finder
 
 
 class TestCardFinderParity:

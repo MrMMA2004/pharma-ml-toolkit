@@ -36,7 +36,11 @@ Request (stdin, JSON)::
          ]},
         {"kind": "table", "title": "NCA observed data",
          "columns": ["#", "time (h)", ...],
-         "rows": [[1, "0.5", ...], ...]}
+         "rows": [[1, "0.5", ...], ...]},
+        {"kind": "image", "title": "Surgery — ring topology mutants",
+         "dataUri": "data:image/png;base64,..."}   # (100x-131) the
+         # surgery grids — decoded, PNG-magic-checked, size-capped and
+         # re-composed as a full-bleed matplotlib figure
       ]
     }
 
@@ -51,6 +55,9 @@ code 2 so the route can surface them as HTTP 400/500 cleanly.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import io
 import json
 import math
 import sys
@@ -65,6 +72,10 @@ MAX_POINTS = 2000
 MAX_ROWS = 300
 MAX_CELLS = 40
 MAX_TEXT = 200
+#: (100x-131) decoded-byte cap for one image section (the surgery grids
+#: ride as base64 PNG data URIs — a few hundred KB decoded; 2 MB is the
+#: honest ceiling before the report file itself gets unwieldy).
+MAX_IMAGE_BYTES = 2_000_000
 
 
 def _fail(message: str) -> int:
@@ -83,7 +94,7 @@ def _validate_section(section: Any) -> dict[str, Any]:
     if not isinstance(section, dict):
         raise TypeError("each section must be an object")
     kind = section.get("kind")
-    if kind not in {"metrics", "figure", "table"}:
+    if kind not in {"metrics", "figure", "table", "image"}:
         raise ValueError(f"unknown section kind {kind!r}")
     title = section.get("title")
     if not isinstance(title, str) or not title or len(title) > MAX_TEXT:
@@ -118,6 +129,26 @@ def _validate_section(section: Any) -> dict[str, Any]:
                 if isinstance(cell, str) and len(cell) > MAX_CELLS:
                     raise ValueError(f"table cells are capped at {MAX_CELLS} chars")
         return {"kind": "table", "title": title, "columns": columns, "rows": rows}
+    # image
+    if kind == "image":
+        data_uri = section.get("dataUri")
+        if not isinstance(data_uri, str) or not data_uri.startswith(
+            "data:image/png;base64,"
+        ):
+            raise ValueError(
+                'image sections carry a dataUri like "data:image/png;base64,…"'
+            )
+        try:
+            decoded = base64.b64decode(data_uri.split(",", 1)[1], validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(f"the image data URI is not valid base64: {exc}") from exc
+        if len(decoded) > MAX_IMAGE_BYTES:
+            raise ValueError(
+                f"image sections are capped at {MAX_IMAGE_BYTES} decoded bytes"
+            )
+        if not decoded.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("the image data URI does not carry a PNG payload")
+        return {"kind": "image", "title": title, "dataUri": data_uri}
     # figure
     traces = section.get("traces")
     if not isinstance(traces, list) or not traces or len(traces) > MAX_TRACES:
@@ -169,6 +200,30 @@ def _validate_section(section: Any) -> dict[str, Any]:
         "yLabel": y_label,
         "traces": clean_traces,
     }
+
+
+def _build_image_figure(plt: Any, section: dict[str, Any]) -> Any:
+    """Re-compose one embedded PNG as a full-bleed matplotlib figure.
+
+    (100x-131) The surgery grids arrive as base64 PNG data URIs (the
+    web twin's bridge already rasterised them with real RDKit); this
+    helper decodes the raster and ``imshow``s it onto a figure sized
+    to the image's own aspect (a full-bleed axes at the raster's pixel
+    size over the 110 dpi ``figure_to_base64`` renders at), so the
+    report embed walks the SAME public ``add_figure`` contract every
+    matplotlib figure rides -- caption included, zero letterboxing,
+    no re-scaling artefacts.
+    """
+    import matplotlib.image as mpimage
+
+    decoded = base64.b64decode(section["dataUri"].split(",", 1)[1])
+    raster = mpimage.imread(io.BytesIO(decoded))
+    height, width = raster.shape[0], raster.shape[1]
+    figure = plt.figure(figsize=(width / 110.0, height / 110.0))
+    axes = figure.add_axes([0.0, 0.0, 1.0, 1.0])
+    axes.imshow(raster, interpolation="nearest")
+    axes.axis("off")
+    return figure
 
 
 def _build_figure(plt: Any, palette: tuple[str, ...], section: dict[str, Any]) -> Any:
@@ -293,20 +348,26 @@ def main() -> int:
                     heading=section["title"],
                 )
                 tables += 1
+            elif section["kind"] == "image":
+                # (100x-131) the surgery grids: full-bleed re-composition
+                # through the public add_figure contract (counts as a
+                # figure in the census — that is what the reader sees).
+                composed.append(_build_image_figure(plt, section))
             else:
                 figure = _build_figure(plt, PALETTE, section)
                 composed.append(figure)
         report.add_text(
             "Every chart and table the web playground session still holds: the "
             "last ML training result (metrics + parity/decision figure), the "
-            "learning-curve run, the PK/PD regimen and the NCA rows.  Figures "
-            "are re-composed server-side with matplotlib and embedded as "
-            "base64, so this file needs no network and no companion assets: "
-            "move it, mail it, archive it.",
+            "learning-curve run, the PK/PD regimen, the NCA rows, and — when a "
+            "molecule-surgery run is in the session — its structure grid and "
+            "SMILES list.  Figures are re-composed server-side with matplotlib "
+            "and embedded as base64, so this file needs no network and no "
+            "companion assets: move it, mail it, archive it.",
             heading="What this file contains",
         )
         for section, figure in zip(
-            [s for s in sections if s["kind"] == "figure"], composed
+            [s for s in sections if s["kind"] in ("figure", "image")], composed
         ):
             report.add_figure(figure, caption=section["title"])
             figures += 1

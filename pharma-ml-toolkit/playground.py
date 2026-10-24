@@ -274,7 +274,19 @@ Design notes
   web twin's Ctrl+Shift+F finder gained the same memory
   (localStorage-backed, only jumps that actually landed are
   remembered), and its Playground gained the Surgery sub-tab -- the
-  web twin of the two molecule-surgery cards below.
+  web twin of the two molecule-surgery cards below.  (100x-131) Both
+  finders' recency rows carry their own "Clear" affordance: one click
+  forgets every remembered jump (the desktop empties the session
+  key and collapses the row in place; the web twin clears its
+  localStorage) -- the honest empty, no re-open needed.  The web
+  session report gained per-section control (toggle chips for every
+  group the session has content for -- skip the PK figures when only
+  the ML run matters) AND the surgery feeds: a run on either surgery
+  card persists to the session (the latest run wins, like
+  ``mlResult``), and the report walks its metrics + SMILES table +
+  structure grid through a new ``image`` section kind on the report
+  bridge (decoded, PNG-magic-checked, re-composed full-bleed through
+  the library's own ``add_figure`` contract).
 
 Command line helpers (useful for scripting and CI)::
 
@@ -2419,6 +2431,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         one click returns to the cards you keep visiting, without
         retyping (the memory is de-duplicated, capped and persisted
         with the session -- restarting the app keeps it).
+
+        (100x-131) The row carries its own "Clear" ghost button: one
+        click forgets every remembered jump (the session-persisted
+        ``finder_recent`` key too) and the row collapses in place --
+        the honest empty, no re-open needed.  The web twin's finder
+        row gained the same affordance (localStorage-backed).
         """
         if tk is None:  # pragma: no cover - headless import
             return
@@ -2454,7 +2472,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # (100x-130) the recency row -- one chip per recently jumped
         # card, filtered to the cards that are live RIGHT NOW (a
         # remembered title whose shell vanished is honestly omitted,
-        # never a dead button).
+        # never a dead button).  (100x-131) the row carries its own
+        # "Clear" ghost button: one click empties the memory (the
+        # session-persisted ``finder_recent`` key too) and the row
+        # collapses in place -- the honest empty, no re-open needed.
         recent_titles = [
             title
             for title in getattr(self, "_finder_recent", [])
@@ -2482,6 +2503,25 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "finder jumps (the row remembers up to "
                     f"{_FINDER_RECENT_MAX}, newest first).",
                 )
+
+            def clear_recent() -> None:
+                """Forget every remembered jump (the row's Clear button)."""
+                self._finder_recent = []
+                recent_row.destroy()
+
+            clear_button = ttk.Button(
+                recent_row,
+                text="Clear",
+                style="Ghost.TButton",
+                command=clear_recent,
+            )
+            clear_button.pack(side="right", padx=(8, 0))
+            Tooltip(
+                clear_button,
+                "Forget every remembered jump -- the row disappears "
+                "until you land on cards again (also clears the "
+                "session-persisted memory).",
+            )
 
         tree = ttk.Treeview(win, columns=("card", "tab"), show="headings", height=12)
         tree.heading("card", text="card")

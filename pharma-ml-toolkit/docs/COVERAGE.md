@@ -854,3 +854,27 @@ both drivers). The GUI-axis census holds at 68 live cards (the round
 touched no card topology). The web catalog walk: 26/26 entries
 through the live finder UI (probe_card_finder_129.sh, the two Surgery
 entries joined).
+
+### Round 16 (100x-131) — the web session report's per-section control + the surgery feed; both finders' clear-recent
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **246 public symbols, 43 zero-hit —
+byte-identical to rounds 127–130's documented floor.** The library
+axis holds; the round's genuine work was the two longest-standing
+handover items — round 129's (a) and round 130's (b) — plus the
+finders' (d), all taken to completion:
+
+| Surface | The 1.2.70 fix |
+| --- | --- |
+| The web session report's per-section control | Every group the session actually has content for renders a toggle chip ("Include in report"): ML training, learning curve, PK / PD, NCA data, run history, surgery — a group with nothing to ship renders no chip. The census line and the download walk the SAME filtered collector (`collectSessionReport(snapshot, options)`), so "what will ship" is always the truth; a fully deselected session disables the button honestly. Skips persist in localStorage (`pharmaml.reportSections`, tolerant restore). |
+| The surgery feed | A run on either Surgery card persists to the store (`surgeryResult`, sessionStorage + tolerant mode-discriminated validation, the latest run winning like `mlResult`), and the collector walks it: the run's metrics card, its SMILES list as a real table (a failed crossover an honest "(no viable crossover)" cell), and the captioned structure grid through a NEW `image` section kind on the report bridge — decoded, PNG-magic-checked, 2 MB decoded cap, re-composed full-bleed via the public `HTMLReport.add_figure` contract. The route's zod schema accepts the kind. |
+| Both finders' clear-recent | One click on the row's dashed "Clear" chip forgets every remembered jump: the desktop empties the session-persisted `finder_recent` key and collapses the row in place; the web twin clears its localStorage and hides the strip live. The next open renders no row at all (the honest-empty rule); no row, no Clear button. |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.70 via
+both drivers). The GUI-axis census holds at 68 live cards (the round
+touched no card topology). The web catalog walk: 26/26 entries (the
+round touched no catalog topology). 15 new tests: TestReview131Gui
+(7, desktop) + TestSessionReportSections (8, web parity incl. the
+bridge's surgery-image round trip).

@@ -110,6 +110,11 @@ const snapshot: SessionSnapshot = {
     f: "1",
     terminalN: 3,
   },
+  // (100x-131) the collector's snapshot gained the surgery slot; this
+  // legacy fixture pins the NO-surgery walk (the 127 contract: same
+  // census as before) — the surgery-on round trip lives in
+  // scratch/probe_session_report_131.ts.
+  surgery: null,
 };
 
 const payload = collectSessionReport(snapshot);

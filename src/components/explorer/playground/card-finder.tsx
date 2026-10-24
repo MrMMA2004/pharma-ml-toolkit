@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { History, Search, SquareArrowOutUpRight } from "lucide-react";
+import { Eraser, History, Search, SquareArrowOutUpRight } from "lucide-react";
 import { toast } from "sonner";
 import { HighlightText } from "@/components/explorer/highlight-text";
 import { cn } from "@/lib/utils";
@@ -64,6 +64,17 @@ function saveRecentIds(ids: string[]): void {
 function rememberJump(id: string): void {
   const next = [id, ...loadRecentIds().filter((x) => x !== id)];
   saveRecentIds(next);
+}
+
+/** (100x-131) Empty the recency memory — the row's own "Clear" chip.
+ * The next open reads an empty list, so the row honestly disappears
+ * (a vanished memory renders no row at all, the same honest rule). */
+function clearRecentIds(): void {
+  try {
+    window.localStorage.removeItem(RECENT_STORAGE_KEY);
+  } catch {
+    /* a blocked localStorage has nothing to clear */
+  }
 }
 
 /** Sub-tab strip labels (the jump-readiness gate matches them on the
@@ -265,8 +276,12 @@ function CardFinderDialog({ onClose }: { onClose: () => void }) {
   const close = useCallback(() => onClose(), [onClose]);
 
   /* (100x-130) the recency row — read once per open (the dialog body
-   * mounts fresh, so a jump made from THIS dialog shows next time). */
+   * mounts fresh, so a jump made from THIS dialog shows next time).
+   * (100x-131) the row's "Clear" affordance empties the memory live
+   * (state flip hides the row without a remount; the storage is
+   * already gone, so the next open starts honestly empty). */
   const recentIds = useMemo(() => loadRecentIds(), []);
+  const [recentCleared, setRecentCleared] = useState(false);
   const recentEntries = useMemo(() => {
     const byId = new Map(PLAYGROUND_CARDS.map((e) => [e.id, e] as const));
     return recentIds
@@ -378,7 +393,7 @@ function CardFinderDialog({ onClose }: { onClose: () => void }) {
                 finder's "Recently jumped" row, localStorage-backed so
                 it survives reloads; entries whose id left the catalog
                 are honestly dropped, never dead chips). */}
-            {recentEntries.length > 0 ? (
+            {recentEntries.length > 0 && !recentCleared ? (
               <div className="flex flex-wrap items-center gap-1.5 border-b bg-muted/20 px-3.5 py-2">
                 <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground">
                   <History className="size-3.5" aria-hidden />
@@ -398,6 +413,20 @@ function CardFinderDialog({ onClose }: { onClose: () => void }) {
                     </span>
                   </button>
                 ))}
+                {/* (100x-131) the clear affordance — empties the memory
+                    for good (the honest empty: no row on the next open) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearRecentIds();
+                    setRecentCleared(true);
+                  }}
+                  className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  title="Forget every remembered jump — the row disappears until you land on cards again"
+                >
+                  <Eraser className="size-3" aria-hidden />
+                  Clear
+                </button>
               </div>
             ) : null}
             {/* Rows */}

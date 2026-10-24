@@ -10,6 +10,90 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.70] — 2026-10-25
+
+### Added — the round-16 full review (100x-131): the web session report's per-section control + the surgery feed; both finders' clear-recent
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a sixteenth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–130's documented floor — the axis holds; no new gaps). The
+round's genuine work was the two longest-standing handover items —
+round 129's (a) the web session report's per-section toggle, and
+round 130's (b) the surgery cards feeding that report — plus the
+finders' (d) clear-recent affordance, both taken to completion.
+
+**The web session report gained per-section control.** Every group
+the session actually has content for now renders a toggle chip on
+the report card ("Include in report"): ML training, learning curve,
+PK / PD, NCA data, run history and — new this round — surgery. A
+group with nothing to ship renders no chip (nothing to skip), so a
+fresh session shows only PK / PD and the chips appear as the session
+fills. The census line ("Ready to ship: … figures · structure grids
+· tables · metric cards") and the download itself walk the SAME
+filtered collector, so "what will ship" is always the truth; a fully
+deselected session disables the button and says so. Skipped groups
+persist in localStorage (`pharmaml.reportSections`, tolerant restore
+— a corrupt payload resets to everything-on, never a broken report).
+Skip the PK figures when only the ML run matters; ship only the
+surgery grid; whatever the session needs.
+
+**The surgery cards now feed the session report.** A run on either
+Surgery card (ring topology moves or breed two molecules) persists
+to the session store — `surgeryResult`, sessionStorage-backed with a
+tolerant mode-discriminated validation, the latest run winning
+exactly like `mlResult` does — and the report collector walks it:
+the run's metrics card (source or parents, mutants or viable
+children, seed, compute time, RDKit version), its SMILES list as a
+real text table (one row per mutant or per draw, a failed crossover
+an honest "(no viable crossover)" cell), and the captioned 2D
+structure grid itself. The grid rides through a new **image section
+kind** on the report bridge: the payload carries the PNG data URI
+(the same raster the web card shows), the bridge validates it
+(base64-decoded, PNG magic-checked, 2 MB decoded cap), re-composes
+it as a full-bleed matplotlib figure sized to the raster's own
+aspect (zero letterboxing, no re-scaling artefacts) and embeds it
+through the SAME public `HTMLReport.add_figure` contract every
+chart rides — caption included, self-contained file preserved. The
+route's zod schema accepts the kind; the bridge census counts the
+grid among the figures (that is what the reader sees).
+
+**Both finders' recency rows gained a "Clear" affordance.** One
+click on the dashed chip forgets every remembered jump: the desktop
+empties the session-persisted `finder_recent` key and collapses the
+row in place (the honest empty, no re-open needed); the web twin
+clears its localStorage and hides the strip live — and because the
+memory is gone, the next open renders no row at all (the standing
+honest-empty rule). No row, no Clear button: a session without
+recency never shows the affordance.
+
+### Verified
+
+- `playground.py --self-test` green (every tab visited, no errors);
+  the GUI axis re-proven **119/119** (118 rar + 1 upload) before and
+  after the round's edits; the library axis holds at **246 public
+  symbols / 43 zero-hit** (byte-identical membership to rounds
+  127–130).
+- 15 new tests: `TestReview131Gui` (7 — the desktop Clear button:
+  rides the row, empties the memory and collapses it in place,
+  persists through the session payload, the next open renders no
+  row, no button without recency, the round's docstring pins) +
+  `TestSessionReportSections` (8 — the collector's option semantics
+  over the fixed fixture: all-on/no-PKPD/no-surgery/surgery-only
+  censuses, `sessionGroupsAvailable`'s honest empty map, the image
+  section's data-URI contract, the piperidine mutant rows; the
+  bridge's surgery-image round trip: 5 embedded figures incl. the
+  grid, the caption, self-containment; the broken-image rejections;
+  the store/cards/route/report-card/finder wiring pins).
+- The bridge smoke: a real 72×36 matplotlib PNG round trips through
+  the image kind 1:1 (the full-bleed axes re-embeds it at its own
+  aspect); bad base64, a jpeg mime and a non-PNG payload all exit 2
+  with the contract's own error text.
+- ruff + mypy clean; web `bun run lint` exit 0 and `tsc --noEmit`
+  zero errors in `src/` (the examples/skills errors are the
+  pre-existing baseline outside `src/`).
+
 ## [1.2.69] — 2026-10-25
 
 ### Added — the round-15 full review (100x-130): the two-sided finder recency row + the web twin's Surgery sub-tab

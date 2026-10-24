@@ -7635,3 +7635,141 @@ class TestReview130Gui:
     def test_jump_docstring_mentions_the_memory(self, playground: Any) -> None:
         doc = playground.PlaygroundApp._jump_to_card.__doc__ or ""
         assert "recency" in doc
+
+
+class TestReview131Gui:
+    """Round 100x-131: the recency row's "Clear" affordance (both twins)
+    -- one click forgets every remembered jump, collapsing the row in
+    place (the desktop empties the session-persisted memory too, so
+    the next open starts honestly empty).  The web twin's round lives
+    in tests/test_web_parity.py (its per-section report control + the
+    surgery feed pins); these guards walk the desktop dialog itself."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    def _finder_dialog(self, app: Any) -> Any:
+        import tkinter as tkmod
+
+        app._find_card_dialog()
+        dialogs = [
+            child
+            for child in app.winfo_children()
+            if isinstance(child, tkmod.Toplevel) and child.title() == "Find a card"
+        ]
+        assert len(dialogs) == 1
+        return dialogs[0]
+
+    @staticmethod
+    def _dialog_buttons(win: Any) -> list[Any]:
+        buttons: list[Any] = []
+
+        def walk(widget: Any) -> None:
+            for child in widget.winfo_children():
+                if child.winfo_class() == "TButton":
+                    buttons.append(child)
+                walk(child)
+
+        walk(win)
+        return buttons
+
+    @staticmethod
+    def _dialog_labels(win: Any) -> list[str]:
+        labels: list[str] = []
+
+        def walk_labels(widget: Any) -> None:
+            for child in widget.winfo_children():
+                if child.winfo_class() == "TLabel":
+                    labels.append(str(child.cget("text")))
+                walk_labels(child)
+
+        walk_labels(win)
+        return labels
+
+    def test_clear_button_rides_the_recency_row(self, app: Any) -> None:
+        app._jump_to_card(1, "Affinity conversion")
+        win = self._finder_dialog(app)
+        texts = [str(b.cget("text")) for b in self._dialog_buttons(win)]
+        assert "Clear" in texts, texts
+        win.destroy()
+
+    def test_clear_click_empties_the_memory_and_collapses_the_row(
+        self, app: Any
+    ) -> None:
+        app._jump_to_card(1, "Affinity conversion")
+        app._jump_to_card(0, "PharmaML Playground")
+        win = self._finder_dialog(app)
+        clear = {
+            str(b.cget("text")): b for b in self._dialog_buttons(win)
+        }["Clear"]
+        clear.invoke()
+        app.update()
+        # the memory is gone and the row collapsed in place
+        assert app._finder_recent == []
+        assert not any(
+            label.startswith("Recently jumped") for label in self._dialog_labels(win)
+        )
+        win.destroy()
+
+    def test_clear_persists_through_the_session_payload(self, app: Any) -> None:
+        import json as jsonmod
+
+        app._jump_to_card(1, "Affinity conversion")
+        app._finder_recent = ["Affinity conversion"]
+        win = self._finder_dialog(app)
+        {
+            str(b.cget("text")): b for b in self._dialog_buttons(win)
+        }["Clear"].invoke()
+        app.update()
+        # the session-persisted key follows (the next save writes [])
+        payload = app._collect_session()
+        assert jsonmod.loads(payload["texts"]["finder_recent"]) == []
+        win.destroy()
+
+    def test_cleared_memory_renders_no_row_on_the_next_open(
+        self, app: Any
+    ) -> None:
+        app._jump_to_card(1, "Affinity conversion")
+        win = self._finder_dialog(app)
+        {
+            str(b.cget("text")): b for b in self._dialog_buttons(win)
+        }["Clear"].invoke()
+        app.update()
+        win.destroy()
+        # a fresh open reads the (now empty) memory: no row, no Clear
+        win2 = self._finder_dialog(app)
+        texts = [str(b.cget("text")) for b in self._dialog_buttons(win2)]
+        assert "Clear" not in texts
+        assert not any(
+            label.startswith("Recently jumped") for label in self._dialog_labels(win2)
+        )
+        win2.destroy()
+
+    def test_no_clear_button_without_recency(self, app: Any) -> None:
+        app._finder_recent = []
+        win = self._finder_dialog(app)
+        texts = [str(b.cget("text")) for b in self._dialog_buttons(win)]
+        assert "Clear" not in texts
+        win.destroy()
+
+    # -- the documentation pins ------------------------------------------- #
+    def test_module_docstring_records_round_131(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-131" in doc
+        assert '"Clear" affordance' in doc
+        assert "per-section control" in doc
+        assert "``image`` section kind" in doc
+
+    def test_finder_dialog_docstring_mentions_the_clear(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._find_card_dialog.__doc__ or ""
+        assert "100x-130" in doc
+        assert "Recently jumped" in doc
+        assert "100x-131" in doc
+        assert '"Clear" ghost button' in doc

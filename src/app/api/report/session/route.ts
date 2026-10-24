@@ -50,6 +50,16 @@ const sectionSchema = z.discriminatedUnion("kind", [
       .min(1)
       .max(300),
   }),
+  // (100x-131) the surgery structure grids — a pre-rasterised PNG data
+  // URI; the bridge decodes, PNG-magic-checks and size-caps it again.
+  z.object({
+    kind: z.literal("image"),
+    title: z.string().min(1).max(200),
+    dataUri: z
+      .string()
+      .startsWith("data:image/png;base64,")
+      .max(2_700_000), // ~2 MB decoded, the bridge's own cap
+  }),
 ]);
 
 const bodySchema = z.object({

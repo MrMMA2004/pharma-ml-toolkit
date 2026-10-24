@@ -25,6 +25,7 @@ import { concentrationAt, derivePk, pdEffect } from "@/lib/pk-pd";
 import type {
   MLLearningCurveResponse,
   MLTrainResponse,
+  SurgeryResponse,
 } from "@/lib/toolkit-types";
 import type {
   MlRunRecord,
@@ -70,6 +71,16 @@ export interface ReportTableSection {
   rows: Array<Array<string | number>>;
 }
 
+/** (100x-131) A pre-rasterised PNG section — the surgery structure
+ * grids arrive from the server bridge as data URIs; the report bridge
+ * decodes them onto a full-bleed matplotlib figure and embeds it through
+ * the same `add_figure` contract every other figure rides. */
+export interface ReportImageSection {
+  kind: "image";
+  title: string;
+  dataUri: string;
+}
+
 export interface ReportMetricsSection {
   kind: "metrics";
   title: string;
@@ -80,7 +91,8 @@ export interface ReportMetricsSection {
 export type ReportSection =
   | ReportFigureSection
   | ReportTableSection
-  | ReportMetricsSection;
+  | ReportMetricsSection
+  | ReportImageSection;
 
 /** POST /api/report/session request body. */
 export interface SessionReportRequest {
@@ -106,6 +118,42 @@ export interface SessionSnapshot {
   pkParams: PkParams;
   pdParams: PdParams;
   ncaState: NcaState;
+  /** (100x-131) the last molecule-surgery run (topology or breed — the
+   *  latest run wins, exactly like mlResult); null = no surgery yet. */
+  surgery: SurgeryResponse | null;
+}
+
+/** (100x-131) Per-group section control — the report card's toggles.
+ *  Every group defaults to shipped; the collector silently skips a
+ *  group the snapshot has no content for either way, so the toggle set
+ *  the UI renders comes from `sessionGroupsAvailable`. */
+export interface SessionReportOptions {
+  ml?: boolean;
+  learningCurve?: boolean;
+  pkpd?: boolean;
+  nca?: boolean;
+  history?: boolean;
+  surgery?: boolean;
+}
+
+/** Which groups would actually ship something for this snapshot — the
+ * honest source for the UI: a group with no content renders no toggle
+ * (nothing to skip), so a fresh session shows only "PK / PD" and the
+ * buttons appear as the session fills. */
+export function sessionGroupsAvailable(
+  snapshot: SessionSnapshot,
+): Record<keyof SessionReportOptions, boolean> {
+  const rows = snapshot.ncaState.rows.filter(
+    (r) => r.t.trim() !== "" && r.c.trim() !== "",
+  );
+  return {
+    ml: snapshot.mlResult !== null,
+    learningCurve: snapshot.lcResult !== null,
+    pkpd: true, // the regimen card is always live in the web twin
+    nca: rows.length > 0,
+    history: snapshot.mlHistory.length > 0,
+    surgery: snapshot.surgery !== null,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -158,15 +206,32 @@ function pkSeries(params: PkParams): Array<[number, number]> {
  *     always live in the web twin) + the PD effect overlay figure
  *  4. NCA observed data — the rows table (only when filled)
  *  5. ML run history — the runs table (only when a run exists)
+ *  6. Molecule surgery (100x-131) — the run's metrics + SMILES table
+ *     + the structure-grid image (only when a run is in the session)
+ *
+ * (100x-131) `options` turns whole groups off — the report card's
+ * per-section toggles: skip the PK figures when only the ML run
+ * matters, ship only the surgery grid, whatever the session needs.
+ * A group with no content is skipped regardless, so the census the
+ * UI shows always matches what would ship.
  */
 export function collectSessionReport(
   snapshot: SessionSnapshot,
+  options: SessionReportOptions = {},
 ): SessionReportRequest {
+  const enabled = {
+    ml: options.ml !== false,
+    learningCurve: options.learningCurve !== false,
+    pkpd: options.pkpd !== false,
+    nca: options.nca !== false,
+    history: options.history !== false,
+    surgery: options.surgery !== false,
+  };
   const sections: ReportSection[] = [];
 
   /* -- 1. ML training ------------------------------------------------ */
   const ml = snapshot.mlResult;
-  if (ml) {
+  if (ml && enabled.ml) {
     const metrics: Array<[string, string]> = [
       ["model", ml.model],
       ["task", ml.task],
@@ -241,7 +306,7 @@ export function collectSessionReport(
 
   /* -- 2. Learning curve ---------------------------------------------- */
   const lc = snapshot.lcResult;
-  if (lc) {
+  if (lc && enabled.learningCurve) {
     sections.push({
       kind: "metrics",
       title: "Learning curve",
@@ -280,37 +345,39 @@ export function collectSessionReport(
   }
 
   /* -- 3. PK regimen (always live) ------------------------------------ */
-  const conc = pkSeries(snapshot.pkParams);
-  sections.push({
-    kind: "figure",
-    title: "PK regimen — concentration vs time",
-    xLabel: "time (h)",
-    yLabel: "concentration (mg/L)",
-    traces: [
-      {
-        name: `${snapshot.pkParams.route === "iv" ? "IV bolus" : "oral"} regimen`,
-        style: "line",
-        points: conc,
-      },
-    ],
-  });
-  const effect = conc.map(
-    ([t, c]) =>
-      [t, pdEffect(c, snapshot.pdParams.model, snapshot.pdParams)] as [number, number],
-  );
-  sections.push({
-    kind: "figure",
-    title: `PD effect — ${snapshot.pdParams.model} model`,
-    xLabel: "time (h)",
-    yLabel: "effect",
-    traces: [
-      { name: "effect", style: "line", points: effect },
-    ],
-  });
+  if (enabled.pkpd) {
+    const conc = pkSeries(snapshot.pkParams);
+    sections.push({
+      kind: "figure",
+      title: "PK regimen — concentration vs time",
+      xLabel: "time (h)",
+      yLabel: "concentration (mg/L)",
+      traces: [
+        {
+          name: `${snapshot.pkParams.route === "iv" ? "IV bolus" : "oral"} regimen`,
+          style: "line",
+          points: conc,
+        },
+      ],
+    });
+    const effect = conc.map(
+      ([t, c]) =>
+        [t, pdEffect(c, snapshot.pdParams.model, snapshot.pdParams)] as [number, number],
+    );
+    sections.push({
+      kind: "figure",
+      title: `PD effect — ${snapshot.pdParams.model} model`,
+      xLabel: "time (h)",
+      yLabel: "effect",
+      traces: [
+        { name: "effect", style: "line", points: effect },
+      ],
+    });
+  }
 
   /* -- 4. NCA observed data ------------------------------------------- */
   const rows = snapshot.ncaState.rows.filter((r) => r.t.trim() !== "" && r.c.trim() !== "");
-  if (rows.length > 0) {
+  if (rows.length > 0 && enabled.nca) {
     sections.push({
       kind: "table",
       title: "NCA observed data",
@@ -320,7 +387,7 @@ export function collectSessionReport(
   }
 
   /* -- 5. ML run history ---------------------------------------------- */
-  if (snapshot.mlHistory.length > 0) {
+  if (snapshot.mlHistory.length > 0 && enabled.history) {
     sections.push({
       kind: "table",
       title: "ML run history",
@@ -332,6 +399,61 @@ export function collectSessionReport(
         `${run.keyMetric} ${fmtCell(run.keyValue)}`,
       ]),
     });
+  }
+
+  /* -- 6. Molecule surgery (100x-131) ---------------------------------- */
+  const surgery = snapshot.surgery;
+  if (surgery && enabled.surgery) {
+    if (surgery.mode === "topology") {
+      sections.push({
+        kind: "metrics",
+        title: "Ring topology moves",
+        items: [
+          ["source", surgery.source],
+          ["distinct mutants", `${surgery.mutants.length}`],
+          ["compute time", `${fmtCell(surgery.elapsedSeconds)} s`],
+          ["RDKit", surgery.rdkitVersion],
+        ],
+      });
+      sections.push({
+        kind: "table",
+        title: "Ring topology mutants",
+        columns: ["#", "mutant SMILES"],
+        rows: surgery.mutants.map((mutant, i) => [i + 1, mutant]),
+      });
+      sections.push({
+        kind: "image",
+        title: `Ring topology mutants — ${surgery.mutants.length} structure panel(s)`,
+        dataUri: surgery.gridPng,
+      });
+    } else {
+      sections.push({
+        kind: "metrics",
+        title: "Scaffold-hop crossover",
+        items: [
+          ["parent A", surgery.parentA],
+          ["parent B", surgery.parentB],
+          ["viable children", `${surgery.viable}/${surgery.children}`],
+          ["seed", `${surgery.seed}`],
+          ["compute time", `${fmtCell(surgery.elapsedSeconds)} s`],
+          ["RDKit", surgery.rdkitVersion],
+        ],
+      });
+      sections.push({
+        kind: "table",
+        title: "Crossover litter",
+        columns: ["draw", "child SMILES"],
+        rows: surgery.litter.map((child, i) => [
+          i + 1,
+          child ?? "(no viable crossover)",
+        ]),
+      });
+      sections.push({
+        kind: "image",
+        title: `Parents & children — ${surgery.gridPanels} structure panel(s)`,
+        dataUri: surgery.gridPng,
+      });
+    }
   }
 
   return {
@@ -357,20 +479,28 @@ function bandFromCurve(
 }
 
 /** The live census for the UI button ("what will ship"): figure and
- *  table counts over the same walk the collector performs. */
-export function sessionReportCensus(snapshot: SessionSnapshot): {
+ *  table counts over the same walk the collector performs — image
+ *  sections count separately (the surgery grids) so the button line
+ *  can say "2 figures · 1 structure grid" honestly. */
+export function sessionReportCensus(
+  snapshot: SessionSnapshot,
+  options: SessionReportOptions = {},
+): {
   figures: number;
   tables: number;
   metrics: number;
+  images: number;
 } {
-  const { sections } = collectSessionReport(snapshot);
+  const { sections } = collectSessionReport(snapshot, options);
   let figures = 0;
   let tables = 0;
   let metrics = 0;
+  let images = 0;
   for (const section of sections) {
     if (section.kind === "figure") figures += 1;
     else if (section.kind === "table") tables += 1;
+    else if (section.kind === "image") images += 1;
     else metrics += 1;
   }
-  return { figures, tables, metrics };
+  return { figures, tables, metrics, images };
 }

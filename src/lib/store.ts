@@ -14,6 +14,7 @@ import type {
   MLLearningCurveResponse,
   DatasetPreviewResponse,
   CsvSourceMeta,
+  SurgeryResponse,
 } from "@/lib/toolkit-types";
 
 export type TabId = "overview" | "explorer" | "reference" | "playground" | "download";
@@ -140,6 +141,16 @@ const ML_RESULT_MAX_BYTES = 400_000;
 /** sessionStorage key for the last learning-curve run (100x-127 — the
  *  session-report collector walks it together with mlResult). */
 const LC_RESULT_STORAGE_KEY = "pharmaml.lcResult";
+
+/** (100x-131) sessionStorage key for the last molecule-surgery run —
+ *  the session-report collector walks it so the report gains the
+ *  surgery metrics, the SMILES table and the structure-grid figure. */
+const SURGERY_RESULT_STORAGE_KEY = "pharmaml.surgeryResult";
+
+/** Hard cap on the persisted surgery result JSON (bytes) — the grid
+ *  PNG rides inside as a data URI, so the cap is a whole order larger
+ *  than the ML result's; an oversized grid simply does not persist. */
+const SURGERY_RESULT_MAX_BYTES = 1_500_000;
 
 /** sessionStorage key for the ML run history (newest first). */
 const ML_HISTORY_STORAGE_KEY = "pharmaml.mlHistory";
@@ -669,6 +680,76 @@ function loadLcResult(): MLLearningCurveResponse | null {
   }
 }
 
+/** Validate a persisted surgery payload (100x-131).  Mode-discriminated
+ *  and as light as validateLcResult: a wrong shape restores as "no
+ *  surgery run yet" instead of crashing the report collector.  The grid
+ *  PNG data URI is checked as a prefixed, length-capped string — full
+ *  base64 validation is the bridge's job (it decodes it). */
+function validateSurgeryResult(raw: unknown): SurgeryResponse | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const pngOk =
+    typeof r.gridPng === "string" &&
+    r.gridPng.startsWith("data:image/png;base64,") &&
+    r.gridPng.length < 2_000_000;
+  if (
+    typeof r.summary !== "string" ||
+    !pngOk ||
+    typeof r.elapsedSeconds !== "number" ||
+    !Number.isFinite(r.elapsedSeconds) ||
+    typeof r.rdkitVersion !== "string" ||
+    typeof r.gridPanels !== "number"
+  ) {
+    return null;
+  }
+  if (r.mode === "topology") {
+    if (typeof r.source !== "string" || r.source.length > 300) return null;
+    if (!Array.isArray(r.mutants)) return null;
+    if (!r.mutants.every((m) => typeof m === "string" && m.length <= 300)) return null;
+    return raw as SurgeryResponse;
+  }
+  if (r.mode === "breed") {
+    if (typeof r.parentA !== "string" || typeof r.parentB !== "string") return null;
+    if (r.parentA.length > 300 || r.parentB.length > 300) return null;
+    if (typeof r.children !== "number" || typeof r.seed !== "number") return null;
+    if (typeof r.viable !== "number") return null;
+    if (!Array.isArray(r.litter)) return null;
+    if (!r.litter.every((c) => c === null || (typeof c === "string" && c.length <= 300))) {
+      return null;
+    }
+    return raw as SurgeryResponse;
+  }
+  return null;
+}
+
+/** Read the persisted surgery result (client only, failure-tolerant). */
+function loadSurgeryResult(): SurgeryResponse | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SURGERY_RESULT_STORAGE_KEY);
+    if (!raw) return null;
+    return validateSurgeryResult(JSON.parse(raw));
+  } catch {
+    return null; // corrupted JSON / private mode — start fresh
+  }
+}
+
+/** Persist the surgery result (client only, size-capped, best-effort). */
+function saveSurgeryResult(result: SurgeryResponse | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (result === null) {
+      window.sessionStorage.removeItem(SURGERY_RESULT_STORAGE_KEY);
+      return;
+    }
+    const json = JSON.stringify(result);
+    if (json.length > SURGERY_RESULT_MAX_BYTES) return; // oversized — persistence is optional
+    window.sessionStorage.setItem(SURGERY_RESULT_STORAGE_KEY, json);
+  } catch {
+    /* quota exceeded or private mode — persistence is optional */
+  }
+}
+
 /** Persist the learning-curve result (client only, size-capped, best-effort). */
 function saveLcResult(result: MLLearningCurveResponse | null): void {
   if (typeof window === "undefined") return;
@@ -861,6 +942,11 @@ interface ToolkitStore {
    *  reloads so the session-report collector can walk it). */
   lcResult: MLLearningCurveResponse | null;
   setLcResult: (result: MLLearningCurveResponse | null) => void;
+  /** Last molecule-surgery run, topology or breed — the latest run wins
+   *  (100x-131 — survives sub-tab switches and reloads so the
+   *  session-report collector can walk its grid figure + SMILES table). */
+  surgeryResult: SurgeryResponse | null;
+  setSurgeryResult: (result: SurgeryResponse | null) => void;
   /** Last dataset-preview payload. */
   mlPreview: DatasetPreviewResponse | null;
   setMlPreview: (preview: DatasetPreviewResponse | null) => void;
@@ -1009,6 +1095,11 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => {
   setLcResult: (result) => {
     set({ lcResult: result });
     saveLcResult(result);
+  },
+  surgeryResult: loadSurgeryResult(),
+  setSurgeryResult: (result) => {
+    set({ surgeryResult: result });
+    saveSurgeryResult(result);
   },
   mlPreview: null,
   setMlPreview: (preview) => set({ mlPreview: preview }),
