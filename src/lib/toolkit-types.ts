@@ -915,3 +915,66 @@ export interface MLAdResponse {
   /** Why the bootstrap half was skipped (classification / adModels 0). */
   bootstrapNote: string | null;
 }
+
+/* ------------------------------------------------------------------ */
+/* Learning curve (ml learning-curve — the desktop card's 100x-125     */
+/* web mirror: train-set size vs CV score, "should we assay more?")    */
+/* ------------------------------------------------------------------ */
+
+/** One schedule point of POST /api/ml/learning-curve — both curves
+ *  reduced across folds at one training-set size. */
+export interface MLLearningCurvePoint {
+  /** Absolute training-subset row count this point fit on. */
+  size: number;
+  /** Mean score on the very rows each fit saw (training curve). */
+  trainMean: number;
+  /** Population std of the training scores across folds. */
+  trainStd: number;
+  /** Mean score on each fold's held-out rows (CV curve). */
+  valMean: number;
+  /** Population std of the CV scores across folds. */
+  valStd: number;
+}
+
+/** Response of POST /api/ml/learning-curve — the web twin of the
+ *  desktop ML card's "Learning curve" figure (pharmaml.viz.
+ *  plot_learning_curve's data semantics: the library's default
+ *  10 % … 100 % 8-step schedule, mean ± std across folds at every
+ *  size, and the gap verdict with the same 0.15 threshold). */
+export interface MLLearningCurveResponse {
+  task: "regression" | "classification";
+  model: string;
+  /** "R²" (regression) or "Accuracy" (classification). */
+  metricName: string;
+  /** The fold count the curve was computed with. */
+  folds: 3 | 5 | 10;
+  /** The size schedule as fractions of each fold's train part. */
+  fractions: number[];
+  /** One point per fraction, smallest size first. */
+  points: MLLearningCurvePoint[];
+  /** trainMean − valMean at the largest size (the overfitting gap). */
+  gap: number;
+  /** The library's verdict line (threshold 0.15). */
+  verdict: string;
+  datasetMeta: {
+    nTotal: number;
+    nFeatures: number;
+    kind: "synthetic" | "csv";
+    fileName?: string;
+  };
+  /** Regression GP only: the kernel the curve cloned — learned ONCE on
+   *  the full data by the LML grid search when the request left all
+   *  three slots unset (the sklearn clone semantics), then fixed for
+   *  every refit. */
+  gpKernel?: {
+    lengthScale: number;
+    signalStd: number;
+    noiseStd: number;
+  };
+  /** Classification GP only: (ℓ, σf) learned once on the full data by
+   *  the Laplace-lml grid search, then cloned by every refit. */
+  gpClsKernel?: {
+    lengthScale: number;
+    signalStd: number;
+  };
+}

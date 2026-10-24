@@ -96,6 +96,7 @@ import type {
   MLCompareEntry,
   MLCompareRequest,
   MLCompareResponse,
+  MLLearningCurveResponse,
   MLTrainResponse,
   MLTrainRequest,
   MLTuneRequest,
@@ -912,6 +913,62 @@ function GpBandTooltip({
           acquisition = {fmtNum(p.acq, 4)}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/* -- Learning-curve rows (100x-125): the same stacked-area band recipe
+ *  the GP chart uses — invisible trainBase/valBase + filled spans
+ *  stack to the mean ± std envelope of each curve. -- */
+
+/** One learning-curve chart row (band internals precomputed). */
+interface LcRow {
+  size: number;
+  trainMean: number;
+  valMean: number;
+  trainBase: number;
+  trainSpan: number;
+  valBase: number;
+  valSpan: number;
+}
+
+/** Collapse the response's points into chart rows (bands = ±1 std). */
+function lcRows(result: MLLearningCurveResponse): LcRow[] {
+  return result.points.map((p) => ({
+    size: p.size,
+    trainMean: p.trainMean,
+    valMean: p.valMean,
+    trainBase: p.trainMean - p.trainStd,
+    trainSpan: 2 * p.trainStd,
+    valBase: p.valMean - p.valStd,
+    valSpan: 2 * p.valStd,
+  }));
+}
+
+/** Custom tooltip for the learning curve: the size plus both scores
+ *  with their fold spread in one compact card (the default tooltip
+ *  would list the stacked band internals). */
+function LcTooltip({
+  active,
+  payload,
+  metricName,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: LcRow }>;
+  metricName: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0]?.payload;
+  if (!p) return null;
+  return (
+    <div className="rounded-md border bg-background/95 px-2.5 py-1.5 text-xs shadow-sm">
+      <p className="font-mono tabular-nums">train size = {p.size}</p>
+      <p className="font-mono tabular-nums" style={{ color: CHART.teal }}>
+        training {metricName} = {fmtNum(p.trainMean, 4)}
+      </p>
+      <p className="font-mono tabular-nums" style={{ color: CHART.amber }}>
+        CV {metricName} = {fmtNum(p.valMean, 4)}
+      </p>
     </div>
   );
 }
@@ -2303,6 +2360,13 @@ export function MlPlayground() {
   const [adK, setAdK] = useState("5");
   const [adPct, setAdPct] = useState("95");
   const [adModels, setAdModels] = useState("20");
+  /* Learning curve (100x-125): re-runs the LAST trained configuration
+   * at growing train sizes — works for synthetic AND CSV runs (the
+   * curve judges the parked request, not just a loaded file). */
+  const [lcStatus, setLcStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [lcResult, setLcResult] = useState<MLLearningCurveResponse | null>(null);
+  const [lcError, setLcError] = useState<string | null>(null);
+  const [lcFolds, setLcFolds] = useState("5");
   const lastTrainBodyRef = useRef<MLTrainRequest | null>(null);
   const [maxTrials, setMaxTrials] = useState<string>("12");
   const [searcher, setSearcher] = useState<"random" | "hyperband">("random");
@@ -2790,6 +2854,51 @@ export function MlPlayground() {
     } catch (err) {
       setAdStatus("error");
       setAdError(err instanceof Error ? err.message : "The analysis request failed.");
+    }
+  }
+
+  /** Plot the learning curve of the last trained configuration —
+   *  the web mirror of the desktop ML card's "Learning curve" button
+   *  (pharmaml.viz.plot_learning_curve): the parked train request is
+   *  re-sent, the server refits it at the library's default 8-step
+   *  size schedule with k-fold CV at every size, and both curves land
+   *  here with mean ± std bands and the gap verdict. */
+  async function runLearningCurve() {
+    const last = lastTrainBodyRef.current;
+    if (!last) {
+      setLcError("Train a model first — the curve re-runs that configuration at growing train sizes.");
+      setLcStatus("error");
+      return;
+    }
+    setLcStatus("running");
+    setLcError(null);
+    const body: Record<string, unknown> = {
+      ...last,
+      folds: Number.parseInt(lcFolds, 10) as 3 | 5 | 10,
+    };
+    try {
+      const res = await fetch("/api/ml/learning-curve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        const message =
+          typeof data === "object" && data !== null && "error" in data
+            ? `${String((data as { error: unknown }).error)}${
+                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+                  : ""
+              }`
+            : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      setLcResult(data as MLLearningCurveResponse);
+      setLcStatus("done");
+    } catch (err) {
+      setLcError(err instanceof Error ? err.message : "The learning-curve request failed.");
+      setLcStatus("error");
     }
   }
 
@@ -5522,6 +5631,234 @@ export function MlPlayground() {
               hierarchical model to view it.
             </p>
           )
+        ) : null}
+
+        {/* --------------------- Learning curve (100x-125) --------------------- */}
+        {result && status !== "running" ? (
+          <Card className="overflow-hidden py-0 shadow-sm">
+            <CardHeader className="border-b bg-muted/30 py-3">
+              <CardTitle className="flex items-center gap-1.5 text-sm">
+                <TrendingUp className="size-3.5 text-primary" aria-hidden />
+                Learning curve — is more data still buying accuracy?
+              </CardTitle>
+              <CardDescription className="text-xs">
+                The last trained configuration refit at growing train sizes (the web twin of
+                the desktop card&rsquo;s plot_learning_curve figure, 10 % … 100 % in 8 steps,
+                k-fold CV at every size). Converging plateau → more rows will not help; CV
+                curve still climbing at the right edge → assay more compounds; a persistent
+                gap → overfitting, not a data problem.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 pb-4">
+              {/* Knobs + run */}
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="w-28">
+                  <Label className="text-[11px] text-muted-foreground">CV folds</Label>
+                  <Select value={lcFolds} onValueChange={setLcFolds}>
+                    <SelectTrigger
+                      className="mt-1 h-8 text-xs"
+                      aria-label="cross-validation folds for the learning curve"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">3-fold</SelectItem>
+                      <SelectItem value="5">5-fold</SelectItem>
+                      <SelectItem value="10">10-fold</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={runLearningCurve}
+                  disabled={lcStatus === "running"}
+                  className="h-8"
+                >
+                  {lcStatus === "running" ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden /> Computing…
+                    </>
+                  ) : (
+                    <>
+                      <Play className="size-3.5" aria-hidden /> Plot learning curve
+                    </>
+                  )}
+                </Button>
+                <p className="text-[11px] text-muted-foreground">
+                  re-runs {modelSpec.label} on the last trained {result.datasetMeta.nTotal} rows
+                  {result.datasetMeta.source ? ` (${result.datasetMeta.source.fileName})` : ""} —
+                  the curve replaces nothing, the parity chart stays.
+                </p>
+              </div>
+
+              {lcError ? (
+                <Alert variant="destructive">
+                  <TriangleAlert className="size-4" aria-hidden />
+                  <AlertTitle>Learning curve failed</AlertTitle>
+                  <AlertDescription>{lcError}</AlertDescription>
+                </Alert>
+              ) : null}
+
+              {lcResult ? (
+                <>
+                  {/* Verdict strip */}
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+                      <p className="text-xs text-muted-foreground">Train/CV gap (full size)</p>
+                      <p
+                        className={`font-mono text-xl font-semibold tabular-nums ${
+                          lcResult.gap > 0.15
+                            ? "text-rose-600 dark:text-rose-400"
+                            : "text-emerald-600 dark:text-emerald-400"
+                        }`}
+                      >
+                        {fmtNum(lcResult.gap, 3)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm sm:col-span-2">
+                      <p className="text-xs text-muted-foreground">Verdict</p>
+                      <p className="text-sm font-medium leading-snug">{lcResult.verdict}</p>
+                    </div>
+                  </div>
+
+                  {lcResult.gpKernel ? (
+                    <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+                      GP kernel cloned from the run&rsquo;s learned values (ℓ ={" "}
+                      {fmtNum(lcResult.gpKernel.lengthScale, 3)}, σf ={" "}
+                      {fmtNum(lcResult.gpKernel.signalStd, 3)}, σn ={" "}
+                      {fmtNum(lcResult.gpKernel.noiseStd, 3)}) — resolved once on the full data,
+                      then fixed for every refit.
+                    </p>
+                  ) : null}
+                  {lcResult.gpClsKernel ? (
+                    <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+                      GP kernel cloned from the run&rsquo;s learned values (ℓ ={" "}
+                      {fmtNum(lcResult.gpClsKernel.lengthScale, 3)}, σf ={" "}
+                      {fmtNum(lcResult.gpClsKernel.signalStd, 3)}) — resolved once on the full
+                      data, then fixed for every refit.
+                    </p>
+                  ) : null}
+
+                  {/* Both curves with ±1σ fold-spread bands */}
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                      {lcResult.metricName} vs training samples — {lcResult.folds}-fold CV, mean ±
+                      1 std across folds
+                    </p>
+                    <div className="h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart
+                          data={lcRows(lcResult)}
+                          margin={{ top: 6, right: 12, left: -14, bottom: 0 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke={CHART.gridStroke}
+                            strokeOpacity={CHART.gridStrokeOpacity}
+                          />
+                          <XAxis
+                            dataKey="size"
+                            type="number"
+                            domain={["dataMin", "dataMax"]}
+                            tick={CHART.axisTick}
+                            tickLine={false}
+                            axisLine={false}
+                            label={{
+                              value: "training samples",
+                              position: "insideBottomRight",
+                              offset: -2,
+                              fontSize: 10,
+                              fill: "#78716c",
+                            }}
+                          />
+                          <YAxis
+                            tick={CHART.axisTick}
+                            tickLine={false}
+                            axisLine={false}
+                            tickFormatter={(v: number) => fmtNum(v, 2)}
+                          />
+                          <Tooltip
+                            cursor={{ strokeDasharray: "3 3" }}
+                            content={
+                              <LcTooltip metricName={lcResult.metricName} />
+                            }
+                          />
+                          <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                          {/* Training band + line */}
+                          <Area
+                            dataKey="trainBase"
+                            stackId="lcTrain"
+                            stroke="none"
+                            fill="transparent"
+                            legendType="none"
+                            isAnimationActive={false}
+                          />
+                          <Area
+                            dataKey="trainSpan"
+                            stackId="lcTrain"
+                            stroke="none"
+                            fill={CHART.teal}
+                            fillOpacity={0.15}
+                            name="training ± 1 std"
+                            legendType="none"
+                            isAnimationActive={false}
+                          />
+                          <Line
+                            dataKey="trainMean"
+                            stroke={CHART.teal}
+                            strokeWidth={2.2}
+                            dot={{ r: 2.5, fill: CHART.teal, strokeWidth: 0 }}
+                            name={`training ${lcResult.metricName} (${fmtNum(
+                              lcResult.points[lcResult.points.length - 1]?.trainMean ?? 0,
+                              3
+                            )})`}
+                            isAnimationActive={false}
+                          />
+                          {/* CV band + line */}
+                          <Area
+                            dataKey="valBase"
+                            stackId="lcVal"
+                            stroke="none"
+                            fill="transparent"
+                            legendType="none"
+                            isAnimationActive={false}
+                          />
+                          <Area
+                            dataKey="valSpan"
+                            stackId="lcVal"
+                            stroke="none"
+                            fill={CHART.amber}
+                            fillOpacity={0.15}
+                            name="CV ± 1 std"
+                            legendType="none"
+                            isAnimationActive={false}
+                          />
+                          <Line
+                            dataKey="valMean"
+                            stroke={CHART.amber}
+                            strokeWidth={2.2}
+                            dot={{ r: 2.5, fill: CHART.amber, strokeWidth: 0 }}
+                            name={`CV ${lcResult.metricName} (${fmtNum(
+                              lcResult.points[lcResult.points.length - 1]?.valMean ?? 0,
+                              3
+                            )})`}
+                            isAnimationActive={false}
+                          />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+                      Read it like the desktop figure: both curves flattening together means the
+                      next 500 assays buy almost nothing; the amber CV curve still rising at the
+                      right edge means they are worth running; a teal band sitting far above the
+                      amber one means the model memorises — regularise or simplify instead of
+                      collecting more rows.
+                    </p>
+                  </div>
+                </>
+              ) : null}
+            </CardContent>
+          </Card>
         ) : null}
 
         {/* ------------------------- Applicability domain ------------------------- */}

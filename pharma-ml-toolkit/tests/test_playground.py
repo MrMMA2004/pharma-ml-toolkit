@@ -6309,3 +6309,218 @@ class TestReview124Gui:
             if widget.winfo_class() == "TLabel"
         )
         assert "scored 2D structure grid" in dump
+
+
+class TestReview125Gui:
+    """Round 100x-125: the Pareto front's colour-coded structure grid
+    (molecule_grid_figure's colours row + the front card's Draw front
+    button) — the front's molecules finally visible, boundary corners
+    accented teal, interior trade-offs muted neutral."""
+
+    TEAL = "#0F766E"
+    NEUTRAL = "#525252"
+    DRUGLIKE = "Multi-objective (QED × MW × TPSA)"
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _run_druglike(app: Any) -> None:
+        app._objective_combo.set(TestReview125Gui.DRUGLIKE)
+        app._pop_size.set("12")
+        app._generations.set("4")
+        app._run_evolution()
+        assert TestReview125Gui._drain(app), "evolution job hung"
+
+    # -- molecule_grid_figure's colours row ------------------------------ #
+    def test_grid_colors_accent_title_and_border(self, playground: Any) -> None:
+        figure = playground.molecule_grid_figure(
+            [("#1 · C1CCNCC1", "C1CCNCC1"), ("#2 · c1ccccc1", "c1ccccc1")],
+            title="coloured",
+            colors=[TestReview125Gui.TEAL, None],
+        )
+        try:
+            accent, classic = figure.get_axes()[0], figure.get_axes()[1]
+            # the accent speaks twice: title colour + a visible border
+            assert accent.title.get_color() == TestReview125Gui.TEAL
+            spine = accent.spines["top"]
+            assert spine.get_visible() and spine.get_edgecolor()[:3] == (
+                15.0 / 255.0, 118.0 / 255.0, 110.0 / 255.0,
+            )
+            # the classic panel keeps the uniform look: default title
+            # colour, border still hidden
+            assert classic.title.get_color() != TestReview125Gui.TEAL
+            assert not classic.spines["top"].get_visible()
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
+
+    def test_grid_colors_mismatch_never_shifts(self, playground: Any) -> None:
+        # a shorter list pads (entry 2 keeps the classic look), a longer
+        # one is truncated -- the same contract as the scores row
+        short = playground.molecule_grid_figure(
+            [("#1 · C1CCNCC1", "C1CCNCC1"), ("#2 · c1ccccc1", "c1ccccc1")],
+            title="pad",
+            colors=[TestReview125Gui.TEAL],
+        )
+        try:
+            assert short.get_axes()[0].title.get_color() == TestReview125Gui.TEAL
+            assert short.get_axes()[1].title.get_color() != TestReview125Gui.TEAL
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(short)
+        long = playground.molecule_grid_figure(
+            [("#1 · C1CCNCC1", "C1CCNCC1")],
+            title="cut",
+            colors=[TestReview125Gui.TEAL, TestReview125Gui.NEUTRAL, "#B45309"],
+        )
+        try:
+            titles = [axis.title.get_color() for axis in long.get_axes()]
+            assert TestReview125Gui.TEAL in titles, titles
+            assert TestReview125Gui.NEUTRAL not in titles, titles
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(long)
+
+    def test_grid_colors_keep_bare_panels_for_none(self, playground: Any) -> None:
+        figure = playground.molecule_grid_figure([("m\nC1CCNCC1", "C1CCNCC1")], title="x")
+        try:
+            assert all(
+                axis.title.get_color() not in (TestReview125Gui.TEAL, TestReview125Gui.NEUTRAL)
+                for axis in figure.get_axes()
+            )
+            assert all(
+                not axis.spines["top"].get_visible() for axis in figure.get_axes()
+            )
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
+
+    def test_grid_colors_reach_unparseable_note(self, playground: Any) -> None:
+        # the honest note keeps its slot AND carries the accent colour
+        figure = playground.molecule_grid_figure(
+            [("#3 · bad", "not-a-smiles")],
+            title="note",
+            colors=[TestReview125Gui.NEUTRAL],
+        )
+        try:
+            texts = [t for t in figure.get_axes()[0].texts]
+            assert texts and texts[0].get_color() == TestReview125Gui.NEUTRAL
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
+
+    # -- the Pareto front card's draw-front button ---------------------- #
+    def test_draw_front_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._pareto_front = None
+        app._pareto_result = None
+        app._gen_draw_front()
+        assert any("Nothing to draw" in str(a) for _n, a in quiet_dialogs)
+        assert getattr(app._pareto_host, "_pg_figure", None) is None
+
+    def test_draw_front_full_path(self, app: Any) -> None:
+        self._run_druglike(app)
+        assert app._pareto_front is not None and len(app._pareto_front) == 7
+        # the run auto-plotted the scatter first (the established
+        # pattern: draw-front REPLACES it, plot-front brings it back)
+        assert app._pareto_host._pg_figure is not None
+        app._gen_draw_front()
+        assert self._drain(app), "the draw-front job hung"
+        figure = app._pareto_host._pg_figure
+        assert figure is not None, "the front structure grid never landed"
+        axes = figure.get_axes()
+        # the pinned deterministic run: 7 front members, 5 of them
+        # boundary corners (crowding +inf) accented teal, 2 muted
+        title_colors = [axis.title.get_color() for axis in axes]
+        assert title_colors.count(self.TEAL) == 5, title_colors
+        assert title_colors.count(self.NEUTRAL) == 2, title_colors
+        # every member panel carries its objective values as the score
+        # row (3 objectives: qed · mw_band · tpsa_band)
+        labels = [axis.get_xlabel() for axis in axes]
+        scored = [label for label in labels if label.startswith("qed ")]
+        assert len(scored) == 7, labels
+        assert all("mw_band" in label and "tpsa_band" in label for label in scored)
+        titles = [axis.get_title() for axis in axes]
+        assert any(title.startswith("#1") for title in titles), titles
+        # Plot front brings the scatter back (the replace/restore pair)
+        app._plot_pareto_front()
+        assert app._pareto_host._pg_figure is not None
+        scatter_label = next(
+            (axis.get_xlabel() for axis in app._pareto_host._pg_figure.get_axes()), ""
+        )
+        assert not scatter_label.startswith("qed ")
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_pareto_card_carries_draw_front_button(self, app: Any) -> None:
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+            if widget.winfo_class() == "TButton"
+        )
+        assert "Draw front" in dump
+        assert "Plot front" in dump
+        assert "Save front as CSV…" in dump
+
+    def test_module_docstring_records_round_125(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-125" in doc
+        assert "colour-coded 2D structure grid" in doc
+
+    def test_home_guide_mentions_front_grid(self, app: Any, playground: Any) -> None:
+        # the home tab's "What lives where" card tells the user the
+        # front's members draw colour-coded
+        guide = None
+        for title, _subtitle, shell in playground._CARD_INDEX:
+            if title != "What lives where":
+                continue
+            try:
+                live = bool(shell.winfo_exists())
+            except Exception:  # noqa: BLE001 - destroyed earlier shell
+                live = False
+            if live:
+                guide = shell
+                break
+        assert guide is not None
+        dump = "\n".join(
+            str(widget.cget("text"))
+            for widget in app._walk_widgets(guide)
+            if widget.winfo_class() == "TLabel"
+        )
+        assert "colour-coded" in dump and "boundary corners" in dump

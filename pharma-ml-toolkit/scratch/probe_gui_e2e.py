@@ -747,6 +747,70 @@ shutil.rmtree(_tmp124, ignore_errors=True)
 _plt.close("all")
 print("HTML session report: real write + guard OK")
 
+# -- 100x-125 additions: the Pareto front's colour-coded grid ------- #
+# a real multi-objective run, then the front card's draw-front button
+app._jump_to_tab(7)
+app._objective_combo.set("Multi-objective (QED × MW × TPSA)")
+app._pop_size.set("12")
+app._generations.set("4")
+app._run_evolution()
+assert pump_until_idle(timeout=240), "multi-objective evolution hung"
+# NB: earlier sections leave mutation/crossover/operator state behind,
+# so the front size is NOT the fresh-app pin here -- the colour split is
+# derived from THIS front's own crowding verdict (the honest contract)
+import math as _math
+
+_front = app._pareto_front
+assert _front is not None and len(_front) >= 2, "the front never filled"
+_crowding = _front.crowding_distance()
+_shown = min(len(_front.smiles), 12)
+_expected_teal = sum(
+    1 for _i in range(_shown) if _math.isinf(_crowding[_i])
+)
+_expected_neutral = _shown - _expected_teal
+_registry_before = len(app._session_figures)
+app._gen_draw_front()
+assert pump_until_idle(timeout=240), "draw-front job hung"
+_grid = getattr(app._pareto_host, "_pg_figure", None)
+assert _grid is not None, "the front structure grid never landed"
+_title_colors = [axis.title.get_color() for axis in _grid.get_axes()]
+assert _title_colors.count("#0F766E") == _expected_teal, (
+    _title_colors,
+    _expected_teal,
+)  # boundary corners
+assert _title_colors.count("#525252") == _expected_neutral, (
+    _title_colors,
+    _expected_neutral,
+)  # interior members
+_labels = [axis.get_xlabel() for axis in _grid.get_axes()]
+assert sum(label.startswith("qed ") for label in _labels) == _shown, _labels[:3]
+# the grid replaced the scatter's registry entry IN PLACE (the registry
+# is host-keyed) -- the front card's figure stays reportable content
+_entry = next(
+    (e for e in app._session_figures if e[0] is app._pareto_host), None
+)
+assert _entry is not None and _entry[2] is _grid, "the grid never registered"
+assert _entry[1] == "Pareto front structure grid", _entry[1]
+assert any(
+    e[0] is app._pareto_host for e in app._live_session_figures()
+), "the front grid is not live"
+# Plot front restores the scatter (the replace/restore pair)
+app._plot_pareto_front()
+assert app._pareto_host._pg_figure is not None
+_scatter_labels = [
+    axis.get_xlabel() for axis in app._pareto_host._pg_figure.get_axes()
+]
+assert not any(label.startswith("qed ") for label in _scatter_labels)
+# the guard: no front -> the honest info
+_saved_front, app._pareto_front = app._pareto_front, None
+_saved_result, app._pareto_result = app._pareto_result, None
+app._gen_draw_front()
+assert any("Nothing to draw" in str(a) for a in DIALOGS), DIALOGS
+app._pareto_front, app._pareto_result = _saved_front, _saved_result
+DIALOGS.clear()
+_plt.close("all")
+print("Pareto front grid: run + colours + registry + restore + guard OK")
+
 # the live-card census grew with the two surgery cards
 assert len(app._live_cards()) >= 68, f"live cards: {len(app._live_cards())}"
 print("card census:", len(app._live_cards()))

@@ -106,7 +106,10 @@ A tabbed graphical interface opens with every calculation domain of the
   first→last history table; multi-objective runs fill the Pareto front
   card: the audit line, the non-dominated table (with the
   crowding-distance column and the deepest hidden trade-off rank), the
-  objective-pair scatter and a CSV export of the front; and the two
+  objective-pair scatter, a CSV export of the front, and (100x-125) a
+  colour-coded 2D structure grid of the front's molecules -- boundary
+  corners accented teal, interior trade-offs muted, objective values
+  under every panel; and the two
   molecule-surgery cards answer what-if questions WITHOUT a run --
   enumerate one molecule's one-step ring-size move set
   (``ring_topology_moves``) or breed two parents into hybrid children
@@ -1651,7 +1654,10 @@ def _truncate_caption_text(text: str, width: int = 34) -> str:
 
 
 def molecule_grid_figure(
-    entries: list[tuple[str, str]], title: str, scores: list[str] | None = None
+    entries: list[tuple[str, str]],
+    title: str,
+    scores: list[str] | None = None,
+    colors: list[str] | None = None,
 ) -> Any:
     """One matplotlib figure of captioned 2D structure panels (100x-123).
 
@@ -1668,6 +1674,12 @@ def molecule_grid_figure(
     ranked leaderboard reads at a glance.  A shorter list pads with
     blanks and a longer one is truncated (a caller's off-by-one can
     never shift the grid); ``None`` keeps the classic bare panels.
+
+    (100x-125) ``colors`` adds one accent colour per entry: the caption
+    AND the panel border take it (a colour-blind-safe encoding of a
+    split the score row cannot carry -- the Pareto front's boundary
+    corners vs its interior trade-offs).  The same pad/truncate contract
+    as ``scores``; ``None`` keeps the uniform classic look.
     """
     import matplotlib.pyplot as plt
     import numpy as np
@@ -1687,6 +1699,10 @@ def molecule_grid_figure(
     if scores is not None:
         for index in range(min(len(scores), len(entries))):
             score_lines[index] = scores[index] or None
+    color_values: list[str | None] = [None] * len(entries)
+    if colors is not None:
+        for index in range(min(len(colors), len(entries))):
+            color_values[index] = colors[index] or None
     for panel in panels:
         # NB: axis("off") would hide the xlabel machinery too (axison
         # skips the whole xaxis at draw time), so the scores row would
@@ -1698,7 +1714,9 @@ def molecule_grid_figure(
         panel.set_yticks([])
     if not entries:
         panels[0].text(0.5, 0.5, "nothing to draw", ha="center", va="center", fontsize=11)
-    for panel, (caption, smiles), score_line in zip(panels, entries, score_lines):
+    for panel, (caption, smiles), score_line, accent in zip(
+        panels, entries, score_lines, color_values
+    ):
         mol = Chem.MolFromSmiles(smiles) if smiles else None
         if mol is None:
             panel.text(
@@ -1708,11 +1726,22 @@ def molecule_grid_figure(
                 ha="center",
                 va="center",
                 fontsize=9,
+                color=accent or "black",
             )
             continue
         raster = np.asarray(Draw.MolToImage(mol, size=(300, 300)))
         panel.imshow(raster)
-        panel.set_title(caption, fontsize=8, pad=6)
+        if accent is not None:
+            # the accent speaks twice -- caption text + a visible border
+            # -- so the split survives grayscale printing and colour
+            # vision differences alike.
+            panel.set_title(caption, fontsize=8, pad=6, color=accent)
+            for spine in panel.spines.values():
+                spine.set_visible(True)
+                spine.set_color(accent)
+                spine.set_linewidth(1.6)
+        else:
+            panel.set_title(caption, fontsize=8, pad=6)
         if score_line is not None:
             panel.set_xlabel(score_line, fontsize=8.5, labelpad=2)
     figure.suptitle(title, fontsize=10)
@@ -3760,7 +3789,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "SMARTS objectives with the GA or reinforcement learning; "
                     "adaptive runs show the operator-mix learning curve, RL runs "
                     "the prior-drift introspection, the leaderboard's top "
-                    "molecules draw as a scored 2D structure grid, and the "
+                    "molecules draw as a scored 2D structure grid, the Pareto "
+                    "front's members draw colour-coded (boundary corners "
+                    "accented, interior trade-offs muted), and the "
                     "surgery cards enumerate one molecule's ring moves or breed "
                     "two parents -- then draw every mutant or child the same "
                     "way."
@@ -13593,6 +13624,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             pareto_buttons, "Save front as CSV…", self._save_pareto_front
         )
         save_front_btn.pack(side="left", padx=(10, 0))
+        # (100x-125) the front's molecules as 2D structure panels -- the
+        # table and the scatter kept them invisible until now.  Boundary
+        # corners accented, interior trade-offs muted; each panel's score
+        # row carries the member's objective values.
+        draw_front_btn = self._action_button(
+            pareto_buttons,
+            "Draw front",
+            self._gen_draw_front,
+            tooltip="The front's molecules as 2D structure panels, boundary "
+            "corners (best/worst on some objective) accented and interior "
+            "trade-offs muted, objective values under each panel -- Plot "
+            "front brings the scatter back.",
+        )
+        draw_front_btn.pack(side="left", padx=(10, 0))
         self._pareto_host = self._figure_host(pareto, height=300)
 
         # (100x-122) molecule surgery -- the two standalone what-if tools
@@ -14238,6 +14283,72 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "pareto_front.csv",
             "Pareto front",
         )
+
+    def _gen_draw_front(self) -> None:
+        """Draw the front's molecules as a colour-coded 2D grid (100x-125).
+
+        The front card tabulated its members and scattered them in
+        objective space, but the molecules themselves stayed invisible.
+        The grid gives every member a panel -- its objective values as
+        the score row -- and encodes NSGA-II's crowding verdict in
+        colour: boundary members (best or worst on some objective,
+        crowding distance +inf) accented teal, interior trade-offs
+        muted neutral.  ``Plot front`` brings the scatter back; a new
+        multi-objective run re-plots it (the established
+        figure-replaces-figure pattern of the ML card's learning curve).
+        """
+        front = self._pareto_front
+        if front is None:
+            messagebox.showinfo(
+                "Nothing to draw",
+                "Run a multi-objective evolution first -- the structure grid "
+                "draws that run's Pareto front.",
+            )
+            return
+        if not self._require_pharmaml() or not self._require(
+            "rdkit", "the front structure grid"
+        ) or not self._require("matplotlib", "the front structure grid"):
+            return
+
+        def work() -> Any:
+            import math
+
+            crowding = front.crowding_distance()
+            shown = min(len(front.smiles), 12)
+            entries: list[tuple[str, str]] = []
+            scores: list[str] = []
+            colors: list[str] = []
+            corners = 0
+            for position in range(shown):
+                smiles = str(front.smiles[position])
+                values = front.values[position]
+                scores.append(
+                    " · ".join(
+                        f"{name} {float(values[name]):.3g}" for name in front.objectives
+                    )
+                )
+                entries.append(
+                    (f"#{position + 1} · {_truncate_caption_text(smiles, 26)}", smiles)
+                )
+                if position < len(crowding) and math.isinf(crowding[position]):
+                    colors.append("#0F766E")  # teal -- a boundary corner
+                    corners += 1
+                else:
+                    colors.append("#525252")  # neutral -- interior trade-off
+            title = (
+                f"Pareto front — {len(front)} member(s), boundary corners "
+                f"accented ({corners} of the {shown} shown)"
+            )
+            if len(front.smiles) > shown:
+                title += f", first {shown} in leaderboard order"
+            return molecule_grid_figure(
+                entries, title=title, scores=scores, colors=colors
+            )
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._pareto_host, figure)
+
+        self._start_job("Pareto front structure grid", work, render)
 
     # ------------------------------------------------------------------ #
     # Utilities tab -- the rar's own file & table operations, one by one

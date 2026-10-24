@@ -716,3 +716,28 @@ count drops to 43 by the audit's grep, the honest direction), and
 `figure_to_base64` moves from plumbing to "the HTML report's embed
 path". The remaining 43 are the round-7/8 classification: containers,
 constants, verified absorptions.
+
+### Round 10 (100x-125) — the front draws its molecules; the web twin gains the learning curve
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: 244 public symbols, 43 zero-hit — the
+documented floor, unchanged, with the round-124 absorptions
+spot-verified in source AGAIN this round (`bootstrap_uncertainty` is
+the engine the AD card's `sensitivity_associations`/bootstrap
+ensemble drives, `ModelInputReport` is what `validate_bundle_input`
+returns at the bundle-audit card, `TrialResult` rows are the tuner
+card's trials CSV export, `ring_topology_mutate` is the GA's topology
+mutation operator). The library axis holds. The round's two genuine
+gaps were the ones round 124's handover named — on the GUI's own
+content surfaces and the web twin:
+
+| Surface | The 1.2.64 fix |
+| --- | --- |
+| Generative ▸ Pareto front card | **Draw front** — the front's members as a colour-coded 2D structure grid (`molecule_grid_figure(colors=…)`): boundary corners (crowding +inf) accented teal, interior trade-offs muted neutral, objective values as every panel's score row. `Plot front` restores the scatter |
+| Web ▸ ML Training tab | **Learning curve** — `POST /api/ml/learning-curve` + `src/lib/learning-curve.ts` + the verdict-strip/band-chart card: the desktop figure's data semantics (10 % … 100 % in 8 steps, k-fold CV per size, mean ± std bands, the 0.15 gap verdict), parity-guarded by `probe_lc_parity_125.{py,ts}` + `TestLearningCurveContract` (fractions bit-identical, verdict strings byte-identical) |
+
+The 43 zero-hit are unchanged: containers, constants, and verified
+absorptions — the classification that has held for three consecutive
+re-audits. The rar/upload/notebook axes: 119/119, zero-hit 0, all
+three probes green after the round's edits.

@@ -10,6 +10,53 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.64] — 2026-10-24
+
+### Added — the round-10 full review (100x-125): the Pareto front's colour-coded structure grid and the web learning curve
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a tenth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: 43 zero-hit symbols at the documented floor — the
+round-124 set, every absorption re-verified in source this round:
+`bootstrap_uncertainty` behind the AD card's sensitivity engine,
+`ModelInputReport` behind `validate_bundle_input` at the bundle audit
+card, `TrialResult` behind the tuner's trials CSV export,
+`ring_topology_mutate` inside the GA's topology mutation operator).
+The two genuine gaps closed this round sit where round 124 pointed
+them: the front's molecules were still invisible, and the web twin
+still lacked the desktop's learning-curve figure:
+
+| Surface | What 1.2.64 adds |
+| --- | --- |
+| Generative ▸ Pareto front card | **Draw front** — the front's members as 2D structure panels (top 12 in leaderboard order), each panel's score row carrying the member's objective values, and NSGA-II's crowding verdict encoded in colour: **boundary corners (best/worst on some objective, crowding +inf) accented teal, interior trade-offs muted neutral** — the accent speaks twice (caption colour + a visible panel border) so the split survives grayscale printing and colour-vision differences alike. `Plot front` brings the scatter back (the established figure-replaces-figure pattern) |
+| `molecule_grid_figure` | An optional **colours row**: one accent colour per entry (caption + border). The same pad/truncate contract as the scores row — a shorter list pads with classic panels, a longer one is truncated, so a caller's off-by-one can never shift the grid |
+| Web ▸ ML Training tab | **Learning curve — is more data still buying accuracy?** — the web twin of the desktop card's `plot_learning_curve` figure. New `POST /api/ml/learning-curve` re-runs the parked train request (synthetic OR CSV) at the library's default 10 % … 100 % 8-step schedule with k-fold CV (3/5/10) at every size; both curves render with mean ± 1 std fold-spread bands (the GP chart's stacked-area recipe), the gap verdict strip, and the three-reading hint. Regression GP with unset kernel slots clones the run's LML-learned kernel (ONE full-data fit, then fixed for every refit — the sklearn clone semantics) |
+| Web ▸ ML Training tab | `src/lib/learning-curve.ts` — the pure module the route imports: the numpy-mirroring `linspace(0.1, 1.0, 8)` schedule, the 0.15 gap threshold, the byte-mirrored verdict strings, and the fold-reduction engine |
+
+- The contract parity guard `scratch/probe_lc_parity_125.{py,ts}` +
+  `TestLearningCurveContract`: the fractions match **bit-for-bit**
+  (the TS linspace reproduces numpy's arithmetic exactly), the gap
+  threshold agrees (0.15, read from the shipped Python source), and
+  the verdict strings compare **byte-for-byte** — the Python side
+  reads them off REAL figures the shipped library produced (an
+  overfitting deep tree, a converging OLS), the TS side formats the
+  SAME parsed gaps. The reduction engine is pinned on the TS side
+  against a hand-computed fixture (prefix subsampling of each fold's
+  train part, 1-based fold slots, population std).
+- The same one-message verdict convention as the desktop: the gap
+  strip colours rose over 0.15, emerald under, exactly where the
+  verdict text flips.
+
+### Fixed
+
+- The environment's /tmp wipe re-flipped executable bits across the
+  whole tree (112 EXE002 ruff hits) — the de-execute walk ran again.
+- A stale display artifact (`[m` swallowed by the terminal) briefly
+  looked like a corrupted type-ignore comment; hexdump proved the file
+  correct — no change needed, recorded so the next round does not
+  chase the same ghost.
+
 ## [1.2.63] — 2026-10-24
 
 ### Added — the round-9 full review (100x-124): the HTML session report and the scored leaderboard grid

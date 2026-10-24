@@ -266,3 +266,79 @@ class TestVariableGenesParity:
         assert odd[-1]["gene"] == "GENE_C" and odd[-1]["mad"] == 0.0
         tie_genes = [row["gene"] for row in odd if row["mad"] == 2.0]
         assert tie_genes == ["GENE_A", "GENE_B", "GENE_E", "GENE_F", "GENE_J"], tie_genes
+
+
+class TestLearningCurveContract:
+    """learning-curve.ts vs pharmaml.viz.plot_learning_curve (the
+    100x-125 pair).
+
+    The web ML Training tab's "Learning curve" card mirrors the desktop
+    ML card's button.  The per-point numbers are engine-specific by
+    design (sklearn vs the TS twin), so this guard pins the CONTRACT
+    the two cards share: the default size schedule (numpy
+    ``linspace(0.1, 1.0, 8)`` — the TS linspace must reproduce numpy's
+    arithmetic bit-for-bit), the gap threshold (0.15, read from the
+    shipped Python source), and the two verdict strings — the Python
+    side reads them off REAL figures the shipped library produced (one
+    overfitting tree, one converging OLS), the TS side formats the SAME
+    parsed gaps, and the strings compare byte-for-byte.  The reduction
+    engine itself is pinned on the TS side against a hand-computed
+    fixture (prefix subsampling of each fold's train part, 1-based fold
+    slots, population std).
+    """
+
+    LC_TS = REPO_ROOT / "src" / "lib" / "learning-curve.ts"
+
+    @pytest.mark.skipif(
+        not LC_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src/lib/learning-curve.ts) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+    def test_learning_curve_contract(self) -> None:
+        _run(
+            [sys.executable, str(TOOLKIT_ROOT / "scratch" / "probe_lc_parity_125.py")],
+            TOOLKIT_ROOT,
+        )
+        ref = json.loads(Path("/tmp/lc_ref_125.json").read_text())
+        # the TS twin formats the very gaps the Python figures printed
+        gaps = [str(case["gap"]) for case in ref["cases"] if case["gap"] >= 0]
+        _run(
+            [BUN, "run", "scratch/probe_lc_parity_125.ts", *gaps],
+            REPO_ROOT,
+        )
+        ts = json.loads(Path("/tmp/lc_ts_125.json").read_text())
+
+        # 1. the default schedule: same 8 fractions, bit-for-bit (both
+        #    compute start + step*i with the last element pinned to 1)
+        assert len(ts["fractions"]) == len(ref["fractions"]) == 8
+        for ts_fraction, ref_fraction in zip(ts["fractions"], ref["fractions"]):
+            assert abs(ts_fraction - ref_fraction) <= 1e-12, (ts_fraction, ref_fraction)
+        assert ts["fractions"][-1] == 1.0 and ref["fractions"][-1] == 1.0
+        assert ref["fractions"][0] == 0.1
+
+        # 2. the gap threshold: both sides agree on the 0.15 cut
+        assert ts["threshold"] == ref["threshold"] == 0.15
+
+        # 3. the verdict strings: the TS twin formats the SAME gap the
+        #    Python figure printed -> byte-identical strings
+        for case in ref["cases"]:
+            if case["gap"] < 0:
+                continue
+            key = str(case["gap"])
+            assert key in ts["verdicts"], (key, sorted(ts["verdicts"]))
+            assert ts["verdicts"][key] == case["verdict"], (key, ts["verdicts"][key], case["verdict"])
+        # the boundary: the shared 0.15 cut flips the verdict between
+        # 0.149999 and 0.150001 (both sides exclusive at the threshold)
+        converging = "curves converging — additional data has diminishing returns"
+        assert ts["verdicts"]["0.149999"] == converging
+        assert ts["verdicts"]["0.150001"].startswith("gap ≈ 0.15")
+        assert ts["verdicts"]["0.150001"] != converging
+
+        # 4. the reduction engine: the hand-computed fixture (prefix
+        #    cut, 1-based slots, population std) — see the probe source
+        engine = ts["engine"]
+        assert [(p["size"], p["trainMean"], p["trainStd"], p["valMean"], p["valStd"]) for p in engine] == [
+            (2, 17, 5, 101.5, 0.5),
+            (4, 19, 5, 101.5, 0.5),
+        ]
