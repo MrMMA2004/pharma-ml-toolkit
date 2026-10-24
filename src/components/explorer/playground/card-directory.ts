@@ -31,7 +31,8 @@ export type PlaygroundTabId =
   | "docking"
   | "features"
   | "ligandprep"
-  | "reconciler";
+  | "reconciler"
+  | "generative";
 
 export interface PlaygroundCardEntry {
   /** Stable slug (also the finder row's React key). */
@@ -247,6 +248,23 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     blurb: "three-way compare of ligand columns",
     match: "Ligand-set reconciliation",
     keywords: "reconciliation compare ligand sets intersection",
+  },
+  /* -- Surgery (100x-130 — the desktop Generative tab's twin) ---------- */
+  {
+    id: "gen-topology",
+    tab: "generative",
+    title: "Ring topology moves",
+    blurb: "one-step ring-size mutants, drawn",
+    match: "Ring topology moves",
+    keywords: "ring topology moves mutants contraction expansion generative",
+  },
+  {
+    id: "gen-breed",
+    tab: "generative",
+    title: "Breed two molecules",
+    blurb: "seeded scaffold-hop crossover litter",
+    match: "Breed two molecules",
+    keywords: "breed crossover scaffold hop children litter parents generative",
   },
   /* -- The session-report strip (rides above every sub-tab) ------------- */
   {

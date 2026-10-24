@@ -833,3 +833,24 @@ The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
 green after the round's edits. The GUI-axis census holds at 68 live
 cards (the round touched no card topology). The web catalog walk:
 24/24 entries through the live finder UI (probe_card_finder_129.sh).
+
+### Round 15 (100x-130) — the two-sided finder recency row + the web Surgery sub-tab
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **246 public symbols, 43 zero-hit —
+byte-identical to rounds 127–129's documented floor.** The library
+axis holds; the round's genuine work was round 129's handover items
+(c) and (d), both taken to completion:
+
+| Surface | The 1.2.69 fix |
+| --- | --- |
+| The finder's recency row (both sides) | Every Ctrl+F jump is remembered — most-recent-first, de-duplicated, capped at `_FINDER_RECENT_MAX = 6` — and the dialog renders one-click "Recently jumped" chips, filtered through `_live_cards()` (a vanished shell is honestly omitted). The memory persists with the session (`finder_recent` text key, JSON-encoded; tolerant restore). The web twin's Ctrl+Shift+F finder gained the same memory: localStorage `pharmaml.cardFinder.recent`, only jumps that actually LANDED are remembered, chips carry their sub-tab tag. |
+| The web Surgery sub-tab | The mirror of the desktop Generative tab's two surgery cards: *Ring topology moves* + *Breed two molecules* over `scripts/surgery_bridge.py` (the stdin→stdout JSON bridge pattern — real `pharmaml.generative` operators, real RDKit, the desktop's own captioned-panel structure grids as base64 PNGs, honest null rows, per-card Download PNG). Route `/api/gen/surgery` (zod discriminated union, the bridge's caps). The card-finder catalog grew to 26 entries; the drift probe + walk re-ran green. |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.69 via
+both drivers). The GUI-axis census holds at 68 live cards (the round
+touched no card topology). The web catalog walk: 26/26 entries
+through the live finder UI (probe_card_finder_129.sh, the two Surgery
+entries joined).

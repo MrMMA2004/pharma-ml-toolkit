@@ -857,6 +857,47 @@ export interface FeatureFactoryResponse {
 }
 
 /* ------------------------------------------------------------------ */
+/* Molecule surgery (generative topology moves + scaffold-hop breed)   */
+/* ------------------------------------------------------------------ */
+
+/** Response of /api/gen/surgery mode "topology": the one-step
+ * ring-size mutant set of one molecule, plus the captioned 2D
+ * structure grid as a base64 PNG data URI (the desktop "Ring
+ * topology moves" card's twin — pharmaml.generative.ring_topology_moves). */
+export interface SurgeryTopologyResponse {
+  mode: "topology";
+  source: string;
+  mutants: string[];
+  summary: string;
+  gridPng: string;
+  gridPanels: number;
+  elapsedSeconds: number;
+  rdkitVersion: string;
+}
+
+/** Response of /api/gen/surgery mode "breed": the seeded
+ * scaffold-hop-crossover litter (a failed draw is an honest null),
+ * plus the parents-and-children structure grid (the desktop "Breed
+ * two molecules" card's twin — pharmaml.generative.scaffold_hop_crossover). */
+export interface SurgeryBreedResponse {
+  mode: "breed";
+  parentA: string;
+  parentB: string;
+  children: number;
+  seed: number;
+  litter: Array<string | null>;
+  viable: number;
+  summary: string;
+  gridPng: string;
+  gridPanels: number;
+  elapsedSeconds: number;
+  rdkitVersion: string;
+}
+
+/** Either surgery response, discriminated on `mode`. */
+export type SurgeryResponse = SurgeryTopologyResponse | SurgeryBreedResponse;
+
+/* ------------------------------------------------------------------ */
 /* Docking ligand prep (SMILES -> PDBQT + grid box + GPF/DPF)          */
 /* ------------------------------------------------------------------ */
 

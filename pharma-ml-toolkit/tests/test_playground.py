@@ -7432,3 +7432,206 @@ class TestReview129Gui:
         assert "100x-129" in doc
         assert "INK VARIANT" in doc
         assert "white plates" in doc
+
+
+class TestReview130Gui:
+    """Round 100x-130: the Ctrl+F card finder's "Recently jumped"
+    recency row -- every finder jump is remembered (most recent first,
+    de-duplicated, capped, persisted with the session) and the dialog
+    offers one-click chips back to those cards, filtered to the cards
+    that are live right now (a vanished shell never leaves a dead
+    button).  The web twin's finder gained the same memory this round
+    (its parity guards live in tests/test_web_parity.py)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    # -- the memory itself ---------------------------------------------- #
+    def test_jump_records_recency_most_recent_first(self, app: Any) -> None:
+        app._jump_to_card(1, "Affinity conversion")
+        app._jump_to_card(0, "PharmaML Playground")
+        assert app._finder_recent == ["PharmaML Playground", "Affinity conversion"]
+        # a re-jump de-duplicates by moving the title to the front
+        app._jump_to_card(1, "Affinity conversion")
+        assert app._finder_recent == ["Affinity conversion", "PharmaML Playground"]
+
+    def test_recency_caps_at_the_documented_maximum(self, app: Any, playground: Any) -> None:
+        titles = [
+            title
+            for title, _subtitle, _shell in playground._CARD_INDEX[:8]
+        ][:8]
+        assert len(titles) == 8, "the index needs 8 cards for the cap test"
+        for index, title in enumerate(titles):
+            app._jump_to_card(0, title)
+        assert app._finder_recent == list(reversed(titles[-6:]))
+        assert len(app._finder_recent) == playground._FINDER_RECENT_MAX
+
+    def test_cap_is_six_and_exported(self, playground: Any) -> None:
+        assert playground._FINDER_RECENT_MAX == 6
+
+    # -- the dialog's chip row ------------------------------------------- #
+    def _finder_dialog(self, app: Any, playground: Any) -> Any:
+        import tkinter as tkmod
+
+        app._find_card_dialog()
+        dialogs = [
+            child
+            for child in app.winfo_children()
+            if isinstance(child, tkmod.Toplevel) and child.title() == "Find a card"
+        ]
+        assert len(dialogs) == 1
+        return dialogs[0]
+
+    @staticmethod
+    def _dialog_buttons(win: Any) -> list[Any]:
+        buttons: list[Any] = []
+
+        def walk(widget: Any) -> None:
+            for child in widget.winfo_children():
+                if child.winfo_class() == "TButton":
+                    buttons.append(child)
+                walk(child)
+
+        walk(win)
+        return buttons
+
+    def test_dialog_shows_recent_chips(self, app: Any, playground: Any) -> None:
+        app._jump_to_card(1, "Affinity conversion")
+        app._jump_to_card(0, "PharmaML Playground")
+        win = self._finder_dialog(app, playground)
+        chip_labels = [str(b.cget("text")) for b in self._dialog_buttons(win)]
+        # newest first, truncated to 24 characters
+        assert "PharmaML Playground" in chip_labels
+        assert "Affinity conversion" in chip_labels
+        # the muted label names the row
+        labels = []
+
+        def walk_labels(widget: Any) -> None:
+            for child in widget.winfo_children():
+                if child.winfo_class() == "TLabel":
+                    labels.append(str(child.cget("text")))
+                walk_labels(child)
+
+        walk_labels(win)
+        assert any(label.startswith("Recently jumped") for label in labels), labels
+        win.destroy()
+
+    def test_chip_click_jumps_and_closes(self, app: Any, playground: Any) -> None:
+        app._jump_to_card(1, "Affinity conversion")
+        app._jump_to_card(0, "PharmaML Playground")
+        win = self._finder_dialog(app, playground)
+        chips = {
+            str(b.cget("text")): b for b in self._dialog_buttons(win)
+        }
+        chip = chips["Affinity conversion"]
+        chip.invoke()
+        app.update()
+        # the dialog closed and the chip's card got selected (+ remembered)
+        assert not bool(win.winfo_exists())
+        assert app._book.index(app._book.select()) == 1
+        assert app._finder_recent[0] == "Affinity conversion"
+
+    def test_dialog_omits_non_live_titles(self, app: Any, playground: Any) -> None:
+        app._finder_recent = ["Affinity conversion", "A card that does not exist"]
+        win = self._finder_dialog(app, playground)
+        chip_labels = [str(b.cget("text")) for b in self._dialog_buttons(win)]
+        assert "Affinity conversion" in chip_labels
+        assert not any("does not exist" in label for label in chip_labels)
+        win.destroy()
+
+    def test_dialog_without_recency_has_no_chip_row(
+        self, app: Any, playground: Any
+    ) -> None:
+        app._finder_recent = []
+        win = self._finder_dialog(app, playground)
+        labels = []
+
+        def walk_labels(widget: Any) -> None:
+            for child in widget.winfo_children():
+                if child.winfo_class() == "TLabel":
+                    labels.append(str(child.cget("text")))
+                walk_labels(child)
+
+        walk_labels(win)
+        assert not any(label.startswith("Recently jumped") for label in labels)
+        win.destroy()
+
+    # -- the session persistence ------------------------------------------ #
+    def test_recency_persists_in_session_payload(self, app: Any) -> None:
+        import json as jsonmod
+
+        app._finder_recent = ["Affinity conversion", "PharmaML Playground"]
+        payload = app._collect_session()
+        raw = payload["texts"]["finder_recent"]
+        assert jsonmod.loads(raw) == ["Affinity conversion", "PharmaML Playground"]
+
+    def test_recency_restores_from_session(self, app: Any) -> None:
+        import json as jsonmod
+
+        app._session = {
+            "theme": "light",
+            "geometry": "",
+            "tab": 0,
+            "variables": {},
+            "families": {},
+            "texts": {
+                "finder_recent": jsonmod.dumps(
+                    ["Molar mass", "SMILES inspector", "Affinity conversion"]
+                )
+            },
+        }
+        app._restore_session()
+        assert app._finder_recent == [
+            "Molar mass",
+            "SMILES inspector",
+            "Affinity conversion",
+        ]
+
+    def test_recency_restore_is_tolerant(self, app: Any) -> None:
+        # garbage resets the memory, never the restore
+        app._session = {
+            "theme": "light",
+            "geometry": "",
+            "tab": 0,
+            "variables": {},
+            "families": {},
+            "texts": {"finder_recent": "not json at all"},
+        }
+        app._restore_session()
+        assert app._finder_recent == []
+        # non-string entries are dropped wholesale too
+        app._session = {
+            "theme": "light",
+            "geometry": "",
+            "tab": 0,
+            "variables": {},
+            "families": {},
+            "texts": {"finder_recent": '["ok", 42]'},
+        }
+        app._restore_session()
+        assert app._finder_recent == []
+
+    # -- the documentation pins ------------------------------------------- #
+    def test_module_docstring_records_round_130(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-130" in doc
+        assert "Recently jumped" in doc
+        assert "_FINDER_RECENT_MAX" in doc
+        assert "finder_recent" in doc
+        assert "Surgery sub-tab" in doc
+
+    def test_finder_remember_docstring_pins_the_contract(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._finder_remember.__doc__ or ""
+        assert "100x-130" in doc
+        assert "Most-recent-first" in doc
+
+    def test_jump_docstring_mentions_the_memory(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._jump_to_card.__doc__ or ""
+        assert "recency" in doc

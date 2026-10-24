@@ -34,6 +34,8 @@ CATALOG = [
  ("ligand prep", "Ligand Prep"),
  ("Batch GPF/DPF", "Ligand Prep"),
  ("reconciliation", "Ligand Sets"),
+ ("Ring topology moves", "Surgery"),
+ ("Breed two molecules", "Surgery"),
  ("Session report", "STRIP"),
 ]
 WALK = """(async () => {

@@ -264,7 +264,17 @@ Design notes
   release; ``auto`` resolves through ``_resolve_auto_theme`` at save
   time, because a PDF's ink is frozen at write time (no reading-time
   toggle like the HTML twin's).  Flip the View ▸ theme radio before
-  saving to pick the other variant.
+  saving to pick the other variant.  (100x-130) The Ctrl+F card
+  finder gained a "Recently jumped" recency row: every jump the
+  finder makes is remembered (most recent first, de-duplicated,
+  capped at ``_FINDER_RECENT_MAX`` and persisted with the session as
+  the ``finder_recent`` text key), and the dialog offers one-click
+  chips back to those cards -- filtered to the cards that are live
+  right now, so a vanished shell never leaves a dead button.  The
+  web twin's Ctrl+Shift+F finder gained the same memory
+  (localStorage-backed, only jumps that actually landed are
+  remembered), and its Playground gained the Surgery sub-tab -- the
+  web twin of the two molecule-surgery cards below.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -1327,6 +1337,10 @@ SHORTCUT_HINTS: tuple[tuple[str, str], ...] = (
     ("Ctrl+Q", "quit"),
 )
 
+#: (100x-130) the card finder's recency cap -- the "Recently jumped"
+#: chip row keeps at most this many destinations, newest first.
+_FINDER_RECENT_MAX = 6
+
 
 def shortcut_hints_text() -> str:
     """Render the hint row's one-line label from :data:`SHORTCUT_HINTS`."""
@@ -2381,6 +2395,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 live.append((title, subtitle, shell, index))
         return live
 
+    def _finder_remember(self, title: str) -> None:
+        """Record a card jump for the finder's recency row (100x-130).
+
+        Most-recent-first, de-duplicated, capped at
+        ``_FINDER_RECENT_MAX`` entries -- the same honest memory the
+        web twin's finder gained this round, persisted with the session
+        (``finder_recent`` text key, JSON-encoded).
+        """
+        recent = [t for t in getattr(self, "_finder_recent", []) if t != title]
+        recent.insert(0, title)
+        self._finder_recent = recent[:_FINDER_RECENT_MAX]
+
     def _find_card_dialog(self) -> None:
         """Ctrl+F -- a live card finder over every tab (100x-120).
 
@@ -2388,6 +2414,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         double-click) selects the card's tab, scrolls the card into
         view and flashes its border -- a 60-card window becomes
         navigable without hunting through tabs.
+
+        (100x-130) A "Recently jumped" chip row rides under the query:
+        one click returns to the cards you keep visiting, without
+        retyping (the memory is de-duplicated, capped and persisted
+        with the session -- restarting the app keeps it).
         """
         if tk is None:  # pragma: no cover - headless import
             return
@@ -2411,6 +2442,47 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if last_query:
             entry.insert(0, last_query)
         entry.pack(fill="x", padx=14, pady=(0, 8))
+
+        def jump_title(title: str) -> None:
+            """Chip shortcut: jump straight to a remembered card."""
+            for card_title, _subtitle, _shell, index in self._live_cards():
+                if card_title == title:
+                    self._jump_to_card(index, title)
+                    win.destroy()
+                    return
+
+        # (100x-130) the recency row -- one chip per recently jumped
+        # card, filtered to the cards that are live RIGHT NOW (a
+        # remembered title whose shell vanished is honestly omitted,
+        # never a dead button).
+        recent_titles = [
+            title
+            for title in getattr(self, "_finder_recent", [])
+            if any(card_title == title for card_title, _s, _sh, _i in self._live_cards())
+        ]
+        if recent_titles:
+            recent_row = ttk.Frame(win, style="Card.TFrame")
+            recent_row.pack(fill="x", padx=14, pady=(0, 6))
+            ttk.Label(
+                recent_row, text="Recently jumped:", style="CardMuted.TLabel"
+            ).pack(side="left")
+            chips = ttk.Frame(recent_row, style="Card.TFrame")
+            chips.pack(side="left", padx=(8, 0))
+            for title in recent_titles:
+                chip = ttk.Button(
+                    chips,
+                    text=_truncate_caption_text(title, 24),
+                    style="Ghost.TButton",
+                    command=lambda remembered=title: jump_title(remembered),
+                )
+                chip.pack(side="left", padx=(4, 0))
+                Tooltip(
+                    chip,
+                    f"Jump back to {title} -- one of your most recent "
+                    "finder jumps (the row remembers up to "
+                    f"{_FINDER_RECENT_MAX}, newest first).",
+                )
+
         tree = ttk.Treeview(win, columns=("card", "tab"), show="headings", height=12)
         tree.heading("card", text="card")
         tree.heading("tab", text="tab")
@@ -2452,8 +2524,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         entry.focus_set()
 
     def _jump_to_card(self, tab_index: int, title: str) -> None:
-        """Select the tab, scroll the card into view and flash it."""
+        """Select the tab, scroll the card into view and flash it.
+
+        (100x-130) Every jump is remembered for the finder's recency
+        row -- the desktop twin of the web finder's own memory, so the
+        cards you keep visiting stay one click away.
+        """
         self._jump_to_tab(tab_index)
+        self._finder_remember(title)
         self.update_idletasks()
         for entry_title, _subtitle, shell in _CARD_INDEX:
             if entry_title != title:
@@ -3007,6 +3085,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # 100x-121: the Ctrl+F card finder's last query -- a plain
             # string (restored into the attribute, not a Text widget).
             "finder": getattr(self, "_finder_last_query", ""),
+            # 100x-130: the finder's recency row -- a JSON-encoded list
+            # of card titles (texts values are coerced to str, so the
+            # list rides as JSON; the restore path parses tolerantly).
+            "finder_recent": json.dumps(getattr(self, "_finder_recent", [])),
         }
         try:
             tab = self._book.index(self._book.select())
@@ -3334,6 +3416,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 # 100x-121: the finder's last query -- an attribute, not a
                 # Text widget; older sessions simply lack the key.
                 self._finder_last_query = str(content)
+                continue
+            if key == "finder_recent":
+                # 100x-130: the recency row's memory -- a JSON list of
+                # card titles, parsed tolerantly (a corrupt or foreign
+                # value resets the memory, never the restore).
+                try:
+                    remembered = json.loads(content)
+                except (TypeError, ValueError):
+                    remembered = []
+                if isinstance(remembered, list) and all(
+                    isinstance(title, str) for title in remembered
+                ):
+                    self._finder_recent = remembered[:_FINDER_RECENT_MAX]
                 continue
             widget = text_widgets.get(key)
             if widget is not None:

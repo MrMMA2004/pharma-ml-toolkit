@@ -10,6 +10,89 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.69] — 2026-10-25
+
+### Added — the round-15 full review (100x-130): the two-sided finder recency row + the web twin's Surgery sub-tab
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a fifteenth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–129's documented floor — the axis holds; no new gaps). The
+round's genuine work was round 129's handover items (c) and (d), both
+taken to completion.
+
+**The Ctrl+F card finder gained a "Recently jumped" recency row on
+BOTH sides.** Every jump the finder makes is now remembered —
+most-recent-first, de-duplicated, capped at six (`_FINDER_RECENT_MAX`)
+— and the dialog offers one-click chips back to those cards, so the
+cards you keep visiting stay one click away without retyping. On the
+desktop the memory persists with the session (the `finder_recent`
+text key, JSON-encoded; the restore parses tolerantly — a corrupt
+value resets the memory, never the restore), and the chips are
+filtered through `_live_cards()` so a remembered title whose shell
+vanished is honestly omitted, never a dead button. The web twin's
+Ctrl+Shift+F finder gained the same memory (localStorage-backed
+`pharmaml.cardFinder.recent`, capped at six): only a jump that
+actually **landed** is remembered — a failed resolve surfaces the
+honest "could not find" toast and never pollutes the row — and the
+chips carry their sub-tab tag, ride under the query in a command-
+palette-styled strip, and survive reloads.
+
+**The web twin's Playground gained the Surgery sub-tab** — the mirror
+of the desktop Generative tab's two molecule-surgery cards (100x-122):
+*Ring topology moves* (every distinct one-step ring-size mutant of one
+molecule, with the captioned 2D structure grid) and *Breed two
+molecules* (the seeded scaffold-hop crossover, honest null rows for
+failed draws, parents-and-children grid). One POST per card runs the
+REAL `pharmaml.generative` operators — `ring_topology_moves` /
+`scaffold_hop_crossover` — with real RDKit on the server through the
+repo-root `scripts/surgery_bridge.py` (the same stdin→stdout JSON
+bridge pattern as the feature factory and the report bridge; the
+zod-validated route at `/api/gen/surgery` guards the caps: SMILES ≤
+300 chars, children 1–8, seed 0–999999, ≤24 grid panels with an
+honest truncation note). The bridge composes the SAME captioned-panel
+structure grids the desktop's "Draw mutants" / "Draw litter" buttons
+build (an RDKit `MolToImage` raster per panel, "(unparseable SMILES)"
+slots, the classic "nothing to draw" line), rendered to a base64 PNG
+data URI through `pharmaml.viz.figure_to_base64` — and each card
+carries a **Download PNG** button (the web twin of the desktop cards'
+per-card "Save figure…": a figure leaves the app from the card that
+shows it). The card finder's catalog grew to 26 entries (the two
+Surgery cards joined, `generative` tab), and the drift probe +
+`TestCardFinderParity` pin them like every other entry.
+
+### Verified
+
+- `tests/test_playground.py::TestReview130Gui` (13 new): the recency
+  memory (most-recent-first, de-dup, the six-cap), the dialog's chip
+  row (live titles only, chip click jumps + closes + re-remembers,
+  no row without memory), the session JSON round trip (incl. the
+  tolerant restore), and the documentation pins.
+- `tests/test_web_parity.py::TestSurgeryBridge` (5 new): the shipped
+  bridge over fixed requests — the piperidine mutant set pinned
+  (`C1CCCC1, C1CCCNCC1, C1CCNC1`), the acyclic honest-empty with its
+  "nothing to draw" grid, the seeded litter (one row per draw, nulls
+  included; parents + viable panels), per-seed determinism, and the
+  client-error exits (unparseable SMILES, bad children/seed, bad
+  mode → exit 2).
+- `tests/test_web_parity.py::TestSurgeryWebWiring` (5 new): the
+  sub-tab strip, the cards' route + honest-null row + Download PNG +
+  the desktop defaults, the route's discriminated-union validation,
+  the catalog's two new entries, and the web finder's recency wiring
+  (`pharmaml.cardFinder.recent`, cap 6, land-only remembering).
+- Suite: **2456 collected = 2451 passed + 5 skipped / 0 failures**;
+  `probe_gui_e2e.py` gained the 100x-130 section (PROBE_OK);
+  `probe_card_directory_129.ts` reports 26/26 with zero problems;
+  the card-finder walk re-ran with the two Surgery entries;
+  `smoke130.py` SMOKE130_OK; `shoot130.py` SHOOT130_OK (VLM-reviewed
+  screenshots: the desktop chip row, the desktop breed card with the
+  litter grid, the web Surgery tab, the web finder's recency strip —
+  every QA point PASS, the one full-window "clipping" claim disproved
+  by the precise crop, the round-129 lesson standing).
+- All 8 notebooks re-executed with 1.2.69 under BOTH drivers (the
+  standing trap honoured).
+
 ## [1.2.68] — 2026-10-25
 
 ### Added — the round-14 full review (100x-129): the PDF session report's dark-ink variant + the web twin's card finder

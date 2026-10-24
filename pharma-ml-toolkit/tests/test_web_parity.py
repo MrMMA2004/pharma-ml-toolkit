@@ -480,12 +480,13 @@ class TestCardFinderParity:
         )
         assert result.returncode == 0, result.stdout + result.stderr
         assert "CARD_DIRECTORY_OK" in result.stdout
-        # the census: 24 cards, 24 unique ids, zero problems
+        # the census: 26 cards (24 + the two Surgery entries of
+        # 100x-130), 26 unique ids, zero problems
         start = result.stdout.index("{")
         end = result.stdout.index("}", start) + 1
         report = json.loads(result.stdout[start:end])
-        assert report["entries"] == 24, report
-        assert report["ids"] == 24, report
+        assert report["entries"] == 26, report
+        assert report["ids"] == 26, report
         assert report["problems"] == [], report
 
     @needs_card_finder
@@ -510,3 +511,212 @@ class TestCardFinderParity:
         styles = (REPO_ROOT / "src" / "app" / "globals.css").read_text(encoding="utf-8")
         assert ".pg-card-flash" in styles
         assert "@keyframes pg-card-flash" in styles
+
+
+class TestSurgeryBridge:
+    """Round 100x-130: the molecule-surgery bridge contract.
+
+    The web twin's Surgery sub-tab mirrors the desktop playground's
+    two generative surgery cards ("Ring topology moves" + "Breed two
+    molecules") over the repo-root bridge pattern: one POST runs the
+    REAL pharmaml.generative operators with real RDKit and returns the
+    SMILES list PLUS the captioned 2D structure grid as a base64 PNG
+    data URI — the same panels the desktop's "Draw mutants" / "Draw
+    litter" buttons compose.  These guards pipe fixed requests through
+    the SHIPPED bridge script and pin the contract: the piperidine
+    mutant set, seeded determinism, honest null draws, the PNG grid,
+    and the client-error exits."""
+
+    BRIDGE_PY = REPO_ROOT / "scripts" / "surgery_bridge.py"
+
+    needs_bridge = pytest.mark.skipif(
+        not BRIDGE_PY.is_file(),
+        reason="web checkout (<repo>/scripts/surgery_bridge.py) required; "
+        "the zip-only tree skips — its probes live outside the shipped tree",
+    )
+
+    def _bridge(self, payload: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+
+    @staticmethod
+    def _png_magic(data_uri: str) -> bytes:
+        import base64
+
+        assert data_uri.startswith("data:image/png;base64,"), data_uri[:40]
+        return base64.b64decode(data_uri.split(",", 1)[1])[:8]
+
+    @needs_bridge
+    def test_topology_round_trip_pins_the_piperidine_set(self) -> None:
+        result = self._bridge({"mode": "topology", "smiles": "C1CCNCC1"})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        # the library's own enumeration for piperidine: two contractions
+        # and one expansion, sorted — pinned so the twin cannot drift
+        assert response["mutants"] == ["C1CCCC1", "C1CCCNCC1", "C1CCNC1"]
+        assert response["source"] == "C1CCNCC1"
+        assert "distinct one-step ring-size mutant" in response["summary"]
+        assert response["gridPanels"] == 3
+        assert self._png_magic(response["gridPng"]) == b"\x89PNG\r\n\x1a\n"
+        assert response["rdkitVersion"]
+
+    @needs_bridge
+    def test_topology_acyclic_is_an_honest_empty(self) -> None:
+        result = self._bridge({"mode": "topology", "smiles": "CCO"})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["mutants"] == []
+        assert "no qualifying saturated ring" in response["summary"]
+        # the grid still renders — the classic "nothing to draw" panel
+        assert self._png_magic(response["gridPng"]) == b"\x89PNG\r\n\x1a\n"
+
+    @needs_bridge
+    def test_breed_round_trip_is_seeded_and_honest_about_nulls(self) -> None:
+        result = self._bridge(
+            {
+                "mode": "breed",
+                "parentA": "CC(=O)Oc1ccccc1C(=O)O",
+                "parentB": "CC(C)Cc1ccc(O)cc1",
+                "children": 4,
+                "seed": 42,
+            }
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["mode"] == "breed"
+        assert len(response["litter"]) == 4, "one row per draw, failed or not"
+        assert response["viable"] == sum(1 for child in response["litter"] if child)
+        assert "viable children" in response["summary"]
+        assert "seed 42" in response["summary"]
+        # parents + viable children panels
+        assert response["gridPanels"] == 2 + response["viable"]
+        assert self._png_magic(response["gridPng"]) == b"\x89PNG\r\n\x1a\n"
+
+    @needs_bridge
+    def test_breed_is_deterministic_per_seed(self) -> None:
+        payload = {
+            "mode": "breed",
+            "parentA": "CC(=O)Oc1ccccc1C(=O)O",
+            "parentB": "CC(C)Cc1ccc(O)cc1",
+            "children": 6,
+            "seed": 7,
+        }
+        first = self._bridge(payload)
+        second = self._bridge(payload)
+        assert first.returncode == 0 and second.returncode == 0
+        litter_a = json.loads(first.stdout)["litter"]
+        litter_b = json.loads(second.stdout)["litter"]
+        assert litter_a == litter_b, "the same seed must breed the same litter"
+
+    @needs_bridge
+    def test_bridge_rejects_bad_requests_as_client_errors(self) -> None:
+        for payload, fragment in (
+            ({"mode": "neon"}, "mode"),
+            ({"mode": "topology", "smiles": "not-a-smiles"}, "did not parse"),
+            ({"mode": "topology", "smiles": ""}, "non-empty"),
+            (
+                {
+                    "mode": "breed",
+                    "parentA": "CCO",
+                    "parentB": "CCO",
+                    "children": 9,
+                    "seed": 0,
+                },
+                "children",
+            ),
+            (
+                {
+                    "mode": "breed",
+                    "parentA": "CCO",
+                    "parentB": "CCO",
+                    "children": 2,
+                    "seed": -1,
+                },
+                "seed",
+            ),
+        ):
+            result = self._bridge(payload)
+            assert result.returncode == 2, (payload, result.stdout)
+            assert fragment in json.loads(result.stdout)["error"], payload
+
+
+class TestSurgeryWebWiring:
+    """Round 100x-130: the Surgery sub-tab's static wiring pins.
+
+    The live E2E (agent-browser) clicks the real buttons; these pins
+    keep the wiring from silently disappearing between rounds: the
+    sub-tab strip carries the generative trigger, the two cards ride
+    on the /api/gen/surgery route, and the finder's catalog gained
+    the two entries (their drift probe lives in
+    scratch/probe_card_directory_129.ts, pinned by
+    TestCardFinderParity below)."""
+
+    PLAYGROUND_TSX = REPO_ROOT / "src" / "components" / "explorer" / "playground.tsx"
+    SURGERY_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "surgery-cards.tsx"
+    )
+    ROUTE_TS = REPO_ROOT / "src" / "app" / "api" / "gen" / "surgery" / "route.ts"
+    CARD_DIRECTORY_TS = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-directory.ts"
+    )
+    CARD_FINDER_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-finder.tsx"
+    )
+
+    needs_wiring = pytest.mark.skipif(
+        not PLAYGROUND_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required; the zip-only "
+        "tree skips — its probes live outside the shipped tree",
+    )
+
+    @needs_wiring
+    def test_sub_tab_and_cards_are_wired(self) -> None:
+        playground = self.PLAYGROUND_TSX.read_text(encoding="utf-8")
+        assert 'value="generative"' in playground
+        assert "<SurgeryCards />" in playground
+        assert "surgery-cards" in playground
+
+    @needs_wiring
+    def test_cards_post_to_the_surgery_route(self) -> None:
+        surgery = self.SURGERY_TSX.read_text(encoding="utf-8")
+        assert '"/api/gen/surgery"' in surgery
+        # the twin's honest null row and download-figure export
+        assert "(no viable crossover on this draw)" in surgery
+        assert "Download PNG" in surgery
+        # the desktop defaults ride over
+        assert "C1CCNCC1" in surgery  # piperidine
+        assert "CC(=O)Oc1ccccc1C(=O)O" in surgery  # aspirin
+        assert "CC(C)Cc1ccc(O)cc1" in surgery  # ibuprofen core
+
+    @needs_wiring
+    def test_route_validates_through_the_bridge(self) -> None:
+        route = self.ROUTE_TS.read_text(encoding="utf-8")
+        assert "surgery_bridge.py" in route
+        assert "discriminatedUnion" in route
+
+    @needs_wiring
+    def test_catalog_carries_the_two_surgery_entries(self) -> None:
+        catalog = self.CARD_DIRECTORY_TS.read_text(encoding="utf-8")
+        assert '"generative"' in catalog
+        assert 'id: "gen-topology"' in catalog
+        assert 'id: "gen-breed"' in catalog
+        assert 'match: "Ring topology moves"' in catalog
+        assert 'match: "Breed two molecules"' in catalog
+        finder = self.CARD_FINDER_TSX.read_text(encoding="utf-8")
+        assert 'generative: "Surgery"' in finder
+
+    @needs_wiring
+    def test_web_finder_recency_wiring_pins(self) -> None:
+        finder = self.CARD_FINDER_TSX.read_text(encoding="utf-8")
+        # the recency row's storage contract + the honest-landing rule
+        assert 'const RECENT_STORAGE_KEY = "pharmaml.cardFinder.recent";' in finder
+        assert "const RECENT_CAP = 6;" in finder
+        assert "rememberJump(entry.id)" in finder
+        assert "if (found) {" in finder
+        assert "Recently jumped" in finder

@@ -1127,7 +1127,7 @@ import zlib as _zlib129
 def _pdf_streams129(pdf_bytes: bytes) -> bytes:
     """Decompress every page-content stream (fpdf2 zlib-compresses)."""
     out: list[bytes] = []
-    for match in _re129.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf_bytes, _re129.S):
+    for match in _re129.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf_bytes, _re129.DOTALL):
         try:
             out.append(_zlib129.decompress(match.group(1)))
         except _zlib129.error:
@@ -1194,6 +1194,99 @@ app._theme_var.set("light")
 app._on_theme_change()
 DIALOGS.clear()
 print("Auto ride: resolved through _resolve_auto_theme at save time OK")
+
+
+# -- 100x-130 additions: the Ctrl+F finder's "Recently jumped" row ---- #
+import tkinter as _tk130
+
+# three real jumps -> the memory is most-recent-first and de-duplicated
+app._jump_to_card(1, "Affinity conversion")
+app._jump_to_card(0, "PharmaML Playground")
+app._jump_to_card(1, "Affinity conversion")
+assert app._finder_recent == ["Affinity conversion", "PharmaML Playground"], (
+    app._finder_recent
+)
+print("Recency memory: most-recent-first + de-duplication OK")
+
+# the dialog: chips for the remembered cards, none for a bogus title
+app._finder_recent = ["Affinity conversion", "Molar mass", "no such card"]
+app._find_card_dialog()
+_dialogs130 = [
+    child
+    for child in app.winfo_children()
+    if isinstance(child, _tk130.Toplevel) and child.title() == "Find a card"
+]
+assert len(_dialogs130) == 1, "finder dialog did not open"
+_win130 = _dialogs130[0]
+_buttons130: list = []
+
+
+def _walk_buttons130(widget):
+    for child in widget.winfo_children():
+        if child.winfo_class() == "TButton":
+            _buttons130.append(child)
+        _walk_buttons130(child)
+
+
+_walk_buttons130(_win130)
+_chip_labels130 = [str(b.cget("text")) for b in _buttons130]
+assert "Affinity conversion" in _chip_labels130, _chip_labels130
+assert "Molar mass" in _chip_labels130, _chip_labels130
+assert not any("no such card" in label for label in _chip_labels130), (
+    "a non-live title leaked into the chip row"
+)
+print("Chip row: live titles only, honest omission OK")
+
+# a chip click jumps AND closes the dialog AND re-remembers
+_chips130 = {str(b.cget("text")): b for b in _buttons130}
+_chips130["Molar mass"].invoke()
+app.update()
+assert not bool(_win130.winfo_exists()), "chip click left the dialog open"
+assert app._finder_recent[0] == "Molar mass", app._finder_recent
+print("Chip click: jump + close + re-remember OK")
+
+# the session round trip carries the memory as JSON
+import json as _json130
+
+_payload130 = app._collect_session()
+_recent_raw130 = _payload130["texts"]["finder_recent"]
+assert _json130.loads(_recent_raw130)[0] == "Molar mass", _recent_raw130
+app._finder_recent = ["SMILES inspector"]
+app._session = {
+    "theme": "light",
+    "geometry": "",
+    "tab": 0,
+    "variables": {},
+    "families": {},
+    "texts": {"finder_recent": _recent_raw130},
+}
+app._restore_session()
+assert app._finder_recent[0] == "Molar mass", app._finder_recent
+print("Session persistence: JSON round trip OK")
+
+# an empty memory renders no chip row at all
+app._finder_recent = []
+app._find_card_dialog()
+_dialogs130b = [
+    child
+    for child in app.winfo_children()
+    if isinstance(child, _tk130.Toplevel) and child.title() == "Find a card"
+]
+_win130b = _dialogs130b[0]
+_labels130: list = []
+
+
+def _walk_labels130(widget):
+    for child in widget.winfo_children():
+        if child.winfo_class() == "TLabel":
+            _labels130.append(str(child.cget("text")))
+        _walk_labels130(child)
+
+
+_walk_labels130(_win130b)
+assert not any(label.startswith("Recently jumped") for label in _labels130)
+_win130b.destroy()
+print("Empty memory: no chip row OK")
 
 
 app.destroy()

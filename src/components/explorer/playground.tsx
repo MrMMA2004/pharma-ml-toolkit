@@ -5,6 +5,7 @@ import {
   Boxes,
   Brain,
   Calculator,
+  Dna,
   FlaskConical,
   GitCompare,
   Microscope,
@@ -21,6 +22,7 @@ import { LigandPrep } from "@/components/explorer/playground/ligand-prep";
 import { BatchConfigs } from "@/components/explorer/playground/batch-configs";
 import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
 import { LigandReconciler } from "@/components/explorer/playground/ligand-reconciler";
+import { SurgeryCards } from "@/components/explorer/playground/surgery-cards";
 import { SessionReport } from "@/components/explorer/playground/session-report";
 import { CardFinderTrigger } from "@/components/explorer/playground/card-finder";
 import { useToolkitStore } from "@/lib/store";
@@ -43,7 +45,7 @@ export function Playground() {
           web twin of the desktop Ctrl+F — the dialog itself is mounted at
           the page level so the hotkey works from any top tab. */}
       <div className="flex flex-wrap items-center justify-center gap-2">
-      <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-3xl grid-cols-2 gap-1 overflow-x-auto p-1 sm:grid-cols-4 lg:max-w-fit lg:grid-cols-8">
+      <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-3xl grid-cols-2 gap-1 overflow-x-auto p-1 sm:grid-cols-4 lg:max-w-fit lg:grid-cols-9">
         <TabsTrigger
           value="calculators"
           className="min-h-11 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm sm:px-3 sm:text-sm"
@@ -100,6 +102,15 @@ export function Playground() {
           <GitCompare className="size-4 shrink-0" aria-hidden />
           Ligand Sets
         </TabsTrigger>
+        {/* (100x-130) the Surgery sub-tab — the web twin of the desktop
+            Generative tab's two molecule-surgery cards. */}
+        <TabsTrigger
+          value="generative"
+          className="min-h-11 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm sm:px-3 sm:text-sm"
+        >
+          <Dna className="size-4 shrink-0" aria-hidden />
+          Surgery
+        </TabsTrigger>
       </TabsList>
         <CardFinderTrigger />
       </div>
@@ -139,6 +150,9 @@ export function Playground() {
       </TabsContent>
       <TabsContent value="reconciler" className="mt-4 sm:mt-6">
         <LigandReconciler />
+      </TabsContent>
+      <TabsContent value="generative" className="mt-4 sm:mt-6">
+        <SurgeryCards />
       </TabsContent>
     </Tabs>
   );

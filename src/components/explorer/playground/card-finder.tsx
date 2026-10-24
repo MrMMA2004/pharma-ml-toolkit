@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Search, SquareArrowOutUpRight } from "lucide-react";
+import { History, Search, SquareArrowOutUpRight } from "lucide-react";
 import { toast } from "sonner";
 import { HighlightText } from "@/components/explorer/highlight-text";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,38 @@ import {
 const HOTKEY_LABEL = "Ctrl+Shift+F";
 const JUMP_TIMEOUT_MS = 2_500;
 
+/** (100x-130) the recency row's localStorage key + cap — the same
+ * honest memory the desktop Ctrl+F finder gained this round: the ids
+ * of the cards you actually LANDED on, most recent first,
+ * de-duplicated, capped. A failed resolve is never remembered. */
+const RECENT_STORAGE_KEY = "pharmaml.cardFinder.recent";
+const RECENT_CAP = 6;
+
+function loadRecentIds(): string[] {
+  try {
+    const raw = window.localStorage.getItem(RECENT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is string => typeof id === "string").slice(0, RECENT_CAP);
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentIds(ids: string[]): void {
+  try {
+    window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(ids.slice(0, RECENT_CAP)));
+  } catch {
+    /* a blocked localStorage (private mode) just loses the memory */
+  }
+}
+
+function rememberJump(id: string): void {
+  const next = [id, ...loadRecentIds().filter((x) => x !== id)];
+  saveRecentIds(next);
+}
+
 /** Sub-tab strip labels (the jump-readiness gate matches them on the
  * live Radix triggers). */
 const SUB_TAB_LABELS: Record<string, string> = {
@@ -45,6 +77,7 @@ const SUB_TAB_LABELS: Record<string, string> = {
   features: "Features",
   ligandprep: "Ligand Prep",
   reconciler: "Ligand Sets",
+  generative: "Surgery",
 };
 
 /** PK / PD Explorer inner-tab labels (the NCA trigger shortens on ≤sm). */
@@ -231,11 +264,26 @@ function CardFinderDialog({ onClose }: { onClose: () => void }) {
 
   const close = useCallback(() => onClose(), [onClose]);
 
+  /* (100x-130) the recency row — read once per open (the dialog body
+   * mounts fresh, so a jump made from THIS dialog shows next time). */
+  const recentIds = useMemo(() => loadRecentIds(), []);
+  const recentEntries = useMemo(() => {
+    const byId = new Map(PLAYGROUND_CARDS.map((e) => [e.id, e] as const));
+    return recentIds
+      .map((id) => byId.get(id))
+      .filter((e): e is PlaygroundCardEntry => e !== undefined)
+      .slice(0, RECENT_CAP);
+  }, [recentIds]);
+
   const runAndClose = useCallback(
     async (entry: PlaygroundCardEntry) => {
       close();
       const found = await jumpToCard(entry);
-      if (!found) {
+      if (found) {
+        // (100x-130) only a jump that actually LANDED is remembered —
+        // a failed resolve never pollutes the recency row.
+        rememberJump(entry.id);
+      } else {
         toast.error("Card not found", {
           description: `“${entry.title}” is not on screen — its heading may have been renamed.`,
         });
@@ -325,6 +373,33 @@ function CardFinderDialog({ onClose }: { onClose: () => void }) {
                 esc
               </kbd>
             </div>
+            {/* (100x-130) the recency row — one chip per card you
+                actually landed on, newest first (the desktop Ctrl+F
+                finder's "Recently jumped" row, localStorage-backed so
+                it survives reloads; entries whose id left the catalog
+                are honestly dropped, never dead chips). */}
+            {recentEntries.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5 border-b bg-muted/20 px-3.5 py-2">
+                <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                  <History className="size-3.5" aria-hidden />
+                  Recently jumped
+                </span>
+                {recentEntries.map((entry) => (
+                  <button
+                    key={`recent-${entry.id}`}
+                    type="button"
+                    onClick={() => void runAndClose(entry)}
+                    className="inline-flex max-w-44 items-center gap-1 truncate rounded-full border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    title={`Jump back to ${entry.title} — one of your most recent finder jumps (the row remembers up to ${RECENT_CAP}, newest first)`}
+                  >
+                    <span className="truncate">{entry.title}</span>
+                    <span className="shrink-0 font-mono text-[9px] text-muted-foreground">
+                      {entry.tab ?? "session"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {/* Rows */}
             <div
               ref={listRef}

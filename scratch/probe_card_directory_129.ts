@@ -37,12 +37,14 @@ const SOURCES: Record<string, string> = {
   "ligand-prep": "src/components/explorer/playground/ligand-prep.tsx",
   "ligand-batch": "src/components/explorer/playground/batch-configs.tsx",
   "ligand-sets": "src/components/explorer/playground/ligand-reconciler.tsx",
+  "gen-topology": "src/components/explorer/playground/surgery-cards.tsx",
+  "gen-breed": "src/components/explorer/playground/surgery-cards.tsx",
   "session-report": "src/components/explorer/playground/session-report.tsx",
 };
 
 const VALID_TABS = new Set([
   "calculators", "pk", "ml", "biology", "docking",
-  "features", "ligandprep", "reconciler", null,
+  "features", "ligandprep", "reconciler", "generative", null,
 ]);
 const VALID_INNER = new Set(["regimen", "pd", "nca", undefined]);
 
