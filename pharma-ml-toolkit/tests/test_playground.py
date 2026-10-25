@@ -5986,7 +5986,9 @@ class TestReview123Gui:
         reader = pypdf.PdfReader(str(target))
         joined = "\n".join((page.extract_text() or "").lower() for page in reader.pages)
         assert "table page(s)" in joined, "the subtitle did not count tables"
-        assert "smiles inspector table" in joined, "no table page shipped"
+        # (100x-134) the page name gained the count prefix: "table 1 ·
+        # Smiles Inspector" (title-cased by the library's writer)
+        assert "table 1 · smiles inspector" in joined, "no table page shipped"
         assert "molwt" in joined, "the rows are not real text"
         assert "more rows" in joined, "the truncation note is missing"
         assert len(reader.pages) >= 2  # title + at least one table page
@@ -6255,7 +6257,8 @@ class TestReview124Gui:
         assert "<table" in text, "the tables never landed"
         assert "What this file contains" in text
         assert "cards on screen" in text, "the metric cards never landed"
-        assert "SMILES inspector table" in text, "the table walk's heading"
+        assert "table 1 · SMILES inspector" in text, "the table walk's heading"
+        # (100x-134) the count prefix replaced the "{title} table" walk
         assert any(
             "figure(s) + " in str(a) for _n, a in quiet_dialogs
         ), "the save message never fired"
@@ -6285,7 +6288,13 @@ class TestReview124Gui:
         assert self._drain(app), "the HTML report job hung"
         text = target.read_text(encoding="utf-8")
         assert "same label" in text
-        assert "same label (2)" in text, "the repeat caption was not numbered"
+        # (100x-134) the " (2)" caption dedupe retired: the count
+        # prefix separates the same-titled pages on its own -- both
+        # captions are numbered, the way the picklist's rows are
+        assert "figure 1 · same label" in text, "the first caption lost its count"
+        assert "figure 2 · same label" in text, (
+            "the repeat caption was not separated by the count prefix"
+        )
         import matplotlib.pyplot as plt
 
         plt.close("all")
@@ -7997,7 +8006,7 @@ class TestReview132Gui:
         text = target.read_text(encoding="utf-8")
         assert "beta plot" in text
         assert "alpha plot" not in text, "the unchecked figure still shipped"
-        assert "SMILES inspector table" in text  # the table still ships
+        assert "table 1 · SMILES inspector" in text  # the table still ships
         assert any(
             "1 figure(s)" in str(a) for _n, a in quiet_dialogs
         ), "the save message did not count one figure"
@@ -8026,7 +8035,7 @@ class TestReview132Gui:
         assert self._drain(app), "the HTML report job hung"
         text = target.read_text(encoding="utf-8")
         assert "alpha plot" in text and "beta plot" in text
-        assert "SMILES inspector table" not in text, "the unchecked table still shipped"
+        assert "table 1 · SMILES inspector" not in text, "the unchecked table still shipped"
         assert any(
             "2 figure(s)" in str(a) for _n, a in quiet_dialogs
         ), "the save message did not count two figures"
@@ -8446,3 +8455,387 @@ class TestReview133Gui:
         doc = playground.PlaygroundApp._render_figure.__doc__ or ""
         assert "100x-133" in doc
         assert "caption" in doc
+
+
+class TestReview134Gui:
+    """Round 100x-134: the picklist's ORDER MEMORY -- the web twin's
+    persisted walking order, mirrored per session on the desktop.  A
+    completed Save stores the dialog's per-kind label order; the next
+    Save re-opens pre-arranged in that order (stale labels skipped, new
+    pages appended in walk order); Cancel never touches it; the
+    dialog's own "Reset to walking order" button restores the walk
+    order AND forgets the memory, enabled exactly while the order has
+    drifted.  The same round's count-prefix page names ("figure N ·
+    <caption>" / "table N · <caption>", numbered the way the picklist's
+    rows are) ride here too."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _figure_static(title: str) -> Any:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure()
+        axes = fig.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title(title)
+        return fig
+
+    def _find_dialog(self, app: Any) -> Any:
+        for child in list(app.winfo_children()):
+            if child.winfo_class() != "Toplevel":
+                continue
+            if str(child.title()) == "Session report contents":
+                return child
+        return None
+
+    def _arrow_buttons(self, app: Any, dialog: Any) -> tuple[list[Any], list[Any]]:
+        ups = [
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TButton" and str(widget.cget("text")) == "▲"
+        ]
+        downs = [
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TButton" and str(widget.cget("text")) == "▼"
+        ]
+        return ups, downs
+
+    def _check_labels(self, app: Any, dialog: Any) -> list[str]:
+        """The checkbox texts in VISUAL order (the packing order)."""
+        checks = [
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TCheckbutton"
+        ]
+        body = checks[0].master.master.master  # check -> row -> group -> body
+        labels: list[str] = []
+        for group_frame in body.pack_slaves():
+            for child in group_frame.pack_slaves():
+                for check in checks:
+                    if check.master is child:
+                        labels.append(str(check.cget("text")))
+        return labels
+
+    def _button(self, app: Any, dialog: Any, text: str) -> Any:
+        return next(
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TButton"
+            and str(widget.cget("text")) == text
+        )
+
+    # -- the order memory's own contract ---------------------------------- #
+
+    def test_save_stores_and_reopen_applies_the_order(self, app: Any) -> None:
+        """A completed Save stores the dialog's order; the NEXT dialog
+        opens pre-arranged in it, with the memory confession rendered."""
+        live = [
+            [None, "alpha plot", object()],
+            [None, "beta plot", object()],
+        ]
+        tables = [
+            ("T one", ["a"], [["1"]]),
+            ("T two", ["b"], [["2"]]),
+        ]
+        assert app._report_page_order == {}  # starts empty (per session)
+
+        def first_visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            ups, downs = self._arrow_buttons(app, dialog)
+            downs[0].invoke()  # T one below T two
+            ups[3].invoke()  # beta above alpha (creation: T one, T two, alpha, beta)
+            app.update()
+            self._button(app, dialog, "Save report…").invoke()
+
+        app.after(150, first_visit)
+        picked = app._session_report_picklist(live, tables)
+        assert picked is not None
+        # the memory now carries ALL labels per kind, in dialog order
+        assert app._report_page_order == {
+            "table": ["T two", "T one"],
+            "figure": ["beta plot", "alpha plot"],
+        }, app._report_page_order
+
+        captured: dict[str, Any] = {}
+
+        def second_visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            captured["labels"] = self._check_labels(app, dialog)
+            captured["notes"] = [
+                str(widget.cget("text"))
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TLabel"
+            ]
+            captured["reset_disabled"] = self._button(
+                app, dialog, "Reset to walking order"
+            ).instate(("disabled",))
+            self._button(app, dialog, "Cancel").invoke()
+
+        app.after(150, second_visit)
+        assert app._session_report_picklist(live, tables) is None  # cancelled
+        # the rows OPENED in the remembered order (no moves needed)
+        assert captured["labels"] == [
+            "table 1 · T two",
+            "table 2 · T one",
+            "figure 1 · beta plot",
+            "figure 2 · alpha plot",
+        ], captured
+        # the confession rendered, and it names the Reset affordance
+        notes = [n for n in captured["notes"] if "last saved order" in n]
+        assert notes and "Reset to walking order" in notes[0], captured
+        # the remembered order IS a drift -- Reset enabled on arrival
+        assert captured["reset_disabled"] is False, captured
+        # Cancel left the memory untouched
+        assert app._report_page_order["figure"] == ["beta plot", "alpha plot"]
+
+    def test_memory_skips_stale_and_appends_new(self, app: Any) -> None:
+        """A remembered label the walk no longer finds is skipped; a NEW
+        page rides after the remembered ones, in walk order."""
+        app._report_page_order = {
+            "figure": ["gone plot", "beta plot"],
+            "table": ["T two"],
+        }
+        live = [
+            [None, "alpha plot", object()],
+            [None, "beta plot", object()],
+        ]
+        tables = [
+            ("T one", ["a"], [["1"]]),
+            ("T two", ["b"], [["2"]]),
+        ]
+        captured: dict[str, Any] = {}
+
+        def visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            captured["labels"] = self._check_labels(app, dialog)
+            self._button(app, dialog, "Cancel").invoke()
+
+        app.after(150, visit)
+        assert app._session_report_picklist(live, tables) is None
+        # "gone plot" skipped; beta (remembered) rides before alpha (new,
+        # walk order); the tables remember T-two-first; T-one rides after
+        assert captured["labels"] == [
+            "table 1 · T two",
+            "table 2 · T one",
+            "figure 1 · beta plot",
+            "figure 2 · alpha plot",
+        ], captured
+
+    def test_reset_restores_walk_order_and_forgets(self, app: Any) -> None:
+        """Reset to walking order: the rows return to the walk order,
+        the confession label collapses, and the MEMORY is forgotten so
+        the NEXT dialog opens in the walk order too."""
+        app._report_page_order = {
+            "figure": ["beta plot", "alpha plot"],
+            "table": [],
+        }
+        live = [
+            [None, "alpha plot", object()],
+            [None, "beta plot", object()],
+        ]
+        captured: dict[str, Any] = {}
+
+        def visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            captured["before"] = self._check_labels(app, dialog)
+            # the confession label itself -- pack_forget keeps it in the
+            # creation-order walk, so VISIBILITY is the manager state
+            memory = next(
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TLabel"
+                and "last saved order" in str(widget.cget("text"))
+            )
+            assert memory.winfo_manager(), "the confession never rendered"
+            reset = self._button(app, dialog, "Reset to walking order")
+            assert not reset.instate(("disabled",))
+            reset.invoke()
+            app.update()
+            captured["after"] = self._check_labels(app, dialog)
+            captured["memory_manager_after"] = memory.winfo_manager()
+            captured["reset_disabled_after"] = self._button(
+                app, dialog, "Reset to walking order"
+            ).instate(("disabled",))
+            self._button(app, dialog, "Cancel").invoke()
+
+        app.after(150, visit)
+        assert app._session_report_picklist(live, []) is None
+        assert captured["before"] == [
+            "figure 1 · beta plot",
+            "figure 2 · alpha plot",
+        ], captured
+        assert captured["after"] == [
+            "figure 1 · alpha plot",
+            "figure 2 · beta plot",
+        ], captured
+        # the confession collapsed -- an empty manager means unpacked
+        assert captured["memory_manager_after"] == "", captured
+        # at the walk order Reset disables itself again
+        assert captured["reset_disabled_after"] is True, captured
+        # the memory itself is gone
+        assert app._report_page_order == {}, app._report_page_order
+
+    def test_reset_drift_honest_through_manual_moves(self, app: Any) -> None:
+        """With no memory the dialog opens at the walk order (Reset
+        disabled); a manual ▼ move drifts it (Reset enabled); Reset
+        restores the walk order and disables itself -- and a Cancel
+        never writes a memory."""
+        live = [
+            [None, "alpha plot", object()],
+            [None, "beta plot", object()],
+        ]
+        captured: dict[str, Any] = {}
+
+        def visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            reset = self._button(app, dialog, "Reset to walking order")
+            captured["disabled_at_walk"] = reset.instate(("disabled",))
+            _ups, downs = self._arrow_buttons(app, dialog)
+            downs[0].invoke()  # alpha below beta
+            app.update()
+            captured["disabled_after_move"] = reset.instate(("disabled",))
+            reset.invoke()
+            app.update()
+            captured["labels_after_reset"] = self._check_labels(app, dialog)
+            captured["disabled_after_reset"] = reset.instate(("disabled",))
+            self._button(app, dialog, "Cancel").invoke()
+
+        app.after(150, visit)
+        assert app._session_report_picklist(live, []) is None
+        assert captured["disabled_at_walk"] is True, captured
+        assert captured["disabled_after_move"] is False, captured
+        assert captured["labels_after_reset"] == [
+            "figure 1 · alpha plot",
+            "figure 2 · beta plot",
+        ], captured
+        assert captured["disabled_after_reset"] is True, captured
+        assert app._report_page_order == {}  # cancel wrote nothing
+
+    # -- the count-prefix page names --------------------------------------- #
+
+    def test_count_prefix_reaches_the_html_report(
+        self,
+        app: Any,
+        playground: Any,
+        monkeypatch: Any,
+        quiet_dialogs: list[Any],
+    ) -> None:
+        """The HTML report's captions/headings read "figure N · ..." /
+        "table N · ..." -- numbered the way the picklist's rows are."""
+        import pathlib
+
+        target = pathlib.Path("/tmp") / "pg134-count-prefix.html"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        first = self._figure_static("alpha plot")
+        second = self._figure_static("beta plot")
+        app._render_figure(app._topo_host, first)
+        app._render_figure(app._breed_host, second)
+        app._session_figures[0][1] = "alpha plot"
+        app._session_figures[1][1] = "beta plot"
+        app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+
+        def interact() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            _ups, downs = self._arrow_buttons(app, dialog)
+            downs[1].invoke()  # alpha below beta -- the dialog's order
+            app.update()
+            self._button(app, dialog, "Save report…").invoke()
+
+        app.after(150, interact)
+        app._menu_save_session_report_html()
+        assert self._drain(app), "the HTML report job hung"
+        text = target.read_text(encoding="utf-8")
+        # the figures ride count-prefixed, in the dialog's order
+        assert "figure 1 · beta plot" in text, "the count prefix never shipped"
+        assert "figure 2 · alpha plot" in text, "the dialog's order never shipped"
+        # the table rides count-prefixed too (the descriptor card's tree)
+        assert "table 1 · SMILES inspector" in text, (
+            "the table's count prefix never shipped"
+        )
+        # the retired " (2)" dedupe is gone from the figure captions
+        assert "alpha plot (2)" not in text and "beta plot (2)" not in text
+        target.unlink(missing_ok=True)
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+        app._desc_tree.delete(*app._desc_tree.get_children())
+
+    def test_both_menus_pin_the_count_prefix_walk(self, playground: Any) -> None:
+        """The PDF twin names its pages and the HTML twin its captions
+        with the same count-prefixed walk (source pins)."""
+        import inspect
+
+        pdf = inspect.getsource(playground.PlaygroundApp._menu_save_session_report)
+        html = inspect.getsource(
+            playground.PlaygroundApp._menu_save_session_report_html
+        )
+        assert 'f"figure {position} · {title}"' in pdf
+        assert 'f"table {position} · {title}"' in pdf
+        assert 'f"figure {position} · {title}"' in html
+        assert 'f"table {position} · {title}"' in html
+        # the retired caption dedupe is gone from the HTML twin
+        assert "unique_caption" not in html
+
+    # -- the docstring pins ------------------------------------------------- #
+
+    def test_module_docstring_records_round_134(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-134" in doc
+        assert "REMEMBERS" in doc
+        assert "hover INSPECT" in doc
+
+    def test_picklist_docstring_records_round_134(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._session_report_picklist.__doc__ or ""
+        assert "100x-134" in doc
+        assert "ORDER MEMORY" in doc or "order REMEMBERS" in doc
+        assert "Reset to walking order" in doc
+
+    def test_menu_docstrings_record_the_count_prefix(self, playground: Any) -> None:
+        pdf = playground.PlaygroundApp._menu_save_session_report.__doc__ or ""
+        html = playground.PlaygroundApp._menu_save_session_report_html.__doc__ or ""
+        assert "100x-134" in pdf and "CARRY THE COUNT" in pdf
+        assert "100x-134" in html and "CARRY THE COUNT" in html

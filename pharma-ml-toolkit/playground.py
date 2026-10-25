@@ -307,7 +307,23 @@ Design notes
   mutant(s)" -- so the picklist's rows and the report's captions say
   what each page actually holds), and the web twin's report card grew
   a PREVIEW -- a dialog that renders the ordered sections before the
-  download, the actual walking order made visible.
+  download, the actual walking order made visible.  (100x-134) The
+  picklist's order now REMEMBERS: a completed Save stores the
+  dialog's per-kind label order (``_report_page_order``), and the
+  next Save re-opens pre-arranged in that order (stale labels
+  skipped, new pages appended in walk order) -- the web twin's
+  persisted walking order, mirrored per session; the dialog's own
+  "Reset to walking order" button restores the walk order AND
+  forgets the memory, enabled exactly while the order has drifted.
+  Both twins' page names grew the count prefix the same round: the
+  PDF's pages and the HTML's captions/headings read "figure N ·
+  <caption>" / "table N · <caption>" -- numbered the way the
+  picklist's rows are, in the dialog's walking order -- and the web
+  twin's preview sketches grew a hover INSPECT: every trace group
+  carries the honest numbers behind the approximation (point count,
+  x/y ranges, the band's center mean, the scatter's class split) as
+  a native SVG title, with a hover emphasis on the trace under the
+  pointer.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -1891,6 +1907,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # closed), and File ▸ Save session report (PDF) walks it to compose
         # pharmaml.viz.save_pdf_report over everything on screen.
         self._session_figures: list[list] = []
+        # (100x-134) the picklist's ORDER MEMORY -- the last SAVED dialog
+        # order's labels per kind ("table" / "figure").  The web twin
+        # persists its walking order per browser (localStorage); the
+        # desktop twin now keeps it for the session: the next Save's
+        # picklist re-opens with the pages already in the remembered
+        # order (a label that no longer exists is skipped, a NEW page
+        # rides after the remembered ones in walk order).  The dialog's
+        # own "Reset to walking order" button clears it -- the web
+        # twin's dashed Reset chip, mirrored.
+        self._report_page_order: dict[str, list[str]] = {}
         self._ml_frame: Any = None
         self._ml_path: Path | None = None
         # -- Data & ML report state (100x-76, extended 100x-79/118) -- #
@@ -3604,6 +3630,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         buttons disable honestly (the first row's ▲ is a no-op), the
         numbering re-writes itself on every move, and a muted note
         under the header says what the order means.
+
+        (100x-134) The order REMEMBERS -- the web twin persists its
+        walking order per browser; the desktop twin now keeps the last
+        SAVED dialog order per session (``_report_page_order``): the
+        next Save's picklist re-opens with each kind's pages already
+        in the remembered order (labels that no longer exist are
+        skipped; a NEW page rides after the remembered ones, in walk
+        order), a muted line under the header confesses the memory,
+        and the dialog's own "Reset to walking order" button clears
+        it (the web twin's dashed Reset chip, mirrored) -- the walk
+        order returns and the memory is forgotten.  Cancel never
+        touches the memory; only a completed Save rewrites it.
         """
         if tk is None:  # pragma: no cover - headless import
             return live, tables
@@ -3636,6 +3674,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             wraplength=430,
             justify="left",
         ).pack(anchor="w", padx=16, pady=(0, 6))
+        # (100x-134) the order-memory confession -- only shown when a
+        # remembered order actually moved something, so a first Save
+        # (or a Reset) keeps the dialog's original quiet.
+        memory_label = ttk.Label(win, style="CardMuted.TLabel")
+        memory_label.pack(anchor="w", padx=16, pady=(0, 6))
 
         body = ttk.Frame(win, style="Card.TFrame")
         body.pack(fill="both", expand=True, padx=16)
@@ -3746,6 +3789,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         if position < len(bucket) - 1
                         else ["disabled"]
                     )
+            # (100x-134) the Reset button rides the same refresh: it is
+            # enabled exactly while the dialog's order has DRIFTED from
+            # the walk order (a remembered order applied, or a manual
+            # ▲ / ▼ move) -- at the walk order it disables itself, the
+            # same honesty as the boundary arrows.
+            drifted = False
+            for kind in ("table", "figure"):
+                ranks = [
+                    walk_rank.get(id(other["entry"]), len(walk_rank))
+                    for other in records[kind]
+                ]
+                if ranks != sorted(ranks):
+                    drifted = True
+            reset_button.state(["!disabled"] if drifted else ["disabled"])
 
         def refresh_census() -> None:
             kept = sum(
@@ -3767,6 +3824,82 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             else:
                 save_button.state(["disabled"])
 
+        # (100x-134) apply the remembered order BEFORE any row exists:
+        # reorder the walked lists per kind (stored labels first, in
+        # stored order; labels the walk no longer finds are skipped -- a
+        # re-rendered card, a cleared table; NEW labels ride after, in
+        # walk order), then build the rows from the ordered lists.  The
+        # dialog opens pre-arranged and the ▲ / ▼ machinery is untouched.
+        def ordered(
+            kind: str, entries: list[Any], labels: list[str]
+        ) -> tuple[list[Any], list[str]]:
+            remembered = self._report_page_order.get(kind) or []
+            if not remembered:
+                return entries, labels
+            pairs = list(zip(entries, labels))
+            used = [False] * len(pairs)
+            kept: list[tuple[Any, str]] = []
+            for name in remembered:
+                for index, (entry, label) in enumerate(pairs):
+                    if not used[index] and label == name:
+                        used[index] = True
+                        kept.append((entry, label))
+                        break
+            rest = [pair for index, pair in enumerate(pairs) if not used[index]]
+            combined = kept + rest
+            return [entry for entry, _label in combined], [label for _e, label in combined]
+
+        table_labels_walk = [title for title, _headings, _rows in tables]
+        figure_labels_walk = [str(entry[1]) for entry in live]
+        table_entries, table_labels = ordered("table", list(tables), table_labels_walk)
+        figure_entries, figure_labels = ordered("figure", list(live), figure_labels_walk)
+        remembered_applied = bool(
+            self._report_page_order.get("table")
+            or self._report_page_order.get("figure")
+        )
+        if remembered_applied:
+            memory_label.configure(
+                text=(
+                    "Your last saved order was applied — Reset to "
+                    "walking order forgets it."
+                ),
+                wraplength=430,
+                justify="left",
+            )
+        else:
+            memory_label.pack_forget()  # nothing remembered: stay quiet
+        # (100x-134) the WALK order frozen for the Reset button: every
+        # entry's rank in the registry walk, so "Reset to walking
+        # order" can honestly restore what the dialog would have shown
+        # with no memory and no moves.
+        walk_rank: dict[int, int] = {}
+        for position, entry in enumerate(list(tables) + list(live)):
+            walk_rank[id(entry)] = position
+
+        def reset_to_walk() -> None:
+            """(100x-134) Restore the walk order AND forget the memory."""
+            for kind in ("table", "figure"):
+                bucket = records[kind]
+                if not bucket:
+                    continue
+                bucket.sort(
+                    key=lambda other: walk_rank.get(
+                        id(other["entry"]), len(walk_rank)
+                    )
+                )
+                for other in bucket:
+                    other["row"].pack_forget()
+                for other in bucket:
+                    other["row"].pack(fill="x", padx=(10, 0), pady=(0, 2))
+            refresh_numbering()
+            refresh_arrows()
+            memory_label.pack_forget()  # the confession no longer applies
+            # the memory itself is forgotten -- the NEXT dialog opens in
+            # the walk order too (the web twin's dashed Reset chip,
+            # mirrored: it deletes the persisted key, not just the drift)
+            self._report_page_order.pop("table", None)
+            self._report_page_order.pop("figure", None)
+
         # (100x-133) the groups ride in the WALKING order -- both walkers
         # (the library's save_pdf_report and the HTML menu's builder)
         # write the table pages before the figure pages, so the dialog
@@ -3776,8 +3909,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             add_group(table_group, "Tables (one page each)", len(tables))
             add_items(
                 table_group,
-                entries=[entry for entry in tables],
-                labels=[title for title, _headings, _rows in tables],
+                entries=table_entries,
+                labels=table_labels,
                 kind="table",
                 prefix="table ",
             )
@@ -3785,8 +3918,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             add_group(figure_group, "Figures (one page each)", len(live))
             add_items(
                 figure_group,
-                entries=[entry for entry in live],
-                labels=[str(entry[1]) for entry in live],
+                entries=figure_entries,
+                labels=figure_labels,
                 kind="figure",
                 prefix="figure ",
             )
@@ -3807,6 +3940,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ):
                 return
             outcome["saved"] = True
+            # (100x-134) the ORDER MEMORY -- a completed Save records the
+            # dialog's per-kind order (ALL labels, kept or not: an
+            # unchecked page keeps its place for the next visit).  The
+            # returned lists stay exactly what they were.
+            self._report_page_order["table"] = [
+                str(other["label"]) for other in records["table"]
+            ]
+            self._report_page_order["figure"] = [
+                str(other["label"]) for other in records["figure"]
+            ]
             win.destroy()
 
         save_button = ttk.Button(buttons, text="Save report…", command=confirm)
@@ -3814,6 +3957,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ttk.Button(buttons, text="Cancel", command=win.destroy).pack(
             side="right", padx=(0, 8)
         )
+        # (100x-134) the Reset button -- the web twin's dashed chip on
+        # the desktop: restores the walk order, forgets the memory.  Its
+        # enabled/disabled state rides refresh_arrows (drift-honest).
+        reset_button = ttk.Button(
+            buttons,
+            text="Reset to walking order",
+            command=reset_to_walk,
+        )
+        reset_button.pack(side="left")
         refresh_numbering()
         refresh_arrows()
         refresh_census()
@@ -3864,6 +4016,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         web report card's per-section control: every page the walk
         found is offered with a checkbox (all on by default) and only
         the kept pages ship.  Cancel leaves the session untouched.
+
+        (100x-134) The page names CARRY THE COUNT -- the PDF's figure
+        pages are named "figure N · <caption>" and its table pages
+        "table N · <caption>", numbered in the picklist's own walking
+        order, so the page headings in the file read exactly the way
+        the picklist's rows did (round 133 numbered the rows; round 134
+        makes the file agree).  The "·" separator is latin-1 safe and
+        a plain file-name character, so the library's page-name
+        validator and the temp-png walk both accept it untouched.
         """
         live = self._live_session_figures()
         tables = self._live_session_tables()
@@ -3908,14 +4069,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return name
 
         figures: dict[str, Any] = {}
-        for _host, title, figure in live:
-            figures[unique_name(title, figures)] = figure
+        for position, (_host, title, figure) in enumerate(live, start=1):
+            # (100x-134) the count prefix -- the picklist's row label,
+            # carried into the file's page heading.  unique_name stays
+            # as the pathological guard (two identical captions at the
+            # same position cannot happen, but the guard is free).
+            figures[
+                unique_name(f"figure {position} · {title}", figures)
+            ] = figure
         import pandas as pd
 
         table_pages: dict[str, Any] = {}
-        for title, headings, rows in tables:
+        for position, (title, headings, rows) in enumerate(tables, start=1):
             frame = pd.DataFrame(rows, columns=headings)
-            table_pages[unique_name(f"{title} table", table_pages, figures)] = frame
+            table_pages[
+                unique_name(f"table {position} · {title}", table_pages, figures)
+            ] = frame
         stamp = time.strftime("%Y-%m-%d %H:%M")
         # (100x-129) the ink variant rides the theme radios -- captured
         # on the MAIN thread (Tk variables are not safe to read from the
@@ -3996,6 +4165,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         (100x-132) Same picklist as the PDF twin: the pre-save
         checklist runs after the guards, and only the kept pages walk
         into the HTML.  Cancel leaves the session untouched.
+
+        (100x-134) The captions CARRY THE COUNT, exactly like the PDF
+        twin's page names: figures ride as "figure N · <caption>" and
+        tables as "table N · <caption>", numbered in the picklist's
+        own walking order -- both twins' headings now read the way the
+        picklist's numbered rows did (the 100x-124 " (2)" caption
+        dedupe retired: the position prefix already separates two
+        same-titled pages, and reads truer to the checklist).
         """
         live = self._live_session_figures()
         tables = self._live_session_tables()
@@ -4043,17 +4220,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             cards = 0
         figure_count = len(live)
         table_count = len(tables)
-        # caption dedupe: two cards can carry the same job label, and
-        # identical captions would read as a missing figure -- number
-        # the repeats the way the PDF's page names do.
-        seen_captions: dict[str, int] = {}
-
-        def unique_caption(base: str) -> str:
-            seen = seen_captions.get(base, 0)
-            seen_captions[base] = seen + 1
-            return base if seen == 0 else f"{base} ({seen + 1})"
-
-        captioned = [(unique_caption(title), figure) for _host, title, figure in live]
+        # (100x-134) the count-prefix walk -- the picklist's numbered
+        # rows, carried into the HTML's captions/headings: "figure N ·
+        # <caption>" / "table N · <caption>" in the dialog's order.
+        # The position prefix separates same-titled pages on its own
+        # (the old " (2)" caption dedupe retired with it).
+        captioned = [
+            (f"figure {position} · {title}", figure)
+            for position, (_host, title, figure) in enumerate(live, start=1)
+        ]
+        table_headings = [
+            f"table {position} · {title}"
+            for position, (title, _headings, _rows) in enumerate(tables, start=1)
+        ]
 
         def work() -> Any:
             import pandas as pd
@@ -4085,9 +4264,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "assets: move it, mail it, archive it.",
                 heading="What this file contains",
             )
-            for title, headings, rows in tables:
+            for heading, (title, headings, rows) in zip(table_headings, tables):
                 report.add_table(
-                    pd.DataFrame(rows, columns=headings), heading=f"{title} table"
+                    pd.DataFrame(rows, columns=headings), heading=heading
                 )
             for caption, figure in captioned:
                 report.add_figure(figure, caption=caption)

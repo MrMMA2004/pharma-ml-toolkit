@@ -54,6 +54,7 @@ import {
   figureSketchBounds,
   PREVIEW_SCATTER_POINTS,
   PREVIEW_TABLE_ROWS,
+  traceInspectText,
   SESSION_GROUP_ORDER,
   sessionGroupsAvailable,
   sessionReportCensus,
@@ -249,7 +250,12 @@ const SKETCH_PAD = { left: 6, right: 6, top: 6, bottom: 18 };
  *  polylines, bands become filled polygons with their mean line on
  *  top, class scatters become dots (stride-capped, the shape survives
  *  the cap).  It is an honest approximation and the dialog says so —
- *  the downloaded report renders the real figure. */
+ *  the downloaded report renders the real figure.  (100x-134) Every
+ *  trace group now carries a hover INSPECT: a native SVG <title> with
+ *  the trace's honest numbers (point count, x/y ranges, the band's
+ *  center mean, the scatter's class split — `traceInspectText`), and
+ *  the trace under the pointer thickens (group-hover stroke/fill) so
+ *  WHICH trace the tooltip describes is never ambiguous. */
 function FigureSketch({ section }: { section: ReportFigureSection }) {
   const bounds = figureSketchBounds(section.traces);
   const spanX = bounds.xMax - bounds.xMin;
@@ -283,16 +289,17 @@ function FigureSketch({ section }: { section: ReportFigureSection }) {
             .map((p) => `${px(p[0]).toFixed(1)},${py(p[3]).toFixed(1)}`)
             .join(" ");
           return (
-            <g key={traceIndex}>
+            <g key={traceIndex} className="group cursor-help">
+              <title>{traceInspectText(trace)}</title>
               <polygon
                 points={`${forward} ${backward}`}
-                className="fill-primary/15"
+                className="fill-primary/15 transition-[fill] group-hover:fill-primary/25"
               />
               <polyline
                 points={band
                   .map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`)
                   .join(" ")}
-                className="fill-none stroke-primary"
+                className="fill-none stroke-primary transition-[stroke-width] group-hover:stroke-2"
                 strokeWidth={1.5}
               />
             </g>
@@ -315,7 +322,8 @@ function FigureSketch({ section }: { section: ReportFigureSection }) {
             });
           }
           return (
-            <g key={traceIndex} className="text-primary">
+            <g key={traceIndex} className="group cursor-help text-primary">
+              <title>{traceInspectText(trace)}</title>
               {dots.map((dot, dotIndex) => (
                 <circle
                   key={dotIndex}
@@ -331,14 +339,16 @@ function FigureSketch({ section }: { section: ReportFigureSection }) {
         }
         if (trace.points.length < 2) return null;
         return (
-          <polyline
-            key={traceIndex}
-            points={trace.points
-              .map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`)
-              .join(" ")}
-            className="fill-none stroke-primary"
-            strokeWidth={1.5}
-          />
+          <g key={traceIndex} className="group cursor-help">
+            <title>{traceInspectText(trace)}</title>
+            <polyline
+              points={trace.points
+                .map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`)
+                .join(" ")}
+              className="fill-none stroke-primary transition-[stroke-width] group-hover:stroke-2"
+              strokeWidth={1.5}
+            />
+          </g>
         );
       })}
       <text
@@ -421,7 +431,8 @@ function SectionPreviewBody({ section }: { section: ReportSection }) {
         <p className="text-[11px] text-muted-foreground">
           {section.traces.length} trace{section.traces.length === 1 ? "" : "s"}:{" "}
           {section.traces.map((trace) => trace.name).join(" · ")}
-          — a quick sketch; the download renders this figure through matplotlib.
+          — a quick sketch; hover a trace to inspect its numbers; the
+          download renders this figure through matplotlib.
         </p>
       </div>
     );

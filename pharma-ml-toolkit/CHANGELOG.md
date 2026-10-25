@@ -10,6 +10,108 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.73] — 2026-10-25
+
+### Added — the round-19 full review (100x-134): the picklist's order memory + both twins' count-prefixed page names + the web preview's hover INSPECT
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a nineteenth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–133's documented floor — the axis holds; no new gaps).
+Round 133's handover named the round's work: (a) the web preview's
+sketches could grow a hover INSPECT, (b) the desktop picklist could
+remember the last custom order per session, and (c) the PDF twin
+could ride the caption feed further. All three shipped — plus CRON
+473637, which hit the exec-limits disable again, recreated fresh as
+473703.
+
+**The picklist's order now REMEMBERS.** The web twin persists its
+walking order per browser (localStorage, since 100x-132); the desktop
+twin now keeps the last SAVED dialog order per session: a completed
+Save stores the dialog's per-kind label order
+(`_report_page_order` — ALL labels, kept or not, so an unchecked page
+keeps its place for the next visit), and the next Save's picklist
+re-opens with each kind's pages already pre-arranged in that order
+(labels the walk no longer finds are skipped — a re-rendered card, a
+cleared table; a NEW page rides after the remembered ones, in walk
+order). A muted confession line under the header says so ("Your last
+saved order was applied — Reset to walking order forgets it."),
+rendered only when a remembered order actually applied. The dialog's
+own **"Reset to walking order"** button (the web twin's dashed Reset
+chip, mirrored on the desktop) restores the walk order AND forgets
+the memory — the next dialog opens in the walk order too — and its
+enabled state rides the same refresh as the boundary arrows: enabled
+exactly while the dialog's order has DRIFTED from the walk order (a
+remembered order on arrival, or a manual ▲ / ▼ move), disabled at the
+walk order itself. Cancel never touches the memory; only a completed
+Save rewrites it.
+
+**Both twins' page names carry the count.** The PDF's figure pages
+are now named "figure N · <caption>" and its table pages
+"table N · <caption>", and the HTML twin's figure captions and
+table headings read the same — numbered in the picklist's own walking
+order, so the page headings in both files read exactly the way the
+picklist's numbered rows did (round 133 numbered the rows; round 134
+makes the files agree). The "·" separator is latin-1-safe and a plain
+file-name character, so the library's page-name validator and the
+temp-png walk accept it untouched; `unique_name` stays as the
+pathological guard. The HTML twin's 100x-124 " (2)" caption dedupe
+retired with it — the position prefix already separates two
+same-titled pages, and reads truer to the checklist.
+
+**The web preview's sketches grew a hover INSPECT.** Every trace
+group in the preview dialog's inline SVG sketch now carries a native
+`<title>` — the honest numbers behind the approximation, zero JS:
+the trace's name, point count, and x/y ranges (fmtCell-compacted,
+the exponential branch included); a band reports its CENTER mean
+(the polygon's edges are the ± spread, the mean line is what reads);
+a classified scatter reports its class split ("31 class 1 / 9 class
+0"); the empties confess ("no points" / "no finite points"); a
+degenerate axis reads its single value (not "v…v"). The trace under
+the pointer thickens while hovered (group-hover stroke/fill
+emphasis) so WHICH trace the tooltip describes is never ambiguous,
+the cursor confesses the affordance (`cursor-help`), and the caption
+under the sketch says it out loud ("hover a trace to inspect its
+numbers"). The wording lives in a pure exported helper
+(`traceInspectText`) so the probe pins it verbatim.
+
+### Verification
+
+- `playground.py --self-test` green (UI built, every tab visited);
+  `probe_coverage_111_perfile.py` 118 rar (115 covered + 3 documented
+  absorptions) + 1 upload = **119/119, zero-hit 0**;
+  `probe_coverage_113_notebooks.py` green;
+  `audit_round7_122.py` **TOTAL 246 symbols / 43 zero-hit** (the
+  documented floor, byte-identical membership).
+- `scratch/smoke134.py` — SMOKE134_OK (the memory store + the
+  count-prefix captions, the pre-arranged re-open + confession +
+  cancel-keeps-memory, the stale-skip + new-append, the Reset's
+  walk-order restore + forget + drift-honesty, the docstring pins).
+- `scratch/shoot134.py` — SHOOT134_OK (`pg134-picklist-first-save.png`,
+  `pg134-picklist-remembered.png`, `pg134-picklist-reset.png`, the
+  `pg134-remembered-report.html` artifact with count-prefixed
+  captions in the dialog's order).
+- New tests: `TestReview134Gui` (9 — the save-stores/reopen-applies
+  contract with the confession + enabled Reset, the stale-skip +
+  new-append, the Reset's restore + forget + manager-state collapse,
+  the drift-honest Reset through manual moves, the count-prefix HTML
+  artifact, both menus' source pins, the docstring pins) +
+  `TestSessionReportInspect` (3 — the TS probe pins over crafted
+  traces: the line/band/scatter wording, the honest empties, the
+  degenerate spans, the exponential branch; the collector's export;
+  the card's inspect surfaces); the standing index pins updated for
+  the count prefix (TestReview123's PDF page name,
+  TestReview124's retired dedupe, TestReview132's three table-heading
+  pins, the preview caption's hover confession).
+- Full suite: **2507 collected = 2502 passed + 5 skipped / 0
+  failures** (foreground, 443 s; junit134.xml); notebooks re-executed
+  with BOTH drivers (64: TOTAL 206 s; 26: "26-R7 driver OK";
+  `test_notebook_variants` 119/119); ruff clean + mypy at the
+  61-error pre-existing baseline (zero new) after the EXE002 chmod
+  sweep; web `bun run lint` clean + `bunx tsc --noEmit` clean in
+  src/ (the examples/skills errors are pre-existing, outside src/).
+
 ## [1.2.72] — 2026-10-25
 
 ### Added — the round-18 full review (100x-133): the picklist's per-page reorder + the registry's captions + the web twin's PREVIEW

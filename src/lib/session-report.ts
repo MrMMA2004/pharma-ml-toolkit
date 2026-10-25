@@ -635,3 +635,54 @@ export function figureSketchBounds(
   }
   return { xMin, xMax, yMin, yMax };
 }
+
+/** (100x-134) The hover-INSPECT text a preview sketch's trace carries —
+ *  the honest numbers behind the approximation: the trace's name, its
+ *  point count, its x/y ranges (fmtCell-compacted), and the kind's own
+ *  confession — a band reports its CENTER mean (the polygon's edges are
+ *  the ± spread, the mean line is what reads), a classified scatter
+ *  reports its class split (how many dots ride each color).  Pure: the
+ *  probe pins the wording.  Rendered as a native SVG <title> inside the
+ *  trace's group, so every browser shows it on hover with zero JS. */
+export function traceInspectText(trace: ReportFigureTrace): string {
+  const total = trace.points.length;
+  if (total === 0) return `${trace.name} — no points`;
+  let xMin = Infinity;
+  let xMax = -Infinity;
+  let yMin = Infinity;
+  let yMax = -Infinity;
+  let sum = 0;
+  let finite = 0;
+  for (const point of trace.points) {
+    const [x, y] = point as [number, number, number?, number?];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (x < xMin) xMin = x;
+    if (x > xMax) xMax = x;
+    if (y < yMin) yMin = y;
+    if (y > yMax) yMax = y;
+    sum += y;
+    finite += 1;
+  }
+  if (finite === 0) return `${trace.name} — no finite points`;
+  const span = (lo: number, hi: number) =>
+    lo === hi ? fmtCell(lo) : `${fmtCell(lo)}…${fmtCell(hi)}`;
+  if (trace.style === "band") {
+    return (
+      `${trace.name} — ${total} pts · x ${span(xMin, xMax)} · ` +
+      `center mean ${fmtCell(sum / finite)}`
+    );
+  }
+  if (trace.style === "scatter" && trace.classes) {
+    let ones = 0;
+    for (const klass of trace.classes) if (klass === 1) ones += 1;
+    const zeros = trace.classes.length - ones;
+    return (
+      `${trace.name} — ${total} pts · x ${span(xMin, xMax)} · ` +
+      `y ${span(yMin, yMax)} · ${ones} class 1 / ${zeros} class 0`
+    );
+  }
+  return (
+    `${trace.name} — ${total} pts · x ${span(xMin, xMax)} · ` +
+    `y ${span(yMin, yMax)}`
+  );
+}

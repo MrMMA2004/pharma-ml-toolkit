@@ -873,9 +873,10 @@ class TestSessionReportPreview:
         assert "more row" in report
         assert "section.dataUri" in report
         # the sketch's honesty note + the in-dialog download
-        assert "a quick sketch; the download renders this figure through matplotlib" in (
-            report
-        )
+        # (100x-134) the note gained the hover-INSPECT confession
+        assert "hover a trace to inspect its numbers" in report
+        assert "a quick sketch" in report
+        assert "renders this figure through matplotlib" in report
         assert "Download this report (HTML)" in report
         # the preview walks the SAME payload the download POSTs
         assert "collectSessionReport(snapshot, options, order)" in report
@@ -1159,3 +1160,92 @@ class TestSurgeryWebWiring:
         assert "rememberJump(entry.id)" in finder
         assert "if (found) {" in finder
         assert "Recently jumped" in finder
+
+
+class TestSessionReportInspect:
+    """Round 100x-134: the preview's hover INSPECT — the sketch's traces
+    carry their honest numbers.
+
+    The TS side (the SHIPPED collector over crafted traces) pins the
+    inspect wording: a line reports its x/y ranges, a band its CENTER
+    mean, a classified scatter its class split, the empties confess,
+    and a degenerate axis reads a single value.  The static pins keep
+    the dialog's surfaces (the native SVG <title> on every trace group,
+    the help cursor, the hover emphasis, the caption's hint) from
+    silently disappearing between rounds."""
+
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+    REPORT_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "session-report.tsx"
+    )
+
+    needs_round = pytest.mark.skipif(
+        not COLLECTOR_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src + <repo>/scratch) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+
+    @needs_round
+    def test_trace_inspect_text_pins(self) -> None:
+        # the TS probe exits non-zero on drift and prints its texts
+        _run([BUN, "run", "scratch/probe_session_report_134.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_134.json").read_text())
+        # a line: name, point count, x/y ranges (fmtCell-compacted)
+        assert ts["inspectLine"] == (
+            "model prediction — 3 pts · x 0…2 · y 0.5…2"
+        ), ts
+        # a band: the CENTER mean rides (the edges ARE the polygon)
+        assert ts["inspectBand"] == (
+            "± band — 2 pts · x 0…2 · center mean 2"
+        ), ts
+        # a classified scatter: the class split rides along
+        assert ts["inspectScatter"] == (
+            "test observations — 4 pts · x 0.5…3.5 · y 0.31…1.9 · "
+            "3 class 1 / 1 class 0"
+        ), ts
+        # a scatter WITHOUT classes reads the plain line wording
+        assert ts["inspectScatterNoClasses"] == (
+            "dots — 2 pts · x 0…1 · y 1…2"
+        ), ts
+        # the honest empties
+        assert ts["inspectEmpty"] == "nothing — no points", ts
+        assert ts["inspectNoFinite"] == "nan — no finite points", ts
+        # a degenerate span reads the single value (no "v…v")
+        assert ts["inspectFlat"] == "flat — 2 pts · x 1 · y 5", ts
+        # fmtCell's exponential branch reaches the tooltip too
+        assert ts["inspectBig"] == (
+            "big — 2 pts · x 0…1 · y 1.235e+4…6.789e+4"
+        ), ts
+        # every crafted trace yielded a named inspect (never a mute title)
+        assert ts["allNamed"] is True, ts
+        # the pkpd-only session still ships its 2 figure sections --
+        # every one of them rides titled groups in the preview
+        assert ts["sectionFigureCount"] == 2, ts
+
+    @pytest.mark.skipif(
+        not COLLECTOR_TS.is_file(),
+        reason="web checkout (<repo>/src/lib/session-report.ts) required",
+    )
+    def test_collector_exports_the_inspect_helper(self) -> None:
+        collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
+        assert "export function traceInspectText" in collector
+        # the native-<title> contract is documented, not incidental
+        assert "native SVG <title>" in collector
+        assert "hover-INSPECT" in collector
+
+    @pytest.mark.skipif(
+        not REPORT_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required",
+    )
+    def test_report_card_carries_the_inspect(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the import + the native title on every trace group
+        assert "traceInspectText" in report
+        assert "<title>{traceInspectText(trace)}</title>" in report
+        # the hover affordances: the help cursor + the emphasis classes
+        assert 'className="group cursor-help' in report
+        assert "group-hover:stroke-2" in report
+        assert "group-hover:fill-primary/25" in report
+        # the caption's hint confesses the affordance
+        assert "hover a trace to inspect its numbers" in report

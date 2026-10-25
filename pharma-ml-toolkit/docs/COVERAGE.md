@@ -931,3 +931,33 @@ The web catalog walk: 26/26 entries (the round touched no catalog
 topology). 13 new tests: TestReview133Gui (9, desktop) +
 TestSessionReportPreview (4, web parity incl. the bounds arithmetic
 and the section stream).
+
+### Round 19 (100x-134) — the picklist's order memory + both twins' count-prefixed page names + the web preview's hover INSPECT
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **246 public symbols, 43 zero-hit —
+byte-identical to rounds 127–133's documented floor.** The library
+axis holds; round 133's handover named all three of the round's
+items — (b) the desktop picklist remembering the last custom order
+per session, (c) the PDF twin riding the caption feed further, (a)
+the web preview's sketches growing a hover inspect — and all three
+shipped:
+
+| Surface | The 1.2.73 fix |
+| --- | --- |
+| The picklist's order memory | A completed Save stores the dialog's per-kind label order (`_report_page_order`, all labels — kept or not), and the next Save's picklist re-opens pre-arranged in it (stale labels skipped, new pages appended in walk order) — the web twin's persisted walking order, mirrored per session. A muted confession line renders when the memory applied; the dialog's own "Reset to walking order" button restores the walk order AND forgets the memory, enabled exactly while the order has drifted (a remembered arrival or a manual ▲ / ▼ move), disabled at the walk order. Cancel never touches the memory. |
+| The count-prefixed page names | The PDF's pages ("figure N · <caption>" / "table N · <caption>") and the HTML twin's captions/headings read the same — numbered in the picklist's own walking order, so both files' page headings read the way the picklist's numbered rows did. The HTML twin's 100x-124 " (2)" caption dedupe retired with it (the position prefix separates same-titled pages on its own). |
+| The web preview's hover INSPECT | Every trace group in the preview's inline SVG sketch carries a native `<title>` — name, point count, x/y ranges (fmtCell-compacted); a band reports its CENTER mean; a classified scatter its class split; the empties confess; a degenerate axis reads its single value. The hovered trace thickens (group-hover emphasis) so the tooltip's subject is never ambiguous, the cursor confesses (`cursor-help`), and the caption says it out loud. The wording lives in the pure exported `traceInspectText` so the probe pins it verbatim. |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.73 via
+both drivers: 64 TOTAL 206 s; 26 "26-R7 driver OK"). The GUI-axis
+census holds at 68 live cards (the round touched no card topology).
+The web catalog walk: 26/26 entries (the round touched no catalog
+topology). 12 new tests: TestReview134Gui (9, desktop) +
+TestSessionReportInspect (3, web parity incl. the TS probe's wording
+pins); the standing index pins updated for the count prefix
+(TestReview123's PDF page name, TestReview124's retired dedupe,
+TestReview132's three table-heading pins, the preview caption's
+hover confession).
