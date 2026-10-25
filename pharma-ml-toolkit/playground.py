@@ -296,6 +296,18 @@ Design notes
   became reorderable in the same round: drag (or the per-chip arrows)
   walks the groups into any order, persisted per browser, and the
   collector honours it -- the report reads the way the reader wants.
+  (100x-133) The picklist's pages reorder too: every row carries ▲ / ▼
+  buttons that move it among its own kind's neighbours, the rows ride
+  in the walkers' real order (table pages first, then figure pages),
+  and the returned lists carry the dialog's order, so the saved file
+  walks its pages exactly the way the checklist read them.  The same
+  round reached the registry's labels: ``_render_figure`` takes an
+  optional ``caption`` that overrides the job label (the generative
+  structure grids pass their counts -- "Ring topology moves — 6
+  mutant(s)" -- so the picklist's rows and the report's captions say
+  what each page actually holds), and the web twin's report card grew
+  a PREVIEW -- a dialog that renders the ordered sections before the
+  download, the actual walking order made visible.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -320,6 +332,7 @@ import threading
 import time
 import traceback
 from collections.abc import Callable, Iterable, Iterator
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -2863,16 +2876,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 _FIGURE_CANVAS = None
         return _FIGURE_CANVAS
 
-    def _render_figure(self, host: Any, figure: Any) -> None:
+    def _render_figure(self, host: Any, figure: Any, caption: str | None = None) -> None:
         """Embed a matplotlib figure into ``host`` (replacing any prior one).
 
         Prefers the live TkAgg canvas; when the TkAgg acceleration cannot
         load (some Tcl 9 builds), falls back to rendering the figure with
         the Agg backend and displaying the PNG directly -- same figures,
         every machine.  (100x-122) every render also feeds the session
-        figure registry the File ▸ Save session report walks.
+        figure registry the File ▸ Save session report walks.  (100x-133)
+        ``caption`` overrides the running job's label in that registry --
+        a card that can say something richer than its job name (the
+        surgery grids' counts) passes it so the picklist's rows say what
+        the page actually holds.
         """
-        self._register_session_figure(host, figure)
+        self._register_session_figure(host, figure, caption)
         self._close_embedded(host)
         for child in host.winfo_children():
             child.destroy()
@@ -2939,16 +2956,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         host.pack_propagate(False)
         return host
 
-    def _register_session_figure(self, host: Any, figure: Any) -> None:
+    def _register_session_figure(
+        self, host: Any, figure: Any, caption: str | None = None
+    ) -> None:
         """Track one live ``(title, figure)`` per host for the session report.
 
         Called from :meth:`_render_figure` BEFORE the prior figure is
         closed: an existing host entry is replaced in place (order kept --
         the report reads top-of-session first), a new host appends.  The
-        title is the running job's label, the honest provenance of what
-        drew the figure.
+        title defaults to the running job's label, the honest provenance
+        of what drew the figure.  (100x-133) ``caption`` overrides that
+        label -- the generative structure grids pass their counts ("Ring
+        topology moves — 6 mutant(s)") so the pre-save picklist's rows
+        and the report's figure captions carry the page's actual census,
+        not just the card's job name.
         """
-        title = self._job_label_base or "figure"
+        title = caption or self._job_label_base or "figure"
         for entry in self._session_figures:
             if entry[0] is host:
                 entry[1] = title
@@ -3568,6 +3591,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ship") that recounts on every checkbox flip, and the Save
         button disables itself at zero pages -- the honest empty, the
         same contract as the web twin's "Nothing would ship" line.
+
+        (100x-133) The pages REORDER -- the desktop twin of the web
+        report card's draggable chips: every row carries ▲ / ▼ buttons
+        that move it among its OWN kind's neighbours (a figure never
+        crosses into the table block, because both walkers ship the
+        kinds separately).  The rows are offered in the WALKING order
+        -- the table pages first, then the figure pages, exactly the
+        sequence ``save_pdf_report`` / the HTML builder writes them --
+        and the returned lists carry the dialog's order, so the report
+        walks the pages the way this list reads them.  The boundary
+        buttons disable honestly (the first row's ▲ is a no-op), the
+        numbering re-writes itself on every move, and a muted note
+        under the header says what the order means.
         """
         if tk is None:  # pragma: no cover - headless import
             return live, tables
@@ -3585,12 +3621,34 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             win,
             text="Choose the pages the report ships — every page is on by default.",
             style="CardMuted.TLabel",
-        ).pack(anchor="w", padx=16, pady=(14, 6))
+        ).pack(anchor="w", padx=16, pady=(14, 2))
+        # (100x-133) the walking-order confession: the list below IS
+        # the order the report writes its pages, so a reorder is a
+        # promise, not a suggestion.
+        ttk.Label(
+            win,
+            text=(
+                "This list is the report's walking order — the table pages "
+                "ship first, then the figure pages.  The ▲ / ▼ buttons on a "
+                "row move it within its own group; the numbering follows."
+            ),
+            style="CardMuted.TLabel",
+            wraplength=430,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 6))
 
         body = ttk.Frame(win, style="Card.TFrame")
         body.pack(fill="both", expand=True, padx=16)
-        figure_vars: list[list[Any]] = []  # [BooleanVar, entry] pairs
-        table_vars: list[list[Any]] = []
+        # (100x-133) one sub-frame PER GROUP: repacking a row on a move
+        # forgets and re-packs it inside its own group, so a row can
+        # never escape into the other kind's block.
+        table_group = ttk.Frame(body, style="Card.TFrame")
+        figure_group = ttk.Frame(body, style="Card.TFrame")
+        table_group.pack(fill="x", pady=(0, 4))
+        figure_group.pack(fill="x", pady=(0, 4))
+        # each record: the checkbox var, the walked entry, the raw label
+        # (for renumbering), the row frame and its two arrow buttons
+        records: dict[str, list[dict[str, Any]]] = {"table": [], "figure": []}
 
         def add_group(parent: Any, heading: str, count: int) -> None:
             row = ttk.Frame(parent, style="Card.TFrame")
@@ -3605,25 +3663,98 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             parent: Any,
             entries: list[Any],
             labels: list[str],
-            var_bucket: list[list[Any]],
+            kind: str,
             prefix: str,
         ) -> None:
-            for position, (label, entry) in enumerate(zip(labels, entries)):
+            for label, entry in zip(labels, entries):
                 var = tk.BooleanVar(value=True)
                 row = ttk.Frame(parent, style="Card.TFrame")
                 row.pack(fill="x", padx=(10, 0), pady=(0, 2))
                 check = ttk.Checkbutton(
                     row,
-                    text=f"{prefix}{position + 1} · {_truncate_caption_text(label, 56)}",
+                    text="",  # refresh_numbering writes the numbered text
                     variable=var,
                     command=refresh_census,
                 )
-                check.pack(anchor="w")
-                var_bucket.append([var, entry])
+                check.pack(side="left", anchor="w")
+                arrows = ttk.Frame(row, style="Card.TFrame")
+                arrows.pack(side="right")
+                record: dict[str, Any] = {
+                    "var": var,
+                    "entry": entry,
+                    "label": str(label),
+                    "row": row,
+                    "check": check,
+                    "kind": kind,
+                    "prefix": prefix,
+                }
+                up = ttk.Button(
+                    arrows,
+                    text="▲",
+                    width=2,
+                    command=partial(shift, record, -1),
+                )
+                up.pack(side="left", padx=(2, 0))
+                down = ttk.Button(
+                    arrows,
+                    text="▼",
+                    width=2,
+                    command=partial(shift, record, 1),
+                )
+                down.pack(side="left")
+                record["up"] = up
+                record["down"] = down
+                records[kind].append(record)
+
+        def shift(record: dict[str, Any], delta: int) -> None:
+            """Move one page one slot among its OWN kind's rows."""
+            bucket = records[record["kind"]]
+            index = bucket.index(record)
+            target = index + delta
+            if not 0 <= target < len(bucket):
+                return  # the boundary is honest -- the button is disabled
+            bucket[index], bucket[target] = bucket[target], bucket[index]
+            # pack appends in call order, so forget-everything-then-pack
+            # rewrites the group's visual order; the heading stays above
+            # (it was packed first and is never forgotten)
+            for other in bucket:
+                other["row"].pack_forget()
+            for other in bucket:
+                other["row"].pack(fill="x", padx=(10, 0), pady=(0, 2))
+            refresh_numbering()
+            refresh_arrows()
+
+        def refresh_numbering() -> None:
+            for kind in ("table", "figure"):
+                for position, other in enumerate(records[kind], start=1):
+                    other["check"].configure(
+                        text=(
+                            f"{other['prefix']}{position} · "
+                            f"{_truncate_caption_text(other['label'], 56)}"
+                        )
+                    )
+
+        def refresh_arrows() -> None:
+            for kind in ("table", "figure"):
+                bucket = records[kind]
+                for position, other in enumerate(bucket):
+                    other["up"].state(
+                        ["!disabled"] if position else ["disabled"]
+                    )
+                    other["down"].state(
+                        ["!disabled"]
+                        if position < len(bucket) - 1
+                        else ["disabled"]
+                    )
 
         def refresh_census() -> None:
-            kept = sum(1 for var, _entry in figure_vars + table_vars if var.get())
-            total = len(figure_vars) + len(table_vars)
+            kept = sum(
+                1
+                for kind in ("table", "figure")
+                for other in records[kind]
+                if other["var"].get()
+            )
+            total = sum(len(records[kind]) for kind in ("table", "figure"))
             census_label.configure(
                 text=(
                     f"{kept} of {total} page{'s' if total != 1 else ''} will ship"
@@ -3636,23 +3767,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             else:
                 save_button.state(["disabled"])
 
-        if live:
-            add_group(body, "Figures (one page each)", len(live))
-            add_items(
-                body,
-                entries=[entry for entry in live],
-                labels=[str(entry[1]) for entry in live],
-                var_bucket=figure_vars,
-                prefix="figure ",
-            )
+        # (100x-133) the groups ride in the WALKING order -- both walkers
+        # (the library's save_pdf_report and the HTML menu's builder)
+        # write the table pages before the figure pages, so the dialog
+        # lists the table block first: what the reader sees is what the
+        # file gets.
         if tables:
-            add_group(body, "Tables (one page each)", len(tables))
+            add_group(table_group, "Tables (one page each)", len(tables))
             add_items(
-                body,
+                table_group,
                 entries=[entry for entry in tables],
                 labels=[title for title, _headings, _rows in tables],
-                var_bucket=table_vars,
+                kind="table",
                 prefix="table ",
+            )
+        if live:
+            add_group(figure_group, "Figures (one page each)", len(live))
+            add_items(
+                figure_group,
+                entries=[entry for entry in live],
+                labels=[str(entry[1]) for entry in live],
+                kind="figure",
+                prefix="figure ",
             )
 
         census_label = ttk.Label(win, style="CardMuted.TLabel")
@@ -3664,7 +3800,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def confirm() -> None:
             # zero pages never saves -- the button is disabled at zero,
             # but a keyboard/programmatic activation gets the same guard
-            if not any(var.get() for var, _entry in figure_vars + table_vars):
+            if not any(
+                other["var"].get()
+                for kind in ("table", "figure")
+                for other in records[kind]
+            ):
                 return
             outcome["saved"] = True
             win.destroy()
@@ -3674,14 +3814,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ttk.Button(buttons, text="Cancel", command=win.destroy).pack(
             side="right", padx=(0, 8)
         )
+        refresh_numbering()
+        refresh_arrows()
         refresh_census()
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.grab_set()
         win.wait_window()
         if not outcome["saved"]:
             return None
-        kept_live = [entry for var, entry in figure_vars if var.get()]
-        kept_tables = [entry for var, entry in table_vars if var.get()]
+        # the kept pages in the DIALOG's order -- the walking order
+        kept_tables = [
+            other["entry"] for other in records["table"] if other["var"].get()
+        ]
+        kept_live = [
+            other["entry"] for other in records["figure"] if other["var"].get()
+        ]
         return kept_live, kept_tables
 
     def _menu_save_session_report(self) -> None:
@@ -14517,7 +14664,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         def render(figure: Any) -> None:
-            self._render_figure(self._topo_host, figure)
+            # (100x-133) the caption carries the count into the session
+            # registry, so the picklist's row says what the page holds
+            self._render_figure(
+                self._topo_host,
+                figure,
+                caption=f"Ring topology moves — {len(mutants)} mutant(s)",
+            )
 
         self._start_job("mutant structure grid", work, render)
 
@@ -14543,10 +14696,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
 
         def work() -> Any:
-            frame = self._ga_result.to_dataframe()
-            top = frame.head(12)
             entries: list[tuple[str, str]] = []
             scores: list[str] = []
+            frame = self._ga_result.to_dataframe()
+            top = frame.head(12)
             for row in top.itertuples(index=False):
                 cells = row._asdict()
                 rank = cells.get("rank")
@@ -14559,17 +14712,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     scores.append(f"score {float(score):.3f}")
                 except (TypeError, ValueError):
                     scores.append("score —")
-            return molecule_grid_figure(
-                entries,
-                title=(
-                    f"Top {len(entries)} molecules — the last run's leaderboard "
-                    "(rank 1 first)"
+            return (
+                molecule_grid_figure(
+                    entries,
+                    title=(
+                        f"Top {len(entries)} molecules — the last run's leaderboard "
+                        "(rank 1 first)"
+                    ),
+                    scores=scores,
                 ),
-                scores=scores,
+                len(entries),
             )
 
-        def render(figure: Any) -> None:
-            self._render_figure(self._ga_grid_host, figure)
+        def render(payload: tuple[Any, int]) -> None:
+            figure, count = payload
+            # (100x-133) the caption carries the panel count into the
+            # session registry -- the picklist's row stays honest about
+            # what the page holds
+            self._render_figure(
+                self._ga_grid_host,
+                figure,
+                caption=f"Top {count} molecules — the last run's leaderboard",
+            )
 
         self._start_job("top-molecule structure grid", work, render)
 
@@ -14608,7 +14772,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         def render(figure: Any) -> None:
-            self._render_figure(self._breed_host, figure)
+            # (100x-133) the caption carries the viable census into the
+            # session registry -- the picklist's row says what it holds
+            self._render_figure(
+                self._breed_host,
+                figure,
+                caption=(
+                    f"Scaffold-hop litter — {len(viable)}/{len(litter)} "
+                    "viable children"
+                ),
+            )
 
         self._start_job("litter structure grid", work, render)
 

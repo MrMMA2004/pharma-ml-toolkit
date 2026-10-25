@@ -580,3 +580,58 @@ export function sessionReportCensus(
   }
   return { figures, tables, metrics, images };
 }
+
+/* ------------------------------------------------------------------ */
+/* The preview (100x-133)                                              */
+/* ------------------------------------------------------------------ */
+
+/** Rows a table section shows in the preview dialog before the "+N more
+ *  rows" confession — the download ships every row, the preview stays
+ *  light.  Exported so the probe can pin the contract. */
+export const PREVIEW_TABLE_ROWS = 6;
+
+/** Dots a scatter trace draws in the preview sketch (stride-sampled, so
+ *  the shape survives the cap) — the downloaded report renders every
+ *  point through matplotlib. */
+export const PREVIEW_SCATTER_POINTS = 120;
+
+/** (100x-133) The x/y bounds a figure section's preview sketch maps its
+ *  traces into — band edges (lo/hi) participate, a degenerate axis (all
+ *  values equal, or no finite points) pads itself by ±1 so a flat line
+ *  still draws inside the viewBox instead of collapsing to a hairline.
+ *  Pure: the probe pins the arithmetic. */
+export function figureSketchBounds(
+  traces: ReportFigureTrace[],
+): { xMin: number; xMax: number; yMin: number; yMax: number } {
+  let xMin = Infinity;
+  let xMax = -Infinity;
+  let yMin = Infinity;
+  let yMax = -Infinity;
+  for (const trace of traces) {
+    for (const point of trace.points) {
+      const [x, y, lo, hi] = point as [
+        number,
+        number,
+        number | undefined,
+        number | undefined,
+      ];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (x < xMin) xMin = x;
+      if (x > xMax) xMax = x;
+      if (y < yMin) yMin = y;
+      if (y > yMax) yMax = y;
+      if (lo !== undefined && Number.isFinite(lo) && lo < yMin) yMin = lo;
+      if (hi !== undefined && Number.isFinite(hi) && hi > yMax) yMax = hi;
+    }
+  }
+  if (xMin === Infinity) return { xMin: 0, xMax: 1, yMin: 0, yMax: 1 };
+  if (xMin === xMax) {
+    xMin -= 1;
+    xMax += 1;
+  }
+  if (yMin === yMax) {
+    yMin -= 1;
+    yMax += 1;
+  }
+  return { xMin, xMax, yMin, yMax };
+}

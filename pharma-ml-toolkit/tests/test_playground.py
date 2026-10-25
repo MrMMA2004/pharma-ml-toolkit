@@ -7807,7 +7807,12 @@ class TestReview132Gui:
     a live census footer that recounts on every flip, Save disabled at
     zero pages) and only the kept pages ship; Cancel aborts with no
     save started at all.  The web twin's round (the reorderable chips)
-    lives in tests/test_web_parity.py."""
+    lives in tests/test_web_parity.py.
+
+    (100x-133 update) the dialog's rows now ride in the WALKING order
+    -- table pages first, then figure pages, the exact sequence both
+    walkers write them -- and every row carries the round-133 reorder
+    arrows; the index pins below follow that order."""
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
@@ -7951,13 +7956,15 @@ class TestReview132Gui:
         self._seed_session(app)
         captured = self._drive(app, action="cancel")
         app._menu_save_session_report_html()
-        # every page was offered, numbered by axis, in walk order
+        # every page was offered, numbered by axis, in walk order --
+        # (100x-133) the table pages ride FIRST (the walkers' own order)
         assert captured.get("error") is None, captured
         assert len(captured["checks"]) == 3, captured
-        assert captured["checks"][0].startswith("figure 1 · ")
-        assert "alpha plot" in captured["checks"][0]
-        assert captured["checks"][1].startswith("figure 2 · ")
-        assert captured["checks"][2].startswith("table 1 · ")
+        assert captured["checks"][0].startswith("table 1 · ")
+        assert "SMILES inspector" in captured["checks"][0]
+        assert captured["checks"][1].startswith("figure 1 · ")
+        assert "alpha plot" in captured["checks"][1]
+        assert captured["checks"][2].startswith("figure 2 · ")
         # cancel aborted BEFORE the file dialog: nothing written, no job
         assert not target.is_file()
         assert not app._busy
@@ -7981,7 +7988,7 @@ class TestReview132Gui:
             playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
         )
         self._seed_session(app)
-        captured = self._drive(app, flips=(0,))  # uncheck "alpha plot"
+        captured = self._drive(app, flips=(1,))  # uncheck "alpha plot"
         app._menu_save_session_report_html()
         assert self._drain(app), "the HTML report job hung"
         # the dialog offered every page, alpha among them
@@ -8014,7 +8021,7 @@ class TestReview132Gui:
             playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
         )
         self._seed_session(app)
-        self._drive(app, flips=(2,))  # uncheck the table
+        self._drive(app, flips=(0,))  # uncheck the table (first row now)
         app._menu_save_session_report_html()
         assert self._drain(app), "the HTML report job hung"
         text = target.read_text(encoding="utf-8")
@@ -8118,3 +8125,324 @@ class TestReview132Gui:
         assert "100x-132" in doc
         assert "pre-save checklist" in doc
         assert "census footer" in doc
+
+
+class TestReview133Gui:
+    """Round 100x-133: the picklist's per-page REORDER -- the desktop
+    twin of the web report card's drag.  Every row carries ▲ / ▼ that
+    move it among its OWN kind's neighbours (the rows ride in the
+    walkers' order: table pages first, then figure pages), the
+    numbering rewrites itself after every move, the boundary buttons
+    disable honestly, and the returned lists carry the dialog's order
+    so the saved report walks its pages exactly the way the checklist
+    read them.  The same round's caption feed (the generative grids'
+    counts reaching the picklist labels) rides here too."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _figure_static(title: str) -> Any:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure()
+        axes = fig.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title(title)
+        return fig
+
+    def _find_dialog(self, app: Any) -> Any:
+        for child in list(app.winfo_children()):
+            if child.winfo_class() != "Toplevel":
+                continue
+            if str(child.title()) == "Session report contents":
+                return child
+        return None
+
+    def _arrow_buttons(self, app: Any, dialog: Any) -> tuple[list[Any], list[Any]]:
+        """The dialog's ▲ / ▲ buttons in creation order (row by row)."""
+        ups = [
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TButton" and str(widget.cget("text")) == "▲"
+        ]
+        downs = [
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TButton" and str(widget.cget("text")) == "▼"
+        ]
+        return ups, downs
+
+    def _check_labels(self, app: Any, dialog: Any) -> list[str]:
+        """The checkbox texts in VISUAL order -- the packing order, which
+        the reorder rewrites (creation order would stay frozen)."""
+        checks = [
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TCheckbutton"
+        ]
+        body = checks[0].master.master.master  # check -> row -> group -> body
+        labels: list[str] = []
+        for group_frame in body.pack_slaves():  # table group, figure group
+            for child in group_frame.pack_slaves():  # heading + rows
+                for check in checks:
+                    if check.master is child:
+                        labels.append(str(check.cget("text")))
+        return labels
+
+    # -- the reorder's own contract --------------------------------------- #
+
+    def test_reorder_returns_the_dialogs_order(self, app: Any) -> None:
+        """▼ on the first table + ▲ on the last figure: the returned
+        lists carry the dialog's order, kind by kind."""
+        live = [
+            [None, "alpha plot", object()],
+            [None, "beta plot", object()],
+        ]
+        tables = [
+            ("T one", ["a"], [["1"]]),
+            ("T two", ["b"], [["2"]]),
+        ]
+        captured: dict[str, Any] = {}
+
+        def interact() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None, "the picklist never opened"
+            ups, downs = self._arrow_buttons(app, dialog)
+            # rows ride table-first: downs[0] is T one's, downs[2] is
+            # beta's (creation order: T one, T two, alpha, beta)
+            captured["before"] = self._check_labels(app, dialog)
+            downs[0].invoke()  # T one below T two
+            ups[3].invoke()  # beta above alpha
+            app.update()
+            captured["after"] = self._check_labels(app, dialog)
+            save = next(
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TButton"
+                and str(widget.cget("text")).startswith("Save report")
+            )
+            save.invoke()
+
+        app.after(150, interact)
+        picked = app._session_report_picklist(live, tables)
+        # the rows ride the walkers' order, numbered by axis
+        assert captured["before"] == [
+            "table 1 · T one",
+            "table 2 · T two",
+            "figure 1 · alpha plot",
+            "figure 2 · beta plot",
+        ], captured
+        # the numbering rewrites itself AND the rows physically move
+        # (the visual order follows the bucket order after the repack)
+        assert captured["after"] == [
+            "table 1 · T two",
+            "table 2 · T one",
+            "figure 1 · beta plot",
+            "figure 2 · alpha plot",
+        ], captured
+        # the return carries the dialog's order -- the walking order
+        assert picked is not None
+        kept_live, kept_tables = picked
+        assert [entry[1] for entry in kept_live] == ["beta plot", "alpha plot"]
+        assert [title for title, _h, _r in kept_tables] == ["T two", "T one"]
+
+    def test_boundary_arrows_disable_and_never_cross_kinds(self, app: Any) -> None:
+        """The first row's ▲ and the last row's ▼ disable honestly; a
+        one-row group has BOTH disabled -- a table can never move into
+        the figure block because the walkers ship the kinds apart."""
+        live = [[None, "alpha plot", object()]]
+        tables = [("Only table", ["a"], [["1"]])]
+        captured: dict[str, Any] = {}
+
+        def interact() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            ups, downs = self._arrow_buttons(app, dialog)
+            # creation order: the table's arrows first, then the figure's
+            captured["table_up_disabled"] = ups[0].instate(("disabled",))
+            captured["table_down_disabled"] = downs[0].instate(("disabled",))
+            captured["figure_up_disabled"] = ups[1].instate(("disabled",))
+            captured["figure_down_disabled"] = downs[1].instate(("disabled",))
+            # a disabled button's invoke is a no-op -- the order stands
+            ups[0].invoke()
+            downs[0].invoke()
+            ups[1].invoke()
+            app.update()
+            captured["labels_after_dead_invokes"] = self._check_labels(app, dialog)
+            cancel = next(
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TButton"
+                and str(widget.cget("text")) == "Cancel"
+            )
+            cancel.invoke()
+
+        app.after(150, interact)
+        assert app._session_report_picklist(live, tables) is None
+        assert captured["table_up_disabled"] is True, captured
+        assert captured["table_down_disabled"] is True, captured
+        assert captured["figure_up_disabled"] is True, captured
+        assert captured["figure_down_disabled"] is True, captured
+        assert captured["labels_after_dead_invokes"] == [
+            "table 1 · Only table",
+            "figure 1 · alpha plot",
+        ], captured
+
+    def test_reorder_reaches_the_saved_report(
+        self,
+        app: Any,
+        playground: Any,
+        monkeypatch: Any,
+        quiet_dialogs: list[Any],
+    ) -> None:
+        """The HTML report walks its pages the way the dialog ordered
+        them -- beta's caption appears BEFORE alpha's in the file."""
+        import pathlib
+
+        target = pathlib.Path("/tmp") / "pg133-reordered.html"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        first = self._figure_static("alpha plot")
+        second = self._figure_static("beta plot")
+        app._render_figure(app._topo_host, first)
+        app._render_figure(app._breed_host, second)
+        app._session_figures[0][1] = "alpha plot"
+        app._session_figures[1][1] = "beta plot"
+        app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+
+        def interact() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            _ups, downs = self._arrow_buttons(app, dialog)
+            downs[0].invoke()  # the table's only arrow is disabled -- no-op
+            downs[1].invoke()  # alpha below beta
+            app.update()
+            save = next(
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TButton"
+                and str(widget.cget("text")).startswith("Save report")
+            )
+            save.invoke()
+
+        app.after(150, interact)
+        app._menu_save_session_report_html()
+        assert self._drain(app), "the HTML report job hung"
+        text = target.read_text(encoding="utf-8")
+        assert "alpha plot" in text and "beta plot" in text
+        assert text.index("beta plot") < text.index("alpha plot"), (
+            "the dialog's order never reached the report"
+        )
+        target.unlink(missing_ok=True)
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+        app._desc_tree.delete(*app._desc_tree.get_children())
+
+    # -- the caption feed -------------------------------------------------- #
+
+    def test_caption_kwarg_reaches_the_registry(self, app: Any) -> None:
+        """_render_figure(caption=...) overrides the job label in the
+        session registry -- the picklist's rows say what the page holds."""
+        figure = self._figure_static("whatever")
+        app._render_figure(
+            app._topo_host, figure, caption="Ring topology moves — 6 mutant(s)"
+        )
+        assert app._session_figures[-1][1] == "Ring topology moves — 6 mutant(s)"
+        # without a caption the job label stands (the honest default)
+        other = self._figure_static("other")
+        app._render_figure(app._breed_host, other)
+        assert app._session_figures[-1][1] == "figure"
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_surgery_grids_pass_their_counts(self, playground: Any) -> None:
+        """The three generative grids' render closures pass count captions."""
+        import inspect
+
+        topo = inspect.getsource(playground.PlaygroundApp._gen_draw_topology)
+        breed = inspect.getsource(playground.PlaygroundApp._gen_draw_breed)
+        top = inspect.getsource(playground.PlaygroundApp._gen_draw_top)
+        assert 'caption=f"Ring topology moves — {len(mutants)} mutant(s)"' in topo
+        assert 'caption=(' in breed and "viable children" in breed
+        assert 'caption=f"Top {count} molecules' in top
+
+    # -- the walking-order note + docstring pins --------------------------- #
+
+    def test_walking_order_note_rides_the_dialog(self, app: Any) -> None:
+        captured: dict[str, Any] = {}
+
+        def interact() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            captured["labels"] = [
+                str(widget.cget("text"))
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TLabel"
+            ]
+            cancel = next(
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TButton"
+                and str(widget.cget("text")) == "Cancel"
+            )
+            cancel.invoke()
+
+        app.after(150, interact)
+        assert app._session_report_picklist([], [("Only table", ["a"], [["1"]])]) is None
+        notes = [label for label in captured["labels"] if "walking order" in label]
+        assert notes, "the walking-order note never rendered"
+        assert "table pages" in notes[0] and "figure pages" in notes[0]
+
+    def test_module_docstring_records_round_133(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-133" in doc
+        assert "▲ / ▼" in doc
+        assert "PREVIEW" in doc
+
+    def test_picklist_docstring_records_round_133(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._session_report_picklist.__doc__ or ""
+        assert "100x-133" in doc
+        assert "REORDER" in doc
+        assert "WALKING order" in doc
+
+    def test_render_figure_docstring_records_the_caption(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._render_figure.__doc__ or ""
+        assert "100x-133" in doc
+        assert "caption" in doc

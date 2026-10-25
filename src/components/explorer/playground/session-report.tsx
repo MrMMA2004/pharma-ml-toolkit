@@ -8,9 +8,13 @@ import {
   ChevronDown,
   ChevronUp,
   Dna,
+  Eye,
   FileDown,
+  Gauge,
   GripVertical,
   History,
+  Image as ImageIcon,
+  LineChart,
   Loader2,
   MonitorSmartphone,
   RotateCcw,
@@ -28,12 +32,33 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useToolkitStore } from "@/lib/store";
 import {
   collectSessionReport,
+  figureSketchBounds,
+  PREVIEW_SCATTER_POINTS,
+  PREVIEW_TABLE_ROWS,
   SESSION_GROUP_ORDER,
   sessionGroupsAvailable,
   sessionReportCensus,
+  type ReportFigureSection,
+  type ReportSection,
   type SessionReportOptions,
   type SessionReportResponse,
 } from "@/lib/session-report";
@@ -64,6 +89,13 @@ import { toast } from "sonner";
 /* dashed "Reset walking order" chip appears whenever it drifted from   */
 /* the canonical one, and the collector sanitizes whatever it is        */
 /* handed (unknown/duplicate ids dropped, missing groups still ship).   */
+/*                                                                      */
+/* (100x-133) The PREVIEW: a dialog renders the ordered sections before */
+/* the download — the actual walking order made visible, section by     */
+/* section (metric cards, table heads, figure SKETCHES drawn from the   */
+/* same trace data, the surgery grids' real PNGs).  The sketches are    */
+/* approximations and say so; the downloaded report renders every       */
+/* figure through matplotlib on the bridge.                             */
 /* ------------------------------------------------------------------ */
 
 /** localStorage key for the per-group toggle set (100x-131). */
@@ -203,6 +235,217 @@ function saveSectionOrder(order: GroupId[]): void {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* The preview's section renderers (100x-133)                           */
+/* ------------------------------------------------------------------ */
+
+/** The sketch's viewBox geometry — one place so the math stays legible. */
+const SKETCH_W = 320;
+const SKETCH_H = 150;
+const SKETCH_PAD = { left: 6, right: 6, top: 6, bottom: 18 };
+
+/** (100x-133) A figure section's preview sketch — an inline SVG drawn
+ *  from the SAME trace data the bridge hands matplotlib: lines become
+ *  polylines, bands become filled polygons with their mean line on
+ *  top, class scatters become dots (stride-capped, the shape survives
+ *  the cap).  It is an honest approximation and the dialog says so —
+ *  the downloaded report renders the real figure. */
+function FigureSketch({ section }: { section: ReportFigureSection }) {
+  const bounds = figureSketchBounds(section.traces);
+  const spanX = bounds.xMax - bounds.xMin;
+  const spanY = bounds.yMax - bounds.yMin;
+  const px = (x: number) =>
+    SKETCH_PAD.left +
+    ((x - bounds.xMin) / spanX) * (SKETCH_W - SKETCH_PAD.left - SKETCH_PAD.right);
+  const py = (y: number) =>
+    SKETCH_PAD.top +
+    (1 - (y - bounds.yMin) / spanY) *
+      (SKETCH_H - SKETCH_PAD.top - SKETCH_PAD.bottom);
+  return (
+    <svg
+      viewBox={`0 0 ${SKETCH_W} ${SKETCH_H}`}
+      role="img"
+      aria-label={`Sketch of ${section.title} — ${section.xLabel} vs ${section.yLabel}`}
+      className="h-36 w-full rounded-md border bg-background"
+    >
+      {section.traces.map((trace, traceIndex) => {
+        if (trace.style === "band") {
+          const band = trace.points.filter(
+            (p): p is [number, number, number, number] =>
+              p.length >= 4 && Number.isFinite(p[2]) && Number.isFinite(p[3]),
+          );
+          if (band.length < 2) return null;
+          const forward = band
+            .map((p) => `${px(p[0]).toFixed(1)},${py(p[2]).toFixed(1)}`)
+            .join(" ");
+          const backward = [...band]
+            .reverse()
+            .map((p) => `${px(p[0]).toFixed(1)},${py(p[3]).toFixed(1)}`)
+            .join(" ");
+          return (
+            <g key={traceIndex}>
+              <polygon
+                points={`${forward} ${backward}`}
+                className="fill-primary/15"
+              />
+              <polyline
+                points={band
+                  .map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`)
+                  .join(" ")}
+                className="fill-none stroke-primary"
+                strokeWidth={1.5}
+              />
+            </g>
+          );
+        }
+        if (trace.style === "scatter") {
+          const total = trace.points.length;
+          const stride = Math.max(1, Math.ceil(total / PREVIEW_SCATTER_POINTS));
+          const dots: Array<{ cx: number; cy: number; fill: string; opacity: number }> = [];
+          for (let i = 0; i < total; i += stride) {
+            const point = trace.points[i];
+            const klass = trace.classes?.[i] ?? 1;
+            const proba = trace.probas?.[i];
+            dots.push({
+              cx: px(point[0]),
+              cy: py(point[1]),
+              fill: klass === 1 ? "currentColor" : "var(--muted-foreground)",
+              opacity:
+                proba === undefined ? 0.85 : Math.max(0.25, Math.abs(proba - 0.5) * 2),
+            });
+          }
+          return (
+            <g key={traceIndex} className="text-primary">
+              {dots.map((dot, dotIndex) => (
+                <circle
+                  key={dotIndex}
+                  cx={dot.cx.toFixed(1)}
+                  cy={dot.cy.toFixed(1)}
+                  r={1.6}
+                  fill={dot.fill}
+                  opacity={dot.opacity}
+                />
+              ))}
+            </g>
+          );
+        }
+        if (trace.points.length < 2) return null;
+        return (
+          <polyline
+            key={traceIndex}
+            points={trace.points
+              .map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`)
+              .join(" ")}
+            className="fill-none stroke-primary"
+            strokeWidth={1.5}
+          />
+        );
+      })}
+      <text
+        x={SKETCH_W / 2}
+        y={SKETCH_H - 4}
+        textAnchor="middle"
+        fontSize={8}
+        className="fill-muted-foreground"
+      >
+        {section.xLabel}
+      </text>
+      <text x={2} y={10} fontSize={8} className="fill-muted-foreground">
+        {section.yLabel}
+      </text>
+    </svg>
+  );
+}
+
+/** One section's preview body — the mini rendering per kind. */
+function SectionPreviewBody({ section }: { section: ReportSection }) {
+  if (section.kind === "metrics") {
+    return (
+      <dl className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+        {section.items.map(([key, value]) => (
+          <div
+            key={key}
+            className="rounded-md border bg-muted/30 px-2 py-1.5 text-xs"
+          >
+            <dt className="text-muted-foreground">{key}</dt>
+            <dd className="truncate font-medium" title={String(value)}>
+              {String(value)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
+  if (section.kind === "table") {
+    const shown = section.rows.slice(0, PREVIEW_TABLE_ROWS);
+    const hidden = section.rows.length - shown.length;
+    return (
+      <div className="space-y-1">
+        <div className="overflow-x-auto rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                {section.columns.map((column) => (
+                  <TableHead key={column} className="h-7 text-[11px]">
+                    {column}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {shown.map((row, rowIndex) => (
+                <TableRow key={rowIndex}>
+                  {row.map((cell, cellIndex) => (
+                    <TableCell key={cellIndex} className="py-1 text-[11px]">
+                      {String(cell)}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {hidden > 0 ? (
+          <p className="text-[11px] text-muted-foreground">
+            + {hidden} more row{hidden === 1 ? "" : "s"} in the download — the
+            preview caps at {PREVIEW_TABLE_ROWS} rows.
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+  if (section.kind === "figure") {
+    return (
+      <div className="space-y-1.5">
+        <FigureSketch section={section} />
+        <p className="text-[11px] text-muted-foreground">
+          {section.traces.length} trace{section.traces.length === 1 ? "" : "s"}:{" "}
+          {section.traces.map((trace) => trace.name).join(" · ")}
+          — a quick sketch; the download renders this figure through matplotlib.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={section.dataUri}
+      alt={section.title}
+      className="max-h-56 w-full rounded-md border bg-background object-contain"
+    />
+  );
+}
+
+/** The kind badge a preview entry carries — icon + label. */
+function sectionKindBadge(section: ReportSection): {
+  icon: typeof Activity;
+  label: string;
+} {
+  if (section.kind === "metrics") return { icon: Gauge, label: "metrics" };
+  if (section.kind === "table") return { icon: Table2, label: "table" };
+  if (section.kind === "figure") return { icon: LineChart, label: "figure" };
+  return { icon: ImageIcon, label: "structure grid" };
+}
+
 export function SessionReport() {
   const mlResult = useToolkitStore((s) => s.mlResult);
   const lcResult = useToolkitStore((s) => s.lcResult);
@@ -218,6 +461,8 @@ export function SessionReport() {
   const [order, setOrder] = useState<GroupId[]>([...SESSION_GROUP_ORDER]);
   const [dragging, setDragging] = useState<GroupId | null>(null);
   const [dropBefore, setDropBefore] = useState<GroupId | null>(null);
+  // (100x-133) the preview dialog — the walking order made visible
+  const [previewOpen, setPreviewOpen] = useState(false);
   const dragId = useRef<GroupId | null>(null);
 
   // restore once on mount (the tolerant reads — defaults ship everything)
@@ -241,6 +486,13 @@ export function SessionReport() {
   const available = useMemo(() => sessionGroupsAvailable(snapshot), [snapshot]);
   const census = useMemo(
     () => sessionReportCensus(snapshot, options, order),
+    [snapshot, options, order],
+  );
+  // (100x-133) the exact payload the download would POST — the preview
+  // renders THIS (same options, same walking order), so what the dialog
+  // shows is what the file ships, section for section.
+  const payload = useMemo(
+    () => collectSessionReport(snapshot, options, order),
     [snapshot, options, order],
   );
   const shippable =
@@ -326,12 +578,14 @@ export function SessionReport() {
       // the desktop twin bakes the APP's theme radios; the web twin
       // bakes the app's resolved palette (light/dark — "auto" stays a
       // reader-side choice via the report's own toggle).
-      const payload = collectSessionReport(snapshot, options, order);
-      payload.theme = resolvedTheme === "dark" ? "dark" : "light";
+      const body = {
+        ...payload,
+        theme: resolvedTheme === "dark" ? "dark" : "light",
+      };
       const res = await fetch("/api/report/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       const data: unknown = await res.json();
       if (!res.ok) {
@@ -548,21 +802,120 @@ export function SessionReport() {
               "Nothing would ship — enable at least one group above."
             )}
           </p>
-          <Button
-            onClick={download}
-            disabled={busy || !shippable}
-            className="min-h-11 shrink-0"
-            aria-label="Download the session report as a self-contained HTML file"
-          >
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-            ) : (
-              <FileDown className="size-4" aria-hidden />
-            )}
-            Download report (HTML)
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPreviewOpen(true)}
+              disabled={!shippable}
+              className="min-h-11 shrink-0"
+              aria-label="Preview the report's ordered sections before downloading"
+            >
+              <Eye className="size-4" aria-hidden />
+              Preview order
+            </Button>
+            <Button
+              onClick={download}
+              disabled={busy || !shippable}
+              className="min-h-11 shrink-0"
+              aria-label="Download the session report as a self-contained HTML file"
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : (
+                <FileDown className="size-4" aria-hidden />
+              )}
+              Download report (HTML)
+            </Button>
+          </div>
         </div>
       </CardContent>
+
+      {/* (100x-133) the PREVIEW — the walking order made visible: the
+          exact payload the download would POST, rendered section by
+          section in a dialog BEFORE any file is written.  Metric cards,
+          table heads (capped, with the honest "+N more rows"), figure
+          sketches drawn from the same trace data, and the surgery
+          grids' real PNGs — numbered, in the chosen walking order. */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex flex-wrap items-center gap-2 text-base">
+              <Eye className="size-4 text-primary" aria-hidden />
+              Report preview
+              <Badge variant="secondary" className="ml-1 font-normal">
+                {payload.sections.length} section
+                {payload.sections.length === 1 ? "" : "s"}
+                {customOrder ? " · your walking order" : " · default order"}
+              </Badge>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              The exact walking order the downloaded file ships — the same
+              sections, the same order, nothing sent anywhere.  Figure
+              sketches are quick approximations; the download renders them
+              through matplotlib.  It opens {resolvedTheme === "dark" ? "dark" : "light"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[62vh] overflow-y-auto pr-1">
+            {payload.sections.length > 0 ? (
+              <ol className="space-y-2.5" aria-label="The report's sections in walking order">
+                {payload.sections.map((section, index) => {
+                  const badge = sectionKindBadge(section);
+                  const BadgeIcon = badge.icon;
+                  return (
+                    <li
+                      key={`${section.kind}-${index}-${section.title}`}
+                      className="rounded-lg border bg-card p-3"
+                    >
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span
+                          className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold tabular-nums text-muted-foreground"
+                          aria-hidden
+                        >
+                          {index + 1}
+                        </span>
+                        <Badge variant="secondary" className="gap-1 font-normal">
+                          <BadgeIcon className="size-3" aria-hidden />
+                          {badge.label}
+                        </Badge>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {section.title}
+                        </span>
+                      </div>
+                      <SectionPreviewBody section={section} />
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                Nothing would ship — enable at least one group on the card.
+              </p>
+            )}
+          </div>
+          <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              {shippable
+                ? `Ready to ship: ${census.figures} figure${census.figures === 1 ? "" : "s"} · ${census.tables} table${census.tables === 1 ? "" : "s"} · ${census.metrics} metric card${census.metrics === 1 ? "" : "s"}${census.images > 0 ? ` · ${census.images} structure grid${census.images === 1 ? "" : "s"}` : ""}`
+                : "Nothing would ship yet."}
+            </p>
+            <Button
+              onClick={() => {
+                setPreviewOpen(false);
+                download();
+              }}
+              disabled={busy || !shippable}
+              className="min-h-11"
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : (
+                <FileDown className="size-4" aria-hidden />
+              )}
+              Download this report (HTML)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

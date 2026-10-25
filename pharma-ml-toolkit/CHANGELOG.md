@@ -10,6 +10,104 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.72] — 2026-10-25
+
+### Added — the round-18 full review (100x-133): the picklist's per-page reorder + the registry's captions + the web twin's PREVIEW
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited an eighteenth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–131's documented floor — the axis holds; no new gaps).
+Round 132's handover named the round's work: (a) the desktop picklist
+could gain per-page REORDER, (c) the surgery feed could reach the
+DESKTOP picklist's labels, and (b) the web report could grow a
+PREVIEW. All three shipped.
+
+**The picklist's pages reorder.** The desktop twin of the web report
+card's draggable chips: every row of the pre-save "Session report
+contents" dialog now carries ▲ / ▼ buttons that move the page among
+its OWN kind's neighbours — a figure never crosses into the table
+block, because both walkers (`save_pdf_report` and the HTML menu's
+builder) write the kinds as separate blocks. The rows themselves now
+ride in the WALKING order — the table pages first, then the figure
+pages, exactly the sequence the walkers ship them — so what the
+checklist reads is what the file gets; a muted note under the header
+says so ("This list is the report's walking order…"), the numbering
+rewrites itself after every move ("figure 1 · …" follows the row, not
+its birth order), the boundary buttons disable honestly (the first
+row's ▲ is a no-op), and the returned `(kept_live, kept_tables)`
+lists carry the dialog's order — the saved report walks its pages
+the way the checklist read them (pinned end-to-end: the moved
+figure's caption appears in its new position in the written HTML).
+
+**The registry's labels carry counts.** `_render_figure` takes an
+optional `caption` that overrides the running job's label in the
+session-figure registry, and the three generative structure grids
+pass theirs: "Ring topology moves — 6 mutant(s)",
+"Scaffold-hop litter — 4/6 viable children",
+"Top 12 molecules — the last run's leaderboard" — so the picklist's
+rows (and the reports' figure captions) say what each page actually
+holds instead of the card's job name.
+
+**The web report card grew a PREVIEW.** A "Preview order" button
+(Eye affordance, honest when nothing would ship) opens a dialog that
+renders the ordered sections BEFORE any file is written — the exact
+payload the download would POST (same options, same walking order):
+numbered entries with kind badges (metrics / table / figure /
+structure grid), metric cards as label/value chips, tables capped at
+6 rows with the honest "+N more rows in the download", figures as
+inline SVG SKETCHES drawn from the same trace data the bridge hands
+matplotlib (lines → polylines, bands → filled polygons with the mean
+line, class scatters → stride-capped dots — the dialog says the
+sketch is an approximation), and the surgery grids' real PNGs (the
+data URIs, direct). The dialog footer carries the census line and
+its own download button; the collector exports the sketch's pure
+helpers (`figureSketchBounds` — band edges participate, degenerate
+axes pad ±1, empty sets fall back to the unit box — plus the
+`PREVIEW_TABLE_ROWS` / `PREVIEW_SCATTER_POINTS` caps) so the probe
+pins the arithmetic.
+
+### Fixed
+
+- `playground.py`'s venv reset for the sixteenth time (rdkit, meeko,
+  gemmi, mordred, torch, ruff, mypy, the editable install — the
+  proven repair recipe, run in foreground chunks after the background
+  attempt died); `/tmp` wiped again (the rar audit re-extracted, 118
+  files, the standing 2-failure cosmetic exit); Xvfb :99 respawned.
+- CRON 473611 (round 132's 15-minute reviewer) hit the exec-limits
+  disable again → deleted + re-created fresh as 473637.
+
+### Verification
+
+- `playground.py --self-test` green (UI built, every tab visited);
+  `probe_coverage_111_perfile.py` 118 rar (115 covered + 3 documented
+  absorptions) + 1 upload = **119/119, zero-hit 0**;
+  `probe_coverage_113_notebooks.py` green;
+  `audit_round7_122.py` **TOTAL 246 symbols / 43 zero-hit** (the
+  documented floor, byte-identical membership).
+- `scratch/smoke133.py` — SMOKE133_OK (the walking-order rows, the ▼
+  move + renumber + the saved file following, the boundary disables,
+  the caption feed, the docstring pins).
+- `scratch/shoot133.py` — SHOOT133_OK (`pg133-picklist-walking-order.png`,
+  `pg133-picklist-reordered.png`, the `pg133-reordered-report.html`
+  artifact — beta genuinely first).
+- New tests: `TestReview133Gui` (9 — the reorder's return order, the
+  boundary disables, the saved-report order, the caption kwarg, the
+  three grids' captions, the note, the docstring pins) +
+  `TestSessionReportPreview` (4 — the TS probe pins over the fixed
+  131 fixture: the bounds arithmetic, the caps, the section stream;
+  the collector's exports; the card's preview surfaces); the
+  TestReview132Gui index pins updated for the walking-order rows.
+- Full suite: **2495 collected = 2490 passed + 5 skipped / 0
+  failures** (foreground, 420 s; junit133.xml); notebooks re-executed
+  with BOTH drivers (64: TOTAL 210 s; 26: "26-R7 driver OK";
+  `test_notebook_variants` 119/119); ruff clean + mypy at the
+  61-error pre-existing baseline (zero new) after the EXE002 chmod
+  sweep (tests/ + src/ + playground.py — the bits had been reset
+  again); web `bun run lint` clean; `bunx tsc --noEmit` clean for the
+  touched files.
+
 ## [1.2.71] — 2026-10-25
 
 ### Added — the round-17 full review (100x-132): the report order — the desktop picklist + the web twin's reorderable chips

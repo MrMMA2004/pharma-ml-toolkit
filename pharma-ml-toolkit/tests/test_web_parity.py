@@ -762,6 +762,126 @@ class TestSessionReportOrder:
         assert "zero pages never saves" in source
 
 
+class TestSessionReportPreview:
+    """Round 100x-133: the web report card's PREVIEW — the walking order
+    made visible before the download.
+
+    The TS side (the SHIPPED collector over the fixed 131 fixture) pins
+    the preview's pure additions: figureSketchBounds' arithmetic (band
+    edges participate, degenerate axes pad, empty sets fall back to the
+    unit box) and the preview caps (the honest "+N more rows", the
+    stride-sampled dots).  The section-stream pin proves the preview
+    renders exactly the collector's sections, in the walking order --
+    and the static pins keep the dialog's surfaces (the Preview button,
+    the sketch, the caps, the in-dialog download) from silently
+    disappearing between rounds."""
+
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+    REPORT_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "session-report.tsx"
+    )
+
+    needs_round = pytest.mark.skipif(
+        not COLLECTOR_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src + <repo>/scratch) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+
+    @needs_round
+    def test_figure_sketch_bounds_pins(self) -> None:
+        # the TS probe exits non-zero on drift and prints its bounds
+        _run([BUN, "run", "scratch/probe_session_report_133.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_133.json").read_text())
+        # band edges (lo/hi) participate in the y bounds
+        assert ts["boundsBand"] == {
+            "xMin": 0, "xMax": 2, "yMin": 0.5, "yMax": 3.5,
+        }, ts
+        # a degenerate (flat) axis pads itself ±1 on BOTH axes
+        assert ts["boundsFlat"] == {
+            "xMin": 0, "xMax": 2, "yMin": 4, "yMax": 6,
+        }, ts
+        # no finite points -> the unit box (the sketch still draws)
+        assert ts["boundsEmpty"] == {
+            "xMin": 0, "xMax": 1, "yMin": 0, "yMax": 1,
+        }, ts
+        # plain scatters take their own extents
+        assert ts["boundsScatter"] == {
+            "xMin": -1, "xMax": 3, "yMin": -4, "yMax": 2,
+        }, ts
+        # a mixed set unions every trace's extents
+        assert ts["boundsMixed"] == {
+            "xMin": -2, "xMax": 4, "yMin": 0, "yMax": 10,
+        }, ts
+
+    @needs_round
+    def test_preview_caps_and_section_stream_pins(self) -> None:
+        _run([BUN, "run", "scratch/probe_session_report_133.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_133.json").read_text())
+        # the preview's honest caps: rows before "+N more", stride-sampled dots
+        assert ts["previewRows"] == 6
+        assert ts["previewScatter"] == 120
+        # the preview renders exactly the collector's sections in the
+        # walking order: surgery's trio first (metrics, table, image),
+        # then ML (metrics, figure), then the canonical remainder
+        stream = ts["sectionStream"]
+        assert [entry["kind"] for entry in stream] == [
+            "metrics", "table", "image",          # surgery (moved first)
+            "metrics", "figure",                  # ml
+            "metrics", "figure",                  # learningCurve
+            "figure", "figure",                   # pkpd
+            "table",                              # nca
+            "table",                              # history
+        ], stream
+        assert stream[0]["title"] == "Ring topology moves"
+        assert stream[2]["title"] == (
+            "Ring topology mutants — 3 structure panel(s)"
+        )
+        assert stream[3]["title"] == "ML training"
+
+    @pytest.mark.skipif(
+        not COLLECTOR_TS.is_file(),
+        reason="web checkout (<repo>/src/lib/session-report.ts) required",
+    )
+    def test_collector_exports_the_preview_helpers(self) -> None:
+        collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
+        assert "export function figureSketchBounds" in collector
+        assert "export const PREVIEW_TABLE_ROWS" in collector
+        assert "export const PREVIEW_SCATTER_POINTS" in collector
+        # the sketch contract is documented, not incidental
+        assert "band edges (lo/hi) participate" in collector
+
+    @pytest.mark.skipif(
+        not REPORT_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required",
+    )
+    def test_report_card_carries_the_preview(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the Preview button (its own affordance, honest when empty)
+        assert "Preview order" in report
+        assert "<Eye" in report
+        assert "Preview the report's ordered sections before downloading" in report
+        # the dialog itself + the numbered section stream
+        assert "<DialogContent" in report
+        assert "Report preview" in report
+        assert "your walking order" in report
+        assert "The report's sections in walking order" in report
+        # the per-kind renderers: the sketch, the capped table, the image
+        assert "FigureSketch" in report
+        assert "PREVIEW_TABLE_ROWS" in report
+        assert "PREVIEW_SCATTER_POINTS" in report
+        assert "more row" in report
+        assert "section.dataUri" in report
+        # the sketch's honesty note + the in-dialog download
+        assert "a quick sketch; the download renders this figure through matplotlib" in (
+            report
+        )
+        assert "Download this report (HTML)" in report
+        # the preview walks the SAME payload the download POSTs
+        assert "collectSessionReport(snapshot, options, order)" in report
+
+
+
 class TestCardFinderParity:
     """Round 100x-129: the web card finder's catalog cannot drift.
 

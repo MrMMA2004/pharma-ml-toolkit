@@ -905,3 +905,29 @@ topology). 11 new tests: TestReview132Gui (7, desktop — the six
 pre-132 report-menu classes gained the `picklist_accept_all` bypass)
 + TestSessionReportOrder (4, web parity incl. the sanitizer and the
 order-invariant census).
+
+### Round 18 (100x-133) — the picklist's per-page reorder + the registry's captions + the web twin's PREVIEW
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **246 public symbols, 43 zero-hit —
+byte-identical to rounds 127–131's documented floor.** The library
+axis holds; round 132's handover named all three of the round's
+items — (a) the desktop picklist's per-page reorder, (c) the surgery
+feed reaching the picklist's labels, (b) the web report's preview —
+and all three shipped:
+
+| Surface | The 1.2.72 fix |
+| --- | --- |
+| The picklist's reorder | Every row of the pre-save dialog carries ▲ / ▼ buttons that move the page among its OWN kind's neighbours (a figure never crosses into the table block — both walkers ship the kinds as separate blocks). The rows ride in the WALKING order (table pages first, then figure pages — the exact sequence `save_pdf_report` / the HTML builder write them), a muted note under the header says so, the numbering rewrites itself after every move, the boundary buttons disable honestly, and the returned lists carry the dialog's order — the saved report walks its pages the way the checklist read them (pinned end-to-end into the written HTML). |
+| The registry's captions | `_render_figure` takes an optional `caption` overriding the job label in the session-figure registry; the three generative structure grids pass their counts ("Ring topology moves — 6 mutant(s)", "Scaffold-hop litter — 4/6 viable children", "Top 12 molecules — the last run's leaderboard") so the picklist's rows and the reports' captions say what each page holds. |
+| The web PREVIEW | A "Preview order" button opens a dialog rendering the ordered sections before any file is written — the exact payload the download would POST: numbered entries with kind badges, metric chips, tables capped at 6 rows (+ the honest "+N more rows"), figure SKETCHES as inline SVG from the same trace data (lines → polylines, bands → filled polygons + mean line, class scatters → stride-capped dots), and the surgery grids' real PNGs direct. The collector exports the sketch's pure helpers (`figureSketchBounds`, `PREVIEW_TABLE_ROWS`, `PREVIEW_SCATTER_POINTS`) so the probe pins the arithmetic. |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.72 via
+both drivers: 64 TOTAL 210 s; 26 "26-R7 driver OK"). The GUI-axis
+census holds at 68 live cards (the round touched no card topology).
+The web catalog walk: 26/26 entries (the round touched no catalog
+topology). 13 new tests: TestReview133Gui (9, desktop) +
+TestSessionReportPreview (4, web parity incl. the bounds arithmetic
+and the section stream).
