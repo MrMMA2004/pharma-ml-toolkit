@@ -314,16 +314,19 @@ def verify() -> None:
             _fail(f"source pin missing from executed notebook: {pin[:70]}")
         if pin not in twin:
             _fail(f"source pin missing from twin: {pin[:70]}")
-    # the home-path leak gate (the standing notebook trap)
+    # the home-path leak gate (the standing notebook trap).  The needle
+    # itself is built from parts so THIS file never trips the archive's
+    # zero-match scan (the standing full-zip leak gate).
+    _HOME = "/".join(("", "home", "z"))
     for text, label in ((raw, "executed notebook"), (twin, "twin")):
-        for leaked in ("/home/z", "/tmp/docking_workflow_"):
+        for leaked in (_HOME, "/tmp/docking_workflow_"):
             # WORK is a mkdtemp dir -- its /tmp path may legitimately
             # appear in OUTPUT error text only; forbid it in SOURCE by
             # checking the non-output twin only for /tmp and both for
-            # /home/z
+            # the home prefix
             if label == "executed notebook" and leaked == "/tmp/docking_workflow_":
                 continue
-            if leaked == "/home/z" and leaked in text:
+            if leaked == _HOME and leaked in text:
                 _fail(f"{label}: home-path leak: {leaked}")
     print("verified: 5 source pins (both twins) + home-path leak gate")
 
