@@ -1006,3 +1006,237 @@ class TestCoordinateTokenFallback:
         assert (box.center_x, box.center_y, box.center_z) == pytest.approx(
             (11.1, 22.2, 33.3)
         )
+
+
+class TestLigandStructureGeneration:
+    """generate_ligand_structures: the nigga.py pipeline, library edition.
+
+    The 2026-10 "new folder" upload's ligand generation/nigga.py: tautomer
+    canonicalisation, multi-conformer ETKDG, MMFF-with-UFF-fallback, the
+    lowest-energy conformer written as a PDB with CONECT records, the
+    metal-centre skip list, and per-row error accounting.
+    """
+
+    def test_pipeline_writes_pdb_with_conect(self, tmp_path: Path) -> None:
+        from pharmaml.docking.ligands import generate_ligand_structures
+
+        csv = tmp_path / "lib.csv"
+        csv.write_text(
+            "name,SMILES\nethanol,CCO\naspirin,CC(=O)Oc1ccccc1C(=O)O\n",
+            encoding="utf-8",
+        )
+        out = tmp_path / "structures"
+        frame = generate_ligand_structures(
+            csv, out, num_confs=4, write_mol2=False
+        )
+        assert len(frame) == 2
+        assert bool(frame["ok"].all())
+        for name in ("ethanol", "aspirin"):
+            pdb = out / f"{name}.pdb"
+            assert pdb.is_file()
+            text = pdb.read_text(encoding="utf-8")
+            assert text.startswith("HEADER")
+            assert "COMPND    " in text
+            assert "CONECT" in text and text.rstrip().endswith("END")
+            assert "ATOM  " in text
+        # the report carries the pipeline's own accounting columns
+        assert set(frame["forcefield"]) <= {"RDKit MMFF", "RDKit UFF"}
+        assert (frame["conformers"] == 4).all()
+        assert (frame["atoms"] > 0).all()
+        assert (frame["energy"] != "").all()
+        # tautomers were canonicalised
+        assert frame["tautomer"].astype(str).ne("").all()
+
+    def test_unsupported_metal_centres_skipped_not_fatal(self, tmp_path: Path) -> None:
+        from pharmaml.docking.ligands import (
+            UNSUPPORTED_LIGAND_ATOMS,
+            generate_ligand_structures,
+        )
+
+        assert "Zn" in UNSUPPORTED_LIGAND_ATOMS and "Fe" in UNSUPPORTED_LIGAND_ATOMS
+        csv = tmp_path / "lib.csv"
+        csv.write_text(
+            "name,SMILES\nethanol,CCO\nzinc_complex,[Zn+2]\n",
+            encoding="utf-8",
+        )
+        frame = generate_ligand_structures(
+            csv, tmp_path / "out", num_confs=2, write_mol2=False
+        )
+        assert len(frame) == 2
+        assert bool(frame.iloc[0]["ok"])
+        assert not bool(frame.iloc[1]["ok"])
+        assert "Zn" in frame.iloc[1]["error"]
+        assert frame.iloc[1]["pdb"] == ""
+        # the valid ligand still landed
+        assert (tmp_path / "out" / "ethanol.pdb").is_file()
+
+    def test_invalid_smiles_rides_along_as_failed_row(self, tmp_path: Path) -> None:
+        from pharmaml.docking.ligands import generate_ligand_structures
+
+        csv = tmp_path / "lib.csv"
+        csv.write_text("name,SMILES\nbroken,C1CC\nethanol,CCO\n", encoding="utf-8")
+        frame = generate_ligand_structures(
+            csv, tmp_path / "out", num_confs=2, write_mol2=False
+        )
+        assert len(frame) == 2
+        # invalid rows ride along at the end (prepare_ligand_library's
+        # convention -- the report covers the whole library)
+        broken = frame[frame["ligand"] == "broken"].iloc[0]
+        ethanol = frame[frame["ligand"] == "ethanol"].iloc[0]
+        assert not bool(broken["ok"])
+        assert "SMILES" in broken["error"]
+        assert bool(ethanol["ok"])
+        assert (tmp_path / "out" / "ethanol.pdb").is_file()
+
+    def test_mol2_graceful_without_openbabel(self, tmp_path: Path) -> None:
+        from pharmaml.docking.ligands import generate_ligand_structures
+
+        csv = tmp_path / "lib.csv"
+        csv.write_text("name,SMILES\nethanol,CCO\n", encoding="utf-8")
+        frame = generate_ligand_structures(csv, tmp_path / "out", num_confs=2)
+        # whether OpenBabel is installed or not, the PDB lands and the
+        # row tells the truth about the MOL2 twin
+        assert bool(frame.iloc[0]["ok"])
+        assert (tmp_path / "out" / "ethanol.pdb").is_file()
+        mol2 = frame.iloc[0]["mol2"]
+        if mol2:
+            assert Path(str(mol2)).is_file()
+        else:
+            assert "OpenBabel" in frame.iloc[0]["error"]
+
+    def test_parameter_guards(self, tmp_path: Path) -> None:
+        from pharmaml.docking.ligands import generate_ligand_structures
+
+        csv = tmp_path / "lib.csv"
+        csv.write_text("name,SMILES\nethanol,CCO\n", encoding="utf-8")
+        with pytest.raises(DataValidationError, match="num_confs"):
+            generate_ligand_structures(csv, tmp_path / "a", num_confs=0)
+        with pytest.raises(DataValidationError, match="workers"):
+            generate_ligand_structures(csv, tmp_path / "b", workers=0)
+
+    def test_workers_pool_writes_the_same_files(self, tmp_path: Path) -> None:
+        from pharmaml.docking.ligands import generate_ligand_structures
+
+        csv = tmp_path / "lib.csv"
+        csv.write_text("name,SMILES\nethanol,CCO\naspirin,CC(=O)Oc1ccccc1C(=O)O\n")
+        frame = generate_ligand_structures(
+            csv, tmp_path / "out", num_confs=2, write_mol2=False, workers=2
+        )
+        assert len(frame) == 2
+        assert bool(frame["ok"].all())
+        assert (tmp_path / "out" / "ethanol.pdb").is_file()
+        assert (tmp_path / "out" / "aspirin.pdb").is_file()
+
+
+class TestMglToolsConversion:
+    """convert_pdb_folder_to_pdbqt: the niggaqt.py batch converter.
+
+    The 2026-10 "new folder" upload's ligand generation/niggaqt.py:
+    prepare_ligand4.py over a folder of PDBs into numbered sub-folders,
+    per-ligand timeout, and the conversion log beside the tree.
+    """
+
+    def _mgl_stubs(self, tmp_path: Path, *, body: str) -> tuple[Path, Path]:
+        """A fake MGLTools pair: executable 'python' + prepare_ligand4.py."""
+        mgl_python = tmp_path / "fake_mgl_python.sh"
+        mgl_python.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
+        mgl_python.chmod(0o755)
+        adt_script = tmp_path / "prepare_ligand4.py"
+        adt_script.write_text("# fake AutoDockTools script\n", encoding="utf-8")
+        return mgl_python, adt_script
+
+    def _pdb_folder(self, tmp_path: Path) -> Path:
+        src = tmp_path / "pdbs"
+        src.mkdir()
+        (src / "a.pdb").write_text("ATOM  1  C   LIG A   1      0.000   0.000   0.000\n")
+        (src / "b.pdb").write_text("ATOM  1  C   LIG A   1      1.000   0.000   0.000\n")
+        (src / "notes.txt").write_text("not a ligand\n")
+        return src
+
+    def test_numbered_subfolders_and_log(self, tmp_path: Path) -> None:
+        from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
+
+        stub = (
+            'out=""\n'
+            'while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; *) shift;; esac; done\n'
+            'printf "REMARK stub pdbqt\\n" > "$out"\n'
+        )
+        mgl_python, adt_script = self._mgl_stubs(tmp_path, body=stub)
+        src = self._pdb_folder(tmp_path)
+        out = tmp_path / "pdbqt_out"
+        frame = convert_pdb_folder_to_pdbqt(
+            src, out, mgl_python, adt_script, timeout_s=10.0
+        )
+        assert len(frame) == 2  # the .txt is ignored
+        assert list(frame["ligand"]) == ["a", "b"]
+        assert list(frame["subfolder"]) == ["1", "2"]
+        assert list(frame["status"]) == ["converted", "converted"]
+        assert (out / "1" / "a.pdbqt").is_file()
+        assert (out / "2" / "b.pdbqt").is_file()
+        log = out / "conversion_log.txt"
+        assert log.is_file()
+        text = log.read_text(encoding="utf-8")
+        assert "SUCCESSFUL CONVERSIONS:" in text
+        assert "a" in text and "b" in text
+        assert "All PDB files converted successfully." in text
+
+    def test_timeout_marks_the_row_and_cleans_up(self, tmp_path: Path) -> None:
+        from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
+
+        mgl_python, adt_script = self._mgl_stubs(tmp_path, body="sleep 30")
+        src = self._pdb_folder(tmp_path)
+        out = tmp_path / "pdbqt_out"
+        frame = convert_pdb_folder_to_pdbqt(
+            src, out, mgl_python, adt_script, timeout_s=1.0
+        )
+        assert list(frame["status"]) == ["timeout", "timeout"]
+        assert "timed out" in frame.iloc[0]["error"]
+        assert frame.iloc[0]["pdbqt"] == ""
+        text = (out / "conversion_log.txt").read_text(encoding="utf-8")
+        assert "TIMED OUT FILES (1+ seconds):" in text
+
+    def test_failing_script_records_nonzero_exit(self, tmp_path: Path) -> None:
+        from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
+
+        mgl_python, adt_script = self._mgl_stubs(tmp_path, body="exit 3")
+        src = self._pdb_folder(tmp_path)
+        frame = convert_pdb_folder_to_pdbqt(
+            src, tmp_path / "out", mgl_python, adt_script, timeout_s=10.0
+        )
+        assert list(frame["status"]) == ["failed", "failed"]
+        assert "exited with 3" in frame.iloc[0]["error"]
+        text = (tmp_path / "out" / "conversion_log.txt").read_text(encoding="utf-8")
+        assert "FAILED CONVERSIONS:" in text
+
+    def test_missing_mgl_python_is_a_typed_error(self, tmp_path: Path) -> None:
+        from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
+
+        src = self._pdb_folder(tmp_path)
+        with pytest.raises(DockingError, match="mgl_python"):
+            convert_pdb_folder_to_pdbqt(
+                src,
+                tmp_path / "out",
+                tmp_path / "no_such_pythonsh",
+                tmp_path / "no_such_script.py",
+            )
+
+    def test_missing_source_directory_is_a_typed_error(self, tmp_path: Path) -> None:
+        from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
+
+        with pytest.raises(DockingError, match="source directory"):
+            convert_pdb_folder_to_pdbqt(
+                tmp_path / "ghost_src", tmp_path / "out", "/bin/sh", "/bin/sh"
+            )
+
+    def test_empty_folder_writes_the_honest_log(self, tmp_path: Path) -> None:
+        from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
+
+        mgl_python, adt_script = self._mgl_stubs(tmp_path, body="true")
+        src = tmp_path / "empty"
+        src.mkdir()
+        frame = convert_pdb_folder_to_pdbqt(
+            src, tmp_path / "out", mgl_python, adt_script
+        )
+        assert len(frame) == 0
+        text = (tmp_path / "out" / "conversion_log.txt").read_text(encoding="utf-8")
+        assert "No PDB files found." in text

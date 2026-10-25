@@ -179,6 +179,20 @@ ABSORBED = {
 # card's GUI surface (the card, its run/save handlers, the library
 # functions the card calls, the figure, and the CLI twin).
 # ---------------------------------------------------------------
+# 100x-141: the "new folder.zip" upload (13 script/config/log files,
+# checked one by one; the vina.exe / vina_split.exe / license .rtf
+# binaries inside the zip are external engines, absorbed like the
+# rar's own engine payloads).  Extracted to upload/extracted_newfolder/.
+_UPLOAD_GEN = [
+    "generate_ligand_structures",  # the nigga.py pipeline (library)
+    "_dock_gen_run",               # the Generate structures button
+    "_dock_gen_save",              # the report CSV button
+]
+_UPLOAD_MGL = [
+    "convert_pdb_folder_to_pdbqt",  # the niggaqt.py pipeline (library)
+    "_dock_mgl_run",                # the Convert the batch button
+    "_dock_mgl_save",               # the report CSV button
+]
 UPLOAD_ROOT = Path(str(Path(__file__).resolve().parents[2] / "upload"))
 UPLOAD_MAP: dict[str, list[str]] = {
     "Applicability_domain_analysis.py": [
@@ -190,6 +204,40 @@ UPLOAD_MAP: dict[str, list[str]] = {
         "_ad_source_combo",              # last-run vs loaded-bundle modes
         "_ad_boot_spin",                 # the bootstrap-ensemble knob
         "Applicability_Domain_Results",  # the upload's output name
+    ],
+    # -- 100x-141: new folder.zip, ligand generation/ (4 files) -------- #
+    "extracted_newfolder/ligand generation/nigga.py": _UPLOAD_GEN,
+    "extracted_newfolder/ligand generation/niggaqt.py": _UPLOAD_MGL,
+    "extracted_newfolder/ligand generation/mismatch2.py": [
+        "check_torsion_consistency",
+        "scan_torsion_consistency",
+    ],
+    "extracted_newfolder/ligand generation/niggamatch.py": [
+        "check_torsion_consistency",
+        "scan_torsion_consistency",
+    ],
+    # -- new folder.zip, Vina/ (2 files) -------------------------------- #
+    "extracted_newfolder/Vina/vina.conf": ["parse_vina_config", "write_config_batch"],
+    "extracted_newfolder/Vina/log.txt": ["parse_vina_output", "scan_vina_directory"],
+    # -- new folder.zip, Vina_contol/ (7 files) -------------------------- #
+    "extracted_newfolder/Vina_contol/adder.py": [
+        "distribute_files",
+        "_dock_distribute_receptor",
+    ],
+    "extracted_newfolder/Vina_contol/batch.py": [
+        "run_vina_batch",
+        "skip_existing",            # 100x-141: the resume parameter
+    ],
+    "extracted_newfolder/Vina_contol/conf.txt": ["parse_vina_config"],
+    "extracted_newfolder/Vina_contol/niggavina.py": [
+        "run_vina_batch",
+        "skip_existing",            # 100x-141: resume + empty-log rule
+    ],
+    "extracted_newfolder/Vina_contol/vinar.py": ["run_vina"],
+    "extracted_newfolder/Vina_contol/vinar_multiple.py": ["run_vina_batch"],
+    "extracted_newfolder/Vina_contol/vina_reader.py": [
+        "parse_vina_output",
+        "scan_vina_directory",
     ],
 }
 

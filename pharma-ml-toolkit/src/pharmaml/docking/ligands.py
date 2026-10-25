@@ -21,6 +21,14 @@ It also carries the torsion-consistency audit of
 TORSDOF equals both the count of active ``REMARK`` torsion definitions
 and the count of ``BRANCH`` records.
 
+And it carries the ligand-structure generator of the same folder's
+``nigga.py`` (the 2026-10 "new folder" upload re-delivered it):
+:func:`generate_ligand_structures` runs the full tautomer →
+multi-conformer ETKDG → MMFF/UFF-lowest-energy pipeline and writes the
+one-model PDB (with CONECT records) plus the OpenBabel MOL2 twin, with
+the metal-centre skip list and per-row error accounting the original
+script had.
+
 Examples
 --------
 >>> from pathlib import Path
@@ -67,6 +75,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -80,10 +89,12 @@ _LOG = get_logger(__name__)
 __all__ = [
     "NAME_COLUMN_CANDIDATES",
     "SMILES_COLUMN_CANDIDATES",
+    "UNSUPPORTED_LIGAND_ATOMS",
     "LigandLibrary",
     "LigandPreparationReport",
     "TorsionCheck",
     "check_torsion_consistency",
+    "generate_ligand_structures",
     "load_ligand_csv",
     "prepare_ligand_library",
     "scan_torsion_consistency",
@@ -726,3 +737,329 @@ def prepare_ligand_library(
         root,
     )
     return report
+
+
+#: Elements the ligand-structure generator refuses by default -- the
+#: ``unsupported_atoms`` set of ``others/Docking/ligand generation/nigga.py``
+#: (metals without a reliable force-field / charge model for the
+#: MMFF/UFF + Gasteiger pipeline; carried as a tuple so the prisma of
+#: "no list primitives" stays satisfied -- it is a module constant, not
+#: a schema).
+UNSUPPORTED_LIGAND_ATOMS = (
+    "Fe",
+    "Zn",
+    "Cu",
+    "Mn",
+    "Co",
+    "Ni",
+    "Mo",
+    "W",
+)
+
+
+def _pdb_block_with_conect(
+    mol: Any,
+    name: str,
+    conf_id: int = 0,
+    default_b_factor: float = 20.0,
+) -> str:
+    """One-conformer PDB block with HEADER/COMPND and CONECT records.
+
+    Mirrors the ``generate_pdb_block`` helper of ``nigga.py``: RDKit's
+    own ``MolToPDBBlock`` drops bond information MGLTools' ligand
+    reader relies on, so the connectivity is written explicitly as
+    ``CONECT`` records (one line per atom listing every neighbour).
+    """
+    from datetime import datetime
+
+
+    conf = mol.GetConformer(conf_id)
+    lines: list[str] = []
+    lines.append(
+        "HEADER    LIGAND                                  "
+        + datetime.now().strftime("%d-%b-%y").upper()
+        + "   "
+        + name[:3].upper()
+    )
+    lines.append(f"COMPND    {name}")
+    res_name = name[:3].upper()
+    for i, atom in enumerate(mol.GetAtoms()):
+        pos = conf.GetAtomPosition(i)
+        atom_name = f"{atom.GetSymbol()}{i + 1}"
+        lines.append(
+            f"ATOM  {i + 1:5d} {atom_name:>4s} {res_name:3s} A{1:4d}    "
+            f"{pos.x:8.3f}{pos.y:8.3f}{pos.z:8.3f}  1.00 "
+            f"{default_b_factor:5.2f}           {atom.GetSymbol():>2s}"
+        )
+    conect: dict[int, set[int]] = {}
+    for bond in mol.GetBonds():
+        a1 = bond.GetBeginAtomIdx() + 1
+        a2 = bond.GetEndAtomIdx() + 1
+        conect.setdefault(a1, set()).add(a2)
+        conect.setdefault(a2, set()).add(a1)
+    for atom_idx in sorted(conect):
+        lines.append(
+            "CONECT{:>5d}{}".format(
+                atom_idx,
+                "".join(f"{b:>5d}" for b in sorted(conect[atom_idx])),
+            )
+        )
+    lines.append("END")
+    return "\n".join(lines) + "\n"
+
+
+def _generate_one_structure(
+    args: tuple[str, str, str, int, float, bool],
+) -> dict[str, object]:
+    """Worker body of :func:`generate_ligand_structures` (top-level so a
+    process pool can pickle it -- exactly the ``process_ligand`` shape of
+    ``nigga.py``, carrying only plain strings/numbers)."""
+    smiles, name, pdb_dir, num_confs, default_b_factor, write_mol2 = args
+    from rdkit import Chem
+    from rdkit.Chem import rdDistGeom, rdForceFieldHelpers
+    from rdkit.Chem.MolStandardize import rdMolStandardize
+
+    row: dict[str, object] = {
+        "ligand": name,
+        "smiles": smiles,
+        "tautomer": "",
+        "pdb": "",
+        "mol2": "",
+        "forcefield": "",
+        "energy": "",
+        "conformers": 0,
+        "atoms": 0,
+        "ok": False,
+        "error": "",
+    }
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise ValueError("invalid SMILES string")
+        try:
+            mol = rdMolStandardize.TautomerEnumerator().Canonicalize(mol)
+            row["tautomer"] = Chem.MolToSmiles(mol)
+        except Exception:  # noqa: BLE001 — canonical tautomer is best-effort
+            row["error"] = "tautomer canonicalization failed; input form kept"
+        unsupported = sorted(
+            {atom.GetSymbol() for atom in mol.GetAtoms()}
+            & set(UNSUPPORTED_LIGAND_ATOMS)
+        )
+        if unsupported:
+            raise ValueError(
+                "unsupported atom(s) " + ", ".join(unsupported)
+                + " (no MMFF/UFF parameterisation for the metal centre)"
+            )
+        mol = Chem.AddHs(mol)
+        conf_ids = list(
+            rdDistGeom.EmbedMultipleConfs(
+                mol, numConfs=num_confs, params=rdDistGeom.ETKDG()
+            )
+        )
+        if not conf_ids:
+            raise ValueError("3D embedding returned no conformers")
+        row["conformers"] = len(conf_ids)
+
+        forcefield = ""
+        lowest_id: int | None = None
+        lowest_energy = float("inf")
+        if rdForceFieldHelpers.MMFFHasAllMoleculeParams(mol):
+            props = rdForceFieldHelpers.MMFFGetMoleculeProperties(mol)
+            for cid in conf_ids:
+                try:
+                    ff = rdForceFieldHelpers.MMFFGetMoleculeForceField(
+                        mol, props, confId=cid
+                    )
+                    ff.Minimize()
+                    energy = ff.CalcEnergy()
+                except Exception:  # noqa: BLE001, S112 — per-conformer FF failures are expected
+                    continue
+                if energy < lowest_energy:
+                    lowest_energy, lowest_id = energy, cid
+            if lowest_id is not None:
+                forcefield = "RDKit MMFF"
+        if lowest_id is None:  # MMFF unavailable or all minimisations failed
+            for cid in conf_ids:
+                try:
+                    rdForceFieldHelpers.UFFOptimizeMolecule(mol, confId=cid)
+                    ff = rdForceFieldHelpers.UFFGetMoleculeForceField(
+                        mol, confId=cid
+                    )
+                    energy = ff.CalcEnergy()
+                except Exception:  # noqa: BLE001, S112 — per-conformer FF failures are expected
+                    continue
+                if energy < lowest_energy:
+                    lowest_energy, lowest_id = energy, cid
+            if lowest_id is not None:
+                forcefield = "RDKit UFF"
+        if lowest_id is None:
+            raise ValueError("force-field optimisation failed for all conformers")
+        row["forcefield"] = forcefield
+        row["energy"] = round(lowest_energy, 4)
+
+        best = Chem.Mol(mol)
+        best.RemoveAllConformers()
+        best.AddConformer(mol.GetConformer(lowest_id), assignId=True)
+        row["atoms"] = best.GetNumAtoms()
+
+        safe = safe_filename(name.replace(" ", "_"))
+        pdb_path = Path(pdb_dir) / f"{safe}.pdb"
+        pdb_path.parent.mkdir(parents=True, exist_ok=True)
+        pdb_path.write_text(
+            _pdb_block_with_conect(best, safe, conf_id=0, default_b_factor=default_b_factor),
+            encoding="utf-8",
+        )
+        row["pdb"] = str(pdb_path)
+        row["ok"] = True
+
+        if write_mol2:
+            try:
+                from openbabel import pybel
+
+                ob_mol = pybel.readstring("mol", Chem.MolToMolBlock(best))
+                ob_mol.addh()
+                ob_mol.calccharges(model="gasteiger")
+                mol2_path = Path(pdb_dir) / f"{safe}.mol2"
+                ob_mol.write("mol2", str(mol2_path), overwrite=True)
+                row["mol2"] = str(mol2_path)
+            except ImportError:
+                row["error"] = (
+                    "MOL2 skipped: OpenBabel not installed (pip install openbabel)"
+                )
+            except Exception as exc:  # noqa: BLE001 — OpenBabel error zoo
+                row["error"] = f"MOL2 generation failed: {exc}"
+    except Exception as exc:  # noqa: BLE001 — per-ligand failures never abort the batch
+        row["error"] = str(exc)
+    return row
+
+
+def generate_ligand_structures(
+    library: LigandLibrary | str | Path,
+    output_root: str | Path,
+    *,
+    num_confs: int = 50,
+    default_b_factor: float = 20.0,
+    write_mol2: bool = True,
+    workers: int = 1,
+    smiles_col: str | None = None,
+    name_col: str | None = None,
+) -> pd.DataFrame:
+    """Generate 3D ligand structures (PDB + MOL2) from a SMILES library.
+
+    The ``others/Docking/ligand generation/nigga.py`` pipeline, library
+    edition: every valid SMILES is canonicalised to its preferred
+    tautomer, embedded as ``num_confs`` ETKDG conformers, minimised
+    (MMFF, falling back to UFF when the molecule lacks MMFF
+    parameters), and the **lowest-energy conformer** is written as a
+    one-model PDB with explicit ``CONECT`` records (the connectivity
+    MGLTools' ``prepare_ligand4.py`` reader wants) plus -- when
+    OpenBabel is installed -- a Gasteiger-charged MOL2 twin.  Ligands
+    carrying metal centres (Fe/Zn/Cu/Mn/Co/Ni/Mo/W by default) are
+    skipped with a per-row reason, exactly like the original script's
+    ``unsupported_atoms`` filter, and never abort the batch.
+
+    Parameters
+    ----------
+    library:
+        A :class:`LigandLibrary` or a path to load one from.
+    output_root:
+        Output directory (created if missing); receives ``<name>.pdb``
+        and ``<name>.mol2`` per ligand.
+    num_confs:
+        ETKDG conformers per ligand (the original script used 50).
+    default_b_factor:
+        B-factor written on every ATOM line (the original used 20.0).
+    write_mol2:
+        Also write the OpenBabel MOL2 twin; when OpenBabel is missing
+        the PDB still lands and the row records the reason.
+    workers:
+        Parallel worker processes (1 = inline, the deterministic
+        default; the original used ``cpu_count() - 1``).
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per library ligand: ``ligand``, ``smiles``,
+        ``tautomer``, ``pdb``, ``mol2``, ``forcefield``, ``energy``,
+        ``conformers``, ``atoms``, ``ok``, ``error``.
+
+    Raises
+    ------
+    DependencyError
+        RDKit missing.
+    DataValidationError
+        ``num_confs`` or ``workers`` out of range.
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> from pharmaml.docking.ligands import generate_ligand_structures
+    >>> csv = Path("/tmp/pharmaml_doctest_gen.csv")
+    >>> _ = csv.write_text("name,smiles\\naspirin,CC(=O)Oc1ccccc1C(=O)O\\n")
+    >>> out = Path("/tmp/pharmaml_doctest_gen_out")
+    >>> frame = generate_ligand_structures(csv, out, num_confs=3, write_mol2=False)
+    >>> bool(frame["ok"].iloc[0]), (out / "aspirin.pdb").is_file()
+    (True, True)
+    >>> "CONECT" in (out / "aspirin.pdb").read_text()
+    True
+    >>> for p in sorted(out.iterdir()): p.unlink()
+    >>> csv.unlink(); out.rmdir()
+    """
+    if num_confs < 1 or num_confs > 1000:
+        raise DataValidationError(
+            f"num_confs must be between 1 and 1000, got {num_confs}"
+        )
+    if workers < 1 or workers > 64:
+        raise DataValidationError(f"workers must be between 1 and 64, got {workers}")
+    if not isinstance(library, LigandLibrary):
+        library = load_ligand_csv(library, smiles_col=smiles_col, name_col=name_col)
+
+    root = Path(output_root)
+    root.mkdir(parents=True, exist_ok=True)
+    valid = library.valid_frame
+    jobs: list[tuple[str, str, str, int, float, bool]] = []
+    for i, record in enumerate(valid.itertuples(index=False), start=1):
+        name = _row_name(getattr(record, "name", None), i)
+        jobs.append((str(record.smiles), name, str(root), num_confs, default_b_factor, write_mol2))
+
+    rows: list[dict[str, object]] = []
+    if jobs and workers > 1:
+        # spawn (not the Linux fork default): the playground runs this
+        # inside a worker THREAD, and Python 3.12+ warns -- correctly --
+        # that forking a multi-threaded process can deadlock the child.
+        # The jobs carry only plain strings/numbers, so spawn's pickle
+        # contract is satisfied by construction.
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+
+        context = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=workers, mp_context=context) as pool:
+            rows = list(pool.map(_generate_one_structure, jobs))
+    else:
+        rows = [_generate_one_structure(job) for job in jobs]
+    for record in library.invalid_frame.itertuples(index=False):
+        rows.append(
+            {
+                "ligand": str(record.name),
+                "smiles": record.smiles,
+                "tautomer": "",
+                "pdb": "",
+                "mol2": "",
+                "forcefield": "",
+                "energy": "",
+                "conformers": 0,
+                "atoms": 0,
+                "ok": False,
+                "error": str(record.error) or "invalid SMILES",
+            }
+        )
+    frame = pd.DataFrame(rows)
+    n_ok = int(frame["ok"].sum()) if len(frame) else 0
+    _LOG.info(
+        "Generated %d/%d ligand structures under %s (%d conformers each)",
+        n_ok,
+        len(frame),
+        root,
+        num_confs,
+    )
+    return frame

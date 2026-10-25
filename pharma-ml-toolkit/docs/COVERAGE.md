@@ -515,7 +515,7 @@ Two additions, same probe file, same pytest module:
    suite fails if the demo's picture silently vanishes or becomes a
    stub (1 new test).
 
-## User uploads (100x-118) — the contract extends past the two archives
+## User uploads (100x-118, extended 100x-141) — the contract extends past the two archives
 
 The standing guarantee is "playground.py covers the entire contents of
 the zip and rar files" — and a file the user hands over later binds
@@ -533,6 +533,30 @@ zero-hit/missing-upload fails the probe) and
 (binding — an uploaded file must tour in an executed notebook). The
 verdict line now reads 118 rar files (115 covered, 3 absorbed,
 zero-hit 0) **+ 1 upload covered = 119/119**.
+
+The 2026-10 "new folder.zip" upload (audited file by file in
+100x-141) extends the axis by **13 more files** (the `vina.exe` /
+`vina_split.exe` / license `.rtf` binaries inside the zip are external
+engines, absorbed like the rar's own engine payloads):
+
+| Uploaded file | PharmaML surface | Status |
+| --- | --- | --- |
+| `ligand generation/nigga.py` | `docking.generate_ligand_structures` (the whole pipeline: tautomer → ETKDG conformers → MMFF/UFF → lowest-energy PDB with CONECT + OpenBabel MOL2, the Fe/Zn/Cu/Mn/Co/Ni/Mo/W skip list, the process-pool workers) + the playground **Ligand structures (CSV → PDB + MOL2)** card | ✚ 100x-141 |
+| `ligand generation/niggaqt.py` | `docking.convert_pdb_folder_to_pdbqt` (prepare_ligand4.py over a folder of PDBs into numbered sub-folders, per-ligand timeout, conversion_log.txt) + the playground **PDB → PDBQT batch (MGLTools)** card | ✚ 100x-141 |
+| `ligand generation/mismatch2.py` | `docking.check_torsion_consistency` + `scan_torsion_consistency` + the audit card's torsion mode | already covered |
+| `ligand generation/niggamatch.py` | same surface (the numeric-sort variant needed none of its own) | already covered |
+| `Vina/vina.conf` | `docking.parse_vina_config` + the grid box / config batch cards | already covered |
+| `Vina/log.txt` | `docking.parse_vina_output` + `scan_vina_directory` + the results card | already covered |
+| `Vina_contol/adder.py` | `docking.distribute_files` + the receptor distribution card | already covered |
+| `Vina_contol/batch.py` | `docking.run_vina_batch(skip_existing=True)` — the resume | ✚ 100x-141 |
+| `Vina_contol/conf.txt` | `docking.parse_vina_config` | already covered |
+| `Vina_contol/niggavina.py` | `run_vina_batch` parallel + the skip-existing resume (the empty-log rule) | ✚ resume 100x-141 |
+| `Vina_contol/vinar.py` | `docking.run_vina` + the Vina config batch card | already covered |
+| `Vina_contol/vinar_multiple.py` | `docking.run_vina_batch(max_parallel=…)` | already covered |
+| `Vina_contol/vina_reader.py` | `docking.parse_vina_output` + `scan_vina_directory` + the Vina results card | already covered |
+
+The uploads verdict line now reads **14/14 upload files covered**
+(119 rar + 14 upload = 133 surfaces, zero-hit 0).
 
 ## Library coverage (100x-119) — the fourth axis: the toolkit itself in the GUI
 
@@ -1161,3 +1185,20 @@ the component's keydown + keyshortcuts + in-dialog reset pins).
 Standing pins updated where the markup evolved: the Contents-line
 form (now title-carrying) across test_viz (12), test_playground (7),
 smoke136/137/139, shoot137/138/139, and the report.py doctest.
+
+### Round 26 (100x-141) — the "new folder.zip" upload audited file by file: the nigga.py pipeline + the niggaqt.py converter + the Vina batch's resume
+
+| What shipped | The contract |
+| --- | --- |
+| The file-by-file audit | The user's new upload (22 entries; 13 script/config/log files + 6 engine binaries + folders) was checked one file at a time against the toolkit's surfaces: 9 of the 13 were already covered (the torsion pair, the Vina configs/logs, the receptor distribution, the Vina runners and reader — most of them rar twins the toolkit had already absorbed), and the audit isolated the three genuine gaps: nigga.py's structure pipeline, niggaqt.py's MGLTools converter (previously "absorbed: MGLTools deprecated" — the re-delivery says otherwise), and the batch.py/niggavina.py resume. The probe's uploads axis now maps all 13 files (14/14 with the AD upload); the engine binaries are absorbed like the rar's own payloads. |
+| `generate_ligand_structures` + the Ligand structures card | nigga.py whole: tautomer canonicalisation (best-effort, confessed per row), the Fe/Zn/Cu/Mn/Co/Ni/Mo/W skip list (`UNSUPPORTED_LIGAND_ATOMS`, per-row reason, never batch-fatal), ETKDG multi-conformer embedding, MMFF minimisation with the UFF fallback, the lowest-energy conformer kept, the one-model PDB written by the original's own writer (HEADER/COMPND/ATOM/CONECT/END — the connectivity prepare_ligand4.py reads), and the OpenBabel/Gasteiger MOL2 twin (graceful without OpenBabel — the PDB lands, the row confesses). The workers knob rides a spawn-context ProcessPoolExecutor (the GUI's worker thread makes fork the documented deadlock risk). The card: library picker reuse, conformers/workers/MOL2 knobs, report tree, CSV save. |
+| `convert_pdb_folder_to_pdbqt` + the MGLTools batch card | niggaqt.py whole: prepare_ligand4.py over every .pdb of a folder into the numbered-sub-folder tree (1/, 2/, 3/…), the 30-second per-ligand timeout (one subprocess.run(timeout=...) instead of the original's polling loop), the conversion_log.txt with its SUCCESSFUL/TIMED OUT/FAILED sections, and pre-flight path checks (a typo'd MGLTools path is a typed error before any subprocess fires). The card: source/output pickers, both MGLTools paths pre-filled with the original's Windows defaults, the timeout knob, report tree, CSV save. |
+| `run_vina_batch(skip_existing=True)` + the resume checkbox | batch.py's "already docked" skip and niggavina.py's empty-log rule, unified: a ligand is skipped only when its _out.pdbqt AND non-empty log both exist (the zero-byte log marks a crashed job and is re-docked); skipped rows return skipped=True/ok=True/seconds=0.0 and the vbatch card's table shows "skip" with the summary confessing the count. The checkbox rides the card next to the workers knob. |
+
+The axes after the round: rar 118 (115 covered + 3 absorbed, zero-hit
+0) + uploads 14/14 — the probe verdict line reads "every rar + upload
+file has a playground.py surface (or a documented absorption)". 30 new
+tests: TestLigandStructureGeneration (6) + TestMglToolsConversion (6)
++ TestVinaBatchResume (4) + TestReview141Gui (14); the docs-index
+symbol test re-synced (275 symbols). The version chain moved to
+1.2.80 across all four carriers.

@@ -234,6 +234,9 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `DEFAULT_MGL_PYTHON` | constant |  |
+| `DEFAULT_PREPARE_LIGAND4` | constant |  |
+| `UNSUPPORTED_LIGAND_ATOMS` | constant |  |
 | `GridBox` | class | Docking search box geometry. |
 | `GridParameters` | class | Parsed AutoDock4 grid parameter file (GPF) content. |
 | `LigandLibrary` | class | A validated ligand library loaded from a table file. |
@@ -248,11 +251,13 @@ after adding new public functions.
 | `compute_grid_box` | function | Compute a grid box enclosing a reference ligand plus padding. |
 | `consensus_breakdown` | function | Explain a consensus ranking: per-column units plus the score. |
 | `consensus_rescore` | function | Combine several docking evidence columns into a 0–1 consensus. |
+| `convert_pdb_folder_to_pdbqt` | function | Batch-convert a folder of PDB files to PDBQT via MGLTools. |
 | `delete_named_files` | function | Delete every file named ``filename`` anywhere under ``directory``. |
 | `distribute_files` | function | Copy each file into every immediate sub-directory of ``target_dir``. |
 | `distribute_receptor` | function | Copy a prepared receptor into every ligand folder of a campaign. |
 | `dock_smiles_array` | function | Dock every SMILES of an array against one receptor, simultaneously. |
 | `extract_pdbqt_atom_types` | function | Collect sorted unique AutoDock atom types from a PDBQT ligand. |
+| `generate_ligand_structures` | function | Generate 3D ligand structures (PDB + MOL2) from a SMILES library. |
 | `ligand_efficiency` | function | Ligand efficiency ``LE = |ΔG| / N_heavy`` (kcal/mol per atom). |
 | `ligand_efficiency_series` | function | Vectorised ligand-efficiency column for a docking summary table. |
 | `list_file_names` | function | List the stems of all files with ``extension`` in a directory. |

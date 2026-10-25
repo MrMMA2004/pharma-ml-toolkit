@@ -10448,3 +10448,152 @@ class TestReview140Gui:
         # fragment links only -- the self-contained contract holds
         assert "href='http" not in html
         plt.close("all")
+
+
+class TestReview141Gui:
+    """Round 100x-141: the 2026-10 "new folder.zip" upload was audited
+    file by file (13 files) and the Docking tab gained the two surfaces
+    the audit found missing -- the LIGAND STRUCTURES card (nigga.py
+    whole: tautomer → conformers → MMFF/UFF → lowest-energy PDB with
+    CONECT + the OpenBabel MOL2 twin, the metal skip list riding
+    per-row) and the MGLTools PDB → PDBQT BATCH card (niggaqt.py whole:
+    prepare_ligand4.py over a folder of PDBs, timeout-guarded, with the
+    conversion log) -- while the Vina config batch card grew the RESUME
+    checkbox of batch.py / niggavina.py (skip already-docked)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_141(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-141" in doc
+        assert '"new folder" upload was audited file by' in doc
+        assert "LIGAND STRUCTURES card" in doc
+        assert "MGLTools PDB → PDBQT BATCH card" in doc
+        assert "RESUME checkbox" in doc
+        assert "non-empty" in doc  # the zero-byte log rule confesses
+
+    # -- the library surface the cards call -------------------------------- #
+
+    def test_docking_package_exports_the_new_pipelines(self) -> None:
+        from pharmaml.docking import (  # noqa: F401
+            DEFAULT_MGL_PYTHON,
+            DEFAULT_PREPARE_LIGAND4,
+            UNSUPPORTED_LIGAND_ATOMS,
+            convert_pdb_folder_to_pdbqt,
+            generate_ligand_structures,
+        )
+
+        assert "Zn" in UNSUPPORTED_LIGAND_ATOMS
+        assert DEFAULT_MGL_PYTHON.endswith("python.exe")
+        assert DEFAULT_PREPARE_LIGAND4.endswith("prepare_ligand4.py")
+
+    def test_workflow_carries_the_resume_parameter(self) -> None:
+        import dataclasses
+        import inspect
+
+        from pharmaml.docking.workflow import DockingRunResult, run_vina_batch
+
+        signature = inspect.signature(run_vina_batch)
+        assert "skip_existing" in signature.parameters
+        assert signature.parameters["skip_existing"].default is False
+        fields = {field.name for field in dataclasses.fields(DockingRunResult)}
+        assert "skipped" in fields
+
+    # -- the source-level wiring -------------------------------------------- #
+
+    def test_gen_card_wires_the_pipeline_with_its_knobs(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        # the work() call threads every knob the card owns
+        assert "generate_ligand_structures(" in source
+        for knob in ("num_confs=num_confs", "write_mol2=write_mol2", "workers=workers"):
+            assert knob in source, knob
+        # the nigga.py subtitle names the pipeline stages
+        assert "canonical tautomer → ETKDG conformers → MMFF (UFF fallback)" in source
+        # the metal skip list is advertised on the button's tooltip
+        assert "Fe/Zn/Cu/Mn/Co/Ni/Mo/W" in source
+
+    def test_mgl_card_wires_the_converter_with_timeout(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "convert_pdb_folder_to_pdbqt(" in source
+        assert '"timeout_s": timeout_s' in source
+        assert 'kwargs["mgl_python"] = mgl_python' in source
+        assert 'kwargs["adt_script"] = adt_script' in source
+        # the original's Windows default is pre-filled for the user
+        assert r'C:\Program Files (x86)\MGLTools-1.5.7\python.exe' in source
+        assert "conversion_log.txt" in source
+
+    def test_vbatch_card_threads_the_resume_checkbox(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "_dock_vbatch_skip_var" in source
+        assert "skip_existing=skip_existing" in source
+        # skipped rows confess in the table
+        assert '"skip" if r.skipped else ("OK" if r.ok else "FAILED")' in source
+        # the checkbox names the upload's scripts it honours
+        assert "Vina_contol/batch.py + niggavina.py resume" in source
+
+    # -- the GUI-level surface ----------------------------------------------- #
+
+    def test_both_new_cards_are_live_on_the_docking_tab(
+        self, app: Any, playground: Any
+    ) -> None:
+        titles = {title for title, _subtitle, _shell in playground._CARD_INDEX}
+        assert "Ligand structures (CSV → PDB + MOL2)" in titles
+        assert "PDB → PDBQT batch (MGLTools)" in titles
+
+    def test_gen_card_defaults_match_the_original_script(self, app: Any) -> None:
+        # nigga.py's own numbers: 50 conformers, MOL2 on, workers 1
+        assert app._dock_gen_confs.get() == "50"
+        assert app._dock_gen_workers.get() == "1"
+        assert bool(app._dock_gen_mol2_var.get()) is True
+        assert app._dock_gen_out is None
+        assert str(app._dock_gen_summary.cget("text")) == "—"
+
+    def test_mgl_card_defaults_match_the_original_script(self, app: Any) -> None:
+        # niggaqt.py's own numbers: the MGLTools-1.5.7 Windows paths and
+        # the 30-second timeout
+        assert app._dock_mgl_timeout.get() == "30"
+        assert app._dock_mgl_python.get().endswith("python.exe")
+        assert app._dock_mgl_adt.get().endswith("prepare_ligand4.py")
+        assert app._dock_mgl_src is None and app._dock_mgl_out is None
+
+    def test_vbatch_resume_checkbox_starts_unticked(self, app: Any) -> None:
+        assert bool(app._dock_vbatch_skip_var.get()) is False
+
+    def test_gen_run_warns_without_library_or_folder(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_gen_run()  # no library, no output folder
+        assert any("No library" in str(args) for _name, args in quiet_dialogs), quiet_dialogs
+
+    def test_mgl_run_warns_without_folders(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._dock_mgl_run()  # no source, no output
+        assert any("Missing paths" in str(args) for _name, args in quiet_dialogs), quiet_dialogs
+
+    def test_gen_save_refuses_before_a_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._dock_gen_save()
+        assert any("Nothing to save" in str(args) for _name, args in quiet_dialogs), quiet_dialogs
+
+    def test_mgl_save_refuses_before_a_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._dock_mgl_save()
+        assert any("Nothing to save" in str(args) for _name, args in quiet_dialogs), quiet_dialogs

@@ -399,6 +399,24 @@ Design notes
   closing the preview (the strip, the section list and the download
   all take it immediately; the card's dashed chip behind the dialog
   stays the other way out).
+  (100x-141) The 2026-10 "new folder" upload was audited file by
+  file (13 files: the ligand generation quartet, the Vina config +
+  log pair, and the seven Vina_contol controllers) and the Docking
+  tab gained the two surfaces that audit found missing -- the
+  LIGAND STRUCTURES card (``nigga.py`` whole: canonical tautomer →
+  ETKDG conformers → MMFF with UFF fallback → the lowest-energy
+  conformer written as a PDB with CONECT records + the
+  Gasteiger-charged OpenBabel MOL2 twin, the Fe/Zn/Cu/Mn/Co/Ni/Mo/W
+  skip list riding per-row, a workers knob for the original's
+  process pool) and the MGLTools PDB → PDBQT BATCH card
+  (``niggaqt.py`` whole: ``prepare_ligand4.py`` over a folder of
+  PDBs into the numbered-sub-folder tree, the per-ligand timeout
+  honoured, the conversion log with its successes / timeouts /
+  failures written beside it) -- while the Vina config batch card
+  grew the RESUME checkbox of ``batch.py`` / ``niggavina.py``
+  (skip already-docked: a ligand whose ``_out.pdbqt`` AND non-empty
+  log exist is not started again, the zero-byte log marks a crashed
+  job, and skipped rows confess it in the table).
 
 Command line helpers (useful for scripting and CI)::
 
@@ -9706,6 +9724,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "Engine subprocesses running simultaneously (real docking takes minutes per ligand).",
         )
         form_row(vbatch, "workers", self._dock_vbatch_workers)
+        # 100x-141: batch.py / niggavina.py resume -- skip ligands whose
+        # output already exists (the "already docked" rule).
+        self._dock_vbatch_skip_var = tk.BooleanVar(value=False)
+        vbatch_skip_check = ttk.Checkbutton(
+            vbatch, text="skip already-docked (resume)", variable=self._dock_vbatch_skip_var
+        )
+        Tooltip(
+            vbatch_skip_check,
+            "Vina_contol/batch.py + niggavina.py resume: a ligand whose "
+            "_out.pdbqt AND non-empty log already exist is not docked "
+            "again -- an interrupted campaign re-runs in seconds, "
+            "docking only the remainder.",
+        )
+        form_row(vbatch, "resume", vbatch_skip_check)
         vbatch_run_row = ttk.Frame(vbatch, style="Card.TFrame")
         grid_append(vbatch, vbatch_run_row, sticky="w", pady=(6, 0))
         vbatch_run_btn = self._action_button(
@@ -9795,6 +9827,194 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         self._dock_smi_summary.pack(side="left", padx=(10, 0))
         bind_enter(self._dock_smi_entry, smi_run_btn)
+
+        # -- ligand structure generation (100x-141): nigga.py ------------- #
+        # The 2026-10 "new folder" upload's ligand generation/nigga.py --
+        # the CSV -> tautomer -> 50 conformers -> MMFF/UFF lowest-energy
+        # -> PDB (CONECT) + MOL2 (OpenBabel/Gasteiger) pipeline, grown a
+        # GUI surface of its own next to the PDBQT campaign card.
+        gen = make_card(
+            page.grid,
+            "Ligand structures (CSV → PDB + MOL2)",
+            row=6,
+            column=0,
+            span=2,
+            subtitle="nigga.py: every valid SMILES of the loaded library → "
+            "canonical tautomer → ETKDG conformers → MMFF (UFF fallback) → "
+            "the lowest-energy conformer as a PDB with CONECT records plus a "
+            "Gasteiger-charged MOL2 (OpenBabel).",
+        )
+        gen.columnconfigure(1, weight=1)
+        self._dock_gen_info = ttk.Label(
+            gen,
+            text="uses the library loaded in the Ligand library card above",
+            style="CardMuted.TLabel",
+            wraplength=380,
+            justify="left",
+        )
+        grid_append(gen, self._dock_gen_info, sticky="w")
+        gen_out_row = ttk.Frame(gen, style="Card.TFrame")
+        grid_append(gen, gen_out_row, sticky="w")
+        gen_out_btn = self._action_button(
+            gen_out_row, "Output folder…", self._dock_gen_pick_out
+        )
+        gen_out_btn.pack(side="left")
+        self._dock_gen_out_info = ttk.Label(
+            gen_out_row,
+            text="no output folder chosen",
+            style="CardMuted.TLabel",
+            wraplength=300,
+            justify="left",
+        )
+        self._dock_gen_out_info.pack(side="left", padx=(10, 0))
+        self._dock_gen_out: Path | None = None
+        self._dock_gen_confs = ttk.Entry(gen, width=10)
+        self._dock_gen_confs.insert(0, "50")
+        Tooltip(
+            self._dock_gen_confs,
+            "ETKDG conformers embedded per ligand; the lowest-energy one "
+            "is kept (the original script used 50).",
+        )
+        form_row(gen, "conformers", self._dock_gen_confs)
+        self._dock_gen_workers = ttk.Entry(gen, width=10)
+        self._dock_gen_workers.insert(0, "1")
+        Tooltip(
+            self._dock_gen_workers,
+            "Parallel worker processes (1 = inline and deterministic; the "
+            "original script used cpu_count() - 1).",
+        )
+        form_row(gen, "workers", self._dock_gen_workers)
+        self._dock_gen_mol2_var = tk.BooleanVar(value=True)
+        gen_mol2_check = ttk.Checkbutton(
+            gen, text="also write MOL2 (OpenBabel)", variable=self._dock_gen_mol2_var
+        )
+        Tooltip(
+            gen_mol2_check,
+            "The Gasteiger-charged MOL2 twin written via OpenBabel; when "
+            "OpenBabel is missing the PDB still lands and the row records "
+            "the reason.",
+        )
+        form_row(gen, "mol2", gen_mol2_check)
+        gen_run_row = ttk.Frame(gen, style="Card.TFrame")
+        grid_append(gen, gen_run_row, sticky="w", pady=(6, 0))
+        gen_run_btn = self._action_button(
+            gen_run_row,
+            "Generate structures",
+            self._dock_gen_run,
+            primary=True,
+            tooltip="The full nigga.py pipeline in a worker thread: "
+            "tautomer → conformers → MMFF/UFF → lowest-energy PDB (+ MOL2). "
+            "Metal centres (Fe/Zn/Cu/Mn/Co/Ni/Mo/W) are skipped with a "
+            "per-row reason, never aborting the batch.",
+        )
+        gen_run_btn.pack(side="left")
+        self._dock_gen_summary = ttk.Label(
+            gen_run_row, text="—", style="CardMuted.TLabel", wraplength=380, justify="left"
+        )
+        self._dock_gen_summary.pack(side="left", padx=(10, 0))
+        gen_tree_frame = ttk.Frame(gen, style="Card.TFrame")
+        grid_append(gen, gen_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._dock_gen_tree = ttk.Treeview(gen_tree_frame, show="headings", height=7)
+        gen_bar = ttk.Scrollbar(gen_tree_frame, orient="vertical", command=self._dock_gen_tree.yview)
+        self._dock_gen_tree.configure(yscrollcommand=gen_bar.set)
+        self._dock_gen_tree.pack(side="left", fill="both", expand=True)
+        gen_bar.pack(side="right", fill="y")
+        gen_save_btn = self._action_button(
+            gen, "Save report CSV…", self._dock_gen_save
+        )
+        gen_save_btn.grid(row=gen.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self._dock_gen_frame: Any = None
+
+        # -- PDB -> PDBQT batch via MGLTools (100x-141): niggaqt.py ------- #
+        # The upload's ligand generation/niggaqt.py -- prepare_ligand4.py
+        # over a folder of PDBs into numbered sub-folders, timeout-guarded,
+        # with the conversion log the original wrote.
+        mgl = make_card(
+            page.grid,
+            "PDB → PDBQT batch (MGLTools)",
+            row=7,
+            column=0,
+            span=2,
+            subtitle="niggaqt.py: every PDB of a folder converted with "
+            "AutoDockTools' prepare_ligand4.py into a numbered sub-folder "
+            "(1/, 2/, 3/ …), each guarded by a timeout; the conversion log "
+            "(successes / timeouts / failures) lands beside the tree.",
+        )
+        mgl.columnconfigure(1, weight=1)
+        mgl_pick_row = ttk.Frame(mgl, style="Card.TFrame")
+        grid_append(mgl, mgl_pick_row, sticky="w")
+        mgl_src_btn = self._action_button(mgl_pick_row, "PDB folder…", self._dock_mgl_pick_src)
+        mgl_src_btn.pack(side="left")
+        mgl_out_btn = self._action_button(
+            mgl_pick_row, "Output folder…", self._dock_mgl_pick_out
+        )
+        mgl_out_btn.pack(side="left", padx=(10, 0))
+        self._dock_mgl_src: Path | None = None
+        self._dock_mgl_out: Path | None = None
+        self._dock_mgl_info = ttk.Label(
+            mgl,
+            text="pick the folder with the .pdb files and the output folder",
+            style="CardMuted.TLabel",
+            wraplength=380,
+            justify="left",
+        )
+        grid_append(mgl, self._dock_mgl_info, sticky="w", pady=(4, 0))
+        self._dock_mgl_python = ttk.Entry(mgl, width=48)
+        self._dock_mgl_python.insert(0, r"C:\Program Files (x86)\MGLTools-1.5.7\python.exe")
+        Tooltip(
+            self._dock_mgl_python,
+            "MGLTools' own interpreter (pythonsh / python.exe) -- the "
+            "Windows default is pre-filled; point it at your installation.",
+        )
+        form_row(mgl, "mgl python", self._dock_mgl_python)
+        self._dock_mgl_adt = ttk.Entry(mgl, width=48)
+        self._dock_mgl_adt.insert(
+            0,
+            r"C:\Program Files (x86)\MGLTools-1.5.7\Lib\site-packages"
+            r"\AutoDockTools\Utilities24\prepare_ligand4.py",
+        )
+        Tooltip(
+            self._dock_mgl_adt,
+            "Full path to prepare_ligand4.py inside the MGLTools tree "
+            "(AutoDockTools/Utilities24).",
+        )
+        form_row(mgl, "prepare_ligand4", self._dock_mgl_adt)
+        self._dock_mgl_timeout = ttk.Entry(mgl, width=10)
+        self._dock_mgl_timeout.insert(0, "30")
+        Tooltip(
+            self._dock_mgl_timeout,
+            "Per-ligand timeout in seconds (the original script used 30; "
+            "timed-out files are named in the log).",
+        )
+        form_row(mgl, "timeout (s)", self._dock_mgl_timeout)
+        mgl_run_row = ttk.Frame(mgl, style="Card.TFrame")
+        grid_append(mgl, mgl_run_row, sticky="w", pady=(6, 0))
+        mgl_run_btn = self._action_button(
+            mgl_run_row,
+            "Convert the batch",
+            self._dock_mgl_run,
+            primary=True,
+            tooltip="prepare_ligand4.py -l <pdb> -o <pdbqt> -A hydrogens "
+            "for every PDB, one numbered sub-folder each, in a worker "
+            "thread; the report table and conversion_log.txt follow.",
+        )
+        mgl_run_btn.pack(side="left")
+        self._dock_mgl_summary = ttk.Label(
+            mgl_run_row, text="—", style="CardMuted.TLabel", wraplength=380, justify="left"
+        )
+        self._dock_mgl_summary.pack(side="left", padx=(10, 0))
+        mgl_tree_frame = ttk.Frame(mgl, style="Card.TFrame")
+        grid_append(mgl, mgl_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._dock_mgl_tree = ttk.Treeview(mgl_tree_frame, show="headings", height=7)
+        mgl_bar = ttk.Scrollbar(mgl_tree_frame, orient="vertical", command=self._dock_mgl_tree.yview)
+        self._dock_mgl_tree.configure(yscrollcommand=mgl_bar.set)
+        self._dock_mgl_tree.pack(side="left", fill="both", expand=True)
+        mgl_bar.pack(side="right", fill="y")
+        mgl_save_btn = self._action_button(
+            mgl, "Save report CSV…", self._dock_mgl_save
+        )
+        mgl_save_btn.grid(row=mgl.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self._dock_mgl_frame: Any = None
 
     # -- ligand library card ------------------------------------------- #
     def _dock_open_csv(self) -> None:
@@ -11186,17 +11406,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dock_vbatch_ligands,
             self._dock_vbatch_out,
         )
+        # 100x-141: batch.py / niggavina.py resume rides the checkbox.
+        skip_existing = bool(self._dock_vbatch_skip_var.get())
 
         def work() -> Any:
             from pharmaml.docking import run_vina_batch
 
-            return run_vina_batch(conf, ligands, out_dir=out, max_parallel=workers)
+            return run_vina_batch(
+                conf, ligands, out_dir=out, max_parallel=workers,
+                skip_existing=skip_existing,
+            )
 
         def render(results: Any) -> None:
             rows = [
                 (
                     Path(r.directory).name,
-                    "OK" if r.ok else "FAILED",
+                    "skip" if r.skipped else ("OK" if r.ok else "FAILED"),
                     f"{r.seconds:.1f}s",
                     _cell_text(Path(r.log_file).name if r.log_file else (r.error or ""), limit=28),
                 )
@@ -11210,8 +11435,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 widths={"ligand": 150, "status": 70, "time": 60, "log / error": 150},
             )
             ok = sum(1 for r in results if r.ok)
+            skipped = sum(1 for r in results if r.skipped)
             self._dock_vbatch_summary.configure(
-                text=(f"{ok}/{len(results)} ligand(s) docked into {out.name}"), style="Field.TLabel"
+                text=(
+                    f"{ok}/{len(results)} ligand(s) docked into {out.name}"
+                    + (f" ({skipped} skipped — already docked)" if skipped else "")
+                ),
+                style="Field.TLabel",
             )
 
         self._start_job(f"vina batch ({workers} workers)", work, render)
@@ -11249,6 +11479,184 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         self._start_job("preparing the ligand", work, render)
+
+    # -- ligand structure generation card (nigga.py, 100x-141) --------- #
+
+    def _dock_gen_pick_out(self) -> None:
+        path = filedialog.askdirectory(title="Choose the ligand-structure output folder")
+        if path:
+            self._dock_gen_out = Path(path)
+            self._dock_gen_out_info.configure(text=f"output: {path}")
+
+    def _dock_gen_run(self) -> None:
+        """Run the nigga.py structure pipeline over the loaded library."""
+        if not self._require_pharmaml() or not self._require(
+            "rdkit", "ligand structure generation"
+        ):
+            return
+        if self._dock_library is None:
+            messagebox.showwarning(
+                "No library", "Load a ligand library in the Ligand library card first."
+            )
+            return
+        if self._dock_gen_out is None:
+            messagebox.showwarning("No output folder", "Choose the output folder first.")
+            return
+        try:
+            num_confs = parse_int(
+                self._dock_gen_confs.get(), "conformers", minimum=1, maximum=1000
+            )
+            workers = parse_int(
+                self._dock_gen_workers.get(), "workers", minimum=1, maximum=64
+            )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        library, out_dir = self._dock_library, self._dock_gen_out
+        write_mol2 = bool(self._dock_gen_mol2_var.get())
+
+        def work() -> Any:
+            from pharmaml.docking import generate_ligand_structures
+
+            return generate_ligand_structures(
+                library,
+                out_dir,
+                num_confs=num_confs,
+                write_mol2=write_mol2,
+                workers=workers,
+            )
+
+        def render(frame: Any) -> None:
+            self._dock_gen_frame = frame
+            self._fill_dynamic_tree(
+                self._dock_gen_tree,
+                frame,
+                widths={
+                    "ligand": 110,
+                    "smiles": 150,
+                    "tautomer": 150,
+                    "pdb": 130,
+                    "mol2": 130,
+                    "forcefield": 80,
+                    "energy": 70,
+                    "conformers": 60,
+                    "atoms": 50,
+                    "ok": 40,
+                    "error": 170,
+                },
+            )
+            ok = int(frame["ok"].sum())
+            mol2 = int(frame["mol2"].astype(str).ne("").sum())
+            self._dock_gen_summary.configure(
+                text=(
+                    f"{ok}/{len(frame)} structures in {out_dir.name}"
+                    + (f" · {mol2} MOL2" if write_mol2 else "")
+                ),
+                style="Field.TLabel",
+            )
+
+        self._start_job("generating ligand structures", work, render)
+
+    def _dock_gen_save(self) -> None:
+        frame = getattr(self, "_dock_gen_frame", None)
+        if frame is None:
+            messagebox.showinfo("Nothing to save", "Generate ligand structures first.")
+            return
+        self._save_frame_dialog(
+            frame,
+            "Save the structure-generation report",
+            "ligand_structures.csv",
+            "Generation report",
+        )
+
+    # -- PDB -> PDBQT batch via MGLTools card (niggaqt.py, 100x-141) ---- #
+
+    def _dock_mgl_pick_src(self) -> None:
+        path = filedialog.askdirectory(title="Pick the folder with the PDB files")
+        if path:
+            self._dock_mgl_src = Path(path)
+            self._dock_mgl_refresh_info()
+
+    def _dock_mgl_pick_out(self) -> None:
+        path = filedialog.askdirectory(title="Pick the PDBQT output folder")
+        if path:
+            self._dock_mgl_out = Path(path)
+            self._dock_mgl_refresh_info()
+
+    def _dock_mgl_refresh_info(self) -> None:
+        src = self._dock_mgl_src.name if self._dock_mgl_src else "—"
+        out = self._dock_mgl_out.name if self._dock_mgl_out else "—"
+        self._dock_mgl_info.configure(text=f"pdb source: {src}\noutput: {out}")
+
+    def _dock_mgl_run(self) -> None:
+        """Batch-convert a folder of PDBs via MGLTools' prepare_ligand4.py."""
+        if not self._require_pharmaml():
+            return
+        if self._dock_mgl_src is None or self._dock_mgl_out is None:
+            messagebox.showwarning(
+                "Missing paths",
+                "Pick the PDB source folder and the output folder first.",
+            )
+            return
+        try:
+            timeout_s = parse_float(
+                self._dock_mgl_timeout.get(), "timeout", minimum=1.0, maximum=3600.0
+            )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        src, out = self._dock_mgl_src, self._dock_mgl_out
+        mgl_python = self._dock_mgl_python.get().strip()
+        adt_script = self._dock_mgl_adt.get().strip()
+        kwargs: dict[str, Any] = {"timeout_s": timeout_s}
+        if mgl_python:
+            kwargs["mgl_python"] = mgl_python
+        if adt_script:
+            kwargs["adt_script"] = adt_script
+
+        def work() -> Any:
+            from pharmaml.docking import convert_pdb_folder_to_pdbqt
+
+            return convert_pdb_folder_to_pdbqt(src, out, **kwargs)
+
+        def render(frame: Any) -> None:
+            self._dock_mgl_frame = frame
+            self._fill_dynamic_tree(
+                self._dock_mgl_tree,
+                frame,
+                widths={
+                    "ligand": 140,
+                    "subfolder": 70,
+                    "pdbqt": 170,
+                    "status": 80,
+                    "seconds": 60,
+                    "error": 160,
+                },
+            )
+            converted = int((frame["status"] == "converted").sum()) if len(frame) else 0
+            log = out / "conversion_log.txt"
+            self._dock_mgl_summary.configure(
+                text=(
+                    f"{converted}/{len(frame)} converted · log: {log}"
+                    if log.exists()
+                    else f"{converted}/{len(frame)} converted into {out.name}"
+                ),
+                style="Field.TLabel",
+            )
+
+        self._start_job("converting PDB → PDBQT (MGLTools)", work, render)
+
+    def _dock_mgl_save(self) -> None:
+        frame = getattr(self, "_dock_mgl_frame", None)
+        if frame is None:
+            messagebox.showinfo("Nothing to save", "Run a conversion first.")
+            return
+        self._save_frame_dialog(
+            frame,
+            "Save the MGLTools conversion report",
+            "mgl_conversion.csv",
+            "Conversion report",
+        )
 
     def _dock_run(self) -> None:
         if not self._require_pharmaml():

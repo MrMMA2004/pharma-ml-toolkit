@@ -21,7 +21,7 @@ Examples
 >>> from pathlib import Path
 >>> from pharmaml.docking.workflow import DockingRunResult
 >>> DockingRunResult(Path("/tmp"), True, None, 1.5)   # a healthy single run
-DockingRunResult(directory=PosixPath('/tmp'), ok=True, log_file=None, seconds=1.5, error=None)
+DockingRunResult(directory=PosixPath('/tmp'), ok=True, log_file=None, seconds=1.5, error=None, skipped=False)
 
 >>> from pharmaml.docking.workflow import parse_vina_config
 >>> conf = Path("/tmp/pharmaml_doctest_vina.conf")
@@ -124,6 +124,11 @@ class DockingRunResult:
         Wall-clock duration.
     error:
         Error message when ``ok`` is False.
+    skipped:
+        True when the run was not started at all because its output
+        already existed (``run_vina_batch(skip_existing=True)`` -- the
+        resume behaviour of ``Vina_contol/batch.py`` and
+        ``niggavina.py``); such rows count as ``ok`` with zero seconds.
     """
 
     directory: Path
@@ -131,6 +136,7 @@ class DockingRunResult:
     log_file: Path | None
     seconds: float
     error: str | None = None
+    skipped: bool = False
 
 
 def _require_executable(name: str) -> str:
@@ -379,6 +385,7 @@ def run_vina_batch(
     max_parallel: int = 1,
     vina_bin: str = "vina",
     timeout_s: float = 3600.0,
+    skip_existing: bool = False,
 ) -> list[DockingRunResult]:
     """Dock every ``.pdbqt`` under a directory with one Vina config.
 
@@ -391,6 +398,14 @@ def run_vina_batch(
     ``<name>.log`` in ``out_dir``.  ``max_parallel > 1`` runs the
     subprocesses through a ``ThreadPoolExecutor`` (subprocesses
     release the GIL, so threads are enough).
+
+    ``skip_existing=True`` adds the resume behaviour of the 2026-10
+    "new folder" upload's ``Vina_contol/batch.py`` and ``niggavina.py``:
+    a ligand whose ``<stem>_out.pdbqt`` AND ``<stem>.log`` both exist
+    and are non-empty is not started again (a zero-byte log marks a
+    crashed job, exactly like ``niggavina.py``'s empty-log cleanup) --
+    an interrupted campaign re-runs in seconds, docking only the
+    remainder.
 
     Parameters
     ----------
@@ -406,11 +421,15 @@ def run_vina_batch(
         Vina executable name or path.
     timeout_s:
         Per-ligand subprocess timeout.
+    skip_existing:
+        Resume mode -- skip ligands whose output PDBQT and non-empty
+        log already exist (``batch.py``'s "already docked" rule).
 
     Returns
     -------
     list of DockingRunResult
-        One result per ligand, in ligand-sorted order.
+        One result per ligand, in ligand-sorted order; skipped
+        ligands carry ``skipped=True`` with ``ok=True``.
 
     Raises
     ------
@@ -472,6 +491,10 @@ def run_vina_batch(
         stem = output_names[ligand]
         out_pdbqt = out / f"{stem}_out.pdbqt"
         log_file = out / f"{stem}.log"
+        if skip_existing and out_pdbqt.is_file() and out_pdbqt.stat().st_size > 0 \
+                and log_file.is_file() and log_file.stat().st_size > 0:
+            _LOG.info("skipping %s (already docked)", ligand.name)
+            return DockingRunResult(out, True, log_file, 0.0, None, True)
         cmd = [
             binary,
             "--config", str(conf),

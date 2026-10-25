@@ -802,6 +802,106 @@ class TestRunVinaBatch:
             run_vina_batch(conf, ligands)
 
 
+class TestVinaBatchResume:
+    """run_vina_batch(skip_existing=True): batch.py / niggavina.py resume.
+
+    The 2026-10 "new folder" upload's Vina_contol controllers: a ligand
+    whose ``_out.pdbqt`` AND non-empty log already exist is not docked
+    again; a zero-byte log marks a crashed job and is redone.
+    """
+
+    def _make_batch(self, tmp_path: Path) -> Path:
+        conf = tmp_path / "conf.txt"
+        conf.write_text(
+            "receptor = r.pdbqt\ncenter_x = 1.0\ncenter_y = 2.0\ncenter_z = 3.0\n"
+            "size_x = 20\nsize_y = 20\nsize_z = 20\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "r.pdbqt").write_text("receptor", encoding="utf-8")
+        ligands = tmp_path / "ligands"
+        ligands.mkdir()
+        (ligands / "1.pdbqt").write_text("ligand 1", encoding="utf-8")
+        (ligands / "2.pdbqt").write_text("ligand 2", encoding="utf-8")
+        return conf
+
+    def _fake_vina(self, monkeypatch, commands: list[list[str]]) -> None:
+        monkeypatch.setattr(
+            workflow_mod, "_require_executable", lambda name: f"/fake/bin/{name}"
+        )
+
+        def fake_run(cmd, **_kwargs):
+            commands.append(list(cmd))
+            out = Path(cmd[cmd.index("--out") + 1])
+            out.write_text("poses", encoding="utf-8")
+            log = Path(cmd[cmd.index("--log") + 1])
+            log.write_text("log", encoding="utf-8")
+
+        monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
+
+    def test_already_docked_ligands_are_skipped(self, tmp_path, monkeypatch) -> None:
+        conf = self._make_batch(tmp_path)
+        commands: list[list[str]] = []
+        self._fake_vina(monkeypatch, commands)
+        out_dir = tmp_path / "results"
+        out_dir.mkdir()
+        # ligand 1 was already docked: pose + non-empty log
+        (out_dir / "1_out.pdbqt").write_text("poses", encoding="utf-8")
+        (out_dir / "1.log").write_text("old log", encoding="utf-8")
+        results = run_vina_batch(
+            conf, tmp_path / "ligands", out_dir=out_dir, skip_existing=True
+        )
+        assert len(results) == 2
+        assert results[0].skipped and results[0].ok and results[0].seconds == 0.0
+        assert not results[1].skipped and results[1].ok
+        # only ligand 2 was actually started
+        assert len(commands) == 1
+        assert commands[0][commands[0].index("--ligand") + 1].endswith("2.pdbqt")
+
+    def test_zero_byte_log_means_crashed_and_is_redone(self, tmp_path, monkeypatch) -> None:
+        # niggavina.py's empty-log cleanup rule: an existing but EMPTY
+        # log marks a crashed job -- the ligand must be docked again.
+        conf = self._make_batch(tmp_path)
+        commands: list[list[str]] = []
+        self._fake_vina(monkeypatch, commands)
+        out_dir = tmp_path / "results"
+        out_dir.mkdir()
+        (out_dir / "1_out.pdbqt").write_text("poses", encoding="utf-8")
+        (out_dir / "1.log").write_text("", encoding="utf-8")  # crashed marker
+        results = run_vina_batch(
+            conf, tmp_path / "ligands", out_dir=out_dir, skip_existing=True
+        )
+        assert not any(result.skipped for result in results)
+        assert len(commands) == 2
+
+    def test_missing_output_means_not_docked_yet(self, tmp_path, monkeypatch) -> None:
+        conf = self._make_batch(tmp_path)
+        commands: list[list[str]] = []
+        self._fake_vina(monkeypatch, commands)
+        out_dir = tmp_path / "results"
+        out_dir.mkdir()
+        (out_dir / "1.log").write_text("orphan log without a pose", encoding="utf-8")
+        results = run_vina_batch(
+            conf, tmp_path / "ligands", out_dir=out_dir, skip_existing=True
+        )
+        assert not any(result.skipped for result in results)
+        assert len(commands) == 2
+
+    def test_resume_off_docks_everything_again(self, tmp_path, monkeypatch) -> None:
+        # the default stays batch.py-less: every ligand re-docked
+        conf = self._make_batch(tmp_path)
+        commands: list[list[str]] = []
+        self._fake_vina(monkeypatch, commands)
+        out_dir = tmp_path / "results"
+        out_dir.mkdir()
+        (out_dir / "1_out.pdbqt").write_text("poses", encoding="utf-8")
+        (out_dir / "1.log").write_text("old log", encoding="utf-8")
+        results = run_vina_batch(
+            conf, tmp_path / "ligands", out_dir=out_dir, skip_existing=False
+        )
+        assert not any(result.skipped for result in results)
+        assert len(commands) == 2
+
+
 class TestScanVinaDirectory:
     def test_ranking_by_best_affinity(self, tmp_path, sample_vina_output) -> None:
         weaker = tmp_path / "ligand_a.log"

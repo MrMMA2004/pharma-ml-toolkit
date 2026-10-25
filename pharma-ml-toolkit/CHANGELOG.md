@@ -10,6 +10,115 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.80] — 2026-10-26
+
+### Added — the round-26 review (100x-141): the "new folder.zip" upload audited file by file — the nigga.py ligand-structure pipeline + the niggaqt.py MGLTools batch converter + the Vina batch's RESUME
+
+The user delivered a new upload — `new folder.zip` (1.0 MB, 22
+entries) — with the instruction *"Check the contents of this file one
+by one and update the playground.py file."* Every file was checked
+one by one against the toolkit's surfaces:
+
+* **ligand generation/** — `nigga.py` (the CSV → canonical tautomer →
+  50 ETKDG conformers → MMFF-with-UFF-fallback → lowest-energy
+  conformer as PDB + OpenBabel/Gasteiger MOL2 pipeline, parallel
+  worker pool, unsupported-atom skip list) had **no dedicated
+  surface**: `prepare_ligand_library` covers the CSV → PDBQT campaign
+  twin, but the PDB/MOL2 structure pipeline itself did not exist.
+  `niggaqt.py` (the MGLTools `prepare_ligand4.py` batch converter
+  with its 30-second timeout, numbered sub-folders and conversion
+  log) had been *absorbed* as "MGLTools deprecated → Meeko path" —
+  the re-delivery says the user wants it. `mismatch2.py` /
+  `niggamatch.py` were already covered (`check_torsion_consistency` /
+  `scan_torsion_consistency`, the audit card's torsion mode).
+* **Vina/** — `vina.conf` + `log.txt` were already covered
+  (`parse_vina_config`, the grid box / config batch cards,
+  `parse_vina_output`).
+* **Vina_contol/** — `adder.py` (receptor distribution),
+  `vinar.py`, `vinar_multiple.py`, `vina_reader.py`, `conf.txt` were
+  already covered (`distribute_files` / `_dock_distribute_receptor`,
+  `run_vina` / `run_vina_batch` / `scan_vina_directory`); `batch.py`
+  and `niggavina.py` contributed one genuinely missing behaviour —
+  the **resume** (skip already-docked ligands; a zero-byte log marks
+  a crashed job).
+
+**The ligand structures card (nigga.py, whole).**
+`pharmaml.docking.generate_ligand_structures(library, output_root,
+*, num_confs=50, default_b_factor=20.0, write_mol2=True, workers=1)`
+runs the original pipeline per library row: RDKit tautomer
+canonicalisation (best-effort — a failure keeps the input form and
+confesses in the row), the metal-centre skip list
+(`UNSUPPORTED_LIGAND_ATOMS` = Fe/Zn/Cu/Mn/Co/Ni/Mo/W, per-row reason,
+never batch-fatal), `EmbedMultipleConfs` ETKDG, MMFF minimisation
+over every conformer with a UFF fallback when the molecule lacks MMFF
+parameters, the **lowest-energy** conformer kept, and two outputs: a
+one-model PDB written by the original's own writer (HEADER / COMPND /
+ATOM / **CONECT** / END — the connectivity MGLTools'
+`prepare_ligand4.py` reader wants; RDKit's own `MolToPDBBlock` drops
+it) and, when OpenBabel is installed, the Gasteiger-charged MOL2 twin
+(without OpenBabel the PDB still lands and the row records why). The
+`workers` knob mirrors the original's `cpu_count() - 1` process pool
+through a `ProcessPoolExecutor` — with the **spawn** context, because
+the playground runs it inside a worker thread and Python 3.12+ warns
+correctly that forking a multi-threaded process can deadlock. The
+report is a DataFrame (`ligand`, `smiles`, `tautomer`, `pdb`, `mol2`,
+`forcefield`, `energy`, `conformers`, `atoms`, `ok`, `error`), with
+invalid-SMILES rows riding along at the end exactly like
+`prepare_ligand_library`'s reports. The Docking tab's new **Ligand
+structures (CSV → PDB + MOL2)** card drives it over the already-loaded
+library with conformers / workers / MOL2 knobs, a live report tree and
+the report CSV export.
+
+**The MGLTools PDB → PDBQT batch card (niggaqt.py, whole).**
+`pharmaml.docking.convert_pdb_folder_to_pdbqt(source_dir, output_dir,
+mgl_python, adt_script, *, timeout_s=30.0, add_hydrogens=True)`
+drives `prepare_ligand4.py -l <pdb> -o <pdbqt> -A hydrogens` over
+every `.pdb` of the source folder into the numbered-sub-folder tree
+(`1/`, `2/`, `3/` … — the `output_pdbqt/<n>/<name>.pdbqt` layout the
+campaign readers and the torsion audit expect), each subprocess
+guarded by the original's 30-second timeout (the manual
+`while proc.poll()` busy-wait became one `subprocess.run(...,
+timeout=...)` call — same verdict, no polling), and writes the
+original's `conversion_log.txt` (SUCCESSFUL CONVERSIONS / TIMED OUT
+FILES / FAILED CONVERSIONS, timestamped) beside the tree. Both the
+interpreter and the script paths are checked **before** the first
+subprocess fires (a typo'd path raises a typed `DockingError` naming
+it, instead of leaving a half-converted tree). The Docking tab's new
+**PDB → PDBQT batch (MGLTools)** card drives it with the source /
+output pickers, the two MGLTools paths pre-filled with the original's
+Windows defaults, the timeout knob, the live report tree and the
+report CSV export.
+
+**The Vina batch's RESUME (batch.py + niggavina.py).**
+`run_vina_batch(..., skip_existing=False)` gained the upload
+controllers' resume behaviour: when ticked, a ligand whose
+`<stem>_out.pdbqt` **and** non-empty `<stem>.log` already exist is
+not started again (the zero-byte log marks a crashed job —
+`niggavina.py`'s empty-log cleanup rule — and is re-docked). Skipped
+ligands return `DockingRunResult(skipped=True, ok=True, seconds=0.0)`
+so an interrupted campaign re-runs in seconds, docking only the
+remainder; the results table's status column shows `skip` and the
+summary confesses the count. The Vina config batch card grew the
+**skip already-docked (resume)** checkbox wired straight through.
+
+The coverage probe's uploads axis now carries all 13 script/config/
+log files of the zip (the `vina.exe` / `vina_split.exe` / license
+`.rtf` payloads are external engines, absorbed like the rar's own);
+the verdict reads **119 rar + 14 upload files, zero-hit 0**.
+
+### Verified
+
+Bare `python -m pytest`: **2637 collected = 2632 passed + 5 skipped /
+0 failures** — 30 new tests (TestLigandStructureGeneration ×6,
+TestMglToolsConversion ×6, TestVinaBatchResume ×4, TestReview141Gui
+×14; the docs-index test re-synced via `scratch/build_docs_index.py`
+— 275 symbols). Doctests green on the three touched modules; ruff
+clean on the docking package; `playground.py --self-test` green on
+Xvfb :99 ("UI built, every tab visited … no errors"); the per-file
+coverage probe green (119 rar + 14 upload, zero-hit 0). Version
+chain: VERSION + pyproject + `pharmaml.__version__` + web
+`SHIPPED_TOOLKIT_VERSION` → 1.2.80.
+
 ## [1.2.79] — 2026-10-26
 
 ### Added — the round-25 full review (100x-140): the forward links' POINTER confession + the census's KEYBOARD path + the confession's in-dialog RESET

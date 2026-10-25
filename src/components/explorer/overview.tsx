@@ -127,7 +127,8 @@ cons  = consensus_rescore(summary, columns=["best_lowest_energy"])
 from pharmaml.docking import (
     write_dpf, check_torsion_consistency, scan_torsion_consistency,
     collect_files, scan_vina_directory, parse_vina_config,
-    distribute_files, cleanup_tree,
+    distribute_files, cleanup_tree, generate_ligand_structures,
+    convert_pdb_folder_to_pdbqt,
 )
 
 write_dpf("ligand_folders/1/l.pdbqt", ga_run=100)   # AutoDock4 r.dpf
@@ -136,6 +137,15 @@ scan_vina_directory("vina_results/")               # best affinity per log
 collect_files("docking_run/", filename="r.dlg")     # gather artifacts
 distribute_files(["receptor.pdbqt"], "ligand_folders/")  # push receptor
 cleanup_tree("docking_run/", keep={"r.dlg"}, dry_run=True)  # safe sweep
+
+# --- Ligand structures & resume (the 2026-10 upload twins) -------
+structs = generate_ligand_structures(               # nigga.py: tautomer →
+    lib, "structures/", num_confs=50,               # ETKDG conformers →
+)                                                   # lowest-energy PDB+MOL2
+tree = convert_pdb_folder_to_pdbqt(                 # niggaqt.py: MGLTools
+    "pdbs/", "pdbqt_tree/", timeout_s=30.0,         # batch, numbered folders
+)
+run_vina_batch(conf, "pdbqt_tree/", skip_existing=True)  # resume batch
 
 # --- Ligand-table reconciliation & standardization ---------------
 from pharmaml.chem import (
@@ -285,7 +295,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "2600 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite)",
+    after: "2632 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite)",
   },
   {
     aspect: "Interface",
@@ -343,8 +353,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "442";
-  const loc = stats ? fmtInt(stats.totalLines) : "156,536";
+  const fileCount = stats ? fmtInt(stats.files) : "446";
+  const loc = stats ? fmtInt(stats.totalLines) : "159,231";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -430,8 +440,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="2600"
-                countTo={2600}
+                value="2632"
+                countTo={2632}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

@@ -5,7 +5,12 @@ atom-type extraction), ``others/dpfer.py`` (DPF generation with the
 about-centroid, TORSDOF and the full AutoDock4 GA parameter block) and
 ``smilestopdbqt.py`` (SMILES -> 3D PDBQT via Meeko with AD4 atom-type
 repair), plus the ligand-folder conventions of
-``ligand generation/*.py``.
+``ligand generation/*.py`` -- and (the 2026-10 "new folder" upload
+re-delivered it) the MGLTools batch converter of
+``ligand generation/niggaqt.py``:
+:func:`convert_pdb_folder_to_pdbqt` drives ``prepare_ligand4.py``
+over a folder of PDB files into the numbered-subfolder PDBQT tree,
+with the original's per-ligand timeout and conversion log.
 
 Key safety improvements over the originals:
 
@@ -63,12 +68,16 @@ pharmaml.exceptions.DockingParseError: ligand file not found: missing.pdbqt
 from __future__ import annotations
 
 import math
+import subprocess
+import time
 import warnings
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TypedDict
 
 import numpy as np
+import pandas as pd
 
 from pharmaml.exceptions import (
     DataValidationError,
@@ -85,6 +94,7 @@ __all__ = [
     "GridBox",
     "GridParameters",
     "compute_grid_box",
+    "convert_pdb_folder_to_pdbqt",
     "extract_pdbqt_atom_types",
     "read_gpf",
     "smiles_to_pdbqt",
@@ -747,3 +757,191 @@ def smiles_to_pdbqt(
     target = out_dir / f"{safe_filename(name or smiles)}.pdbqt"
     target.write_text("\n".join(repaired_lines) + "\n", encoding="utf-8")
     return target
+
+
+#: Default MGLTools interpreter path of ``niggaqt.py`` (the Windows
+#: MGLTools-1.5.7 layout; override for any other installation).
+DEFAULT_MGL_PYTHON = r"C:\Program Files (x86)\MGLTools-1.5.7\python.exe"
+
+#: Default ``prepare_ligand4.py`` location inside a standard
+#: MGLTools-1.5.7 tree.
+DEFAULT_PREPARE_LIGAND4 = (
+    r"C:\Program Files (x86)\MGLTools-1.5.7\Lib\site-packages"
+    r"\AutoDockTools\Utilities24\prepare_ligand4.py"
+)
+
+
+def convert_pdb_folder_to_pdbqt(
+    source_dir: str | Path,
+    output_dir: str | Path,
+    mgl_python: str | Path = DEFAULT_MGL_PYTHON,
+    adt_script: str | Path = DEFAULT_PREPARE_LIGAND4,
+    *,
+    timeout_s: float = 30.0,
+    add_hydrogens: bool = True,
+    log_name: str = "conversion_log.txt",
+) -> pd.DataFrame:
+    """Batch-convert a folder of PDB files to PDBQT via MGLTools.
+
+    The ``others/Docking/ligand generation/niggaqt.py`` pipeline (the
+    2026-10 "new folder" upload re-delivered it): every ``.pdb`` under
+    ``source_dir`` is converted with AutoDockTools'
+    ``prepare_ligand4.py`` into a numbered sub-folder (``1``, ``2``,
+    ``3`` ... -- the ``output_pdbqt/<n>/<name>.pdbqt`` layout the
+    campaign readers and the torsion-consistency audit expect), one
+    PDBQT per PDB, each subprocess guarded by ``timeout_s`` seconds.
+    A conversion log (successes / timeouts / failures) lands next to
+    the output tree exactly like the original's ``conversion_log.txt``.
+
+    Design changes vs. the original: the manual ``while proc.poll()``
+    timeout loop became a single ``subprocess.run(..., timeout=...)``
+    call (same 30-second verdict, no busy-wait), the Popen argument
+    list stays a list (never ``shell=True``), and the run summary is a
+    typed DataFrame instead of three loose lists.
+
+    Parameters
+    ----------
+    source_dir:
+        Folder with the ``.pdb`` files (searched non-recursively,
+        sorted by name -- the original's convention).
+    output_dir:
+        Destination folder (created if missing); one numbered
+        sub-folder per ligand is created inside it.
+    mgl_python:
+        MGLTools' own Python interpreter (``pythonsh`` / ``python.exe``).
+    adt_script:
+        Full path to ``prepare_ligand4.py`` inside the MGLTools tree.
+    timeout_s:
+        Per-ligand timeout in seconds (the original used 30).
+    add_hydrogens:
+        Pass ``-A hydrogens`` (the original's default); ``False`` omits
+        the repair flag entirely.
+    log_name:
+        Name of the conversion log written into ``output_dir``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``ligand`` (PDB stem), ``subfolder``, ``pdbqt`` (path,
+        empty on failure), ``status`` (``converted`` / ``timeout`` /
+        ``failed``), ``seconds``, ``error``.
+
+    Raises
+    ------
+    DockingError
+        ``source_dir`` is not a directory, or ``mgl_python`` /
+        ``adt_script`` do not exist (checked before the first
+        subprocess fires -- no half-converted trees from a typo'd
+        path).
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
+    >>> convert_pdb_folder_to_pdbqt("/tmp/pharmaml_doctest_no_pdbs_in_here",
+    ...     "/tmp/pharmaml_doctest_out", mgl_python="/bin/false")
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DockingError: source directory not found: /tmp/pharmaml_doctest_no_pdbs_in_here
+    >>> src = Path("/tmp/pharmaml_doctest_mgl_src"); src.mkdir()
+    >>> convert_pdb_folder_to_pdbqt(src, "/tmp/pharmaml_doctest_mgl_out")
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DockingError: MGLTools python 'C:\\Program Files (x86)\\MGLTools-1.5.7\\python.exe' not found -- point mgl_python at your MGLTools pythonsh
+    >>> src.rmdir()
+    """
+    source = Path(source_dir)
+    if not source.is_dir():
+        raise DockingError(f"source directory not found: {source}")
+    python = Path(mgl_python)
+    if not python.is_file():
+        raise DockingError(
+            f"MGLTools python '{python}' not found -- point mgl_python at "
+            "your MGLTools pythonsh"
+        )
+    script = Path(adt_script)
+    if not script.is_file():
+        raise DockingError(
+            f"prepare_ligand4 script '{script}' not found -- point adt_script "
+            "at AutoDockTools' Utilities24/prepare_ligand4.py"
+        )
+    if timeout_s <= 0:
+        raise DockingError(f"timeout_s must be positive, got {timeout_s}")
+
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    pdb_files = sorted(p for p in source.iterdir() if p.suffix.lower() == ".pdb" and p.is_file())
+    rows: list[dict[str, object]] = []
+    for i, pdb_file in enumerate(pdb_files, start=1):
+        name = pdb_file.stem
+        numbered = out / str(i)
+        numbered.mkdir(parents=True, exist_ok=True)
+        pdbqt_path = numbered / f"{name}.pdbqt"
+        cmd: list[str] = [str(python), str(script), "-l", str(pdb_file), "-o", str(pdbqt_path)]
+        if add_hydrogens:
+            cmd += ["-A", "hydrogens"]
+        started = time.perf_counter()
+        status = "converted"
+        error = ""
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            status = "timeout"
+            error = f"conversion timed out after {timeout_s:.0f} seconds"
+            pdbqt_path.unlink(missing_ok=True)
+            _LOG.warning("%s: %s", name, error)
+        except subprocess.CalledProcessError as exc:
+            status = "failed"
+            error = f"prepare_ligand4 exited with {exc.returncode}"
+            pdbqt_path.unlink(missing_ok=True)
+            _LOG.warning("%s: %s", name, error)
+        except OSError as exc:
+            status = "failed"
+            error = f"could not launch {python}: {exc}"
+            _LOG.warning("%s: %s", name, error)
+        seconds = time.perf_counter() - started
+        if status == "converted" and not pdbqt_path.is_file():
+            status = "failed"
+            error = "prepare_ligand4 reported success but wrote no PDBQT"
+        rows.append(
+            {
+                "ligand": name,
+                "subfolder": str(i),
+                "pdbqt": str(pdbqt_path) if status == "converted" else "",
+                "status": status,
+                "seconds": round(seconds, 3),
+                "error": error,
+            }
+        )
+
+    log_path = out / log_name
+    converted = [r for r in rows if r["status"] == "converted"]
+    timeouts = [r for r in rows if r["status"] == "timeout"]
+    failed = [r for r in rows if r["status"] == "failed"]
+    lines = [
+        f"PDB to PDBQT Conversion Log - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "=" * 50,
+        "",
+    ]
+    if converted:
+        lines.append("SUCCESSFUL CONVERSIONS:")
+        lines += [str(r["ligand"]) for r in converted]
+        lines.append("")
+    if timeouts:
+        lines.append(f"TIMED OUT FILES ({timeout_s:.0f}+ seconds):")
+        lines += [str(r["ligand"]) for r in timeouts]
+        lines.append("")
+    if failed:
+        lines.append("FAILED CONVERSIONS:")
+        lines += [str(r["ligand"]) for r in failed]
+        lines.append("")
+    if not timeouts and not failed:
+        lines.append("All PDB files converted successfully." if rows else "No PDB files found.")
+    log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _LOG.info(
+        "MGLTools conversion: %d/%d PDB files converted under %s",
+        len(converted),
+        len(rows),
+        out,
+    )
+    return pd.DataFrame(rows)

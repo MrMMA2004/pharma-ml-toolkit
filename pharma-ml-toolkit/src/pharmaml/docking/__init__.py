@@ -12,10 +12,12 @@ from pharmaml.docking.campaign import (
     write_config_batch,
 )
 from pharmaml.docking.ligands import (
+    UNSUPPORTED_LIGAND_ATOMS,
     LigandLibrary,
     LigandPreparationReport,
     TorsionCheck,
     check_torsion_consistency,
+    generate_ligand_structures,
     load_ligand_csv,
     prepare_ligand_library,
     scan_torsion_consistency,
@@ -29,9 +31,12 @@ from pharmaml.docking.parsing import (
     scan_vina_directory,
 )
 from pharmaml.docking.preparation import (
+    DEFAULT_MGL_PYTHON,
+    DEFAULT_PREPARE_LIGAND4,
     GridBox,
     GridParameters,
     compute_grid_box,
+    convert_pdb_folder_to_pdbqt,
     extract_pdbqt_atom_types,
     read_gpf,
     smiles_to_pdbqt,
@@ -59,6 +64,9 @@ from pharmaml.docking.workflow import (
 )
 
 __all__ = [
+    "DEFAULT_MGL_PYTHON",
+    "DEFAULT_PREPARE_LIGAND4",
+    "UNSUPPORTED_LIGAND_ATOMS",
     "GridBox",
     "GridParameters",
     "LigandLibrary",
@@ -73,11 +81,13 @@ __all__ = [
     "compute_grid_box",
     "consensus_breakdown",
     "consensus_rescore",
+    "convert_pdb_folder_to_pdbqt",
     "delete_named_files",
     "distribute_files",
     "distribute_receptor",
     "dock_smiles_array",
     "extract_pdbqt_atom_types",
+    "generate_ligand_structures",
     "ligand_efficiency",
     "ligand_efficiency_series",
     "list_file_names",
