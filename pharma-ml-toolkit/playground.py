@@ -371,6 +371,20 @@ Design notes
   ("The imported order from <file> was applied") until the reader
   completes their own Save -- then it is their last saved order
   again, honestly.
+  (100x-139) The return link gained its POINTER confession: the
+  small "↑ Contents" link now carries a title tooltip ("Back to the
+  contents block at the top of the report") -- the aria world always
+  knew the destination, a hovering pointer had no clue (one string,
+  minted once, so the table and figure wrappers can never drift);
+  the web preview's census line became CLICKABLE LEGS (clicking a
+  kind's count SPOTLIGHTS that kind's lines -- the others dim,
+  never hide, every line stays fully clickable; clicking the active
+  leg again clears it; the spotlight resets when the dialog closes
+  so a fresh open starts fresh), and the strip's confession grew
+  the ORDER's provenance -- the web twin of the picklist's memory
+  label: "Your last saved walking order was applied" when the
+  browser's persisted order is in force, the canonical order stays
+  quiet (nothing was remembered).
 
 Command line helpers (useful for scripting and CI)::
 

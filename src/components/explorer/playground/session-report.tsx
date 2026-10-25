@@ -57,8 +57,10 @@ import {
 } from "@/lib/pinned-trace-store";
 import {
   collectSessionReport,
+  contentsCensusLegs,
   contentsCensusText,
   figureSketchBounds,
+  orderConfessionText,
   PREVIEW_SCATTER_POINTS,
   PREVIEW_TABLE_ROWS,
   traceInspectText,
@@ -115,6 +117,17 @@ import { toast } from "sonner";
 /* listed), each line a button that JUMPS the dialog to its section      */
 /* (smooth scroll + a brief accent ring on the arrival, the HTML        */
 /* twin's :target ring mirrored inside the dialog).                     */
+/*                                                                      */
+/* (100x-139) The strip grew two honest affordances: the census line     */
+/* became CLICKABLE LEGS (each kind's count is a button that            */
+/* SPOTLIGHTS that kind's lines — the others dim, never hide, they       */
+/* stay fully clickable; clicking the active leg again clears it;        */
+/* the spotlight resets when the dialog closes so a fresh open starts   */
+/* fresh), and the strip's confession names the ORDER's provenance      */
+/* (the web twin of the desktop picklist's memory label — "your last     */
+/* saved walking order was applied" when the browser's persisted         */
+/* order was applied, and the canonical order confesses nothing, the     */
+/* desktop's "nothing remembered: stay quiet" rule).                     */
 /* ------------------------------------------------------------------ */
 
 /** localStorage key for the per-group toggle set (100x-131). */
@@ -630,6 +643,13 @@ export function SessionReport() {
   // (100x-137) the Contents strip's jump target — the section the last
   // jump landed on, held briefly so the arrival ring fades on its own
   const [jumpedTo, setJumpedTo] = useState<number | null>(null);
+  // (100x-139) the strip's SPOTLIGHT — the census-leg kind whose lines
+  // stay lit while the others dim (null = no spotlight, every line at
+  // full strength; the dimmed lines stay fully clickable — dimmed is
+  // never hidden).  Cleared when the dialog closes so a fresh open
+  // starts fresh — a spotlight is a view aid, never a filter on what
+  // the report ships.
+  const [spotlight, setSpotlight] = useState<ReportContentsEntry["kind"] | null>(null);
   const dragId = useRef<GroupId | null>(null);
   const jumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // the jump timer is cleaned up when the component goes (a plain
@@ -664,6 +684,10 @@ export function SessionReport() {
     () => sessionReportCensus(snapshot, options, order),
     [snapshot, options, order],
   );
+  // (100x-132) the order-drift flag — the persisted browser order vs
+  // the canonical one (the dashed Reset chip appears while this holds;
+  // the strip's order confession keys off it too)
+  const customOrder = order.join() !== SESSION_GROUP_ORDER.join();
   // (100x-133) the exact payload the download would POST — the preview
   // renders THIS (same options, same walking order), so what the dialog
   // shows is what the file ships, section for section.
@@ -688,9 +712,24 @@ export function SessionReport() {
     () => contentsCensusText(sessionContentsCensus(contents)),
     [contents],
   );
+  // (100x-139) the census's LEGS — the clickable form of the same line
+  // (each kind's count a button that spotlights its lines); a leg's
+  // label is the same text the plain line prints, so the visual census
+  // never drifts from the aria one
+  const contentsLegs = useMemo(
+    () => contentsCensusLegs(sessionContentsCensus(contents)),
+    [contents],
+  );
+  // (100x-139) the strip's ORDER confession — the web twin of the
+  // desktop picklist's memory label: the browser's persisted walking
+  // order applied ("your last saved order") vs the canonical order's
+  // honest silence (the pure derivation, probe-pinned)
+  const orderConfession = useMemo(
+    () => orderConfessionText(customOrder),
+    [customOrder],
+  );
   const shippable =
     census.figures + census.tables + census.metrics + census.images > 0;
-  const customOrder = order.join() !== SESSION_GROUP_ORDER.join();
   // the chips render in the walking order, only the shippable groups
   const orderedGroups = useMemo(
     () =>
@@ -1042,7 +1081,16 @@ export function SessionReport() {
           table heads (capped, with the honest "+N more rows"), figure
           sketches drawn from the same trace data, and the surgery
           grids' real PNGs — numbered, in the chosen walking order. */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+      <Dialog
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          // (100x-139) a closed dialog forgets its spotlight — a fresh
+          // open starts fresh (the view aid never leaks into the next
+          // session's reading)
+          if (!open) setSpotlight(null);
+        }}
+      >
         {/* (100x-135) the ESCAPE LAYERING: Radix closes the dialog on
             Escape at the document-capture phase — before any trace
             group's own keydown could stop it — so the dialog itself
@@ -1094,19 +1142,61 @@ export function SessionReport() {
                   {/* (100x-138) the KIND CENSUS — the counts of exactly
                       what the strip lists (metrics excluded, the strip's
                       own noise rule), the footer's singular/plural
-                      discipline */}
+                      discipline.  (100x-139) the census became CLICKABLE
+                      LEGS: each kind's count spotlights that kind's lines
+                      (the others dim — never hide, they stay fully
+                      clickable); clicking the active leg again clears
+                      it; a kind with zero lines renders as plain text
+                      (nothing to spotlight — an honest no-op avoided). */}
                   <p
                     className="text-[10px] tabular-nums text-muted-foreground"
-                    aria-label="The contents census — the kinds and counts the strip lists"
+                    aria-label="The contents census — the kinds and counts the strip lists; click a kind to spotlight its lines"
+                    title={`${contentsCensusLine} — click a kind to spotlight its lines`}
                   >
-                    {contentsCensusLine}
+                    {contentsLegs.map((leg, legIndex) => (
+                      <span key={leg.kind}>
+                        {legIndex > 0 ? <span aria-hidden> · </span> : null}
+                        {leg.count > 0 ? (
+                          <button
+                            type="button"
+                            aria-pressed={spotlight === leg.kind}
+                            onClick={() =>
+                              setSpotlight(spotlight === leg.kind ? null : leg.kind)
+                            }
+                            title={
+                              spotlight === leg.kind
+                                ? `Spotlight on — click to clear (every line back at full strength)`
+                                : `Spotlight the ${leg.count} ${leg.kind === "image" ? "structure grid" : leg.kind}${leg.count === 1 ? "" : "s"} — the other kinds dim, never hide`
+                            }
+                            className={`rounded px-0.5 -mx-0.5 tabular-nums underline-offset-2 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                              spotlight === leg.kind
+                                ? "font-medium text-primary underline decoration-dotted"
+                                : "text-muted-foreground hover:text-primary hover:underline decoration-dotted"
+                            }`}
+                          >
+                            {leg.label}
+                          </button>
+                        ) : (
+                          <span className="tabular-nums">{leg.label}</span>
+                        )}
+                      </span>
+                    ))}
                   </p>
                 </div>
                 <ul className="mt-1 flex flex-wrap gap-1" role="list">
                   {contents.map((entry) => {
                     const KindIcon = contentsKindIcon(entry.kind);
+                    // (100x-139) the SPOTLIGHT — a line outside the
+                    // spotlighted kind DIMS (opacity, never display: the
+                    // line stays exactly as clickable as before — dimmed
+                    // is not hidden, and the jump keeps working)
+                    const dimmed = spotlight !== null && entry.kind !== spotlight;
                     return (
-                      <li key={entry.index} role="listitem">
+                      <li
+                        key={entry.index}
+                        role="listitem"
+                        className={dimmed ? "opacity-40 transition-opacity" : "transition-opacity"}
+                      >
                         <button
                           type="button"
                           onClick={() => jumpToSection(entry.index)}
@@ -1130,6 +1220,11 @@ export function SessionReport() {
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   The same block the downloaded file&apos;s header carries — click
                   a line to jump to it.
+                  {/* (100x-139) the ORDER confession — the web twin of the
+                      desktop picklist's memory label: the persisted order
+                      applied says so and names the way out; the canonical
+                      order stays quiet (nothing was remembered). */}
+                  {orderConfession ? ` ${orderConfession}` : ""}
                 </p>
               </nav>
             ) : null}

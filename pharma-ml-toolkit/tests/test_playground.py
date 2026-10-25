@@ -10158,3 +10158,151 @@ class TestReview138Gui:
             playground.PlaygroundApp._clear_report_order
         )
         assert "the provenance dies with the memory" in clear_source
+
+
+@XVFB_SKIP
+class TestReview139Gui:
+    """Round 100x-139: the return link's POINTER confession (the "↑
+    Contents" link carries a title tooltip -- the aria world always knew
+    the destination, a hovering pointer had no clue), the web preview's
+    census became CLICKABLE LEGS with the SPOTLIGHT, and the strip's
+    confession grew the ORDER's provenance ("Your last saved walking
+    order was applied" -- the web twin of THIS app's picklist memory
+    label).  The desktop side pins: the module docstring records the
+    round, the picklist's wording stays the web twin's anchor, the
+    playground never inlines the library's one-string link, and the
+    app's own save path ships the tooltip on every page wrapper."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, rounds: int = 4) -> None:
+        for _ in range(rounds):
+            app.update_idletasks()
+            app.update()
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_139(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-139" in doc
+        assert "POINTER confession" in doc
+        assert "SPOTLIGHTS" in doc
+        assert "last saved walking order was applied" in doc
+
+    # -- the web twin's anchor ---------------------------------------------- #
+
+    def test_the_picklist_wording_is_the_web_twins_anchor(
+        self, playground: Any
+    ) -> None:
+        """The web strip's order confession mirrors THIS wording -- the
+        desktop's own memory label must stay findable (the probe pins
+        the web side; this pins the desktop's half of the pair)."""
+        import inspect
+
+        source = inspect.getsource(
+            playground.PlaygroundApp._session_report_picklist
+        )
+        assert "Your last saved order was applied" in source
+        assert "Reset to " in source and "walking order forgets it." in source
+
+    # -- the one-string discipline ------------------------------------------ #
+
+    def test_the_playground_never_inlines_the_return_link(self) -> None:
+        """The link lives ONCE, in the library (pharmaml.viz.report's
+        _BACK_CONTENTS_LINK) -- the playground composes through
+        HTMLReport and carries no drifted copy of its own."""
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "back-contents" not in source, (
+            "the playground grew an inline return link -- the one-string "
+            "discipline broke"
+        )
+
+    def test_the_library_constant_carries_the_tooltip(self) -> None:
+        """The one string confesses the jump target to the POINTER world
+        (the exact wording the tests and the doctest pin)."""
+        from pharmaml.viz.report import _BACK_CONTENTS_LINK
+
+        assert _BACK_CONTENTS_LINK == (
+            "<a class='back-contents' href='#contents' "
+            "title='Back to the contents block at the top of the report'>"
+            "\u2191 Contents</a>"
+        )
+
+    # -- the app's own save path ships the tooltip --------------------------- #
+
+    def test_the_desktop_html_twin_carries_the_tooltip(
+        self,
+        app: Any,
+        playground: Any,
+        monkeypatch: Any,
+        dialogs: list[Any],
+        picklist_accept_all: None,
+        tmp_path: Path,
+    ) -> None:
+        """End to end through the app's own File ▸ Save session report:
+        a planted figure + a filled table ship as an HTML file whose
+        EVERY page wrapper ends in the tooltip-carrying return link."""
+        import time as _time
+
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        figure = plt.figure()
+        axes = figure.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title("alpha plot")
+        app._render_figure(app._topo_host, figure, caption="alpha plot")
+        app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+        self._drain(app)
+
+        target = tmp_path / "session-report.html"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        app._menu_save_session_report_html()
+
+        # the worker thread writes the file -- pump until it lands
+        deadline = _time.monotonic() + 30.0
+        while not target.is_file() and _time.monotonic() < deadline:
+            app.update()
+            _time.sleep(0.01)
+        assert target.is_file(), "the save job never wrote the file"
+
+        html = target.read_text(encoding="utf-8")
+        link = (
+            "<a class='back-contents' href='#contents' "
+            "title='Back to the contents block at the top of the report'>"
+            "\u2191 Contents</a>"
+        )
+        # one figure + one table -> exactly two page wrappers, each
+        # ending in the SAME tooltip-carrying link
+        assert html.count(link) == 2, html.count(link)
+        assert html.count("title='Back to the contents block at the top of the report'") == 2
+        # the anchors themselves are unchanged (the round only grew the
+        # tooltip -- the round-trip navigation still holds)
+        assert "<nav class='contents' id='contents' tabindex='-1'" in html
+        assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in html
+        assert "<li><a href='#pg-2'>figure 1 · alpha plot</a></li>" in html
+        plt.close("all")

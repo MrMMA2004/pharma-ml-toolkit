@@ -1108,3 +1108,28 @@ the theme-variable styling, the noise rule's other half, the bundle's
 automatic gain). Standing pins updated where the markup evolved: the
 nav string (now id+tabindex-carrying) and the :target selector (now
 nav-covering) across test_viz/smoke136/smoke137/shoot136/shoot137.
+
+### Round 24 (100x-139) — the return link's pointer confession + the census's clickable legs + the strip's order confession
+
+| What shipped | The contract |
+| --- | --- |
+| The return link's POINTER confession | The "↑ Contents" link every HTML page wrapper ends in carries `title='Back to the contents block at the top of the report'` — the pointer world gets the same confession the aria world always had. ONE string, minted once (`_BACK_CONTENTS_LINK` in `pharmaml.viz/report.py`), so the table and figure wrappers can never drift apart (the lockstep discipline the page ids follow); the playground composes through `HTMLReport` and carries no inline twin (test-pinned). No caller change: the desktop's save path, `save_visual_bundle`, and the web bridge's `/api/report/session` all gained it automatically; the PDF twin's ink stays frozen. |
+| The census's CLICKABLE legs | The web preview's census line ("2 figures · 1 table · 1 structure grid") became interactive: each kind's count is a button that SPOTLIGHTS that kind's strip lines — the other kinds dim to 40% opacity, never hidden (every dimmed line stays exactly as clickable as before, jumps included); the active leg carries `aria-pressed` with accent + dotted-underline styling; clicking the active leg again clears it; the spotlight resets when the dialog closes (a fresh open starts fresh — a view aid, never a filter on what ships). A zero-count kind renders as plain text (nothing to spotlight); the legs' labels are the same text the plain line prints (`contentsCensusLegs`, pure, probe-pinned — the visual census can never drift from the aria one); a metrics leg can never exist (excluded by construction upstream). |
+| The strip's ORDER confession | The web preview's confession line appends "Your last saved walking order was applied — Reset walking order forgets it." while the browser's persisted walking order is in force (`orderConfessionText`, pure, probe-pinned — the web twin of the desktop picklist's memory label); the canonical order confesses NOTHING (the desktop's "nothing remembered: stay quiet" noise rule, mirrored). The desktop's own wording stays the anchor this round mirrors — test-pinned on the picklist's method source. |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.78 via
+both drivers — the re-execution's home-path leak in two notebook
+outputs scrubbed before the suite ran, the standing round-138 trap).
+The GUI-axis census holds at 68 live cards (the round touched no card
+topology). The web catalog walk: 26/26 entries (the round touched no
+catalog topology). 8 new tests: TestReview139Gui (5, desktop: the
+docstring pins, the picklist-wording anchor, the no-inline-link
+discipline, the library constant's exact string, the end-to-end save
+path shipping the tooltip on both wrappers) + TestPreviewContentsSpotlight
+(3, web parity: the TS probe's legs + confession verdicts, the
+collector export surface, the component's spotlight + confession
+pins). Standing pins updated where the markup evolved: the return-link
+string (now title-carrying) across test_viz's TestHTMLReportBackLinks
+(one shared BACK_LINK class constant), smoke138, shoot138, and the
+report.py doctest.

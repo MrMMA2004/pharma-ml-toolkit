@@ -1593,3 +1593,93 @@ class TestPreviewContentsCensus:
         assert "contents.length > 0" in report
         # tabular figures so the counts align under each other
         assert "tabular-nums" in report
+
+
+class TestPreviewContentsSpotlight:
+    """Round 100x-139: the strip's two honest affordances — the census
+    became CLICKABLE LEGS (clicking a kind's count spotlights that
+    kind's lines; the others dim, never hide; clicking the active leg
+    again clears it; the spotlight resets when the dialog closes) and
+    the strip's confession names the ORDER's provenance ("Your last
+    saved walking order was applied — Reset walking order forgets
+    it." when the browser's persisted order is in force; the canonical
+    order confesses nothing — the desktop picklist's own noise rule,
+    mirrored).  The TS probe pins the pure derivations
+    (src/lib/session-report.ts's contentsCensusLegs +
+    orderConfessionText); the static pins keep the strip's spotlight
+    and confession from silently disappearing between rounds."""
+
+    REPORT_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "session-report.tsx"
+    )
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+
+    needs_round = pytest.mark.skipif(
+        not REPORT_TSX.is_file() or not COLLECTOR_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src + <repo>/scratch) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+
+    @needs_round
+    def test_the_legs_and_confession_pin(self) -> None:
+        # the TS probe exits non-zero on drift and prints its verdicts
+        _run([BUN, "run", "scratch/probe_session_report_139.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_139.json").read_text())
+        # the legs over the mixed fixture: kind + label + count, one per
+        # kind the strip lists (metrics can never be a leg)
+        assert ts["mixedLegs"] == [
+            {"kind": "figure", "count": 2, "label": "2 figures"},
+            {"kind": "table", "count": 1, "label": "1 table"},
+            {"kind": "image", "count": 1, "label": "1 structure grid"},
+        ], ts
+        # the legs ARE the plain line, byte for byte — the clickable
+        # census can never drift from the aria one
+        assert ts["legsMatchLine"] is True, ts
+        assert (
+            ts["plainLine"] == "2 figures · 1 table · 1 structure grid"
+        ), ts
+        # a zero-count figures/tables leg still rides (the plain line
+        # prints "0 tables"); an images leg never rides without images
+        assert ts["zeroTableLegRides"] is True, ts
+        assert ts["noImagesLegWithoutImages"] is True, ts
+        # the confession: drifted says so + names the way out; the
+        # canonical order stays quiet (null — nothing was remembered)
+        assert (
+            ts["driftedConfession"]
+            == "Your last saved walking order was applied — Reset walking order forgets it."
+        ), ts
+        assert ts["canonicalConfession"] is None, ts
+        assert ts["confessionNamesTheWayOut"] is True, ts
+        # metrics can never be a spotlight target
+        assert ts["metricsNeverALeg"] is True, ts
+
+    def test_the_collector_exports_the_spotlight_contract(self) -> None:
+        collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
+        assert "export function contentsCensusLegs(" in collector
+        assert "export function orderConfessionText(" in collector
+        assert "export interface ContentsCensusLeg" in collector
+        # the disciplines are documented, not incidental
+        assert "click can spotlight exactly that kind's lines" in collector
+        assert "nothing remembered: stay quiet" in collector
+
+    def test_the_component_carries_the_spotlight_and_confession(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the legs render inside the strip (the census's clickable form)
+        assert "contentsCensusLegs(sessionContentsCensus(contents))" in report
+        # the spotlight state + its toggle + its honest dim (opacity,
+        # never display — dimmed is not hidden)
+        assert 'useState<ReportContentsEntry["kind"] | null>(null)' in report
+        assert "setSpotlight(spotlight === leg.kind ? null : leg.kind)" in report
+        assert "opacity-40" in report
+        # the spotlight resets when the dialog closes (a fresh open
+        # starts fresh — the view aid never leaks across sessions)
+        assert "if (!open) setSpotlight(null);" in report
+        # the legs carry the pressed state (a toggle, honestly labelled)
+        assert "aria-pressed={spotlight === leg.kind}" in report
+        # the confession renders after the strip's own sentence, only
+        # while an order was persisted (the pure derivation)
+        assert "orderConfessionText(customOrder)" in report
+        assert "{orderConfession ? ` ${orderConfession}` : \"\"}" in report
+        # the census paragraph's aria confesses the click affordance
+        assert "click a kind to spotlight its lines" in report

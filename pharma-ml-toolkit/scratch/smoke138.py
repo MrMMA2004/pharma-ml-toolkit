@@ -253,15 +253,21 @@ def main() -> int:
         .render()
     )
     # the nav is the RETURN target; every page wrapper ends in the link
+    # (100x-139: the link carries its title tooltip -- one string, both
+    # wrappers, zero drift)
     assert "<nav class='contents' id='contents' tabindex='-1' aria-label='Contents'>" in html
     assert (
-        "</table><a class='back-contents' href='#contents'>\u2191 Contents</a></section>" in html
+        "</table><a class='back-contents' href='#contents' "
+        "title='Back to the contents block at the top of the report'>"
+        "\u2191 Contents</a></section>" in html
     )
     assert (
         "<figcaption>figure 1 · alpha plot</figcaption>"
-        "<a class='back-contents' href='#contents'>\u2191 Contents</a></figure>" in html
+        "<a class='back-contents' href='#contents' "
+        "title='Back to the contents block at the top of the report'>"
+        "\u2191 Contents</a></figure>" in html
     )
-    assert html.count("<a class='back-contents' href='#contents'>") == 2
+    assert html.count("title='Back to the contents block at the top of the report'") == 2
     # the ring + the margin cover the nav (the return landing)
     assert "section.page:target, figure.page:target, nav.contents:target {" in html
     assert "section.page, figure.page, nav.contents { scroll-margin-top: 1.25rem; }" in html

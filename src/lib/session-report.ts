@@ -723,6 +723,70 @@ export function contentsCensusText(census: SessionContentsCensus): string {
   return bits.join(" · ");
 }
 
+/** (100x-139) One CLICKABLE leg of the census line — the census's
+ *  interactive form: the same label the plain line prints (the
+ *  singular/plural discipline, byte for byte) plus the KIND the leg
+ *  counts, so a click can spotlight exactly that kind's lines in the
+ *  strip.  A kind with zero lines renders no leg — there is nothing
+ *  for its filter to dim, so it is never a filter target. */
+export interface ContentsCensusLeg {
+  /** The kind this leg counts — the filter a click toggles. */
+  kind: ReportContentsEntry["kind"];
+  /** The leg's readable label — "2 figures", the census line's own
+   *  wording discipline (singular/plural, "structure grid(s)"). */
+  label: string;
+  /** How many strip lines ride this kind (the honest count the label
+   *  prints — never padded, never capped). */
+  count: number;
+}
+
+/** (100x-139) The census's LEGS — the clickable form of the census
+ *  line: one leg per kind the strip actually lists (figures and
+ *  tables always carry their counts, images only when they list —
+ *  the plain line's own conditional, mirrored), each carrying its
+ *  kind so the strip's spotlight filter can toggle it.  Pure: the
+ *  probe pins the legs (kind + label + count) and their discipline
+ *  against contentsCensusText — a leg's label is always the same
+ *  text the plain line would print for that kind. */
+export function contentsCensusLegs(
+  census: SessionContentsCensus,
+): ContentsCensusLeg[] {
+  const legs: ContentsCensusLeg[] = [
+    {
+      kind: "figure",
+      count: census.figures,
+      label: `${census.figures} figure${census.figures === 1 ? "" : "s"}`,
+    },
+    {
+      kind: "table",
+      count: census.tables,
+      label: `${census.tables} table${census.tables === 1 ? "" : "s"}`,
+    },
+  ];
+  if (census.images > 0) {
+    legs.push({
+      kind: "image",
+      count: census.images,
+      label: `${census.images} structure grid${census.images === 1 ? "" : "s"}`,
+    });
+  }
+  return legs;
+}
+
+/** (100x-139) The Contents strip's ORDER confession — the web twin of
+ *  the desktop picklist's memory label: when the browser's persisted
+ *  walking order was applied (the reader dragged a chip on a past
+ *  visit and the order survived — "your last saved order"), the
+ *  strip says so and names the way out (the card's dashed Reset
+ *  chip, which deletes the stored key, not just the drift).  The
+ *  canonical order confesses NOTHING — the desktop's own noise rule
+ *  ("nothing remembered: stay quiet"): there is no memory to name
+ *  when none was applied.  Pure: the probe pins both verdicts. */
+export function orderConfessionText(orderDrifted: boolean): string | null {
+  if (!orderDrifted) return null;
+  return "Your last saved walking order was applied — Reset walking order forgets it.";
+}
+
 /** (100x-134) The hover-INSPECT text a preview sketch's trace carries —
  *  the honest numbers behind the approximation: the trace's name, its
  *  point count, its x/y ranges (fmtCell-compacted), and the kind's own

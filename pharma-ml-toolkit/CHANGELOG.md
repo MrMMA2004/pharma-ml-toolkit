@@ -10,6 +10,83 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.78] — 2026-10-26
+
+### Added — the round-24 full review (100x-139): the return link's POINTER confession + the census's CLICKABLE legs + the strip's ORDER confession
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a twenty-fourth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–137's documented floor — the axis holds; no new gaps;
+playground.py itself parses clean at 17,6xx lines with its full
+structure intact). Round 138's handover named the round's work: (a)
+the HTML twin's return link could gain a title tooltip confessing the
+jump target (the aria world already knows — the pointer world does
+not), (b) the web preview's census could grow a click-to-spotlight
+(clicking "2 figures" dims the non-figure lines), and (c) the
+picklist's confession could surface in the WEB preview too ("your
+last saved order" vs the canonical walking order). All three shipped.
+
+**The return link's POINTER confession.** The small "↑ Contents" link
+every page wrapper ends in now carries
+`title='Back to the contents block at the top of the report'` — the
+pointer world gets the same confession the aria world always had (the
+link's own text names the destination; a hovering pointer had no
+clue). One string, minted once (`_BACK_CONTENTS_LINK` in
+`pharmaml.viz.report`), so the table and figure wrappers can never
+drift apart — the same lockstep discipline the page ids follow. No
+caller change: the desktop's HTML twin, `save_visual_bundle`, and the
+web bridge's `/api/report/session` all gained it automatically; the
+PDF twin's ink stays frozen.
+
+**The census's CLICKABLE legs.** The web preview's census line became
+interactive — each kind's count ("2 figures", "1 table", "1 structure
+grid") is a button that SPOTLIGHTS that kind's lines in the strip:
+the other kinds dim to 40% opacity (never hidden — every dimmed line
+stays exactly as clickable as before, jumps included), the active leg
+carries `aria-pressed` with accent + dotted-underline styling, and
+clicking the active leg again clears the spotlight. A kind with zero
+lines renders as plain text (nothing to spotlight — an honest no-op
+avoided); the legs' labels are the same text the plain line prints
+(`contentsCensusLegs`, pure, probe-pinned — the visual census can
+never drift from the aria one); the spotlight resets when the dialog
+closes, so a fresh open starts fresh.
+
+**The strip's ORDER confession.** The web preview's Contents strip now
+confesses the order's provenance — the web twin of the desktop
+picklist's memory label: when the browser's persisted walking order is
+in force, the strip's confession line appends "Your last saved walking
+order was applied — Reset walking order forgets it." (the pure
+`orderConfessionText`, probe-pinned); the canonical order confesses
+NOTHING — the desktop's own noise rule ("nothing remembered: stay
+quiet"), mirrored: there is no memory to name when none was applied.
+
+### Verified
+
+Bare `python -m pytest`: **2594 collected = 2589 passed + 5 skipped /
+0 failures** (junit139.xml, scrubbed after the final run; the dev
+server stopped for the run; both notebook drivers re-executed with
+1.2.78 — 212 s / "26-R7 driver OK"; the re-execution's home-path leak
+in two notebook outputs caught and scrubbed before the suite ran).
+ruff clean; mypy **fully clean** (the toolchain rotation retired the
+old 61-error baseline — zero errors across all 65 source files); web
+`bunx tsc --noEmit` clean in src/ + `bun run lint` clean. GUI
+round-trip on Xvfb :99: SMOKE139_OK + SHOOT139_OK
+(pg139-anchor-confession.png / pg139-tooltip-report.html), VLM review
+PASS on every shot (the anchor wording legible, the web confession +
+census legs + badge verified, mobile 390px no cut-off). PROBE139_OK
+(the legs + confession derivations pinned). agent-browser E2E green —
+the SPOTLIGHT golden path (clicking "2 figures" dims the table line to
+0.4 while both figure lines stay at 1; the dimmed line's jump still
+lands; clicking the active leg clears it; the spotlight resets across
+a dialog close), the confession golden path (persisting a custom order
+appends "Your last saved walking order was applied", the canonical
+order stays quiet), the API probe (POST `/api/report/session` 200 —
+the downloaded HTML carries the tooltip on BOTH wrappers), mobile
+390×844 (scrollWidth == clientWidth == 390, dialog 358, legs
+visible), the sticky footer both ways, zero console/page errors.
+
 ## [1.2.77] — 2026-10-25
 
 ### Added — the round-23 full review (100x-138): the report's RETURN leg + the strip's KIND CENSUS + the picklist confession's PROVENANCE

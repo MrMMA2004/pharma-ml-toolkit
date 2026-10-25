@@ -283,12 +283,25 @@ try:
     assert "<li><a href='#pg-2'>figure 1 · beta plot</a></li>" in html
     assert "<li><a href='#pg-3'>figure 2 · Ring topology moves — 6 mutant(s)</a></li>" in html
     # (100x-138) the RETURN leg: every page wrapper ends in the back link
-    assert html.count("<a class='back-contents' href='#contents'>\u2191 Contents</a>") == 3
+    # (100x-139: the link carries its title tooltip -- three wrappers,
+    # the same one-string discipline)
     assert (
-        "</table><a class='back-contents' href='#contents'>\u2191 Contents</a></section>" in html
+        html.count(
+            "<a class='back-contents' href='#contents' "
+            "title='Back to the contents block at the top of the report'>"
+            "\u2191 Contents</a>"
+        )
+        == 3
     )
     assert (
-        "<a class='back-contents' href='#contents'>\u2191 Contents</a></figure>" in html
+        "</table><a class='back-contents' href='#contents' "
+        "title='Back to the contents block at the top of the report'>"
+        "\u2191 Contents</a></section>" in html
+    )
+    assert (
+        "<a class='back-contents' href='#contents' "
+        "title='Back to the contents block at the top of the report'>"
+        "\u2191 Contents</a></figure>" in html
     )
     assert "section.page:target, figure.page:target, nav.contents:target {" in html
     print("artifact pg138-return-leg-report.html written (the round trip)")

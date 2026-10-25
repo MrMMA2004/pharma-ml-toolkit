@@ -76,7 +76,7 @@ b'%PDF-'
 True
 >>> "<nav class='contents'" in html and "<li><a href='#pg-1'>Model leaderboard</a></li>" in html
 True
->>> "<a class='back-contents' href='#contents'>\u2191 Contents</a>" in html
+>>> "<a class='back-contents' href='#contents' title='Back to the contents block at the top of the report'>\u2191 Contents</a>" in html
 True
 >>> html.startswith("<!DOCTYPE html>")
 True
@@ -189,7 +189,9 @@ ul.contents-list a:hover, ul.contents-list a:focus-visible {
    jump one way; this is the other).  Muted until hovered/focused,
    the same affordance discipline as the Contents lines, and the
    nav itself flashes the same accent ring when targeted so the
-   return landing is never lost either. */
+   return landing is never lost either.
+   (100x-139) the link carries a title tooltip -- the pointer world
+   gets the same confession the aria world always had. */
 a.back-contents { display: block; text-align: right; font-size: .75rem;
                   color: var(--muted); text-decoration: none;
                   margin: .15rem 0 .8rem; }
@@ -234,6 +236,18 @@ _PDF_DARK: dict[str, tuple[int, int, int]] = {
 #: Label the toggle button carries per theme (server-side fallback;
 #: the inline script relabels on load and on every cycle).
 _THEME_LABELS: dict[str, str] = {"auto": "\u25d0 auto", "light": "\u2600 light", "dark": "\u263d dark"}
+
+#: (100x-139) The RETURN link every anchored page ends in -- ONE
+#: string, minted once, so the table and figure wrappers can never
+#: drift apart (the same lockstep discipline the page ids follow).  The
+#: ``title`` tooltip confesses the jump target to the POINTER world --
+#: the aria world already knows (the link's own text names the
+#: destination); a pointer hovering the small muted link had no clue.
+_BACK_CONTENTS_LINK = (
+    "<a class='back-contents' href='#contents' "
+    "title='Back to the contents block at the top of the report'>"
+    "\u2191 Contents</a>"
+)
 
 #: Inline engine of the theme toggle -- zero external assets (the
 #: self-contained contract holds: no network, no companion files).
@@ -836,15 +850,18 @@ class HTMLReport:
         # (100x-137) the page rides inside an anchored wrapper so its
         # Contents line can link to it (a table block is a document
         # section; tabindex lets the fragment jump land focus there).
+        # (100x-136) the page names for the header's Contents block,
+        # minted here, at add time — the block's lines and the wrapper's
+        # id can never disagree.
         # (100x-138) the wrapper ends in the RETURN link -- back to the
-        # header's Contents block (minted here, at add time: the wrapper
-        # exists exactly when the Contents block will render, so the
-        # link's target can never be missing).
+        # header's Contents block (minted once as _BACK_CONTENTS_LINK,
+        # so the wrapper's existence and the link's target stay in
+        # lockstep).
         page_id = f"pg-{len(self._page_names) + 1}"
         self._blocks.append(
             f"<section class='page' id='{page_id}' tabindex='-1'>"
             + "".join(parts)
-            + "<a class='back-contents' href='#contents'>\u2191 Contents</a>"
+            + _BACK_CONTENTS_LINK
             + "</section>"
         )
         self._page_ids.append(page_id)
@@ -872,13 +889,15 @@ class HTMLReport:
         # figcaption's legitimate parent, and the Contents line's
         # link target (tabindex lets the fragment jump land focus).
         # (100x-138) the wrapper ends in the RETURN link, after the
-        # caption — back to the header's Contents block.
+        # caption — back to the header's Contents block (the SAME
+        # _BACK_CONTENTS_LINK the table wrapper ends in — one string,
+        # two wrappers, zero drift).
         page_id = f"pg-{len(self._page_names) + 1}"
         block = f"<figure class='page' id='{page_id}' tabindex='-1'>"
         block += f"<img src='{data_uri}' alt='{alt}'/>"
         if caption:
             block += f"<figcaption>{_escape(caption)}</figcaption>"
-        block += "<a class='back-contents' href='#contents'>\u2191 Contents</a>"
+        block += _BACK_CONTENTS_LINK
         block += "</figure>"
         self._blocks.append(block)
         # (100x-136) the Contents line this page contributes — the

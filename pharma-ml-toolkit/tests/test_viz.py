@@ -2235,7 +2235,20 @@ class TestHTMLReportBackLinks:
     jump lands), so a reader deep in a long report is one click from the
     index.  The link is minted at add time with the wrapper: a page
     wrapper exists exactly when at least one Contents line does, so the
-    back-link's target can never be missing."""
+    back-link's target can never be missing.
+
+    Round 100x-139: the link now carries a ``title`` tooltip — the
+    pointer world gets the same confession the aria world always had
+    (the link's own text names the destination; a hovering pointer had
+    no clue).  One string, minted once (``_BACK_CONTENTS_LINK``), so
+    the table and figure wrappers can never drift apart."""
+
+    #: The full return-link string every wrapper ends in (100x-139).
+    BACK_LINK = (
+        "<a class='back-contents' href='#contents' "
+        "title='Back to the contents block at the top of the report'>"
+        "\u2191 Contents</a>"
+    )
 
     def test_every_page_wrapper_ends_in_the_return_link(self, trained_classifier):
         _result, report, _X_test, _y_test = trained_classifier
@@ -2254,17 +2267,17 @@ class TestHTMLReportBackLinks:
         )
         # the table wrapper ends in the return link, after the table
         assert (
-            "</table><a class='back-contents' href='#contents'>\u2191 Contents</a>"
-            "</section>" in text
+            "</table>" + self.BACK_LINK + "</section>" in text
         )
         # the figure wrapper ends in the return link, after the caption
         assert (
-            "<figcaption>cm</figcaption>"
-            "<a class='back-contents' href='#contents'>\u2191 Contents</a>"
-            "</figure>" in text
+            "<figcaption>cm</figcaption>" + self.BACK_LINK + "</figure>" in text
         )
         # one return link per page wrapper, never more
-        assert text.count("<a class='back-contents' href='#contents'>") == 2
+        assert text.count(self.BACK_LINK) == 2
+        # (100x-139) the tooltip confesses the jump target -- the exact
+        # wording, on BOTH wrappers (the one-string discipline)
+        assert text.count("title='Back to the contents block at the top of the report'") == 2
         # the return target is REAL (the same lockstep discipline the
         # Contents lines' hrefs carry) and the link is a pure fragment
         assert "id='contents'" in text
@@ -2278,10 +2291,7 @@ class TestHTMLReportBackLinks:
         # the img's own fallback alt rides, and the return link still
         # closes the wrapper (the Contents line needs its jump target
         # with or without a caption -- so does the return leg)
-        assert (
-            "/><a class='back-contents' href='#contents'>\u2191 Contents</a>"
-            "</figure>" in text
-        )
+        assert "/>" + self.BACK_LINK + "</figure>" in text
 
     def test_the_return_link_styling_rides_the_theme_variables(self):
         text = HTMLReport("styled").add_table(
@@ -2329,5 +2339,5 @@ class TestHTMLReportBackLinks:
         assert written, "the bundle wrote nothing"
         text = (tmp_path / "bundle" / "report.html").read_text()
         assert "<nav class='contents' id='contents' tabindex='-1'" in text
-        assert text.count("<a class='back-contents' href='#contents'>") == 2
+        assert text.count(self.BACK_LINK) == 2
         assert "id='pg-1'" in text and "id='pg-2'" in text
