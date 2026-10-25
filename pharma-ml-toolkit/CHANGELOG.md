@@ -10,6 +10,79 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.77] — 2026-10-25
+
+### Added — the round-23 full review (100x-138): the report's RETURN leg + the strip's KIND CENSUS + the picklist confession's PROVENANCE
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a twenty-third time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–135's documented floor — the axis holds; no new gaps;
+playground.py itself parses clean at 17,5xx lines with its full
+structure intact). Round 137's handover named the round's work: (a)
+the HTML twin's Contents could grow a "back to contents" link on each
+page wrapper (the anchor jumps one way; a reader deep in a long report
+has no one-click return), (b) the web preview's Contents strip could
+show the kind badges' counts (the census in the strip), and (c) the
+desktop's imported order could confess its PROVENANCE in the picklist
+itself ("imported from \<file\>" vs "your last saved order"). All
+three shipped.
+
+**The report's RETURN leg.** Every table/figure page wrapper in
+`HTMLReport`'s output ends in a small "↑ Contents" link back to the
+header's block — the nav carries `id='contents'` and its own
+`tabindex='-1'` so the jump lands focus there, and it flashes the same
+accent ring the jumped-to pages do (`:target`, the scroll-margin
+breathing room included). The link is minted at ADD time with the
+wrapper: a page wrapper exists exactly when at least one Contents line
+does, so the back-link's target can never be missing, and a prose-only
+report renders neither the nav nor the links (the noise rule's other
+half). Fragment links only — the self-contained contract holds; the
+PDF twin's ink stays frozen, its pages carry no return. The web
+preview's strip needs no twin here: it is already sticky, which IS the
+always-available return.
+
+**The strip's KIND CENSUS.** The web preview's Contents strip header
+now carries the census line — "2 figures · 1 table · 1 structure
+grid" — derived from the strip's OWN entries (`sessionContentsCensus`
++ `contentsCensusText`, pure, probe-pinned), so metrics are excluded
+by construction: the footer's own census counts metric cards, this
+one never does — the strip confesses only its own lines. The wording
+rides the footer's singular/plural discipline; a census with no images
+drops the leg entirely; a metrics-only payload hides the whole strip
+as before.
+
+**The confession's PROVENANCE.** An order that arrived through File ▸
+Import remembered order now says so in the picklist itself — "The
+imported order from \<file\> was applied — Reset to walking order
+forgets it" (the basename, truncated the honest way for very long
+names) — until the reader completes their own Save (the order becomes
+theirs; the wording returns to "Your last saved order was applied"),
+resets, or clears. The empty import confesses nothing (an empty memory
+is nobody's import); a foreign file never touches the live memory OR
+its provenance; and a fresh LAUNCH restores from the session file —
+which IS the last saved order — so a restart never claims an import
+(the honest restart contract, test-pinned).
+
+### Verified
+
+Bare `python -m pytest`: **2586 collected = 2581 passed + 5 skipped /
+0 failures** (junit138.xml; the dev server stopped for the run; both
+notebook drivers re-executed with 1.2.77 — 206 s / "26-R7 driver OK";
+the re-execution's home-path leak in two notebook outputs caught by
+the round-137 guard and scrubbed before the clean re-run). ruff clean
+after the EXE002 chmod sweep (the git-index flip fired again — 114
+files); mypy at the 61-error pre-existing baseline, zero new. GUI
+round-trip on Xvfb :99: SMOKE138_OK + SHOOT138_OK
+(pg138-imported-confession.png / pg138-own-order.png /
+pg138-return-leg-report.html / pg138-shared-order.json), VLM review
+PASS on both shots. The web twin: `bunx tsc --noEmit` clean in src/,
+`bun run lint` clean, PROBE138_OK (the census derivation pinned),
+agent-browser E2E green (the census visible in the strip, the
+download's HTML carrying the return links, mobile 390px, sticky
+footer, zero console errors).
+
 ## [1.2.76] — 2026-10-25
 
 ### Added — the round-22 full review (100x-137): the order memory's export/import pair + the HTML twin's clickable Contents anchors + the web preview's Contents twin

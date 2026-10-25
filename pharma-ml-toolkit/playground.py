@@ -359,6 +359,18 @@ Design notes
   stay plain text), and the web preview's dialog gained the file's
   CONTENTS twin (a sticky strip listing exactly what the downloaded
   file's header lists, each line jumping the dialog to its section).
+  (100x-138) The report's anchors gained the RETURN leg: every page
+  wrapper in the HTML twin ends in a small "↑ Contents" link back to
+  the header's block (the nav carries its own id and tabindex, and
+  flashes the same accent ring when the jump lands -- the one-way
+  anchor became a round trip), the web preview's Contents strip
+  carries the KIND CENSUS ("2 figures · 1 table · 1 structure grid"
+  -- the counts of exactly what the strip lists, metrics excluded as
+  always), and the picklist's confession names its PROVENANCE: an
+  order that arrived through File ▸ Import remembered order says so
+  ("The imported order from <file> was applied") until the reader
+  completes their own Save -- then it is their last saved order
+  again, honestly.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -2020,6 +2032,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # mirrored exactly.  ``persist_session=False`` (the test
         # harness) keeps the per-process memory and never writes.
         self._report_page_order: dict[str, list[str]] = {}
+        # (100x-138) the memory's PROVENANCE -- the file the current
+        # order was imported from (File ▸ Import remembered order), or
+        # None when the memory is the reader's own (a completed Save or
+        # a session-file restore).  The picklist's confession names it:
+        # "The imported order from <file> was applied" vs "Your last
+        # saved order was applied".  A completed Save makes the order
+        # the reader's own (cleared here), the dialog's Reset and the
+        # File menu's Clear forget it with the memory, and a fresh
+        # LAUNCH restores from the session file -- which IS the last
+        # saved order, so the attribute starts None and stays there.
+        self._report_order_origin: str | None = None
         self._ml_frame: Any = None
         self._ml_path: Path | None = None
         # -- Data & ML report state (100x-76, extended 100x-79/118) -- #
@@ -3406,6 +3429,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         self._report_page_order.pop("table", None)
         self._report_page_order.pop("figure", None)
+        # (100x-138) the provenance dies with the memory -- a cleared
+        # order is nobody's import any more
+        self._report_order_origin = None
         wrote = self._write_session_file() if self._persist_session else False
         if messagebox is not None:
             if not self._persist_session:
@@ -3497,6 +3523,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         order is the honest reset: both kinds empty, the next picklist
         walks the walk order.  With ``persist_session=False`` the
         message says so -- the import lives in this process only.
+
+        (100x-138) The adoption carries its PROVENANCE: the picklist's
+        confession names the file the order arrived through ("The
+        imported order from <file> was applied") until the reader
+        completes their own Save (the order becomes theirs), resets,
+        or clears.  The empty import confesses nothing -- an empty
+        memory is nobody's import.  The provenance is process-local by
+        design: after a restart the order arrives from the SESSION
+        FILE, which IS the last saved order, and the confession says
+        exactly that.
         """
         if filedialog is None:  # pragma: no cover - headless import
             return
@@ -3517,6 +3553,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 )
             return
         self._report_page_order = order
+        # (100x-138) the PROVENANCE -- the file this order arrived
+        # through; the next picklist's confession names it ("The
+        # imported order from <file> was applied") until the reader
+        # completes their own Save, Resets, or Clears.  The honest
+        # EMPTY import clears it instead -- an empty memory is nobody's
+        # import.
+        self._report_order_origin = (
+            str(source) if (order.get("table") or order.get("figure")) else None
+        )
         wrote = self._write_session_file() if self._persist_session else False
         if messagebox is not None:
             tables = len(order.get("table", []))
@@ -4011,6 +4056,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         attribute) and writes the session through immediately, so an
         imported order survives crashes and restarts exactly like a
         remembered one.
+
+        (100x-138) The confession names its PROVENANCE: an order that
+        arrived through Import says so -- "The imported order from
+        <file> was applied" -- until the reader completes their own
+        Save (the order becomes theirs and the wording returns to
+        "Your last saved order"), resets, or clears.  A restart
+        restores from the session file, which IS the last saved
+        order, so a fresh launch never claims an import.
         """
         if tk is None:  # pragma: no cover - headless import
             return live, tables
@@ -4227,14 +4280,32 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             or self._report_page_order.get("figure")
         )
         if remembered_applied:
-            memory_label.configure(
-                text=(
-                    "Your last saved order was applied — Reset to "
-                    "walking order forgets it."
-                ),
-                wraplength=430,
-                justify="left",
-            )
+            # (100x-138) the confession names its PROVENANCE -- an order
+            # that arrived through File ▸ Import remembered order says
+            # so (the file's name, truncated the honest way), until the
+            # reader completes their own Save / Resets / Clears; the
+            # session-file restore IS the last saved order, so it keeps
+            # the original wording.
+            origin = getattr(self, "_report_order_origin", None)
+            if origin:
+                memory_label.configure(
+                    text=(
+                        f"The imported order from "
+                        f"{_truncate_caption_text(Path(origin).name, 40)} "
+                        "was applied — Reset to walking order forgets it."
+                    ),
+                    wraplength=430,
+                    justify="left",
+                )
+            else:
+                memory_label.configure(
+                    text=(
+                        "Your last saved order was applied — Reset to "
+                        "walking order forgets it."
+                    ),
+                    wraplength=430,
+                    justify="left",
+                )
         else:
             memory_label.pack_forget()  # nothing remembered: stay quiet
         # (100x-134) the WALK order frozen for the Reset button: every
@@ -4268,6 +4339,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # mirrored: it deletes the persisted key, not just the drift)
             self._report_page_order.pop("table", None)
             self._report_page_order.pop("figure", None)
+            # (100x-138) the provenance dies with the memory (the Reset
+            # forgets the import the same way it forgets the reader's)
+            self._report_order_origin = None
 
         # (100x-133) the groups ride in the WALKING order -- both walkers
         # (the library's save_pdf_report and the HTML menu's builder)
@@ -4319,6 +4393,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._report_page_order["figure"] = [
                 str(other["label"]) for other in records["figure"]
             ]
+            # (100x-138) the completed Save makes the order the READER'S
+            # own -- the import's provenance confession retires with it
+            # (the next picklist says "Your last saved order" again)
+            self._report_order_origin = None
             win.destroy()
 
         save_button = ttk.Button(buttons, text="Save report…", command=confirm)

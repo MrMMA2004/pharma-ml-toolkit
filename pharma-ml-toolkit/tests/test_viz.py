@@ -1230,7 +1230,12 @@ class TestHTMLReportContents:
         )
         text = page.render()
         # the nav block with its semantic label + the heading
-        assert "<nav class='contents' aria-label='Contents'>" in text
+        # (100x-138) the nav is also the RETURN target -- id + tabindex
+        # so the pages' "↑ Contents" links land the jump with focus
+        assert (
+            "<nav class='contents' id='contents' tabindex='-1' "
+            "aria-label='Contents'>" in text
+        )
         assert "<h2>Contents</h2>" in text
         # the lines in CALL order (the walking order the file writes
         # them), each the SAME string the page itself prints -- each
@@ -1288,7 +1293,10 @@ class TestHTMLReportContents:
         assert "ul.contents-list a { color: inherit;" in text
         assert "ul.contents-list a:hover, ul.contents-list a:focus-visible {" in text
         assert "color: var(--accent); text-decoration: underline; }" in text
-        assert "section.page:target, figure.page:target {" in text
+        # (100x-138) the return leg's ring covers the nav too
+        assert (
+            "section.page:target, figure.page:target, nav.contents:target {" in text
+        )
         assert "outline: 2px solid var(--accent);" in text
         assert "scroll-margin-top: 1.25rem;" in text
         assert "figure.page { margin: 0; }" in text
@@ -2218,3 +2226,108 @@ class TestParetoFrontPlot:
         assert ax.get_ylabel() == "nov"
         # the title is left-anchored (the house style for audit lines)
         assert ax.get_title(loc="left").startswith("Trade — 5 of 7 molecules")
+
+
+class TestHTMLReportBackLinks:
+    """Round 100x-138: the RETURN leg — every page wrapper ends in a
+    small "↑ Contents" link back to the header's block (the nav carries
+    its own id and tabindex, and flashes the same accent ring when the
+    jump lands), so a reader deep in a long report is one click from the
+    index.  The link is minted at add time with the wrapper: a page
+    wrapper exists exactly when at least one Contents line does, so the
+    back-link's target can never be missing."""
+
+    def test_every_page_wrapper_ends_in_the_return_link(self, trained_classifier):
+        _result, report, _X_test, _y_test = trained_classifier
+        text = (
+            HTMLReport("round trip")
+            .add_metrics(report, heading="Metrics")
+            .add_table(metrics_to_dataframe(report), heading="board")
+            .add_figure(plot_confusion_matrix(report), caption="cm")
+            .render()
+        )
+        # the nav is the RETURN TARGET: its own id + tabindex (a landing
+        # aid, never a tab stop) so the jump lands focus there
+        assert (
+            "<nav class='contents' id='contents' tabindex='-1' "
+            "aria-label='Contents'>" in text
+        )
+        # the table wrapper ends in the return link, after the table
+        assert (
+            "</table><a class='back-contents' href='#contents'>\u2191 Contents</a>"
+            "</section>" in text
+        )
+        # the figure wrapper ends in the return link, after the caption
+        assert (
+            "<figcaption>cm</figcaption>"
+            "<a class='back-contents' href='#contents'>\u2191 Contents</a>"
+            "</figure>" in text
+        )
+        # one return link per page wrapper, never more
+        assert text.count("<a class='back-contents' href='#contents'>") == 2
+        # the return target is REAL (the same lockstep discipline the
+        # Contents lines' hrefs carry) and the link is a pure fragment
+        assert "id='contents'" in text
+        assert "href='http" not in text
+
+    def test_captionless_figures_carry_the_link_too(self, trained_classifier):
+        _result, report, _X_test, _y_test = trained_classifier
+        text = HTMLReport("no caption").add_figure(
+            plot_confusion_matrix(report)
+        ).render()
+        # the img's own fallback alt rides, and the return link still
+        # closes the wrapper (the Contents line needs its jump target
+        # with or without a caption -- so does the return leg)
+        assert (
+            "/><a class='back-contents' href='#contents'>\u2191 Contents</a>"
+            "</figure>" in text
+        )
+
+    def test_the_return_link_styling_rides_the_theme_variables(self):
+        text = HTMLReport("styled").add_table(
+            pd.DataFrame({"a": [1]}), heading="t"
+        ).render()
+        # muted ink until hovered/focused (the Contents lines'
+        # affordance discipline), right-aligned at the wrapper's foot
+        assert (
+            "a.back-contents { display: block; text-align: right; "
+            "font-size: .75rem;" in text
+        )
+        assert "a.back-contents:hover, a.back-contents:focus-visible {" in text
+        # the nav rides the SAME arrival ring + scroll margin the pages
+        # do, so the return landing is never lost either
+        assert (
+            "section.page:target, figure.page:target, nav.contents:target {" in text
+        )
+        assert "section.page, figure.page, nav.contents { scroll-margin-top: 1.25rem; }" in text
+
+    def test_no_back_links_without_the_contents_block(self):
+        """The noise rule's other half: a prose-only report renders no nav
+        and no back-link ELEMENTS (the static CSS rides every report,
+        like every other rule — the RENDERED document is what counts)."""
+        text = HTMLReport("prose only").add_text("just prose").render()
+        assert "<nav class='contents'" not in text
+        assert "href='#contents'" not in text
+        assert "<section class='page'" not in text and "<figure class='page'" not in text
+
+    def test_visual_bundle_gains_the_return_leg(self, tmp_path):
+        """``save_visual_bundle`` composes through HTMLReport — its
+        report.html gains the return links automatically (no caller
+        change, the standing convention)."""
+        from matplotlib.figure import Figure
+
+        figure = Figure()
+        figure.add_subplot(111).plot([0, 1], [0, 1])
+        board = pd.DataFrame({"model": ["rf"], "score": [0.9]})
+        written = save_visual_bundle(
+            {"confusion": figure},
+            tables={"leaderboard": board},
+            metrics={"a": 1},
+            out_dir=tmp_path / "bundle",
+            close=False,
+        )
+        assert written, "the bundle wrote nothing"
+        text = (tmp_path / "bundle" / "report.html").read_text()
+        assert "<nav class='contents' id='contents' tabindex='-1'" in text
+        assert text.count("<a class='back-contents' href='#contents'>") == 2
+        assert "id='pg-1'" in text and "id='pg-2'" in text

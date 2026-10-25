@@ -255,7 +255,7 @@ try:
     assert pump(app), "the HTML report job hung"
     assert TARGET_HTML.is_file(), "the contents report never landed"
     html = TARGET_HTML.read_text(encoding="utf-8")
-    assert "<nav class='contents' aria-label='Contents'>" in html
+    assert "<nav class='contents' id='contents' tabindex='-1' aria-label='Contents'>" in html
     assert "<li>table 1 · SMILES inspector</li>" in html
     assert "<li>figure 1 · Ring topology moves — 6 mutant(s)</li>" in html
     assert "<li>figure 2 · beta plot</li>" in html

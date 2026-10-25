@@ -76,6 +76,8 @@ b'%PDF-'
 True
 >>> "<nav class='contents'" in html and "<li><a href='#pg-1'>Model leaderboard</a></li>" in html
 True
+>>> "<a class='back-contents' href='#contents'>\u2191 Contents</a>" in html
+True
 >>> html.startswith("<!DOCTYPE html>")
 True
 >>> HTMLReport("no pages").add_text("only prose").render().count("<nav class='contents'")
@@ -181,8 +183,20 @@ ul.contents-list li::marker { color: var(--accent); }
 ul.contents-list a { color: inherit; text-decoration: none; }
 ul.contents-list a:hover, ul.contents-list a:focus-visible {
   color: var(--accent); text-decoration: underline; }
-section.page, figure.page { scroll-margin-top: 1.25rem; }
-section.page:target, figure.page:target {
+/* (100x-138) the RETURN leg -- every page wrapper ends in a small
+   "\u2191 Contents" link back to the header's block, so a reader deep
+   in a long report is one click from the top (the Contents lines
+   jump one way; this is the other).  Muted until hovered/focused,
+   the same affordance discipline as the Contents lines, and the
+   nav itself flashes the same accent ring when targeted so the
+   return landing is never lost either. */
+a.back-contents { display: block; text-align: right; font-size: .75rem;
+                  color: var(--muted); text-decoration: none;
+                  margin: .15rem 0 .8rem; }
+a.back-contents:hover, a.back-contents:focus-visible {
+  color: var(--accent); text-decoration: underline; }
+section.page, figure.page, nav.contents { scroll-margin-top: 1.25rem; }
+section.page:target, figure.page:target, nav.contents:target {
   outline: 2px solid var(--accent); outline-offset: .4rem;
   border-radius: .5rem; }
 figure.page { margin: 0; } /* the wrapper resets the UA's 40px inset */
@@ -747,6 +761,16 @@ class HTMLReport:
     jumped-to page flashes an accent ring via ``:target``.  The PDF
     twin has no links — its ink is frozen at write time — so its
     Contents lines stay plain text.
+
+    (100x-138) The RETURN leg: every page wrapper ends in a small
+    ``↑ Contents`` link back to the header's block (the nav carries
+    ``id='contents'`` and its own ``tabindex='-1'`` so the jump lands
+    focus there and flashes the same accent ring) — the anchor jumps
+    one way, this carries the reader back, so a report thirty pages
+    deep is still one click from the index.  The link is minted at
+    add time with the wrapper: a page wrapper exists exactly when at
+    least one Contents line does, so the back-link's target can
+    never be missing.
     """
 
     def __init__(
@@ -812,10 +836,15 @@ class HTMLReport:
         # (100x-137) the page rides inside an anchored wrapper so its
         # Contents line can link to it (a table block is a document
         # section; tabindex lets the fragment jump land focus there).
+        # (100x-138) the wrapper ends in the RETURN link -- back to the
+        # header's Contents block (minted here, at add time: the wrapper
+        # exists exactly when the Contents block will render, so the
+        # link's target can never be missing).
         page_id = f"pg-{len(self._page_names) + 1}"
         self._blocks.append(
             f"<section class='page' id='{page_id}' tabindex='-1'>"
             + "".join(parts)
+            + "<a class='back-contents' href='#contents'>\u2191 Contents</a>"
             + "</section>"
         )
         self._page_ids.append(page_id)
@@ -842,11 +871,14 @@ class HTMLReport:
         # (100x-137) the page rides inside an anchored <figure> — the
         # figcaption's legitimate parent, and the Contents line's
         # link target (tabindex lets the fragment jump land focus).
+        # (100x-138) the wrapper ends in the RETURN link, after the
+        # caption — back to the header's Contents block.
         page_id = f"pg-{len(self._page_names) + 1}"
         block = f"<figure class='page' id='{page_id}' tabindex='-1'>"
         block += f"<img src='{data_uri}' alt='{alt}'/>"
         if caption:
             block += f"<figcaption>{_escape(caption)}</figcaption>"
+        block += "<a class='back-contents' href='#contents'>\u2191 Contents</a>"
         block += "</figure>"
         self._blocks.append(block)
         # (100x-136) the Contents line this page contributes — the
@@ -877,8 +909,12 @@ class HTMLReport:
                 f"<li><a href='#{page_id}'>{_escape(name)}</a></li>"
                 for page_id, name in zip(self._page_ids, self._page_names)
             )
+            # (100x-138) the nav is the RETURN target now — its own id
+            # and tabindex let the pages' "↑ Contents" links land the
+            # jump (with focus) and flash the same accent ring.
             contents = (
-                "<nav class='contents' aria-label='Contents'>\n"
+                "<nav class='contents' id='contents' tabindex='-1' "
+                "aria-label='Contents'>\n"
                 "<h2>Contents</h2>\n"
                 f"<ul class='contents-list'>\n{lines}\n</ul>\n"
                 "</nav>\n"

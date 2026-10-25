@@ -194,7 +194,7 @@ def main() -> int:
         .add_figure(figure, caption="figure 1 · alpha plot")
     )
     html = report.render()
-    assert "<nav class='contents' aria-label='Contents'>" in html
+    assert "<nav class='contents' id='contents' tabindex='-1' aria-label='Contents'>" in html
     # the lines are ANCHORS that resolve to real page ids
     assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in html
     assert "<li><a href='#pg-2'>figure 1 · alpha plot</a></li>" in html
@@ -202,7 +202,7 @@ def main() -> int:
     assert "<figure class='page' id='pg-2' tabindex='-1'>" in html
     # the link styling + the :target ring ride the theme variables
     assert "ul.contents-list a:hover, ul.contents-list a:focus-visible {" in html
-    assert "section.page:target, figure.page:target {" in html
+    assert "section.page:target, figure.page:target, nav.contents:target {" in html
     assert "scroll-margin-top: 1.25rem;" in html
     banner("5.  the HTML twin's clickable Contents anchors")
 

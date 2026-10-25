@@ -57,11 +57,13 @@ import {
 } from "@/lib/pinned-trace-store";
 import {
   collectSessionReport,
+  contentsCensusText,
   figureSketchBounds,
   PREVIEW_SCATTER_POINTS,
   PREVIEW_TABLE_ROWS,
   traceInspectText,
   SESSION_GROUP_ORDER,
+  sessionContentsCensus,
   sessionGroupsAvailable,
   sessionReportCensus,
   sessionReportContents,
@@ -677,6 +679,15 @@ export function SessionReport() {
     () => sessionReportContents(payload.sections),
     [payload],
   );
+  // (100x-138) the strip's KIND CENSUS — the counts of exactly what
+  // it lists ("2 figures · 1 table · 1 structure grid"), derived from
+  // the Contents entries themselves so metrics are excluded by
+  // construction; the footer's own census counts metric cards, this
+  // one never does — the strip confesses only its own lines
+  const contentsCensusLine = useMemo(
+    () => contentsCensusText(sessionContentsCensus(contents)),
+    [contents],
+  );
   const shippable =
     census.figures + census.tables + census.metrics + census.images > 0;
   const customOrder = order.join() !== SESSION_GROUP_ORDER.join();
@@ -1078,7 +1089,19 @@ export function SessionReport() {
                 aria-label="Contents — the downloaded file's header block, mirrored"
                 className="sticky top-0 z-10 mb-2.5 rounded-lg border bg-card/95 px-3 py-2 shadow-sm backdrop-blur"
               >
-                <p className="text-xs font-medium text-foreground">Contents</p>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                  <p className="text-xs font-medium text-foreground">Contents</p>
+                  {/* (100x-138) the KIND CENSUS — the counts of exactly
+                      what the strip lists (metrics excluded, the strip's
+                      own noise rule), the footer's singular/plural
+                      discipline */}
+                  <p
+                    className="text-[10px] tabular-nums text-muted-foreground"
+                    aria-label="The contents census — the kinds and counts the strip lists"
+                  >
+                    {contentsCensusLine}
+                  </p>
+                </div>
                 <ul className="mt-1 flex flex-wrap gap-1" role="list">
                   {contents.map((entry) => {
                     const KindIcon = contentsKindIcon(entry.kind);

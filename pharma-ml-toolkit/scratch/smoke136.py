@@ -212,7 +212,7 @@ def main() -> int:
         .add_figure(figure, caption="figure 1 · alpha plot")
     )
     html = report.render()
-    assert "<nav class='contents' aria-label='Contents'>" in html
+    assert "<nav class='contents' id='contents' tabindex='-1' aria-label='Contents'>" in html
     # (100x-137) the standing pins updated: every Contents line rides
     # an anchor that links to its page's id
     assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in html

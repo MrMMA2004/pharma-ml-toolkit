@@ -9781,3 +9781,380 @@ class TestReview137Gui:
         html_doc = playground.PlaygroundApp._menu_save_session_report_html.__doc__ or ""
         assert "100x-137" in html_doc
         assert "CLICKABLE anchor" in html_doc
+
+
+class TestReview138Gui:
+    """Round 100x-138: the picklist confession's PROVENANCE -- an order
+    that arrived through File ▸ Import remembered order says so ("The
+    imported order from <file> was applied") until the reader completes
+    their own Save, resets, or clears; a fresh launch restores from the
+    session file, which IS the last saved order, and keeps the default
+    wording.  The round also carried the HTML twin's return leg and the
+    web strip's kind census (their own suites pin them)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def isolated_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        """Point HOME at a scratch dir so tests never touch a real session."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        return tmp_path
+
+    @pytest.fixture()
+    def dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, rounds: int = 4) -> None:
+        for _ in range(rounds):
+            app.update_idletasks()
+            app.update()
+
+    def _find_dialog(self, app: Any) -> Any:
+        for child in list(app.winfo_children()):
+            if child.winfo_class() != "Toplevel":
+                continue
+            if str(child.title()) == "Session report contents":
+                return child
+        return None
+
+    def _memory_label(self, app: Any, dialog: Any) -> Any:
+        """The confession label -- the TLabel whose text says 'applied'."""
+        return next(
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TLabel" and "was applied" in str(widget.cget("text"))
+        )
+
+    def _button(self, app: Any, dialog: Any, text: str) -> Any:
+        return next(
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TButton"
+            and str(widget.cget("text")) == text
+        )
+
+    def _plant_order_file(
+        self, playground: Any, tmp_path: Path, name: str = "colleague-order.json"
+    ) -> Path:
+        import json as _json
+
+        source = tmp_path / name
+        source.write_text(
+            _json.dumps(
+                playground.dump_report_order(
+                    {"figure": ["beta plot", "alpha plot"], "table": ["T one"]}
+                )
+            ),
+            encoding="utf-8",
+        )
+        return source
+
+    # -- the provenance attribute's life cycle ----------------------------- #
+
+    def test_origin_starts_none_on_a_fresh_app(self, playground: Any) -> None:
+        """The attribute exists and starts None -- a fresh app's memory is
+        nobody's import (and the session restore keeps it that way)."""
+        import inspect
+
+        source = inspect.getsource(playground.PlaygroundApp.__init__)
+        assert "self._report_order_origin: str | None = None" in source
+
+    def test_import_sets_the_provenance_attribute(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """A valid non-empty import carries its source -- the next
+        picklist's confession names this file."""
+        source = self._plant_order_file(playground, tmp_path)
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        assert app._report_order_origin is None
+        app._import_report_order()
+        assert app._report_order_origin == str(source)
+
+    def test_empty_import_confesses_nothing(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """The honest EMPTY import clears the provenance -- an empty
+        memory is nobody's import."""
+        import json as _json
+
+        source = tmp_path / "empty-order.json"
+        source.write_text(
+            _json.dumps(playground.dump_report_order({})), encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app._report_page_order = {"figure": ["old order"], "table": []}
+        app._report_order_origin = "somewhere/old.json"
+        app._import_report_order()
+        assert app._report_page_order == {}
+        assert app._report_order_origin is None
+
+    def test_foreign_rejection_leaves_the_provenance_alone(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """A foreign file never touches the live memory OR its provenance."""
+        source = self._plant_order_file(playground, tmp_path)
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app._import_report_order()
+        assert app._report_order_origin == str(source)
+        foreign = tmp_path / "not-an-order.json"
+        foreign.write_text('{"format": 1}', encoding="utf-8")
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(foreign)
+        )
+        app._import_report_order()
+        assert app._report_order_origin == str(source), "the provenance was touched"
+        assert app._report_page_order == {
+            "figure": ["beta plot", "alpha plot"],
+            "table": ["T one"],
+        }
+        errors = [call for call in dialogs if call[0] == "showerror"]
+        assert errors and errors[-1][1][0] == "Invalid report order file"
+
+    def test_clear_menu_forgets_the_provenance(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """File ▸ Clear remembered report order forgets the memory AND its
+        provenance -- a cleared order is nobody's import any more."""
+        source = self._plant_order_file(playground, tmp_path)
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app._import_report_order()
+        assert app._report_order_origin is not None
+        app._clear_report_order()
+        assert app._report_page_order == {}
+        assert app._report_order_origin is None
+
+    # -- the confession wording -------------------------------------------- #
+
+    def test_picklist_confesses_the_imported_file(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """After an import the picklist's confession names the FILE -- 'The
+        imported order from colleague-order.json was applied' -- with the
+        Reset promise the default wording carries."""
+        source = self._plant_order_file(playground, tmp_path)
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app._import_report_order()
+        live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
+        tables = [("T one", ["h"], [["r"]])]
+        captured: dict[str, Any] = {}
+
+        def visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            memory = self._memory_label(app, dialog)
+            captured["text"] = str(memory.cget("text"))
+            captured["manager"] = memory.winfo_manager()
+            self._button(app, dialog, "Cancel").invoke()
+
+        app.after(150, visit)
+        assert app._session_report_picklist(live, tables) is None
+        assert captured["manager"], "the confession never rendered"
+        assert captured["text"] == (
+            "The imported order from colleague-order.json was applied — "
+            "Reset to walking order forgets it."
+        ), captured["text"]
+
+    def test_long_filenames_truncate_honestly(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """A very long source name truncates the honest way -- the same
+        40-character ellipsis the captions use, on the BASENAME only."""
+        long_name = "a-really-long-colleague-order-filename-that-will-not-fit.json"
+        source = self._plant_order_file(playground, tmp_path, name=long_name)
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app._import_report_order()
+        expected = (
+            f"The imported order from "
+            f"{playground._truncate_caption_text(long_name, 40)} "
+            "was applied — Reset to walking order forgets it."
+        )
+        live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
+        captured: dict[str, Any] = {}
+
+        def visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            captured["text"] = str(self._memory_label(app, dialog).cget("text"))
+            self._button(app, dialog, "Cancel").invoke()
+
+        app.after(150, visit)
+        assert app._session_report_picklist(live, []) is None
+        assert captured["text"] == expected, captured["text"]
+        assert "…" in captured["text"], "the truncation never happened"
+        assert str(tmp_path) not in captured["text"], "the DIRECTORY leaked"
+
+    def test_completed_save_retires_the_provenance(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """A completed Save makes the order the reader's OWN -- the
+        provenance retires and the next confession reads 'Your last
+        saved order was applied' again."""
+        source = self._plant_order_file(playground, tmp_path)
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app._import_report_order()
+        assert app._report_order_origin == str(source)
+        live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
+        captured: dict[str, Any] = {}
+
+        def first_visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            captured["first"] = str(self._memory_label(app, dialog).cget("text"))
+            self._button(app, dialog, "Save report…").invoke()
+
+        app.after(150, first_visit)
+        kept = app._session_report_picklist(live, [])
+        assert kept is not None  # the Save completed
+        assert app._report_order_origin is None, "the provenance survived the Save"
+
+        def second_visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            captured["second"] = str(self._memory_label(app, dialog).cget("text"))
+            self._button(app, dialog, "Cancel").invoke()
+
+        app.after(150, second_visit)
+        assert app._session_report_picklist(live, []) is None
+        assert captured["first"].startswith("The imported order from")
+        assert captured["second"] == (
+            "Your last saved order was applied — Reset to "
+            "walking order forgets it."
+        ), captured["second"]
+
+    def test_reset_forgets_the_provenance_with_the_memory(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """The dialog's Reset forgets the import exactly the way it
+        forgets the reader's own order -- the provenance dies with the
+        memory."""
+        source = self._plant_order_file(playground, tmp_path)
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app._import_report_order()
+        live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
+
+        def visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            self._button(app, dialog, "Reset to walking order").invoke()
+            app.update()
+            self._button(app, dialog, "Cancel").invoke()
+
+        app.after(150, visit)
+        assert app._session_report_picklist(live, []) is None
+        assert app._report_page_order == {}
+        assert app._report_order_origin is None
+
+    def test_session_restore_keeps_the_default_wording(
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
+        monkeypatch: Any,
+        dialogs: list[Any],
+        tmp_path: Path,
+    ) -> None:
+        """The honest RESTART contract: after a relaunch the order arrives
+        from the SESSION FILE -- which IS the last saved order -- so the
+        provenance stays None and the confession keeps the default
+        wording; a fresh launch never claims an import."""
+        import gc
+
+        # plant a session file carrying a non-empty order, the way the
+        # import's write-through leaves it
+        source = self._plant_order_file(playground, tmp_path)
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        seeding = playground.PlaygroundApp()
+        self._drain(seeding)
+        seeding._import_report_order()
+        seeding.destroy()
+        gc.collect()
+        session_file = isolated_home / ".pharmaml" / "playground-session.json"
+        assert session_file.is_file(), "the import never wrote the session file"
+
+        app = playground.PlaygroundApp()  # restores from the session file
+        self._drain(app)
+        assert app._report_page_order == {
+            "figure": ["beta plot", "alpha plot"],
+            "table": ["T one"],
+        }
+        assert app._report_order_origin is None, "a restart claimed the import"
+        live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
+        captured: dict[str, Any] = {}
+
+        def visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            captured["text"] = str(self._memory_label(app, dialog).cget("text"))
+            self._button(app, dialog, "Cancel").invoke()
+
+        app.after(150, visit)
+        assert app._session_report_picklist(live, []) is None
+        assert captured["text"] == (
+            "Your last saved order was applied — Reset to "
+            "walking order forgets it."
+        ), captured["text"]
+        app.destroy()
+        gc.collect()
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_138(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-138" in doc
+        assert "RETURN leg" in doc
+        assert "KIND CENSUS" in doc
+        assert "PROVENANCE" in doc
+
+    def test_handler_docstrings_pin_the_round(self, playground: Any) -> None:
+        import inspect
+
+        import_doc = playground.PlaygroundApp._import_report_order.__doc__ or ""
+        assert "100x-138" in import_doc
+        assert "PROVENANCE" in import_doc
+        picklist_doc = playground.PlaygroundApp._session_report_picklist.__doc__ or ""
+        assert "100x-138" in picklist_doc
+        assert "PROVENANCE" in picklist_doc
+        # the retirement pins: the Save / Reset / Clear all carry the note
+        picklist_source = inspect.getsource(
+            playground.PlaygroundApp._session_report_picklist
+        )
+        assert "the import's provenance confession retires" in picklist_source
+        assert "the provenance dies with the memory" in picklist_source
+        clear_source = inspect.getsource(
+            playground.PlaygroundApp._clear_report_order
+        )
+        assert "the provenance dies with the memory" in clear_source

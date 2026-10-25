@@ -48,6 +48,11 @@ export const ZIP_EXCLUDE_ARGS: readonly string[] = [
   "*.pyc",
   "catboost_info/*",
   "*/catboost_info/*",
+  // (100x-138) machine-local run logs must never ship — the venv repair
+  // trace (absolute pip paths) rode the archive once and tripped the
+  // round-end leak scan; logs are diagnostics for THIS machine only.
+  "*.log",
+  "*/*.log",
   // Generated example output (leaderboards etc.) — .gitignored on the
   // Python side, excluded here so the archive ships source only.
   "artifacts/*",

@@ -1070,3 +1070,41 @@ tests/test_leakage.py (the guard that FAILS the suite if any absolute
 home prefix ever returns — the pattern assembled at runtime, the scrub
 tool excluded as a pattern-documenter). All scrubbed drivers
 re-verified (SMOKE134/136/137_OK; venv_repair_9.sh rides $HOME).
+
+### Round 23 (100x-138) — the report's return leg + the strip's kind census + the picklist confession's provenance
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0 after the standing /tmp re-extract; the
+self-test green under Xvfb :99; notebooks probe green), then the
+round-7 audit script re-ran: **246 public symbols, 43 zero-hit —
+byte-identical to rounds 127–135's documented floor.** The library
+axis holds; round 137's handover named all three of the round's items
+— (a) the HTML twin's Contents growing a "back to contents" link on
+each page wrapper, (b) the web preview's Contents strip showing the
+kind badges' counts, and (c) the desktop's imported order confessing
+its provenance in the picklist itself — and all three shipped:
+
+| Surface | The 1.2.77 fix |
+| --- | --- |
+| The report's RETURN leg | Every table/figure page wrapper in `HTMLReport`'s output ends in a small "↑ Contents" link back to the header's block: the nav carries `id='contents'` + `tabindex='-1'` (a landing aid, never a tab stop) and flashes the same accent ring the jumped-to pages do — the one-way anchor became a ROUND TRIP, so a report thirty pages deep is one click from the index. The link is minted at ADD time with the wrapper (a wrapper exists exactly when at least one Contents line does, so the target can never be missing); prose-only reports render neither nav nor links (the noise rule's other half — the static CSS rides every report like every other rule); fragment links only, the self-contained contract holds; the PDF's ink stays frozen. No caller change — the playground's HTML twin and `save_visual_bundle`'s report.html gain it automatically. |
+| The strip's KIND CENSUS | The web preview's Contents strip header carries the census line — "2 figures · 1 table · 1 structure grid" — derived from the strip's OWN entries (`sessionContentsCensus` + `contentsCensusText` in src/lib/session-report.ts, pure, probe-pinned by scratch/probe_session_report_138.ts): metrics are excluded BY CONSTRUCTION (the footer's census counts metric cards, this one never does — the strip confesses only its own lines), the wording rides the footer's singular/plural discipline, a census with no images drops the leg entirely, and a metrics-only payload hides the whole strip as before. |
+| The confession's PROVENANCE | An order that arrived through File ▸ Import remembered order says so in the picklist itself — "The imported order from \<file\> was applied — Reset to walking order forgets it" (the basename, `_truncate_caption_text`-truncated for very long names, the DIRECTORY never leaking) — until the reader completes their own Save (the order becomes theirs; the wording returns to "Your last saved order was applied"), resets, or clears. The empty import confesses nothing (an empty memory is nobody's import); a foreign file never touches the live memory OR its provenance; and a fresh LAUNCH restores from the session file — which IS the last saved order — so a restart never claims an import (the honest restart contract, test-pinned through a seeding app's write-through and a fresh launch's restore). |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.77 via
+both drivers — the re-execution's home-path leak in two notebook
+outputs caught by the round-137 leakage guard and scrubbed before the
+clean suite re-run). The GUI-axis census holds at 68 live cards (the
+round touched no card topology). The web catalog walk: 26/26 entries
+(the round touched no catalog topology). 20 new tests:
+TestReview138Gui (12, desktop: the provenance attribute's life cycle —
+import/empty/foreign/clear — the confession's wording incl. the
+truncation and the Save-retirement, the Reset forget, the restart
+contract, the docstring pins) + TestPreviewContentsCensus (3, web
+parity: the TS probe's census verdicts + the collector export surface
++ the component's census-line pins) + TestHTMLReportBackLinks (5,
+test_viz.py: the wrappers' return links incl. the captionless figure,
+the theme-variable styling, the noise rule's other half, the bundle's
+automatic gain). Standing pins updated where the markup evolved: the
+nav string (now id+tabindex-carrying) and the :target selector (now
+nav-covering) across test_viz/smoke136/smoke137/shoot136/shoot137.

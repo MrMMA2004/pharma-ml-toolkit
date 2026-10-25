@@ -676,6 +676,53 @@ export function sessionReportContents(
   return entries;
 }
 
+/** (100x-138) The KIND CENSUS of a Contents list — the counts of
+ *  exactly what the strip lists (figures / tables / images).  Here
+ *  metrics are excluded by construction: the census derives from the
+ *  Contents entries themselves (the strip's own noise rule — the
+ *  footer's census counts metric cards too, this one never does). */
+export interface SessionContentsCensus {
+  /** Figure sections listed (image sections ride add_figure in the
+   *  file, so they are counted separately below, never as figures). */
+  figures: number;
+  /** Table sections listed. */
+  tables: number;
+  /** Image sections listed — the structure grids. */
+  images: number;
+}
+
+/** (100x-138) Derive the Contents strip's kind census — pure, so the
+ *  probe can pin it: over the strip's own entries (metrics never
+ *  listed), figures/tables/images are counted by their kind. */
+export function sessionContentsCensus(
+  entries: ReportContentsEntry[],
+): SessionContentsCensus {
+  let figures = 0;
+  let tables = 0;
+  let images = 0;
+  for (const entry of entries) {
+    if (entry.kind === "figure") figures += 1;
+    else if (entry.kind === "table") tables += 1;
+    else images += 1;
+  }
+  return { figures, tables, images };
+}
+
+/** (100x-138) The census's readable line — "2 figures · 1 table ·
+ *  1 structure grid", the footer's singular/plural discipline (images
+ *  read as "structure grid(s)", the established wording; a census
+ *  with no images drops the leg entirely).  Pure — the probe pins the wording. */
+export function contentsCensusText(census: SessionContentsCensus): string {
+  const bits: string[] = [
+    `${census.figures} figure${census.figures === 1 ? "" : "s"}`,
+    `${census.tables} table${census.tables === 1 ? "" : "s"}`,
+  ];
+  if (census.images > 0) {
+    bits.push(`${census.images} structure grid${census.images === 1 ? "" : "s"}`);
+  }
+  return bits.join(" · ");
+}
+
 /** (100x-134) The hover-INSPECT text a preview sketch's trace carries —
  *  the honest numbers behind the approximation: the trace's name, its
  *  point count, its x/y ranges (fmtCell-compacted), and the kind's own

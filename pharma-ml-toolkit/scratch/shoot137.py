@@ -298,13 +298,13 @@ try:
     assert pump(app), "the HTML report job hung"
     assert TARGET_HTML.is_file(), "the anchors report never landed"
     html = TARGET_HTML.read_text(encoding="utf-8")
-    assert "<nav class='contents' aria-label='Contents'>" in html
+    assert "<nav class='contents' id='contents' tabindex='-1' aria-label='Contents'>" in html
     assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in html
     assert "<li><a href='#pg-2'>figure 1 · beta plot</a></li>" in html
     assert "<li><a href='#pg-3'>figure 2 · Ring topology moves — 6 mutant(s)</a></li>" in html
     assert "<section class='page' id='pg-1' tabindex='-1'>" in html
     assert "<figure class='page' id='pg-2' tabindex='-1'>" in html
-    assert "section.page:target, figure.page:target {" in html
+    assert "section.page:target, figure.page:target, nav.contents:target {" in html
     print("artifact pg137-anchors-report.html written (the clickable anchors)")
 finally:
     import contextlib

@@ -1524,3 +1524,72 @@ class TestPreviewContentsTwin:
         assert "The same block the downloaded file" in report
         # every line is a labelled button (a11y)
         assert "Jump to section ${entry.index + 1}: ${entry.title}" in report
+
+
+class TestPreviewContentsCensus:
+    """Round 100x-138: the preview's Contents strip carries the KIND
+    CENSUS — "2 figures · 1 table · 1 structure grid", the counts of
+    exactly what the strip lists, metrics excluded by construction (the
+    footer's own census counts metric cards; this one never does).  The
+    TS probe pins the pure derivations (src/lib/session-report.ts's
+    sessionContentsCensus + contentsCensusText); the static pins keep
+    the strip's census line from silently disappearing between rounds."""
+
+    REPORT_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "session-report.tsx"
+    )
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+
+    needs_round = pytest.mark.skipif(
+        not REPORT_TSX.is_file() or not COLLECTOR_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src + <repo>/scratch) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+
+    @needs_round
+    def test_the_census_pins(self) -> None:
+        # the TS probe exits non-zero on drift and prints its verdicts
+        _run([BUN, "run", "scratch/probe_session_report_138.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_138.json").read_text())
+        # the mixed fixture (2 figures + 1 table + 1 image, metrics
+        # interleaved): the census counts the strip's own lines
+        assert ts["mixedCensus"] == {"figures": 2, "tables": 1, "images": 1}, ts
+        # the wording: the footer's singular/plural discipline, images
+        # read as "structure grid(s)"
+        assert ts["mixedText"] == "2 figures · 1 table · 1 structure grid", ts
+        # metrics are excluded by construction — the census counts
+        # exactly the strip's lines, never a metrics leg, never a
+        # metrics key
+        assert ts["metricsExcluded"] is True, ts
+        assert ts["metricsCounted"] is False, ts
+        # a census with no images drops the leg entirely (the footer's
+        # images-conditional, mirrored)
+        assert ts["noImagesText"] == "1 figure · 1 table", ts
+        # singular forms stay singular
+        assert ts["singularText"] == "1 figure · 0 tables", ts
+        assert ts["oneOfEachText"] == "1 figure · 1 table · 1 structure grid", ts
+        # the noise rule holds upstream: a metrics-only payload yields
+        # [] and the strip (census included) never renders
+        assert ts["metricsOnlyYieldsEmpty"] is True, ts
+
+    def test_the_collector_exports_the_census_contract(self) -> None:
+        collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
+        assert "export function sessionContentsCensus(" in collector
+        assert "export function contentsCensusText(" in collector
+        assert "export interface SessionContentsCensus" in collector
+        # the discipline is documented, not incidental
+        assert "metrics are excluded by construction" in collector
+        assert "the probe pins the wording" in collector
+
+    def test_the_component_carries_the_census_line(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the strip's header row: the title on the left, the census on
+        # the right, the derived line rendered inside the strip
+        assert "contentsCensusText(sessionContentsCensus(contents))" in report
+        assert "The contents census — the kinds and counts the strip lists" in report
+        # the census rides the SAME noise rule as the strip itself (it
+        # renders inside the contents.length > 0 branch, never alone)
+        assert "contents.length > 0" in report
+        # tabular figures so the counts align under each other
+        assert "tabular-nums" in report
