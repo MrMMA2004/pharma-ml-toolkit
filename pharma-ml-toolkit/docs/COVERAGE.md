@@ -878,3 +878,30 @@ touched no card topology). The web catalog walk: 26/26 entries (the
 round touched no catalog topology). 15 new tests: TestReview131Gui
 (7, desktop) + TestSessionReportSections (8, web parity incl. the
 bridge's surgery-image round trip).
+
+### Round 17 (100x-132) — the report order: the desktop picklist + the web twin's reorderable chips
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **246 public symbols, 43 zero-hit —
+byte-identical to rounds 127–131's documented floor.** The library
+axis holds; round 131's handover named the round's work — (a) the
+desktop report's per-section control and (c) the web report's walking
+order — and settled (b) by inspection (every surgery grid renders
+through `_render_figure`, so the desktop report already walks them):
+
+| Surface | The 1.2.71 fix |
+| --- | --- |
+| The desktop pre-save picklist | Both report menus (PDF + HTML) consult a "Session report contents" dialog before the file dialog: every page the walk found (one figure page per live render, one text page per filled table) is offered with a checkbox — grouped, numbered, all on by default — and only the kept pages ship. A LIVE census footer recounts on every flip; at zero pages Save disables AND the confirm command re-checks (a keyboard/programmatic activation of the disabled button stays a no-op). Cancel aborts with no save started. |
+| The web walking order | The section chips reorder: drag (GripVertical handle + primary drop-caret cue) or the hover/focus micro-arrows (labelled, extended hit areas — the keyboard/touch path); the order persists per browser (`pharmaml.reportSectionOrder`, tolerant restore, equality removes the key) and a dashed "Reset walking order" chip appears only while drifted. The census line confesses "in your chosen walking order". |
+| The ordered collector | `collectSessionReport`/`sessionReportCensus` take an optional third `order` argument; the walk was refactored into six pure per-group builders assembled under `sanitizeSessionOrder` (unknown ids dropped, duplicates collapsed first-wins, missing groups appended canonical-last so a stored order predating a new group never drops it). Whole groups move — a group's internal order never re-cuts — and the census is order-invariant (pinned byte-identical to the 131 baseline). |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.71 via
+both drivers: 64 TOTAL 190 s; 26 "26-R7 driver OK"). The GUI-axis
+census holds at 68 live cards (the round touched no card topology).
+The web catalog walk: 26/26 entries (the round touched no catalog
+topology). 11 new tests: TestReview132Gui (7, desktop — the six
+pre-132 report-menu classes gained the `picklist_accept_all` bypass)
++ TestSessionReportOrder (4, web parity incl. the sanitizer and the
+order-invariant census).

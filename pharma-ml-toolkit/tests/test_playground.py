@@ -713,6 +713,19 @@ XVFB_SKIP = pytest.mark.skipif(
 )
 
 
+@pytest.fixture()
+def picklist_accept_all(playground: Any, monkeypatch: Any) -> None:
+    """(100x-132) Bypass the report menus' pre-save picklist by accepting
+    every page -- the pre-132 tests' original semantics (the whole
+    session ships).  The 132 tests drive the real dialog instead."""
+
+    monkeypatch.setattr(
+        playground.PlaygroundApp,
+        "_session_report_picklist",
+        lambda self, live, tables: (live, tables),
+    )
+
+
 @pytest.fixture(scope="module")
 def xvfb_display() -> str:
     """A module-scoped virtual display, polled until Xvfb accepts sockets."""
@@ -5450,7 +5463,9 @@ class TestReview122Gui:
     and the session PDF report."""
 
     @pytest.fixture()
-    def app(self, playground: Any, xvfb_display: str) -> Any:
+    def app(
+        self, playground: Any, xvfb_display: str, picklist_accept_all: None
+    ) -> Any:
         application = playground.PlaygroundApp(persist_session=False)
         yield application
         application.destroy()
@@ -5800,7 +5815,9 @@ class TestReview123Gui:
     table axis (every filled table becomes a REAL text page)."""
 
     @pytest.fixture()
-    def app(self, playground: Any, xvfb_display: str) -> Any:
+    def app(
+        self, playground: Any, xvfb_display: str, picklist_accept_all: None
+    ) -> Any:
         application = playground.PlaygroundApp(persist_session=False)
         yield application
         application.destroy()
@@ -6062,7 +6079,9 @@ class TestReview124Gui:
     caller anywhere) and the leaderboard's scored structure grid."""
 
     @pytest.fixture()
-    def app(self, playground: Any, xvfb_display: str) -> Any:
+    def app(
+        self, playground: Any, xvfb_display: str, picklist_accept_all: None
+    ) -> Any:
         application = playground.PlaygroundApp(persist_session=False)
         yield application
         application.destroy()
@@ -6535,7 +6554,9 @@ class TestReview126Gui:
     DRUGLIKE = "Multi-objective (QED × MW × TPSA)"
 
     @pytest.fixture()
-    def app(self, playground: Any, xvfb_display: str) -> Any:
+    def app(
+        self, playground: Any, xvfb_display: str, picklist_accept_all: None
+    ) -> Any:
         application = playground.PlaygroundApp(persist_session=False)
         yield application
         application.destroy()
@@ -6713,7 +6734,9 @@ class TestReview127Gui:
     public REPORT_THEMES contract."""
 
     @pytest.fixture()
-    def app(self, playground: Any, xvfb_display: str) -> Any:
+    def app(
+        self, playground: Any, xvfb_display: str, picklist_accept_all: None
+    ) -> Any:
         application = playground.PlaygroundApp(persist_session=False)
         yield application
         application.destroy()
@@ -7183,7 +7206,9 @@ class TestReview129Gui:
     PLATE = b"1 1 1 rg"  # the white plate under every figure
 
     @pytest.fixture()
-    def app(self, playground: Any, xvfb_display: str) -> Any:
+    def app(
+        self, playground: Any, xvfb_display: str, picklist_accept_all: None
+    ) -> Any:
         application = playground.PlaygroundApp(persist_session=False)
         yield application
         application.destroy()
@@ -7773,3 +7798,323 @@ class TestReview131Gui:
         assert "Recently jumped" in doc
         assert "100x-131" in doc
         assert '"Clear" ghost button' in doc
+
+
+class TestReview132Gui:
+    """Round 100x-132: the session reports' PRE-SAVE PICKLIST -- the
+    desktop twin of the web report card's per-section control.  Every
+    page the walk found is offered with a checkbox (all on by default,
+    a live census footer that recounts on every flip, Save disabled at
+    zero pages) and only the kept pages ship; Cancel aborts with no
+    save started at all.  The web twin's round (the reorderable chips)
+    lives in tests/test_web_parity.py."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 240.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _figure_static(title: str) -> Any:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure()
+        axes = fig.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title(title)
+        return fig
+
+    # -- the driver ------------------------------------------------------- #
+    def _drive(
+        self,
+        app: Any,
+        flips: tuple[int, ...] = (),
+        action: str = "save",
+        extra: Any = None,
+    ) -> dict[str, Any]:
+        """Schedule the modal interaction, then return the bucket.
+
+        The picklist blocks inside ``wait_window`` (its own event
+        loop), so the interaction rides an ``after`` callback that the
+        loop processes while the dialog is up: find the Toplevel by
+        title, flip the listed checkboxes, optionally run ``extra``
+        (which may close the dialog itself), then press Save/Cancel.
+        """
+        captured: dict[str, Any] = {}
+
+        def interact() -> None:
+            dialog = None
+            for child in list(app.winfo_children()):
+                if child.winfo_class() != "Toplevel":
+                    continue  # Menu/Frame/Notebook carry no title()
+                if str(child.title()) == "Session report contents":
+                    dialog = child
+                    break
+            if dialog is None:
+                captured["error"] = "the picklist never opened"
+                return
+            checks = [
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TCheckbutton"
+            ]
+            captured["checks"] = [str(check.cget("text")) for check in checks]
+            for index in flips:
+                checks[index].invoke()
+            app.update()
+            if extra is not None:
+                extra(dialog, captured)
+            # extra may have closed the dialog itself -- never walk a
+            # destroyed window (the TclError would kill this callback
+            # and strand the modal)
+            try:
+                alive = dialog.winfo_exists()
+            except Exception:  # noqa: BLE001 - destroyed mid-callback
+                alive = False
+            if not alive:
+                return
+            captured.setdefault(
+                "labels",
+                [
+                    str(widget.cget("text"))
+                    for widget in app._walk_widgets(dialog)
+                    if widget.winfo_class() == "TLabel"
+                ],
+            )
+            buttons = {
+                str(widget.cget("text")): widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TButton"
+            }
+            if action == "save":
+                for text, button in buttons.items():
+                    if text.startswith("Save report"):
+                        button.invoke()
+                        break
+            elif action == "cancel":
+                buttons["Cancel"].invoke()
+
+        app.after(150, interact)
+        return captured
+
+    def _seed_session(self, app: Any) -> None:
+        """Two live figures with distinct captions + one filled table."""
+        first = self._figure_static("alpha plot")
+        second = self._figure_static("beta plot")
+        app._render_figure(app._topo_host, first)
+        app._render_figure(app._breed_host, second)
+        app._session_figures[0][1] = "alpha plot"
+        app._session_figures[1][1] = "beta plot"
+        app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+
+    # -- the dialog's own contract ---------------------------------------- #
+    def test_picklist_offers_every_page_and_cancel_aborts(
+        self, app: Any, playground: Any, monkeypatch: Any, tmp_path: Any
+    ) -> None:
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "never.html"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        self._seed_session(app)
+        captured = self._drive(app, action="cancel")
+        app._menu_save_session_report_html()
+        # every page was offered, numbered by axis, in walk order
+        assert captured.get("error") is None, captured
+        assert len(captured["checks"]) == 3, captured
+        assert captured["checks"][0].startswith("figure 1 · ")
+        assert "alpha plot" in captured["checks"][0]
+        assert captured["checks"][1].startswith("figure 2 · ")
+        assert captured["checks"][2].startswith("table 1 · ")
+        # cancel aborted BEFORE the file dialog: nothing written, no job
+        assert not target.is_file()
+        assert not app._busy
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+        app._desc_tree.delete(*app._desc_tree.get_children())
+
+    def test_unchecked_figure_never_ships(
+        self,
+        app: Any,
+        playground: Any,
+        monkeypatch: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Any,
+    ) -> None:
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "filtered.html"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        self._seed_session(app)
+        captured = self._drive(app, flips=(0,))  # uncheck "alpha plot"
+        app._menu_save_session_report_html()
+        assert self._drain(app), "the HTML report job hung"
+        # the dialog offered every page, alpha among them
+        assert captured.get("error") is None, captured
+        assert any("alpha plot" in text for text in captured["checks"])
+        text = target.read_text(encoding="utf-8")
+        assert "beta plot" in text
+        assert "alpha plot" not in text, "the unchecked figure still shipped"
+        assert "SMILES inspector table" in text  # the table still ships
+        assert any(
+            "1 figure(s)" in str(a) for _n, a in quiet_dialogs
+        ), "the save message did not count one figure"
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+        app._desc_tree.delete(*app._desc_tree.get_children())
+
+    def test_unchecked_table_never_ships(
+        self,
+        app: Any,
+        playground: Any,
+        monkeypatch: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Any,
+    ) -> None:
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "notable.html"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        self._seed_session(app)
+        self._drive(app, flips=(2,))  # uncheck the table
+        app._menu_save_session_report_html()
+        assert self._drain(app), "the HTML report job hung"
+        text = target.read_text(encoding="utf-8")
+        assert "alpha plot" in text and "beta plot" in text
+        assert "SMILES inspector table" not in text, "the unchecked table still shipped"
+        assert any(
+            "2 figure(s)" in str(a) for _n, a in quiet_dialogs
+        ), "the save message did not count two figures"
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+        app._desc_tree.delete(*app._desc_tree.get_children())
+
+    def test_census_recounts_and_save_disables_at_zero(self, app: Any) -> None:
+        self._seed_session(app)
+
+        def extra(dialog: Any, bucket: dict[str, Any]) -> None:
+            checks = [
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TCheckbutton"
+            ]
+            save = next(
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TButton"
+                and str(widget.cget("text")).startswith("Save report")
+            )
+            bucket["enabled_at_start"] = not save.instate(("disabled",))
+            checks[0].invoke()  # one off -> 2 of 3
+            app.update()
+            labels = [
+                str(widget.cget("text"))
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TLabel"
+            ]
+            bucket["two_of_three"] = [
+                label for label in labels if "2 of 3 pages will ship" in label
+            ]
+            checks[1].invoke()
+            checks[2].invoke()  # everything off
+            app.update()
+            labels = [
+                str(widget.cget("text"))
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TLabel"
+            ]
+            bucket["nothing"] = [
+                label for label in labels if "Nothing would ship" in label
+            ]
+            bucket["disabled"] = bool(save.instate(("disabled",)))
+            save.invoke()  # a disabled ttk button: the command never fires
+            app.update()
+            bucket["still_open"] = bool(dialog.winfo_exists())
+            cancel = next(
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TButton"
+                and str(widget.cget("text")) == "Cancel"
+            )
+            cancel.invoke()
+
+        bucket = self._drive(app, action="none", extra=extra)
+        app._menu_save_session_report_html()
+        # the footer recounts on every flip and Save follows it
+        assert bucket.get("enabled_at_start") is True, bucket
+        assert bucket.get("two_of_three"), "the census footer never recounted"
+        assert bucket.get("nothing"), "the zero-page footer never appeared"
+        assert bucket.get("disabled") is True, "Save stayed enabled at zero pages"
+        assert bucket.get("still_open") is True, (
+            "the disabled Save still closed the dialog"
+        )
+        # no save happened at all: no job, nothing written
+        assert not app._busy
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+        app._desc_tree.delete(*app._desc_tree.get_children())
+
+    # -- the wiring + documentation pins ---------------------------------- #
+    def test_both_menus_consult_the_picklist(self, playground: Any) -> None:
+        import inspect
+
+        pdf_source = inspect.getsource(
+            playground.PlaygroundApp._menu_save_session_report
+        )
+        html_source = inspect.getsource(
+            playground.PlaygroundApp._menu_save_session_report_html
+        )
+        assert "_session_report_picklist" in pdf_source
+        assert "_session_report_picklist" in html_source
+
+    def test_module_docstring_records_round_132(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-132" in doc
+        assert "pre-save picklist" in doc
+        assert "reorderable" in doc
+
+    def test_picklist_docstring_records_round_132(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._session_report_picklist.__doc__ or ""
+        assert "100x-132" in doc
+        assert "pre-save checklist" in doc
+        assert "census footer" in doc

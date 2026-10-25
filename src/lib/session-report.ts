@@ -136,6 +136,47 @@ export interface SessionReportOptions {
   surgery?: boolean;
 }
 
+/** One report group's id (the toggle + reorder axis). */
+export type SessionGroupId = keyof SessionReportOptions;
+
+/** (100x-132) The canonical walking order — models before curves,
+ *  regimen before data tables, surgery last.  The report card's chips
+ *  can drag into any permutation; `sanitizeSessionOrder` guards what
+ *  the collector will actually accept. */
+export const SESSION_GROUP_ORDER: SessionGroupId[] = [
+  "ml",
+  "learningCurve",
+  "pkpd",
+  "nca",
+  "history",
+  "surgery",
+];
+
+/** (100x-132) Normalize a walking order: unknown ids dropped,
+ *  duplicates dropped (first occurrence wins), missing groups appended
+ *  in canonical order at the END — an order stored before a new group
+ *  existed still ships that group, never silently drops it. */
+export function sanitizeSessionOrder(
+  order: SessionGroupId[] | undefined,
+): SessionGroupId[] {
+  if (!order || order.length === 0) return [...SESSION_GROUP_ORDER];
+  const seen = new Set<SessionGroupId>();
+  const known: SessionGroupId[] = [];
+  for (const id of order) {
+    if (SESSION_GROUP_ORDER.includes(id) && !seen.has(id)) {
+      seen.add(id);
+      known.push(id);
+    }
+  }
+  for (const id of SESSION_GROUP_ORDER) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      known.push(id);
+    }
+  }
+  return known;
+}
+
 /** Which groups would actually ship something for this snapshot — the
  * honest source for the UI: a group with no content renders no toggle
  * (nothing to skip), so a fresh session shows only "PK / PD" and the
@@ -191,123 +232,95 @@ function pkSeries(params: PkParams): Array<[number, number]> {
 /* The collector                                                       */
 /* ------------------------------------------------------------------ */
 
-/** Build the report payload from the session snapshot.  Pure: no DOM,
- *  no store subscription — the UI component reads the store and hands
- *  the pieces in, so the collector is trivially unit-testable.
- *
- * Sections, in walking order (the desktop report walks its cards the
- * same way — models before curves, tables last):
- *
- *  1. ML training — metrics card + the parity/decision figure
- *     (only when a result exists)
- *  2. Learning curve — metrics + the mean ± std band figure
- *     (only when a curve was computed)
- *  3. PK regimen — the concentration profile (the regimen card is
- *     always live in the web twin) + the PD effect overlay figure
- *  4. NCA observed data — the rows table (only when filled)
- *  5. ML run history — the runs table (only when a run exists)
- *  6. Molecule surgery (100x-131) — the run's metrics + SMILES table
- *     + the structure-grid image (only when a run is in the session)
- *
- * (100x-131) `options` turns whole groups off — the report card's
- * per-section toggles: skip the PK figures when only the ML run
- * matters, ship only the surgery grid, whatever the session needs.
- * A group with no content is skipped regardless, so the census the
- * UI shows always matches what would ship.
- */
-export function collectSessionReport(
-  snapshot: SessionSnapshot,
-  options: SessionReportOptions = {},
-): SessionReportRequest {
-  const enabled = {
-    ml: options.ml !== false,
-    learningCurve: options.learningCurve !== false,
-    pkpd: options.pkpd !== false,
-    nca: options.nca !== false,
-    history: options.history !== false,
-    surgery: options.surgery !== false,
-  };
-  const sections: ReportSection[] = [];
+/** (100x-132) Each group's own sections, in the group's internal order.
+ *  The group builders are pure: they read the snapshot and return only
+ *  what that group ships — a group with no content returns [].  The
+ *  collector assembles them under the (sanitized) walking order, so
+ *  "the report reads the way the reader wants" is a reorder of WHOLE
+ *  groups, never a re-cut of a group's own figures. */
 
-  /* -- 1. ML training ------------------------------------------------ */
+function mlSections(snapshot: SessionSnapshot): ReportSection[] {
   const ml = snapshot.mlResult;
-  if (ml && enabled.ml) {
-    const metrics: Array<[string, string]> = [
-      ["model", ml.model],
-      ["task", ml.task],
-    ];
-    for (const [key, value] of Object.entries(ml.metrics)) {
-      metrics.push([key, fmtCell(value)]);
-    }
-    metrics.push(["rows", `${ml.datasetMeta.nTotal}`]);
-    metrics.push(["features", String(ml.datasetMeta.features.length)]);
-    if (ml.datasetMeta.source) {
-      metrics.push(["source", ml.datasetMeta.source.fileName ?? "csv"]);
-    }
-    sections.push({ kind: "metrics", title: "ML training", items: metrics });
+  if (!ml) return [];
+  const sections: ReportSection[] = [];
+  const metrics: Array<[string, string]> = [
+    ["model", ml.model],
+    ["task", ml.task],
+  ];
+  for (const [key, value] of Object.entries(ml.metrics)) {
+    metrics.push([key, fmtCell(value)]);
+  }
+  metrics.push(["rows", `${ml.datasetMeta.nTotal}`]);
+  metrics.push(["features", String(ml.datasetMeta.features.length)]);
+  if (ml.datasetMeta.source) {
+    metrics.push(["source", ml.datasetMeta.source.fileName ?? "csv"]);
+  }
+  sections.push({ kind: "metrics", title: "ML training", items: metrics });
 
-    if (ml.task === "regression") {
-      const traces: ReportFigureTrace[] = [
-        {
-          name: "model prediction",
-          style: "line",
-          points: (ml.series.curve ?? []).map((p) => [p.x, p.yhat] as [number, number]),
-        },
-        {
-          name: "test observations",
-          style: "scatter",
-          points: ml.series.test.map((p) => [p.x, p.y] as [number, number]),
-        },
-      ];
-      if (ml.series.train && ml.series.train.length > 0) {
-        traces.push({
-          name: "train observations",
-          style: "scatter",
-          points: ml.series.train.map((p) => [p.x, p.y] as [number, number]),
-        });
-      }
-      const bandTrace = bandFromCurve(ml.series.curve ?? []);
-      if (bandTrace) traces.splice(1, 0, bandTrace);
-      sections.push({
-        kind: "figure",
-        title: "Predicted vs observed",
-        xLabel: "observed",
-        yLabel: "predicted",
-        traces,
-      });
-    } else {
-      const traces: ReportFigureTrace[] = [];
-      if (ml.series.boundary && ml.series.boundary.length > 0) {
-        traces.push({
-          name: "decision regions",
-          style: "scatter",
-          points: ml.series.boundary.map(
-            (p) => [p.x, p.y] as [number, number],
-          ),
-          classes: ml.series.boundary.map((p) => Math.round(p.pred)),
-          probas: ml.series.boundary.map((p) => p.proba ?? Math.round(p.pred)),
-        });
-      }
-      traces.push({
+  if (ml.task === "regression") {
+    const traces: ReportFigureTrace[] = [
+      {
+        name: "model prediction",
+        style: "line",
+        points: (ml.series.curve ?? []).map((p) => [p.x, p.yhat] as [number, number]),
+      },
+      {
         name: "test observations",
         style: "scatter",
         points: ml.series.test.map((p) => [p.x, p.y] as [number, number]),
-        classes: ml.series.test.map((p) => Math.round(p.label ?? 0)),
-      });
-      sections.push({
-        kind: "figure",
-        title: "Decision map",
-        xLabel: "feature 1",
-        yLabel: "feature 2",
-        traces,
+      },
+    ];
+    if (ml.series.train && ml.series.train.length > 0) {
+      traces.push({
+        name: "train observations",
+        style: "scatter",
+        points: ml.series.train.map((p) => [p.x, p.y] as [number, number]),
       });
     }
-  }
-
-  /* -- 2. Learning curve ---------------------------------------------- */
-  const lc = snapshot.lcResult;
-  if (lc && enabled.learningCurve) {
+    const bandTrace = bandFromCurve(ml.series.curve ?? []);
+    if (bandTrace) traces.splice(1, 0, bandTrace);
     sections.push({
+      kind: "figure",
+      title: "Predicted vs observed",
+      xLabel: "observed",
+      yLabel: "predicted",
+      traces,
+    });
+  } else {
+    const traces: ReportFigureTrace[] = [];
+    if (ml.series.boundary && ml.series.boundary.length > 0) {
+      traces.push({
+        name: "decision regions",
+        style: "scatter",
+        points: ml.series.boundary.map(
+          (p) => [p.x, p.y] as [number, number],
+        ),
+        classes: ml.series.boundary.map((p) => Math.round(p.pred)),
+        probas: ml.series.boundary.map((p) => p.proba ?? Math.round(p.pred)),
+      });
+    }
+    traces.push({
+      name: "test observations",
+      style: "scatter",
+      points: ml.series.test.map((p) => [p.x, p.y] as [number, number]),
+      classes: ml.series.test.map((p) => Math.round(p.label ?? 0)),
+    });
+    sections.push({
+      kind: "figure",
+      title: "Decision map",
+      xLabel: "feature 1",
+      yLabel: "feature 2",
+      traces,
+    });
+  }
+  return sections;
+}
+
+function learningCurveSections(snapshot: SessionSnapshot): ReportSection[] {
+  const lc = snapshot.lcResult;
+  if (!lc) return [];
+  return [
+    {
       kind: "metrics",
       title: "Learning curve",
       items: [
@@ -319,8 +332,8 @@ export function collectSessionReport(
           ? (lc.datasetMeta.fileName ?? "csv")
           : "synthetic"],
       ],
-    });
-    sections.push({
+    },
+    {
       kind: "figure",
       title: `Learning curve — ${lc.metricName} vs training samples`,
       xLabel: "training samples",
@@ -341,13 +354,19 @@ export function collectSessionReport(
           ),
         },
       ],
-    });
-  }
+    },
+  ];
+}
 
-  /* -- 3. PK regimen (always live) ------------------------------------ */
-  if (enabled.pkpd) {
-    const conc = pkSeries(snapshot.pkParams);
-    sections.push({
+function pkpdSections(snapshot: SessionSnapshot): ReportSection[] {
+  // the regimen card is always live in the web twin — no guard
+  const conc = pkSeries(snapshot.pkParams);
+  const effect = conc.map(
+    ([t, c]) =>
+      [t, pdEffect(c, snapshot.pdParams.model, snapshot.pdParams)] as [number, number],
+  );
+  return [
+    {
       kind: "figure",
       title: "PK regimen — concentration vs time",
       xLabel: "time (h)",
@@ -359,12 +378,8 @@ export function collectSessionReport(
           points: conc,
         },
       ],
-    });
-    const effect = conc.map(
-      ([t, c]) =>
-        [t, pdEffect(c, snapshot.pdParams.model, snapshot.pdParams)] as [number, number],
-    );
-    sections.push({
+    },
+    {
       kind: "figure",
       title: `PD effect — ${snapshot.pdParams.model} model`,
       xLabel: "time (h)",
@@ -372,23 +387,29 @@ export function collectSessionReport(
       traces: [
         { name: "effect", style: "line", points: effect },
       ],
-    });
-  }
+    },
+  ];
+}
 
-  /* -- 4. NCA observed data ------------------------------------------- */
-  const rows = snapshot.ncaState.rows.filter((r) => r.t.trim() !== "" && r.c.trim() !== "");
-  if (rows.length > 0 && enabled.nca) {
-    sections.push({
+function ncaSections(snapshot: SessionSnapshot): ReportSection[] {
+  const rows = snapshot.ncaState.rows.filter(
+    (r) => r.t.trim() !== "" && r.c.trim() !== "",
+  );
+  if (rows.length === 0) return [];
+  return [
+    {
       kind: "table",
       title: "NCA observed data",
       columns: ["#", "time (h)", "concentration (mg/L)"],
       rows: rows.map((r, i) => [i + 1, r.t, r.c]),
-    });
-  }
+    },
+  ];
+}
 
-  /* -- 5. ML run history ---------------------------------------------- */
-  if (snapshot.mlHistory.length > 0 && enabled.history) {
-    sections.push({
+function historySections(snapshot: SessionSnapshot): ReportSection[] {
+  if (snapshot.mlHistory.length === 0) return [];
+  return [
+    {
       kind: "table",
       title: "ML run history",
       columns: ["when", "task", "model", "metric"],
@@ -398,14 +419,16 @@ export function collectSessionReport(
         run.model,
         `${run.keyMetric} ${fmtCell(run.keyValue)}`,
       ]),
-    });
-  }
+    },
+  ];
+}
 
-  /* -- 6. Molecule surgery (100x-131) ---------------------------------- */
+function surgerySections(snapshot: SessionSnapshot): ReportSection[] {
   const surgery = snapshot.surgery;
-  if (surgery && enabled.surgery) {
-    if (surgery.mode === "topology") {
-      sections.push({
+  if (!surgery) return [];
+  if (surgery.mode === "topology") {
+    return [
+      {
         kind: "metrics",
         title: "Ring topology moves",
         items: [
@@ -414,46 +437,95 @@ export function collectSessionReport(
           ["compute time", `${fmtCell(surgery.elapsedSeconds)} s`],
           ["RDKit", surgery.rdkitVersion],
         ],
-      });
-      sections.push({
+      },
+      {
         kind: "table",
         title: "Ring topology mutants",
         columns: ["#", "mutant SMILES"],
         rows: surgery.mutants.map((mutant, i) => [i + 1, mutant]),
-      });
-      sections.push({
+      },
+      {
         kind: "image",
         title: `Ring topology mutants — ${surgery.mutants.length} structure panel(s)`,
         dataUri: surgery.gridPng,
-      });
-    } else {
-      sections.push({
-        kind: "metrics",
-        title: "Scaffold-hop crossover",
-        items: [
-          ["parent A", surgery.parentA],
-          ["parent B", surgery.parentB],
-          ["viable children", `${surgery.viable}/${surgery.children}`],
-          ["seed", `${surgery.seed}`],
-          ["compute time", `${fmtCell(surgery.elapsedSeconds)} s`],
-          ["RDKit", surgery.rdkitVersion],
-        ],
-      });
-      sections.push({
-        kind: "table",
-        title: "Crossover litter",
-        columns: ["draw", "child SMILES"],
-        rows: surgery.litter.map((child, i) => [
-          i + 1,
-          child ?? "(no viable crossover)",
-        ]),
-      });
-      sections.push({
-        kind: "image",
-        title: `Parents & children — ${surgery.gridPanels} structure panel(s)`,
-        dataUri: surgery.gridPng,
-      });
-    }
+      },
+    ];
+  }
+  return [
+    {
+      kind: "metrics",
+      title: "Scaffold-hop crossover",
+      items: [
+        ["parent A", surgery.parentA],
+        ["parent B", surgery.parentB],
+        ["viable children", `${surgery.viable}/${surgery.children}`],
+        ["seed", `${surgery.seed}`],
+        ["compute time", `${fmtCell(surgery.elapsedSeconds)} s`],
+        ["RDKit", surgery.rdkitVersion],
+      ],
+    },
+    {
+      kind: "table",
+      title: "Crossover litter",
+      columns: ["draw", "child SMILES"],
+      rows: surgery.litter.map((child, i) => [
+        i + 1,
+        child ?? "(no viable crossover)",
+      ]),
+    },
+    {
+      kind: "image",
+      title: `Parents & children — ${surgery.gridPanels} structure panel(s)`,
+      dataUri: surgery.gridPng,
+    },
+  ];
+}
+
+/** Build the report payload from the session snapshot.  Pure: no DOM,
+ *  no store subscription — the UI component reads the store and hands
+ *  the pieces in, so the collector is trivially unit-testable.
+ *
+ *  Sections walk in the (100x-132) WALKING ORDER: the group builders
+ *  each contribute their own sections (a group with no content
+ *  contributes nothing), and the collector assembles them under
+ *  ``order`` — the report card's drag-and-drop chips.  The canonical
+ *  order (models → curve → regimen → data tables → surgery) is what
+ *  an absent/invalid ``order`` falls back to; `sanitizeSessionOrder`
+ *  documents the exact rules.
+ *
+ * (100x-131) `options` turns whole groups off — the report card's
+ *  per-section toggles: skip the PK figures when only the ML run
+ *  matters, ship only the surgery grid, whatever the session needs.
+ *  A group with no content is skipped regardless, so the census the
+ *  UI shows always matches what would ship.
+ */
+export function collectSessionReport(
+  snapshot: SessionSnapshot,
+  options: SessionReportOptions = {},
+  order?: SessionGroupId[],
+): SessionReportRequest {
+  const enabled = {
+    ml: options.ml !== false,
+    learningCurve: options.learningCurve !== false,
+    pkpd: options.pkpd !== false,
+    nca: options.nca !== false,
+    history: options.history !== false,
+    surgery: options.surgery !== false,
+  };
+  const builders: Record<
+    SessionGroupId,
+    (snapshot: SessionSnapshot) => ReportSection[]
+  > = {
+    ml: mlSections,
+    learningCurve: learningCurveSections,
+    pkpd: pkpdSections,
+    nca: ncaSections,
+    history: historySections,
+    surgery: surgerySections,
+  };
+  const sections: ReportSection[] = [];
+  for (const id of sanitizeSessionOrder(order)) {
+    if (enabled[id]) sections.push(...builders[id](snapshot));
   }
 
   return {
@@ -481,17 +553,21 @@ function bandFromCurve(
 /** The live census for the UI button ("what will ship"): figure and
  *  table counts over the same walk the collector performs — image
  *  sections count separately (the surgery grids) so the button line
- *  can say "2 figures · 1 structure grid" honestly. */
+ *  can say "2 figures · 1 structure grid" honestly.  (100x-132) the
+ *  walking order never changes the counts, but it rides the same
+ *  signature so the UI always pins the census to the report it would
+ *  actually ship. */
 export function sessionReportCensus(
   snapshot: SessionSnapshot,
   options: SessionReportOptions = {},
+  order?: SessionGroupId[],
 ): {
   figures: number;
   tables: number;
   metrics: number;
   images: number;
 } {
-  const { sections } = collectSessionReport(snapshot, options);
+  const { sections } = collectSessionReport(snapshot, options, order);
   let figures = 0;
   let tables = 0;
   let metrics = 0;

@@ -286,7 +286,16 @@ Design notes
   ``mlResult``), and the report walks its metrics + SMILES table +
   structure grid through a new ``image`` section kind on the report
   bridge (decoded, PNG-magic-checked, re-composed full-bleed through
-  the library's own ``add_figure`` contract).
+  the library's own ``add_figure`` contract).  (100x-132) Both report
+  menus consult a pre-save picklist before the file dialog -- the
+  desktop twin of the web report card's per-section control: every
+  page the session walk found (one figure page per live render, one
+  text page per filled table) is offered with a checkbox, all on by
+  default, a live census footer recounts on every flip, and the Save
+  button disables itself at zero pages.  The web twin's section chips
+  became reorderable in the same round: drag (or the per-chip arrows)
+  walks the groups into any order, persisted per browser, and the
+  collector honours it -- the report reads the way the reader wants.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -3541,6 +3550,140 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not save the figure", exc)
 
+    def _session_report_picklist(
+        self, live: list[list], tables: list[tuple[str, list[str], list[list[str]]]]
+    ) -> tuple[list[list], list[tuple[str, list[str], list[list[str]]]]] | None:
+        """The pre-save checklist both session-report menus consult.
+
+        (100x-132) The web twin's report card gained its per-section
+        control in 100x-131 (toggle chips, localStorage-persisted); the
+        desktop's groups differ -- it walks LIVE pages, one figure page
+        per card render plus one text page per filled table -- so the
+        desktop twin is a pre-save dialog: every page the walk found is
+        listed with a checkbox, all on by default, and the caller ships
+        only the kept pages.  Returns ``(kept_live, kept_tables)`` or
+        ``None`` when the user cancelled (no save started at all).
+
+        The dialog carries a LIVE census footer ("N of M pages will
+        ship") that recounts on every checkbox flip, and the Save
+        button disables itself at zero pages -- the honest empty, the
+        same contract as the web twin's "Nothing would ship" line.
+        """
+        if tk is None:  # pragma: no cover - headless import
+            return live, tables
+        win = tk.Toplevel(self)
+        win.title("Session report contents")
+        win.configure(background=BG)
+        win.transient(self)
+        try:
+            win.geometry(f"+{self.winfo_rootx() + 120}+{self.winfo_rooty() + 90}")
+        except tk.TclError:  # pragma: no cover - unmapped parent
+            pass
+        win.bind("<Escape>", lambda _e: win.destroy())
+
+        ttk.Label(
+            win,
+            text="Choose the pages the report ships — every page is on by default.",
+            style="CardMuted.TLabel",
+        ).pack(anchor="w", padx=16, pady=(14, 6))
+
+        body = ttk.Frame(win, style="Card.TFrame")
+        body.pack(fill="both", expand=True, padx=16)
+        figure_vars: list[list[Any]] = []  # [BooleanVar, entry] pairs
+        table_vars: list[list[Any]] = []
+
+        def add_group(parent: Any, heading: str, count: int) -> None:
+            row = ttk.Frame(parent, style="Card.TFrame")
+            row.pack(fill="x", pady=(0, 4))
+            ttk.Label(
+                row,
+                text=f"{heading} — {count} page{'s' if count != 1 else ''}",
+                style="Field.TLabel",
+            ).pack(side="left")
+
+        def add_items(
+            parent: Any,
+            entries: list[Any],
+            labels: list[str],
+            var_bucket: list[list[Any]],
+            prefix: str,
+        ) -> None:
+            for position, (label, entry) in enumerate(zip(labels, entries)):
+                var = tk.BooleanVar(value=True)
+                row = ttk.Frame(parent, style="Card.TFrame")
+                row.pack(fill="x", padx=(10, 0), pady=(0, 2))
+                check = ttk.Checkbutton(
+                    row,
+                    text=f"{prefix}{position + 1} · {_truncate_caption_text(label, 56)}",
+                    variable=var,
+                    command=refresh_census,
+                )
+                check.pack(anchor="w")
+                var_bucket.append([var, entry])
+
+        def refresh_census() -> None:
+            kept = sum(1 for var, _entry in figure_vars + table_vars if var.get())
+            total = len(figure_vars) + len(table_vars)
+            census_label.configure(
+                text=(
+                    f"{kept} of {total} page{'s' if total != 1 else ''} will ship"
+                    if kept
+                    else "Nothing would ship — tick at least one page."
+                )
+            )
+            if kept:
+                save_button.state(["!disabled"])
+            else:
+                save_button.state(["disabled"])
+
+        if live:
+            add_group(body, "Figures (one page each)", len(live))
+            add_items(
+                body,
+                entries=[entry for entry in live],
+                labels=[str(entry[1]) for entry in live],
+                var_bucket=figure_vars,
+                prefix="figure ",
+            )
+        if tables:
+            add_group(body, "Tables (one page each)", len(tables))
+            add_items(
+                body,
+                entries=[entry for entry in tables],
+                labels=[title for title, _headings, _rows in tables],
+                var_bucket=table_vars,
+                prefix="table ",
+            )
+
+        census_label = ttk.Label(win, style="CardMuted.TLabel")
+        census_label.pack(anchor="w", padx=16, pady=(10, 4))
+        buttons = ttk.Frame(win, style="Card.TFrame")
+        buttons.pack(fill="x", padx=16, pady=(0, 14))
+        outcome: dict[str, Any] = {"saved": False}
+
+        def confirm() -> None:
+            # zero pages never saves -- the button is disabled at zero,
+            # but a keyboard/programmatic activation gets the same guard
+            if not any(var.get() for var, _entry in figure_vars + table_vars):
+                return
+            outcome["saved"] = True
+            win.destroy()
+
+        save_button = ttk.Button(buttons, text="Save report…", command=confirm)
+        save_button.pack(side="right")
+        ttk.Button(buttons, text="Cancel", command=win.destroy).pack(
+            side="right", padx=(0, 8)
+        )
+        refresh_census()
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        win.grab_set()
+        win.wait_window()
+        if not outcome["saved"]:
+            return None
+        kept_live = [entry for var, entry in figure_vars if var.get()]
+        kept_tables = [entry for var, entry in table_vars if var.get()]
+        return kept_live, kept_tables
+
     def _menu_save_session_report(self) -> None:
         """File ▸ Save session report -- one PDF of the session on screen.
 
@@ -3568,6 +3711,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         first -- a PDF's ink is frozen at write time, so there is no
         reading-time toggle to defer to.  Flip the View ▸ theme radio
         before saving to pick the other variant.
+
+        (100x-132) Both report menus now consult the pre-save picklist
+        (:meth:`_session_report_picklist`) -- the desktop twin of the
+        web report card's per-section control: every page the walk
+        found is offered with a checkbox (all on by default) and only
+        the kept pages ship.  Cancel leaves the session untouched.
         """
         live = self._live_session_figures()
         tables = self._live_session_tables()
@@ -3589,6 +3738,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     "Install it, then restart the playground.",
                 )
             return
+        picked = self._session_report_picklist(live, tables)
+        if picked is None:
+            return  # the user cancelled the checklist -- no save at all
+        live, tables = picked
         path = filedialog.asksaveasfilename(
             title="Save session report",
             defaultextension=".pdf",
@@ -3692,6 +3845,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         time, remembered per browser (localStorage) -- the sender pins
         a starting palette, the reader overrides it for themselves,
         and neither touches the other's preference.
+
+        (100x-132) Same picklist as the PDF twin: the pre-save
+        checklist runs after the guards, and only the kept pages walk
+        into the HTML.  Cancel leaves the session untouched.
         """
         live = self._live_session_figures()
         tables = self._live_session_tables()
@@ -3706,6 +3863,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         if not self._require_pharmaml():
             return
+        picked = self._session_report_picklist(live, tables)
+        if picked is None:
+            return  # the user cancelled the checklist -- no save at all
+        live, tables = picked
         path = filedialog.asksaveasfilename(
             title="Save session report (HTML)",
             defaultextension=".html",

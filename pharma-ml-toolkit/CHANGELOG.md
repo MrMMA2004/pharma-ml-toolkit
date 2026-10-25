@@ -10,6 +10,96 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.71] — 2026-10-25
+
+### Added — the round-17 full review (100x-132): the report order — the desktop picklist + the web twin's reorderable chips
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a seventeenth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–131's documented floor — the axis holds; no new gaps).
+Round 131's handover had named the round's work: (a) the desktop
+session report's per-section control, (c) the web report's walking
+order — both twins shipped — and (b) the surgery-feeding question was
+settled by inspection (every surgery grid already renders through
+`_render_figure`, so the desktop report already walks them; nothing
+to build).
+
+**Both desktop report menus consult a pre-save picklist.** The web
+twin's report card gained its per-section control in 1.2.70; the
+desktop's groups differ — it walks LIVE pages (one figure page per
+card render plus one text page per filled table) — so the desktop
+twin is a "Session report contents" dialog between the guards and
+the file dialog: every page the walk found is offered with a
+checkbox, all on by default, grouped and numbered ("figure 1 · …",
+"table 1 · …"), and only the kept pages ship. A LIVE census footer
+("N of M pages will ship") recounts on every flip; at zero pages it
+says "Nothing would ship — tick at least one page." and the Save
+button disables itself — and the confirm command re-checks the
+census anyway (a keyboard/programmatic activation of the disabled
+button stays a no-op). Cancel aborts with no save started at all.
+Unchecking a page genuinely drops it from the written report — the
+round's tests pin the filtered HTML byte-level (the unchecked
+caption absent, the kept captions and tables present, the save
+message counting the truth).
+
+**The web report's section chips reorder.** Drag a chip (or ride its
+hover/focus arrows) and the report walks its groups in that order —
+the reader's narrative, not the code's. The collector was refactored
+into six pure per-group builders assembled under a sanitized walking
+order: unknown ids drop, duplicates collapse (first occurrence wins),
+and missing groups still ship (appended canonical-last — a stored
+order that predates a new group never silently drops it). The order
+persists per browser (`pharmaml.reportSectionOrder`, tolerant
+restore; equality with the canonical order removes the key entirely),
+a dashed "Reset walking order" chip appears only while the order
+drifted (the finders' Clear-chip convention), a GripVertical handle
+plus a primary drop-caret cue the drag, each chip carries labelled
+micro-arrows (the keyboard/touch path, with extended hit areas), and
+the census line confesses "in your chosen walking order". Reordering
+changes how the report reads, never what ships: the census is
+order-invariant (pinned byte-identical to 1.2.70's baseline), and a
+disabled group stays disabled wherever it sits.
+
+### Verified
+
+- `playground.py --self-test` green; the GUI axis re-proven **119/119**
+  (118 rar + 1 upload) before the round's edits; the library axis
+  holds at **246 public symbols / 43 zero-hit** (byte-identical
+  membership to rounds 127–131).
+- 11 new tests: `TestReview132Gui` (7 — every page offered and
+  numbered; cancel aborts with no save; the unchecked figure/table
+  never ships, the save message counts the truth; the census recounts
+  live, Save disables at zero and the guarded confirm stays a no-op;
+  both menus' wiring + the docstring pins) + `TestSessionReportOrder`
+  (4 — the collector's order semantics over the fixed fixture: the
+  sanitizer's unknown/duplicate/partial/empty contracts, whole-group
+  moves that never re-cut a group's internals, the order-invariant
+  census; the collector's exports; the card's drag/arrows/reset/
+  persistence/a11y wiring pins; the desktop picklist's source pins).
+  The six pre-132 report-menu test classes gained the
+  `picklist_accept_all` bypass (their original whole-session
+  semantics preserved).
+- The desktop smoke (`scratch/smoke132.py`): every page offered, the
+  filtered report written with the unchecked page genuinely absent,
+  the census/Save/guard contract walked live, both menus' wiring —
+  all green under Xvfb.
+- The screenshots (`scratch/shoot132.py`): the picklist all-on and
+  mid-filter states + a real filtered report artifact
+  (`download/pg132-filtered-report.html`); VLM review of both shots —
+  every QA point PASS.
+- The TS probe (`scratch/probe_session_report_132.ts`): the 131
+  census reproduced byte-identically under the refactored collector
+  (no regression), the reorder semantics pinned, the sanitizer's
+  corrupt-payload contracts pinned.
+- ruff clean; mypy unchanged (61 pre-existing baseline errors, zero
+  new); web `bun run lint` exit 0 and `tsc --noEmit` zero errors in
+  `src/`.
+- Suite: **2482 collected = 2477 passed + 5 skipped / 0 failures**
+  (foreground chunks; the notebooks re-executed with 1.2.71 via BOTH
+  drivers first — 64: TOTAL 190 s; 26: "26-R7 driver OK").
+
 ## [1.2.70] — 2026-10-25
 
 ### Added — the round-16 full review (100x-131): the web session report's per-section control + the surgery feed; both finders' clear-recent

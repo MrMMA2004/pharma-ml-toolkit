@@ -638,6 +638,130 @@ class TestSessionReportSections:
         assert "Forget every remembered jump" in finder
 
 
+class TestSessionReportOrder:
+    """Round 100x-132: the session report's WALKING ORDER (the web
+    twin's reorderable chips) + the desktop picklist's wiring pins.
+
+    The TS side (the SHIPPED collector over the fixed 131 fixture)
+    pins the reorder semantics: WHOLE groups move (a group's internal
+    order never re-cuts), unknown/duplicate ids drop, missing groups
+    still ship (appended canonical-last), and the census is
+    order-invariant — reordering changes how the report reads, never
+    what ships.  The static pins keep the round's surfaces (the
+    chips' drag + arrows + the persisted order + the reset chip + the
+    desktop picklist both menus consult) from silently disappearing
+    between rounds."""
+
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+    REPORT_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "session-report.tsx"
+    )
+    PLAYGROUND_PY = TOOLKIT_ROOT / "playground.py"
+
+    needs_round = pytest.mark.skipif(
+        not COLLECTOR_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src + <repo>/scratch) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+
+    @needs_round
+    def test_collector_walking_order_pins(self) -> None:
+        # the TS probe exits non-zero on drift and prints its censuses
+        _run([BUN, "run", "scratch/probe_session_report_132.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_132.json").read_text())
+        canonical = [
+            "ml", "learningCurve", "pkpd", "nca", "history", "surgery",
+        ]
+        assert ts["canonical"] == canonical
+        # unknown ids dropped; missing groups appended canonical-last
+        assert ts["sanitizedUnknown"] == [
+            "surgery", "ml", "learningCurve", "pkpd", "nca", "history",
+        ]
+        # duplicates collapse (first occurrence wins)
+        assert ts["sanitizedDupes"] == [
+            "ml", "pkpd", "learningCurve", "nca", "history", "surgery",
+        ]
+        # a partial order completes (surgery stays first, the missing
+        # groups appended canonical-last); empty/absent falls back
+        assert ts["sanitizedPartial"] == ["surgery"] + canonical[:5]
+        assert ts["sanitizedEmpty"] == canonical
+        assert ts["sanitizedUndefined"] == canonical
+        # the ordered walk moves WHOLE groups: surgery's three sections
+        # first, then ML, then the canonical remainder — the group's
+        # internal order never re-cuts
+        assert ts["orderedTitles"][:3] == [
+            "Ring topology moves",
+            "Ring topology mutants",
+            "Ring topology mutants — 3 structure panel(s)",
+        ]
+        assert ts["orderedTitles"][3:] == ts["defaultTitles"][:8]
+        assert sorted(ts["orderedTitles"]) == sorted(ts["defaultTitles"])
+        # the census is order-invariant — the 131 baseline byte-identical
+        assert ts["censusDefault"] == ts["censusReordered"] == {
+            "figures": 4, "tables": 3, "metrics": 3, "images": 1,
+        }
+        # order never resurrects a disabled group
+        assert ts["censusSurgeryFirstOnly"] == {
+            "figures": 2, "tables": 1, "metrics": 1, "images": 1,
+        }
+        # the availability map is unchanged (the 131 contract)
+        assert ts["available"]["surgery"] is True
+
+    @pytest.mark.skipif(
+        not COLLECTOR_TS.is_file(),
+        reason="web checkout (<repo>/src/lib/session-report.ts) required",
+    )
+    def test_collector_exports_the_order_contract(self) -> None:
+        collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
+        assert "export function sanitizeSessionOrder" in collector
+        assert "export const SESSION_GROUP_ORDER" in collector
+        assert "order?: SessionGroupId[]" in collector
+        # the sanitize contract is documented, not incidental
+        assert "unknown ids dropped" in collector
+
+    @pytest.mark.skipif(
+        not REPORT_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required",
+    )
+    def test_report_card_carries_the_reorder_affordances(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the persisted order (its own key, tolerant restore)
+        assert (
+            'const SECTION_ORDER_STORAGE_KEY = "pharmaml.reportSectionOrder";'
+            in report
+        )
+        assert "loadSectionOrder" in report
+        assert "saveSectionOrder" in report
+        # the drag path + the arrow path + the reset chip
+        assert "draggable" in report
+        assert "moveGroup" in report
+        assert "dropOn" in report
+        assert "Reset walking order" in report
+        assert "GripVertical" in report
+        assert "RotateCcw" in report
+        # the affordances are labelled (a11y)
+        assert "aria-roledescription" in report
+        assert "earlier in the report" in report
+        # the census line confesses the custom order
+        assert "in your chosen walking order" in report
+
+    @pytest.mark.skipif(
+        not PLAYGROUND_PY.is_file(),
+        reason="toolkit checkout (<toolkit>/playground.py) required",
+    )
+    def test_desktop_picklist_wiring_pins(self) -> None:
+        source = self.PLAYGROUND_PY.read_text(encoding="utf-8")
+        assert "def _session_report_picklist" in source
+        # BOTH report menus consult it (PDF + HTML)
+        assert source.count("_session_report_picklist(live, tables)") == 2
+        # the honest zero (the web twin's census line, verbatim kin)
+        assert "Nothing would ship — tick at least one page." in source
+        # the dialog's own title + the guarded confirm
+        assert '"Session report contents"' in source
+        assert "zero pages never saves" in source
+
+
 class TestCardFinderParity:
     """Round 100x-129: the web card finder's catalog cannot drift.
 

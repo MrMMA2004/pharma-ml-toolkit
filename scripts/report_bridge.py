@@ -337,6 +337,22 @@ def main() -> int:
     tables = 0
     composed: list[Any] = []
     try:
+        # (100x-132) the WALKING ORDER: every section is added INLINE,
+        # in payload order -- the web report card's reorderable chips
+        # promise "the report reads the way the reader wants", so the
+        # bridge may no longer defer the figures to a trailing gallery
+        # (the 131 layout put the text between the tables and the
+        # figures; the provenance text now opens the file instead).
+        report.add_text(
+            "Every chart and table the web playground session still holds: the "
+            "last ML training result (metrics + parity/decision figure), the "
+            "learning-curve run, the PK/PD regimen, the NCA rows, and — when a "
+            "molecule-surgery run is in the session — its structure grid and "
+            "SMILES list.  Figures are re-composed server-side with matplotlib "
+            "and embedded as base64, so this file needs no network and no "
+            "companion assets: move it, mail it, archive it.",
+            heading="What this file contains",
+        )
         for section in sections:
             if section["kind"] == "metrics":
                 report.add_metrics(dict(section["items"]), heading=section["title"])
@@ -352,25 +368,15 @@ def main() -> int:
                 # (100x-131) the surgery grids: full-bleed re-composition
                 # through the public add_figure contract (counts as a
                 # figure in the census — that is what the reader sees).
-                composed.append(_build_image_figure(plt, section))
+                figure = _build_image_figure(plt, section)
+                composed.append(figure)
+                report.add_figure(figure, caption=section["title"])
+                figures += 1
             else:
                 figure = _build_figure(plt, PALETTE, section)
                 composed.append(figure)
-        report.add_text(
-            "Every chart and table the web playground session still holds: the "
-            "last ML training result (metrics + parity/decision figure), the "
-            "learning-curve run, the PK/PD regimen, the NCA rows, and — when a "
-            "molecule-surgery run is in the session — its structure grid and "
-            "SMILES list.  Figures are re-composed server-side with matplotlib "
-            "and embedded as base64, so this file needs no network and no "
-            "companion assets: move it, mail it, archive it.",
-            heading="What this file contains",
-        )
-        for section, figure in zip(
-            [s for s in sections if s["kind"] in ("figure", "image")], composed
-        ):
-            report.add_figure(figure, caption=section["title"])
-            figures += 1
+                report.add_figure(figure, caption=section["title"])
+                figures += 1
         html = report.render()
     except Exception as exc:  # noqa: BLE001 - library errors are ours to report
         return _fail(f"could not compose the report: {exc}")
