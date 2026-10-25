@@ -63,6 +63,7 @@ import {
   orderConfessionText,
   PREVIEW_SCATTER_POINTS,
   PREVIEW_TABLE_ROWS,
+  spotlightKeyAction,
   traceInspectText,
   SESSION_GROUP_ORDER,
   sessionContentsCensus,
@@ -128,6 +129,15 @@ import { toast } from "sonner";
 /* saved walking order was applied" when the browser's persisted         */
 /* order was applied, and the canonical order confesses nothing, the     */
 /* desktop's "nothing remembered: stay quiet" rule).                     */
+/*                                                                      */
+/* (100x-140) Both affordances gained their missing limbs: the census   */
+/* grew a KEYBOARD path (digits 1/2/3 toggle the census line's legs —    */
+/* the same toggle a click makes, through the same pure map so the two  */
+/* paths can never disagree; 0 clears, Escape stays the pin-then-close  */
+/* layering's own), and the confession's way out moved INTO the dialog  */
+/* (a "Reset now" link beside the sentence — the canonical order        */
+/* without closing the preview, the strip and the download both take    */
+/* it immediately). */
 /* ------------------------------------------------------------------ */
 
 /** localStorage key for the per-group toggle set (100x-131). */
@@ -817,6 +827,46 @@ export function SessionReport() {
     jumpTimer.current = setTimeout(() => setJumpedTo(null), 1600);
   }
 
+  /** (100x-140) The census's KEYBOARD path — one keydown on the open
+   *  dialog mapped through the SAME pure verdict a click consumes
+   *  (spotlightKeyAction), so the two paths can never disagree:
+   *  digits 1/2/3 toggle the census line's legs ("1" figures, "2"
+   *  tables, "3" structure grids when they ride), 0 clears, every
+   *  other key passes untouched (Tab, Escape — already the
+   *  pin-then-close layering's own — and anything a modifier rides:
+   *  the browser keeps those).  A zero-count leg's digit is a
+   *  swallowed no-op — the plain-text rendering's own honesty, the
+   *  same rule the click path follows. */
+  function censusKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (
+      event.defaultPrevented ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    const node = event.target as HTMLElement | null;
+    if (
+      node !== null &&
+      (node.tagName === "INPUT" ||
+        node.tagName === "TEXTAREA" ||
+        node.tagName === "SELECT" ||
+        node.isContentEditable)
+    ) {
+      return;
+    }
+    const verdict = spotlightKeyAction(event.key, contentsLegs);
+    if (verdict.action === "pass") return;
+    event.preventDefault();
+    if (verdict.action === "clear") {
+      setSpotlight(null);
+      return;
+    }
+    if (verdict.action === "noop") return;
+    setSpotlight(spotlight === verdict.kind ? null : verdict.kind);
+  }
+
   async function download() {
     setBusy(true);
     try {
@@ -1106,6 +1156,7 @@ export function SessionReport() {
               event.preventDefault();
             }
           }}
+          onKeyDown={censusKeyDown}
         >
           <DialogHeader>
             <DialogTitle className="flex flex-wrap items-center gap-2 text-base">
@@ -1150,8 +1201,8 @@ export function SessionReport() {
                       (nothing to spotlight — an honest no-op avoided). */}
                   <p
                     className="text-[10px] tabular-nums text-muted-foreground"
-                    aria-label="The contents census — the kinds and counts the strip lists; click a kind to spotlight its lines"
-                    title={`${contentsCensusLine} — click a kind to spotlight its lines`}
+                    aria-label="The contents census — the kinds and counts the strip lists; click a kind to spotlight its lines; keys 1-3 spotlight the kinds, 0 clears"
+                    title={`${contentsCensusLine} — click a kind to spotlight its lines; keys 1-3 spotlight the kinds, 0 clears`}
                   >
                     {contentsLegs.map((leg, legIndex) => (
                       <span key={leg.kind}>
@@ -1160,13 +1211,14 @@ export function SessionReport() {
                           <button
                             type="button"
                             aria-pressed={spotlight === leg.kind}
+                            aria-keyshortcuts={String(legIndex + 1)}
                             onClick={() =>
                               setSpotlight(spotlight === leg.kind ? null : leg.kind)
                             }
                             title={
                               spotlight === leg.kind
-                                ? `Spotlight on — click to clear (every line back at full strength)`
-                                : `Spotlight the ${leg.count} ${leg.kind === "image" ? "structure grid" : leg.kind}${leg.count === 1 ? "" : "s"} — the other kinds dim, never hide`
+                                ? `Spotlight on — click to clear (every line back at full strength; key ${legIndex + 1} or 0 clears too)`
+                                : `Spotlight the ${leg.count} ${leg.kind === "image" ? "structure grid" : leg.kind}${leg.count === 1 ? "" : "s"} — the other kinds dim, never hide (key ${legIndex + 1} toggles it)`
                             }
                             className={`rounded px-0.5 -mx-0.5 tabular-nums underline-offset-2 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
                               spotlight === leg.kind
@@ -1223,8 +1275,25 @@ export function SessionReport() {
                   {/* (100x-139) the ORDER confession — the web twin of the
                       desktop picklist's memory label: the persisted order
                       applied says so and names the way out; the canonical
-                      order stays quiet (nothing was remembered). */}
+                      order stays quiet (nothing was remembered).
+                      (100x-140) the way out moved INTO the dialog — a
+                      "Reset now" link beside the sentence restores the
+                      canonical order without closing the preview (the
+                      strip, the section list and the download all take it
+                      immediately; the card&apos;s dashed chip behind the dialog
+                      stays the other way out, for when the dialog is
+                      closed). */}
                   {orderConfession ? ` ${orderConfession}` : ""}
+                  {orderConfession ? (
+                    <button
+                      type="button"
+                      onClick={resetOrder}
+                      title="Restore the canonical walking order right here — the strip, the preview and the download all take it immediately; the dialog stays open."
+                      className="ml-1 rounded font-medium text-primary underline decoration-dotted underline-offset-2 transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      Reset now
+                    </button>
+                  ) : null}
                 </p>
               </nav>
             ) : null}

@@ -1240,13 +1240,13 @@ class TestHTMLReportContents:
         # the lines in CALL order (the walking order the file writes
         # them), each the SAME string the page itself prints -- each
         # wrapped in the anchor that jumps to its page (100x-137)
-        assert "<li><a href='#pg-1'>table 1 · board</a></li>" in text
-        assert "<li><a href='#pg-2'>figure 1 · cm</a></li>" in text
-        assert "<li><a href='#pg-3'>figure 2 · cm</a></li>" in text
+        assert "<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · board</a></li>" in text
+        assert "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · cm</a></li>" in text
+        assert "<li><a href='#pg-3' title='Jump to this page in the report'>figure 2 · cm</a></li>" in text
         assert (
-            text.index("<li><a href='#pg-1'>table 1 · board</a></li>")
-            < text.index("<li><a href='#pg-2'>figure 1 · cm</a></li>")
-            < text.index("<li><a href='#pg-3'>figure 2 · cm</a></li>")
+            text.index("<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · board</a></li>")
+            < text.index("<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · cm</a></li>")
+            < text.index("<li><a href='#pg-3' title='Jump to this page in the report'>figure 2 · cm</a></li>")
         )
         # the page's own headings match their Contents lines (no drift)
         assert "<h2>table 1 · board</h2>" in text
@@ -1328,8 +1328,8 @@ class TestHTMLReportContents:
             .add_figure(plot_confusion_matrix(report))
             .render()
         )
-        assert "<li><a href='#pg-1'>table 1</a></li>" in text
-        assert "<li><a href='#pg-2'>figure 1</a></li>" in text
+        assert "<li><a href='#pg-1' title='Jump to this page in the report'>table 1</a></li>" in text
+        assert "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1</a></li>" in text
         # the figure's alt carries the same positional identity
         assert "alt='figure 1'" in text
         # heading-less pages still carry their anchor wrappers
@@ -1367,10 +1367,10 @@ class TestHTMLReportContents:
         assert written, "the bundle wrote nothing"
         text = (tmp_path / "bundle" / "report.html").read_text()
         assert "<nav class='contents'" in text
-        assert "<li><a href='#pg-1'>Leaderboard</a></li>" in text
-        assert "<li><a href='#pg-2'>Confusion</a></li>" in text
-        assert text.index("<li><a href='#pg-1'>Leaderboard</a></li>") < text.index(
-            "<li><a href='#pg-2'>Confusion</a></li>"
+        assert "<li><a href='#pg-1' title='Jump to this page in the report'>Leaderboard</a></li>" in text
+        assert "<li><a href='#pg-2' title='Jump to this page in the report'>Confusion</a></li>" in text
+        assert text.index("<li><a href='#pg-1' title='Jump to this page in the report'>Leaderboard</a></li>") < text.index(
+            "<li><a href='#pg-2' title='Jump to this page in the report'>Confusion</a></li>"
         )
         # (100x-137) the anchors resolve: the bundle's pages carry the
         # ids the Contents lines link to
@@ -2341,3 +2341,103 @@ class TestHTMLReportBackLinks:
         assert "<nav class='contents' id='contents' tabindex='-1'" in text
         assert text.count(self.BACK_LINK) == 2
         assert "id='pg-1'" in text and "id='pg-2'" in text
+
+
+class TestContentsForwardTooltips:
+    """Round 100x-140: the forward Contents lines gained the POINTER
+    confession — the same title-tooltip discipline the return link
+    gained in 100x-139, applied symmetrically to the other leg: every
+    line's anchor now tells a hovering pointer where the jump goes
+    ("Jump to this page in the report"), the same thing the aria world
+    always knew.  The tooltip is minted at the ONE place the lines are
+    minted (the render's join), so href and tooltip can never drift —
+    the lockstep discipline the ids and names have always had."""
+
+    #: The tooltip string every forward Contents line carries (100x-140).
+    FORWARD_TITLE = "title='Jump to this page in the report'"
+
+    def test_every_contents_line_carries_the_tooltip(self, trained_classifier):
+        _result, report, _X_test, _y_test = trained_classifier
+        text = (
+            HTMLReport("pointer confession")
+            .add_metrics(report, heading="Metrics")
+            .add_table(metrics_to_dataframe(report), heading="board")
+            .add_figure(plot_confusion_matrix(report), caption="cm")
+            .add_figure(plot_confusion_matrix(report))
+            .render()
+        )
+        # three pages -> three Contents lines, EVERY one carrying the
+        # tooltip (a line without it would be a line a hovering pointer
+        # learns nothing from — the round's whole point)
+        assert text.count(self.FORWARD_TITLE) == 3
+        # the tooltip rides the anchor itself, before the link text (the
+        # href and the tooltip are minted together — one string per line)
+        assert "<li><a href='#pg-1' " + self.FORWARD_TITLE + ">board</a></li>" in text
+        assert "<li><a href='#pg-2' " + self.FORWARD_TITLE + ">cm</a></li>" in text
+        # the captionless figure's fallback name rides too (the Contents
+        # line's own discipline, unchanged by the tooltip)
+        assert "<li><a href='#pg-3' " + self.FORWARD_TITLE + ">figure 2</a></li>" in text
+
+    def test_the_pointer_round_trip_is_symmetric(self, trained_classifier):
+        """Both legs of the anchor round trip confess to the pointer
+        world now: the forward link says where the jump goes, the
+        return link says where the climb back lands — one wording each,
+        minted once each, never drifting."""
+        _result, report, _X_test, _y_test = trained_classifier
+        text = (
+            HTMLReport("round trip, pointer edition")
+            .add_table(metrics_to_dataframe(report), heading="board")
+            .add_figure(plot_confusion_matrix(report), caption="cm")
+            .render()
+        )
+        assert text.count(self.FORWARD_TITLE) == 2
+        assert (
+            text.count("title='Back to the contents block at the top of the report'") == 2
+        )
+        # every forward tooltip is immediately followed by the link's
+        # own text (the minting order: href, title, text)
+        assert text.count(self.FORWARD_TITLE + ">") == 2
+
+    def test_no_forward_tooltips_without_the_contents_block(self):
+        """The noise rule's other half, mirrored: a prose-only report
+        renders no Contents lines, so no tooltips ride anything."""
+        text = HTMLReport("prose only").add_text("just prose").render()
+        assert self.FORWARD_TITLE not in text
+        assert "<nav class='contents'" not in text
+
+    def test_visual_bundle_gains_the_tooltips(self, tmp_path):
+        """``save_visual_bundle`` composes through HTMLReport — its
+        report.html gains the forward tooltips automatically (no caller
+        change, the standing convention)."""
+        from matplotlib.figure import Figure
+
+        figure = Figure()
+        figure.add_subplot(111).plot([0, 1], [0, 1])
+        board = pd.DataFrame({"model": ["rf"], "score": [0.9]})
+        written = save_visual_bundle(
+            {"confusion": figure},
+            tables={"leaderboard": board},
+            metrics={"a": 1},
+            out_dir=tmp_path / "bundle",
+            close=False,
+        )
+        assert written, "the bundle wrote nothing"
+        text = (tmp_path / "bundle" / "report.html").read_text()
+        assert text.count(self.FORWARD_TITLE) == 2
+        # the bundle's own Contents lines carry it in the same minting
+        # order the direct render does
+        assert "<li><a href='#pg-1' " + self.FORWARD_TITLE + ">" in text
+
+    def test_the_css_documents_the_symmetry(self):
+        """The static CSS comment carries the round's confession (the
+        contiguous phrase, grep-settled) — the tooltip is a documented
+        discipline, not an incidental string."""
+        source = (
+            Path(__file__).resolve().parent.parent
+            / "src"
+            / "pharmaml"
+            / "viz"
+            / "report.py"
+        ).read_text(encoding="utf-8")
+        assert "the return link gained in 100x-139, applied" in source
+        assert "symmetrically to the forward leg" in source

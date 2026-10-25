@@ -196,8 +196,8 @@ def main() -> int:
     html = report.render()
     assert "<nav class='contents' id='contents' tabindex='-1' aria-label='Contents'>" in html
     # the lines are ANCHORS that resolve to real page ids
-    assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in html
-    assert "<li><a href='#pg-2'>figure 1 · alpha plot</a></li>" in html
+    assert "<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>" in html
+    assert "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>" in html
     assert "<section class='page' id='pg-1' tabindex='-1'>" in html
     assert "<figure class='page' id='pg-2' tabindex='-1'>" in html
     # the link styling + the :target ring ride the theme variables

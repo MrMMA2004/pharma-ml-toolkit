@@ -787,6 +787,49 @@ export function orderConfessionText(orderDrifted: boolean): string | null {
   return "Your last saved walking order was applied — Reset walking order forgets it.";
 }
 
+/** (100x-140) What one KEY press does to the strip's spotlight — the
+ *  census's KEYBOARD path, as a pure verdict the dialog's keydown
+ *  consumes (the click path toggles the same state the same way; the
+ *  two paths can never disagree because they share this map). */
+export type SpotlightKeyAction =
+  /** Not a spotlight key — the keydown lets it go untouched (Tab,
+   *   Escape, letters, anything but the census digits). */
+  | { readonly action: "pass" }
+  /** "0" — the way out: clear whatever spotlight is on (the digit
+   *  Escape cannot serve — Escape is already the pin-then-close
+   *  layering's job). */
+  | { readonly action: "clear" }
+  /** A leg's digit, but that leg has nothing to spotlight (a
+   *  zero-count kind renders as plain text — the honest no-op the
+   *  plain rendering already makes; the key is swallowed so the
+   *  digit still FEELS owned, it just does nothing). */
+  | { readonly action: "noop" }
+  /** A leg's digit with lines to spotlight — toggle that kind (the
+   *  active kind's digit clears, exactly like clicking the leg). */
+  | {
+      readonly action: "toggle";
+      readonly kind: ReportContentsEntry["kind"];
+    };
+
+/** (100x-140) Map one key press onto the census's legs — the keyboard
+ *  twin of clicking a leg: "1"/"2"/"3" toggle the census line's
+ *  1st/2nd/3rd leg (figure / table / structure grid — the digits
+ *  count the line's legs, clickable or plain, so the mapping is
+ *  stable whatever the session lists), "0" clears, every other key
+ *  passes.  Pure: the probe pins every verdict, including the
+ *  zero-count leg's honest no-op and the out-of-range digit's pass. */
+export function spotlightKeyAction(
+  key: string,
+  legs: ContentsCensusLeg[],
+): SpotlightKeyAction {
+  if (key === "0") return { action: "clear" };
+  if (!/^[1-9]$/.test(key)) return { action: "pass" };
+  const leg = legs[Number(key) - 1];
+  if (leg === undefined) return { action: "pass" };
+  if (leg.count < 1) return { action: "noop" };
+  return { action: "toggle", kind: leg.kind };
+}
+
 /** (100x-134) The hover-INSPECT text a preview sketch's trace carries —
  *  the honest numbers behind the approximation: the trace's name, its
  *  point count, its x/y ranges (fmtCell-compacted), and the kind's own

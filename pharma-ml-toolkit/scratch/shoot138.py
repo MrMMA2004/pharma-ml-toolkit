@@ -279,9 +279,9 @@ try:
     assert TARGET_HTML.is_file(), "the return-leg report never landed"
     html = TARGET_HTML.read_text(encoding="utf-8")
     assert "<nav class='contents' id='contents' tabindex='-1' aria-label='Contents'>" in html
-    assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in html
-    assert "<li><a href='#pg-2'>figure 1 · beta plot</a></li>" in html
-    assert "<li><a href='#pg-3'>figure 2 · Ring topology moves — 6 mutant(s)</a></li>" in html
+    assert "<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>" in html
+    assert "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · beta plot</a></li>" in html
+    assert "<li><a href='#pg-3' title='Jump to this page in the report'>figure 2 · Ring topology moves — 6 mutant(s)</a></li>" in html
     # (100x-138) the RETURN leg: every page wrapper ends in the back link
     # (100x-139: the link carries its title tooltip -- three wrappers,
     # the same one-string discipline)

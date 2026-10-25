@@ -1133,3 +1133,31 @@ pins). Standing pins updated where the markup evolved: the return-link
 string (now title-carrying) across test_viz's TestHTMLReportBackLinks
 (one shared BACK_LINK class constant), smoke138, shoot138, and the
 report.py doctest.
+
+### Round 25 (100x-140) — the forward links' pointer confession + the census's keyboard path + the confession's in-dialog reset
+
+| What shipped | The contract |
+| --- | --- |
+| The forward links' POINTER confession | Every Contents line in the HTML twin carries `title='Jump to this page in the report'` — the same tooltip discipline the return link gained in 100x-139, applied symmetrically to the other leg: the aria world always knew where the jump goes (the line's own text names the page), a hovering pointer gets told now. The tooltip is minted at the ONE place the lines are minted (the render join), so href and tooltip can never drift (the lockstep discipline the ids and names have always had); the playground carries no inline markup twin (test-pinned on the markup form, not the English phrase — the docstring may quote the wording). No caller change: the desktop's save path, `save_visual_bundle`, and the web bridge's `/api/report/session` all gained it automatically; the PDF twin's ink stays frozen. |
+| The census's KEYBOARD path | The web preview's spotlight gained a keyboard twin: digits 1/2/3 toggle the census line's 1st/2nd/3rd leg (figure / table / structure grid — the digits count the line's legs, clickable or plain, so the mapping is stable whatever the session lists), 0 clears, every other key PASSES untouched (Tab, Escape — the pin-then-close layering's own — and anything a modifier rides). The map is PURE (`spotlightKeyAction` in src/lib/session-report.ts, probe-pinned: every verdict incl. the zero-count leg's swallowed no-op and the out-of-range digit's pass) and the dialog's keydown consumes the SAME verdict a click consumes — the two paths cannot disagree. Guards: modifiers and text fields keep their keys; the legs carry `aria-keyshortcuts` with their digit; the census paragraph's aria-label + title confess the keys. |
+| The confession's in-dialog RESET | The strip's order confession grew its way out INSIDE the dialog: a "Reset now" link beside the sentence restores the canonical walking order without closing the preview — the strip, the section list and the download all take it immediately, through the SAME single `resetOrder` source the card's dashed chip uses (the card's chip stays the other way out, for when the dialog is closed). The confession retires honestly on reset (the canonical order confesses nothing, as always); the desktop picklist's own in-dialog Reset button — always there — is the parity this round brought the web twin up to. |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.79 via
+both drivers — the re-execution's home-path leak in two notebook
+outputs scrubbed before the suite ran, the standing round-138 trap;
+the junit140.xml scrubbed after the final run, the standing order).
+The GUI-axis census holds at 68 live cards (the round touched no card
+topology). The web catalog walk: 26/26 entries (the round touched no
+catalog topology). 11 new tests: TestContentsForwardTooltips (5,
+test_viz.py: every line carries the tooltip, the round trip confesses
+in BOTH directions, the noise rule's mirrored half, the bundle's
+automatic gain, the CSS comment's contiguous discipline pins) +
+TestReview140Gui (3, desktop: the docstring pins, the one-place
+minting — markup-form pin, the end-to-end save path shipping the
+forward tooltip on every line) + TestPreviewKeyboardSpotlight (3, web
+parity: the TS probe's every verdict, the collector export surface,
+the component's keydown + keyshortcuts + in-dialog reset pins).
+Standing pins updated where the markup evolved: the Contents-line
+form (now title-carrying) across test_viz (12), test_playground (7),
+smoke136/137/139, shoot137/138/139, and the report.py doctest.

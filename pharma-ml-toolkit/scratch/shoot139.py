@@ -211,9 +211,9 @@ try:
         html.count("title='Back to the contents block at the top of the report'") == 3
     )
     assert "<nav class='contents' id='contents' tabindex='-1'" in html
-    assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in html
-    assert "<li><a href='#pg-2'>figure 1 · beta plot</a></li>" in html
-    assert "<li><a href='#pg-3'>figure 2 · Ring topology moves — 6 mutant(s)</a></li>" in html
+    assert "<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>" in html
+    assert "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · beta plot</a></li>" in html
+    assert "<li><a href='#pg-3' title='Jump to this page in the report'>figure 2 · Ring topology moves — 6 mutant(s)</a></li>" in html
     print("artifact pg139-tooltip-report.html written (the pointer confession)")
 finally:
     import contextlib

@@ -138,8 +138,8 @@ def main() -> int:
     )
     # the round only GREW the tooltip -- the navigation holds as before
     assert "<nav class='contents' id='contents' tabindex='-1'" in html
-    assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in html
-    assert "<li><a href='#pg-2'>figure 1 · alpha plot</a></li>" in html
+    assert "<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>" in html
+    assert "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>" in html
     # the saved-file confession reached the reader (the completion dialog)
     saved = [call for call in seen if call[0] == "showinfo" and call[1][0] == "Session report saved"]
     assert saved, [call[1][0] for call in seen]

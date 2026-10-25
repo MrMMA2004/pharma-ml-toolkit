@@ -10,6 +10,90 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.79] — 2026-10-26
+
+### Added — the round-25 full review (100x-140): the forward links' POINTER confession + the census's KEYBOARD path + the confession's in-dialog RESET
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a twenty-fifth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–138's documented floor — the axis holds; no new gaps;
+playground.py itself parses clean at 17,6xx lines with its full
+structure intact). Round 139's handover named the round's work: (a)
+the spotlight could grow a KEYBOARD path (the legs are buttons so
+Tab+Enter already works — but a digit quick-switch could ride the
+dialog's keydown), (b) the strip's confession could name the RESET as
+an action inside the DIALOG too (today the way out is the card's chip
+behind the dialog), and (c) the HTML twin's Contents lines could grow
+the same title tooltip the return link gained (the forward links
+confess nothing to the pointer world either — the round's own lesson,
+applied symmetrically). All three shipped.
+
+**The forward links' POINTER confession.** Every Contents line in
+`HTMLReport`'s output now carries
+`title='Jump to this page in the report'` — the same tooltip
+discipline the return link gained in 1.2.78, applied symmetrically to
+the other leg: the aria world always knew where the jump goes (the
+line's own text names the page), a hovering pointer gets told now.
+The tooltip is minted at the ONE place the lines are minted (the
+render join), so href and tooltip can never drift — the lockstep
+discipline the ids and names have always had. No caller change: the
+desktop's HTML twin, `save_visual_bundle`, and the web bridge's
+`/api/report/session` all gained it automatically; the PDF twin's ink
+stays frozen, its lines stay plain text.
+
+**The census's KEYBOARD path.** The web preview's spotlight gained a
+keyboard twin: digits **1/2/3** toggle the census line's
+1st/2nd/3rd leg (figure / table / structure grid — the digits count
+the line's legs, clickable or plain, so the mapping is stable whatever
+the session lists), **0** clears, every other key passes untouched
+(Tab, Escape — already the pin-then-close layering's own — and
+anything a modifier rides: the browser keeps those). The map is PURE
+(`spotlightKeyAction` in `src/lib/session-report.ts`, probe-pinned)
+and the dialog's keydown consumes the SAME verdict a click consumes —
+the two paths cannot disagree. A zero-count leg's digit is a
+swallowed no-op (the plain-text rendering's own honesty — nothing to
+spotlight); the legs carry `aria-keyshortcuts` with their digit, and
+the census paragraph's aria-label and title grew the keyboard
+confession ("keys 1-3 spotlight the kinds, 0 clears").
+
+**The confession's in-dialog RESET.** The strip's order confession
+grew its way out INSIDE the dialog — a "Reset now" link beside the
+sentence restores the canonical walking order without closing the
+preview (the strip, the section list and the download all take it
+immediately, through the SAME single `resetOrder` source the card's
+dashed chip uses; the card's chip stays the other way out, for when
+the dialog is closed). The confession retires honestly on reset —
+the canonical order confesses nothing, as always.
+
+### Verified
+
+Bare `python -m pytest`: **2605 collected = 2600 passed + 5 skipped /
+0 failures** (junit140.xml, scrubbed after the final run; the dev
+server stopped for the run; both notebook drivers re-executed with
+1.2.79 — 207 s / "26-R7 driver OK"; the re-execution's home-path leak
+in two notebook outputs caught and scrubbed before the suite ran).
+ruff clean after the standing EXE002 chmod sweep (113 files — the
+git-index flip fired again); mypy fully clean (zero errors across all
+65 source files); web `bunx tsc --noEmit` clean in src/ + `bun run
+lint` clean. GUI round-trip on Xvfb :99: SMOKE140_OK + SHOOT140_OK
+(pg140-picklist-anchor.png / pg140-forward-tooltip-report.html), VLM
+review PASS on every shot (the picklist's numbered rows + confession
++ in-dialog Reset button verified legible, the web keyboard/reset
+shots verified, mobile 390px no cut-off). PROBE140_OK (the keyboard
+map's every verdict pinned). agent-browser E2E green — the KEYBOARD
+golden path (pressing "1" spotlights figures while the table line
+dims to 0.4; pressing "0" clears; non-digit keys pass; the spotlight
+still resets across a dialog close), the RESET golden path (persisting
+a custom order, then "Reset now" inside the dialog retires the
+confession and flips the badge to "default order" without closing),
+the API probe (POST `/api/report/session` 200 — the downloaded HTML
+carries the forward tooltip on EVERY Contents line plus the return
+tooltip on every wrapper), mobile 390×844 (scrollWidth ==
+clientWidth == 390, dialog 358, legs + Reset now visible), the sticky
+footer both ways, zero console/page errors.
+
 ## [1.2.78] — 2026-10-26
 
 ### Added — the round-24 full review (100x-139): the return link's POINTER confession + the census's CLICKABLE legs + the strip's ORDER confession

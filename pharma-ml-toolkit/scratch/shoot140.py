@@ -1,0 +1,252 @@
+"""Screenshots + artifacts for the 100x-140 round: the forward Contents
+lines' POINTER confession (the web spotlight-keyboard + Reset-now
+features shoot in the browser, not here -- the parity suite pins
+their logic; this shoot drives the desktop half).
+(1) App #1 seeds three pages, moves a row, Saves -- the memory is
+planted -- and the picklist re-opens with the confession whose way
+out the web strip's new "Reset now" link mirrors in-dialog (the
+desktop's Reset button has always lived IN the picklist -- the round
+brought the web twin up to parity) (pg140-picklist-anchor.png).
+(2) The HTML report saved from that order carries the round's forward
+confession: EVERY Contents line tells a hovering pointer where the
+jump goes, minted once, while every wrapper still ends in the return
+link's climb-back tooltip (pg140-forward-tooltip-report.html rides
+along; both directions asserted before the shoot ends).
+
+Run: DISPLAY=:99 python scratch/shoot140.py
+"""
+import os
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+import gc
+
+sys.path.insert(0, ".")
+import playground  # noqa: E402
+
+# an isolated HOME so the shoot never touches a real session file
+_HOME = tempfile.mkdtemp(prefix="shoot140-home-")
+os.environ["HOME"] = _HOME
+
+# keep any modal quiet in headless runs
+playground.messagebox.showinfo = lambda *a, **k: None
+playground.messagebox.showerror = lambda *a, **k: None
+playground.messagebox.showwarning = lambda *a, **k: None
+
+OUT = Path(__file__).resolve().parents[1] / "download"
+TARGET_HTML = OUT / "pg140-forward-tooltip-report.html"
+
+BACK_LINK = (
+    "<a class='back-contents' href='#contents' "
+    "title='Back to the contents block at the top of the report'>"
+    "\u2191 Contents</a>"
+)
+FORWARD_TITLE = "title='Jump to this page in the report'"
+
+
+def pump(app, timeout: float = 300.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        app.update()
+        if not app._busy:
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def run_for(app, seconds: float) -> None:
+    """Pump the MAIN loop for a window so scheduled stages can fire."""
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        app.update()
+        time.sleep(0.01)
+
+
+def shot(app, name: str) -> None:
+    from PIL import ImageGrab  # type: ignore
+
+    for _ in range(12):
+        app.update()
+        time.sleep(0.01)
+    img = ImageGrab.grab(xdisplay=":99")
+    img.save(f"{OUT}/{name}.png")
+    print("shot", name)
+
+
+def widgets_of(app, dialog, cls):
+    return [w for w in app._walk_widgets(dialog) if w.winfo_class() == cls]
+
+
+def find_picklist(app):
+    return next(
+        child
+        for child in app.winfo_children()
+        if child.winfo_class() == "Toplevel"
+        and str(child.title()) == "Session report contents"
+    )
+
+
+def confession_text(app, dialog):
+    return next(
+        str(widget.cget("text"))
+        for widget in app._walk_widgets(dialog)
+        if widget.winfo_class() == "TLabel" and "was applied" in str(widget.cget("text"))
+    )
+
+
+def seed(app):
+    """The same three pages the standing shoots plant."""
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    def figure_static(title):
+        fig = plt.figure()
+        axes = fig.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title(title)
+        return fig
+
+    app._render_figure(
+        app._topo_host,
+        figure_static("the grid"),
+        caption="Ring topology moves — 6 mutant(s)",
+    )
+    app._render_figure(
+        app._breed_host, figure_static("beta plot"), caption="beta plot"
+    )
+    app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+    pump(app, timeout=30.0)
+
+
+# -- App #1: seed, move a row, Save (the memory is planted) ------------- #
+app = playground.PlaygroundApp(persist_session=True)
+app.geometry("1280x860+10+10")
+try:
+    pump(app)
+    seed(app)
+    assert app._report_page_order == {}
+
+    def stage_one():
+        dialog = find_picklist(app)
+        downs = [
+            w
+            for w in widgets_of(app, dialog, "TButton")
+            if str(w.cget("text")) == "▼"
+        ]
+        downs[1].invoke()  # the mutants below beta (the remembered move)
+        app.update()
+
+        def stage_two():
+            save = next(
+                w
+                for w in widgets_of(app, dialog, "TButton")
+                if str(w.cget("text")).startswith("Save report")
+            )
+            save.invoke()
+
+        app.after(600, stage_two)
+
+    app.after(500, stage_one)
+    app._session_report_picklist(
+        app._live_session_figures(), app._live_session_tables()
+    )
+    assert app._report_page_order == {
+        "table": ["SMILES inspector"],
+        "figure": ["beta plot", "Ring topology moves — 6 mutant(s)"],
+    }, app._report_page_order
+    print("the memory is planted (a completed Save with a moved row)")
+
+    # the picklist re-opens with the confession whose way-out the web
+    # strip's new "Reset now" link mirrors IN the dialog -- the desktop
+    # picklist has always carried its reset button beside the memory;
+    # the round brought the web twin up to that parity
+    def stage_three():
+        dialog = find_picklist(app)
+        confession = confession_text(app, dialog)
+        assert confession == (
+            "Your last saved order was applied — Reset to walking order forgets it."
+        ), confession
+        # the picklist's own Reset button -- the desktop's in-dialog way
+        # out, the thing the web strip gained this round
+        resets = [
+            w
+            for w in widgets_of(app, dialog, "TButton")
+            if "Reset" in str(w.cget("text"))
+        ]
+        assert resets, "the picklist lost its Reset button"
+        shot(app, "pg140-picklist-anchor")
+
+        def stage_four():
+            save = next(
+                w
+                for w in widgets_of(app, dialog, "TButton")
+                if str(w.cget("text")).startswith("Save report")
+            )
+            save.invoke()
+
+        app.after(700, stage_four)
+
+    app.after(500, stage_three)
+    app._session_report_picklist(
+        app._live_session_figures(), app._live_session_tables()
+    )
+    print("shot pg140-picklist-anchor.png (the in-dialog way out, desktop parity)")
+
+    # the HTML report saved from the remembered order carries the
+    # FORWARD confession: every Contents line tells the pointer world
+    # where the jump goes, while every wrapper still ends in the
+    # return link's climb-back tooltip -- both directions, one minting
+    playground.filedialog.asksaveasfilename = lambda **_k: str(TARGET_HTML)
+
+    def stage_five():
+        dialog = find_picklist(app)
+
+        def stage_six():
+            save = next(
+                w
+                for w in widgets_of(app, dialog, "TButton")
+                if str(w.cget("text")).startswith("Save report")
+            )
+            save.invoke()
+
+        app.after(700, stage_six())
+
+    app.after(500, stage_five)
+    app._menu_save_session_report_html()
+    assert pump(app), "the HTML report job hung"
+    assert TARGET_HTML.is_file(), "the forward-tooltip report never landed"
+    html = TARGET_HTML.read_text(encoding="utf-8")
+    # three pages -> exactly three forward-tooltipped Contents lines
+    assert html.count(FORWARD_TITLE) == 3, html.count(FORWARD_TITLE)
+    assert (
+        "<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>" in html
+    )
+    assert (
+        "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · beta plot</a></li>" in html
+    )
+    assert (
+        "<li><a href='#pg-3' title='Jump to this page in the report'>figure 2 · Ring topology moves — 6 mutant(s)</a></li>" in html
+    )
+    # ...and the return leg still confesses on every wrapper (BOTH ways)
+    assert html.count(BACK_LINK) == 3, html.count(BACK_LINK)
+    assert (
+        html.count("title='Back to the contents block at the top of the report'") == 3
+    )
+    assert "<nav class='contents' id='contents' tabindex='-1'" in html
+    print("artifact pg140-forward-tooltip-report.html written (both directions)")
+finally:
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        if app.winfo_exists():
+            app.destroy()
+gc.collect()
+
+import matplotlib.pyplot as plt  # noqa: E402
+
+plt.close("all")
+print("SHOOT140_OK")

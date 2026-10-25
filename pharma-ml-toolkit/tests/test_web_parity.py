@@ -1683,3 +1683,76 @@ class TestPreviewContentsSpotlight:
         assert "{orderConfession ? ` ${orderConfession}` : \"\"}" in report
         # the census paragraph's aria confesses the click affordance
         assert "click a kind to spotlight its lines" in report
+
+
+class TestPreviewKeyboardSpotlight:
+    """Round 100x-140: the census's KEYBOARD path — digits 1/2/3 toggle
+    the census line's legs through the SAME pure verdict a click
+    consumes (spotlightKeyAction — the two paths cannot disagree), 0
+    clears, every other key passes untouched, and the confession's way
+    out moved INTO the dialog (a "Reset now" link beside the sentence
+    that restores the canonical order without closing the preview).
+    The TS probe pins the pure map; the static pins keep the keydown,
+    the keyshortcuts and the in-dialog reset from silently
+    disappearing between rounds."""
+
+    REPORT_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "session-report.tsx"
+    )
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+
+    needs_round = pytest.mark.skipif(
+        not REPORT_TSX.is_file() or not COLLECTOR_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src + <repo>/scratch) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+
+    @needs_round
+    def test_the_keyboard_map_pins(self) -> None:
+        # the TS probe exits non-zero on drift and prints its verdicts
+        _run([BUN, "run", "scratch/probe_session_report_140.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_140.json").read_text())
+        # the digits toggle the census line's legs, in line order
+        assert ts["digit1"] == {"action": "toggle", "kind": "figure"}, ts
+        assert ts["digit2"] == {"action": "toggle", "kind": "table"}, ts
+        assert ts["digit3"] == {"action": "toggle", "kind": "image"}, ts
+        # "0" is the clear (the way out Escape cannot serve)
+        assert ts["digit0"] == {"action": "clear"}, ts
+        # a zero-count leg's digit is a swallowed no-op (the plain-text
+        # rendering's own honesty — nothing to spotlight)
+        assert ts["zeroCountLegDigit"] == {"action": "noop"}, ts
+        # the real leg next to it still toggles
+        assert ts["zeroCountFigureDigit"] == {"action": "toggle", "kind": "figure"}, ts
+        # digits beyond the legs the line lists pass (not ours to own)
+        assert ts["outOfRangeDigit"] == {"action": "pass"}, ts
+        assert ts["farOutOfRangeDigit"] == {"action": "pass"}, ts
+        # non-digits always pass — the keydown owns only the census digits
+        assert ts["allNonDigitsPassed"] is True, ts
+
+    def test_the_collector_exports_the_keyboard_contract(self) -> None:
+        collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
+        assert "export function spotlightKeyAction(" in collector
+        assert "export type SpotlightKeyAction" in collector
+        # the disciplines are documented, not incidental
+        assert "two paths can never disagree because they share this map" in collector
+        assert "the digits" in collector and "count the line's legs" in collector
+
+    def test_the_component_carries_the_keydown_and_the_reset(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the keydown rides the open dialog, through the pure map
+        assert "onKeyDown={censusKeyDown}" in report
+        assert "spotlightKeyAction(event.key, contentsLegs)" in report
+        # the guards: modifiers and text fields keep their keys
+        assert "event.ctrlKey" in report and "event.metaKey" in report
+        assert 'node.tagName === "TEXTAREA"' in report
+        # the legs confess their shortcut (the digit that toggles them)
+        assert "aria-keyshortcuts={String(legIndex + 1)}" in report
+        # the census paragraph's aria + title grew the keyboard confession
+        assert "keys 1-3 spotlight the kinds, 0 clears" in report
+        # the way out moved INTO the dialog: the reset link beside the
+        # confession, reusing the card's own single resetOrder source
+        assert "Reset now" in report
+        assert "onClick={resetOrder}" in report
+        # the reset stays honest about its scope (the dialog stays open)
+        assert "the dialog stays open" in report

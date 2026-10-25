@@ -9425,12 +9425,12 @@ class TestReview136Gui:
         # each line riding its anchor link (100x-137)
         assert "<nav class='contents'" in text
         assert "aria-label='Contents'" in text
-        assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in text
-        assert "<li><a href='#pg-2'>figure 1 · alpha plot</a></li>" in text
-        assert "<li><a href='#pg-3'>figure 2 · beta plot</a></li>" in text
+        assert "<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>" in text
+        assert "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>" in text
+        assert "<li><a href='#pg-3' title='Jump to this page in the report'>figure 2 · beta plot</a></li>" in text
         assert (
-            text.index("<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>")
-            < text.index("<li><a href='#pg-2'>figure 1 · alpha plot</a></li>")
+            text.index("<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>")
+            < text.index("<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>")
         )
         # the pages carry the anchor targets the lines link to
         assert "<section class='page' id='pg-1' tabindex='-1'>" in text
@@ -10303,6 +10303,148 @@ class TestReview139Gui:
         # the anchors themselves are unchanged (the round only grew the
         # tooltip -- the round-trip navigation still holds)
         assert "<nav class='contents' id='contents' tabindex='-1'" in html
-        assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in html
-        assert "<li><a href='#pg-2'>figure 1 · alpha plot</a></li>" in html
+        assert "<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>" in html
+        assert "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>" in html
+        plt.close("all")
+
+
+class TestReview140Gui:
+    """Round 100x-140: the forward Contents lines gained the POINTER
+    confession (every line's anchor whispers "Jump to this page in the
+    report" to a hovering pointer -- the same tooltip discipline the
+    return link gained in 100x-139, applied symmetrically), the web
+    census's spotlight gained a KEYBOARD path (digits 1/2/3 toggle the
+    legs through the same pure map a click consumes; 0 clears), and the
+    web strip's confession gained its way out INSIDE the dialog (a
+    "Reset now" link).  The desktop side pins: the module docstring
+    records the round, the forward tooltip is minted ONCE in the
+    library's render (never inlined here), and the app's own save path
+    ships it on every Contents line."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, rounds: int = 4) -> None:
+        for _ in range(rounds):
+            app.update_idletasks()
+            app.update()
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_140(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-140" in doc
+        assert "the same POINTER" in doc
+        assert "Jump to this page in the report" in doc
+        assert "KEYBOARD" in doc
+        assert "digits 1/2/3 toggle the census line's legs through the SAME" in doc
+        assert '"Reset now" link beside' in doc
+
+    # -- the one-place minting discipline ----------------------------------- #
+
+    def test_the_forward_tooltip_is_minted_once_in_the_library(self) -> None:
+        """The tooltip rides the ONE place the Contents lines are
+        minted -- the library's render join.  The playground composes
+        through HTMLReport and carries no inline copy of its own (the
+        one-string discipline the return link taught, applied to the
+        whole line)."""
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "title='Jump to this page in the report'" not in source, (
+            "the playground inlined the forward tooltip markup -- the "
+            "minting must stay in the library's render"
+        )
+        library = (
+            TOOLKIT_ROOT / "src" / "pharmaml" / "viz" / "report.py"
+        ).read_text(encoding="utf-8")
+        # minted exactly once (the render join), never pasted twice
+        assert library.count("Jump to this page in the report") == 2, (
+            library.count("Jump to this page in the report")
+        )
+
+    # -- the app's own save path ships the forward tooltip ------------------- #
+
+    def test_the_desktop_html_twin_carries_the_forward_tooltip(
+        self,
+        app: Any,
+        playground: Any,
+        monkeypatch: Any,
+        dialogs: list[Any],
+        picklist_accept_all: None,
+        tmp_path: Path,
+    ) -> None:
+        """End to end through the app's own File ▸ Save session report:
+        a planted figure + a filled table ship as an HTML file whose
+        EVERY Contents line carries the pointer confession (the jump
+        target told to a hovering pointer, symmetric with the return
+        link's climb-back target)."""
+        import time as _time
+
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        figure = plt.figure()
+        axes = figure.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title("alpha plot")
+        app._render_figure(app._topo_host, figure, caption="alpha plot")
+        app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+        self._drain(app)
+
+        target = tmp_path / "session-report.html"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        app._menu_save_session_report_html()
+
+        # the worker thread writes the file -- pump until it lands
+        deadline = _time.monotonic() + 30.0
+        while not target.is_file() and _time.monotonic() < deadline:
+            app.update()
+            _time.sleep(0.01)
+        assert target.is_file(), "the save job never wrote the file"
+
+        html = target.read_text(encoding="utf-8")
+        # one figure + one table -> exactly two Contents lines, EACH
+        # carrying the forward tooltip (a line without it would be a
+        # line a hovering pointer learns nothing from)
+        tooltip = "title='Jump to this page in the report'"
+        assert html.count(tooltip) == 2, html.count(tooltip)
+        # the minted line form: href + title + the page's own name
+        assert (
+            "<li><a href='#pg-1' title='Jump to this page in the report'>"
+            "table 1 · SMILES inspector</a></li>" in html
+        )
+        assert (
+            "<li><a href='#pg-2' title='Jump to this page in the report'>"
+            "figure 1 · alpha plot</a></li>" in html
+        )
+        # the return leg's tooltip still rides every wrapper too (the
+        # round trip confesses in BOTH directions now)
+        assert (
+            html.count("title='Back to the contents block at the top of the report'")
+            == 2
+        )
+        # fragment links only -- the self-contained contract holds
+        assert "href='http" not in html
         plt.close("all")

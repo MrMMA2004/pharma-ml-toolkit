@@ -385,6 +385,20 @@ Design notes
   label: "Your last saved walking order was applied" when the
   browser's persisted order is in force, the canonical order stays
   quiet (nothing was remembered).
+  (100x-140) The forward Contents lines gained the same POINTER
+  confession the return link carries (every line's anchor now
+  whispers "Jump to this page in the report" to a hovering pointer
+  -- minted at the one place the lines are minted, so href and
+  tooltip can never drift), the census's spotlight grew a KEYBOARD
+  path (digits 1/2/3 toggle the census line's legs through the SAME
+  pure verdict a click consumes -- the two paths cannot disagree; 0
+  clears, a zero-count leg's digit is a swallowed no-op, Escape
+  keeps its pin-then-close day job), and the strip's confession
+  grew its way out INSIDE the dialog -- a "Reset now" link beside
+  the sentence that restores the canonical walking order without
+  closing the preview (the strip, the section list and the download
+  all take it immediately; the card's dashed chip behind the dialog
+  stays the other way out).
 
 Command line helpers (useful for scripting and CI)::
 

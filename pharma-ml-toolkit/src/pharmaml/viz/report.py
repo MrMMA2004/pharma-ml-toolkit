@@ -74,7 +74,7 @@ b'%PDF-'
 >>> html = report.render()
 >>> "<h1>QSAR run</h1>" in html and "<td>rf</td>" in html
 True
->>> "<nav class='contents'" in html and "<li><a href='#pg-1'>Model leaderboard</a></li>" in html
+>>> "<nav class='contents'" in html and "<li><a href='#pg-1' title='Jump to this page in the report'>Model leaderboard</a></li>" in html
 True
 >>> "<a class='back-contents' href='#contents' title='Back to the contents block at the top of the report'>\u2191 Contents</a>" in html
 True
@@ -179,7 +179,11 @@ ul.contents-list li::marker { color: var(--accent); }
    click jumps to the page; the PDF twin's ink is frozen, its lines
    stay plain text.  The link inherits the list's ink until the
    reader points at it (hover/focus), and the jumped-to page flashes
-   a short accent ring (:target) so the arrival is never lost. */
+   a short accent ring (:target) so the arrival is never lost.
+   (100x-140) every line also carries a title tooltip -- the POINTER
+   confession the return link gained in 100x-139, applied
+   symmetrically to the forward leg: a hovering pointer gets told
+   where the jump goes, the same thing the aria world always knew. */
 ul.contents-list a { color: inherit; text-decoration: none; }
 ul.contents-list a:hover, ul.contents-list a:focus-visible {
   color: var(--accent); text-decoration: underline; }
@@ -921,11 +925,18 @@ class HTMLReport:
         # no table/figure pages at all (the noise rule).
         # (100x-137) every line is a LINK to its page's anchor — the
         # ids were minted at add time in lockstep with the names, so
-        # href and target can never disagree.
+        # href and target can never disagree.  (100x-140) every line
+        # carries the POINTER confession too — the same title tooltip
+        # discipline the return link gained in 100x-139, applied
+        # symmetrically to the forward leg (the aria world always
+        # knew the destination; a hovering pointer gets told now) —
+        # minted at this ONE place, so every line ships it in
+        # lockstep with the href it explains.
         contents = ""
         if self._page_names:
             lines = "".join(
-                f"<li><a href='#{page_id}'>{_escape(name)}</a></li>"
+                f"<li><a href='#{page_id}' title='Jump to this page in the report'>"
+                f"{_escape(name)}</a></li>"
                 for page_id, name in zip(self._page_ids, self._page_names)
             )
             # (100x-138) the nav is the RETURN target now — its own id
