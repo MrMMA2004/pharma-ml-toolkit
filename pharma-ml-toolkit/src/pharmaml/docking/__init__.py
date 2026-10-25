@@ -56,11 +56,13 @@ from pharmaml.docking.scoring import (
 )
 from pharmaml.docking.smiles_docking import dock_smiles_array
 from pharmaml.docking.workflow import (
+    VinaBatchProgress,
     batch_run_directories,
     parse_vina_config,
     run_autodock4,
     run_vina,
     run_vina_batch,
+    vina_batch_progress,
 )
 
 __all__ = [
@@ -73,6 +75,7 @@ __all__ = [
     "LigandPreparationReport",
     "ProteinReport",
     "TorsionCheck",
+    "VinaBatchProgress",
     "batch_run_directories",
     "check_docking_completion",
     "check_torsion_consistency",
@@ -108,6 +111,7 @@ __all__ = [
     "scan_torsion_consistency",
     "scan_vina_directory",
     "smiles_to_pdbqt",
+    "vina_batch_progress",
     "write_config_batch",
     "write_dpf",
     "write_gpf",

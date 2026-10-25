@@ -395,6 +395,9 @@ class TestSessionHelpers:
             "variables": {},
             "families": {},
             "texts": {"pasted": "ok"},
+            # (100x-142) the picked-paths key -- always present, empty
+            # when the payload carries none (older files stay loadable)
+            "paths": {},
         }
 
     def test_dump_load_round_trip_is_lossless(self, playground: Any) -> None:
@@ -7491,10 +7494,12 @@ class TestReview130Gui:
     def test_jump_records_recency_most_recent_first(self, app: Any) -> None:
         app._jump_to_card(1, "Affinity conversion")
         app._jump_to_card(0, "PharmaML Playground")
-        assert app._finder_recent == ["PharmaML Playground", "Affinity conversion"]
-        # a re-jump de-duplicates by moving the title to the front
+        # (100x-142) the memory keys on "tab:title" -- the five
+        # duplicated card titles can never jump to the wrong tab again
+        assert app._finder_recent == ["0:PharmaML Playground", "1:Affinity conversion"]
+        # a re-jump de-duplicates by moving the key to the front
         app._jump_to_card(1, "Affinity conversion")
-        assert app._finder_recent == ["Affinity conversion", "PharmaML Playground"]
+        assert app._finder_recent == ["1:Affinity conversion", "0:PharmaML Playground"]
 
     def test_recency_caps_at_the_documented_maximum(self, app: Any, playground: Any) -> None:
         titles = [
@@ -7504,7 +7509,8 @@ class TestReview130Gui:
         assert len(titles) == 8, "the index needs 8 cards for the cap test"
         for index, title in enumerate(titles):
             app._jump_to_card(0, title)
-        assert app._finder_recent == list(reversed(titles[-6:]))
+        # (100x-142) keyed entries: every jump landed on tab 0
+        assert app._finder_recent == [f"0:{title}" for title in reversed(titles[-6:])]
         assert len(app._finder_recent) == playground._FINDER_RECENT_MAX
 
     def test_cap_is_six_and_exported(self, playground: Any) -> None:
@@ -7570,7 +7576,7 @@ class TestReview130Gui:
         # the dialog closed and the chip's card got selected (+ remembered)
         assert not bool(win.winfo_exists())
         assert app._book.index(app._book.select()) == 1
-        assert app._finder_recent[0] == "Affinity conversion"
+        assert app._finder_recent[0] == "1:Affinity conversion"
 
     def test_dialog_omits_non_live_titles(self, app: Any, playground: Any) -> None:
         app._finder_recent = ["Affinity conversion", "A card that does not exist"]
@@ -10597,3 +10603,478 @@ class TestReview141Gui:
     def test_mgl_save_refuses_before_a_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._dock_mgl_save()
         assert any("Nothing to save" in str(args) for _name, args in quiet_dialogs), quiet_dialogs
+
+
+@XVFB_SKIP
+class TestReview142Gui:
+    """Round 100x-142 -- the engineering-details round: a one-by-one
+    review of every tab fixed the audit's findings (the text-map drift
+    that let the Chemistry tab's MACCS + similarity-scan boxes escape
+    Reset/Copy, the Ctrl+O busy guard, the main-thread frame captures,
+    the finder's title-only recency keys, the fractional-input
+    truncation, the AD k-guard) and shipped three features (the picked
+    PATHS riding the session file, the generate → MGLTools relay, the
+    vina_batch_progress pre-flight census)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @pytest.fixture()
+    def isolated_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        monkeypatch.setenv("HOME", str(tmp_path))
+        return tmp_path
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 60.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_142(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-142" in doc
+        assert "engineering-details round" in doc
+        assert "Send PDBs → MGLTools" in doc
+        assert "Count remaining" in doc
+        assert "picked file/folder PATHS now ride the session" in doc
+
+    # -- the audit fixes: the text-map drift ------------------------------- #
+
+    def test_session_text_widgets_map_covers_all_seven_keys(self, app: Any) -> None:
+        widgets = app._session_text_widgets()
+        assert set(widgets) == {
+            "pasted",
+            "corpus",
+            "smiles",
+            "rism",
+            "maccs",
+            "scan_refs",
+            "scan_lib",
+        }
+        assert all(widget is not None for widget in widgets.values())
+
+    def test_ownership_walk_covers_all_seven_text_boxes(self, app: Any) -> None:
+        # the bug (audit 100x-142 §3): text_by_id carried only 4 keys, so
+        # text:maccs / text:scan_refs / text:scan_lib never entered the
+        # ownership map -- and Reset/Copy silently skipped them.  The
+        # probe: Chemistry owns five of the seven, Generative the
+        # corpus, Docking the SMILES array.
+        owners = app._tab_input_names()
+        chemistry = owners[1]
+        for key in (
+            "text:pasted",
+            "text:rism",
+            "text:maccs",
+            "text:scan_refs",
+            "text:scan_lib",
+        ):
+            assert key in chemistry, f"{key} missing from the Chemistry tab's ownership"
+        assert "text:corpus" in owners[7]  # Generative
+        assert "text:smiles" in owners[4]  # Docking
+
+    def test_chemistry_reset_restores_maccs_and_scan_boxes(self, app: Any) -> None:
+        # the live confession: scribble over the three boxes the drift
+        # forgot, reset the Chemistry tab, and they must return to their
+        # LAUNCH DEFAULTS (the shipped example content, not empty).
+        defaults = {
+            "maccs": app._maccs_text.get("1.0", "end-1c"),
+            "scan_refs": app._scan_ref_text.get("1.0", "end-1c"),
+            "scan_lib": app._scan_lib_text.get("1.0", "end-1c"),
+        }
+        for box in (app._maccs_text, app._scan_ref_text, app._scan_lib_text):
+            box.delete("1.0", "end")
+            box.insert("1.0", "JUNK")
+        app._reset_tab(1)
+        assert app._maccs_text.get("1.0", "end-1c") == defaults["maccs"]
+        assert app._scan_ref_text.get("1.0", "end-1c") == defaults["scan_refs"]
+        assert app._scan_lib_text.get("1.0", "end-1c") == defaults["scan_lib"]
+        assert "reset" in str(app._job_label.cget("text"))
+
+    def test_chemistry_copy_inputs_carries_the_scan_boxes(self, app: Any) -> None:
+        import json as _json
+
+        captured: list[str] = []
+        app._copy = lambda text: captured.append(text)  # type: ignore[method-assign]
+        for box, marker in (
+            (app._scan_lib_text, "CCNMARKER"),
+            (app._maccs_text, "CCOMARKER"),
+        ):
+            box.delete("1.0", "end")
+            box.insert("1.0", marker)
+        app._copy_tab_inputs(1)
+        payload = _json.loads(captured[-1])
+        assert payload["texts"].get("scan_lib") == "CCNMARKER"
+        assert payload["texts"].get("maccs") == "CCOMARKER"
+
+    # -- the audit fixes: parse_int fractional rejection -------------------- #
+
+    def test_parse_int_rejects_fractional_input(self, playground: Any) -> None:
+        with pytest.raises(ValueError, match="not a whole number"):
+            playground.parse_int("2.5", "cv folds")
+        # whole-valued float spellings still parse
+        assert playground.parse_int("2.0", "cv folds") == 2
+        assert playground.parse_int("1e2", "epochs") == 100
+        for poison in ("inf", "nan", "-inf"):
+            with pytest.raises(ValueError, match="not a whole number"):
+                playground.parse_int(poison, "field")
+
+    # -- the audit fixes: the busy guard + job ordering -------------------- #
+
+    def test_menu_open_csv_refuses_while_busy(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._busy = True
+        try:
+            selected_before = app._book.select()
+            app._menu_open_csv()
+            assert app._book.select() == selected_before  # no tab switch
+            assert any("Busy" in str(args) for _name, args in quiet_dialogs), quiet_dialogs
+        finally:
+            app._busy = False
+
+    def test_poll_jobs_clears_the_callback_before_invoking(self) -> None:
+        # the source-level pin: capture-and-clear precedes the call, so a
+        # render callback that chains into _start_job keeps its on_done
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        capture = source.index("callback = self._on_done")
+        invoke = source.index("callback(result)")
+        assert capture < invoke
+        assert "self._on_done = None\n            if callback is not None:" in source
+
+    def test_copy_skips_the_label_flash_while_busy(self, app: Any) -> None:
+        app._job_label.configure(text="running job — 3/8")
+        app._busy = True
+        try:
+            app._copy("payload")
+            assert "running job" in str(app._job_label.cget("text"))
+            assert "copied" not in str(app._job_label.cget("text"))
+        finally:
+            app._busy = False
+        app._copy("payload")  # idle again: the flash returns
+        assert "copied to clipboard" in str(app._job_label.cget("text"))
+
+    def test_require_survives_an_unknown_module_name(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # the audit's StopIteration trap: a module outside the probe
+        # table must produce the install dialog, never an exception
+        assert app._require("not_a_real_module", "the feature") is False
+        assert any("needs not_a_real_module" in str(args) for _name, args in quiet_dialogs)
+
+    def test_ad_k_guard_covers_every_too_few_rows_case(self) -> None:
+        # the source-level pin: the n_models == 0 condition is gone
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "n_models == 0 and len(x_train) <= k" not in source
+        assert "if len(x_train) <= k:" in source
+
+    def test_tune_worker_parameter_renamed_to_notify(self) -> None:
+        # the shadowing trap: _ml_tune's worker parameter no longer
+        # collides with the evaluate_model binding inside it
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "def work(notify: Any) -> Any:" in source
+        assert "notify(info[\"trial\"], info.get(\"total\"), note)" in source
+
+    # -- the audit fixes: the finder's recency keys ------------------------ #
+
+    def test_finder_remember_keys_on_tab_and_title(self, app: Any) -> None:
+        app._finder_recent = []
+        app._finder_remember(4, "Results")  # the Docking tab's Results card
+        app._finder_remember(6, "Results")  # the Deep Learning tab's twin
+        assert app._finder_recent == ["6:Results", "4:Results"]
+        # a re-jump of the SAME card moves it to the front, de-duplicated
+        app._finder_remember(4, "Results")
+        assert app._finder_recent == ["4:Results", "6:Results"]
+
+    def test_finder_remember_drops_legacy_bare_titles(self, app: Any) -> None:
+        # an older session file's title-only entry cannot name a tab --
+        # re-membering the keyed twin drops it (no duplicate chips)
+        app._finder_recent = ["Results"]
+        app._finder_remember(6, "Results")
+        assert app._finder_recent == ["6:Results"]
+
+    def test_jump_to_card_records_the_tab_aware_key(self, app: Any) -> None:
+        app._finder_recent = []
+        app._jump_to_card(1, "Similarity scan (library vs references)")
+        assert app._finder_recent and app._finder_recent[0].startswith("1:")
+
+    # -- the feature: picked paths ride the session ------------------------ #
+
+    def test_collect_session_carries_the_picked_paths(self, app: Any, tmp_path: Path) -> None:
+        app._dock_gen_out = tmp_path
+        app._dock_mgl_src = tmp_path
+        payload = app._collect_session()
+        assert payload["paths"]["_dock_gen_out"] == str(tmp_path)
+        assert payload["paths"]["_dock_mgl_src"] == str(tmp_path)
+
+    def test_collect_session_never_carries_dataset_paths(self, app: Any, tmp_path: Path) -> None:
+        # the CSV loaders stay out on purpose: a path without its loaded
+        # frame would be a lie the label tells
+        app._ml_path = tmp_path / "data.csv"
+        app._dock_lib_path = tmp_path / "lib.csv"
+        payload = app._collect_session()
+        assert "_ml_path" not in payload["paths"]
+        assert "_dock_lib_path" not in payload["paths"]
+
+    def test_restore_returns_existing_paths_and_refreshes_labels(
+        self, playground: Any, xvfb_display: str, isolated_home: Path, tmp_path: Path
+    ) -> None:
+        import gc
+        import json as _json
+
+        ligands = tmp_path / "ligands"
+        ligands.mkdir()
+        payload = playground.dump_session(
+            theme="light",
+            geometry="1180x780+10+20",
+            tab=4,
+            variables={},
+            families={},
+            texts={},
+            paths={
+                "_dock_vbatch_ligands": str(ligands),  # exists -> restored
+                "_dock_vbatch_out": str(tmp_path / "absent"),  # gone -> dropped
+            },
+        )
+        (isolated_home / ".pharmaml").mkdir(parents=True)
+        (isolated_home / ".pharmaml" / "playground-session.json").write_text(
+            _json.dumps(payload), encoding="utf-8"
+        )
+        app = playground.PlaygroundApp()
+        for _ in range(4):
+            app.update_idletasks()
+            app.update()
+        assert app._dock_vbatch_ligands == ligands
+        assert app._dock_vbatch_out is None  # the absent folder stayed gone
+        assert "ligands: ligands" in str(app._dock_vbatch_info.cget("text"))
+        assert "picked path(s)" in str(app._job_label.cget("text"))
+        app.destroy()
+        del app
+        gc.collect()
+
+    def test_restore_never_overwrites_a_live_pick(
+        self, playground: Any, app: Any, tmp_path: Path
+    ) -> None:
+        live = tmp_path / "live"
+        live.mkdir()
+        app._dock_mgl_src = live  # the user already picked THIS session
+        session = playground.load_session(
+            {
+                "format": playground.SESSION_FORMAT,
+                "theme": "light",
+                "geometry": "",
+                "tab": 0,
+                "variables": {},
+                "families": {},
+                "texts": {},
+                "paths": {"_dock_mgl_src": str(tmp_path)},
+            }
+        )
+        assert session is not None
+        app._session = session
+        app._restore_session()
+        assert app._dock_mgl_src == live
+
+    def test_session_paths_key_round_trips_through_dump_and_load(
+        self, playground: Any, tmp_path: Path
+    ) -> None:
+        payload = playground.dump_session(
+            theme="light",
+            geometry="",
+            tab=0,
+            variables={},
+            families={},
+            texts={},
+            paths={"_dock_smi_out": str(tmp_path)},
+        )
+        assert playground.load_session(payload) == payload
+        # a foreign value inside paths is coerced away, never fatal
+        loaded = playground.load_session(
+            {
+                "format": playground.SESSION_FORMAT,
+                "theme": "light",
+                "geometry": "",
+                "tab": 0,
+                "variables": {},
+                "families": {},
+                "texts": {},
+                "paths": {"_dock_smi_out": 42, "bad": None},
+            }
+        )
+        assert loaded is not None
+        assert loaded["paths"] == {}
+
+    # -- the feature: the generate → MGLTools relay ------------------------ #
+
+    def test_gen_to_mgl_hands_the_folder_over(self, app: Any, tmp_path: Path) -> None:
+        app._dock_gen_out = tmp_path
+        app._dock_mgl_out = None
+        app._dock_gen_to_mgl()
+        assert app._dock_mgl_src == tmp_path
+        # the output folder lands BESIDE the PDB folder, never inside it
+        assert app._dock_mgl_out == tmp_path.parent / f"{tmp_path.name}_pdbqt"
+        assert "handed to the MGLTools card" in str(app._dock_gen_summary.cget("text"))
+        info = str(app._dock_mgl_info.cget("text"))
+        assert f"pdb source: {tmp_path.name}" in info
+
+    def test_gen_to_mgl_never_overwrites_a_live_output_pick(
+        self, app: Any, tmp_path: Path
+    ) -> None:
+        chosen = tmp_path / "chosen"
+        chosen.mkdir()
+        app._dock_gen_out = tmp_path
+        app._dock_mgl_out = chosen
+        app._dock_gen_to_mgl()
+        assert app._dock_mgl_out == chosen
+
+    def test_gen_to_mgl_warns_without_an_output_folder(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_gen_out = None
+        app._dock_gen_to_mgl()
+        assert any("No output folder" in str(args) for _name, args in quiet_dialogs), quiet_dialogs
+
+    def test_gen_card_carries_the_relay_button(self, app: Any) -> None:
+        labels = [
+            str(button.cget("text"))
+            for button in app._action_buttons
+            if button.winfo_exists()
+        ]
+        assert "Send PDBs → MGLTools" in labels
+        assert "Count remaining" in labels
+
+    # -- the feature: the pre-flight resume census ------------------------- #
+
+    def test_vbatch_census_button_reports_the_promise(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        ligands = tmp_path / "ligands"
+        ligands.mkdir()
+        (ligands / "a.pdbqt").write_text("ligand a", encoding="utf-8")
+        (ligands / "b.pdbqt").write_text("ligand b", encoding="utf-8")
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "a_out.pdbqt").write_text("poses", encoding="utf-8")
+        (out / "a.log").write_text("log", encoding="utf-8")
+        app._dock_vbatch_ligands = ligands
+        app._dock_vbatch_out = out
+        app._dock_vbatch_count()
+        assert self._drain_jobs(app), "census job hung"
+        summary = str(app._dock_vbatch_summary.cget("text"))
+        assert "1/2 already docked" in summary
+        assert "1 to go" in summary
+        assert quiet_dialogs == []
+
+    def test_vbatch_census_warns_without_folders(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_vbatch_ligands = None
+        app._dock_vbatch_count()
+        assert any("Missing paths" in str(args) for _name, args in quiet_dialogs), quiet_dialogs
+
+    def test_toggling_resume_runs_the_census_on_its_own(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        ligands = tmp_path / "ligands"
+        ligands.mkdir()
+        (ligands / "only.pdbqt").write_text("ligand", encoding="utf-8")
+        out = tmp_path / "out"
+        out.mkdir()
+        app._dock_vbatch_ligands = ligands
+        app._dock_vbatch_out = out
+        app._dock_vbatch_skip_var.set(True)  # the trace fires the census
+        assert self._drain_jobs(app), "auto census job hung"
+        summary = str(app._dock_vbatch_summary.cget("text"))
+        assert "0/1 already docked" in summary
+        assert "1 to go" in summary
+        assert quiet_dialogs == []
+
+    def test_toggling_resume_without_folders_stays_quiet(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dock_vbatch_ligands = None
+        app._dock_vbatch_out = None
+        app._dock_vbatch_skip_var.set(True)  # no paths -> no auto job
+        app.update()
+        assert not app._busy
+        assert quiet_dialogs == []
+
+    # -- the audit fix: the live frame reaches the DL tab ------------------ #
+
+    def test_dl_load_frame_adopts_an_in_memory_dataset(
+        self, app: Any, tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        frame = pd.DataFrame(
+            {"smiles": ["CCO", "CCN"], "value": [1.0, 2.0]}
+        )
+        app._dl_load_frame(frame, "cleaned.csv (live)")
+        assert app._dl_frame is frame
+        assert app._dl_path is None  # in-memory adoption never fakes a path
+        assert "cleaned.csv (live)" in str(app._dl_info.cget("text"))
+        assert "2" in str(app._dl_info.cget("text"))
+        values = list(app._dl_target_combo["values"])
+        assert "value" in values
+
+    def test_tune_apply_prefers_the_live_frame_over_the_stale_path(
+        self, app: Any, tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        # the cleaned frame sits in memory; _ml_path still names the
+        # original CSV -- Apply best → dnn must carry the LIVE one
+        original = tmp_path / "original.csv"
+        original.write_text("smiles,value\nCCO,1.0\n", encoding="utf-8")
+        app._ml_path = original
+        cleaned = pd.DataFrame({"smiles": ["CCO"], "value": [1.0]})
+        app._ml_frame = cleaned
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "self._dl_load_frame(\n                    self._ml_frame," in source
+
+    # -- the library surface the census calls ------------------------------ #
+
+    def test_docking_package_exports_the_census(self) -> None:
+        from pharmaml.docking import VinaBatchProgress, vina_batch_progress
+
+        assert callable(vina_batch_progress)
+        assert VinaBatchProgress.__name__ == "VinaBatchProgress"
+
+    def test_vbatch_census_uses_the_library_helper(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "from pharmaml.docking import vina_batch_progress" in source
+        assert "return vina_batch_progress(ligands, out)" in source
+        # the auto-census trace rides the checkbox
+        assert 'trace_add("write", _on_skip_toggle)' in source
+
+    def test_session_paths_allowlist_excludes_reload_dependent_pickers(
+        self, playground: Any
+    ) -> None:
+        allowlist = playground._SESSION_PATH_ATTRS
+        for excluded in ("_ml_path", "_dock_lib_path", "_feat_csv_path", "_ml_ad_train_path"):
+            assert excluded not in allowlist, excluded
+        for included in ("_dock_gen_out", "_dock_mgl_src", "_dock_mgl_out", "_dock_vbatch_out"):
+            assert included in allowlist, included

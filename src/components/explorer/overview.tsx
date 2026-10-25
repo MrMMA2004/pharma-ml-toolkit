@@ -112,7 +112,7 @@ report = evaluate_model(result.model, X_te, y_te, ds.task)
 from pharmaml.docking import (
     load_ligand_csv, prepare_ligand_library, prepare_protein,
     compute_grid_box, scan_docking_directory, parse_vina_output,
-    ligand_efficiency, consensus_rescore,
+    ligand_efficiency, consensus_rescore, run_vina_batch,
 )
 
 lib = load_ligand_csv("ligands.csv")          # SMILES col auto-detected
@@ -128,7 +128,7 @@ from pharmaml.docking import (
     write_dpf, check_torsion_consistency, scan_torsion_consistency,
     collect_files, scan_vina_directory, parse_vina_config,
     distribute_files, cleanup_tree, generate_ligand_structures,
-    convert_pdb_folder_to_pdbqt,
+    convert_pdb_folder_to_pdbqt, vina_batch_progress,
 )
 
 write_dpf("ligand_folders/1/l.pdbqt", ga_run=100)   # AutoDock4 r.dpf
@@ -146,6 +146,9 @@ tree = convert_pdb_folder_to_pdbqt(                 # niggaqt.py: MGLTools
     "pdbs/", "pdbqt_tree/", timeout_s=30.0,         # batch, numbered folders
 )
 run_vina_batch(conf, "pdbqt_tree/", skip_existing=True)  # resume batch
+progress = vina_batch_progress(                    # pre-flight census:
+    "pdbqt_tree/", "results/"                     # N docked, M to go
+)
 
 # --- Ligand-table reconciliation & standardization ---------------
 from pharmaml.chem import (
@@ -295,7 +298,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "2632 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite)",
+    after: "2673 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite)",
   },
   {
     aspect: "Interface",
@@ -353,8 +356,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "446";
-  const loc = stats ? fmtInt(stats.totalLines) : "159,234";
+  const fileCount = stats ? fmtInt(stats.files) : "453";
+  const loc = stats ? fmtInt(stats.totalLines) : "160,727";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -440,8 +443,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="2632"
-                countTo={2632}
+                value="2673"
+                countTo={2673}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

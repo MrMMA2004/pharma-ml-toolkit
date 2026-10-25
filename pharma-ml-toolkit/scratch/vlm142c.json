@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS. The card titled 'PDB → PDBQT batch (MGLTools)' is clearly visible and features a green highlighted border to indicate it was just activated.\n2) PASS. The info label correctly displays the 'pdb source:' as pg142_gen_s0m0w_1q and the 'output:' as pg142_gen_s0m0w_1q_pdbqt.\n3) PASS. Both the mgl python and prepare_ligand4 path entries are visible and contain the expected Windows-style default directory paths.\n4) PASS. The UI elements are properly aligned, text is legible, and there are no visual glitches or rendering defects in the screenshot.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792971077,
+  "id": "202610260731159977fbd2c61543c5",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610260731159977fbd2c61543c5",
+  "usage": {
+    "completion_tokens": 142,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1390,
+    "prompt_tokens_details": {
+      "cached_tokens": 5
+    },
+    "total_tokens": 1532
+  }
+}

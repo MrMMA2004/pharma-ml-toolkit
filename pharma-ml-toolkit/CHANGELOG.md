@@ -10,6 +10,121 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.81] — 2026-10-26
+
+### Added — the round-27 engineering review (100x-142): a one-by-one audit of every tab, nine latent bugs fixed, and three workflow features
+
+The instruction this round: *"Review the current codebase and
+implementation, troubleshoot potential issues, and continue improving
+the engineering details."* A full one-by-one audit of playground.py's
+tabs (module helpers, chrome, session machinery, Data & ML, Deep
+Learning, Generative — the Docking tab reviewed in parallel) found one
+real bug, five risks and three polish items; all nine are fixed, plus
+three features shipped.
+
+**The audit's findings, fixed:**
+
+* **The text-map drift (the round's one real bug).** Four separate
+  maps disagreed about which text boxes ride the session: the restore
+  path knew all seven keys, the per-tab reset map carried five, the
+  copy-inputs map a *different* five, and the ownership walk only
+  four. Net effect: the Chemistry tab's MACCS box and both
+  similarity-scan boxes escaped "Reset this tab to defaults" and
+  "Copy inputs as JSON" while riding the session file all along. One
+  shared `_session_text_widgets()` map now feeds all four consumers —
+  no drift possible.
+* **The Ctrl+O busy guard + the main-thread frame captures.**
+  File ▸ Open CSV stayed live during a running job and swapped
+  `self._ml_frame` synchronously while the worker thread was still
+  reading it (a narrow but real race: KeyError on the swapped target,
+  or silent training against the new frame). The menu accelerator now
+  obeys the busy rule, and `_ml_train` / `_ens_train` / `_ml_tune` /
+  `_ml_compare` capture the frame on the MAIN thread
+  (`_ml_clean_frame`'s own pattern) before the job starts.
+* **The `_poll_jobs` ordering.** The poller invoked the render
+  callback and only then cleared `self._on_done` — a render that
+  chained into `_start_job` would have its own callback silently
+  wiped. Capture-and-clear now precedes the invocation.
+* **The finder's title-only recency keys.** Five card titles are
+  duplicated ACROSS tabs (Dataset ×2, Preview ×2, Results ×3), so a
+  "Recently jumped" chip recorded from the Generative *Results* card
+  jumped to the Data & ML *Results* card (build order wins). The
+  memory now keys on `"tab:title"`; legacy bare titles from older
+  session files keep a first-match fallback, and a duplicated title's
+  chip appends the tab label so it confesses WHICH card it opens.
+* **The fractional-input truncation.** `parse_int` turned a "cv
+  folds" of `2.5` into a quiet 2. Fractional input is now rejected
+  with the field name in the error; whole-valued float spellings
+  (`2.0`, `1e2`) still parse and `inf`/`nan` are honestly refused.
+* **The AD k-guard.** The friendly too-few-training-rows warning
+  fired only when the bootstrap model count was zero; every other
+  short-train case fell through to the library's mid-job
+  `ModelError` dialog. The guard now covers all cases.
+* **`_ml_tune`'s shadowed worker parameter** (`report` was both the
+  progress reporter and the `evaluate_model` binding) — renamed to
+  `notify`, the DL tab's own documented convention.
+* **`_require`'s unguarded `next()`** — a module name outside the
+  dependency table raised `StopIteration` inside the Tk callback
+  (surfacing as the generic "Unexpected error" dialog). The guarded
+  fallback keeps the gate honest for any future dependency name.
+* **`_copy` clobbered a running job's status line** — a copy during a
+  job now skips the label flash (the clipboard write, the user's real
+  intent, still happens).
+
+**The features:**
+
+* **The picked file/folder PATHS ride the session file.** ~27 pure
+  picker attributes (`_SESSION_PATH_ATTRS`) — the Docking tab's
+  receptor / ligand / campaign / Vina / vbatch / gen / MGL / audit
+  pickers, the conversion card's pair, the Utilities pickers — now
+  persist and restore, so a restart hands the folders back instead of
+  demanding eleven re-picks. Dataset paths that need an in-memory
+  reload (the CSV loaders) stay out on purpose: a path without its
+  frame would be a lie the label tells. A path comes back only when
+  it still EXISTS on this machine (a mailed session or a moved folder
+  degrades to the honest un-picked state), and a live pick is never
+  overwritten. `_refresh_restored_path_labels()` re-renders every
+  picker's info label after the restore.
+* **The generate → MGLTools relay.** The ligand-structures card's
+  "Send PDBs → MGLTools" button hands the structure output folder to
+  the converter card as its PDB source, pre-fills the PDBQT output
+  folder BESIDE it (never inside it, never over a live pick),
+  refreshes the card's info label, and jumps there with the finder's
+  own flash — the nigga.py → niggaqt.py relay without one re-pick.
+* **The pre-flight resume census.** `vina_batch_progress(ligands_dir,
+  out_dir) -> VinaBatchProgress(total, docked, remaining, collisions)`
+  counts what a resumed Vina batch would skip, with the SAME skip
+  rule AND the same collision-disambiguated output names the run
+  itself uses (the stem logic lives in one shared
+  `_batch_output_names` helper — the census and the run can never
+  disagree). The batch card's "Count remaining" button reports
+  "N/M already docked · K to go" and confesses name collisions;
+  toggling the resume checkbox with both folders picked runs the
+  census on its own.
+
+### Fixed
+
+* `_ml_tune_apply` → dnn reloaded the ORIGINAL CSV from `_ml_path`
+  into the Deep Learning tab, resurrecting every row the Clean card
+  had removed — the winner was then trained on data it was never
+  tuned on. The new `_dl_load_frame()` adopts the LIVE (cleaned)
+  frame; `_dl_load_path` is now a thin wrapper over it.
+
+### Verification
+
+* **2678 collected = 2673 passed + 5 skipped / 0 failures** (bare
+  pytest, dev server stopped — the OOM lesson; +41 tests this round:
+  7 for `vina_batch_progress` incl. the run-agreement census, 33 for
+  the round's GUI surface incl. the live Chemistry reset/copy
+  confessions, the session-path round-trips, the bridge, the census
+  button + auto-census trace, and the source-level ordering pins).
+* Doctests green on the touched modules (workflow.py gained the
+  `VinaBatchProgress` example tour); ruff clean (two RUF100
+  auto-fixes); mypy `src/` clean (65 files); playground.py at the
+  61-error pre-existing baseline; `--self-test` green on Xvfb.
+* docs/INDEX.md regenerated (277 symbols) after the docs-index symbol
+  test caught the two new public names — the standing trap.
+
 ## [1.2.80] — 2026-10-26
 
 ### Added — the round-26 review (100x-141): the "new folder.zip" upload audited file by file — the nigga.py ligand-structure pipeline + the niggaqt.py MGLTools batch converter + the Vina batch's RESUME

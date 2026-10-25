@@ -1186,3 +1186,118 @@ class TestVinaBatchRunsInConfigDirectory:
         results = run_vina_batch(conf, ligands, out_dir=tmp_path / "out")
         assert all(result.ok for result in results)
         assert seen == [conf.parent]
+
+
+class TestVinaBatchProgress:
+    """vina_batch_progress (100x-142): the pre-flight resume census.
+
+    "N ligands already docked, M to go" BEFORE the Dock button -- with
+    the SAME skip rule and the SAME collision-disambiguated output
+    names ``run_vina_batch(skip_existing=True)`` uses, so the census and
+    the run can never disagree.
+    """
+
+    def _tree(self, tmp_path: Path) -> tuple[Path, Path]:
+        ligands = tmp_path / "ligands"
+        ligands.mkdir()
+        (ligands / "a.pdbqt").write_text("ligand a", encoding="utf-8")
+        (ligands / "b.pdbqt").write_text("ligand b", encoding="utf-8")
+        out = tmp_path / "out"
+        out.mkdir()
+        return ligands, out
+
+    def test_census_counts_the_skip_rule_rows(self, tmp_path) -> None:
+        from pharmaml.docking.workflow import vina_batch_progress
+
+        ligands, out = self._tree(tmp_path)
+        # nothing docked yet
+        progress = vina_batch_progress(ligands, out)
+        assert (progress.total, progress.docked, progress.remaining) == (2, 0, 2)
+        # 'a' completes: pose + non-empty log
+        (out / "a_out.pdbqt").write_text("poses", encoding="utf-8")
+        (out / "a.log").write_text("log", encoding="utf-8")
+        progress = vina_batch_progress(ligands, out)
+        assert (progress.total, progress.docked, progress.remaining) == (2, 1, 1)
+
+    def test_zero_byte_log_is_not_docked(self, tmp_path) -> None:
+        # niggavina.py's crashed-job marker: the census must agree with
+        # the run -- a zero-byte log means REDO, not skip.
+        from pharmaml.docking.workflow import vina_batch_progress
+
+        ligands, out = self._tree(tmp_path)
+        (out / "a_out.pdbqt").write_text("poses", encoding="utf-8")
+        (out / "a.log").write_text("", encoding="utf-8")
+        progress = vina_batch_progress(ligands, out)
+        assert progress.docked == 0
+        assert progress.remaining == 2
+
+    def test_census_agrees_with_the_run_itself(self, tmp_path, monkeypatch) -> None:
+        # the promise: docked == the skipped rows a resumed run reports
+        from pharmaml.docking.workflow import run_vina_batch, vina_batch_progress
+
+        ligands, out = self._tree(tmp_path)
+        # half the campaign already landed
+        (out / "a_out.pdbqt").write_text("poses", encoding="utf-8")
+        (out / "a.log").write_text("log", encoding="utf-8")
+        conf = tmp_path / "conf.txt"
+        conf.write_text("receptor = r.pdbqt\n", encoding="utf-8")
+        (tmp_path / "r.pdbqt").write_text("receptor", encoding="utf-8")
+        monkeypatch.setattr(workflow_mod, "_require_executable", lambda name: f"/fake/{name}")
+
+        def fake_run(cmd, **_kwargs) -> None:
+            out_pdbqt = Path(cmd[cmd.index("--out") + 1])
+            out_pdbqt.write_text("poses", encoding="utf-8")
+            log = Path(cmd[cmd.index("--log") + 1])
+            log.write_text("log", encoding="utf-8")
+
+        monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
+        before = vina_batch_progress(ligands, out)
+        results = run_vina_batch(conf, ligands, out_dir=out, skip_existing=True)
+        after = vina_batch_progress(ligands, out)
+        # the run skipped exactly what the census promised
+        assert sum(1 for result in results if result.skipped) == before.docked
+        # and the campaign is now complete by the census's own rule
+        assert after.docked == after.total == 2
+
+    def test_same_stem_ligands_count_as_collisions(self, tmp_path) -> None:
+        # two 'a.pdbqt' in different sub-folders: the flat output names
+        # collide, the disambiguation renames the second, and the census
+        # confesses the count (the census names files EXACTLY like the
+        # run -- the renamed 'a' is not confused with the plain one).
+        from pharmaml.docking.workflow import vina_batch_progress
+
+        ligands, out = self._tree(tmp_path)
+        sub = ligands / "sub"
+        sub.mkdir()
+        (sub / "a.pdbqt").write_text("twin", encoding="utf-8")
+        # the FIRST 'a' is docked; the sub-folder twin is not
+        (out / "a_out.pdbqt").write_text("poses", encoding="utf-8")
+        (out / "a.log").write_text("log", encoding="utf-8")
+        progress = vina_batch_progress(ligands, out)
+        assert progress.total == 3
+        assert progress.docked == 1
+        assert progress.remaining == 2
+        assert progress.collisions == 1
+
+    def test_missing_ligands_dir_raises_the_runs_own_error(self, tmp_path) -> None:
+        from pharmaml.docking.workflow import vina_batch_progress
+
+        with pytest.raises(DockingError, match="ligands directory not found"):
+            vina_batch_progress(tmp_path / "absent", tmp_path / "out")
+
+    def test_progress_dataclass_is_frozen_with_named_fields(self) -> None:
+        import dataclasses
+
+        from pharmaml.docking.workflow import VinaBatchProgress
+
+        fields = {field.name for field in dataclasses.fields(VinaBatchProgress)}
+        assert fields == {"total", "docked", "remaining", "collisions"}
+        progress = VinaBatchProgress(total=3, docked=1, remaining=2, collisions=0)
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            progress.docked = 5  # type: ignore[misc]
+
+    def test_census_is_exported_from_the_docking_package(self) -> None:
+        from pharmaml.docking import VinaBatchProgress, vina_batch_progress
+
+        assert callable(vina_batch_progress)
+        assert VinaBatchProgress.__name__ == "VinaBatchProgress"

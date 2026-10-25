@@ -1202,3 +1202,32 @@ tests: TestLigandStructureGeneration (6) + TestMglToolsConversion (6)
 + TestVinaBatchResume (4) + TestReview141Gui (14); the docs-index
 symbol test re-synced (275 symbols). The version chain moved to
 1.2.80 across all four carriers.
+
+### Round 27 (100x-142) — the engineering review: a one-by-one audit of every tab, nine latent bugs fixed, and the picked-paths session + the generate→MGL relay + the pre-flight resume census
+
+| What shipped | The contract |
+| --- | --- |
+| The one-by-one audit | The instruction ("review the codebase, troubleshoot potential issues, improve the engineering details") became a tab-by-tab review of playground.py (module helpers, chrome, session machinery, Data & ML, Deep Learning, Generative; the Docking tab in parallel). The audit's harvest: one real bug (the text-map drift), five risks (the Ctrl+O race, the _poll_jobs ordering, the finder's title-only keys, the AD k-guard's condition, the shadowed tuner parameter), three polish items (fractional parse_int truncation, the _copy label clobber, _require's unguarded next()) — all nine fixed, each with its own regression test or source-level pin. |
+| The picked PATHS ride the session | `_SESSION_PATH_ATTRS` (27 pure picker attributes across Docking / conversion / Utilities) persist through the session file's new `paths` key and restore only when the folder still EXISTS on this machine (a mailed session degrades to the honest un-picked state; a live pick is never overwritten; dataset paths needing a reload stay out on purpose — a path without its frame would be a lie the label tells). `_refresh_restored_path_labels()` re-renders every picker's info label after the restore, reusing the four cards that own refresh helpers. |
+| `vina_batch_progress` + the Count remaining button | The pre-flight resume census: `VinaBatchProgress(total, docked, remaining, collisions)` applies the SAME skip rule and the SAME collision-disambiguated output names as `run_vina_batch(skip_existing=True)` — the stem logic lives in one shared `_batch_output_names` helper, so "N/M already docked · K to go" is a promise the run keeps. The vbatch card's button reports it (confessing name collisions); toggling the resume checkbox with both folders picked runs the census on its own (the trace degrades to a no-op during session restore and never fires while busy). |
+| The generate → MGLTools relay | The ligand-structures card's "Send PDBs → MGLTools" button: the structure output folder becomes the converter's PDB source, the PDBQT output folder is pre-filled BESIDE it (never inside, never over a live pick), the card's info label refreshes, and the finder's own jump + flash lands on the MGL card — the nigga.py → niggaqt.py relay in one click. |
+| `_dl_load_frame` (the Apply-best fix) | `_ml_tune_apply` → dnn reloaded the ORIGINAL CSV (resurrecting every row the Clean card removed — the winner then trained on data it was never tuned on). The split-out `_dl_load_frame` adopts the LIVE cleaned frame; `_dl_load_path` is a thin wrapper. |
+
+The axes after the round: unchanged (rar 118, uploads 14/14, zero-hit
+0) — the round was engineering depth, not upload breadth. 41 new
+tests: TestVinaBatchProgress (7, test_campaign.py — the census counts
+the skip rule rows, the zero-byte log means redo, the census AGREES
+with the run, collisions, the typed error, the frozen dataclass, the
+package export) + TestReview142Gui (33, test_playground.py — the
+docstring pins, the seven-key text map + the ownership walk + the
+live Chemistry reset/copy confessions, the fractional parse_int
+rejection, the Ctrl+O busy guard, the _poll_jobs ordering pin, the
+_copy busy skip, the _require fallback, the AD k-guard pin, the
+notify rename pin, the finder's keyed recency + legacy tolerance +
+jump recording, the session-path collect/restore/existence/overwrite
+guards + the round-trip + the allowlist pins, the bridge's handover +
+no-overwrite + warning + live button, the census button + auto trace
++ quiet no-path case, the live-frame adoption + the Apply-best source
+pin, and the library export + wiring pins). The docs-index symbol
+test re-synced (277 symbols). The version chain moved to 1.2.81
+across all four carriers.

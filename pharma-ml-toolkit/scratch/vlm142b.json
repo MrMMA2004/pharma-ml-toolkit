@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS. The card titled 'Vina config batch' is clearly visible in the upper right section of the interface.\n2) PASS. The run row contains the 'Dock the batch', 'Count remaining', and 'Parse config' buttons as specified.\n3) PASS. A 'resume' checkbox with the label 'skip already-docked (resume)' is visible in the card.\n4) PASS. The 'Config', 'Ligands folder', and 'Output' pickers along with a 'workers' field are all present.\n5) PASS. The UI elements are rendered correctly without any obvious visual defects or overlapping text.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792971068,
+  "id": "202610260731050be9353bf6a84bf6",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610260731050be9353bf6a84bf6",
+  "usage": {
+    "completion_tokens": 129,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1368,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1497
+  }
+}

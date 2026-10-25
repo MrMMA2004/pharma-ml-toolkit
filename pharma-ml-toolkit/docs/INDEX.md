@@ -243,6 +243,7 @@ after adding new public functions.
 | `LigandPreparationReport` | class | Audit of one :func:`prepare_ligand_library` batch. |
 | `ProteinReport` | class | Audit of one :func:`prepare_protein` run. |
 | `TorsionCheck` | class | Torsion-consistency audit of one prepared ligand PDBQT. |
+| `VinaBatchProgress` | class | Pre-flight resume census for :func:`run_vina_batch`. |
 | `batch_run_directories` | function | Dock every prepared ligand sub-directory in parallel. |
 | `check_docking_completion` | function | Audit a docking tree for missing/failed runs (upgrades checker.py). |
 | `check_torsion_consistency` | function | Compare TORSDOF, active REMARKs and BRANCH counts of a PDBQT. |
@@ -278,6 +279,7 @@ after adding new public functions.
 | `scan_torsion_consistency` | function | Audit every ``.pdbqt`` under a tree for torsion consistency. |
 | `scan_vina_directory` | function | Summarise every Vina ``.log`` under a results tree. |
 | `smiles_to_pdbqt` | function | Convert one SMILES to a 3D PDBQT ligand (Meeko + RDKit). |
+| `vina_batch_progress` | function | Count what a resumed Vina batch would skip and what it would dock. |
 | `write_config_batch` | function | Write the ``r.gpf`` + ``r.dpf`` pair into every ligand folder. |
 | `write_dpf` | function | Write an AutoDock4 docking parameter file (DPF) for one ligand. |
 | `write_gpf` | function | Write an AutoDock4 grid parameter file (GPF) for one ligand. |

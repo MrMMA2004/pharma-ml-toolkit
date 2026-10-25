@@ -417,6 +417,23 @@ Design notes
   (skip already-docked: a ligand whose ``_out.pdbqt`` AND non-empty
   log exist is not started again, the zero-byte log marks a crashed
   job, and skipped rows confess it in the table).
+  (100x-142) The engineering-details round: a one-by-one review of
+  every tab fixed the text-map drift (the Chemistry tab's MACCS and
+  both similarity-scan boxes now ride "Reset to defaults" and "Copy
+  inputs as JSON" like the session file always said they did), the
+  Ctrl+O busy guard + the main-thread frame captures (no more dataset
+  swaps under a running trainer), the finder's recency keys on
+  "tab:title" (the five duplicated card titles can never jump to the
+  wrong tab again), the fractional-input rejection in every integer
+  field, and the AD k-guard for every too-few-rows case -- while the
+  picked file/folder PATHS now ride the session file (a restart hands
+  the docking/util pickers back when the folders still exist), the
+  ligand-structures card grew the "Send PDBs → MGLTools" relay (one
+  click from generate to convert-ready), and the Vina batch card grew
+  the pre-flight "Count remaining" census (``vina_batch_progress``,
+  the same skip rule and naming the run itself uses -- "N already
+  docked, M to go" is a promise the run keeps, and toggling resume
+  with both folders picked runs it on its own).
 
 Command line helpers (useful for scripting and CI)::
 
@@ -624,6 +641,48 @@ def session_path() -> Path:
     return Path.home() / ".pharmaml" / "playground-session.json"
 
 
+#: (100x-142) The picked file/folder PATHS that ride the session file.
+#: Pure pickers only -- dataset paths that need an in-memory RELOAD
+#: (the CSV loaders) stay out: restoring the path without the frame
+#: would be a lie (the label would claim a dataset that is not loaded).
+#: The restore re-applies a path only when it still EXISTS on disk,
+#: so a mailed session or a moved folder degrades to the honest
+#: "no folder chosen" instead of a dead path.
+_SESSION_PATH_ATTRS: frozenset[str] = frozenset(
+    {
+        # -- docking tab pickers -------------------------------------- #
+        "_dock_out_dir",
+        "_dock_receptor_source",
+        "_dock_receptor_path",
+        "_dock_ligand_path",
+        "_dock_campaign_root",
+        "_dock_vina_receptor",
+        "_dock_vina_ligand",
+        "_dock_smiles_receptor",
+        "_dock_smiles_out",
+        "_dock_vbatch_conf",
+        "_dock_vbatch_ligands",
+        "_dock_vbatch_out",
+        "_dock_smi_out",
+        "_dock_gen_out",
+        "_dock_mgl_src",
+        "_dock_mgl_out",
+        "_dock_audit_gpf",
+        "_dock_audit_folder",
+        # -- conversion / utility pickers ---------------------------- #
+        "_conv_input",
+        "_conv_output",
+        "_util_merge_folder",
+        "_util_merge_split_file",
+        "_util_cmp_a",
+        "_util_cmp_b",
+        "_util_tool_folder",
+        "_util_tool_out",
+        "_util_reindex_path",
+    }
+)
+
+
 def parse_geometry(text: str) -> tuple[int, int, int, int] | None:
     """Split a Tk geometry string into ``(w, h, x, y)`` (or ``None``).
 
@@ -644,13 +703,17 @@ def dump_session(
     variables: dict[str, Any],
     families: dict[str, bool],
     texts: dict[str, str],
+    paths: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Assemble the JSON-serialisable session payload (pure normaliser).
 
     Values are coerced to their session types here so the file can never
     carry a half-typed payload, whatever the caller collected.
+    (100x-142) ``paths`` carries the picked file/folder PATHS (str keys,
+    absolute paths as strings) -- the docking/util pickers a restart
+    used to forget.  Older payloads without the key stay loadable.
     """
-    return {
+    payload = {
         "format": SESSION_FORMAT,
         "theme": theme if theme in _THEMES else "light",
         "geometry": str(geometry),
@@ -658,7 +721,11 @@ def dump_session(
         "variables": {str(name): value for name, value in variables.items()},
         "families": {str(name): bool(checked) for name, checked in families.items()},
         "texts": {str(name): str(content) for name, content in texts.items()},
+        # always present (100x-142): a payload without picked paths
+        # round-trips identically -- an empty dict, never a missing key
+        "paths": {str(name): str(path) for name, path in (paths or {}).items()},
     }
+    return payload
 
 
 def load_session(raw: Any) -> dict[str, Any] | None:
@@ -692,6 +759,12 @@ def load_session(raw: Any) -> dict[str, Any] | None:
     if not isinstance(texts, dict):
         texts = {}
     texts = {str(name): content for name, content in texts.items() if isinstance(content, str)}
+    # (100x-142) the picked paths -- optional so older session files
+    # (and every hand-built payload in the tests) stay loadable.
+    paths = raw.get("paths")
+    if not isinstance(paths, dict):
+        paths = {}
+    paths = {str(name): str(path) for name, path in paths.items() if isinstance(path, str)}
     return {
         "format": SESSION_FORMAT,
         "theme": theme,
@@ -700,6 +773,7 @@ def load_session(raw: Any) -> dict[str, Any] | None:
         "variables": variables,
         "families": families,
         "texts": texts,
+        "paths": paths,
     }
 
 
@@ -927,12 +1001,22 @@ def parse_int(
     minimum: int | None = None,
     maximum: int | None = None,
 ) -> int:
-    """Parse a widget string into an int with a friendly error."""
+    """Parse a widget string into an int with a friendly error.
+
+    (100x-142) Fractional input is now REJECTED, not silently truncated:
+    ``int(float(...))`` used to turn a "cv folds" of ``2.5`` into a
+    quiet 2 -- the field name rides the error so the dialog names the
+    offender.  Whole-valued float spellings (``2.0``, ``1e2``) still
+    parse, and ``inf``/``nan`` are honestly refused.
+    """
     text = str(raw).strip()
     try:
-        value = int(float(text))
+        number = float(text)
     except ValueError as exc:
         raise ValueError(f"{field}: {raw!r} is not a whole number") from exc
+    if not number.is_integer():
+        raise ValueError(f"{field}: {raw!r} is not a whole number ({number:g})")
+    value = int(number)
     if minimum is not None and value < minimum:
         raise ValueError(f"{field}: {value} is below the minimum {minimum}")
     if maximum is not None and value > maximum:
@@ -2643,16 +2727,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 live.append((title, subtitle, shell, index))
         return live
 
-    def _finder_remember(self, title: str) -> None:
+    def _finder_remember(self, tab_index: int, title: str) -> None:
         """Record a card jump for the finder's recency row (100x-130).
 
         Most-recent-first, de-duplicated, capped at
         ``_FINDER_RECENT_MAX`` entries -- the same honest memory the
         web twin's finder gained this round, persisted with the session
-        (``finder_recent`` text key, JSON-encoded).
+        (``finder_recent`` text key, JSON-encoded).  (100x-142) the key
+        is ``"tab:title"`` -- five card titles are duplicated ACROSS
+        tabs (Dataset, Preview, Results …), and the old title-only key
+        landed the chip on whichever tab built first.  Legacy bare
+        titles from an older session file are dropped on re-membering
+        (they cannot name a tab).
         """
-        recent = [t for t in getattr(self, "_finder_recent", []) if t != title]
-        recent.insert(0, title)
+        key = f"{tab_index}:{title}"
+        recent = [
+            entry
+            for entry in getattr(self, "_finder_recent", [])
+            if entry != key and entry != title
+        ]
+        recent.insert(0, key)
         self._finder_recent = recent[:_FINDER_RECENT_MAX]
 
     def _find_card_dialog(self) -> None:
@@ -2697,11 +2791,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             entry.insert(0, last_query)
         entry.pack(fill="x", padx=14, pady=(0, 8))
 
-        def jump_title(title: str) -> None:
-            """Chip shortcut: jump straight to a remembered card."""
-            for card_title, _subtitle, _shell, index in self._live_cards():
-                if card_title == title:
-                    self._jump_to_card(index, title)
+        def jump_title(remembered: str) -> None:
+            """Chip shortcut: jump straight to a remembered card.
+
+            (100x-142) The memory keys on "tab:title" -- five card
+            titles are duplicated ACROSS tabs, so a title-only match
+            jumped to whichever tab built first.  Bare titles from an
+            older session keep the first-match fallback.
+            """
+            index: int | None = None
+            title = remembered
+            head, sep, rest = remembered.partition(":")
+            if sep and head.isdigit():
+                index = int(head)
+                title = rest
+            for card_title, _subtitle, _shell, card_index in self._live_cards():
+                if card_title == title and (index is None or card_index == index):
+                    self._jump_to_card(card_index, card_title)
                     win.destroy()
                     return
 
@@ -2712,12 +2818,30 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # "Clear" ghost button: one click empties the memory (the
         # session-persisted ``finder_recent`` key too) and the row
         # collapses in place -- the honest empty, no re-open needed.
-        recent_titles = [
-            title
-            for title in getattr(self, "_finder_recent", [])
-            if any(card_title == title for card_title, _s, _sh, _i in self._live_cards())
-        ]
-        if recent_titles:
+        # (100x-142) entries are "tab:title" keys; a title duplicated
+        # across tabs gets the tab label appended so the chips stay
+        # honest about WHICH Dataset / Results card they open.
+        live_cards = self._live_cards()
+        live_keys = {(card_index, card_title) for card_title, _s, _sh, card_index in live_cards}
+        title_counts: dict[str, int] = {}
+        for card_title, _s, _sh, _i in live_cards:
+            title_counts[card_title] = title_counts.get(card_title, 0) + 1
+
+        def _parse_remembered(entry: str) -> tuple[int | None, str]:
+            head, sep, rest = entry.partition(":")
+            if sep and head.isdigit():
+                return int(head), rest
+            return None, entry
+
+        remembered_cards: list[tuple[str, int | None, str]] = []
+        for remembered_key in getattr(self, "_finder_recent", []):
+            index, title = _parse_remembered(remembered_key)
+            if index is not None:
+                if (index, title) in live_keys:
+                    remembered_cards.append((remembered_key, index, title))
+            elif any(card_title == title for card_title, _s, _sh, _i in live_cards):
+                remembered_cards.append((remembered_key, None, title))
+        if remembered_cards:
             recent_row = ttk.Frame(win, style="Card.TFrame")
             recent_row.pack(fill="x", padx=14, pady=(0, 6))
             ttk.Label(
@@ -2725,12 +2849,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ).pack(side="left")
             chips = ttk.Frame(recent_row, style="Card.TFrame")
             chips.pack(side="left", padx=(8, 0))
-            for title in recent_titles:
+            for remembered_key, index, title in remembered_cards:
+                chip_text = title
+                if index is not None and title_counts.get(title, 0) > 1:
+                    with contextlib.suppress(tk.TclError):
+                        chip_text = f"{title} · {self._book.tab(index, 'text').strip()}"
                 chip = ttk.Button(
                     chips,
-                    text=_truncate_caption_text(title, 24),
+                    text=_truncate_caption_text(chip_text, 24),
                     style="Ghost.TButton",
-                    command=lambda remembered=title: jump_title(remembered),
+                    command=lambda remembered=remembered_key: jump_title(remembered),
                 )
                 chip.pack(side="left", padx=(4, 0))
                 Tooltip(
@@ -2807,7 +2935,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         cards you keep visiting stay one click away.
         """
         self._jump_to_tab(tab_index)
-        self._finder_remember(title)
+        self._finder_remember(tab_index, title)
         self.update_idletasks()
         for entry_title, _subtitle, shell in _CARD_INDEX:
             if entry_title != title:
@@ -2908,10 +3036,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         messagebox.showerror(title, detail)
 
     def _require(self, module: str, feature: str) -> bool:
-        """Gate a feature on a probed dependency with an install hint."""
+        """Gate a feature on a probed dependency with an install hint.
+
+        (100x-142) The hint lookup used a bare ``next()`` -- a module
+        name outside ``_DEPENDENCIES`` raised ``StopIteration`` INSIDE
+        the Tk callback (surfacing as the generic "Unexpected error"
+        dialog instead of an install hint).  The guarded fallback keeps
+        the gate honest for any future dependency name.
+        """
         if self.deps.get(module):
             return True
-        pip_hint = next(hint for name, _l, _p, hint in _DEPENDENCIES if name == module)
+        pip_hint = next(
+            (hint for name, _l, _p, hint in _DEPENDENCIES if name == module),
+            f"{module}",
+        )
         messagebox.showwarning(
             f"{feature} needs {module}",
             f"{feature} needs the {module} package, which is not installed.\n\n"
@@ -3044,11 +3182,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if error is not None:
             traceback.print_exception(type(error), error, error.__traceback__)
             messagebox.showerror("Calculation failed", f"{type(error).__name__}: {error}")
-        elif self._on_done is not None:
-            try:
-                self._on_done(result)
-            except Exception as exc:  # noqa: BLE001 - render errors are ours
-                self._show_error("Could not display the result", exc)
+        else:
+            # (100x-142) capture-and-clear BEFORE invoking: a render
+            # callback that chains straight into _start_job (e.g. an
+            # auto-follow-up job) used to have its own on_done wiped
+            # by the assignment below -- the chained result was then
+            # silently discarded.  No current handler chains, but the
+            # ordering was one refactor away from silent data loss.
+            callback = self._on_done
+            self._on_done = None
+            if callback is not None:
+                try:
+                    callback(result)
+                except Exception as exc:  # noqa: BLE001 - render errors are ours
+                    self._show_error("Could not display the result", exc)
         self._on_done = None
         self.after(80, self._poll_jobs)
 
@@ -3060,8 +3207,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _copy(self, text: str) -> None:
         self.clipboard_clear()
         self.clipboard_append(text)
+        if self._busy:
+            # (100x-142) a copy during a running job must not clobber
+            # the live job label (the status bar IS the job's progress
+            # line); the clipboard write -- the user's real intent --
+            # still happens.
+            return
         self._job_label.configure(text="copied to clipboard")
-        self.after(1400, lambda: self._job_label.configure(text="busy…" if self._busy else "idle"))
+        self.after(1400, lambda: self._job_label.configure(text="idle"))
 
     def _close_embedded(self, host: Any) -> None:
         figure = getattr(host, "_pg_figure", None)
@@ -3395,6 +3548,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             tab = self._book.index(self._book.select())
         except tk.TclError:  # pragma: no cover - no tab selected yet
             tab = 0
+        # (100x-142) the picked paths -- pure pickers only (see
+        # _SESSION_PATH_ATTRS); dataset paths that need a reload stay
+        # out on purpose.  getattr twice on purpose: the isinstance
+        # guard must never leak an unrelated loop variable into str().
+        paths = {
+            name: str(getattr(self, name))
+            for name in sorted(_SESSION_PATH_ATTRS)
+            if isinstance(getattr(self, name, None), Path)
+        }
         return dump_session(
             theme=self._theme,
             geometry=self.geometry(),
@@ -3402,6 +3564,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             variables=variables,
             families=families,
             texts=texts,
+            paths=paths,
         )
 
     def _write_session_file(self) -> bool:
@@ -3703,6 +3866,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         self._reset_tab(index)
 
+    def _session_text_widgets(self) -> dict[str, Any]:
+        """The seven persisted text boxes as ONE shared map.
+
+        (100x-142) The four text maps had drifted apart: the restore path
+        knew all seven keys, the reset map carried five, the copy map a
+        DIFFERENT five, and the ownership walk only four -- so the
+        Chemistry tab's MACCS box and both similarity-scan boxes escaped
+        "Reset to defaults" and "Copy inputs as JSON" while riding the
+        session file all along.  One map, four consumers, no drift.
+        """
+        return {
+            "pasted": self._feat_pasted_text,
+            "corpus": self._corpus_text,
+            "smiles": getattr(self, "_dock_smiles_text", None),
+            "rism": getattr(self, "_rism_text", None),
+            "maccs": getattr(self, "_maccs_text", None),
+            "scan_refs": getattr(self, "_scan_ref_text", None),
+            "scan_lib": getattr(self, "_scan_lib_text", None),
+        }
+
     def _reset_tab(self, index: int) -> None:
         """Reset ONE tab's inputs to launch defaults (per-tab footer
         button, 100x-55; the File-menu command delegates here).
@@ -3713,13 +3896,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         """
         names = self._tab_input_owners.get(index, set())
         defaults = self._session_defaults
-        text_widgets = {
-            "pasted": self._feat_pasted_text,
-            "corpus": self._corpus_text,
-            "smiles": getattr(self, "_dock_smiles_text", None),
-            "rism": getattr(self, "_rism_text", None),
-            "maccs": getattr(self, "_maccs_text", None),
-        }
+        text_widgets = self._session_text_widgets()
         applied = 0
         for name in sorted(names):
             if name.startswith("family:"):
@@ -3779,14 +3956,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         into an issue report, a script, or a message.
         """
         names = self._tab_input_owners.get(index, set())
-        text_widgets = {
-            "pasted": self._feat_pasted_text,
-            "corpus": self._corpus_text,
-            "smiles": getattr(self, "_dock_smiles_text", None),
-            "rism": getattr(self, "_rism_text", None),
-            "scan_refs": getattr(self, "_scan_ref_text", None),
-            "scan_lib": getattr(self, "_scan_lib_text", None),
-        }
+        text_widgets = self._session_text_widgets()
         variables: dict[str, Any] = {}
         families: dict[str, bool] = {}
         texts: dict[str, str] = {}
@@ -3850,11 +4020,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         family_by_tcl_name = {
             str(var): f"family:{family}" for family, var in self._feat_family_vars.items()
         }
+        text_widgets = self._session_text_widgets()
         text_by_id = {
-            id(self._feat_pasted_text): "text:pasted",
-            id(self._corpus_text): "text:corpus",
-            id(getattr(self, "_dock_smiles_text", None)): "text:smiles",
-            id(getattr(self, "_rism_text", None)): "text:rism",
+            id(widget): f"text:{key}"
+            for key, widget in text_widgets.items()
+            if widget is not None
         }
         owners: dict[int, set[str]] = {}
         with contextlib.suppress(tk.TclError):
@@ -3912,15 +4082,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # the hint row's visibility rides a tk.Variable, so a restored
         # session may have flipped it -- re-apply after the variables.
         self._apply_hint_visibility()
-        text_widgets = {
-            "pasted": self._feat_pasted_text,
-            "corpus": self._corpus_text,
-            "smiles": getattr(self, "_dock_smiles_text", None),
-            "rism": getattr(self, "_rism_text", None),
-            "maccs": getattr(self, "_maccs_text", None),
-            "scan_refs": getattr(self, "_scan_ref_text", None),
-            "scan_lib": getattr(self, "_scan_lib_text", None),
-        }
+        text_widgets = self._session_text_widgets()
         for key, content in session["texts"].items():
             if key == "finder":
                 # 100x-121: the finder's last query -- an attribute, not a
@@ -3967,6 +4129,32 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         tab = session["tab"]
         if 0 <= tab < self._book.index("end"):
             self._book.select(tab)
+        # (100x-142) the picked paths come back ONLY when they still
+        # exist on this machine (a mailed session, a moved folder, a
+        # deleted campaign tree all degrade to the honest un-picked
+        # state); a live pick is never overwritten.
+        restored_paths = 0
+        # .get(): hand-built payloads (older tests, foreign callers) may
+        # carry no paths key at all -- the restore degrades to a no-op.
+        for name, raw_path in session.get("paths", {}).items():
+            if name not in _SESSION_PATH_ATTRS:
+                continue
+            if getattr(self, name, None) is not None:
+                continue
+            candidate = Path(raw_path)
+            if candidate.exists():
+                setattr(self, name, candidate)
+                restored_paths += 1
+        if restored_paths:
+            self._refresh_restored_path_labels()
+            self._job_label.configure(
+                text=(
+                    f"session restored · {restored_paths} picked path(s) "
+                    "back · File ▸ Clear saved session resets"
+                )
+            )
+        elif session["variables"] or session["texts"]:
+            self._job_label.configure(text="session restored · File ▸ Clear saved session resets")
         restored_geometry = False
         parsed = parse_geometry(session["geometry"])
         if parsed is not None:
@@ -3978,8 +4166,6 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             with contextlib.suppress(tk.TclError):
                 self.geometry(spec)
                 restored_geometry = True
-        if session["variables"] or session["texts"]:
-            self._job_label.configure(text="session restored · File ▸ Clear saved session resets")
         # the ML tab's manual-hyperparameter card is DYNAMIC (rebuilt
         # per model selection, values carried by the JSON variable the
         # loop above already restored) -- rebuild it once, after the
@@ -3995,6 +4181,68 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._objective_hint()
         return restored_geometry
 
+    def _refresh_restored_path_labels(self) -> None:
+        """Re-render every picker's info label after a path restore.
+
+        (100x-142) The pick handlers configure their labels inline, so
+        a restored path needs the same text the picker would have
+        written.  The four cards that OWN a refresh helper reuse it
+        (one rule per card); every other label is set with the picker's
+        exact format, each guarded so one missing widget can never
+        abort the rest of the restore.
+        """
+
+        def _label(attr: str, text: str) -> None:
+            widget = getattr(self, attr, None)
+            if widget is not None:
+                with contextlib.suppress(tk.TclError):
+                    widget.configure(text=text)
+
+        def _name_of(attr: str) -> str:
+            value = getattr(self, attr, None)
+            return value.name if isinstance(value, Path) else "—"
+
+        # cards with their own refresh helper -- one rule each
+        for helper in (
+            "_dock_refresh_campaign_info",
+            "_dock_refresh_vina_info",
+            "_dock_vbatch_refresh_info",
+            "_dock_mgl_refresh_info",
+        ):
+            with contextlib.suppress(Exception):
+                getattr(self, helper)()
+        # inline-format labels -- the pickers' own text, verbatim
+        if isinstance(self._dock_out_dir, Path):
+            _label("_dock_out_info", f"campaign output: {self._dock_out_dir}")
+        if isinstance(self._dock_receptor_source, Path):
+            _label("_dock_receptor_info", self._dock_receptor_source.name)
+        if isinstance(self._dock_ligand_path, Path):
+            _label("_dock_ligand_info", self._dock_ligand_path.name)
+        if isinstance(self._dock_smi_out, Path):
+            _label("_dock_smi_info", f"output: {self._dock_smi_out}")
+        if isinstance(self._dock_gen_out, Path):
+            _label("_dock_gen_out_info", f"output: {self._dock_gen_out}")
+        if isinstance(self._dock_smiles_receptor, Path):
+            _label("_dock_smiles_receptor_info", str(self._dock_smiles_receptor))
+        if isinstance(self._dock_smiles_out, Path):
+            _label("_dock_smiles_out_info", f"campaign output: {self._dock_smiles_out}")
+        if isinstance(self._dock_audit_gpf, Path) or isinstance(self._dock_audit_folder, Path):
+            gpf = str(self._dock_audit_gpf) if isinstance(self._dock_audit_gpf, Path) else None
+            folder = (
+                str(self._dock_audit_folder) if isinstance(self._dock_audit_folder, Path) else None
+            )
+            text = ""
+            if gpf:
+                text += f"GPF: {gpf}"
+            if folder:
+                text += ("\n" if text else "") + f"folder: {folder}"
+            _label("_dock_audit_info", text)
+        if isinstance(self._conv_input, Path) or isinstance(self._conv_output, Path):
+            _label(
+                "_conv_info",
+                f"input: {_name_of('_conv_input')}\noutput: {_name_of('_conv_output')}",
+            )
+
     def _on_close(self) -> None:
         """Window close: save the session (unless disabled), then exit."""
         if self._persist_session:
@@ -4003,6 +4251,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     # -- menu actions ---------------------------------------------------- #
     def _menu_open_csv(self) -> None:
+        # (100x-142) the busy guard: Ctrl+O stayed live during a job and
+        # _ml_load_path swapped self._ml_frame synchronously while the
+        # running worker thread was still reading it -- a narrow but
+        # real race (KeyError on the swapped target, or silent training
+        # against the new frame).  The action buttons are disabled for
+        # exactly this reason; the menu accelerator now obeys the same
+        # rule.
+        if self._busy:
+            messagebox.showinfo(
+                "Busy",
+                "A calculation is still running -- wait for it before "
+                "opening another dataset.",
+            )
+            return
         self._book.select(self._ml_page)
         self._ml_open_csv()
 
@@ -9738,6 +10000,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "docking only the remainder.",
         )
         form_row(vbatch, "resume", vbatch_skip_check)
+        # (100x-142) toggling resume ON with both folders picked runs
+        # the census straight away (the trace fires during session
+        # restore too -- the paths are still un-picked at that point,
+        # so it degrades to a no-op; a busy app never auto-starts).
+        def _on_skip_toggle(*_args: Any) -> None:
+            if (
+                self._dock_vbatch_skip_var.get()
+                and not self._busy
+                and self._dock_vbatch_ligands is not None
+                and self._dock_vbatch_out is not None
+            ):
+                self._dock_vbatch_count()
+
+        self._dock_vbatch_skip_var.trace_add("write", _on_skip_toggle)
         vbatch_run_row = ttk.Frame(vbatch, style="Card.TFrame")
         grid_append(vbatch, vbatch_run_row, sticky="w", pady=(6, 0))
         vbatch_run_btn = self._action_button(
@@ -9751,6 +10027,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "below.",
         )
         vbatch_run_btn.pack(side="left")
+        # 100x-142: the pre-count button -- "N already docked, M to go"
+        # BEFORE the run, with the library's own skip rule (the same
+        # collision-aware naming the batch uses, so the census and the
+        # run can never disagree).
+        vbatch_count_btn = self._action_button(
+            vbatch_run_row,
+            "Count remaining",
+            self._dock_vbatch_count,
+            tooltip="vina_batch_progress: counts the ligands under the "
+            "tree whose _out.pdbqt AND non-empty log already exist -- "
+            "exactly the rows a resumed run would skip -- and says how "
+            "many are left to dock.",
+        )
+        vbatch_count_btn.pack(side="left", padx=(10, 0))
         # 100x-120: parse the picked config (parse_vina_config) -- the
         # key\u2192value dump plus a one-click fill of the single-run form.
         vbatch_parse_btn = self._action_button(
@@ -9908,6 +10198,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "per-row reason, never aborting the batch.",
         )
         gen_run_btn.pack(side="left")
+        # 100x-142: the generate → convert bridge -- one click hands
+        # the PDB folder to the MGLTools card (round 26's open item:
+        # "load the generated PDBs into the MGLTools card").
+        gen_bridge_btn = self._action_button(
+            gen_run_row,
+            "Send PDBs → MGLTools",
+            self._dock_gen_to_mgl,
+            tooltip="Hands the structure output folder to the MGLTools "
+            "card below as its PDB source (the output folder is "
+            "pre-filled BESIDE it when unset) and jumps there -- the "
+            "nigga.py → niggaqt.py relay without one re-pick.",
+        )
+        gen_bridge_btn.pack(side="left", padx=(10, 0))
         self._dock_gen_summary = ttk.Label(
             gen_run_row, text="—", style="CardMuted.TLabel", wraplength=380, justify="left"
         )
@@ -11379,6 +11682,42 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 style="Field.TLabel",
             )
 
+    def _dock_vbatch_count(self) -> None:
+        """Pre-flight resume census: N already docked, M to go (100x-142).
+
+        ``vina_batch_progress`` with the SAME skip rule and the SAME
+        collision-aware output names ``run_vina_batch`` uses -- the
+        census is a promise the run keeps.  The summary label carries
+        the verdict (and confesses name collisions when the tree has
+        same-stem ligands in different sub-folders).
+        """
+        if not self._require_pharmaml():
+            return
+        if self._dock_vbatch_ligands is None or self._dock_vbatch_out is None:
+            messagebox.showwarning(
+                "Missing paths",
+                "Pick the ligand folder and the output folder first -- the "
+                "census counts what a resumed run would skip.",
+            )
+            return
+        ligands, out = self._dock_vbatch_ligands, self._dock_vbatch_out
+
+        def work() -> Any:
+            from pharmaml.docking import vina_batch_progress
+
+            return vina_batch_progress(ligands, out)
+
+        def render(progress: Any) -> None:
+            note = (
+                f"resume census: {progress.docked}/{progress.total} already docked "
+                f"· {progress.remaining} to go"
+            )
+            if progress.collisions:
+                note += f" · {progress.collisions} name collision(s) disambiguated"
+            self._dock_vbatch_summary.configure(text=note, style="Field.TLabel")
+
+        self._start_job("counting the resume census", work, render)
+
     def _dock_vbatch_run(self) -> None:
         """Dock every PDBQT under the ligand tree with one Vina config."""
         if not self._require_pharmaml():
@@ -11568,6 +11907,41 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "ligand_structures.csv",
             "Generation report",
         )
+
+    def _dock_gen_to_mgl(self) -> None:
+        """Hand the generated PDB folder to the MGLTools card (100x-142).
+
+        The nigga.py → niggaqt.py relay: the structure output folder
+        becomes the converter's PDB source, the PDBQT output folder is
+        pre-filled BESIDE it (never inside it, never over a live pick),
+        the MGL card's info label refreshes, and the finder's own jump
+        lands on the card -- one click from generate to convert-ready.
+        """
+        if self._dock_gen_out is None:
+            messagebox.showwarning(
+                "No output folder",
+                "Choose the structure output folder first -- the bridge "
+                "sends the PDBs it holds to the MGLTools card.",
+            )
+            return
+        src = self._dock_gen_out
+        self._dock_mgl_src = src
+        if self._dock_mgl_out is None:
+            # a sensible default the user can always re-pick: the PDBQT
+            # tree lands BESIDE the PDB folder, never inside it
+            self._dock_mgl_out = src.parent / f"{src.name}_pdbqt"
+        self._dock_mgl_refresh_info()
+        self._dock_gen_summary.configure(
+            text=(
+                f"PDB folder handed to the MGLTools card ({src.name}) -- "
+                "hit Convert the batch there"
+            ),
+            style="Field.TLabel",
+        )
+        for title, _subtitle, _shell, index in self._live_cards():
+            if title == "PDB → PDBQT batch (MGLTools)":
+                self._jump_to_card(index, title)
+                break
 
     # -- PDB -> PDBQT batch via MGLTools card (niggaqt.py, 100x-141) ---- #
 
@@ -13100,11 +13474,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showwarning("Check the manual settings", str(exc))
             return
 
+        # (100x-142) the frame is captured on the MAIN thread (the
+        # _ml_clean_frame pattern): reading self._ml_frame inside work()
+        # raced a concurrent dataset swap (Ctrl+O during the job).
+        frame = self._ml_frame
+
         def work() -> Any:
             from pharmaml.ml import evaluate_model, train_model
             from pharmaml.ml.preprocessing import make_train_test_split
 
-            frame = self._ml_frame
             y = frame[target]
             numeric, dropped = numeric_feature_columns(frame, target)
             x_train, x_test, y_train, y_test = make_train_test_split(
@@ -13218,13 +13596,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if kind == "voting" and task == "regression":
             voting_rule = "soft"  # ignored by VotingRegressor; keep valid
 
+        # (100x-142) same main-thread capture as _ml_train.
+        frame = self._ml_frame
+
         def work() -> Any:
             from pharmaml.ml.evaluation import evaluate_model
             from pharmaml.ml.models import build_stacking, build_voting
             from pharmaml.ml.preprocessing import make_train_test_split
             from pharmaml.ml.training import TrainingResult
 
-            frame = self._ml_frame
             y = frame[target]
             x_train, x_test, y_train, y_test = make_train_test_split(
                 frame[numeric], y, random_state=42
@@ -13699,7 +14079,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if smiles is not None:
                 query_names = test_frame[smiles].tolist()
             label = str(self._ml_bundle[1].get("name", "bundle"))
-        if n_models == 0 and len(x_train) <= k:
+        # (100x-142) the k-guard no longer requires n_models == 0: the
+        # friendly pre-flight warning belongs to EVERY too-few-rows case
+        # (bootstrap or not) -- before, a short train set with bootstrap
+        # models > 0 fell through to the library's own ModelError as a
+        # mid-job "Calculation failed" dialog.
+        if len(x_train) <= k:
             messagebox.showwarning(
                 "Too few training rows",
                 f"k={k} needs at least {k + 1} training rows; only "
@@ -14113,7 +14498,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showwarning("Check the search settings", str(exc))
             return
 
-        def work(report: Any) -> Any:
+        # (100x-142) same main-thread capture as _ml_train; the worker
+        # parameter is "notify" (the DL tab's convention) -- the old
+        # "report" name was shadowed by the evaluate_model binding below
+        # and survived only because the last on_trial call happened
+        # before the rebinding.
+        frame = self._ml_frame
+
+        def work(notify: Any) -> Any:
             from sklearn.model_selection import cross_val_score
 
             import pharmaml.ml.tuner as tuner_module
@@ -14136,11 +14528,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     note = f"best {info['best_score']:.3f}"
                 if info.get("error") is not None:
                     note = (note + " · " if note else "") + "trial failed"
-                report(info["trial"], info.get("total"), note)
+                notify(info["trial"], info.get("total"), note)
 
             hypermodel = getattr(tuner_module, hypermodel_name)
             objective = "r2" if task == "regression" else "accuracy"
-            frame = self._ml_frame
             y = frame[target]
             numeric, _dropped = numeric_feature_columns(frame, target)
             x_train, x_test, y_train, y_test = make_train_test_split(
@@ -14289,7 +14680,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if estimator == "dnn":
             if not self._require("torch", "the Deep Learning tab"):
                 return
-            if self._ml_path is not None:
+            # (100x-142) carry the LIVE frame -- the cleaned dataset the
+            # search actually scored -- instead of re-reading the original
+            # CSV from _ml_path (the old behaviour resurrected every row
+            # the Clean card had removed).
+            if self._ml_frame is not None:
+                self._dl_load_frame(
+                    self._ml_frame,
+                    f"{self._ml_path.name} (live)" if self._ml_path else "live frame",
+                )
+            elif self._ml_path is not None:
                 self._dl_load_path(self._ml_path)
             if target in list(self._dl_target_combo["values"]):
                 self._dl_target_combo.set(target)
@@ -14404,10 +14804,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if task == "auto":
             task = self._infer_task(target)
 
+        # (100x-142) same main-thread capture as _ml_train.
+        frame = self._ml_frame
+
         def work(report: Any) -> Any:
             from pharmaml.ml import compare_models
 
-            frame = self._ml_frame
             y = frame[target]
             numeric, _dropped = numeric_feature_columns(frame, target)
 
@@ -14812,19 +15214,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         self._dl_load_path(path)
 
-    def _dl_load_path(self, path: Path) -> None:
-        try:
-            from pharmaml.utils.io import read_table
+    def _dl_load_frame(self, frame: Any, label: str) -> None:
+        """Adopt an in-memory frame as the DL tab's dataset.
 
-            frame = read_table(path)
-        except Exception as exc:  # noqa: BLE001
-            self._show_error("Could not read the dataset", exc)
-            return
-        if frame.empty:
-            messagebox.showwarning("Empty dataset", f"{path.name} has no rows.")
-            return
+        (100x-142) Split out of ``_dl_load_path`` so "Apply best → dnn"
+        can carry the LIVE (possibly cleaned) Data & ML frame into the
+        Deep Learning tab -- reloading ``_ml_path`` used to resurrect the
+        ORIGINAL un-cleaned CSV, so the winner was then trained on data
+        it was never tuned on.
+        """
         self._dl_frame = frame
-        self._dl_path = path
+        self._dl_path = None
         columns = [str(column) for column in frame.columns]
         self._dl_preview_tree.delete(*self._dl_preview_tree.get_children())
         self._dl_preview_tree["columns"] = columns
@@ -14837,7 +15237,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
         self._dl_target_combo["values"] = columns
         self._dl_target_combo.set(default_target_column(frame) or columns[-1])
-        self._dl_info.configure(text=f"{path.name} — {len(frame):,} rows × {len(columns)} columns")
+        self._dl_info.configure(
+            text=f"{label} — {len(frame):,} rows × {len(columns)} columns"
+        )
+
+    def _dl_load_path(self, path: Path) -> None:
+        try:
+            from pharmaml.utils.io import read_table
+
+            frame = read_table(path)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not read the dataset", exc)
+            return
+        if frame.empty:
+            messagebox.showwarning("Empty dataset", f"{path.name} has no rows.")
+            return
+        self._dl_load_frame(frame, path.name)
+        self._dl_path = path
 
     def _dl_train(self) -> None:
         if not self._require_pharmaml():

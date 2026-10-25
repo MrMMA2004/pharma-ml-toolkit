@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS. The card titled \"Ligand structures (CSV → PDB + MOL2)\" is clearly visible at the top of the interface.\n2) PASS. The run row contains both the \"Generate structures\" button and the \"Send PDBs → MGLTools\" button.\n3) PASS. The card includes entry fields for \"conformers\" (set to 50) and \"workers\" (set to 1).\n4) PASS. The layout is clean with no overlapping widgets, cut-off text, or visible rendering defects.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792971058,
+  "id": "2026102607305670e0c3cd73454f35",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102607305670e0c3cd73454f35",
+  "usage": {
+    "completion_tokens": 115,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1359,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1474
+  }
+}

@@ -100,11 +100,13 @@ _LOG = get_logger(__name__)
 
 __all__ = [
     "DockingRunResult",
+    "VinaBatchProgress",
     "batch_run_directories",
     "parse_vina_config",
     "run_autodock4",
     "run_vina",
     "run_vina_batch",
+    "vina_batch_progress",
 ]
 
 
@@ -137,6 +139,68 @@ class DockingRunResult:
     seconds: float
     error: str | None = None
     skipped: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class VinaBatchProgress:
+    """Pre-flight resume census for :func:`run_vina_batch`.
+
+    The answer to "what would a resumed run actually do?" before the
+    Dock button is pressed -- the same skip rule
+    ``run_vina_batch(skip_existing=True)`` applies (output PDBQT AND
+    non-empty log, the zero-byte log marking a crashed job), computed
+    with the SAME collision-disambiguated output names the batch will
+    write, so the census and the run can never disagree.
+
+    Attributes
+    ----------
+    total:
+        Ligand PDBQTs found under the tree (recursively).
+    docked:
+        Ligands whose ``<stem>_out.pdbqt`` AND non-empty ``<stem>.log``
+        already exist in the output folder -- the rows a resumed batch
+        skips in seconds.
+    remaining:
+        ``total - docked`` -- the ligands a resumed run would dock.
+    collisions:
+        Same-stem ligands in different sub-folders whose flat output
+        names were disambiguated (the "<parent>_<stem>" prefix rule).
+
+    Examples
+    --------
+    >>> import shutil, tempfile
+    >>> from pathlib import Path
+    >>> from pharmaml.docking.workflow import vina_batch_progress
+    >>> root = Path(tempfile.mkdtemp())
+    >>> ligs, out = root / "ligs", root / "out"
+    >>> ligs.mkdir(); out.mkdir()
+    >>> _ = (ligs / "a.pdbqt").write_text("LIGAND\\n")
+    >>> _ = (ligs / "b.pdbqt").write_text("LIGAND\\n")
+    >>> vina_batch_progress(ligs, out)   # nothing docked yet
+    VinaBatchProgress(total=2, docked=0, remaining=2, collisions=0)
+    >>> _ = (out / "a_out.pdbqt").write_text("POSE\\n")
+    >>> _ = (out / "a.log").write_text("Estimated\\n")
+    >>> vina_batch_progress(ligs, out)   # 'a' complete, 'b' still to go
+    VinaBatchProgress(total=2, docked=1, remaining=1, collisions=0)
+    >>> _ = (out / "b_out.pdbqt").write_text("POSE\\n")
+    >>> _ = (out / "b.log").write_text("")   # zero-byte: crashed job
+    >>> vina_batch_progress(ligs, out)   # 'b' is honestly NOT docked
+    VinaBatchProgress(total=2, docked=1, remaining=1, collisions=0)
+    >>> sub = ligs / "sub"; sub.mkdir()
+    >>> _ = (sub / "a.pdbqt").write_text("LIGAND\\n")   # stem collision
+    >>> vina_batch_progress(ligs, out)
+    VinaBatchProgress(total=3, docked=1, remaining=2, collisions=1)
+    >>> shutil.rmtree(root)
+    >>> vina_batch_progress(root / "ligs", out)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DockingError: ligands directory not found: .../ligs
+    """
+
+    total: int
+    docked: int
+    remaining: int
+    collisions: int
 
 
 def _require_executable(name: str) -> str:
@@ -378,6 +442,95 @@ def parse_vina_config(conf_path: str | Path) -> dict[str, str]:
     return config
 
 
+def _batch_output_names(ligands: list[Path]) -> dict[Path, str]:
+    """The flat output stem per ligand, collision-disambiguated.
+
+    Flat output names ("l_out.pdbqt") collide when two sub-folders hold
+    ligands with the same stem -- the second run would silently
+    overwrite the first.  Colliding stems get a "<parent>_<stem>"
+    prefix (and a running counter if even that repeats), so no result
+    is ever lost.  One rule shared by :func:`run_vina_batch` and
+    :func:`vina_batch_progress` (100x-142) -- the census and the run can
+    never disagree about which file a ligand owns.
+    """
+    used_stems: set[str] = set()
+    output_names: dict[Path, str] = {}
+    for ligand in ligands:
+        stem = ligand.stem
+        if stem in used_stems:
+            stem = f"{safe_filename(ligand.parent.name)}_{ligand.stem}"
+            counter = 2
+            while stem in used_stems:
+                stem = f"{safe_filename(ligand.parent.name)}_{ligand.stem}_{counter}"
+                counter += 1
+            _LOG.warning(
+                "output name collision for %s -- writing %s_out.pdbqt instead",
+                ligand,
+                stem,
+            )
+        used_stems.add(stem)
+        output_names[ligand] = stem
+    return output_names
+
+
+def vina_batch_progress(
+    ligands_dir: str | Path,
+    out_dir: str | Path,
+) -> VinaBatchProgress:
+    """Count what a resumed Vina batch would skip and what it would dock.
+
+    The pre-flight twin of ``run_vina_batch(skip_existing=True)``: the
+    SAME skip rule (``<stem>_out.pdbqt`` AND non-empty ``<stem>.log``, a
+    zero-byte log counting as a crashed job to redo) applied with the
+    SAME collision-disambiguated output names -- so "N ligands already
+    docked, M to go" on a button is a promise the run keeps.
+
+    Parameters
+    ----------
+    ligands_dir:
+        Tree with ligand PDBQTs (searched recursively).
+    out_dir:
+        The batch's output folder (poses and logs live there).
+
+    Returns
+    -------
+    VinaBatchProgress
+        total / docked / remaining / collisions census.
+
+    Raises
+    ------
+    DockingError
+        If the ligands directory is missing (the run's own first
+        check, fired early for the same honest reason).
+    """
+    ligands_root = Path(ligands_dir)
+    if not ligands_root.is_dir():
+        raise DockingError(f"ligands directory not found: {ligands_dir}")
+    out = Path(out_dir)
+    ligands = sorted(p for p in ligands_root.rglob("*.pdbqt") if p.is_file())
+    output_names = _batch_output_names(ligands)
+    collisions = sum(
+        1 for ligand, stem in output_names.items() if stem != ligand.stem
+    )
+    docked = 0
+    for stem in output_names.values():
+        out_pdbqt = out / f"{stem}_out.pdbqt"
+        log_file = out / f"{stem}.log"
+        if (
+            out_pdbqt.is_file()
+            and out_pdbqt.stat().st_size > 0
+            and log_file.is_file()
+            and log_file.stat().st_size > 0
+        ):
+            docked += 1
+    return VinaBatchProgress(
+        total=len(ligands),
+        docked=docked,
+        remaining=len(ligands) - docked,
+        collisions=collisions,
+    )
+
+
 def run_vina_batch(
     conf_path: str | Path,
     ligands_dir: str | Path,
@@ -464,27 +617,10 @@ def run_vina_batch(
         return []
     binary = _require_executable(vina_bin)
 
-    # Flat output names ("l_out.pdbqt") collide when two sub-folders hold
-    # ligands with the same stem -- the second run would silently overwrite
-    # the first.  Colliding stems get a "<parent>_<stem>" prefix (and a
-    # running counter if even that repeats), so no result is ever lost.
-    used_stems: set[str] = set()
-    output_names: dict[Path, str] = {}
-    for ligand in ligands:
-        stem = ligand.stem
-        if stem in used_stems:
-            stem = f"{safe_filename(ligand.parent.name)}_{ligand.stem}"
-            counter = 2
-            while stem in used_stems:
-                stem = f"{safe_filename(ligand.parent.name)}_{ligand.stem}_{counter}"
-                counter += 1
-            _LOG.warning(
-                "output name collision for %s -- writing %s_out.pdbqt instead",
-                ligand,
-                stem,
-            )
-        used_stems.add(stem)
-        output_names[ligand] = stem
+    # (100x-142) the collision-disambiguated stems live in ONE shared
+    # helper -- vina_batch_progress applies the identical naming, so
+    # the pre-flight census and this run can never disagree.
+    output_names = _batch_output_names(ligands)
 
     def _dock_one(ligand: Path) -> DockingRunResult:
         started = time.perf_counter()
