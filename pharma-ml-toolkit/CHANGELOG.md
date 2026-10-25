@@ -10,6 +10,95 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.75] — 2026-10-25
+
+### Added — the round-21 full review (100x-136): the File menu's Clear remembered order + the HTML twin's Contents block + the web preview's persistent pin
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a twenty-first time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–135's documented floor — the axis holds; no new gaps).
+Round 135's handover named the round's work: (a) the HTML twin's
+header could grow the same CONTENTS block the PDF title page gained
+(its numbered headings already made one possible — HTMLReport would
+need to collect its add_* headings), (b) the web preview's pin could
+PERSIST per browser (localStorage, mirroring the desktop's new
+session-file key — today the pin died with the dialog), and (c) the
+desktop picklist could offer a "Clear remembered order" affordance in
+the FILE menu (today only the dialog's Reset forgot, and only while a
+drift existed). All three shipped — plus CRON 473787, which hit the
+exec-limits disable again (run_count 1), deleted and recreated fresh
+as 473854.
+
+**The File menu's always-available forget.** The dialog's Reset
+button only exists while the picklist is open, and only works while
+the order has drifted from the walk order (it disables itself at the
+walk order, the boundary arrows' honesty) — a reader who remembered
+an order had no way to forget it without dialog gymnastics. File ▸
+Clear remembered report order (sitting right after its forgetting
+sibling "Clear saved session…") drops BOTH kinds and writes the
+session file through IMMEDIATELY — the Reset's forget rides the
+close-time auto-save, this one does not wait, so the forget survives
+a crash. The honest messages cover every case: a memory that never
+existed gets "Nothing to forget yet" (never a silent no-op),
+persist_session=False names its scope ("the memory never reached a
+file"), and a failed file write confesses the consequence ("the next
+launch restores the remembered order after all"). The job label
+carries the round's own status line.
+
+**The HTML twin's Contents block.** HTMLReport now collects every
+table and figure page name in the walking order the file writes them
+(each line the SAME string the page itself prints — the table's
+`<h2>` heading / the figure's `<figcaption>` caption; a heading-less
+block lists its positional fallback `table N` / `figure N`, the
+identity the alt already carries) and renders a `<nav
+class='contents' aria-label='Contents'>` panel right under the
+subtitle — the SAME mini table-of-contents the PDF title page gained
+in 100x-135, themed through the same CSS variables both palettes
+ride. A report with no table/figure pages skips the block entirely
+(a contents list of nothing is noise, the PDF twin's rule).
+save_visual_bundle's report.html gains it automatically (no caller
+change), and the playground's HTML twin lists its count-prefixed
+pages exactly the way the picklist's numbered rows read — the saved
+message says so.
+
+**The web preview's persistent pin.** The pin (Enter on a focused
+trace group, 100x-135) died with the dialog; now it rides a small
+external store over localStorage (`src/lib/pinned-trace-store.ts`,
+keyed by the figure section's title — the web twin of the desktop's
+report_page_order session-file key) wrapped as a React external
+store: useSyncExternalStore subscribes, the snapshot reads an
+in-memory mirror hydrated once from the key, writes update the key
+AND the mirror and notify every subscriber, and SSR hydrates against
+the null server snapshot — no restore effect anywhere, so the
+react-hooks/set-state-in-effect rule stays clean. A stored pin is
+validated against the live trace count at READ time (a stale index
+pins nothing, the honest fallback), a restored pin confesses its
+provenance ("pinned from your last visit"), the caption hints the
+persistence ("a pin is remembered per browser"), and an empty map
+REMOVES the whole key (the walking-order key's minimal-payload
+discipline). The Escape layering (the 135 E2E catch) holds for
+restored pins exactly as for fresh ones.
+
+### Verified
+
+- Full suite: **2544 collected = 2539 passed + 5 skipped / 0
+  failures** (bare `python -m pytest`, junit136.xml; 19 new tests —
+  TestReview136Gui ×11, TestHTMLReportContents ×5,
+  TestSessionReportPinStore ×3); ruff clean; mypy at the 61-error
+  pre-existing baseline (zero new, none in the round's regions).
+- The web side: `bun run lint` clean, `bunx tsc --noEmit` clean.
+- Notebooks re-executed with 1.2.75 via BOTH drivers (64: TOTAL
+  208 s; 26: "26-R7 driver OK").
+- The round's evidence: scratch/smoke136.py (SMOKE136_OK), the
+  pg136-file-menu.png / pg136-after-clear.png shots +
+  pg136-contents-report.html artifact (scratch/shoot136.py,
+  SHOOT136_OK), the TS probe scratch/probe_session_report_136.ts
+  (PROBE136_OK), and the agent-browser E2E (home renders v1.2.75 ·
+  2539 tests; the preview's pin persists across a dialog
+  close/reopen; zero console errors).
+
 ## [1.2.74] — 2026-10-25
 
 ### Added — the round-20 full review (100x-135): the picklist's order memory across restarts + the PDF title page's Contents + the web preview's keyboard inspect

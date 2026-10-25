@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { useTheme } from "next-themes";
 import {
   Activity,
@@ -49,6 +49,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToolkitStore } from "@/lib/store";
+import {
+  pinWasTouched,
+  pinnedTraceSnapshot,
+  savePinnedTrace,
+  subscribeToPinnedTraces,
+} from "@/lib/pinned-trace-store";
 import {
   collectSessionReport,
   figureSketchBounds,
@@ -236,6 +242,18 @@ function saveSectionOrder(order: GroupId[]): void {
   }
 }
 
+/** (100x-136) The hook a sketch reads its pin through — subscribe to
+ * the external store (src/lib/pinned-trace-store.ts, the probe-pinned
+ * twin of the desktop's session-file key), snapshot THIS figure's
+ * entry, and hydrate against null. */
+function usePinnedTrace(title: string): number | null {
+  return useSyncExternalStore(
+    subscribeToPinnedTraces,
+    () => pinnedTraceSnapshot(title),
+    () => null,
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* The preview's section renderers (100x-133)                           */
 /* ------------------------------------------------------------------ */
@@ -264,10 +282,25 @@ const SKETCH_PAD = { left: 6, right: 6, top: 6, bottom: 18 };
  *  <title> tooltip never appears on keyboard focus — a visible strip
  *  is the honest replacement), and Enter PINS the readout so it stays
  *  readable while focus walks on (Esc unpins, Enter again unpins too —
- *  the pin is a toggle, and only one trace is pinned at a time). */
+ *  the pin is a toggle, and only one trace is pinned at a time).
+ *  (100x-136) The pin PERSISTS per browser: the pin lives in a small
+ *  external store over localStorage (useSyncExternalStore — no restore
+ *  effect anywhere), every pin/unpin writes through, a stored pin is
+ *  validated against the live trace count at READ time (a stale index
+ *  pins nothing), and a restored pin confesses its provenance in the
+ *  readout — the desktop's report_page_order memory, mirrored exactly
+ *  (its session-file key traded for this browser's storage). */
 function FigureSketch({ section }: { section: ReportFigureSection }) {
   const [focusedTrace, setFocusedTrace] = useState<number | null>(null);
-  const [pinnedTrace, setPinnedTrace] = useState<number | null>(null);
+  // (100x-136) the pin rides the external store — the stored value,
+  // validated against the live trace list at read time (a figure that
+  // changed shape since the pin landed pins nothing, the honest
+  // fallback), and the confession marks a pin this browser session
+  // never wrote (it arrived from storage, the reader's last visit).
+  const storedPin = usePinnedTrace(section.title);
+  const pinnedTrace =
+    storedPin !== null && storedPin < section.traces.length ? storedPin : null;
+  const pinRestored = pinnedTrace !== null && !pinWasTouched(section.title);
   const bounds = figureSketchBounds(section.traces);
   const spanX = bounds.xMax - bounds.xMin;
   const spanY = bounds.yMax - bounds.yMin;
@@ -292,15 +325,22 @@ function FigureSketch({ section }: { section: ReportFigureSection }) {
     (event: KeyboardEvent<SVGGElement>): void => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        setPinnedTrace((prev) => (prev === traceIndex ? null : traceIndex));
+        // (100x-136) the pin writes through the store — the toggle AND
+        // the memory are one call, and the notification re-renders.
+        savePinnedTrace(
+          section.title,
+          pinnedTrace === traceIndex ? null : traceIndex,
+        );
       } else if (event.key === "Escape" && pinnedTrace === traceIndex) {
         // the pin CONSUMES the Escape: clear the readout and stop the
         // event here, so the dialog's own close-on-escape never fires
         // on the same keystroke -- a reader clearing a pin sees the
         // cleared state, and only a SECOND Escape closes the dialog.
+        // (100x-136) the clear writes through too — forgetting is a
+        // stored decision, not a lost one.
         event.preventDefault();
         event.stopPropagation();
-        setPinnedTrace(null);
+        savePinnedTrace(section.title, null);
       }
     };
   return (
@@ -448,7 +488,9 @@ function FigureSketch({ section }: { section: ReportFigureSection }) {
         >
           {traceInspectText(readoutTrace)}
           {pinnedTrace === readoutIndex
-            ? " — pinned (Esc clears, Enter toggles)"
+            ? pinRestored
+              ? " — pinned from your last visit (Esc clears, Enter toggles)"
+              : " — pinned (Esc clears, Enter toggles)"
             : ""}
         </p>
       ) : null}
@@ -521,8 +563,8 @@ function SectionPreviewBody({ section }: { section: ReportSection }) {
           {section.traces.length} trace{section.traces.length === 1 ? "" : "s"}:{" "}
           {section.traces.map((trace) => trace.name).join(" · ")}
           — a quick sketch; hover a trace (or Tab to it) to inspect its
-          numbers, Enter pins the readout; the download renders this
-          figure through matplotlib.
+          numbers, Enter pins the readout — a pin is remembered per
+          browser; the download renders this figure through matplotlib.
         </p>
       </div>
     );

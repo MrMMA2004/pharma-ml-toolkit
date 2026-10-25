@@ -991,3 +991,33 @@ layering) + 3 new TestSavePdfReport
 cases (library); the standing caption pins updated for the round's
 dual-path wording.
 
+
+### Round 21 (100x-136) — the File menu's Clear remembered order + the HTML twin's Contents block + the web preview's persistent pin
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **246 public symbols, 43 zero-hit —
+byte-identical to rounds 127–135's documented floor.** The library
+axis holds; round 135's handover named all three of the round's
+items — (a) the HTML twin's header growing the same CONTENTS block
+the PDF title page gained, (b) the web preview's pin persisting per
+browser, and (c) the desktop picklist's Clear-remembered-order
+affordance in the FILE menu — and all three shipped:
+
+| Surface | The 1.2.75 fix |
+| --- | --- |
+| The File menu's Clear remembered order | File ▸ "Clear remembered report order…" (right after its forgetting sibling) drops both kinds of `_report_page_order` and writes the session file through IMMEDIATELY (the Reset's forget rides the close-time auto-save; this one does not wait — it survives a crash). The honest messages: "Nothing to forget yet" for a memory that never existed, the persist_session=False scope named, and the failed-write confession ("the next launch restores the remembered order after all"). The next picklist opens in the walking order with its confession quiet. |
+| The HTML twin's Contents block | `HTMLReport` collects every table/figure page name in the walking order (the string the page itself prints — the `<h2>` heading / the `<figcaption>` caption; heading-less blocks list their positional fallback `table N` / `figure N`) and renders a themed `<nav class='contents' aria-label='Contents'>` panel under the subtitle — the PDF title page's 100x-135 mini table-of-contents, mirrored. No table/figure pages → the block is skipped (the noise rule). `save_visual_bundle`'s report.html gains it automatically. |
+| The web preview's persistent pin | The pin rides an external store over localStorage (`src/lib/pinned-trace-store.ts`, keyed by the figure section's title — the web twin of the desktop's `report_page_order` session-file key): useSyncExternalStore subscribes (no restore effect — the react-hooks/set-state-in-effect rule stays clean), the snapshot reads a lazily-hydrated mirror, writes move the key AND the mirror and notify, SSR hydrates against null. A stored pin is range-validated at read time, a restored pin confesses ("pinned from your last visit"), an empty map removes the whole key. |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.75 via
+both drivers: 64 TOTAL 208 s; 26 "26-R7 driver OK"). The GUI-axis
+census holds at 68 live cards (the round touched no card topology).
+The web catalog walk: 26/26 entries (the round touched no catalog
+topology). 19 new tests: TestReview136Gui (11, desktop incl. the
+HTML-twin Contents end-to-end) + TestHTMLReportContents (5, library)
++ TestSessionReportPinStore (3, web parity: the TS probe pins + the
+component/store static pins); one standing pin updated (the toggle's
+computed form) and one joined the import line
+(useSyncExternalStore).

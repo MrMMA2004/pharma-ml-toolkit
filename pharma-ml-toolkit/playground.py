@@ -335,6 +335,16 @@ Design notes
   inspect grew a KEYBOARD path: Tab focuses a trace group, the readout
   strip shows the same honest numbers, and Enter pins it (Esc clears
   the pin) -- the pointer-only tooltip was the only path until now.
+  (100x-136) The order memory gained an always-available FORGET: File
+  ▸ Clear remembered report order drops both kinds and writes the
+  session file through immediately (the dialog's Reset only works
+  while a drift exists; this path never disables), the HTML twin's
+  header grew the SAME Contents block the PDF title page has (every
+  table/figure page name in the walking order, the count-prefixed
+  names the playground composes), and the web preview's pin now
+  PERSISTS per browser (an external store over localStorage -- a pin
+  deliberately held survives the dialog closing and the page
+  reloading, the desktop's session-file memory mirrored).
 
 Command line helpers (useful for scripting and CI)::
 
@@ -2292,6 +2302,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             label="Save session now", accelerator="Ctrl+Shift+S", command=self._save_session_now
         )
         file_menu.add_command(label="Clear saved session…", command=self._clear_saved_session)
+        # (100x-136) the order memory's always-available forget -- the
+        # dialog's Reset only exists while the picklist is open (and only
+        # works while a drift exists); this one forgets from anywhere.
+        file_menu.add_command(
+            label="Clear remembered report order…", command=self._clear_report_order
+        )
         file_menu.add_command(label="Export session…", command=self._export_session)
         file_menu.add_command(label="Import session…", command=self._import_session)
         file_menu.add_command(
@@ -3275,6 +3291,70 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 else "No saved session file existed.",
             )
 
+    def _clear_report_order(self) -> None:
+        """File ▸ Clear remembered report order -- forget the picklist's memory.
+
+        (100x-136) The order memory (100x-134, persisted by 100x-135)
+        was forgettable from INSIDE the dialog only while a drift
+        existed -- the dialog's Reset button disables itself at the
+        walk order, so a reader who remembered an order wanted no
+        dialog gymnastics to forget it.  This menu item is the
+        always-available path: both kinds are dropped, the session
+        file is written THROUGH immediately (the Reset relies on the
+        close-time auto-save; this one does not wait -- the forget
+        survives a crash), and the next picklist opens in the walking
+        order with its confession quiet.  With ``persist_session=False``
+        the memory was per-process anyway -- the message says so
+        honestly, and the failed-write case confesses that the next
+        LAUNCH will restore the order after all (the file still holds
+        it).  A memory that never existed gets the honest "nothing to
+        forget" -- never a silent no-op.
+        """
+        if not (
+            self._report_page_order.get("table")
+            or self._report_page_order.get("figure")
+        ):
+            if messagebox is not None:
+                messagebox.showinfo(
+                    "No remembered order",
+                    "Nothing to forget yet.\n\n"
+                    "Save a session report once and its page order is "
+                    "remembered -- the next Save's checklist re-opens "
+                    "pre-arranged, and this menu item forgets it.",
+                )
+            return
+        self._report_page_order.pop("table", None)
+        self._report_page_order.pop("figure", None)
+        wrote = self._write_session_file() if self._persist_session else False
+        if messagebox is not None:
+            if not self._persist_session:
+                messagebox.showinfo(
+                    "Remembered order cleared",
+                    "The report checklist's remembered page order was "
+                    "forgotten for this session.\n\n"
+                    "Session saving is off, so the memory never reached "
+                    "a file -- the next launch starts fresh regardless.",
+                )
+            elif wrote:
+                messagebox.showinfo(
+                    "Remembered order cleared",
+                    "The report checklist's remembered page order was "
+                    "forgotten.\n\n"
+                    "The next Save opens in the walking order (tables "
+                    "first, then figures), and the session file was "
+                    "written -- the next launch forgets it too.",
+                )
+            else:
+                messagebox.showinfo(
+                    "Remembered order cleared",
+                    "The report checklist's remembered page order was "
+                    "forgotten -- the next Save opens in the walking order "
+                    "(tables first, then figures).\n\n"
+                    "The session file could not be written, so the next "
+                    "launch restores the remembered order after all.",
+                )
+        self._job_label.configure(text="remembered report order cleared")
+
     def _export_session(self) -> None:
         """File ▸ Export session -- write a shareable session file."""
         if filedialog is None:
@@ -3709,6 +3789,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         close-time auto-save writes the empty state, and the next
         LAUNCH starts at the walk order.  A corrupt or foreign file
         value resets the memory, never the restore.
+
+        (100x-136) The memory is forgettable WITHOUT the dialog too:
+        File ▸ Clear remembered report order drops both kinds and
+        writes the session file through immediately (the Reset's
+        forget rides the close-time auto-save; this one does not
+        wait), so the next picklist -- this session or the next
+        launch -- opens in the walking order.  The dialog's Reset
+        stays the in-dialog path (drift-honest); the menu item is the
+        always-available one.
         """
         if tk is None:  # pragma: no cover - headless import
             return live, tables
@@ -4248,6 +4337,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         picklist's numbered rows did (the 100x-124 " (2)" caption
         dedupe retired: the position prefix already separates two
         same-titled pages, and reads truer to the checklist).
+
+        (100x-136) The header carries the CONTENTS block -- the SAME
+        mini table-of-contents the PDF twin's title page gained in
+        100x-135: every table and figure page name in the walking
+        order the file writes them (tables first, then figures, the
+        picklist's own order), each line the SAME string the page's
+        own heading prints.  No caller change -- ``HTMLReport`` grew
+        it, so this twin and the library's every other HTML report
+        (``save_visual_bundle``'s report.html included) navigate by
+        the number the checklist ticked.
         """
         live = self._live_session_figures()
         tables = self._live_session_tables()
@@ -4354,6 +4453,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 f"{saved}\n\nSelf-contained HTML -- the figures are embedded, "
                 "so the file renders identically offline and survives "
                 "being moved or e-mailed.\n\n"
+                "The header's Contents block lists every page by its "
+                "number -- the same numbers the checklist's rows read.\n\n"
                 f"Theme: opens {theme} (the app's setting); the button in "
                 "the report's top-right corner cycles it per reader.",
             )

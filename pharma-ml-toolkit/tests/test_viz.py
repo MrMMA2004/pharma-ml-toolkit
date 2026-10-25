@@ -1207,6 +1207,110 @@ class TestHTMLReport:
         assert "<h1>empty</h1>" in text and "footer" in text
 
 
+class TestHTMLReportContents:
+    """(100x-136) The header's CONTENTS block -- the HTML twin of the
+    PDF title page's mini table-of-contents (100x-135): every table
+    and figure page name in the walking order the file writes them,
+    each line the SAME string the page's own heading prints, skipped
+    entirely when the report has no table/figure pages."""
+
+    def test_contents_lists_pages_in_walking_order(self, trained_classifier):
+        _result, report, _X_test, _y_test = trained_classifier
+        page = (
+            HTMLReport("Contents report", subtitle="the twin")
+            .add_metrics(report, heading="Metrics")
+            .add_table(metrics_to_dataframe(report), heading="table 1 · board")
+            .add_figure(plot_confusion_matrix(report), caption="figure 1 · cm")
+            .add_figure(plot_confusion_matrix(report), caption="figure 2 · cm")
+        )
+        text = page.render()
+        # the nav block with its semantic label + the heading
+        assert "<nav class='contents' aria-label='Contents'>" in text
+        assert "<h2>Contents</h2>" in text
+        # the lines in CALL order (the walking order the file writes
+        # them), each the SAME string the page itself prints
+        assert "<li>table 1 · board</li>" in text
+        assert "<li>figure 1 · cm</li>" in text
+        assert "<li>figure 2 · cm</li>" in text
+        assert (
+            text.index("<li>table 1 · board</li>")
+            < text.index("<li>figure 1 · cm</li>")
+            < text.index("<li>figure 2 · cm</li>")
+        )
+        # the page's own headings match their Contents lines (no drift)
+        assert "<h2>table 1 · board</h2>" in text
+        assert "<figcaption>figure 1 · cm</figcaption>" in text
+        # the block sits in the HEADER: after the subtitle, before the
+        # first content block (the metrics cards)
+        assert text.index("aria-label='Contents'") < text.index("class='metrics'")
+
+    def test_contents_skipped_without_table_or_figure_pages(self):
+        text = (
+            HTMLReport("prose only")
+            .add_metrics({"a": 1})
+            .add_text("just prose", heading="Notes")
+            .render()
+        )
+        # no nav block, no Contents heading (the CSS comment's word
+        # does not count -- the RENDERED document is what matters)
+        assert "<nav class='contents'" not in text
+        assert "<h2>Contents</h2>" not in text
+        assert "<ul class='contents-list'>" not in text
+
+    def test_contents_fallback_names_for_headingless_blocks(
+        self, trained_classifier
+    ):
+        """A heading-less table / caption-less figure lists its
+        positional fallback -- the SAME identity the figure's alt
+        already carries."""
+        _result, report, _X_test, _y_test = trained_classifier
+        text = (
+            HTMLReport("fallbacks")
+            .add_table(metrics_to_dataframe(report))
+            .add_figure(plot_confusion_matrix(report))
+            .render()
+        )
+        assert "<li>table 1</li>" in text
+        assert "<li>figure 1</li>" in text
+        # the figure's alt carries the same positional identity
+        assert "alt='figure 1'" in text
+
+    def test_contents_styles_ride_the_theme_variables(self):
+        text = HTMLReport("styled").add_table(
+            pd.DataFrame({"a": [1]}), heading="t"
+        ).render()
+        # the panel rides the CSS variables so both themes carry it
+        assert "nav.contents {" in text
+        assert "background: var(--panel)" in text
+        assert "ul.contents-list li::marker { color: var(--accent); }" in text
+
+    def test_visual_bundle_report_gains_contents(self, tmp_path):
+        """``save_visual_bundle`` composes through HTMLReport -- its
+        report.html carries the Contents with the title-cased page
+        names, automatically (no caller change)."""
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        from matplotlib.figure import Figure
+
+        figure = Figure()
+        figure.add_subplot(111).plot([0, 1], [0, 1])
+        board = pd.DataFrame({"model": ["rf"], "score": [0.9]})
+        written = save_visual_bundle(
+            {"confusion": figure},
+            tables={"leaderboard": board},
+            metrics={"a": 1},
+            out_dir=tmp_path / "bundle",
+            close=False,
+        )
+        assert written, "the bundle wrote nothing"
+        text = (tmp_path / "bundle" / "report.html").read_text()
+        assert "<nav class='contents'" in text
+        assert "<li>Leaderboard</li>" in text
+        assert "<li>Confusion</li>" in text
+        assert text.index("<li>Leaderboard</li>") < text.index("<li>Confusion</li>")
+
+
 class TestHTMLReportTheme:
     """(100x-126) The report's theme engine: a ``theme`` constructor
     parameter bakes the initial ``data-theme``, every report carries a

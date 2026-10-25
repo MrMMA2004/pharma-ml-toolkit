@@ -1291,7 +1291,9 @@ class TestSessionReportKeyboard:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # Enter AND Space toggle; Escape only clears THIS trace's pin
         assert 'event.key === "Enter" || event.key === " "' in report
-        assert "prev === traceIndex ? null : traceIndex" in report
+        # (100x-136) the computed form — the toggle AND the stored write
+        # are one call through the external store (no setState)
+        assert "pinnedTrace === traceIndex ? null : traceIndex" in report
         assert 'event.key === "Escape"' in report
         # Space never scrolls the page while toggling
         assert "event.preventDefault()" in report
@@ -1316,10 +1318,11 @@ class TestSessionReportKeyboard:
 
     def test_the_type_is_imported_not_namespaced(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
-        # KeyboardEvent rides the type import (no React namespace)
+        # KeyboardEvent rides the type import (no React namespace);
+        # (100x-136) useSyncExternalStore joined the named imports
         assert (
-            'import { useEffect, useMemo, useRef, useState, type KeyboardEvent }'
-            ' from "react"'
+            'import { useEffect, useMemo, useRef, useState, useSyncExternalStore,'
+            ' type KeyboardEvent } from "react"'
         ) in report
 
     def test_the_escape_layering_holds_the_dialog(self) -> None:
@@ -1340,3 +1343,101 @@ class TestSessionReportKeyboard:
         assert "event.preventDefault();" in report
         # the group's own Escape consumes the event AFTER the pin clears
         assert "the pin CONSUMES the Escape" in report
+
+
+class TestSessionReportPinStore:
+    """Round 100x-136: the preview's pin PERSISTS per browser — the web
+    twin of the desktop's report_page_order session-file key, wrapped as
+    a React external store (src/lib/pinned-trace-store.ts) so the
+    component needs NO restore effect at all.  The TS probe pins the
+    store's contract over a mocked localStorage; the static pins keep
+    the component's surfaces (the hook, the read-time range guard, the
+    restored-pin confession, the caption's persistence hint) from
+    silently disappearing between rounds."""
+
+    REPORT_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "session-report.tsx"
+    )
+    STORE_TS = REPO_ROOT / "src" / "lib" / "pinned-trace-store.ts"
+
+    needs_round = pytest.mark.skipif(
+        not REPORT_TSX.is_file() or not STORE_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src + <repo>/scratch) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+
+    @needs_round
+    def test_the_store_contract_pins(self) -> None:
+        # the TS probe exits non-zero on drift and prints its verdicts
+        _run([BUN, "run", "scratch/probe_session_report_136.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_136.json").read_text())
+        # the SSR legs: no window -- the honest nothing, never a throw
+        assert ts["ssrSnapshotNull"] is True, ts
+        assert ts["ssrWriteNeverThrows"] is True, ts
+        assert ts["ssrReadMapEmpty"] is True, ts
+        # the pre-seeded launch: a stored pin lands on the FIRST snapshot
+        assert ts["preSeededSnapshotA"] == 2, ts
+        assert ts["preSeededSnapshotB"] == 0, ts
+        assert ts["preSeededUnknownNull"] is True, ts
+        # the stored pins were READ, not written -- the confession basis
+        assert ts["preSeededUntouchedA"] is True, ts
+        assert ts["preSeededUntouchedB"] is True, ts
+        # the write-through: snapshot + key move together, the notify
+        # fires (and stops after unsubscribe), the write marks touched
+        assert ts["notifyFiredOnWrite"] is True, ts
+        assert ts["writeMovesSnapshot"] is True, ts
+        assert ts["writeMarksTouched"] is True, ts
+        assert ts["writeMovesKey"] is True, ts
+        assert ts["writeKeepsOtherEntries"] is True, ts
+        # the unpin: the entry clears, the REST of the map survives
+        assert ts["unpinClearsSnapshot"] is True, ts
+        assert ts["unpinKeepsRest"] is True, ts
+        # the minimal-payload discipline: an empty map REMOVES the key
+        assert ts["keyRemovedWhenEmpty"] is True, ts
+        assert ts["emptySnapshotNull"] is True, ts
+        assert ts["unsubscribeStopsNotify"] is True, ts
+        # the load-time filter + the tolerant read
+        assert ts["loadFilterKeepsValid"] is True, ts
+        tolerance = ts["tolerantRead"]
+        assert tolerance["garbage"] is True and tolerance["array"] is True, ts
+        assert tolerance["scalar"] is True and tolerance["nullBody"] is True, ts
+        # the storage key itself (the desktop twin's report_page_order,
+        # traded for this browser key)
+        assert ts["storageKey"] == "pharmaml.reportPinnedTrace", ts
+
+    def test_the_component_reads_the_store_through_the_hook(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the hook: subscribe + THIS figure's snapshot + the null server
+        # snapshot (SSR hydrates honestly, the stored pin lands after)
+        assert "useSyncExternalStore(" in report
+        assert "subscribeToPinnedTraces," in report
+        assert "() => pinnedTraceSnapshot(title)," in report
+        assert "() => null," in report
+        # the read-time range guard: a stale index pins nothing
+        assert "storedPin < section.traces.length" in report
+        # the restored-pin confession (the desktop memory's convention)
+        assert "pinned from your last visit (Esc clears, Enter toggles)" in report
+        assert "!pinWasTouched(section.title)" in report
+        # the writes ride the store (toggle AND clear write through)
+        assert report.count("savePinnedTrace(") >= 2
+        # the caption confesses the persistence
+        assert "a pin is remembered per" in report
+
+    def test_the_store_file_pins_its_own_contract(self) -> None:
+        store = self.STORE_TS.read_text(encoding="utf-8")
+        # the exported surface the component + probe consume
+        assert 'export const PINNED_TRACE_STORAGE_KEY = "pharmaml.reportPinnedTrace";' in store
+        for exported in (
+            "export function readPinnedTraceMap(",
+            "export function pinnedTraceSnapshot(",
+            "export function subscribeToPinnedTraces(",
+            "export function pinWasTouched(",
+            "export function savePinnedTrace(",
+        ):
+            assert exported in store, exported
+        # the minimal-payload discipline + the blocked-storage tolerance
+        assert "removeItem(PINNED_TRACE_STORAGE_KEY)" in store
+        assert "still updates the mirror" in store
+        # the SSR guards (window undefined -> the honest nothing)
+        assert store.count('typeof window === "undefined"') >= 3

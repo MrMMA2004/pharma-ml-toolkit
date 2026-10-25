@@ -9164,3 +9164,309 @@ class TestReview135Gui:
         assert 'if key == "report_page_order":' in restore
         # the tolerant parse (a corrupt value resets, never raises)
         assert "json.loads" in restore
+
+
+@XVFB_SKIP
+class TestReview136Gui:
+    """Round 100x-136: the order memory's always-available FORGET --
+    File ▸ Clear remembered report order.  The dialog's Reset only
+    exists while the picklist is open (and only works while a drift
+    exists); this menu item drops both kinds and writes the session
+    file through IMMEDIATELY, so the forget survives a crash and the
+    next launch starts at the walk order.  The round also carried the
+    HTML twin's Contents block (the library's own tests pin it) and
+    the web preview's persistent pin (the parity pins)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def isolated_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        """Point HOME at a scratch dir so tests never touch a real session."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        return tmp_path
+
+    @pytest.fixture()
+    def dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, rounds: int = 4) -> None:
+        for _ in range(rounds):
+            app.update_idletasks()
+            app.update()
+
+    def _find_dialog(self, app: Any) -> Any:
+        for child in list(app.winfo_children()):
+            if child.winfo_class() != "Toplevel":
+                continue
+            if str(child.title()) == "Session report contents":
+                return child
+        return None
+
+    @staticmethod
+    def _figure_static(title: str) -> Any:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        figure = plt.figure()
+        axes = figure.add_subplot(111)
+        axes.plot([0, 1], [0, 1])
+        axes.set_title(title)
+        return figure
+
+    # -- the forget itself ------------------------------------------------- #
+
+    def test_clear_forgets_and_writes_through(
+        self, playground: Any, xvfb_display: str, isolated_home: Path, dialogs: list[Any]
+    ) -> None:
+        """A remembered order is dropped AND the session file is written
+        immediately -- the forget does not wait for the close-time
+        auto-save (it survives a crash), and the message says so."""
+        import gc
+        import json as _json
+
+        app = playground.PlaygroundApp()  # persist_session=True
+        self._drain(app)
+        app._report_page_order = {
+            "figure": ["beta plot", "alpha plot"],
+            "table": ["T one"],
+        }
+        app._clear_report_order()
+        # both kinds dropped, in-process and on disk
+        assert app._report_page_order == {}, app._report_page_order
+        session_file = isolated_home / ".pharmaml" / "playground-session.json"
+        assert session_file.is_file(), "the clear never wrote the session file"
+        payload = _json.loads(session_file.read_text(encoding="utf-8"))
+        assert _json.loads(payload["texts"]["report_page_order"]) == {}
+        # the honest message: the forget is written, the launch forgets too
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos and infos[0][1][0] == "Remembered order cleared"
+        assert "next launch forgets it too" in infos[0][1][1]
+        assert "remembered report order cleared" in str(app._job_label.cget("text"))
+        app.destroy()
+        gc.collect()
+
+    def test_clear_with_no_memory_is_honest(
+        self, app: Any, dialogs: list[Any]
+    ) -> None:
+        """A memory that never existed gets the honest 'nothing to
+        forget' -- never a silent no-op, never an error."""
+        app._clear_report_order()
+        assert app._report_page_order == {}
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos and infos[0][1][0] == "No remembered order"
+        assert "Nothing to forget yet" in infos[0][1][1]
+
+    def test_after_clear_the_picklist_walks_in_walk_order(
+        self, app: Any, dialogs: list[Any]
+    ) -> None:
+        """The very next picklist after a clear opens in the WALKING
+        order with its confession quiet -- the clear is immediate, not
+        deferred to the next Save."""
+        app._report_page_order = {"figure": ["beta plot", "alpha plot"], "table": []}
+        app._clear_report_order()
+        live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
+        captured: dict[str, Any] = {}
+
+        def visit() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            checks = [
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TCheckbutton"
+            ]
+            captured["labels"] = [str(check.cget("text")) for check in checks]
+            # (the 133/134 lesson) a pack_forget confession stays in the
+            # CREATION walk -- only a MANAGED label is actually shown
+            captured["notes"] = [
+                str(widget.cget("text"))
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TLabel"
+                and widget.winfo_manager() != ""
+            ]
+            next(
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TButton" and str(widget.cget("text")) == "Cancel"
+            ).invoke()
+
+        app.after(150, visit)
+        assert app._session_report_picklist(live, []) is None
+        assert captured["labels"] == [
+            "figure 1 · alpha plot",
+            "figure 2 · beta plot",
+        ], captured
+        assert not any("last saved order" in note for note in captured["notes"])
+
+    def test_clear_forget_survives_restart(
+        self, playground: Any, xvfb_display: str, isolated_home: Path, dialogs: list[Any]
+    ) -> None:
+        """The end-to-end story: a remembering launch clears, and the
+        NEXT launch starts at the walk order (the write-through beat
+        the close-time auto-save to it)."""
+        import gc
+
+        app = playground.PlaygroundApp()
+        self._drain(app)
+        app._report_page_order = {"figure": ["beta plot", "alpha plot"], "table": []}
+        app._on_close()  # the memory lands on the file
+        gc.collect()
+
+        reopened = playground.PlaygroundApp()  # replants the memory
+        self._drain(reopened)
+        assert reopened._report_page_order["figure"] == ["beta plot", "alpha plot"]
+        reopened._clear_report_order()  # forgets AND writes through
+        reopened.destroy()
+        gc.collect()
+
+        third = playground.PlaygroundApp()
+        self._drain(third)
+        assert third._report_page_order == {}  # the forget survived
+        third.destroy()
+        gc.collect()
+
+    def test_persist_session_false_message_names_the_scope(
+        self, app: Any, dialogs: list[Any]
+    ) -> None:
+        """With session saving off, the memory was per-process anyway --
+        the message says so honestly instead of claiming a file write."""
+        app._report_page_order = {"figure": ["beta plot"], "table": []}
+        app._clear_report_order()
+        assert app._report_page_order == {}
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos and "never reached a file" in infos[0][1][1]
+
+    def test_failed_write_confesses_the_launch_restore(
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
+        dialogs: list[Any],
+        monkeypatch: Any,
+    ) -> None:
+        """When the session file CANNOT be written, the in-process forget
+        still happens but the message confesses the consequence: the
+        next launch restores the remembered order after all."""
+        import gc
+
+        monkeypatch.setattr(
+            playground.PlaygroundApp, "_write_session_file", lambda self: False
+        )
+        app = playground.PlaygroundApp()
+        self._drain(app)
+        app._report_page_order = {"figure": ["beta plot"], "table": []}
+        app._clear_report_order()
+        assert app._report_page_order == {}  # the in-process forget held
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos and "restores the remembered order after all" in infos[0][1][1]
+        app.destroy()
+        gc.collect()
+
+    # -- the HTML twin's Contents block (the library feature, end-to-end) -- #
+
+    def test_html_twin_carries_the_contents_block(
+        self,
+        app: Any,
+        playground: Any,
+        monkeypatch: Any,
+        dialogs: list[Any],
+        picklist_accept_all: None,
+        tmp_path: Any,
+    ) -> None:
+        """The playground's HTML report opens with the Contents nav --
+        every kept page's count-prefixed name, tables first, exactly
+        the way the picklist's numbered rows read."""
+        import pathlib
+
+        target = pathlib.Path(tmp_path) / "contents.html"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        first = self._figure_static("alpha plot")
+        second = self._figure_static("beta plot")
+        app._render_figure(app._topo_host, first)
+        app._render_figure(app._breed_host, second)
+        app._session_figures[0][1] = "alpha plot"
+        app._session_figures[1][1] = "beta plot"
+        app._desc_tree.insert("", "end", values=("MolWt", "180.16"))
+
+        app._menu_save_session_report_html()
+        import time
+
+        stop = time.time() + 240.0
+        while time.time() < stop:
+            app.update()
+            if not app._busy:
+                break
+            time.sleep(0.02)
+        assert not app._busy, "the HTML report job hung"
+        assert target.is_file()
+        text = target.read_text(encoding="utf-8")
+        # the Contents nav: the heading, the list, the count-prefixed
+        # lines in the walking order (the table first, then figures)
+        assert "<nav class='contents'" in text
+        assert "aria-label='Contents'" in text
+        assert "<li>table 1 · SMILES inspector</li>" in text
+        assert "<li>figure 1 · alpha plot</li>" in text
+        assert "<li>figure 2 · beta plot</li>" in text
+        assert (
+            text.index("<li>table 1 · SMILES inspector</li>")
+            < text.index("<li>figure 1 · alpha plot</li>")
+        )
+        # the page's own heading matches its Contents line (no drift)
+        assert "<h2>table 1 · SMILES inspector</h2>" in text
+        # the saved message confesses the new block
+        assert any(
+            "Contents block lists every page" in str(a) for _n, a in dialogs
+        ), "the save message never mentioned the Contents"
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+        app._desc_tree.delete(*app._desc_tree.get_children())
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_136(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-136" in doc
+        assert "always-available FORGET" in doc
+        assert "PERSISTS per browser" in doc
+
+    def test_clear_handler_docstring_pins_the_round(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._clear_report_order.__doc__ or ""
+        assert "100x-136" in doc
+        assert "persist_session=False" in doc
+
+    def test_picklist_docstring_mentions_the_menu_path(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._session_report_picklist.__doc__ or ""
+        assert "100x-136" in doc
+        assert "Clear remembered report order" in doc
+
+    def test_file_menu_wires_the_clear_command(self, playground: Any) -> None:
+        import inspect
+
+        source = inspect.getsource(playground.PlaygroundApp._build_menu)
+        assert 'label="Clear remembered report order…"' in source
+        assert "command=self._clear_report_order" in source
+        # the HTML menu's docstring confesses the Contents twin
+        html_doc = playground.PlaygroundApp._menu_save_session_report_html.__doc__ or ""
+        assert "100x-136" in html_doc
+        assert "CONTENTS block" in html_doc

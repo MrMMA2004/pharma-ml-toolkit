@@ -74,8 +74,12 @@ b'%PDF-'
 >>> html = report.render()
 >>> "<h1>QSAR run</h1>" in html and "<td>rf</td>" in html
 True
+>>> "<nav class='contents'" in html and "<li>Model leaderboard</li>" in html
+True
 >>> html.startswith("<!DOCTYPE html>")
 True
+>>> HTMLReport("no pages").add_text("only prose").render().count("<nav class='contents'")
+0
 >>> saved = report.save("/tmp/pharmaml_doctest_report.html")
 >>> saved.as_posix()
 '/tmp/pharmaml_doctest_report.html'
@@ -159,6 +163,15 @@ img { max-width: 100%; height: auto; border: 1px solid var(--border); border-rad
 figcaption { font-size: .8rem; color: var(--muted); margin-top: -0.8rem; margin-bottom: 1rem; }
 footer { margin-top: 2.5rem; font-size: .75rem; color: var(--faint);
          border-top: 1px solid var(--border); padding-top: .6rem; }
+/* (100x-136) the Contents block -- the HTML twin of the PDF title
+   page's mini table-of-contents: a bordered panel right under the
+   subtitle listing every table/figure page name in walking order. */
+nav.contents { border: 1px solid var(--border); border-radius: .5rem; background: var(--panel);
+               padding: .75rem 1rem .85rem; margin: 1.1rem 0 0; }
+nav.contents h2 { margin-top: 0; font-size: .95rem; }
+ul.contents-list { margin: .2rem 0 0; padding-left: 1.15rem; font-size: .85rem; }
+ul.contents-list li { padding: .1rem 0; }
+ul.contents-list li::marker { color: var(--accent); }
 .theme-toggle { position: fixed; top: .8rem; right: 1rem; font: inherit; font-size: .78rem;
   border: 1px solid var(--border); background: var(--panel); color: var(--fg);
   border-radius: .4rem; padding: .28rem .65rem; cursor: pointer; opacity: .82;
@@ -699,6 +712,16 @@ class HTMLReport:
     auto → light → dark at reading time, remembered per browser via
     ``localStorage``.  The script is inline, so the self-contained
     contract holds.
+
+    (100x-136) The header carries a CONTENTS block — the HTML twin of
+    the PDF title page's mini table-of-contents: every table and
+    figure page name, collected in the walking order the file writes
+    them, each line the SAME string the page itself prints (the
+    table's ``<h2>`` heading / the figure's ``<figcaption>`` caption;
+    a heading-less block lists its positional fallback ``table N`` /
+    ``figure N``, the identity its ``alt`` already carries).  A report
+    with no tables and no figures skips the block entirely — a
+    contents list of nothing is noise, the PDF twin's rule.
     """
 
     def __init__(
@@ -716,6 +739,12 @@ class HTMLReport:
         self.theme = theme
         self._blocks: list[str] = []
         self._figure_count = 0
+        self._table_count = 0
+        # (100x-136) the page names for the header's Contents block,
+        # collected in call order — exactly the sequence the document
+        # writes them (metrics/text sections are title-page material
+        # and are not listed, the PDF twin's discipline).
+        self._page_names: list[str] = []
 
     # -- content builders -------------------------------------------------
     def add_metrics(self, metrics: Any, heading: str | None = None) -> HTMLReport:
@@ -748,6 +777,11 @@ class HTMLReport:
         parts = [f"<h2>{_escape(heading)}</h2>"] if heading else []
         parts.append(_frame_to_html(frame, max_rows=max_rows))
         self._blocks.append("".join(parts))
+        # (100x-136) the Contents line this page contributes — the
+        # heading the page prints, or the positional fallback when the
+        # caller passed none (the identity is honest either way).
+        self._table_count += 1
+        self._page_names.append(heading or f"table {self._table_count}")
         return self
 
     def add_text(self, text: str, heading: str | None = None) -> HTMLReport:
@@ -771,6 +805,10 @@ class HTMLReport:
         if caption:
             block += f"<figcaption>{_escape(caption)}</figcaption>"
         self._blocks.append(block)
+        # (100x-136) the Contents line this page contributes — the
+        # caption the page prints, or the SAME positional fallback the
+        # alt already carries.
+        self._page_names.append(caption or f"figure {self._figure_count}")
         return self
 
     # -- rendering --------------------------------------------------------
@@ -779,6 +817,21 @@ class HTMLReport:
         subtitle = (
             f"<p class='subtitle'>{_escape(self.subtitle)}</p>" if self.subtitle else ""
         )
+        # (100x-136) the Contents block — the PDF title page's mini
+        # table-of-contents mirrored in HTML: every table/figure page
+        # name in the walking order, each line the SAME string the
+        # page prints (no drift is possible — the names ARE the
+        # strings the blocks rendered).  Skipped when the report has
+        # no table/figure pages at all (the noise rule).
+        contents = ""
+        if self._page_names:
+            lines = "".join(f"<li>{_escape(name)}</li>" for name in self._page_names)
+            contents = (
+                "<nav class='contents' aria-label='Contents'>\n"
+                "<h2>Contents</h2>\n"
+                f"<ul class='contents-list'>\n{lines}\n</ul>\n"
+                "</nav>\n"
+            )
         body = "\n".join(self._blocks)
         # the toggle's server-side label matches the baked theme (the
         # script relabels on load and whenever the reader cycles); its
@@ -796,7 +849,7 @@ class HTMLReport:
             "<meta name='viewport' content='width=device-width, initial-scale=1'>\n"
             f"<title>{_escape(self.title)}</title>\n<style>{_REPORT_CSS}</style>\n"
             "</head>\n<body>\n"
-            f"{toggle}<h1>{_escape(self.title)}</h1>\n{subtitle}\n{body}\n"
+            f"{toggle}<h1>{_escape(self.title)}</h1>\n{subtitle}\n{contents}{body}\n"
             "<footer>PharmaML report — self-contained HTML (figures embedded, "
             "no external assets)</footer>\n"
             f"<script>{_THEME_SCRIPT}</script>\n</body>\n</html>\n"
