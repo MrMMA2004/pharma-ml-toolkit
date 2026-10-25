@@ -1431,6 +1431,63 @@ class TestSavePdfReport:
         with pytest.raises(DependencyError, match="fpdf"):
             save_pdf_report({}, out_path=tmp_path / "x.pdf")
 
+    def test_title_page_contents_section(self, trained_classifier, tmp_path):
+        """(100x-135) the title page's mini table-of-contents: every
+        page name listed in the WALKING order (tables first, then
+        figures), each line the SAME string the page's own heading
+        prints -- the count-prefixed names read like the picklist's
+        numbered rows.  Metrics still ride the title page below it."""
+        _, report, _, _ = trained_classifier
+        out = save_pdf_report(
+            {"figure 2 · confusion": plot_confusion_matrix(report)},
+            tables={"table 1 · metrics": metrics_to_dataframe(report)},
+            metrics=report,
+            out_path=tmp_path / "toc.pdf",
+        )
+        reader = self._reader(out)
+        page0 = reader.pages[0].extract_text() or ""
+        assert "Contents" in page0
+        assert "Metrics" in page0  # the section below the contents list
+        # the walking order: the table's line rides BEFORE the figure's
+        assert page0.index("Table 1 · Metrics") < page0.index(
+            "Figure 2 · Confusion"
+        )
+        # each contents line is the page's OWN heading (no drift)
+        assert "Table 1 · Metrics" in (reader.pages[1].extract_text() or "")
+        assert "Figure 2 · Confusion" in (reader.pages[2].extract_text() or "")
+
+    def test_contents_skipped_when_nothing_to_list(self, tmp_path):
+        """A report with no tables and no figures stays a pure title
+        page -- a contents list of nothing is noise, skipped entirely."""
+        out = save_pdf_report({}, out_path=tmp_path / "bare.pdf", title="Bare")
+        page0 = self._reader(out).pages[0].extract_text() or ""
+        assert "Bare" in page0
+        assert "Contents" not in page0
+
+    def test_contents_lists_a_shared_name_twice(self, tmp_path):
+        """A table AND a figure sharing one name are TWO pages -- the
+        contents list says so twice (a dict merge would silently drop
+        one of them, and the list would lie about the page count)."""
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure()
+        try:
+            frame = pd.DataFrame({"a": [1]})
+            out = save_pdf_report(
+                {"shared": fig},
+                tables={"shared": frame},
+                out_path=tmp_path / "twice.pdf",
+                close=False,
+            )
+        finally:
+            plt.close(fig)
+        reader = self._reader(out)
+        assert len(reader.pages) == 3  # title / table / figure
+        page0 = reader.pages[0].extract_text() or ""
+        assert page0.count("Shared") == 2  # listed twice, honestly
+        assert "Shared" in (reader.pages[1].extract_text() or "")
+        assert "Shared" in (reader.pages[2].extract_text() or "")
+
 
 class TestExportDocx:
     """Word tables -- the legacy approved.py wrote a bare name list."""

@@ -961,3 +961,33 @@ pins); the standing index pins updated for the count prefix
 (TestReview123's PDF page name, TestReview124's retired dedupe,
 TestReview132's three table-heading pins, the preview caption's
 hover confession).
+
+### Round 20 (100x-135) — the picklist's order memory across restarts + the PDF title page's Contents + the web preview's keyboard inspect
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0; notebooks probe green), then the
+round-7 audit script re-ran: **246 public symbols, 43 zero-hit —
+byte-identical to rounds 127–134's documented floor.** The library
+axis holds; round 134's handover named all three of the round's
+items — (a) the desktop picklist's memory persisting across
+sessions, (b) the web preview's inspect growing a keyboard path, and
+(c) the PDF twin's title page listing the numbered page names — and
+all three shipped:
+
+| Surface | The 1.2.74 fix |
+| --- | --- |
+| The order memory across restarts | The picklist's remembered order now rides the auto-saved session file (`report_page_order`, the JSON-in-a-text trick): `_collect_session` serialises the two real kinds with labels coerced; `_restore_session` replants it before the first picklist ever opens, tolerantly (a corrupt/foreign value resets per kind, never the restore); the Reset button's forget is symmetric (the close-time auto-save writes the empty state, the next launch starts at the walk order); `persist_session=False` keeps the per-process memory. |
+| The PDF title page's Contents | `save_pdf_report` writes a mini table-of-contents under the subtitle — every page name in the walking order (tables first), each line the SAME string the page's own heading prints (a shared helper, no drift). The count-prefixed names make it read like the picklist's numbered rows; the empty report skips the section; a shared name lists twice (two pages, no silent dict-merge drop). |
+| The web preview's keyboard inspect | Every trace group in the preview's sketch is focusable (Tab reaches it; the inspect text rides `role="group"`'s aria-label), focus thickens the trace like hover does, and a readout strip under the sketch carries the FULL inspect text (a polite `role="status"` live region — the native tooltip never shows on keyboard focus). Enter PINS the readout (Space toggles too, Escape clears, one pin at a time, a pin outlives its focus). The caption names both paths. |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.74 via
+both drivers: 64 TOTAL 212 s; 26 "26-R7 driver OK"). The GUI-axis
+census holds at 68 live cards (the round touched no card topology).
+The web catalog walk: 26/26 entries (the round touched no catalog
+topology). 18 new tests: TestReview135Gui (9, desktop) +
+TestSessionReportKeyboard (6, web parity incl. the E2E-caught Escape
+layering) + 3 new TestSavePdfReport
+cases (library); the standing caption pins updated for the round's
+dual-path wording.
+

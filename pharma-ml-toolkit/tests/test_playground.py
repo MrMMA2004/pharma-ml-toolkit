@@ -8839,3 +8839,328 @@ class TestReview134Gui:
         html = playground.PlaygroundApp._menu_save_session_report_html.__doc__ or ""
         assert "100x-134" in pdf and "CARRY THE COUNT" in pdf
         assert "100x-134" in html and "CARRY THE COUNT" in html
+
+
+class TestReview135Gui:
+    """Round 100x-135: the picklist's order memory now survives
+    RESTARTS -- the ``report_page_order`` session-file key, mirroring
+    the web twin's localStorage exactly.  A completed Save rewrites
+    the memory, the close-time auto-save persists it, and a fresh
+    launch replants it before the first picklist ever opens; the
+    Reset button's forget is symmetric (the next launch starts at
+    the walk order), and a corrupt or foreign file value resets the
+    memory, never the restore."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def isolated_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        """Point HOME at a scratch dir so tests never touch a real session."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        return tmp_path
+
+    @staticmethod
+    def _drain(app: Any, rounds: int = 4) -> None:
+        for _ in range(rounds):
+            app.update_idletasks()
+            app.update()
+
+    def _find_dialog(self, app: Any) -> Any:
+        for child in list(app.winfo_children()):
+            if child.winfo_class() != "Toplevel":
+                continue
+            if str(child.title()) == "Session report contents":
+                return child
+        return None
+
+    def _arrow_buttons(self, app: Any, dialog: Any) -> tuple[list[Any], list[Any]]:
+        ups = [
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TButton" and str(widget.cget("text")) == "▲"
+        ]
+        downs = [
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TButton" and str(widget.cget("text")) == "▼"
+        ]
+        return ups, downs
+
+    def _button(self, app: Any, dialog: Any, text: str) -> Any:
+        return next(
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TButton"
+            and str(widget.cget("text")) == text
+        )
+
+    def _check_labels(self, app: Any, dialog: Any) -> list[str]:
+        """The checkbox texts in VISUAL order (the packing order)."""
+        checks = [
+            widget
+            for widget in app._walk_widgets(dialog)
+            if widget.winfo_class() == "TCheckbutton"
+        ]
+        body = checks[0].master.master.master  # check -> row -> group -> body
+        labels: list[str] = []
+        for group_frame in body.pack_slaves():
+            for child in group_frame.pack_slaves():
+                for check in checks:
+                    if check.master is child:
+                        labels.append(str(check.cget("text")))
+        return labels
+
+    # -- the session-file contract ----------------------------------------- #
+
+    def test_collect_session_carries_the_order_key(self, app: Any) -> None:
+        """``_collect_session`` serialises the memory as the
+        ``report_page_order`` text key -- JSON, only the two real
+        kinds, labels coerced to str (never a half-typed payload)."""
+        import json as _json
+
+        app._report_page_order = {
+            "figure": ["beta plot", "alpha plot"],
+            "table": ["T one"],
+            # a foreign kind the collector must DROP (never persisted)
+            "chart": ["never shipped"],
+        }
+        texts = app._collect_session()["texts"]
+        assert _json.loads(texts["report_page_order"]) == {
+            "figure": ["beta plot", "alpha plot"],
+            "table": ["T one"],
+        }, texts["report_page_order"]
+
+    def test_order_memory_survives_close_and_reopen(
+        self, playground: Any, xvfb_display: str, isolated_home: Path
+    ) -> None:
+        """The end-to-end restart: a completed Save stores the order,
+        the close-time auto-save persists it, and a FRESH launch
+        replants it before the first picklist ever opens."""
+        import gc
+
+        app = playground.PlaygroundApp()  # persist_session=True
+        self._drain(app)
+        live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
+        tables = [("T one", ["a"], [["1"]])]
+
+        def first_save() -> None:
+            dialog = self._find_dialog(app)
+            assert dialog is not None
+            ups, _downs = self._arrow_buttons(app, dialog)
+            ups[2].invoke()  # beta above alpha
+            app.update()
+            self._button(app, dialog, "Save report…").invoke()
+
+        app.after(150, first_save)
+        app._session_report_picklist(live, tables)
+        assert app._report_page_order == {
+            "table": ["T one"],
+            "figure": ["beta plot", "alpha plot"],
+        }, app._report_page_order
+        app._on_close()  # writes the session file, then destroys
+        gc.collect()
+
+        reopened = playground.PlaygroundApp()
+        self._drain(reopened)
+        # the memory rode the file: the fresh launch replanted it
+        assert reopened._report_page_order == {
+            "table": ["T one"],
+            "figure": ["beta plot", "alpha plot"],
+        }, reopened._report_page_order
+        reopened.destroy()
+        gc.collect()
+
+    def test_reset_forget_rides_the_session_file(
+        self, playground: Any, xvfb_display: str, isolated_home: Path
+    ) -> None:
+        """The Reset button's forget is symmetric: it empties the
+        attribute, the close-time auto-save writes the EMPTY state,
+        and the next LAUNCH starts at the walk order."""
+        import gc
+
+        app = playground.PlaygroundApp()
+        self._drain(app)
+        app._report_page_order = {
+            "figure": ["beta plot", "alpha plot"],
+            "table": [],
+        }
+        app._on_close()
+        gc.collect()
+
+        reopened = playground.PlaygroundApp()
+        self._drain(reopened)
+        assert reopened._report_page_order["figure"] == [
+            "beta plot",
+            "alpha plot",
+        ]
+        live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
+        tables: list[tuple[str, list[str], list[list[str]]]] = []
+
+        def reset_visit() -> None:
+            dialog = self._find_dialog(reopened)
+            assert dialog is not None
+            self._button(reopened, dialog, "Reset to walking order").invoke()
+            # Cancel: the Reset's forget must survive a non-save exit
+            self._button(reopened, dialog, "Cancel").invoke()
+
+        reopened.after(150, reset_visit)
+        assert reopened._session_report_picklist(live, tables) is None
+        assert reopened._report_page_order == {}  # the Reset forgot
+        reopened._on_close()  # the auto-save writes the EMPTY state
+        gc.collect()
+
+        third = playground.PlaygroundApp()
+        self._drain(third)
+        assert third._report_page_order == {}  # the forget survived restart
+        third.destroy()
+        gc.collect()
+
+    def test_relaunch_reopens_prearranged_with_confession(
+        self, playground: Any, xvfb_display: str, isolated_home: Path
+    ) -> None:
+        """The launch-path proof: a fresh boot from a remembering file
+        opens its FIRST picklist pre-arranged, with the memory
+        confession rendered and the Reset button armed."""
+        import gc
+
+        app = playground.PlaygroundApp()
+        self._drain(app)
+        app._report_page_order = {
+            "figure": ["beta plot", "alpha plot"],
+            "table": [],
+        }
+        app._on_close()
+        gc.collect()
+
+        reopened = playground.PlaygroundApp()
+        self._drain(reopened)
+        live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
+        captured: dict[str, Any] = {}
+
+        def visit() -> None:
+            dialog = self._find_dialog(reopened)
+            assert dialog is not None
+            captured["labels"] = self._check_labels(reopened, dialog)
+            captured["notes"] = [
+                str(widget.cget("text"))
+                for widget in reopened._walk_widgets(dialog)
+                if widget.winfo_class() == "TLabel"
+            ]
+            captured["reset_disabled"] = self._button(
+                reopened, dialog, "Reset to walking order"
+            ).instate(("disabled",))
+            self._button(reopened, dialog, "Cancel").invoke()
+
+        reopened.after(150, visit)
+        assert reopened._session_report_picklist(live, []) is None
+        # the FIRST dialog of the session opened pre-arranged
+        assert captured["labels"] == [
+            "figure 1 · beta plot",
+            "figure 2 · alpha plot",
+        ], captured
+        # the confession rendered and names the Reset affordance
+        notes = [n for n in captured["notes"] if "last saved order" in n]
+        assert notes and "Reset to walking order" in notes[0], captured
+        # the remembered order IS a drift -- Reset armed on arrival
+        assert captured["reset_disabled"] is False, captured
+        reopened.destroy()
+        gc.collect()
+
+    def test_foreign_or_corrupt_value_resets_never_raises(
+        self, playground: Any, xvfb_display: str, isolated_home: Path
+    ) -> None:
+        """A corrupt or foreign ``report_page_order`` value resets the
+        memory to the walk order, never the restore (the session's
+        other keys still land)."""
+        import gc
+        import json as _json
+
+        # (poison, the sanitized memory it must land on) -- the
+        # tolerance is PER KIND: a broken kind resets, a valid one in
+        # the same payload still lands (families restore the same way)
+        poisons = [
+            ("not json at all", {}),
+            (_json.dumps(["a", "list", "not", "a", "dict"]), {}),
+            (
+                _json.dumps({"figure": "not a list", "table": ["ok one"]}),
+                {"table": ["ok one"]},
+            ),
+            (
+                _json.dumps({"figure": [1, 2, 3], "table": ["ok one"]}),
+                {"table": ["ok one"]},
+            ),
+            (_json.dumps({"chart": ["a foreign kind"]}), {}),
+        ]
+        for poison, expected in poisons:
+            payload = playground.dump_session(
+                theme="light",
+                geometry="1000x700+10+10",
+                tab=0,
+                variables={},
+                families={},
+                texts={"report_page_order": poison},
+            )
+            (isolated_home / ".pharmaml").mkdir(parents=True, exist_ok=True)
+            (isolated_home / ".pharmaml" / "playground-session.json").write_text(
+                _json.dumps(payload), encoding="utf-8"
+            )
+            app = playground.PlaygroundApp()
+            self._drain(app)
+            # the memory landed on its sanitized self, never an error
+            assert app._report_page_order == expected, (
+                poison,
+                app._report_page_order,
+            )
+            app.destroy()
+            del app
+            gc.collect()
+
+    def test_persist_session_false_keeps_memory_in_process(
+        self, app: Any
+    ) -> None:
+        """``persist_session=False`` (the test harness): the memory
+        still works per-process AND the collect path serialises it --
+        only the file write is skipped."""
+        import json as _json
+
+        app._report_page_order = {"figure": ["beta plot"], "table": []}
+        texts = app._collect_session()["texts"]
+        assert _json.loads(texts["report_page_order"]) == {
+            "figure": ["beta plot"],
+            "table": [],
+        }
+
+    # -- the docstring pins ------------------------------------------------- #
+
+    def test_module_docstring_records_round_135(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-135" in doc
+        assert "survives RESTARTS" in doc
+        assert "KEYBOARD path" in doc
+        assert "Contents section" in doc
+
+    def test_picklist_docstring_records_round_135(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._session_report_picklist.__doc__ or ""
+        assert "100x-135" in doc
+        assert "survives RESTARTS" in doc
+        assert "report_page_order" in doc
+
+    def test_session_collect_and_restore_pin_the_key(
+        self, playground: Any
+    ) -> None:
+        import inspect
+
+        collect = inspect.getsource(playground.PlaygroundApp._collect_session)
+        restore = inspect.getsource(playground.PlaygroundApp._restore_session)
+        assert '"report_page_order": json.dumps(' in collect
+        assert 'if key == "report_page_order":' in restore
+        # the tolerant parse (a corrupt value resets, never raises)
+        assert "json.loads" in restore

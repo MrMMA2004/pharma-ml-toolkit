@@ -323,7 +323,18 @@ Design notes
   carries the honest numbers behind the approximation (point count,
   x/y ranges, the band's center mean, the scatter's class split) as
   a native SVG title, with a hover emphasis on the trace under the
-  pointer.
+  pointer.  (100x-135) The order memory now survives RESTARTS: the
+  picklist's remembered order rides the auto-saved session file (a
+  ``report_page_order`` text key, JSON like the finder's recency row),
+  so the next launch re-opens pre-arranged exactly where the last
+  session left it -- mirroring the web twin's localStorage exactly;
+  "Reset to walking order" still forgets it, and the forget rides the
+  session file too.  The PDF's title page gained a Contents section
+  (the mini table-of-contents the count prefix made possible -- every
+  page name, tables first, in the walking order), and the web preview's
+  inspect grew a KEYBOARD path: Tab focuses a trace group, the readout
+  strip shows the same honest numbers, and Enter pins it (Esc clears
+  the pin) -- the pointer-only tooltip was the only path until now.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -1916,6 +1927,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # rides after the remembered ones in walk order).  The dialog's
         # own "Reset to walking order" button clears it -- the web
         # twin's dashed Reset chip, mirrored.
+        # (100x-135) the memory now rides the SESSION FILE too: a
+        # completed Save rewrites it, the close-time auto-save persists
+        # it, and a fresh launch restores it before the first picklist
+        # ever opens (the ``report_page_order`` text key, JSON like the
+        # finder's recency row -- parsed tolerantly, a corrupt value
+        # resets the memory, never the restore).  The Reset button's
+        # forget is symmetric: it empties the attribute, the next
+        # auto-save writes the empty state, and the next LAUNCH starts
+        # at the walk order -- the web twin's localStorage delete,
+        # mirrored exactly.  ``persist_session=False`` (the test
+        # harness) keeps the per-process memory and never writes.
         self._report_page_order: dict[str, list[str]] = {}
         self._ml_frame: Any = None
         self._ml_path: Path | None = None
@@ -3187,6 +3209,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # of card titles (texts values are coerced to str, so the
             # list rides as JSON; the restore path parses tolerantly).
             "finder_recent": json.dumps(getattr(self, "_finder_recent", [])),
+            # 100x-135: the picklist's order memory -- the same JSON-in-a
+            # text trick, one dict of kind -> label list (the web twin's
+            # localStorage key, mirrored onto the session file so the
+            # memory survives restarts; the restore path parses
+            # tolerantly and a foreign value resets it, never the app).
+            "report_page_order": json.dumps(
+                {
+                    kind: [str(label) for label in labels]
+                    for kind, labels in getattr(
+                        self, "_report_page_order", {}
+                    ).items()
+                    if kind in ("table", "figure")
+                    and isinstance(labels, list)
+                }
+            ),
         }
         try:
             tab = self._book.index(self._book.select())
@@ -3528,6 +3565,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 ):
                     self._finder_recent = remembered[:_FINDER_RECENT_MAX]
                 continue
+            if key == "report_page_order":
+                # 100x-135: the picklist's order memory -- a JSON dict of
+                # kind -> label list, parsed with the SAME tolerance (a
+                # corrupt or foreign value resets the memory to the
+                # walk order, never the restore); only the two real
+                # kinds survive, each label coerced to str, so the
+                # attribute never carries a half-typed payload.
+                try:
+                    stored = json.loads(content)
+                except (TypeError, ValueError):
+                    stored = {}
+                if isinstance(stored, dict):
+                    self._report_page_order = {
+                        str(kind): [str(label) for label in labels]
+                        for kind, labels in stored.items()
+                        if kind in ("table", "figure")
+                        and isinstance(labels, list)
+                        and all(isinstance(label, str) for label in labels)
+                    }
+                continue
             widget = text_widgets.get(key)
             if widget is not None:
                 widget.delete("1.0", "end")
@@ -3642,6 +3699,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         it (the web twin's dashed Reset chip, mirrored) -- the walk
         order returns and the memory is forgotten.  Cancel never
         touches the memory; only a completed Save rewrites it.
+
+        (100x-135) The memory now survives RESTARTS: ``_collect_session``
+        serialises it as the ``report_page_order`` text key (JSON, like
+        the finder's recency row) and ``_restore_session`` replants it
+        before the first picklist ever opens -- the web twin's
+        localStorage, mirrored onto the session file.  The Reset
+        button's forget is symmetric: the attribute empties, the
+        close-time auto-save writes the empty state, and the next
+        LAUNCH starts at the walk order.  A corrupt or foreign file
+        value resets the memory, never the restore.
         """
         if tk is None:  # pragma: no cover - headless import
             return live, tables
@@ -4025,6 +4092,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         makes the file agree).  The "·" separator is latin-1 safe and
         a plain file-name character, so the library's page-name
         validator and the temp-png walk both accept it untouched.
+
+        (100x-135) The title page carries the CONTENTS section -- the
+        library's new mini table-of-contents listing every page name
+        in the walking order, which means the count prefix now does
+        double duty: the picklist's rows, the file's page headings,
+        AND the title page's contents list all read the same numbered
+        names, so the reader can find any page by the number they
+        ticked.  No caller change -- ``save_pdf_report`` grew it.
         """
         live = self._live_session_figures()
         tables = self._live_session_tables()

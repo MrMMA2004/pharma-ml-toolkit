@@ -873,10 +873,12 @@ class TestSessionReportPreview:
         assert "more row" in report
         assert "section.dataUri" in report
         # the sketch's honesty note + the in-dialog download
-        # (100x-134) the note gained the hover-INSPECT confession
-        assert "hover a trace to inspect its numbers" in report
+        # (100x-134) the note gained the hover-INSPECT confession;
+        # (100x-135) the confession now carries BOTH paths (pointer +
+        # keyboard -- Tab focuses, Enter pins)
+        assert "hover a trace (or Tab to it) to inspect its" in report
         assert "a quick sketch" in report
-        assert "renders this figure through matplotlib" in report
+        assert "figure through matplotlib" in report
         assert "Download this report (HTML)" in report
         # the preview walks the SAME payload the download POSTs
         assert "collectSessionReport(snapshot, options, order)" in report
@@ -1247,5 +1249,94 @@ class TestSessionReportInspect:
         assert 'className="group cursor-help' in report
         assert "group-hover:stroke-2" in report
         assert "group-hover:fill-primary/25" in report
-        # the caption's hint confesses the affordance
-        assert "hover a trace to inspect its numbers" in report
+        # (100x-135) the caption's hint now confesses BOTH paths -- the
+        # keyboard sentence rides the pointer one
+        assert "hover a trace (or Tab to it) to inspect its" in report
+        assert "Enter pins the readout" in report
+
+
+class TestSessionReportKeyboard:
+    """Round 100x-135: the preview's KEYBOARD inspect -- the hover
+    tooltip was pointer-only until now.  Every trace group is
+    focusable (Tab reaches it, the inspect text rides its aria-label),
+    focus shows a readout strip under the sketch carrying the FULL
+    numbers (the native <title> never appears on keyboard focus),
+    Enter PINS the readout (Esc clears, Enter toggles), and the
+    focus emphasis mirrors the hover emphasis stroke-for-stroke.
+    Static pins keep the surfaces from silently disappearing between
+    rounds; the inspect TEXT itself is already pinned (round 134's
+    TS probe -- the readout strip reuses the very same helper)."""
+
+    REPORT_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "session-report.tsx"
+    )
+
+    @pytest.mark.skipif(
+        not REPORT_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required",
+    )
+    def test_every_trace_group_is_focusable_and_labelled(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the keyboard path's three legs on EVERY trace group
+        assert report.count("tabIndex={0}") >= 3  # band / scatter / line
+        assert 'role="group"' in report
+        assert "aria-label={traceInspectText(trace)}" in report
+        # the handlers: focus sets, blur guards (a stale blur never
+        # clobbers the next focus), the keys toggle the pin
+        assert "onFocus={() => setFocusedTrace(traceIndex)}" in report
+        assert "prev === traceIndex ? null : prev" in report
+        assert "onKeyDown={traceKeyDown(traceIndex)}" in report
+
+    def test_the_pin_contract_is_a_toggle(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # Enter AND Space toggle; Escape only clears THIS trace's pin
+        assert 'event.key === "Enter" || event.key === " "' in report
+        assert "prev === traceIndex ? null : traceIndex" in report
+        assert 'event.key === "Escape"' in report
+        # Space never scrolls the page while toggling
+        assert "event.preventDefault()" in report
+        # the readout precedence: a PIN outlives the focus that set it
+        assert "pinnedTrace ?? focusedTrace" in report
+
+    def test_the_readout_strip_confesses_itself(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the visible strip (the honest keyboard replacement for a
+        # tooltip that never shows on focus) + its polite live region
+        assert 'role="status"' in report
+        assert "{traceInspectText(readoutTrace)}" in report
+        # the pin's own confession names both keys
+        assert "pinned (Esc clears, Enter toggles)" in report
+
+    def test_focus_emphasis_mirrors_the_hover_emphasis(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the emphasis classes grew their focus-visible twins, exactly
+        # the strokes the pointer path already had
+        assert "group-focus-visible:stroke-2" in report
+        assert "group-focus-visible:fill-primary/25" in report
+
+    def test_the_type_is_imported_not_namespaced(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # KeyboardEvent rides the type import (no React namespace)
+        assert (
+            'import { useEffect, useMemo, useRef, useState, type KeyboardEvent }'
+            ' from "react"'
+        ) in report
+
+    def test_the_escape_layering_holds_the_dialog(self) -> None:
+        """(100x-135, E2E-caught) Radix closes the dialog on Escape at
+        the document-CAPTURE phase -- before any trace group's own
+        keydown could stop it -- so the dialog itself must hold the
+        door while a pin is showing: the first Escape clears the pin
+        (the group's handler), the dialog stays; only a second Escape
+        closes it.  The pin marks its readout with data-pinned and the
+        DialogContent's onEscapeKeyDown refuses the close while one
+        lives."""
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the pin's own marker (undefined when the readout is mere focus)
+        assert "data-pinned={pinnedTrace === readoutIndex" in report
+        # the dialog's door: refuse the Radix close while a pin lives
+        assert "onEscapeKeyDown={" in report
+        assert "p[data-pinned='true']" in report
+        assert "event.preventDefault();" in report
+        # the group's own Escape consumes the event AFTER the pin clears
+        assert "the pin CONSUMES the Escape" in report

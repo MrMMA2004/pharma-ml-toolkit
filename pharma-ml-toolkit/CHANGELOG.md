@@ -10,6 +10,125 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.74] — 2026-10-25
+
+### Added — the round-20 full review (100x-135): the picklist's order memory across restarts + the PDF title page's Contents + the web preview's keyboard inspect
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a twentieth time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–134's documented floor — the axis holds; no new gaps).
+Round 134's handover named the round's work: (a) the desktop
+picklist's memory could PERSIST across sessions (today it was
+per-session — a session-file key would mirror the web twin's
+localStorage exactly), (b) the web preview's inspect could grow a
+KEYBOARD path (focus a trace group + Enter shows the numbers — the
+tooltip was pointer-only), and (c) the PDF twin's title page could
+list the numbered page names as a mini table-of-contents (the count
+prefix made one possible). All three shipped — plus CRON 473765,
+which hit the exec-limits disable again (run_count 1), deleted and
+recreated fresh as 473787.
+
+**The order memory now survives RESTARTS.** The web twin persists
+its walking order per browser (localStorage, since 100x-132); the
+desktop twin's `_report_page_order` now rides the auto-saved
+session file too — a `report_page_order` text key carrying one JSON
+dict of kind → label list (the same JSON-in-a-text trick as the
+finder's recency row, 100x-130). `_collect_session` serialises only
+the two real kinds with labels coerced to str (never a half-typed
+payload); `_restore_session` replants it before the first picklist
+ever opens, parsed with the SAME tolerance — a corrupt or foreign
+value resets per kind (a broken kind drops, a valid one in the same
+payload still lands, exactly the way families restore), never the
+restore. The Reset button's forget is symmetric: it empties the
+attribute, the close-time auto-save writes the empty state, and the
+next LAUNCH starts at the walk order — the web twin's localStorage
+delete, mirrored exactly. `persist_session=False` keeps the
+per-process memory and never writes (the test harness's world).
+
+**The PDF's title page carries a CONTENTS section.**
+`save_pdf_report` now writes a mini table-of-contents under the
+subtitle: every page name in the walking order — the table pages
+first, then the figure pages, exactly the sequence the document
+writes them — each line the SAME string the page's own heading
+prints (a shared `_page_heading` helper, so the list can never drift
+from what the pages say). The playground's count-prefixed names
+("figure N · <caption>" / "table N · <caption>", 100x-134) make the
+list read like the picklist's numbered rows, so the reader can find
+any page by the number they ticked; direct callers' names read
+title-cased, the way their page headings always have. A report with
+no tables and no figures stays a pure title page (a contents list of
+nothing is noise, skipped entirely); a long list simply flows (auto
+page break — never truncated, never capped); and a name shared by a
+table and a figure is listed TWICE, honestly, because it is two
+pages (a dict merge would silently drop one).
+
+**The web preview's inspect grew a KEYBOARD path.** The hover
+INSPECT (100x-134) was pointer-only; now every trace group in the
+preview's FigureSketch is focusable — Tab reaches it, `role="group"`
+carries the inspect text as its aria-label (screen readers announce
+the same honest numbers), and focus thickens the trace exactly like
+hover does (`group-focus-visible:stroke-2` /
+`group-focus-visible:fill-primary/25`, mirroring the hover emphasis
+stroke-for-stroke). Because the native SVG `<title>` tooltip never
+appears on keyboard focus, a readout strip renders under the sketch
+carrying the FULL inspect text (a polite `role="status"` live
+region, so the numbers are announced as they land) — and **Enter
+PINS it** (Space too — a toggle, so Enter again unpins; Escape
+clears; only one trace pinned at a time; a pin outlives the focus
+that set it, `pinnedTrace ?? focusedTrace`). The caption's
+confession now names both paths: "hover a trace (or Tab to it) to
+inspect its numbers, Enter pins the readout".
+
+### Verified
+
+- `playground.py --self-test` green; the GUI axis re-proven **119/119**
+  (118 rar + 1 upload) before the round's edits; the library axis
+  holds at **246 public symbols / 43 zero-hit** (byte-identical
+  membership to rounds 127–134).
+- 18 new tests: `TestReview135Gui` (9 — the collect path's JSON key
+  with foreign kinds dropped; the end-to-end restart: completed Save
+  → close-time auto-save → fresh launch replants; the Reset forget
+  riding the file (the next launch starts at the walk order); the
+  launch-path proof: a fresh boot from a remembering file opens its
+  FIRST picklist pre-arranged with the confession rendered and the
+  Reset armed; five poison payloads resetting per kind with the
+  restore itself landing; persist_session=False keeping the
+  in-process memory; three docstring/source pins) +
+  `TestSessionReportKeyboard` (6 — every trace group focusable and
+  labelled with guarded blur; the pin contract as a toggle with the
+  readout precedence; the readout strip's live-region + confession;
+  the focus emphasis mirroring hover; the type import pin; the E2E-caught Escape layering pin — Radix closes the dialog on Escape at document-CAPTURE, so the DialogContent itself holds the door while a pin lives: the first Escape clears the pin, the dialog stays, only a second closes it) + 3 new
+  `TestSavePdfReport` cases (the Contents section's walking order
+  with lines matching the page headings; the empty report's skip; a
+  shared name listed twice). The two round-133/134 caption pins
+  updated to the round's dual-path wording.
+- The desktop smoke (`scratch/smoke135.py`): SMOKE135_OK — the
+  restart story walked live (store → file → replant; the Reset
+  forget across a restart; three poison payloads), the Contents
+  section read back off a real PDF via pypdf (walking order, the
+  shared-name double listing), the docstring pins.
+- The screenshots (`scratch/shoot135.py`): SHOOT135_OK — two full
+  app lifecycles (App #1 saves the order and closes; App #2 launches
+  from the file and opens its first picklist pre-arranged with the
+  confession + armed Reset), the PDF saved from the remembered order
+  with its Contents page rasterised via pdftoppm
+  (`download/pg135-contents-page-1.png`, the PDF riding along as
+  `pg135-contents-report.pdf`), and the Reset press on the replanted
+  memory (`pg135-restart-remembered.png`,
+  `pg135-restart-reset.png`); VLM review of the shots — every QA
+  point PASS.
+- ruff clean (after the standing EXE002 chmod sweep); mypy unchanged
+  (61 pre-existing baseline errors, all in `cli.py`, zero new); web
+  `bun run lint` exit 0 and `tsc --noEmit` zero errors in `src/`
+  (the examples/skills errors are pre-existing, outside `src/`).
+- Suite: **2525 collected = 2520 passed + 5 skipped / 0 failures**
+  (bare `python -m pytest` — the testpaths trap; junit135.xml; the
+  dev server stopped for the run); the notebooks re-executed with
+  1.2.74 via BOTH drivers first — 64: TOTAL 212 s; 26: "26-R7
+  driver OK".
+
 ## [1.2.73] — 2026-10-25
 
 ### Added — the round-19 full review (100x-134): the picklist's order memory + both twins' count-prefixed page names + the web preview's hover INSPECT

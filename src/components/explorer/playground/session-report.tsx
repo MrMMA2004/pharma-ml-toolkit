@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useTheme } from "next-themes";
 import {
   Activity,
@@ -255,8 +255,19 @@ const SKETCH_PAD = { left: 6, right: 6, top: 6, bottom: 18 };
  *  the trace's honest numbers (point count, x/y ranges, the band's
  *  center mean, the scatter's class split — `traceInspectText`), and
  *  the trace under the pointer thickens (group-hover stroke/fill) so
- *  WHICH trace the tooltip describes is never ambiguous. */
+ *  WHICH trace the tooltip describes is never ambiguous.
+ *  (100x-135) The inspect grew a KEYBOARD path: every trace group is
+ *  focusable (Tab reaches it, role="group" + the inspect text as its
+ *  aria-label, so screen readers announce the same numbers), focus
+ *  thickens the trace exactly like hover does and shows a readout
+ *  strip under the sketch carrying the FULL inspect text (the native
+ *  <title> tooltip never appears on keyboard focus — a visible strip
+ *  is the honest replacement), and Enter PINS the readout so it stays
+ *  readable while focus walks on (Esc unpins, Enter again unpins too —
+ *  the pin is a toggle, and only one trace is pinned at a time). */
 function FigureSketch({ section }: { section: ReportFigureSection }) {
+  const [focusedTrace, setFocusedTrace] = useState<number | null>(null);
+  const [pinnedTrace, setPinnedTrace] = useState<number | null>(null);
   const bounds = figureSketchBounds(section.traces);
   const spanX = bounds.xMax - bounds.xMin;
   const spanY = bounds.yMax - bounds.yMin;
@@ -267,13 +278,39 @@ function FigureSketch({ section }: { section: ReportFigureSection }) {
     SKETCH_PAD.top +
     (1 - (y - bounds.yMin) / spanY) *
       (SKETCH_H - SKETCH_PAD.top - SKETCH_PAD.bottom);
+  // the readout: the pinned trace wins over the focused one, so a pin
+  // stays readable while focus walks elsewhere (the pin is deliberate)
+  const readoutIndex = pinnedTrace ?? focusedTrace;
+  const readoutTrace =
+    readoutIndex === null ? null : (section.traces[readoutIndex] ?? null);
+  /** (100x-135) one shared handler for every trace group's keyboard
+   *  contract: Enter or Space toggles the pin on THIS trace, Escape
+   *  clears a pin THIS trace holds.  Space is prevented so the page
+   *  never scrolls while toggling. */
+  const traceKeyDown =
+    (traceIndex: number) =>
+    (event: KeyboardEvent<SVGGElement>): void => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setPinnedTrace((prev) => (prev === traceIndex ? null : traceIndex));
+      } else if (event.key === "Escape" && pinnedTrace === traceIndex) {
+        // the pin CONSUMES the Escape: clear the readout and stop the
+        // event here, so the dialog's own close-on-escape never fires
+        // on the same keystroke -- a reader clearing a pin sees the
+        // cleared state, and only a SECOND Escape closes the dialog.
+        event.preventDefault();
+        event.stopPropagation();
+        setPinnedTrace(null);
+      }
+    };
   return (
-    <svg
-      viewBox={`0 0 ${SKETCH_W} ${SKETCH_H}`}
-      role="img"
-      aria-label={`Sketch of ${section.title} — ${section.xLabel} vs ${section.yLabel}`}
-      className="h-36 w-full rounded-md border bg-background"
-    >
+    <>
+      <svg
+        viewBox={`0 0 ${SKETCH_W} ${SKETCH_H}`}
+        role="img"
+        aria-label={`Sketch of ${section.title} — ${section.xLabel} vs ${section.yLabel}`}
+        className="h-36 w-full rounded-md border bg-background"
+      >
       {section.traces.map((trace, traceIndex) => {
         if (trace.style === "band") {
           const band = trace.points.filter(
@@ -289,17 +326,28 @@ function FigureSketch({ section }: { section: ReportFigureSection }) {
             .map((p) => `${px(p[0]).toFixed(1)},${py(p[3]).toFixed(1)}`)
             .join(" ");
           return (
-            <g key={traceIndex} className="group cursor-help">
+            <g
+              key={traceIndex}
+              className="group cursor-help"
+              tabIndex={0}
+              role="group"
+              aria-label={traceInspectText(trace)}
+              onFocus={() => setFocusedTrace(traceIndex)}
+              onBlur={() =>
+                setFocusedTrace((prev) => (prev === traceIndex ? null : prev))
+              }
+              onKeyDown={traceKeyDown(traceIndex)}
+            >
               <title>{traceInspectText(trace)}</title>
               <polygon
                 points={`${forward} ${backward}`}
-                className="fill-primary/15 transition-[fill] group-hover:fill-primary/25"
+                className="fill-primary/15 transition-[fill] group-hover:fill-primary/25 group-focus-visible:fill-primary/25"
               />
               <polyline
                 points={band
                   .map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`)
                   .join(" ")}
-                className="fill-none stroke-primary transition-[stroke-width] group-hover:stroke-2"
+                className="fill-none stroke-primary transition-[stroke-width] group-hover:stroke-2 group-focus-visible:stroke-2"
                 strokeWidth={1.5}
               />
             </g>
@@ -322,7 +370,18 @@ function FigureSketch({ section }: { section: ReportFigureSection }) {
             });
           }
           return (
-            <g key={traceIndex} className="group cursor-help text-primary">
+            <g
+              key={traceIndex}
+              className="group cursor-help text-primary"
+              tabIndex={0}
+              role="group"
+              aria-label={traceInspectText(trace)}
+              onFocus={() => setFocusedTrace(traceIndex)}
+              onBlur={() =>
+                setFocusedTrace((prev) => (prev === traceIndex ? null : prev))
+              }
+              onKeyDown={traceKeyDown(traceIndex)}
+            >
               <title>{traceInspectText(trace)}</title>
               {dots.map((dot, dotIndex) => (
                 <circle
@@ -339,13 +398,24 @@ function FigureSketch({ section }: { section: ReportFigureSection }) {
         }
         if (trace.points.length < 2) return null;
         return (
-          <g key={traceIndex} className="group cursor-help">
+          <g
+            key={traceIndex}
+            className="group cursor-help"
+            tabIndex={0}
+            role="group"
+            aria-label={traceInspectText(trace)}
+            onFocus={() => setFocusedTrace(traceIndex)}
+            onBlur={() =>
+              setFocusedTrace((prev) => (prev === traceIndex ? null : prev))
+            }
+            onKeyDown={traceKeyDown(traceIndex)}
+          >
             <title>{traceInspectText(trace)}</title>
             <polyline
               points={trace.points
                 .map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`)
                 .join(" ")}
-              className="fill-none stroke-primary transition-[stroke-width] group-hover:stroke-2"
+              className="fill-none stroke-primary transition-[stroke-width] group-hover:stroke-2 group-focus-visible:stroke-2"
               strokeWidth={1.5}
             />
           </g>
@@ -363,7 +433,26 @@ function FigureSketch({ section }: { section: ReportFigureSection }) {
       <text x={2} y={10} fontSize={8} className="fill-muted-foreground">
         {section.yLabel}
       </text>
-    </svg>
+      </svg>
+      {/* (100x-135) the keyboard readout strip — the FULL inspect text
+        *  for the focused (or pinned) trace.  The native <title>
+        *  tooltip never shows on keyboard focus, so this visible strip
+        *  is the honest replacement; a pin appends its own confession
+        *  so the reader knows Esc clears it.  role="status" makes it a
+        *  polite live region: the numbers are announced as they land. */}
+      {readoutTrace ? (
+        <p
+          role="status"
+          data-pinned={pinnedTrace === readoutIndex ? "true" : undefined}
+          className="rounded-md border bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground"
+        >
+          {traceInspectText(readoutTrace)}
+          {pinnedTrace === readoutIndex
+            ? " — pinned (Esc clears, Enter toggles)"
+            : ""}
+        </p>
+      ) : null}
+    </>
   );
 }
 
@@ -431,8 +520,9 @@ function SectionPreviewBody({ section }: { section: ReportSection }) {
         <p className="text-[11px] text-muted-foreground">
           {section.traces.length} trace{section.traces.length === 1 ? "" : "s"}:{" "}
           {section.traces.map((trace) => trace.name).join(" · ")}
-          — a quick sketch; hover a trace to inspect its numbers; the
-          download renders this figure through matplotlib.
+          — a quick sketch; hover a trace (or Tab to it) to inspect its
+          numbers, Enter pins the readout; the download renders this
+          figure through matplotlib.
         </p>
       </div>
     );
@@ -848,7 +938,22 @@ export function SessionReport() {
           sketches drawn from the same trace data, and the surgery
           grids' real PNGs — numbered, in the chosen walking order. */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        {/* (100x-135) the ESCAPE LAYERING: Radix closes the dialog on
+            Escape at the document-capture phase — before any trace
+            group's own keydown could stop it — so the dialog itself
+            must hold the door while a pinned readout is showing: the
+            first Escape clears the pin (the group's handler), the
+            dialog stays; only a second Escape (no pin held) closes
+            it.  The pin marks itself with data-pinned for this query
+            — one attribute, no lifted state. */}
+        <DialogContent
+          className="sm:max-w-2xl"
+          onEscapeKeyDown={(event) => {
+            if (document.querySelector("p[data-pinned='true']")) {
+              event.preventDefault();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="flex flex-wrap items-center gap-2 text-base">
               <Eye className="size-4 text-primary" aria-hidden />

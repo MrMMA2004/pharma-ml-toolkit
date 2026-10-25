@@ -433,6 +433,17 @@ def save_pdf_report(
     at 38 rows with a note), and one page per figure (rendered to png
     through the headless Agg backend, so no display is needed).
 
+    (100x-135) The title page carries a CONTENTS section -- a mini
+    table-of-contents listing every page name in the walking order
+    (the table pages first, then the figure pages, exactly the
+    sequence the document writes them), each line the SAME string the
+    page's own heading prints.  The playground's count-prefixed names
+    ("figure N · <caption>" / "table N · <caption>", 100x-134) make
+    the list read like the picklist's numbered rows; direct callers'
+    names read title-cased, the way their page headings always have.
+    A report with no tables and no figures stays a pure title page --
+    a contents list of nothing is noise, so it is skipped entirely.
+
     Requires fpdf (``pip install 'pharmaml[reports]'``); non-latin-1
     punctuation is transliterated (``em dash`` -> ``-``) because the
     built-in Helvetica only encodes latin-1 -- the report never crashes
@@ -513,11 +524,31 @@ def save_pdf_report(
         # creates mid-table, so a long dark table never bleeds white.
         pdf.set_page_background(_PDF_DARK["page"])
 
-    # Title page: heading, optional subtitle, metrics as name: value.
+    # Title page: heading, optional subtitle, the CONTENTS section
+    # (100x-135), then the metrics as name: value.
     pdf.add_page()
     _pdf_write(pdf, _latin1_safe(title), 16, style="B", h=10, color=accent)
     if subtitle:
         _pdf_write(pdf, _latin1_safe(subtitle), 11, style="I", h=7, color=muted)
+
+    def _page_heading(name: str) -> str:
+        """The string a page's own heading prints (TOC lines match it)."""
+        return _latin1_safe(name.replace("_", " ").title())
+
+    # (100x-135) the mini table-of-contents: every page name, tables
+    # first, in the walking order -- the SAME string the page's own
+    # heading prints (the shared helper above), so the list can never
+    # drift from what the pages actually say.  A long list simply
+    # flows -- auto page break is on, so thirty pages of contents
+    # stay honest (the list is never truncated or capped).
+    if tables or figures:
+        pdf.ln(4)
+        _pdf_write(pdf, "Contents", 12, style="B", h=8, color=accent)
+        # BOTH key lists, walked separately -- a name shared by a table
+        # and a figure is TWO pages, and the list says so twice (a dict
+        # merge would silently drop one of them).
+        for name in [*(tables or {}), *figures]:
+            _pdf_write(pdf, _page_heading(name), 10, h=6, color=ink)
     if metrics is not None:
         pdf.ln(4)
         _pdf_write(pdf, "Metrics", 12, style="B", h=8, color=accent)
@@ -529,9 +560,7 @@ def save_pdf_report(
     # One page per table: bold header row, then the body, 60 rows max.
     for name, frame in (tables or {}).items():
         pdf.add_page()
-        _pdf_write(
-            pdf, _latin1_safe(name.replace("_", " ").title()), 13, style="B", h=9, color=accent
-        )
+        _pdf_write(pdf, _page_heading(name), 13, style="B", h=9, color=accent)
         _pdf_write(
             pdf,
             _latin1_safe(" | ".join(str(col) for col in frame.columns)),
@@ -556,9 +585,7 @@ def save_pdf_report(
             png_path = Path(tmp) / f"{name}.png"
             save_figure(figure, png_path)
             pdf.add_page()
-            _pdf_write(
-                pdf, _latin1_safe(name.replace("_", " ").title()), 13, style="B", h=9, color=accent
-            )
+            _pdf_write(pdf, _page_heading(name), 13, style="B", h=9, color=accent)
             if dark:
                 # White plate under the figure: matplotlib renders on
                 # white, and a raw white png on a near-black page reads
