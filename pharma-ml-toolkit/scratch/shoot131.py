@@ -9,7 +9,7 @@ surgery content the report's image section now embeds); (4) a REAL
 session report HTML artifact with the surgery image section inside
 (the round's bridge output, saved into download/ for inspection).
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot131.py
+Run: DISPLAY=:99 python scratch/shoot131.py
 """
 import json
 import subprocess
@@ -22,8 +22,8 @@ import playground
 # keep any modal quiet in headless runs
 playground.messagebox.showinfo = lambda *a, **k: None
 
-SURGERY_BRIDGE = "/home/z/my-project/scripts/surgery_bridge.py"
-REPORT_BRIDGE = "/home/z/my-project/scripts/report_bridge.py"
+SURGERY_BRIDGE = str(Path(__file__).resolve().parents[2] / "scripts" / "surgery_bridge.py")
+REPORT_BRIDGE = str(Path(__file__).resolve().parents[2] / "scripts" / "report_bridge.py")
 
 app = playground.PlaygroundApp()
 app.geometry("1280x860+10+10")
@@ -48,7 +48,7 @@ def shot(name: str) -> None:
     from PIL import ImageGrab  # type: ignore
 
     img = ImageGrab.grab(xdisplay=":99")
-    img.save(f"/home/z/my-project/pharma-ml-toolkit/download/{name}.png")
+    img.save(f"download/{name}.png")
     print("shot", name)
 
 
@@ -164,7 +164,7 @@ try:
     composed = json.loads(report.stdout)
     assert composed["figures"] == 1 and composed["tables"] == 1
     with open(
-        "/home/z/my-project/pharma-ml-toolkit/download/pg131-surgery-report.html",
+        "download/pg131-surgery-report.html",
         "w",
         encoding="utf-8",
     ) as handle:

@@ -5,7 +5,7 @@ feature factory, the similarity scan, both docking cards, the NCA
 profile, the utilities reconciliation) carries its own export button --
 headless, Xvfb-driven.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/smoke128.py
+Run: DISPLAY=:99 python scratch/smoke128.py
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 import sys
 import time
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 
 import matplotlib.pyplot as plt  # noqa: E402
 import playground  # noqa: E402

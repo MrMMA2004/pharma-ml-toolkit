@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 RAR_ROOT = Path("/tmp/rar_audit/کدهای ماشین لرنینگ")
-PLAYGROUND = Path("/home/z/my-project/pharma-ml-toolkit/playground.py")
+PLAYGROUND = Path("playground.py")
 
 src = PLAYGROUND.read_text(encoding="utf-8")
 
@@ -179,7 +179,7 @@ ABSORBED = {
 # card's GUI surface (the card, its run/save handlers, the library
 # functions the card calls, the figure, and the CLI twin).
 # ---------------------------------------------------------------
-UPLOAD_ROOT = Path("/home/z/my-project/upload")
+UPLOAD_ROOT = Path(str(Path(__file__).resolve().parents[2] / "upload"))
 UPLOAD_MAP: dict[str, list[str]] = {
     "Applicability_domain_analysis.py": [
         "applicability_domain",          # the composed workflow (card work())

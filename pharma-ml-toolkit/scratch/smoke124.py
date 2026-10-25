@@ -1,7 +1,7 @@
 """Round 100x-124 smoke: the HTML session report, the GA top-molecule
 grid and molecule_grid_figure's scores row -- headless, Xvfb-driven.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/smoke124.py
+Run: DISPLAY=:99 python scratch/smoke124.py
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import sys
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 
 import playground  # noqa: E402
 

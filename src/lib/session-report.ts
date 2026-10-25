@@ -636,6 +636,46 @@ export function figureSketchBounds(
   return { xMin, xMax, yMin, yMax };
 }
 
+/* ------------------------------------------------------------------ */
+/* The preview's Contents twin (100x-137)                              */
+/* ------------------------------------------------------------------ */
+
+/** (100x-137) One line of the preview's Contents strip — the twin of
+ *  the downloaded file's header Contents block: the section's title
+ *  (the SAME string the file's line prints) plus its overall index in
+ *  the payload, so a click can scroll the dialog's list to it. */
+export interface ReportContentsEntry {
+  /** The section's overall index in the payload (0-based) — the number
+   *  the preview's own numbered entries carry, so the strip's numbers
+   *  and the list's numbers are the SAME coordinates. */
+  index: number;
+  /** The title the file's Contents line prints (the section title). */
+  title: string;
+  /** The section's kind — table / figure / image (metrics sections are
+   *  title-page material and never listed, the file twin's rule). */
+  kind: "table" | "figure" | "image";
+}
+
+/** (100x-137) Derive the Contents lines the preview dialog shows —
+ *  exactly what the downloaded file's header Contents block lists:
+ *  every table / figure / image section's title in walking order
+ *  (images ride the add_figure contract in the file, so they list like
+ *  figures here).  Metrics sections are NOT listed (they are
+ *  title-page material, the file twin's discipline), so a metrics-only
+ *  report yields [] — the noise rule: the strip hides itself.  Pure:
+ *  the probe pins the derivation. */
+export function sessionReportContents(
+  sections: ReportSection[],
+): ReportContentsEntry[] {
+  const entries: ReportContentsEntry[] = [];
+  for (let index = 0; index < sections.length; index += 1) {
+    const section = sections[index];
+    if (section.kind === "metrics") continue;
+    entries.push({ index, title: section.title, kind: section.kind });
+  }
+  return entries;
+}
+
 /** (100x-134) The hover-INSPECT text a preview sketch's trace carries —
  *  the honest numbers behind the approximation: the trace's name, its
  *  point count, its x/y ranges (fmtCell-compacted), and the kind's own

@@ -4,7 +4,7 @@ window with a live IV figure (the palette the PDF matches), the
 save-confirmation moment, and the round's real artifacts: the
 dark-ink PDF and the classic light PDF written by the menu itself.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot129.py
+Run: DISPLAY=:99 python scratch/shoot129.py
 """
 import shutil
 import sys
@@ -39,7 +39,7 @@ def shot(name: str) -> None:
     from PIL import ImageGrab  # type: ignore
 
     img = ImageGrab.grab(xdisplay=":99")
-    img.save(f"/home/z/my-project/pharma-ml-toolkit/download/{name}.png")
+    img.save(f"download/{name}.png")
     print("shot", name)
 
 
@@ -80,9 +80,9 @@ for src, dst in (
     ("/tmp/shoot129-dark.pdf", "pg129-session-dark.pdf"),
     (save_report_light_target, "pg129-session-light.pdf"),
 ):
-    shutil.copyfile(src, f"/home/z/my-project/pharma-ml-toolkit/download/{dst}")
+    shutil.copyfile(src, f"download/{dst}")
     print("artifact", dst)
-with open("/home/z/my-project/pharma-ml-toolkit/download/pg129-session-dark.pdf", "rb") as fh:
+with open("download/pg129-session-dark.pdf", "rb") as fh:
     head = fh.read(8)
 assert head.startswith(b"%PDF-"), head
 print("2. both PDF artifacts written by the menu itself OK")

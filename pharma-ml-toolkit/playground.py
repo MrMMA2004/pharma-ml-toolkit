@@ -345,6 +345,20 @@ Design notes
   PERSISTS per browser (an external store over localStorage -- a pin
   deliberately held survives the dialog closing and the page
   reloading, the desktop's session-file memory mirrored).
+  (100x-137) The order memory became SHAREABLE: File ▸ Export
+  remembered order writes a standalone JSON artifact (just the
+  format marker, the kind tag and the two label lists -- the
+  preference WITHOUT the session's inputs, which a full Export
+  session would drag along), and Import remembered order adopts one
+  (tolerantly -- a foreign file is rejected with an honest error,
+  never the app) and writes the session file through immediately so
+  the imported order survives a crash.  The HTML twin's Contents
+  lines became CLICKABLE anchors (every table/figure page rides an
+  id-carrying wrapper; the line links to it; the jumped-to page
+  flashes an accent ring -- the PDF's ink stays frozen, its lines
+  stay plain text), and the web preview's dialog gained the file's
+  CONTENTS twin (a sticky strip listing exactly what the downloaded
+  file's header lists, each line jumping the dialog to its section).
 
 Command line helpers (useful for scripting and CI)::
 
@@ -655,6 +669,63 @@ def read_json_file(path: str | Path) -> Any | None:
             return json.load(handle)
     except (OSError, ValueError):
         return None
+
+
+#: (100x-137) The standalone report-order artifact's format marker and
+#: kind tag -- a remembered page order shared WITHOUT the session's
+#: inputs (the session file already carries the ``report_page_order``
+#: key, but a whole session is more than a colleague needs when all
+#: they asked for is the page order).
+REPORT_ORDER_FORMAT = 1
+REPORT_ORDER_KIND = "pharmaml-report-order"
+
+
+def dump_report_order(order: dict[str, Any]) -> dict[str, Any]:
+    """Assemble the shareable report-order payload (pure normaliser).
+
+    Only the two real kinds survive, each label coerced to ``str``, so
+    the file can never carry a half-typed payload whatever the caller
+    held.  An empty memory dumps as an honest empty order -- importing
+    it is a valid reset-to-walk-order, not an error.
+    """
+    clean: dict[str, list[str]] = {}
+    for kind in ("table", "figure"):
+        labels = order.get(kind) if isinstance(order, dict) else None
+        if isinstance(labels, list):
+            clean[kind] = [str(label) for label in labels]
+    return {
+        "format": REPORT_ORDER_FORMAT,
+        "kind": REPORT_ORDER_KIND,
+        "order": clean,
+    }
+
+
+def load_report_order(raw: Any) -> dict[str, list[str]] | None:
+    """Validate a parsed order file into a trusted dict (or ``None``).
+
+    A file without BOTH the format marker and the kind tag is foreign
+    (rejected wholesale); a structurally fine file gets only the two
+    real kinds back, each a list of ``str`` -- the restore path never
+    has to defend itself twice.  A valid file whose order block is
+    empty returns ``{}`` (the honest empty import, see the dump).
+    """
+    if (
+        not isinstance(raw, dict)
+        or raw.get("format") != REPORT_ORDER_FORMAT
+        or raw.get("kind") != REPORT_ORDER_KIND
+    ):
+        return None
+    stored = raw.get("order")
+    if not isinstance(stored, dict):
+        return None
+    order: dict[str, list[str]] = {}
+    for kind in ("table", "figure"):
+        labels = stored.get(kind)
+        if isinstance(labels, list) and all(
+            isinstance(label, str) for label in labels
+        ):
+            order[kind] = list(labels)
+    return order
 
 
 #: (import name, display label, why it matters, pip hint)
@@ -2308,6 +2379,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         file_menu.add_command(
             label="Clear remembered report order…", command=self._clear_report_order
         )
+        # (100x-137) the order memory's SHARE pair -- the standalone
+        # artifact (just the preference, none of the session's inputs):
+        # export writes the tiny order file, import adopts one and
+        # writes the session through immediately.
+        file_menu.add_command(
+            label="Export remembered order…", command=self._export_report_order
+        )
+        file_menu.add_command(
+            label="Import remembered order…", command=self._import_report_order
+        )
         file_menu.add_command(label="Export session…", command=self._export_session)
         file_menu.add_command(label="Import session…", command=self._import_session)
         file_menu.add_command(
@@ -3355,6 +3436,129 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 )
         self._job_label.configure(text="remembered report order cleared")
 
+    def _export_report_order(self) -> None:
+        """File ▸ Export remembered order -- share the picklist's memory.
+
+        (100x-137) The order memory lived in exactly two places -- the
+        process (100x-134) and the auto-saved session file (100x-135,
+        which a full ``Export session…`` already carries) -- so sharing
+        an order with a colleague meant sharing the WHOLE session:
+        every input, every pasted corpus, every path.  This menu item
+        writes the standalone artifact instead: a tiny JSON carrying
+        only the format marker, the kind tag and the two label lists
+        (``dump_report_order`` normalises), the preference without the
+        inputs.  A memory that never existed gets the honest
+        "nothing to share yet" -- never a silent no-op, never an empty
+        file pretending to be one.  A failed write confesses on the
+        job label exactly the way the session export does.
+        """
+        if not (
+            self._report_page_order.get("table")
+            or self._report_page_order.get("figure")
+        ):
+            if messagebox is not None:
+                messagebox.showinfo(
+                    "No remembered order",
+                    "Nothing to share yet.\n\n"
+                    "Save a session report once and its page order is "
+                    "remembered -- this item writes that order to a "
+                    "small file a colleague can import on their machine.",
+                )
+            return
+        if filedialog is None:  # pragma: no cover - headless import
+            return
+        target = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            initialfile="pharmaml-report-order.json",
+            filetypes=[("Playground report order", "*.json"), ("All files", "*.*")],
+            title="Export remembered report order",
+        )
+        if not target:
+            return
+        if export_session(dump_report_order(self._report_page_order), target):
+            self._job_label.configure(text=f"report order exported · {target}")
+        else:
+            self._job_label.configure(
+                text="report order NOT exported (path unwritable)"
+            )
+
+    def _import_report_order(self) -> None:
+        """File ▸ Import remembered order -- adopt a shared order.
+
+        (100x-137) The import side of the standalone artifact: a valid
+        order file REPLACES the in-process memory (both kinds, the
+        ``load_report_order`` normaliser's trusted dict) and writes the
+        session file THROUGH immediately -- the same discipline as the
+        Clear menu item, so the imported order survives a crash and the
+        next LAUNCH re-opens pre-arranged exactly where the colleague
+        left it.  A foreign or corrupt file (missing format marker,
+        missing kind tag, unreadable JSON) is rejected with an honest
+        error and the live memory is never touched.  A valid but EMPTY
+        order is the honest reset: both kinds empty, the next picklist
+        walks the walk order.  With ``persist_session=False`` the
+        message says so -- the import lives in this process only.
+        """
+        if filedialog is None:  # pragma: no cover - headless import
+            return
+        source = filedialog.askopenfilename(
+            filetypes=[("Playground report order", "*.json"), ("All files", "*.*")],
+            title="Import remembered report order",
+        )
+        if not source:
+            return
+        order = load_report_order(read_json_file(source))
+        if order is None:
+            if messagebox is not None:
+                messagebox.showerror(
+                    "Invalid report order file",
+                    "That file is not a remembered report order "
+                    "(format marker missing or unreadable).\n\n"
+                    "The live order memory was not touched.",
+                )
+            return
+        self._report_page_order = order
+        wrote = self._write_session_file() if self._persist_session else False
+        if messagebox is not None:
+            tables = len(order.get("table", []))
+            figures = len(order.get("figure", []))
+            if not (tables or figures):
+                messagebox.showinfo(
+                    "Report order imported",
+                    "The imported order is empty -- the next Save's "
+                    "checklist opens in the walking order (tables "
+                    "first, then figures).",
+                )
+            elif not self._persist_session:
+                messagebox.showinfo(
+                    "Report order imported",
+                    f"The imported order was applied: {tables} table "
+                    f"page{'s' if tables != 1 else ''} and {figures} "
+                    f"figure page{'s' if figures != 1 else ''}.\n\n"
+                    "Session saving is off, so the order lives in "
+                    "this session only -- the next launch starts at "
+                    "the walking order.",
+                )
+            elif wrote:
+                messagebox.showinfo(
+                    "Report order imported",
+                    f"The imported order was applied: {tables} table "
+                    f"page{'s' if tables != 1 else ''} and {figures} "
+                    f"figure page{'s' if figures != 1 else ''}.\n\n"
+                    "The next Save's checklist opens pre-arranged in "
+                    "this order, and the session file was written -- "
+                    "the next launch keeps it too.",
+                )
+            else:
+                messagebox.showinfo(
+                    "Report order imported",
+                    f"The imported order was applied: {tables} table "
+                    f"page{'s' if tables != 1 else ''} and {figures} "
+                    f"figure page{'s' if figures != 1 else ''}.\n\n"
+                    "The session file could not be written, so the next "
+                    "launch restores the order that was there before.",
+                )
+        self._job_label.configure(text=f"report order imported · {source}")
+
     def _export_session(self) -> None:
         """File ▸ Export session -- write a shareable session file."""
         if filedialog is None:
@@ -3798,6 +4002,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         launch -- opens in the walking order.  The dialog's Reset
         stays the in-dialog path (drift-honest); the menu item is the
         always-available one.
+
+        (100x-137) The memory is SHAREABLE without the session: File
+        ▸ Export remembered order writes the standalone artifact
+        (``dump_report_order`` -- the two label lists and nothing
+        else), and Import remembered order adopts one through
+        ``load_report_order`` (a foreign file never reaches the
+        attribute) and writes the session through immediately, so an
+        imported order survives crashes and restarts exactly like a
+        remembered one.
         """
         if tk is None:  # pragma: no cover - headless import
             return live, tables
@@ -4347,6 +4560,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         it, so this twin and the library's every other HTML report
         (``save_visual_bundle``'s report.html included) navigate by
         the number the checklist ticked.
+
+        (100x-137) Every Contents line is a CLICKABLE anchor: each
+        page rides an id-carrying wrapper (``<section class='page'>``
+        for tables, ``<figure class='page'>`` for figures) and the
+        line links to it, so a reader jumps straight to the page --
+        the jumped-to page flashes an accent ring.  The PDF twin's
+        ink is frozen at write time; its Contents lines stay plain
+        text.  Again no caller change -- the builder grew it.
         """
         live = self._live_session_figures()
         tables = self._live_session_tables()

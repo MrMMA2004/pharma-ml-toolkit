@@ -2,7 +2,7 @@
 colour-coded structure grid (boundary corners accented teal, interior
 trade-offs muted) on the Generative tab.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot125.py
+Run: DISPLAY=:99 python scratch/shoot125.py
 """
 import sys
 import time
@@ -36,7 +36,7 @@ def shot(name: str) -> None:
     from PIL import ImageGrab  # type: ignore
 
     img = ImageGrab.grab(xdisplay=":99")
-    img.save(f"/home/z/my-project/download/{name}.png")
+    img.save(f"{Path(__file__).resolve().parents[2] / 'download'} / {name}.png")
     print("shot", name)
 
 

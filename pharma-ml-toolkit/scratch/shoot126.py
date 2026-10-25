@@ -3,7 +3,7 @@ card with its NEW per-card "Save figure..." button, and the themed HTML
 session report (dark palette + the toggle button) rendered off a real
 session figure.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot126.py
+Run: DISPLAY=:99 python scratch/shoot126.py
 """
 import sys
 import time
@@ -37,7 +37,7 @@ def shot(name: str) -> None:
     from PIL import ImageGrab  # type: ignore
 
     img = ImageGrab.grab(xdisplay=":99")
-    img.save(f"/home/z/my-project/download/{name}.png")
+    img.save(f"{Path(__file__).resolve().parents[2] / 'download'} / {name}.png")
     print("shot", name)
 
 
@@ -92,13 +92,13 @@ def spy(figure, path, *args, **kwargs):
 viz_module.save_figure = spy
 try:
     playground.filedialog.asksaveasfilename = lambda **_k: (
-        "/home/z/my-project/download/pg126-front-export.png"
+        str(Path(__file__).resolve().parents[2] / "download") + "/pg126-front-export.png"
     )
     app._save_pareto_figure()
     assert captured["figure"] is grid, "saved a figure that is not the card's"
 finally:
     viz_module.save_figure = real_save
-with open("/home/z/my-project/download/pg126-front-export.png", "rb") as handle:
+with open(str(Path(__file__).resolve().parents[2] / "download") + "/pg126-front-export.png", "rb") as handle:
     assert handle.read(8) == b"\x89PNG\r\n\x1a\n"
 print("exported the card's live grid via the per-card button")
 
@@ -109,11 +109,11 @@ print("exported the card's live grid via the per-card button")
 # radios + the saved artifact path in the completion dialog flow.
 app._theme_var.set("dark")
 playground.filedialog.asksaveasfilename = lambda **_k: (
-    "/home/z/my-project/download/pg126-report.html"
+    str(Path(__file__).resolve().parents[2] / "download") + "/pg126-report.html"
 )
 app._menu_save_session_report_html()
 assert pump(), "html report hung"
-with open("/home/z/my-project/download/pg126-report.html", encoding="utf-8") as handle:
+with open(str(Path(__file__).resolve().parents[2] / "download") + "/pg126-report.html", encoding="utf-8") as handle:
     text = handle.read()
 assert "<html lang='en' data-theme='dark'>" in text
 assert "id='theme-toggle'" in text and "localStorage" in text

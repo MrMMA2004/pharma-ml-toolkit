@@ -12,7 +12,7 @@ The dialog is MODAL (its own wait_window loop), so every interaction
 and screenshot rides after-callbacks the loop processes while the
 dialog is up.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot134.py
+Run: DISPLAY=:99 python scratch/shoot134.py
 """
 import sys
 import time
@@ -24,7 +24,7 @@ import playground
 # keep any modal quiet in headless runs
 playground.messagebox.showinfo = lambda *a, **k: None
 
-OUT = Path("/home/z/my-project/pharma-ml-toolkit/download")
+OUT = Path(__file__).resolve().parents[1] / "download"
 TARGET = OUT / "pg134-remembered-report.html"
 playground.filedialog.asksaveasfilename = lambda **_k: str(TARGET)
 

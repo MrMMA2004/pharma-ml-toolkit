@@ -12,7 +12,7 @@ page rasterised with pdftoppm; the PDF itself rides along as an
 artifact).  (4) The Reset press on the replanted memory restores
 the walk order and collapses the confession (pg135-restart-reset.png).
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot135.py
+Run: DISPLAY=:99 python scratch/shoot135.py
 """
 import os
 import sys
@@ -30,7 +30,7 @@ os.environ["HOME"] = _HOME
 # keep any modal quiet in headless runs
 playground.messagebox.showinfo = lambda *a, **k: None
 
-OUT = Path("/home/z/my-project/pharma-ml-toolkit/download")
+OUT = Path(__file__).resolve().parents[1] / "download"
 TARGET_PDF = OUT / "pg135-contents-report.pdf"
 playground.filedialog.asksaveasfilename = lambda **_k: str(TARGET_PDF)
 

@@ -4,7 +4,7 @@ PK/PD tab (IV bolus profile, Emax effect curve, the NCA profile) with
 their NEW buttons, plus the ML results card's button row; the exports
 exercise the real save path through the cards' own buttons.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot128.py
+Run: DISPLAY=:99 python scratch/shoot128.py
 """
 import sys
 import time
@@ -38,7 +38,7 @@ def shot(name: str) -> None:
     from PIL import ImageGrab  # type: ignore
 
     img = ImageGrab.grab(xdisplay=":99")
-    img.save(f"/home/z/my-project/download/{name}.png")
+    img.save(f"{Path(__file__).resolve().parents[2] / 'download'} / {name}.png")
     print("shot", name)
 
 
@@ -90,7 +90,7 @@ iv_figure = getattr(app._iv_host, "_pg_figure", None)
 assert iv_figure is not None, "the IV decay curve never landed"
 scroll_to_widget(app._iv_host)
 shot("pg128-iv-save-button")
-real_export(app._save_iv_figure, "/home/z/my-project/download/pg128-iv-export.png", iv_figure)
+real_export(app._save_iv_figure, str(Path(__file__).resolve().parents[2] / "download") + "/pg128-iv-export.png", iv_figure)
 
 # 2) the Emax pharmacodynamics card: the real effect curve + button
 app._emax_math()
@@ -110,7 +110,7 @@ nca_figure = getattr(app._nca_host, "_pg_figure", None)
 assert nca_figure is not None, "the NCA profile never landed"
 scroll_to_widget(app._nca_host)
 shot("pg128-nca-save-button")
-real_export(app._save_nca_figure, "/home/z/my-project/download/pg128-nca-export.png", nca_figure)
+real_export(app._save_nca_figure, str(Path(__file__).resolve().parents[2] / "download") + "/pg128-nca-export.png", nca_figure)
 
 # 4) the Data & ML tab: the ML results card's button row now carries
 # the per-card export beside Calibration curve / Learning curve

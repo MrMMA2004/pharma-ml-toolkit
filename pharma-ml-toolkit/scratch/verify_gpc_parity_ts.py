@@ -4,7 +4,7 @@ TypeScript fitter saw (the deterministic mod-based grid from
 scratch/verify_gpc_parity.ts, replicated in numpy) — compares the
 probabilities / Newton iterations / Laplace lml against the TS output.
 
-Run:  /home/z/.venv/bin/python scratch/verify_gpc_parity_ts.py
+Run:  python scratch/verify_gpc_parity_ts.py
 """
 
 from __future__ import annotations

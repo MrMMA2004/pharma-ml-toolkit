@@ -1212,7 +1212,12 @@ class TestHTMLReportContents:
     PDF title page's mini table-of-contents (100x-135): every table
     and figure page name in the walking order the file writes them,
     each line the SAME string the page's own heading prints, skipped
-    entirely when the report has no table/figure pages."""
+    entirely when the report has no table/figure pages.
+
+    (100x-137) Every line is a CLICKABLE anchor -- the page rides in
+    an id-carrying wrapper (``<section class='page' id='pg-N'>`` for
+    tables, ``<figure class='page' id='pg-N'>`` for figures) and the
+    line links to it, so a click jumps the reader to the page."""
 
     def test_contents_lists_pages_in_walking_order(self, trained_classifier):
         _result, report, _X_test, _y_test = trained_classifier
@@ -1228,14 +1233,15 @@ class TestHTMLReportContents:
         assert "<nav class='contents' aria-label='Contents'>" in text
         assert "<h2>Contents</h2>" in text
         # the lines in CALL order (the walking order the file writes
-        # them), each the SAME string the page itself prints
-        assert "<li>table 1 · board</li>" in text
-        assert "<li>figure 1 · cm</li>" in text
-        assert "<li>figure 2 · cm</li>" in text
+        # them), each the SAME string the page itself prints -- each
+        # wrapped in the anchor that jumps to its page (100x-137)
+        assert "<li><a href='#pg-1'>table 1 · board</a></li>" in text
+        assert "<li><a href='#pg-2'>figure 1 · cm</a></li>" in text
+        assert "<li><a href='#pg-3'>figure 2 · cm</a></li>" in text
         assert (
-            text.index("<li>table 1 · board</li>")
-            < text.index("<li>figure 1 · cm</li>")
-            < text.index("<li>figure 2 · cm</li>")
+            text.index("<li><a href='#pg-1'>table 1 · board</a></li>")
+            < text.index("<li><a href='#pg-2'>figure 1 · cm</a></li>")
+            < text.index("<li><a href='#pg-3'>figure 2 · cm</a></li>")
         )
         # the page's own headings match their Contents lines (no drift)
         assert "<h2>table 1 · board</h2>" in text
@@ -1243,6 +1249,49 @@ class TestHTMLReportContents:
         # the block sits in the HEADER: after the subtitle, before the
         # first content block (the metrics cards)
         assert text.index("aria-label='Contents'") < text.index("class='metrics'")
+
+    def test_contents_lines_link_to_real_page_anchors(self, trained_classifier):
+        """(100x-137) Every Contents line's href resolves to a REAL id
+        the document carries -- the ids are minted at add time in
+        lockstep with the names, so href and target can never drift.
+        Tables ride in ``<section class='page'>`` wrappers, figures in
+        ``<figure class='page'>`` (the figcaption's legitimate parent).
+        """
+        _result, report, _X_test, _y_test = trained_classifier
+        text = (
+            HTMLReport("anchors")
+            .add_metrics(report, heading="Metrics")
+            .add_table(metrics_to_dataframe(report), heading="board")
+            .add_figure(plot_confusion_matrix(report), caption="cm")
+            .render()
+        )
+        # the wrappers carry the ids, with tabindex so a fragment jump
+        # lands focus on the page (the keyboard reader's arrival)
+        assert "<section class='page' id='pg-1' tabindex='-1'>" in text
+        assert "<figure class='page' id='pg-2' tabindex='-1'>" in text
+        # every href in the Contents resolves -- no orphan links
+        for page_id in ("pg-1", "pg-2"):
+            assert f"href='#{page_id}'" in text
+            assert f"id='{page_id}'" in text
+        # the anchors are pure fragment links: the self-contained
+        # contract holds (no http, no mailto, no companion files)
+        assert "href='http" not in text
+        assert "href='mailto" not in text
+
+    def test_contents_anchor_css_rides_the_theme_variables(self):
+        """(100x-137) The link styling, the jump landing ring and the
+        wrapper geometry all ride the CSS variables, so both themes
+        carry them; the figure wrapper resets the UA inset."""
+        text = HTMLReport("styled").add_table(
+            pd.DataFrame({"a": [1]}), heading="t"
+        ).render()
+        assert "ul.contents-list a { color: inherit;" in text
+        assert "ul.contents-list a:hover, ul.contents-list a:focus-visible {" in text
+        assert "color: var(--accent); text-decoration: underline; }" in text
+        assert "section.page:target, figure.page:target {" in text
+        assert "outline: 2px solid var(--accent);" in text
+        assert "scroll-margin-top: 1.25rem;" in text
+        assert "figure.page { margin: 0; }" in text
 
     def test_contents_skipped_without_table_or_figure_pages(self):
         text = (
@@ -1262,7 +1311,8 @@ class TestHTMLReportContents:
     ):
         """A heading-less table / caption-less figure lists its
         positional fallback -- the SAME identity the figure's alt
-        already carries."""
+        already carries; the anchor wrapper exists either way (the
+        Contents line needs its jump target even without a heading)."""
         _result, report, _X_test, _y_test = trained_classifier
         text = (
             HTMLReport("fallbacks")
@@ -1270,10 +1320,13 @@ class TestHTMLReportContents:
             .add_figure(plot_confusion_matrix(report))
             .render()
         )
-        assert "<li>table 1</li>" in text
-        assert "<li>figure 1</li>" in text
+        assert "<li><a href='#pg-1'>table 1</a></li>" in text
+        assert "<li><a href='#pg-2'>figure 1</a></li>" in text
         # the figure's alt carries the same positional identity
         assert "alt='figure 1'" in text
+        # heading-less pages still carry their anchor wrappers
+        assert "<section class='page' id='pg-1' tabindex='-1'>" in text
+        assert "<figure class='page' id='pg-2' tabindex='-1'>" in text
 
     def test_contents_styles_ride_the_theme_variables(self):
         text = HTMLReport("styled").add_table(
@@ -1306,9 +1359,14 @@ class TestHTMLReportContents:
         assert written, "the bundle wrote nothing"
         text = (tmp_path / "bundle" / "report.html").read_text()
         assert "<nav class='contents'" in text
-        assert "<li>Leaderboard</li>" in text
-        assert "<li>Confusion</li>" in text
-        assert text.index("<li>Leaderboard</li>") < text.index("<li>Confusion</li>")
+        assert "<li><a href='#pg-1'>Leaderboard</a></li>" in text
+        assert "<li><a href='#pg-2'>Confusion</a></li>" in text
+        assert text.index("<li><a href='#pg-1'>Leaderboard</a></li>") < text.index(
+            "<li><a href='#pg-2'>Confusion</a></li>"
+        )
+        # (100x-137) the anchors resolve: the bundle's pages carry the
+        # ids the Contents lines link to
+        assert "id='pg-1'" in text and "id='pg-2'" in text
 
 
 class TestHTMLReportTheme:

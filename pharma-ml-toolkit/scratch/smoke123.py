@@ -7,7 +7,7 @@ import sys
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 import playground  # noqa: E402
 
 

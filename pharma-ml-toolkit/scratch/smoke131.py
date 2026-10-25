@@ -7,7 +7,7 @@ the surgery bridge composes into the HTML report as a full-bleed
 embedded figure with its caption; broken payloads exit 2) --
 headless, Xvfb-driven.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/smoke131.py
+Run: DISPLAY=:99 python scratch/smoke131.py
 """
 
 from __future__ import annotations
@@ -18,12 +18,12 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 
 import playground
 
-SURGERY_BRIDGE = "/home/z/my-project/scripts/surgery_bridge.py"
-REPORT_BRIDGE = "/home/z/my-project/scripts/report_bridge.py"
+SURGERY_BRIDGE = str(Path(__file__).resolve().parents[2] / "scripts" / "surgery_bridge.py")
+REPORT_BRIDGE = str(Path(__file__).resolve().parents[2] / "scripts" / "report_bridge.py")
 
 
 def deadline_wait(app, label: str, timeout: float = 300.0) -> bool:

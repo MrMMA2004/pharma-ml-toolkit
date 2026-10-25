@@ -3,7 +3,7 @@ surgery cards and the evolution Results card with their NEW per-card
 "Save figure..." buttons, each over a real drawn grid (the buttons ride
 the cards' own button rows; the exports exercise the real save path).
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot127.py
+Run: DISPLAY=:99 python scratch/shoot127.py
 """
 import sys
 import time
@@ -37,7 +37,7 @@ def shot(name: str) -> None:
     from PIL import ImageGrab  # type: ignore
 
     img = ImageGrab.grab(xdisplay=":99")
-    img.save(f"/home/z/my-project/download/{name}.png")
+    img.save(f"{Path(__file__).resolve().parents[2] / 'download'} / {name}.png")
     print("shot", name)
 
 
@@ -90,14 +90,14 @@ def spy(figure, path, *args, **kwargs):
 viz_module.save_figure = spy
 try:
     playground.filedialog.asksaveasfilename = lambda **_k: (
-        "/home/z/my-project/download/pg127-topo-export.png"
+        str(Path(__file__).resolve().parents[2] / "download") + "/pg127-topo-export.png"
     )
     app._save_topo_figure()
     assert pump(), "topo save hung"
     assert captured["figure"] is topo_grid, "saved a figure that is not the card's"
 finally:
     viz_module.save_figure = real_save
-with open("/home/z/my-project/download/pg127-topo-export.png", "rb") as handle:
+with open(str(Path(__file__).resolve().parents[2] / "download") + "/pg127-topo-export.png", "rb") as handle:
     assert handle.read(8) == b"\x89PNG\r\n\x1a\n"
 print("exported the topology card's live grid via its own button")
 
@@ -132,14 +132,14 @@ shot("pg127-results-save-button")
 viz_module.save_figure = spy
 try:
     playground.filedialog.asksaveasfilename = lambda **_k: (
-        "/home/z/my-project/download/pg127-results-export.png"
+        str(Path(__file__).resolve().parents[2] / "download") + "/pg127-results-export.png"
     )
     app._save_ga_figure()
     assert pump(), "results save hung"
     assert captured["figure"] is top_grid, "saved a figure that is not the card's"
 finally:
     viz_module.save_figure = real_save
-with open("/home/z/my-project/download/pg127-results-export.png", "rb") as handle:
+with open(str(Path(__file__).resolve().parents[2] / "download") + "/pg127-results-export.png", "rb") as handle:
     assert handle.read(8) == b"\x89PNG\r\n\x1a\n"
 print("exported the Results card's leaderboard grid via its own button")
 

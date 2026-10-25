@@ -32,7 +32,7 @@ app._ml_ad_run()
 assert pump(), "AD hung"
 assert app._ml_ad_result is not None
 
-out = sys.argv[1] if len(sys.argv) > 1 else "/home/z/my-project/download/ad-card-r118.png"
+out = sys.argv[1] if len(sys.argv) > 1 else str(Path(__file__).resolve().parents[2] / "download") + "/ad-card-r118.png"
 app._book.select(5)  # Data & ML tab
 app.update()
 page = app._book.nametowidget(app._book.tabs()[5])

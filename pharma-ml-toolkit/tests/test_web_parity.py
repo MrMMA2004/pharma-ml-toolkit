@@ -1441,3 +1441,86 @@ class TestSessionReportPinStore:
         assert "still updates the mirror" in store
         # the SSR guards (window undefined -> the honest nothing)
         assert store.count('typeof window === "undefined"') >= 3
+
+
+class TestPreviewContentsTwin:
+    """Round 100x-137: the preview dialog's CONTENTS twin — the file's
+    header Contents block mirrored as a sticky strip, each line a
+    button that jumps the dialog to its section (smooth scroll + a
+    brief accent ring, the HTML twin's :target ring mirrored).  The TS
+    probe pins the pure derivation (src/lib/session-report.ts's
+    sessionReportContents) over a mixed fixture; the static pins keep
+    the component's surfaces (the sticky strip, the jump handler, the
+    arrival ring, the scroll margin, the confession) from silently
+    disappearing between rounds."""
+
+    REPORT_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "session-report.tsx"
+    )
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+
+    needs_round = pytest.mark.skipif(
+        not REPORT_TSX.is_file() or not COLLECTOR_TS.is_file() or BUN is None,
+        reason="web checkout (<repo>/src + <repo>/scratch) + bun runtime "
+        "required; the zip-only tree skips — its probes live outside the "
+        "shipped tree",
+    )
+
+    @needs_round
+    def test_the_derivation_pins(self) -> None:
+        # the TS probe exits non-zero on drift and prints its verdicts
+        _run([BUN, "run", "scratch/probe_session_report_137.ts"], REPO_ROOT)
+        ts = json.loads(Path("/tmp/sr_ts_137.json").read_text())
+        # the walking order: every table/figure/image title, metrics
+        # NEVER listed (title-page material, the file twin's rule)
+        assert ts["mixedTitles"] == [
+            "Predicted vs observed",
+            "NCA observed data",
+            "Ring topology mutants — 3 structure panel(s)",
+            "PK regimen — concentration vs time",
+        ], ts
+        assert ts["metricsNeverListed"] is True, ts
+        # the indices are the OVERALL payload indices (gaps where the
+        # metrics sat) — the strip's numbers and the preview list's
+        # numbers are the SAME coordinates
+        assert ts["mixedIndices"] == [1, 2, 3, 5], ts
+        assert ts["indicesAreOverall"] is True, ts
+        # the kinds ride along (images list like figures — the
+        # add_figure contract they ride in the file)
+        assert ts["mixedKinds"] == ["figure", "table", "image", "figure"], ts
+        # the noise rule: metrics-only and empty both yield []
+        assert ts["metricsOnlyYieldsEmpty"] is True, ts
+        assert ts["emptyYieldsEmpty"] is True, ts
+        # the file-twin parity: the derivation IS the file's block
+        assert ts["fileTwinParity"] is True, ts
+
+    def test_the_collector_exports_the_contents_contract(self) -> None:
+        collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
+        assert "export function sessionReportContents(" in collector
+        assert "export interface ReportContentsEntry" in collector
+        # the discipline is documented, not incidental
+        assert "title-page material" in collector
+        assert "the noise rule" in collector
+
+    def test_the_component_carries_the_strip_and_the_jump(self) -> None:
+        report = self.REPORT_TSX.read_text(encoding="utf-8")
+        # the strip: sticky at the top of the scroll area, labelled as
+        # the file twin, hidden when the derivation yields nothing
+        assert "sticky top-0 z-10" in report
+        assert "Contents — the downloaded file's header block, mirrored" in report
+        assert "contents.length > 0" in report
+        # the jump: the handler + the per-section anchor ids it targets
+        assert "function jumpToSection(" in report
+        assert "preview-section-${index}" in report
+        assert "scrollIntoView({ behavior: \"smooth\", block: \"start\" })" in report
+        # the arrival ring (the HTML twin's :target ring, mirrored) and
+        # the fade timer that clears it
+        assert "jumpedTo === index" in report
+        assert "ring-2 ring-primary" in report
+        assert "setTimeout(() => setJumpedTo(null), 1600)" in report
+        # the scroll margin: the jump lands BELOW the pinned strip
+        assert "scroll-mt-[84px]" in report
+        # the confession: the strip says what it mirrors
+        assert "The same block the downloaded file" in report
+        # every line is a labelled button (a11y)
+        assert "Jump to section ${entry.index + 1}: ${entry.title}" in report

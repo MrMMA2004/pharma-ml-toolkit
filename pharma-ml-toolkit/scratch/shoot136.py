@@ -11,7 +11,7 @@ new CONTENTS block -- the count-prefixed lines in the walking order
 (the pg136-contents-report.html artifact rides along; the block's
 lines are asserted before the shoot ends).
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot136.py
+Run: DISPLAY=:99 python scratch/shoot136.py
 """
 import os
 import sys
@@ -29,7 +29,7 @@ os.environ["HOME"] = _HOME
 # keep any modal quiet in headless runs
 playground.messagebox.showinfo = lambda *a, **k: None
 
-OUT = Path("/home/z/my-project/pharma-ml-toolkit/download")
+OUT = Path(__file__).resolve().parents[1] / "download"
 TARGET_HTML = OUT / "pg136-contents-report.html"
 playground.filedialog.asksaveasfilename = lambda **_k: str(TARGET_HTML)
 

@@ -29,7 +29,7 @@ def shot(name):
     from PIL import ImageGrab  # type: ignore
 
     img = ImageGrab.grab(xdisplay=":99")
-    img.save(f"/home/z/my-project/download/{name}.png")
+    img.save(f"{Path(__file__).resolve().parents[2] / 'download'} / {name}.png")
     print("shot", name)
 
 

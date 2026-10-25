@@ -7,7 +7,7 @@ the Surgery-adjacent Generative tab so the round's desktop context is
 visible; the web twin's Surgery sub-tab screenshots come from the
 agent-browser E2E (shoot130-web).
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot130.py
+Run: DISPLAY=:99 python scratch/shoot130.py
 """
 import sys
 import time
@@ -41,7 +41,7 @@ def shot(name: str) -> None:
     from PIL import ImageGrab  # type: ignore
 
     img = ImageGrab.grab(xdisplay=":99")
-    img.save(f"/home/z/my-project/pharma-ml-toolkit/download/{name}.png")
+    img.save(f"download/{name}.png")
     print("shot", name)
 
 

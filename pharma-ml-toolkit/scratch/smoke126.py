@@ -4,14 +4,14 @@ the Pareto front card's per-card "Save figure..." export (the figure
 THIS card shows, not the last one drawn anywhere) -- headless,
 Xvfb-driven.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/smoke126.py
+Run: DISPLAY=:99 python scratch/smoke126.py
 """
 
 from __future__ import annotations
 
 import sys
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 
 import playground  # noqa: E402
 

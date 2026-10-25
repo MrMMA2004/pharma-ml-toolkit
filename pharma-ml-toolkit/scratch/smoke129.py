@@ -4,7 +4,7 @@ ink and white figure plates, a light app writes the classic colourless
 paper, auto resolves through _resolve_auto_theme before the ink freezes
 -- headless, Xvfb-driven.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/smoke129.py
+Run: DISPLAY=:99 python scratch/smoke129.py
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import sys
 import time
 import zlib
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 
 import playground  # noqa: E402
 

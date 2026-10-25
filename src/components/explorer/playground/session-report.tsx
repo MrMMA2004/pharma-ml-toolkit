@@ -64,6 +64,8 @@ import {
   SESSION_GROUP_ORDER,
   sessionGroupsAvailable,
   sessionReportCensus,
+  sessionReportContents,
+  type ReportContentsEntry,
   type ReportFigureSection,
   type ReportSection,
   type SessionReportOptions,
@@ -103,6 +105,14 @@ import { toast } from "sonner";
 /* same trace data, the surgery grids' real PNGs).  The sketches are    */
 /* approximations and say so; the downloaded report renders every       */
 /* figure through matplotlib on the bridge.                             */
+/*                                                                      */
+/* (100x-137) The preview gained the file's CONTENTS twin: a sticky     */
+/* strip above the section list listing exactly what the downloaded     */
+/* file's header Contents block lists (every table/figure/image page    */
+/* in walking order — metrics are title-page material and never         */
+/* listed), each line a button that JUMPS the dialog to its section      */
+/* (smooth scroll + a brief accent ring on the arrival, the HTML        */
+/* twin's :target ring mirrored inside the dialog).                     */
 /* ------------------------------------------------------------------ */
 
 /** localStorage key for the per-group toggle set (100x-131). */
@@ -589,6 +599,15 @@ function sectionKindBadge(section: ReportSection): {
   return { icon: ImageIcon, label: "structure grid" };
 }
 
+/** (100x-137) The icon a Contents strip line carries for its kind —
+ * the same icons the preview entries below wear, so a line and its
+ * target are recognizably the same animal. */
+function contentsKindIcon(kind: ReportContentsEntry["kind"]): typeof Activity {
+  if (kind === "table") return Table2;
+  if (kind === "figure") return LineChart;
+  return ImageIcon;
+}
+
 export function SessionReport() {
   const mlResult = useToolkitStore((s) => s.mlResult);
   const lcResult = useToolkitStore((s) => s.lcResult);
@@ -606,7 +625,19 @@ export function SessionReport() {
   const [dropBefore, setDropBefore] = useState<GroupId | null>(null);
   // (100x-133) the preview dialog — the walking order made visible
   const [previewOpen, setPreviewOpen] = useState(false);
+  // (100x-137) the Contents strip's jump target — the section the last
+  // jump landed on, held briefly so the arrival ring fades on its own
+  const [jumpedTo, setJumpedTo] = useState<number | null>(null);
   const dragId = useRef<GroupId | null>(null);
+  const jumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // the jump timer is cleaned up when the component goes (a plain
+  // unmount cleanup — never a restore effect)
+  useEffect(
+    () => () => {
+      if (jumpTimer.current) clearTimeout(jumpTimer.current);
+    },
+    [],
+  );
 
   // restore once on mount (the tolerant reads — defaults ship everything)
   useEffect(() => {
@@ -637,6 +668,14 @@ export function SessionReport() {
   const payload = useMemo(
     () => collectSessionReport(snapshot, options, order),
     [snapshot, options, order],
+  );
+  // (100x-137) the Contents lines the strip shows — the SAME list the
+  // downloaded file's header block prints (the pure derivation, so
+  // the probe can pin it; a metrics-only report yields [] and the
+  // strip hides itself, the file twin's noise rule)
+  const contents = useMemo(
+    () => sessionReportContents(payload.sections),
+    [payload],
   );
   const shippable =
     census.figures + census.tables + census.metrics + census.images > 0;
@@ -713,6 +752,19 @@ export function SessionReport() {
   function resetOrder() {
     setOrder([...SESSION_GROUP_ORDER]);
     saveSectionOrder([...SESSION_GROUP_ORDER]);
+  }
+
+  /** (100x-137) Jump the preview's list to one section — the Contents
+   *  strip's click contract: smooth-scroll the entry into view and
+   *  hold a brief accent ring on it (the HTML twin's :target ring,
+   *  mirrored inside the dialog; the ring fades on its own timer). */
+  function jumpToSection(index: number) {
+    const target = document.getElementById(`preview-section-${index}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    setJumpedTo(index);
+    if (jumpTimer.current) clearTimeout(jumpTimer.current);
+    jumpTimer.current = setTimeout(() => setJumpedTo(null), 1600);
   }
 
   async function download() {
@@ -1014,6 +1066,50 @@ export function SessionReport() {
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[62vh] overflow-y-auto pr-1">
+            {/* (100x-137) the file's CONTENTS twin — a sticky strip at the
+                top of the scroll area listing exactly what the downloaded
+                file's header block lists (metrics never listed, the noise
+                rule), each line jumping the dialog to its section.  It
+                stays pinned while the list scrolls — a dialog is small,
+                a contents list that scrolls away is a contents list you
+                can only use once. */}
+            {contents.length > 0 ? (
+              <nav
+                aria-label="Contents — the downloaded file's header block, mirrored"
+                className="sticky top-0 z-10 mb-2.5 rounded-lg border bg-card/95 px-3 py-2 shadow-sm backdrop-blur"
+              >
+                <p className="text-xs font-medium text-foreground">Contents</p>
+                <ul className="mt-1 flex flex-wrap gap-1" role="list">
+                  {contents.map((entry) => {
+                    const KindIcon = contentsKindIcon(entry.kind);
+                    return (
+                      <li key={entry.index} role="listitem">
+                        <button
+                          type="button"
+                          onClick={() => jumpToSection(entry.index)}
+                          aria-label={`Jump to section ${entry.index + 1}: ${entry.title}`}
+                          title={`${entry.title} — jump to its entry (the downloaded file's Contents links to the page itself)`}
+                          className="inline-flex max-w-56 items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        >
+                          <span
+                            className="tabular-nums font-semibold"
+                            aria-hidden
+                          >
+                            {entry.index + 1}
+                          </span>
+                          <KindIcon className="size-3 shrink-0" aria-hidden />
+                          <span className="truncate">{entry.title}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  The same block the downloaded file&apos;s header carries — click
+                  a line to jump to it.
+                </p>
+              </nav>
+            ) : null}
             {payload.sections.length > 0 ? (
               <ol className="space-y-2.5" aria-label="The report's sections in walking order">
                 {payload.sections.map((section, index) => {
@@ -1022,7 +1118,12 @@ export function SessionReport() {
                   return (
                     <li
                       key={`${section.kind}-${index}-${section.title}`}
-                      className="rounded-lg border bg-card p-3"
+                      id={`preview-section-${index}`}
+                      className={`scroll-mt-[84px] rounded-lg border bg-card p-3 transition-shadow ${
+                        jumpedTo === index
+                          ? "ring-2 ring-primary ring-offset-1 ring-offset-card"
+                          : ""
+                      }`}
                     >
                       <div className="mb-2 flex flex-wrap items-center gap-2">
                         <span

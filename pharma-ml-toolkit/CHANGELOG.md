@@ -10,6 +10,152 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.76] — 2026-10-25
+
+### Added — the round-22 full review (100x-137): the order memory's export/import pair + the HTML twin's clickable Contents anchors + the web preview's Contents twin
+
+The standing complaint — "playground.py content is incomplete. Also
+improve its user interface." — was re-audited a twenty-second time (the
+rar/upload contracts re-proven 119/119 first, then the library-axis
+audit re-run: **246 public symbols, 43 zero-hit**, byte-identical to
+rounds 127–135's documented floor — the axis holds; no new gaps).
+Round 136's handover named the round's work: (a) the web preview's
+dialog could show its own numbered-contents line (the file's Contents
+block now exists on both twins; the preview's header could mirror it),
+(b) the desktop picklist's memory could grow a cross-session
+export/import (ride the report_page_order key the session already
+serialises), and (c) the HTML twin's Contents lines could become
+CLICKABLE anchors (ids on the page wrappers — the PDF twin has no
+links, but HTML naturally does). All three shipped — plus CRON 473854,
+which hit the exec-limits disable again (run_count 1), deleted and
+recreated fresh as 473930.
+
+**The order memory's SHARE pair.** The memory lived in exactly two
+places — the process (100x-134) and the auto-saved session file
+(100x-135, which a full Export session already carries) — so sharing
+an order meant sharing the WHOLE session: every input, every pasted
+corpus, every path. File ▸ Export remembered order writes the
+standalone artifact instead: a tiny JSON carrying the format marker,
+the kind tag and the two label lists (`dump_report_order` normalises —
+the preference without the inputs). The honest edges: a memory that
+never existed gets "Nothing to share yet" (never a silent no-op,
+never an empty file pretending to be one), and a failed write confesses
+on the job label. Import remembered order adopts a colleague's file
+through `load_report_order` (a foreign or corrupt file — missing
+marker, missing kind tag, unreadable JSON — is rejected with an honest
+error and the live memory is NEVER touched), replaces the in-process
+memory, and writes the session file through immediately (the Clear
+menu item's discipline, mirrored for adoption — the imported order
+survives a crash and the next launch re-opens pre-arranged exactly
+where the colleague left it). A valid but EMPTY order imports as the
+honest reset; `persist_session=False` names its scope. The next
+picklist opens pre-arranged in the imported order with its confession
+showing — proven end-to-end in scratch/shoot137.py across two fresh
+apps (a planted memory exported, a fresh HOME imported it back).
+
+**The HTML twin's clickable anchors.** Every table/figure page now
+rides inside its own id-carrying wrapper — `<section class='page'
+id='pg-N' tabindex='-1'>` for tables, `<figure class='page' id='pg-N'
+tabindex='-1'>` for figures (the figcaption's legitimate parent at
+last) — and every Contents line links to it
+(`<li><a href='#pg-N'>name</a></li>`), so a click jumps the reader
+straight to the page. The ids are minted at add time in lockstep with
+the names, so href and target can never drift. The links inherit the
+list's ink until the reader points at them (hover/focus → accent +
+underline), the jumped-to page flashes an accent ring via `:target`,
+`scroll-margin-top` gives the landing breathing room, and `tabindex`
+lets the fragment jump land focus for keyboard readers. The fragment
+links keep the self-contained contract (no network, no companion
+files); the PDF twin's ink is frozen at write time, so its Contents
+lines stay plain text. No caller change — `HTMLReport` grew it, so
+the playground's session report and `save_visual_bundle`'s
+report.html gained the anchors automatically.
+
+**The web preview's Contents twin.** The preview dialog gained the
+file's header block mirrored as a STICKY strip above the section list:
+exactly the lines the downloaded file's Contents prints (every
+table/figure/image section's title in walking order — metrics are
+title-page material and never listed, the file twin's discipline; a
+metrics-only report hides the strip entirely, the noise rule). Each
+line is a labelled button — the section's overall number (the SAME
+coordinates the numbered entries below carry), its kind icon, its
+title — that JUMPS the dialog to its section: smooth scroll, a brief
+accent ring on the arrival (the HTML twin's `:target` ring, mirrored
+inside the dialog; it fades on its own timer), and `scroll-mt` so the
+landing clears the pinned strip. The derivation lives in
+`sessionReportContents` (src/lib/session-report.ts — pure, probe-pinned
+by scratch/probe_session_report_137.ts: walking order, metrics never
+listed, overall indices with gaps, kinds carried, the noise rule, the
+file-twin parity). The strip stays pinned while the list scrolls — a
+dialog is small, a contents list that scrolls away is a contents list
+you can only use once.
+
+**The build-machine-path leak, found and fixed.** The round's own
+ZIP verification re-ran the 1.2.44 full-archive scan
+(LEAKAGE_AUDIT.md's documented contract: "zero /home/<user>/ matches")
+and found **42 entries leaking** — the 1.2.44 scrub had regressed
+silently: rounds 120+ added scratch drivers whose run hints, sys.path
+inserts and OUT paths reintroduced the absolute prefixes one round at
+a time, and the later verification chains had dropped the scan (it
+was not in the standing bump checklist). The fix: scratch/
+scrub_home_paths_137.py neutralises every form (the venv python run
+hints → `python`, the toolkit-root sys.path inserts → the documented
+cwd, the absolute download/bridge targets → file-relative `Path`
+computations, the junit xmls' recorded skip locations → the same
+site-packages-neutral rewrite the notebook driver performs), and
+**tests/test_leakage.py fails the suite forever after** if any
+absolute home prefix returns — the pattern assembled at runtime so
+the guard's own source never matches, with the scrub tool itself
+excluded as a pattern-documenter (the LEAKAGE_AUDIT quoting
+convention). All scrubbed drivers re-verified (SMOKE134/136/137_OK;
+venv_repair_9.sh now rides $HOME so it still repairs THIS machine);
+ruff clean after the sweep.
+
+### Verified
+
+- EVIDENCE CHAIN BEFORE WORK (all green): `--self-test` ("UI built,
+  every tab visited…"); probe_coverage_111_perfile.py 118 rar (115
+  covered + 3 absorbed) + 1 upload = 119/119, zero-hit 0; the
+  notebooks probe green; audit_round7_122.py TOTAL 246 symbols /
+  43 zero-hit — byte-identical to rounds 127-135. playground.py
+  itself: AST parse OK, no truncation markers — the completeness
+  verdict stands.
+- TESTS: 22 new — TestReview137Gui (12, tests/test_playground.py: the
+  dump/load normalisers incl. the foreign rejections and the honest
+  empty; the export's standalone artifact (marker + kind tag + the two
+  lists, NONE of the session's inputs) + the nothing-to-share honesty;
+  the import's adopt-and-write-through with the picklist re-open
+  pre-arranged + the foreign rejection that never touches the live
+  memory + the empty-order reset + the persist-off scope; the
+  docstring pins; the File-menu wiring via inspect.getsource) +
+  TestPreviewContentsTwin (3, tests/test_web_parity.py: the TS probe's
+  derivation verdicts pinned — walking order, metrics never listed,
+  overall indices [1,2,3,5], kinds, the noise rule, the file-twin
+  parity; the collector's export surface; the component's sticky
+  strip + jump handler + arrival ring + scroll margin + confession
+  + labelled buttons) + 2 anchor tests in tests/test_viz.py (every
+  href resolves to a real id, fragment-only links, the wrappers with
+  tabindex; the anchor CSS rides the theme variables) + TestLeakage
+  (5, tests/test_leakage.py: the shipped tree carries zero absolute
+  home paths; the scrub tool's idempotence documentation; the
+  pattern catches the venv/repo-root/foreign-user forms). Standing
+  pins updated where the feature evolved: the Contents `<li>` pins
+  across test_viz/test_playground/smoke136 (now `<li><a href='#pg-N'>…`),
+  and the bundle test's anchor resolution.
+- DESKTOP ARTIFACTS: scratch/smoke137.py (SMOKE137_OK: the full story
+  — normalisers, export, import, pre-arranged re-open, the anchors,
+  the docstring pins) + scratch/shoot137.py (SHOOT137_OK: the File
+  menu posted with BOTH new items between their siblings —
+  pg137-file-menu.png; the imported-order picklist with its confession
+  — pg137-imported-order.png; the artifacts pg137-shared-order.json +
+  pg137-anchors-report.html with the clickable lines).
+- VLM REVIEW on both shots: every QA point PASS — the File menu
+  (dropdown visible, all three remembered-order items legible,
+  Export/Import sitting immediately after Clear, zero defects), the
+  imported-order dialog (numbered rows in the imported order, the
+  "last saved order was applied" confession present, arrows visible,
+  zero defects).
+
 ## [1.2.75] — 2026-10-25
 
 ### Added — the round-21 full review (100x-136): the File menu's Clear remembered order + the HTML twin's Contents block + the web preview's persistent pin

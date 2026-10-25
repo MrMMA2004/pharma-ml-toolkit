@@ -16,7 +16,7 @@ Contracts walked:
   5. _render_figure(caption=...) reaches the registry, so the picklist
      offers the count-carrying label.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/smoke133.py
+Run: DISPLAY=:99 python scratch/smoke133.py
 """
 
 from __future__ import annotations
@@ -25,14 +25,14 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 
 import matplotlib
 
 matplotlib.use("Agg", force=True)
 import playground
 
-OUT = Path("/home/z/my-project/pharma-ml-toolkit/download")
+OUT = Path(__file__).resolve().parents[1] / "download"
 
 
 def deadline_wait(app, label: str, timeout: float = 300.0) -> bool:

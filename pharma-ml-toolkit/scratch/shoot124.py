@@ -1,7 +1,7 @@
 """Screenshots + artifacts for the 100x-124 round: the GA top-molecule
 scored structure grid and the HTML session report (the portable twin).
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/shoot124.py
+Run: DISPLAY=:99 python scratch/shoot124.py
 """
 import shutil
 import sys
@@ -38,7 +38,7 @@ def shot(name: str) -> None:
     from PIL import ImageGrab  # type: ignore
 
     img = ImageGrab.grab(xdisplay=":99")
-    img.save(f"/home/z/my-project/download/{name}.png")
+    img.save(f"{Path(__file__).resolve().parents[2] / 'download'} / {name}.png")
     print("shot", name)
 
 
@@ -114,7 +114,7 @@ assert "data:image" in html and "<table" in html and "cards on screen" in html
 print("html bytes:", target.stat().st_size)
 
 # keep the artifact for inspection (and the VLM/browser review)
-shutil.copy(target, "/home/z/my-project/download/pg124-session-report.html")
+shutil.copy(target, str(Path(__file__).resolve().parents[2] / "download") + "/pg124-session-report.html")
 plt.close("all")
 
 app.destroy()

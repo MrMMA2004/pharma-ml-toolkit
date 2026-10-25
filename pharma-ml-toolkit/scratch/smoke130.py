@@ -7,7 +7,7 @@ bridge answers the pinned contracts (the piperidine mutant set, the
 seeded litter, the honest-null rows, the PNG grid) -- headless,
 Xvfb-driven.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/smoke130.py
+Run: DISPLAY=:99 python scratch/smoke130.py
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 
 import playground
 
-BRIDGE = "/home/z/my-project/scripts/surgery_bridge.py"
+BRIDGE = str(Path(__file__).resolve().parents[2] / "scripts" / "surgery_bridge.py")
 
 
 def deadline_wait(app, label: str, timeout: float = 300.0) -> bool:

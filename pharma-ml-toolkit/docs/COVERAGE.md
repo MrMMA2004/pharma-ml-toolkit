@@ -1021,3 +1021,52 @@ HTML-twin Contents end-to-end) + TestHTMLReportContents (5, library)
 component/store static pins); one standing pin updated (the toggle's
 computed form) and one joined the import line
 (useSyncExternalStore).
+
+### Round 22 (100x-137) — the order memory's export/import pair + the HTML twin's clickable Contents anchors + the web preview's Contents twin
+
+The binding axes were re-proven first (per-file rar + upload probe:
+118 + 1 = 119/119, zero-hit 0 after the standing /tmp re-extract;
+notebooks probe green), then the round-7 audit script re-ran: **246
+public symbols, 43 zero-hit — byte-identical to rounds 127–135's
+documented floor.** The library axis holds; round 136's handover named
+all three of the round's items — (a) the web preview's dialog showing
+its own numbered-contents line (the file's Contents block mirrored),
+(b) the desktop picklist's memory growing a cross-session
+export/import (the report_page_order key the session already
+serialises), and (c) the HTML twin's Contents lines becoming clickable
+anchors — and all three shipped:
+
+| Surface | The 1.2.76 fix |
+| --- | --- |
+| The order memory's export/import pair | File ▸ "Export remembered order…" writes the STANDALONE artifact — a tiny JSON (`dump_report_order` normalises) carrying the format marker, the kind tag and the two label lists: the preference WITHOUT the session's inputs (a full Export session drags every input along). "Nothing to share yet" for a memory that never existed (never an empty file). File ▸ "Import remembered order…" adopts a colleague's file through `load_report_order` (a foreign/corrupt file is rejected with an honest error and the live memory NEVER touched; the empty order imports as the honest reset), replaces the in-process memory, and writes the session file through immediately — the Clear item's discipline, mirrored for adoption (the imported order survives a crash; the next launch re-opens pre-arranged). Proven across two fresh apps in scratch/shoot137.py. |
+| The HTML twin's clickable anchors | Every table/figure page rides an id-carrying wrapper (`<section class='page' id='pg-N' tabindex='-1'>` for tables, `<figure class='page' id='pg-N' tabindex='-1'>` for figures — the figcaption's legitimate parent) and every Contents line links to it (`<li><a href='#pg-N'>name</a></li>`): a click jumps the reader to the page. Ids are minted at add time in lockstep with the names (href and target can never drift); hover/focus re-inks the line (accent + underline), the jumped-to page flashes an accent ring via `:target`, scroll-margin-top gives the landing breathing room. Fragment links only — the self-contained contract holds; the PDF twin's ink is frozen, its lines stay plain text. No caller change (the session report + save_visual_bundle gained it automatically). |
+| The web preview's Contents twin | The preview dialog mirrors the downloaded file's header block as a STICKY strip: exactly the table/figure/image titles in walking order (metrics are title-page material and never listed; a metrics-only report hides the strip, the noise rule), each line a labelled button (the section's overall number + kind icon + title) that JUMPS the dialog to its section — smooth scroll, a brief accent ring on the arrival (the HTML twin's :target ring, mirrored), scroll-mt clearing the pinned strip. The derivation is pure (`sessionReportContents` in src/lib/session-report.ts, probe-pinned by scratch/probe_session_report_137.ts: walking order, metrics never listed, overall indices with gaps, kinds, the noise rule, the file-twin parity). |
+
+The rar/upload/notebook axes: 119/119, zero-hit 0, all three probes
+green after the round's edits (notebooks re-executed with 1.2.76 via
+both drivers). The GUI-axis census holds at 68 live cards (the round
+touched no card topology). The web catalog walk: 26/26 entries (the
+round touched no catalog topology). 17 new tests: TestReview137Gui
+(12, desktop: the normalisers + export + import incl. the pre-arranged
+re-open, the foreign rejection, the honest empty, the persist-off
+scope, the docstring pins, the File-menu wiring) +
+TestPreviewContentsTwin (3, web parity: the TS probe's derivation
+verdicts + the collector export surface + the component's strip/jump/
+ring/margin/confession pins) + 2 anchor tests in test_viz.py (href↔id
+resolution + fragment-only links; the anchor CSS on both themes).
+Standing pins updated where the feature evolved: the Contents `<li>`
+pins across test_viz/test_playground/smoke136 (now anchor-wrapped),
+and the bundle test's anchor resolution.
+
+**The round's fourth deliverable — the build-machine-path leak found
+and fixed.** The round's own ZIP verification re-ran the 1.2.44
+full-archive scan (LEAKAGE_AUDIT.md's contract: zero /home/<user>/
+matches) and found 42 leaking entries — the 1.2.44 scrub had regressed
+silently as rounds 120+ added scratch drivers with absolute paths, and
+the scan had fallen out of the standing bump checklist. The fix:
+scratch/scrub_home_paths_137.py (portable run hints, file-relative
+Path targets, the junit xmls' site-packages-neutral rewrite) +
+tests/test_leakage.py (the guard that FAILS the suite if any absolute
+home prefix ever returns — the pattern assembled at runtime, the scrub
+tool excluded as a pattern-documenter). All scrubbed drivers
+re-verified (SMOKE134/136/137_OK; venv_repair_9.sh rides $HOME).

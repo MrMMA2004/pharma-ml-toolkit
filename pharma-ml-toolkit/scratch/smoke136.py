@@ -213,12 +213,16 @@ def main() -> int:
     )
     html = report.render()
     assert "<nav class='contents' aria-label='Contents'>" in html
-    assert "<li>table 1 · SMILES inspector</li>" in html
-    assert "<li>figure 1 · alpha plot</li>" in html
+    # (100x-137) the standing pins updated: every Contents line rides
+    # an anchor that links to its page's id
+    assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in html
+    assert "<li><a href='#pg-2'>figure 1 · alpha plot</a></li>" in html
     assert (
-        html.index("<li>table 1 · SMILES inspector</li>")
-        < html.index("<li>figure 1 · alpha plot</li>")
+        html.index("<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>")
+        < html.index("<li><a href='#pg-2'>figure 1 · alpha plot</a></li>")
     )
+    assert "<section class='page' id='pg-1' tabindex='-1'>" in html
+    assert "<figure class='page' id='pg-2' tabindex='-1'>" in html
     assert "<h2>table 1 · SMILES inspector</h2>" in html
     assert html.index("aria-label='Contents'") < html.index("class='metrics'")
     prose = HTMLReport("prose").add_text("only prose").render()

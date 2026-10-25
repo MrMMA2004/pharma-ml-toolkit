@@ -4,7 +4,7 @@ picks the figure that drew LAST on that card; both surgery cards carry
 their own button) and the HTML report's bake guarded by the library's
 public REPORT_THEMES contract -- headless, Xvfb-driven.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/smoke127.py
+Run: DISPLAY=:99 python scratch/smoke127.py
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 import sys
 import time
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 
 import matplotlib.pyplot as plt  # noqa: E402
 import playground  # noqa: E402

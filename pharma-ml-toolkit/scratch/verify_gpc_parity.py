@@ -9,7 +9,7 @@ probability).  This script proves the formulas in numpy FIRST, against
 sklearn's GaussianProcessClassifier with a pinned kernel
 (optimizer=None), so the TypeScript port has a verified reference.
 
-Run:  /home/z/.venv/bin/python scratch/verify_gpc_parity.py
+Run:  python scratch/verify_gpc_parity.py
 """
 
 from __future__ import annotations

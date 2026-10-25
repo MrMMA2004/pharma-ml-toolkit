@@ -8,7 +8,7 @@ BASE=http://localhost:3000
 LOG=scratch/probe_card_finder_129.log
 PASS=0; FAIL=0
 
-/home/z/.venv/bin/python - << 'PY' > /tmp/walks_129.jsonl
+python - << 'PY' > /tmp/walks_129.jsonl
 import json
 CATALOG = [
  ("Creatinine clearance", "Calculators"),
@@ -78,11 +78,11 @@ agent-browser find text "Overview" click >/dev/null 2>&1; sleep 1.2
 COUNT=0
 while IFS= read -r line; do
   COUNT=$((COUNT+1))
-  Q=$(/home/z/.venv/bin/python -c "import sys, json; print(json.loads(sys.argv[1])['q'])" "$line")
-  TAB=$(/home/z/.venv/bin/python -c "import sys, json; print(json.loads(sys.argv[1])['tab'])" "$line")
-  SCRIPT=$(/home/z/.venv/bin/python -c "import sys, json; print(json.loads(sys.argv[1])['script'])" "$line")
+  Q=$(python -c "import sys, json; print(json.loads(sys.argv[1])['q'])" "$line")
+  TAB=$(python -c "import sys, json; print(json.loads(sys.argv[1])['tab'])" "$line")
+  SCRIPT=$(python -c "import sys, json; print(json.loads(sys.argv[1])['script'])" "$line")
   RAW=$(agent-browser eval "$SCRIPT" 2>/dev/null | tr '\n' ' ')
-  VERDICT=$(/home/z/.venv/bin/python - "$Q" "$TAB" "$RAW" << 'PY'
+  VERDICT=$(python - "$Q" "$TAB" "$RAW" << 'PY'
 import json, re, sys
 q, tab, raw = sys.argv[1], sys.argv[2], sys.argv[3]
 m = re.search(r"\{.*\}", raw, re.S)

@@ -6,7 +6,7 @@ the census footer recounts on every flip, Save disables at zero pages
 guarded confirm), Cancel aborts with no save started, and only the
 kept pages walk into the HTML -- headless, Xvfb-driven.
 
-Run: DISPLAY=:99 /home/z/.venv/bin/python scratch/smoke132.py
+Run: DISPLAY=:99 python scratch/smoke132.py
 """
 
 from __future__ import annotations
@@ -15,14 +15,14 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit")
+sys.path.insert(0, ".")
 
 import matplotlib
 
 matplotlib.use("Agg", force=True)
 import playground
 
-OUT = Path("/home/z/my-project/pharma-ml-toolkit/download")
+OUT = Path(__file__).resolve().parents[1] / "download"
 
 
 def deadline_wait(app, label: str, timeout: float = 300.0) -> bool:

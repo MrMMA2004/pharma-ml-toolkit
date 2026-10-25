@@ -34,7 +34,7 @@ def shot(name):
     from PIL import ImageGrab  # type: ignore
 
     img = ImageGrab.grab(xdisplay=":99")
-    img.save(f"/home/z/my-project/download/{name}.png")
+    img.save(f"{Path(__file__).resolve().parents[2] / 'download'} / {name}.png")
     print("shot", name)
 
 
@@ -109,7 +109,7 @@ shot("pg122-two-figures")
 # keep the artifact for inspection
 import shutil
 
-shutil.copy(target, "/home/z/my-project/download/pg122-session-report.pdf")
+shutil.copy(target, str(Path(__file__).resolve().parents[2] / "download") + "/pg122-session-report.pdf")
 shutil.rmtree(tmp, ignore_errors=True)
 
 app.destroy()

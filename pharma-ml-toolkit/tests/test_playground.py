@@ -9421,16 +9421,20 @@ class TestReview136Gui:
         assert target.is_file()
         text = target.read_text(encoding="utf-8")
         # the Contents nav: the heading, the list, the count-prefixed
-        # lines in the walking order (the table first, then figures)
+        # lines in the walking order (the table first, then figures) --
+        # each line riding its anchor link (100x-137)
         assert "<nav class='contents'" in text
         assert "aria-label='Contents'" in text
-        assert "<li>table 1 · SMILES inspector</li>" in text
-        assert "<li>figure 1 · alpha plot</li>" in text
-        assert "<li>figure 2 · beta plot</li>" in text
+        assert "<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>" in text
+        assert "<li><a href='#pg-2'>figure 1 · alpha plot</a></li>" in text
+        assert "<li><a href='#pg-3'>figure 2 · beta plot</a></li>" in text
         assert (
-            text.index("<li>table 1 · SMILES inspector</li>")
-            < text.index("<li>figure 1 · alpha plot</li>")
+            text.index("<li><a href='#pg-1'>table 1 · SMILES inspector</a></li>")
+            < text.index("<li><a href='#pg-2'>figure 1 · alpha plot</a></li>")
         )
+        # the pages carry the anchor targets the lines link to
+        assert "<section class='page' id='pg-1' tabindex='-1'>" in text
+        assert "<figure class='page' id='pg-2' tabindex='-1'>" in text
         # the page's own heading matches its Contents line (no drift)
         assert "<h2>table 1 · SMILES inspector</h2>" in text
         # the saved message confesses the new block
@@ -9470,3 +9474,310 @@ class TestReview136Gui:
         html_doc = playground.PlaygroundApp._menu_save_session_report_html.__doc__ or ""
         assert "100x-136" in html_doc
         assert "CONTENTS block" in html_doc
+
+
+class TestReview137Gui:
+    """Round 100x-137: the order memory's SHARE pair -- File ▸ Export /
+    Import remembered order, the standalone artifact (the preference
+    without the session's inputs).  The round also carried the HTML
+    twin's clickable Contents anchors (the library's own tests pin
+    them) and the web preview's Contents twin (the parity pins)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def isolated_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        """Point HOME at a scratch dir so tests never touch a real session."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        return tmp_path
+
+    @pytest.fixture()
+    def dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, rounds: int = 4) -> None:
+        for _ in range(rounds):
+            app.update_idletasks()
+            app.update()
+
+    # -- the pure normalisers ---------------------------------------------- #
+
+    def test_dump_normalises_to_the_two_kinds(self, playground: Any) -> None:
+        """``dump_report_order`` keeps only the two real kinds, coerces
+        every label to str, and stamps the format marker + kind tag --
+        the file can never carry a half-typed payload."""
+        dumped = playground.dump_report_order(
+            {"figure": ["beta", "alpha"], "table": ["T one"], "junk": ["x"]}
+        )
+        assert dumped == {
+            "format": playground.REPORT_ORDER_FORMAT,
+            "kind": playground.REPORT_ORDER_KIND,
+            "order": {"table": ["T one"], "figure": ["beta", "alpha"]},
+        }
+
+    def test_load_rejects_foreign_and_keeps_valid(self, playground: Any) -> None:
+        """``load_report_order`` rejects anything without BOTH the format
+        marker and the kind tag; a valid file returns only the two real
+        kinds as lists of str (the restore path never defends twice)."""
+        good = playground.dump_report_order({"figure": ["b", "a"], "table": []})
+        assert playground.load_report_order(good) == {
+            "figure": ["b", "a"],
+            "table": [],
+        }
+        # foreign: a session file, a marker-less dict, a kind mismatch
+        assert playground.load_report_order({"format": 1}) is None
+        assert (
+            playground.load_report_order(
+                {"format": 1, "kind": "something-else", "order": {}}
+            )
+            is None
+        )
+        assert playground.load_report_order("not a dict") is None
+        assert playground.load_report_order(None) is None
+        # structurally fine but half-typed: only the str lists survive
+        half_typed = {
+            "format": playground.REPORT_ORDER_FORMAT,
+            "kind": playground.REPORT_ORDER_KIND,
+            "order": {"table": ["ok", 3], "figure": "not-a-list"},
+        }
+        assert playground.load_report_order(half_typed) == {}
+        # the honest empty: a valid empty order imports as a reset
+        assert playground.load_report_order(playground.dump_report_order({})) == {}
+
+    # -- the export -------------------------------------------------------- #
+
+    def test_export_writes_the_standalone_artifact(
+        self, app: Any, playground: Any, monkeypatch: Any, tmp_path: Path
+    ) -> None:
+        """The export writes ONLY the order -- the format marker, the kind
+        tag and the two label lists -- never the session's inputs."""
+        import json as _json
+
+        target = tmp_path / "shared-order.json"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        app._report_page_order = {"figure": ["beta plot", "alpha plot"], "table": ["T one"]}
+        app._export_report_order()
+        assert target.is_file(), "the export never wrote the file"
+        payload = _json.loads(target.read_text(encoding="utf-8"))
+        assert payload == {
+            "format": playground.REPORT_ORDER_FORMAT,
+            "kind": playground.REPORT_ORDER_KIND,
+            "order": {"table": ["T one"], "figure": ["beta plot", "alpha plot"]},
+        }
+        # the artifact carries NONE of the session's inputs
+        assert "variables" not in payload and "texts" not in payload
+        assert "report order exported" in str(app._job_label.cget("text"))
+
+    def test_export_with_no_memory_is_honest(
+        self, app: Any, playground: Any, monkeypatch: Any, tmp_path: Path, dialogs: list[Any]
+    ) -> None:
+        """A memory that never existed gets the honest 'nothing to share
+        yet' -- never a silent no-op, never an empty file."""
+        target = tmp_path / "never-written.json"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
+        )
+        app._export_report_order()
+        assert not target.exists(), "an empty memory must not write a file"
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos and infos[0][1][0] == "No remembered order"
+        assert "Nothing to share yet" in infos[0][1][1]
+
+    # -- the import -------------------------------------------------------- #
+
+    def test_import_adopts_the_order_and_writes_through(
+        self,
+        playground: Any,
+        xvfb_display: str,
+        isolated_home: Path,
+        monkeypatch: Any,
+        dialogs: list[Any],
+        tmp_path: Path,
+    ) -> None:
+        """A valid order file REPLACES the memory and writes the session
+        file through immediately -- the imported order survives a crash
+        and the next LAUNCH re-opens pre-arranged (the Clear's
+        discipline, mirrored for adoption)."""
+        import gc
+        import json as _json
+
+        source = tmp_path / "colleague-order.json"
+        source.write_text(
+            _json.dumps(
+                playground.dump_report_order(
+                    {"figure": ["beta plot", "alpha plot"], "table": ["T one"]}
+                )
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app = playground.PlaygroundApp()  # persist_session=True
+        self._drain(app)
+        app._import_report_order()
+        assert app._report_page_order == {
+            "figure": ["beta plot", "alpha plot"],
+            "table": ["T one"],
+        }
+        # the write-through landed: the session file carries the imported order
+        session_file = isolated_home / ".pharmaml" / "playground-session.json"
+        assert session_file.is_file(), "the import never wrote the session file"
+        payload = _json.loads(session_file.read_text(encoding="utf-8"))
+        assert _json.loads(payload["texts"]["report_page_order"]) == {
+            "table": ["T one"],
+            "figure": ["beta plot", "alpha plot"],
+        }
+        # the honest message: applied, written, the next launch keeps it
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos and infos[0][1][0] == "Report order imported"
+        assert "next launch keeps it too" in infos[0][1][1]
+        assert "report order imported" in str(app._job_label.cget("text"))
+        # the picklist re-opens PRE-ARRANGED in the imported order (the
+        # after-callback driver cancels the dialog; the ROW ORDER at
+        # open time is what this asserts)
+        live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
+        tables = [("T one", ["h"], [["r"]])]
+        captured: dict[str, Any] = {}
+
+        def visit() -> None:
+            dialog = None
+            for child in list(app.winfo_children()):
+                if child.winfo_class() == "Toplevel" and str(child.title()) == (
+                    "Session report contents"
+                ):
+                    dialog = child
+            assert dialog is not None
+            checks = [
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TCheckbutton"
+            ]
+            captured["labels"] = [str(check.cget("text")) for check in checks]
+            next(
+                widget
+                for widget in app._walk_widgets(dialog)
+                if widget.winfo_class() == "TButton" and str(widget.cget("text")) == "Cancel"
+            ).invoke()
+
+        app.after(150, visit)
+        assert app._session_report_picklist(live, tables) is None  # cancelled
+        assert captured["labels"] == [
+            "table 1 · T one",
+            "figure 1 · beta plot",
+            "figure 2 · alpha plot",
+        ], captured["labels"]
+        app.destroy()
+        gc.collect()
+
+    def test_import_rejects_foreign_files(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """A foreign or corrupt file is rejected with an honest error and
+        the live memory is never touched."""
+        source = tmp_path / "not-an-order.json"
+        source.write_text('{"format": 1, "theme": "light"}', encoding="utf-8")
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app._report_page_order = {"figure": ["mine"], "table": []}
+        app._import_report_order()
+        # the live memory survived untouched
+        assert app._report_page_order == {"figure": ["mine"], "table": []}
+        errors = [call for call in dialogs if call[0] == "showerror"]
+        assert errors and errors[0][1][0] == "Invalid report order file"
+        assert "not touched" in errors[0][1][1]
+
+    def test_import_empty_order_is_the_honest_reset(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """A valid but EMPTY order imports as a reset: both kinds empty,
+        the next picklist walks the walk order -- never an error."""
+        import json as _json
+
+        source = tmp_path / "empty-order.json"
+        source.write_text(
+            _json.dumps(playground.dump_report_order({})), encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app._report_page_order = {"figure": ["old order"], "table": []}
+        app._import_report_order()
+        assert app._report_page_order == {}
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos and "imported order is empty" in infos[0][1][1]
+        assert "walking order" in infos[0][1][1]
+
+    def test_import_persist_off_names_the_scope(
+        self, app: Any, playground: Any, monkeypatch: Any, dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        """With session saving off, the import lives in this process only
+        -- the message says so instead of claiming a file write."""
+        source = tmp_path / "order.json"
+        source.write_text(
+            __import__("json").dumps(
+                playground.dump_report_order({"figure": ["b", "a"], "table": []})
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **_k: str(source)
+        )
+        app._import_report_order()
+        assert app._report_page_order == {"figure": ["b", "a"], "table": []}
+        infos = [call for call in dialogs if call[0] == "showinfo"]
+        assert infos and "lives in this session only" in infos[0][1][1]
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_137(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-137" in doc
+        assert "SHAREABLE" in doc
+        assert "CLICKABLE anchors" in doc
+        assert "CONTENTS twin" in doc
+
+    def test_handler_docstrings_pin_the_round(self, playground: Any) -> None:
+        export_doc = playground.PlaygroundApp._export_report_order.__doc__ or ""
+        assert "100x-137" in export_doc
+        assert "dump_report_order" in export_doc
+        import_doc = playground.PlaygroundApp._import_report_order.__doc__ or ""
+        assert "100x-137" in import_doc
+        assert "load_report_order" in import_doc
+
+    def test_picklist_docstring_mentions_the_share_pair(self, playground: Any) -> None:
+        doc = playground.PlaygroundApp._session_report_picklist.__doc__ or ""
+        assert "100x-137" in doc
+        assert "SHAREABLE" in doc
+
+    def test_file_menu_wires_the_share_pair(self, playground: Any) -> None:
+        import inspect
+
+        source = inspect.getsource(playground.PlaygroundApp._build_menu)
+        assert 'label="Export remembered order…"' in source
+        assert "command=self._export_report_order" in source
+        assert 'label="Import remembered order…"' in source
+        assert "command=self._import_report_order" in source
+        # the HTML menu's docstring confesses the clickable anchors
+        html_doc = playground.PlaygroundApp._menu_save_session_report_html.__doc__ or ""
+        assert "100x-137" in html_doc
+        assert "CLICKABLE anchor" in html_doc

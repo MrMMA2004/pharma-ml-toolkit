@@ -74,7 +74,7 @@ b'%PDF-'
 >>> html = report.render()
 >>> "<h1>QSAR run</h1>" in html and "<td>rf</td>" in html
 True
->>> "<nav class='contents'" in html and "<li>Model leaderboard</li>" in html
+>>> "<nav class='contents'" in html and "<li><a href='#pg-1'>Model leaderboard</a></li>" in html
 True
 >>> html.startswith("<!DOCTYPE html>")
 True
@@ -172,6 +172,20 @@ nav.contents h2 { margin-top: 0; font-size: .95rem; }
 ul.contents-list { margin: .2rem 0 0; padding-left: 1.15rem; font-size: .85rem; }
 ul.contents-list li { padding: .1rem 0; }
 ul.contents-list li::marker { color: var(--accent); }
+/* (100x-137) the Contents lines are LINKS -- every table/figure page
+   is an anchor target (the id its wrapper section carries), so a
+   click jumps to the page; the PDF twin's ink is frozen, its lines
+   stay plain text.  The link inherits the list's ink until the
+   reader points at it (hover/focus), and the jumped-to page flashes
+   a short accent ring (:target) so the arrival is never lost. */
+ul.contents-list a { color: inherit; text-decoration: none; }
+ul.contents-list a:hover, ul.contents-list a:focus-visible {
+  color: var(--accent); text-decoration: underline; }
+section.page, figure.page { scroll-margin-top: 1.25rem; }
+section.page:target, figure.page:target {
+  outline: 2px solid var(--accent); outline-offset: .4rem;
+  border-radius: .5rem; }
+figure.page { margin: 0; } /* the wrapper resets the UA's 40px inset */
 .theme-toggle { position: fixed; top: .8rem; right: 1rem; font: inherit; font-size: .78rem;
   border: 1px solid var(--border); background: var(--panel); color: var(--fg);
   border-radius: .4rem; padding: .28rem .65rem; cursor: pointer; opacity: .82;
@@ -722,6 +736,17 @@ class HTMLReport:
     ``figure N``, the identity its ``alt`` already carries).  A report
     with no tables and no figures skips the block entirely — a
     contents list of nothing is noise, the PDF twin's rule.
+
+    (100x-137) Every Contents line is a CLICKABLE anchor: each
+    table/figure page rides inside its own wrapper (``<section
+    class='page' id='pg-N'>`` for tables, ``<figure class='page'
+    id='pg-N'>`` for figures — the figcaption's legitimate parent at
+    last), and the line links to that id, so a click jumps the reader
+    straight to the page.  The fragment links keep the
+    self-contained contract (no network, no companion files); the
+    jumped-to page flashes an accent ring via ``:target``.  The PDF
+    twin has no links — its ink is frozen at write time — so its
+    Contents lines stay plain text.
     """
 
     def __init__(
@@ -745,6 +770,10 @@ class HTMLReport:
         # writes them (metrics/text sections are title-page material
         # and are not listed, the PDF twin's discipline).
         self._page_names: list[str] = []
+        # (100x-137) the anchor ids riding in lockstep with the names
+        # — one ``pg-N`` per table/figure page, minted at add time so
+        # the block wrapper and the Contents line can never disagree.
+        self._page_ids: list[str] = []
 
     # -- content builders -------------------------------------------------
     def add_metrics(self, metrics: Any, heading: str | None = None) -> HTMLReport:
@@ -776,11 +805,20 @@ class HTMLReport:
         """Styled HTML table (long tables are truncated at ``max_rows``)."""
         parts = [f"<h2>{_escape(heading)}</h2>"] if heading else []
         parts.append(_frame_to_html(frame, max_rows=max_rows))
-        self._blocks.append("".join(parts))
         # (100x-136) the Contents line this page contributes — the
         # heading the page prints, or the positional fallback when the
         # caller passed none (the identity is honest either way).
         self._table_count += 1
+        # (100x-137) the page rides inside an anchored wrapper so its
+        # Contents line can link to it (a table block is a document
+        # section; tabindex lets the fragment jump land focus there).
+        page_id = f"pg-{len(self._page_names) + 1}"
+        self._blocks.append(
+            f"<section class='page' id='{page_id}' tabindex='-1'>"
+            + "".join(parts)
+            + "</section>"
+        )
+        self._page_ids.append(page_id)
         self._page_names.append(heading or f"table {self._table_count}")
         return self
 
@@ -801,13 +839,20 @@ class HTMLReport:
         data_uri = figure_to_base64(figure, fmt=fmt)
         self._figure_count += 1
         alt = _escape(caption or f"figure {self._figure_count}")
-        block = f"<img src='{data_uri}' alt='{alt}'/>"
+        # (100x-137) the page rides inside an anchored <figure> — the
+        # figcaption's legitimate parent, and the Contents line's
+        # link target (tabindex lets the fragment jump land focus).
+        page_id = f"pg-{len(self._page_names) + 1}"
+        block = f"<figure class='page' id='{page_id}' tabindex='-1'>"
+        block += f"<img src='{data_uri}' alt='{alt}'/>"
         if caption:
             block += f"<figcaption>{_escape(caption)}</figcaption>"
+        block += "</figure>"
         self._blocks.append(block)
         # (100x-136) the Contents line this page contributes — the
         # caption the page prints, or the SAME positional fallback the
         # alt already carries.
+        self._page_ids.append(page_id)
         self._page_names.append(caption or f"figure {self._figure_count}")
         return self
 
@@ -823,9 +868,15 @@ class HTMLReport:
         # page prints (no drift is possible — the names ARE the
         # strings the blocks rendered).  Skipped when the report has
         # no table/figure pages at all (the noise rule).
+        # (100x-137) every line is a LINK to its page's anchor — the
+        # ids were minted at add time in lockstep with the names, so
+        # href and target can never disagree.
         contents = ""
         if self._page_names:
-            lines = "".join(f"<li>{_escape(name)}</li>" for name in self._page_names)
+            lines = "".join(
+                f"<li><a href='#{page_id}'>{_escape(name)}</a></li>"
+                for page_id, name in zip(self._page_ids, self._page_names)
+            )
             contents = (
                 "<nav class='contents' aria-label='Contents'>\n"
                 "<h2>Contents</h2>\n"

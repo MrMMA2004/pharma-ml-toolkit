@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "kind": "pharmaml-report-order",
+  "order": {
+    "table": [
+      "SMILES inspector"
+    ],
+    "figure": [
+      "beta plot",
+      "Ring topology moves \u2014 6 mutant(s)"
+    ]
+  }
+}
