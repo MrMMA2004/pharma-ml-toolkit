@@ -1,0 +1,890 @@
+########## CELL 0 [code] ##########
+import pandas as pd
+from rdkit import Chem
+from rdkit.Chem import PandasTools
+from rdkit.Chem import rdMolDescriptors
+import numpy as np
+import datamol as dm
+
+########## CELL 1 [code] ##########
+from tqdm.auto import tqdm
+
+tqdm.pandas()
+
+########## CELL 2 [code] ##########
+bd_df = pd.read_csv("D2.csv")
+
+########## CELL 3 [code] ##########
+bd_df.shape
+
+########## CELL 4 [code] ##########
+bd_df.columns
+
+########## CELL 5 [code] ##########
+bd_df['Target Name'].unique()
+
+########## CELL 6 [code] ##########
+(bd_df
+ .query("`IC50 (nM)` != ''")
+ #.query("`Target Name` == 'Tyrosine-protein kinase SYK'")
+ [['Ligand SMILES', 'IC50 (nM)', 'BindingDB Ligand Name']]
+ .rename(columns={'Ligand SMILES': 'SMILES'})
+ .astype({'SMILES': str, 'IC50 (nM)':str, 'BindingDB Ligand Name':str})
+ .drop_duplicates('SMILES')
+ .query("~`IC50 (nM)`.str.contains('<|>')")
+ .query("~SMILES.str.contains('.', regex=False)")
+ .astype({'IC50 (nM)':float, 'SMILES': str})
+ .assign(IC50= lambda adf: adf['IC50 (nM)'].apply(lambda x: x if x>0 else None))
+ .assign(pIC50= lambda adf: adf.IC50.pipe(dm.molar.molar_to_log, 'nM'))
+ ['pIC50']
+ .hist()
+)
+
+########## CELL 7 [code] ##########
+(bd_df
+ .query("`IC50 (nM)` != ''")
+ [['Ligand SMILES', 'IC50 (nM)', 'BindingDB Ligand Name']]
+ .rename(columns={'Ligand SMILES': 'SMILES'})
+ .astype({'SMILES': str, 'IC50 (nM)':str, 'BindingDB Ligand Name':str})
+ .drop_duplicates('SMILES')
+ .query("~`IC50 (nM)`.str.contains('<|>')")
+ .query("~SMILES.str.contains('.', regex=False)")
+ .astype({'IC50 (nM)':float, 'SMILES': str})
+ .assign(IC50= lambda adf: adf['IC50 (nM)'].apply(lambda x: x if x>0 else None))
+ .assign(pIC50= lambda adf: adf.IC50.pipe(dm.molar.molar_to_log, 'nM'))
+ .query('~IC50.isna()')
+ [["SMILES", "pIC50"]]
+ .assign(name= lambda adf: [f"dop_{x}" for x in range(len(adf))])
+ .reset_index(drop=True)
+).to_csv('dop_train.csv', index=False)
+
+########## CELL 8 [code] ##########
+
+
+########## CELL 9 [markdown] ##########
+## ML workflow
+- Feature generation from SMILES
+- Data preprocessing
+- ML pipeline setup with cross-validation and grid search
+- Model training and evaluation
+- Model comparison
+
+########## CELL 10 [code] ##########
+df = pd.read_csv('dop_train.csv')
+
+########## CELL 11 [code] ##########
+df.head()
+
+########## CELL 12 [code] ##########
+df.shape
+
+########## CELL 13 [code] ##########
+df.query("index == 420")
+
+########## CELL 14 [code] ##########
+df.dtypes
+
+########## CELL 15 [markdown] ##########
+**I will use the above descriptors to create models**
+
+########## CELL 16 [code] ##########
+dm.list_supported_fingerprints()
+
+########## CELL 17 [markdown] ##########
+**I will use the above Fingerprints to create models**
+
+########## CELL 18 [code] ##########
+property_names = list(rdMolDescriptors.Properties.GetAvailableProperties())
+property_getter = rdMolDescriptors.Properties(property_names)
+
+########## CELL 19 [code] ##########
+len(property_names)
+
+########## CELL 20 [code] ##########
+def smi2props(smi):
+    mol = Chem.MolFromSmiles(smi)
+    props = None
+    if mol:
+        Chem.DeleteSubstructs(mol, Chem.MolFromSmarts("[#1X0]"))
+        props = np.array(property_getter.ComputeProperties(mol))
+    return props
+
+########## CELL 21 [code] ##########
+df['props'] = df.SMILES.progress_apply(safe_smi2props)
+
+########## CELL 22 [code] ##########
+df = df.query("~props.isna()")
+
+########## CELL 23 [code] ##########
+df[property_names] = df['props'].to_list()
+
+########## CELL 24 [code] ##########
+# The second time
+df = df.drop(columns='props')
+
+########## CELL 25 [code] ##########
+df.head()
+
+########## CELL 26 [code] ##########
+df.shape
+
+########## CELL 27 [code] ##########
+df.isna().sum()
+
+########## CELL 28 [markdown] ##########
+## First Impressions
+
+########## CELL 29 [code] ##########
+from lightgbm import LGBMRegressor, plot_importance #LightGBM models
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.metrics import r2_score, mean_squared_error #ML stats
+import seaborn as sns #Plotting
+from yellowbrick.regressor import prediction_error, ResidualsPlot
+
+########## CELL 30 [code] ##########
+train, test = train_test_split(df, test_size=0.2)
+
+########## CELL 31 [code] ##########
+train_x = train[property_names]
+train_y = train.pIC50.astype(float)
+test_x = test[property_names]
+test_y = test.pIC50.astype(float)
+
+########## CELL 32 [code] ##########
+lgbm = LGBMRegressor()
+
+########## CELL 33 [code] ##########
+lgbm.fit(train_x, train_y)
+
+########## CELL 34 [code] ##########
+pred = lgbm.predict(test_x)
+
+########## CELL 35 [code] ##########
+r2_score(test_y, pred)
+
+########## CELL 36 [code] ##########
+mean_squared_error(test_y,pred,squared=False)
+
+########## CELL 37 [code] ##########
+ax = sns.regplot(x=test_y,y=pred,scatter_kws={'s':10})
+ax.set(xlabel="Experimental pic50")
+ax.set(ylabel="Predicted pic50")
+
+########## CELL 38 [code] ##########
+plot_importance(lgbm, figsize=(8,12),height=0.5)
+
+########## CELL 39 [code] ##########
+imp_fs = {k: v for k, v in sorted((dict(zip(lgbm.feature_name_, lgbm.feature_importances_))).items(), key=lambda item: item[1], reverse=True)}
+
+########## CELL 40 [code] ##########
+fingerprints = ['maccs', 'pattern', 'layered', 'erg','estate', 'ecfp', 'fcfp', 'topological', 'atompair', 'rdkit', 'ecfp-count', 'fcfp-count','topological-count', 'atompair-count', 'rdkit-count', 'avalon-count']
+
+########## CELL 41 [code] ##########
+", ".join(fingerprints)
+
+########## CELL 42 [code] ##########
+def test_fp(df):
+    df['mol'] = df.SMILES.apply(Chem.MolFromSmiles)
+    r2s = []
+    mses = []
+    for fp in fingerprints:
+        curr_df = df.copy()
+        curr_df['mol'] = df.SMILES.apply(Chem.MolFromSmiles)
+        curr_df['fp'] = df.mol.apply(dm.to_fp, fp_type=fp)
+        print("the fp in use: ", fp)
+        print("Train test split process ")
+        train, test = train_test_split(curr_df, test_size=0.2, random_state=99)
+        train_x = train['fp'].to_list()
+        train_y = train.pIC50
+        test_x = test['fp'].to_list()
+        test_y = test.pIC50
+        print("train size, ", len(train_x), "test size, ", len(test_x))
+        lgbm = LGBMRegressor()
+        lgbm.fit(train_x, train_y)
+        pred = lgbm.predict(test_x)
+        curr_r2 = r2_score(test_y, pred)
+        curr_mse = mean_squared_error(test_y,pred,squared=False)
+        print(curr_r2)
+        print(curr_mse)
+        r2s.append(curr_r2)
+        mses.append(curr_mse)
+    return r2s, mses
+
+########## CELL 43 [code] ##########
+r2s, mses = test_fp(df)
+
+########## CELL 44 [code] ##########
+import matplotlib.pyplot as plt
+
+########## CELL 45 [code] ##########
+import collections
+
+########## CELL 46 [code] ##########
+dict(zip(fingerprints, r2s))
+
+########## CELL 47 [code] ##########
+ax = sns.lineplot(x=[f"{x}, {y:.3f}" for x,y in zip(fingerprints, r2s)], y=r2s)
+#ax.lineplot(
+ax.set(xlabel='Fingerprint')
+ax.set(ylabel='r2 value')
+plt.xticks(rotation=45, ha='right')
+plt.show()
+
+
+########## CELL 48 [code] ##########
+selected_fps = ['pattern', 'ecfp', 'fcfp', 'topological', 'rdkit', 'ecfp-count', 'fcfp-count','topological-count', 'atompair-count', 'rdkit-count', 'avalon-count']
+
+########## CELL 49 [code] ##########
+from sklearn.metrics import mean_absolute_error
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+import xgboost as xgb
+
+########## CELL 50 [markdown] ##########
+Comparing different regressors
+
+########## CELL 51 [code] ##########
+def test_naive_(df, model, selected_fps, selected_desc):
+    df['mol'] = df.SMILES.apply(Chem.MolFromSmiles)
+    r2s = []
+    mses = []
+    for sfp in selected_fps:
+        curr_df = df.copy()
+        curr_df['mol'] = df.SMILES.apply(Chem.MolFromSmiles)
+        curr_df['fp'] = df.mol.apply(dm.to_fp, fp_type=sfp)
+        curr_fp_df = pd.DataFrame(curr_df['fp'].to_list(), columns=[f'fp{x}' for x in range(len(curr_df['fp'].values[0]))])
+        curr_df = pd.concat([curr_df[[*selected_desc, 'SMILES', 'pIC50']], curr_fp_df], axis=1)
+        del curr_fp_df
+        print("the fp in use: ", sfp)
+        print("Train test split process ")
+        train, test = train_test_split(curr_df, test_size=0.2, random_state=99)
+        train_x = train.drop(columns=['SMILES', 'pIC50'])
+        train_y = train.pIC50
+        test_x = test.drop(columns=['SMILES', 'pIC50'])
+        test_y = test.pIC50
+        print("train size, ", len(train_x), "test size, ", len(test_x))
+        model.fit(train_x, train_y)
+        pred = model.predict(test_x)
+        curr_r2 = r2_score(test_y, pred)
+        curr_mse = mean_squared_error(test_y,pred,squared=False)
+        print(curr_r2)
+        print(curr_mse)
+        r2s.append(curr_r2)
+        mses.append(curr_mse)
+
+########## CELL 52 [markdown] ##########
+Each time the first number is r2 and the second number is mse
+
+########## CELL 53 [code] ##########
+lgbm_new = LGBMRegressor()
+
+########## CELL 54 [code] ##########
+test_naive_(df, lgbm_new, selected_fps, property_names)
+
+########## CELL 55 [code] ##########
+rfreg = RandomForestRegressor(n_estimators=200)
+
+########## CELL 56 [code] ##########
+test_naive_(df, rfreg, fingerprints, property_names)
+
+########## CELL 57 [code] ##########
+xgb_reg = xgb.XGBRegressor(n_estimators=200)
+
+########## CELL 58 [code] ##########
+test_naive_(df, xgb_reg, selected_fps, property_names)
+
+########## CELL 59 [code] ##########
+svrreg = SVR()
+
+########## CELL 60 [code] ##########
+test_naive_(fp_desc_df, svrreg, selected_fps, selected_desc)
+
+########## CELL 61 [code] ##########
+elasticreg = ElasticNet()
+
+########## CELL 62 [code] ##########
+test_naive_(fp_desc_df, elasticreg, selected_fps, selected_desc)
+
+########## CELL 63 [code] ##########
+lassoreg = Lasso()
+
+########## CELL 64 [code] ##########
+test_naive_(df, lassoreg, selected_fps, selected_desc)
+
+########## CELL 65 [code] ##########
+ridgereg = Ridge()
+
+########## CELL 66 [code] ##########
+test_naive_(fp_desc_df, ridgereg, selected_fps, selected_desc)
+
+########## CELL 67 [markdown] ##########
+## Scaling the descriptor values
+
+########## CELL 68 [code] ##########
+from sklearn.preprocessing import StandardScaler
+
+########## CELL 69 [code] ##########
+scalar = StandardScaler()
+
+########## CELL 70 [code] ##########
+def test_naive_with_scaler(df, model, selected_fps, selected_desc):
+    df['mol'] = df.SMILES.apply(Chem.MolFromSmiles)
+    r2s = []
+    mses = []
+    for sfp in selected_fps:
+        curr_df = df.copy()
+        curr_df['fp'] = df.mol.apply(dm.to_fp, fp_type=sfp)
+        curr_fp_df = pd.DataFrame(curr_df['fp'].to_list(), columns=[f'fp{x}' for x in range(len(curr_df['fp'][0]))])
+        curr_df = pd.concat([curr_df[['pIC50']], pd.DataFrame(scalar.fit_transform(toy_df[selected_desc]), columns=selected_desc)], axis=1)
+        curr_df = pd.concat([curr_df, curr_fp_df], axis=1)
+        del curr_fp_df
+        print("the fp in use: ", sfp)
+        print("Train test split process ")
+        train, test = train_test_split(curr_df, test_size=0.2, random_state=99)
+        train_x = train.drop(columns=['pIC50'])
+        train_y = train.pIC50.astype(float)
+        test_x = test.drop(columns=['pIC50'])
+        test_y = test.pIC50.astype(float)
+    
+        print("train size, ", len(train_x), "test size, ", len(test_x))
+        model.fit(train_x, train_y)
+        pred = model.predict(test_x)
+        curr_r2 = r2_score(test_y, pred)
+        curr_mse = mean_squared_error(test_y,pred,squared=False)
+        print(curr_r2)
+        print(curr_mse)
+        r2s.append(curr_r2)
+        mses.append(curr_mse)
+
+########## CELL 71 [code] ##########
+test_naive_with_scaler(df, lgbm, selected_fps, selected_desc)
+
+########## CELL 72 [markdown] ##########
+**Scaling won't improve the r2 or mse**
+
+########## CELL 73 [markdown] ##########
+## Hypertuning
+
+########## CELL 74 [markdown] ##########
+### XGboost, LightGBM and Random Forest are chosen for hypertuning 
+#### avalon-count, ecfp-count, ecfp fingerprints chosen
+##### Grid search will be done with the model-config list [5:]
+
+########## CELL 75 [code] ##########
+df.head()
+
+########## CELL 76 [code] ##########
+from sklearn.model_selection import GridSearchCV, KFold, RandomizedSearchCV
+
+########## CELL 77 [code] ##########
+def test_naive_with_scaler_gridsearch(df, model, selected_desc, grid_params):
+    df['mol'] = df.SMILES.apply(Chem.MolFromSmiles)
+
+    curr_df = df.copy()
+    curr_df['fp'] = df.mol.apply(dm.to_fp, fp_type='fcfp')
+    curr_fp_df = pd.DataFrame(curr_df['fp'].to_list(), columns=[f'fp{x}' for x in range(len(curr_df['fp'][0]))])
+    curr_df = pd.concat([curr_df[[*selected_desc, 'SMILES', 'pIC50']], curr_fp_df], axis=1)
+    del curr_fp_df
+
+    print("Train test split process ")
+    train, test = train_test_split(curr_df, test_size=0.2, random_state=99)
+    train_x = train.drop(columns=['SMILES', 'pIC50'])
+    train_y = train.pIC50.astype(float)
+    test_x = test.drop(columns=['SMILES', 'pIC50'])
+    test_y = test.pIC50.astype(float)
+
+    print("train size, ", len(train_x), "test size, ", len(test_x))
+    grid = GridSearchCV(model, grid_params, cv=5, scoring='r2', n_jobs=-1, verbose=1)
+    print("fitting ... ")
+    grid.fit(train_x, train_y)
+    print("fit finished ...")
+    print(grid.best_params_)
+    model_best = grid.best_estimator_
+    pred = model_best.predict(test_x)
+    curr_r2 = r2_score(test_y, pred)
+    curr_mse = mean_squared_error(test_y,pred,squared=False)
+    print(curr_r2)
+    print(curr_mse)
+
+    return curr_r2, curr_mse
+
+########## CELL 78 [markdown] ##########
+xgboost hypertuning
+
+########## CELL 79 [code] ##########
+xgb_params = {
+            'n_estimators': [100, 200, 500],
+            'max_depth': [3, 5, 7],
+            'learning_rate': [0.01, 0.05, 0.1],
+            'colsample_bytree': [0.7, 0.8, 0.9]
+        }
+
+########## CELL 80 [code] ##########
+xgb_reg = xgb.XGBRegressor()
+
+########## CELL 81 [code] ##########
+xgb_r2, xgb_mse = test_naive_with_scaler_gridsearch(df, xgb_reg, property_names, xgb_params)
+
+########## CELL 82 [markdown] ##########
+random forest hypertuning
+
+########## CELL 83 [code] ##########
+rf_params =  {
+            'n_estimators': [100, 200, 500],
+            'max_depth': [None, 10, 20, 30],
+            'min_samples_split': [2, 5, 10]
+        }
+
+########## CELL 84 [code] ##########
+rf_reg = RandomForestRegressor()
+
+########## CELL 85 [code] ##########
+rf_r2, rf_mse = test_naive_with_scaler_gridsearch(df, rf_reg, property_names, rf_params)
+
+########## CELL 86 [markdown] ##########
+## lightGBM hypertuning
+
+########## CELL 87 [code] ##########
+def test_naive(df, model, selected_desc):
+    df['mol'] = df.SMILES.apply(Chem.MolFromSmiles)
+
+    curr_df = df.copy()
+    curr_df['fp'] = df.mol.apply(dm.to_fp, fp_type='fcfp')
+    curr_fp_df = pd.DataFrame(curr_df['fp'].to_list(), columns=[f'fp{x}' for x in range(len(curr_df['fp'][0]))])
+    curr_df = pd.concat([curr_df[[*selected_desc, 'SMILES', 'pIC50']], curr_fp_df], axis=1)
+    del curr_fp_df
+
+    print("Train test split process ")
+    train, test = train_test_split(curr_df, test_size=0.2, random_state=99)
+    train_x = train.drop(columns=['SMILES', 'pIC50'])
+    train_y = train.pIC50.astype(float)
+    test_x = test.drop(columns=['SMILES', 'pIC50'])
+    test_y = test.pIC50.astype(float)
+
+    print("train size, ", len(train_x), "test size, ", len(test_x))
+    print("fitting ... ")
+    model.fit(train_x, train_y)
+    print("fit finished ...")
+    pred = model.predict(test_x)
+    curr_r2 = r2_score(test_y, pred)
+    curr_mse = mean_squared_error(test_y,pred,squared=False)
+    print(curr_r2)
+    print(curr_mse)
+
+    ax = sns.regplot(x=test_y,y=pred,scatter_kws={'s':10})
+    ax.set(xlabel="Experimental pic50")
+    ax.set(ylabel="Predicted pic50")
+
+    return curr_r2, curr_mse, ax
+
+########## CELL 88 [code] ##########
+gbm_params = {
+        'learning_rate': [0.01, 0.05, 0.1],
+        'num_leaves': [31, 63, 127],
+        'min_child_samples': [10, 20, 50],
+        'subsample': [0.8, 1.0],
+        'colsample_bytree': [0.8, 1.0],
+        'reg_alpha': [0, 0.1, 1.0],
+        'reg_lambda': [0, 0.1, 1.0],
+        'n_estimators': [100, 200]
+    }
+
+########## CELL 89 [markdown] ##########
+_**Normal GridSearch for lightgbm teared apart my CPU :/ so I tested some values manually and the below is the best result:**_
+
+########## CELL 90 [code] ##########
+gbm = LGBMRegressor(learning_rate=0.05, n_estimators=500, colsample_bytree=0.5, reg_alpha=0.1, reg_lambda=0.1)
+
+########## CELL 91 [code] ##########
+test_naive(df, gbm, property_names)
+
+########## CELL 92 [code] ##########
+xgb_best = xgb.XGBRegressor(**{'colsample_bytree': 0.7, 'learning_rate': 0.1, 'max_depth': 7, 'n_estimators': 500})
+
+########## CELL 93 [code] ##########
+test_naive(df, xgb_best, property_names)
+
+########## CELL 94 [code] ##########
+rf_best = RandomForestRegressor(**{'max_depth': 30, 'min_samples_split': 2, 'n_estimators': 500})
+
+########## CELL 95 [code] ##########
+test_naive(df, rf_best, property_names)
+
+########## CELL 96 [markdown] ##########
+### Testing drugs with these 3 models
+
+########## CELL 97 [code] ##########
+df_drugs = pd.read_csv('drugs.csv')
+
+########## CELL 98 [code] ##########
+df_drugs.head()
+
+########## CELL 99 [code] ##########
+def main_test(df, model, selected_desc):
+    df['mol'] = df.SMILES.apply(Chem.MolFromSmiles)
+    print(f"Input dataframe shape: {df.shape}")
+    curr_df = df.copy()
+    curr_df['fp'] = df.mol.apply(dm.to_fp, fp_type='fcfp')
+    print("shape after adding fp, ", curr_df.shape)
+    curr_fp_df = pd.DataFrame(curr_df['fp'].to_list(), columns=[f'fp{x}' for x in range(len(curr_df['fp'][0]))], index=curr_df.index)
+    print("curr_fp_df shape", curr_fp_df.shape)
+    curr_df = pd.concat([curr_df[[*selected_desc, 'SMILES']], curr_fp_df], axis=1)
+    print("shape after concat", curr_df.shape)
+    del curr_fp_df
+    print(f"Output dataframe shape: {curr_df.shape}")
+    pred = model.predict(curr_df.drop(columns=['SMILES']))
+
+
+    return pred
+
+########## CELL 100 [code] ##########
+pic50_pred = main_test(df_drugs, xgb_best, property_names)
+
+########## CELL 101 [code] ##########
+df_drugs['pred_pic50'] = pic50_pred
+
+########## CELL 102 [code] ##########
+df_drugs['IC50'] = df_drugs.pred_pic50.apply(dm.molar.log_to_molar, unit='nM')
+
+########## CELL 103 [code] ##########
+df_drugs.query('IC50 < 300')
+
+########## CELL 104 [code] ##########
+rf_drugs = df_drugs.query('IC50 < 300')
+
+########## CELL 105 [code] ##########
+xgb_drugs = df_drugs.query('IC50 < 300')
+
+########## CELL 106 [code] ##########
+gbm_drugs = df_drugs.query('IC50 < 300')
+
+########## CELL 107 [code] ##########
+gbm_drugs
+
+########## CELL 108 [code] ##########
+rf_drugs
+
+########## CELL 109 [code] ##########
+xgb_drugs
+
+########## CELL 110 [code] ##########
+xgb_drugs.columns
+
+########## CELL 111 [code] ##########
+pd.concat(
+    [xgb_drugs.drop(columns=['pred_pic50', 'mol']).assign(model = lambda adf: 'xgb'),
+     gbm_drugs.drop(columns=['pred_pic50', 'mol']).assign(model = lambda adf: 'gbm'),
+     rf_drugs.drop(columns=['pred_pic50', 'mol']).assign(model = lambda adf: 'rf')]
+).sort_values('IC50').query("NumRotatableBonds <= 10").query("NumRotatableBonds < 15 and amw <= 600").reset_index(drop=True).to_csv("syk_final.csv", index=False)
+
+########## CELL 112 [markdown] ##########
+## Results 
+
+########## CELL 113 [markdown] ##########
+#### Cross validation
+
+########## CELL 114 [code] ##########
+def cross_validate_(df, model, selected_desc, n_splits=5, random_state=85):
+
+    df['mol'] = df.SMILES.apply(Chem.MolFromSmiles)
+    curr_df = df.copy()
+    curr_df['fp'] = df.mol.apply(dm.to_fp, fp_type='avalon-count')
+    curr_fp_df = pd.DataFrame(curr_df['fp'].to_list(), columns=[f'fp{x}' for x in range(len(curr_df['fp'][0]))])
+    curr_df = pd.concat([curr_df[[*selected_desc, 'SMILES', 'pIC50']], curr_fp_df], axis=1)
+    del curr_fp_df
+    
+    X = curr_df.drop(columns=['SMILES', 'pIC50'])
+    y = curr_df.pIC50.astype(float)
+
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+    
+    fold_r2_scores = []
+    fold_rmse_scores = []
+    fold_predictions = []
+    fold_actual = []
+    
+    print(f"Starting {n_splits}-fold cross-validation...")
+
+    for fold, (train_idx, test_idx) in enumerate(kf.split(X)):
+        print(f"\nFold {fold+1}/{n_splits}")
+        
+        X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+        y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+        
+        print(f"  Training model on {len(X_train)} samples...")
+        model.fit(X_train, y_train)
+        
+        y_pred = model.predict(X_test)
+        
+        r2 = r2_score(y_test, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        
+        print(f"  Fold {fold+1} - R²: {r2:.4f}, RMSE: {rmse:.4f}")
+        
+        fold_r2_scores.append(r2)
+        fold_rmse_scores.append(rmse)
+        fold_predictions.extend(y_pred)
+        fold_actual.extend(y_test.values)
+    
+    mean_r2 = np.mean(fold_r2_scores)
+    std_r2 = np.std(fold_r2_scores)
+    mean_rmse = np.mean(fold_rmse_scores)
+    std_rmse = np.std(fold_rmse_scores)
+    
+    overall_r2 = r2_score(fold_actual, fold_predictions)
+    overall_rmse = np.sqrt(mean_squared_error(fold_actual, fold_predictions))
+    
+    results = {
+        'fold_r2_scores': fold_r2_scores,
+        'fold_rmse_scores': fold_rmse_scores,
+        'mean_r2': mean_r2,
+        'std_r2': std_r2,
+        'mean_rmse': mean_rmse,
+        'std_rmse': std_rmse,
+        'overall_r2': overall_r2,
+        'overall_rmse': overall_rmse,
+    }
+    
+    # Print summary
+    print("\n" + "="*50)
+    print("Cross-Validation Summary:")
+    print(f"Mean R²: {mean_r2:.4f} ± {std_r2:.4f}")
+    print(f"Mean RMSE: {mean_rmse:.4f} ± {std_rmse:.4f}")
+    print(f"Overall R² (all folds combined): {overall_r2:.4f}")
+    print(f"Overall RMSE (all folds combined): {overall_rmse:.4f}")
+    print("="*50)
+
+    return results
+
+########## CELL 115 [code] ##########
+rf_best = RandomForestRegressor(**{'max_depth': 30, 'min_samples_split': 2, 'n_estimators': 100})
+
+########## CELL 116 [code] ##########
+rf_results = cross_validate_(df, rf_best, selected_desc)
+
+########## CELL 117 [code] ##########
+xgboost_best = xgb.XGBRegressor(**{'colsample_bytree': 0.7, 'learning_rate': 0.05, 'max_depth': 7, 'n_estimators': 500})
+
+########## CELL 118 [code] ##########
+xgb_results = cross_validate_(df, xgboost_best, selected_desc)
+
+########## CELL 119 [code] ##########
+gbm_results = cross_validate_(df, gbm, selected_desc)
+
+########## CELL 120 [markdown] ##########
+### Best model is lightGBM with above parameters, avalon-count fingerprint and selected-desc descriptors
+
+########## CELL 121 [markdown] ##########
+## Testing drugs
+
+########## CELL 122 [code] ##########
+df_drug = pd.read_csv('./drugs.csv', engine='pyarrow', dtype_backend='pyarrow')
+
+########## CELL 123 [code] ##########
+df_drug.head()
+
+########## CELL 124 [code] ##########
+df_drug.shape
+
+########## CELL 125 [markdown] ##########
+prepare df to test, adding descs
+
+########## CELL 126 [code] ##########
+def safe_smi2props(smi):
+    try:
+        return smi2props(smi)
+    except Exception:
+        return None
+
+########## CELL 127 [code] ##########
+df_drug['props'] = df_drug.SMILES.progress_apply(safe_smi2props)
+
+########## CELL 128 [code] ##########
+df_drug.query("props.isna()")
+
+########## CELL 129 [markdown] ##########
+Deleting the above 2 rows
+
+########## CELL 130 [code] ##########
+df_drug_corrected = df_drug.query("props.notna()")
+
+########## CELL 131 [code] ##########
+df_drug_corrected.shape
+
+########## CELL 132 [code] ##########
+df_drug_corrected[selected_desc] = df_drug_corrected['props'].to_list()
+
+########## CELL 133 [code] ##########
+df_drug_corrected.head()
+
+########## CELL 134 [code] ##########
+df_drug_corrected = df_drug_corrected.drop(columns='props')
+
+########## CELL 135 [code] ##########
+df_drug_corrected.shape
+
+########## CELL 136 [code] ##########
+def main_test(df, model, selected_desc):
+    df['mol'] = df.SMILES.apply(Chem.MolFromSmiles)
+    print(f"Input dataframe shape: {df.shape}")
+    curr_df = df.copy()
+    curr_df['fp'] = df.mol.apply(dm.to_fp, fp_type='avalon-count')
+    print("shape after adding fp, ", curr_df.shape)
+    curr_fp_df = pd.DataFrame(curr_df['fp'].to_list(), columns=[f'fp{x}' for x in range(len(curr_df['fp'][0]))], index=curr_df.index)
+    print("curr_fp_df shape", curr_fp_df.shape)
+    curr_df = pd.concat([curr_df[[*selected_desc, 'SMILES']], curr_fp_df], axis=1)
+    print("shape after concat", curr_df.shape)
+    del curr_fp_df
+    print(f"Output dataframe shape: {curr_df.shape}")
+    pred = model.predict(curr_df.drop(columns=['SMILES']))
+
+
+    return pred
+
+########## CELL 137 [code] ##########
+pic50_pred = main_test(df_drug_corrected, gbm, selected_desc)
+
+########## CELL 138 [markdown] ##########
+seems like some drugs cannot be converted to fps.
+
+########## CELL 139 [code] ##########
+def safe_to_fp(mol):
+    try:
+        return dm.to_fp(mol, fp_type='avalon-count')
+    except Exception:
+        return None
+
+########## CELL 140 [code] ##########
+df_drug_corrected.shape
+
+########## CELL 141 [code] ##########
+df_drug_corrected['fp'] = df_drug_corrected.mol.progress_apply(safe_to_fp)
+
+########## CELL 142 [code] ##########
+df_drug_corrected.query("fp.isna()")
+
+########## CELL 143 [markdown] ##########
+I will delete the above row and test again
+
+########## CELL 144 [code] ##########
+df_drug_corrected = df_drug_corrected.query("fp.notna()").drop(columns=['fp'])
+
+########## CELL 145 [code] ##########
+df_drug_corrected.shape
+
+########## CELL 146 [code] ##########
+pic50_pred = main_test(df_drug_corrected, gbm, selected_desc)
+
+########## CELL 147 [code] ##########
+df_drug_corrected['predicted_pic50'] = pic50_pred
+
+########## CELL 148 [code] ##########
+df_drug_corrected.head()
+
+########## CELL 149 [markdown] ##########
+converting back to ic50
+
+########## CELL 150 [code] ##########
+df_drug_corrected['IC50'] = df_drug_corrected.predicted_pic50.apply(dm.molar.log_to_molar, unit='nM')
+
+########## CELL 151 [code] ##########
+df_drug_corrected.head()
+
+########## CELL 152 [code] ##########
+df_drug_corrected.describe()
+
+########## CELL 153 [code] ##########
+df_drug_corrected.query("IC50 <= 1000").shape
+
+########## CELL 154 [code] ##########
+df_drug_corrected.query("IC50 <= 500").shape
+
+########## CELL 155 [code] ##########
+df_drug_corrected.query("IC50 <= 100").shape
+
+########## CELL 156 [code] ##########
+ecfp_rf_100 = df_drug_corrected.query("IC50 <= 100")
+
+########## CELL 157 [code] ##########
+ecfp_rf_100.shape
+
+########## CELL 158 [code] ##########
+ecfp_gbm_100 = df_drug_corrected.query("IC50 <= 100")
+
+########## CELL 159 [code] ##########
+ecfp_gbm_100.shape
+
+########## CELL 160 [code] ##########
+ecfp_xgb_100 = df_drug_corrected.query("IC50 <= 100")
+
+########## CELL 161 [code] ##########
+ecfp_xgb_100.shape
+
+########## CELL 162 [code] ##########
+n_ecfp_gbm_100 = df_drug_corrected.query("IC50 <= 100")
+
+########## CELL 163 [code] ##########
+n_ecfp_gbm_100.shape
+
+########## CELL 164 [code] ##########
+n_ecfp_xgb_100 = df_drug_corrected.query("IC50 <= 100")
+
+########## CELL 165 [code] ##########
+n_ecfp_xgb_100.shape
+
+########## CELL 166 [code] ##########
+n_ecfp_rf_100 = df_drug_corrected.query("IC50 <= 100")
+
+########## CELL 167 [code] ##########
+avalon_rf_100 = df_drug_corrected.query("IC50 <= 100")
+
+########## CELL 168 [code] ##########
+avalon_rf_100.shape
+
+########## CELL 169 [code] ##########
+avalon_xgb_100 = df_drug_corrected.query("IC50 <= 100")
+
+########## CELL 170 [code] ##########
+avalon_xgb_100.shape
+
+########## CELL 171 [code] ##########
+avalon_gbm_100 = df_drug_corrected.query("IC50 <= 100")
+
+########## CELL 172 [code] ##########
+avalon_gbm_100.shape
+
+########## CELL 173 [code] ##########
+df_drug_corrected.query("IC50 <= 50").shape
+
+########## CELL 174 [code] ##########
+import mols2grid
+
+########## CELL 175 [code] ##########
+mols2grid.display(df_drug_corrected.query("IC50 <= 100"), smiles_col='SMILES', size=(260, 180), subset=['name', 'IC50'], transform={"IC50": lambda x: f"{x:.2f} nM"})
+
+########## CELL 176 [code] ##########
+common = pd.concat([avalon_gbm_100[['name', 'SMILES']], avalon_rf_100[['name', 'SMILES']], avalon_gbm_100[['name', 'SMILES']]])
+
+########## CELL 177 [code] ##########
+commen_ecfp_count = common[common.duplicated(keep=False)].drop_duplicates()
+
+########## CELL 178 [code] ##########
+commen_ecfp = common[common.duplicated(keep=False)].drop_duplicates()
+
+########## CELL 179 [code] ##########
+from rdkit import IPythonConsole
+
+IPythonConsole.ipython_useSVG = False
+
+########## CELL 180 [code] ##########
+ecfp_rf_100
+
+########## CELL 181 [code] ##########
+Chem.Draw.MolsToGridImage(
+    [Chem.MolFromSmiles(x) for x in commen_ecfp_count.SMILES.values],
+    legends = [f"{name}" for name in commen_ecfp_count.name.values]
+)
+
+########## CELL 182 [code] ##########
+

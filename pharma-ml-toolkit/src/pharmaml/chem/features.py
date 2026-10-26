@@ -11,23 +11,42 @@ the notebook glue with explicit contracts:
   order and :data:`FAMILY_PREFIXES` the column naming, so a feature frame
   is always ``desc_*`` + ``apc_bit_*`` + ``ecfp_bit_*`` +
   ``ecfp3_bit_*`` + ``avalon_count_*`` + ``rdkit_bit_*`` +
-  ``morgan_full_bit_*`` + ``morgan_scaffold_bit_*`` + ``rism_*``
-  (6 x 2048 + 512 + the current RDKit property list + the ten
-  3D-RISM-KH solvation descriptors -- more than 12,000 columns in
-  total).  The ``ecfp3`` family (radius-3 Morgan, the
+  ``morgan_full_bit_*`` + ``morgan_scaffold_bit_*`` + the ten
+  ``fak_ml.ipynb`` fingerprint families (``maccs_bit_*``, ``fcfp_bit_*``,
+  ``fcfp_count_*``, ``topo_bit_*``, ``topo_count_*``, ``rdkit_count_*``,
+  ``pattern_bit_*``, ``layered_bit_*``, ``estate_bit_*``, ``erg_*``) +
+  ``d3d_*`` + ``rism_*`` (thirteen 2048-bit blocks + 512 + 167 + 79 +
+  315 + the current RDKit property list + the nine 3D shape descriptors
+  + the ten 3D-RISM-KH solvation descriptors -- more than 27,000 columns
+  in total).  The ``ecfp3`` family (radius-3 Morgan, the
   ``Ml/D2.py`` upload's own R3 half of its dual-radius fingerprints)
-  joins the vocabulary as a first-class citizen.
+  and the ten ``fak_ml.ipynb`` families (cell 40's 16 datamol
+  fingerprint types minus the six the vocabulary already carried) join
+  as first-class citizens; the ``shape_3d`` family (``xxx.ipynb`` cell
+  6's 3D block: ETKDGv3 conformers, MMFF94s->UFF fallback, 9
+  rdMolDescriptors shape descriptors) and ``rism`` close the frame as
+  the two 3D-geometry descriptor families.
 * **Failure accounting instead of silent drops.**  Molecules that fail to
   parse or compute are dropped from the frame and recorded with their
-  original row index in :class:`FeatureReport`; only the Murcko-scaffold
+  original row index in :class:`FeatureReport`; the Murcko-scaffold
   family deliberately keeps zero rows (an acyclic molecule has an *empty*
-  scaffold, which is a zero fingerprint, not a failure).
+  scaffold, which is a zero fingerprint, not a failure), and the
+  ``shape_3d`` family keeps NaN rows for molecules whose 3D pipeline
+  fails (``xxx.ipynb`` cell 6's failed-molecule behaviour -- the row
+  stays, the descriptors do not).
 * **Modern RDKit calls.**  The atom-pair count fingerprint comes from
   ``rdFingerprintGenerator`` sparse counts folded modulo 2048 (the
   deprecated ``GetAtomPairFingerprint`` and the rar's datamol dependency
   are both gone); the Murcko scaffold uses
   ``MurckoScaffold.GetScaffoldForMol`` (the rar's ``GetMurckoScaffold``
-  no longer exists in RDKit 2026.09).
+  no longer exists in RDKit 2026.09); the ten ``fak_ml.ipynb`` families
+  ride the same generator spellings, with two honest build notes:
+  ``rdFingerprintGenerator`` on RDKit 2026.09 has no
+  ``GetTopologicalFingerprintGenerator`` (the topological/path
+  fingerprint generator IS ``GetRDKitFPGenerator``) and no
+  ``GetCountFingerprintAsBitVect`` (the folded count vector arrives as
+  ``GetCountFingerprintAsNumPy``), so ``topological``/``topological_count``
+  and ``rdkit_count`` read those spellings.
 * **Strictly optional LightGBM.**  :func:`rank_features` imports lightgbm
   lazily and falls back to random forests when it is not installed, so
   this module's import path needs only rdkit + numpy + pandas
@@ -69,7 +88,7 @@ ValueError: smiles is empty -- pass at least one SMILES string
 >>> compute_feature_frame(["CCO"], families=("ecfp", "typo"))
 Traceback (most recent call last):
 ...
-ValueError: unknown feature family 'typo'; valid families are: descriptors, atompair_count, ecfp, ecfp3, avalon_count, rdkit_fingerprint, morgan_full, morgan_scaffold, rism
+ValueError: unknown feature family 'typo'; valid families are: descriptors, atompair_count, ecfp, ecfp3, avalon_count, rdkit_fingerprint, morgan_full, morgan_scaffold, maccs, fcfp, fcfp_count, topological, topological_count, rdkit_count, pattern, layered, estate, erg, shape_3d, rism
 >>> compute_feature_frame(["CCO"], families=())
 Traceback (most recent call last):
 ...
@@ -79,10 +98,23 @@ ValueError: families is empty -- pass at least one family name
 ('descriptors', 'ecfp')
 >>> family_of_column("ecfp3_bit_2047")
 'ecfp3'
+>>> family_of_column("maccs_bit_166")
+'maccs'
+>>> family_of_column("d3d_pmi1")
+'shape_3d'
 >>> family_of_column("SMILES")
 Traceback (most recent call last):
 ...
-ValueError: unknown feature-column prefix in 'SMILES'; columns must start with one of: desc_, apc_bit_, ecfp_bit_, ecfp3_bit_, avalon_count_, rdkit_bit_, morgan_full_bit_, morgan_scaffold_bit_, rism_
+ValueError: unknown feature-column prefix in 'SMILES'; columns must start with one of: desc_, apc_bit_, ecfp_bit_, ecfp3_bit_, avalon_count_, rdkit_bit_, morgan_full_bit_, morgan_scaffold_bit_, maccs_bit_, fcfp_bit_, fcfp_count_, topo_bit_, topo_count_, rdkit_count_, pattern_bit_, layered_bit_, estate_bit_, erg_, d3d_, rism_
+
+>>> frame, report = compute_feature_frame(
+...     ["CCO"], families=("maccs", "estate", "erg", "shape_3d"))
+>>> report.families                     # the fak_ml widths on this build
+{'maccs': 167, 'estate': 79, 'erg': 315, 'shape_3d': 9}
+>>> (frame.columns[0], frame.columns[-1])
+('maccs_bit_0', 'd3d_npr2')
+>>> float(frame["d3d_pmi1"].iloc[0]) > 0.0    # ethanol embeds & optimises
+True
 
 >>> frame, report = compute_feature_frame(["CCCCCCCC"], families=("morgan_scaffold",))
 >>> (frame.shape, float(frame.iloc[0].sum()), report.n_valid)   # acyclic: kept
@@ -146,15 +178,23 @@ _LOG = get_logger(__name__)
 __all__ = [
     "ATOMPAIR_BITS",
     "AVALON_BITS",
+    "D3D_DESCRIPTOR_COUNT",
     "ECFP3_BITS",
     "ECFP3_RADIUS",
     "ECFP_BITS",
+    "ERG_BITS",
+    "ESTATE_BITS",
     "FAMILY_PREFIXES",
+    "FCFP_BITS",
     "FEATURE_FAMILIES",
+    "LAYERED_BITS",
+    "MACCS_BITS",
     "MORGAN_BITS",
     "MORGAN_RADIUS",
+    "PATTERN_BITS",
     "RDKIT_FP_BITS",
     "RISM_DESCRIPTOR_COUNT",
+    "TOPOLOGICAL_BITS",
     "FeatureReport",
     "FeatureSelection",
     "compute_feature_frame",
@@ -164,7 +204,9 @@ __all__ = [
     "selection_metadata",
 ]
 
-#: The nine feature families, in canonical output order.
+#: The twenty feature families, in canonical output order (the two 3D
+#: geometry descriptor families, ``shape_3d`` and ``rism``, close the
+#: frame -- ``rism`` last, the historical tail of the vocabulary).
 FEATURE_FAMILIES: tuple[str, ...] = (
     "descriptors",
     "atompair_count",
@@ -174,6 +216,17 @@ FEATURE_FAMILIES: tuple[str, ...] = (
     "rdkit_fingerprint",
     "morgan_full",
     "morgan_scaffold",
+    "maccs",
+    "fcfp",
+    "fcfp_count",
+    "topological",
+    "topological_count",
+    "rdkit_count",
+    "pattern",
+    "layered",
+    "estate",
+    "erg",
+    "shape_3d",
     "rism",
 )
 
@@ -188,6 +241,17 @@ FAMILY_PREFIXES: dict[str, str] = {
     "rdkit_fingerprint": "rdkit_bit_",
     "morgan_full": "morgan_full_bit_",
     "morgan_scaffold": "morgan_scaffold_bit_",
+    "maccs": "maccs_bit_",
+    "fcfp": "fcfp_bit_",
+    "fcfp_count": "fcfp_count_",
+    "topological": "topo_bit_",
+    "topological_count": "topo_count_",
+    "rdkit_count": "rdkit_count_",
+    "pattern": "pattern_bit_",
+    "layered": "layered_bit_",
+    "estate": "estate_bit_",
+    "erg": "erg_",
+    "shape_3d": "d3d_",
     "rism": "rism_",
 }
 
@@ -208,12 +272,34 @@ RDKIT_FP_BITS = 2048
 MORGAN_BITS = 2048
 #: Morgan fingerprint radius (ECFP-style).
 MORGAN_RADIUS = 2
+#: Bit length of the MACCS structure-key fingerprint (RDKit's fixed 167
+#: SMARTS keys).
+MACCS_BITS = 167
+#: Bit length of the FCFP (feature-invariant Morgan) fingerprint, both
+#: the bit and the count flavour.
+FCFP_BITS = 2048
+#: Bit length of the topological (RDKit path) fingerprint, both flavours.
+TOPOLOGICAL_BITS = 2048
+#: Bit length of the pattern fingerprint (substructure screening bits).
+PATTERN_BITS = 2048
+#: Bit length of the layered fingerprint.
+LAYERED_BITS = 2048
+#: Length of the E-State fingerprint: the 79 atom-type counts of
+#: ``Chem.EState.Fingerprinter.FingerprintMol`` (NOT the twin E-State
+#: SUMS vector).
+ESTATE_BITS = 79
+#: Length of the ERG (extended-connectivity reduced graph) fingerprint
+#: -- 315 on this RDKit build (2026.09.1), checked per molecule.
+ERG_BITS = 315
+#: Number of 3D shape descriptor columns (the ``shape_3d`` family; see
+#: :data:`pharmaml.chem.descriptors.D3D_COLUMNS`).
+D3D_DESCRIPTOR_COUNT = 9
 
 #: Number of RISM-KH solvation descriptor columns (see
 #: :data:`pharmaml.chem.rism.RISM_DESCRIPTORS`).
 RISM_DESCRIPTOR_COUNT = 10
 
-#: Bit length of each fingerprint family, keyed by family name.
+#: Width of every family, keyed by family name.
 _FAMILY_BITS: dict[str, int] = {
     "atompair_count": ATOMPAIR_BITS,
     "ecfp": ECFP_BITS,
@@ -222,12 +308,24 @@ _FAMILY_BITS: dict[str, int] = {
     "rdkit_fingerprint": RDKIT_FP_BITS,
     "morgan_full": MORGAN_BITS,
     "morgan_scaffold": MORGAN_BITS,
+    "maccs": MACCS_BITS,
+    "fcfp": FCFP_BITS,
+    "fcfp_count": FCFP_BITS,
+    "topological": TOPOLOGICAL_BITS,
+    "topological_count": TOPOLOGICAL_BITS,
+    "rdkit_count": RDKIT_FP_BITS,
+    "pattern": PATTERN_BITS,
+    "layered": LAYERED_BITS,
+    "estate": ESTATE_BITS,
+    "erg": ERG_BITS,
+    "shape_3d": D3D_DESCRIPTOR_COUNT,
     "rism": RISM_DESCRIPTOR_COUNT,
 }
 
-#: Reference bit lengths recorded by :func:`selection_metadata` (the seven
-#: fingerprint families; ``descriptors`` is not a fingerprint and is
-#: covered by ``families_computed`` instead).
+#: Reference bit lengths recorded by :func:`selection_metadata` (the
+#: seventeen fingerprint families; ``descriptors``, ``shape_3d`` and
+#: ``rism`` are descriptor families, covered by ``families_computed``
+#: instead).
 _FINGERPRINT_SIZES: dict[str, int] = {
     "ecfp": ECFP_BITS,
     "ecfp3": ECFP3_BITS,
@@ -236,7 +334,33 @@ _FINGERPRINT_SIZES: dict[str, int] = {
     "morgan_scaffold": MORGAN_BITS,
     "avalon_count": AVALON_BITS,
     "atompair_count": ATOMPAIR_BITS,
+    "maccs": MACCS_BITS,
+    "fcfp": FCFP_BITS,
+    "fcfp_count": FCFP_BITS,
+    "topological": TOPOLOGICAL_BITS,
+    "topological_count": TOPOLOGICAL_BITS,
+    "rdkit_count": RDKIT_FP_BITS,
+    "pattern": PATTERN_BITS,
+    "layered": LAYERED_BITS,
+    "estate": ESTATE_BITS,
+    "erg": ERG_BITS,
 }
+
+#: Column names of the ``shape_3d`` family: the nine
+#: :data:`pharmaml.chem.descriptors.D3D_COLUMNS` names, snake_cased and
+#: re-prefixed with ``d3d_`` so the frame vocabulary stays one flat
+#: prefix namespace (``RadiusOfGyration`` -> ``d3d_radius_of_gyration``).
+_D3D_FAMILY_COLUMNS: tuple[str, ...] = (
+    "d3d_asphericity",
+    "d3d_eccentricity",
+    "d3d_pmi1",
+    "d3d_pmi2",
+    "d3d_pmi3",
+    "d3d_radius_of_gyration",
+    "d3d_spherocity_index",
+    "d3d_npr1",
+    "d3d_npr2",
+)
 
 _RANK_METHODS: tuple[str, ...] = ("auto", "random_forest", "lightgbm", "variance")
 _RANK_TASKS: tuple[str, ...] = ("auto", "classification", "regression")
@@ -447,6 +571,190 @@ def _ecfp3_computer() -> Callable[[Any], np.ndarray]:
     return ecfp3_vector
 
 
+# ---------------------------------------------------------------------
+# The ten fak_ml.ipynb families (cell 40's datamol fingerprint types)
+# ---------------------------------------------------------------------
+
+
+def _maccs_computer() -> Callable[[Any], np.ndarray]:
+    """MACCS family: the fixed 167 structure-key bits."""
+    from rdkit import DataStructs
+    from rdkit.Chem import rdMolDescriptors
+
+    def maccs_vector(mol: Any) -> np.ndarray:
+        fingerprint = rdMolDescriptors.GetMACCSKeysFingerprint(mol)
+        # DataStructs.ConvertToNumpyArray fills an existing 1-D array
+        # (the descriptors module's own MACCS path).
+        buffer = np.zeros(MACCS_BITS, dtype=np.uint8)
+        DataStructs.ConvertToNumpyArray(fingerprint, buffer)
+        return buffer.astype(float)
+
+    return maccs_vector
+
+
+def _fcfp_generator() -> Any:
+    """The feature-invariant Morgan generator (radius 2, 2048 bits).
+
+    ``GetMorganFeatureAtomInvGen`` swaps the connectivity invariants
+    for Gasteiger-Marsili feature labels (donor/acceptor/aromatic/...)
+    -- the FCFP/ECFC distinction in the fak_ml notebook's own spelling.
+    """
+    from rdkit.Chem import rdFingerprintGenerator
+
+    return rdFingerprintGenerator.GetMorganGenerator(
+        radius=MORGAN_RADIUS,
+        fpSize=FCFP_BITS,
+        includeChirality=False,
+        useBondTypes=True,
+        atomInvariantsGenerator=rdFingerprintGenerator.GetMorganFeatureAtomInvGen(),
+    )
+
+
+def _fcfp_computer(generator: Any) -> Callable[[Any], np.ndarray]:
+    """FCFP family: feature-invariant Morgan bits (2048)."""
+
+    def fcfp_vector(mol: Any) -> np.ndarray:
+        return _onbits_vector(generator.GetFingerprint(mol), FCFP_BITS)
+
+    return fcfp_vector
+
+
+def _fcfp_count_computer(generator: Any) -> Callable[[Any], np.ndarray]:
+    """FCFP count family: folded feature-invariant Morgan counts (2048).
+
+    ``GetCountFingerprintAsNumPy`` is this build's spelling of the
+    folded count vector (the generator object carries no
+    ``GetCountFingerprintAsBitVect`` on RDKit 2026.09).
+    """
+
+    def fcfp_count_vector(mol: Any) -> np.ndarray:
+        return np.asarray(generator.GetCountFingerprintAsNumPy(mol), dtype=float)
+
+    return fcfp_count_vector
+
+
+def _rdkit_path_generator(fp_size: int) -> Any:
+    """The RDKit path ('topological') fingerprint generator.
+
+    ``rdFingerprintGenerator`` on this build has no
+    ``GetTopologicalFingerprintGenerator``; the topological/path
+    fingerprint generator IS ``GetRDKitFPGenerator`` -- the honest
+    spelling adaptation behind the ``topological``, ``topological_count``
+    and ``rdkit_count`` families.  The notebook's own 'topological' and
+    'rdkit' types differ only in the generator-vs-legacy call, and at
+    these defaults the two spellings are byte-identical on this build
+    (verified: ethanol and aspirin set the same bits through both), so
+    ``topological`` duplicates ``rdkit_fingerprint``'s values and
+    ``topological_count`` duplicates ``rdkit_count``'s -- kept as
+    separate vocabulary entries because the notebook's 16-type list
+    carries both spellings.
+    """
+    from rdkit.Chem import rdFingerprintGenerator
+
+    return rdFingerprintGenerator.GetRDKitFPGenerator(fpSize=fp_size)
+
+
+def _generator_bit_computer(generator: Any, bits: int) -> Callable[[Any], np.ndarray]:
+    """Bit-vector computer over an ``rdFingerprintGenerator`` generator."""
+
+    def bit_vector(mol: Any) -> np.ndarray:
+        return _onbits_vector(generator.GetFingerprint(mol), bits)
+
+    return bit_vector
+
+
+def _generator_count_computer(generator: Any) -> Callable[[Any], np.ndarray]:
+    """Count-vector computer over an ``rdFingerprintGenerator`` generator.
+
+    The count flavour shares the honest build note of
+    :func:`_fcfp_count_computer` (``GetCountFingerprintAsNumPy``).
+    """
+
+    def count_vector(mol: Any) -> np.ndarray:
+        return np.asarray(generator.GetCountFingerprintAsNumPy(mol), dtype=float)
+
+    return count_vector
+
+
+def _pattern_computer() -> Callable[[Any], np.ndarray]:
+    """Pattern family: the substructure-screening pattern bits (2048)."""
+    from rdkit import Chem
+
+    def pattern_vector(mol: Any) -> np.ndarray:
+        fingerprint = Chem.PatternFingerprint(mol, fpSize=PATTERN_BITS)
+        return _onbits_vector(fingerprint, PATTERN_BITS)
+
+    return pattern_vector
+
+
+def _layered_computer() -> Callable[[Any], np.ndarray]:
+    """Layered family: the layered (multi-property path) bits (2048)."""
+    from rdkit import Chem
+
+    def layered_vector(mol: Any) -> np.ndarray:
+        fingerprint = Chem.LayeredFingerprint(mol, fpSize=LAYERED_BITS)
+        return _onbits_vector(fingerprint, LAYERED_BITS)
+
+    return layered_vector
+
+
+def _estate_computer() -> Callable[[Any], np.ndarray]:
+    """E-State family: the 79 atom-type COUNTS as float.
+
+    ``Chem.EState.Fingerprinter.FingerprintMol`` returns ``(counts,
+    sums)``; this family keeps the COUNTS vector (the honest choice to
+    document: the E-State fingerprint IS 79 atom-type counts) and leaves
+    the twin E-State SUMS vector unshipped.  Entries are small
+    non-negative integers -- 0/1 for most molecules, higher when an
+    atom environment repeats -- cast to float like every other family;
+    the ``estate_bit_`` prefix follows the notebook's own family name.
+    """
+    from rdkit.Chem.EState import Fingerprinter
+
+    def estate_vector(mol: Any) -> np.ndarray:
+        counts, _sums = Fingerprinter.FingerprintMol(mol)
+        return np.asarray(counts, dtype=float)
+
+    return estate_vector
+
+
+def _erg_computer() -> Callable[[Any], np.ndarray]:
+    """ERG family: the reduced-graph fingerprint (315 on this build).
+
+    ``rdReducedGraphs.GetErGFingerprint`` returns a float vector of
+    extended-connectivity reduced-graph contributions.  Exotic
+    molecules can yield +/-inf; those cells become NaN (preserved per
+    the frame contract -- :func:`rank_features` fills with 0) instead
+    of poisoning the whole column.
+    """
+    from rdkit.Chem import rdReducedGraphs
+
+    def erg_vector(mol: Any) -> np.ndarray:
+        fingerprint = np.asarray(rdReducedGraphs.GetErGFingerprint(mol), dtype=float)
+        if fingerprint.shape != (ERG_BITS,):
+            raise ValueError(
+                f"ERG fingerprint has length {fingerprint.shape[0]}, expected {ERG_BITS}"
+            )
+        return np.where(np.isfinite(fingerprint), fingerprint, np.nan)
+
+    return erg_vector
+
+
+def _shape3d_computer(n_conformers: int = 3) -> Callable[[Any], np.ndarray]:
+    """3D shape family: the nine ``d3d_*`` descriptors per molecule.
+
+    The ``shape_3d`` family (``xxx.ipynb`` cell 6's 3D block:
+    ETKDGv3 conformers at the fixed seed 42, MMFF94s->UFF fallback, 9
+    rdMolDescriptors shape descriptors) rides
+    :func:`pharmaml.chem.descriptors._shape_vector`.  A molecule whose
+    3D pipeline fails keeps its ROW as an all-NaN vector -- the
+    notebook's failed-molecule behaviour -- instead of a drop.
+    """
+    from pharmaml.chem.descriptors import _shape_computer
+
+    return _shape_computer(n_conformers)
+
+
 def _morgan_scaffold_computer(
     morgan_vector: Callable[[Any], np.ndarray],
 ) -> Callable[[Any], np.ndarray]:
@@ -467,6 +775,7 @@ def _morgan_scaffold_computer(
 def compute_feature_frame(
     smiles: Sequence[str],
     families: Iterable[str] = FEATURE_FAMILIES,
+    n_conformers: int = 3,
 ) -> tuple[pd.DataFrame, FeatureReport]:
     """Compute a multi-family feature matrix for a batch of SMILES.
 
@@ -480,6 +789,9 @@ def compute_feature_frame(
         :data:`FEATURE_FAMILIES`).  Unknown names raise; duplicates are
         ignored.  The output column order is the CANONICAL
         :data:`FEATURE_FAMILIES` order regardless of the request order.
+    n_conformers:
+        ETKDG conformer count for the ``shape_3d`` family only (the
+        ``xxx.ipynb`` cell 6 default 3); every other family ignores it.
 
     Returns
     -------
@@ -495,6 +807,9 @@ def compute_feature_frame(
         ``(row, smiles)`` pairs and the per-family column counts.  When
         every molecule fails, a 0-row frame (with all columns) plus the
         fully-populated report is returned -- check ``report.n_valid``.
+        The ``shape_3d`` family is the one deliberate exception to the
+        drop rule: a molecule whose 3D pipeline fails keeps its row with
+        NaN ``d3d_*`` cells (the notebook's failed-molecule behaviour).
 
     Raises
     ------
@@ -527,6 +842,37 @@ def compute_feature_frame(
       ``MurckoScaffold.GetScaffoldForMol`` (NOT the rar's
       ``GetMurckoScaffold``, which no longer exists), then Morgan bits;
       an empty (acyclic) scaffold yields a zero row, never a drop.
+    * ``maccs``: ``rdMolDescriptors.GetMACCSKeysFingerprint`` -> the
+      167 structure-key bits (``maccs_bit_*``).
+    * ``fcfp`` / ``fcfp_count``: the feature-invariant Morgan
+      generator (``GetMorganGenerator(radius=2, fpSize=2048,
+      atomInvariantsGenerator=GetMorganFeatureAtomInvGen())``), bit
+      flavour via ``GetFingerprint`` and count flavour via
+      ``GetCountFingerprintAsNumPy``.
+    * ``topological`` / ``topological_count`` / ``rdkit_count``: the
+      RDKit path fingerprint generator
+      ``GetRDKitFPGenerator(fpSize=2048)`` (there is no
+      ``GetTopologicalFingerprintGenerator`` on this build -- the
+      topological/path generator IS this one); bit flavour via
+      ``GetFingerprint``, count flavours via
+      ``GetCountFingerprintAsNumPy``.  At these defaults the generator
+      bits are byte-identical to the legacy ``rdkit_fingerprint``
+      family's, so ``topological`` (and ``topological_count`` vs
+      ``rdkit_count``) duplicate values by construction -- separate
+      vocabulary entries because the notebook's 16-type list carries
+      both spellings.
+    * ``pattern``: ``Chem.PatternFingerprint(mol, fpSize=2048)``;
+      ``layered``: ``Chem.LayeredFingerprint(mol, fpSize=2048)``.
+    * ``estate``: ``Chem.EState.Fingerprinter.FingerprintMol`` -> the
+      79 atom-type COUNTS (not the twin SUMS vector) as float.
+    * ``erg``: ``rdReducedGraphs.GetErGFingerprint`` -> 315 floats on
+      this build (length checked per molecule; non-finite cells for
+      exotic molecules become NaN, preserved per the frame contract).
+    * ``shape_3d``: the nine 3D shape descriptors of
+      :func:`pharmaml.chem.descriptors.compute_3d_descriptors`
+      (``xxx.ipynb`` cell 6's 3D block: ETKDGv3 conformers at the fixed
+      seed 42, MMFF94s->UFF fallback), named ``d3d_asphericity`` ...
+      ``d3d_npr2``; a failed 3D pipeline keeps a NaN row.
     * ``rism``: the ten 3D-RISM-KH-inspired solvation descriptors from
       :mod:`pharmaml.chem.rism` (embedded 3D geometry + Gasteiger
       charges, pairwise tempered-KH surrogate), named
@@ -552,11 +898,17 @@ def compute_feature_frame(
             f"unknown feature family {unknown[0]!r}; valid families are: "
             + ", ".join(FEATURE_FAMILIES)
         )
+    if (
+        not isinstance(n_conformers, (int, np.integer))
+        or isinstance(n_conformers, bool)
+        or int(n_conformers) < 1
+    ):
+        raise ValueError(f"n_conformers must be an integer >= 1, got {n_conformers!r}")
     requested_set = set(family_list)
     requested = [family for family in FEATURE_FAMILIES if family in requested_set]
 
     Chem = require_rdkit()
-    computers, columns, family_widths = _family_plan(requested)
+    computers, columns, family_widths = _family_plan(requested, int(n_conformers))
 
     rows: list[np.ndarray] = []
     valid_smiles: list[str] = []
@@ -606,6 +958,7 @@ def compute_feature_frame(
 
 def _family_plan(
     requested: list[str],
+    n_conformers: int = 3,
 ) -> tuple[dict[str, Callable[[Any], np.ndarray]], list[str], dict[str, int]]:
     """Build per-family computers, column names and widths for the request."""
     computers: dict[str, Callable[[Any], np.ndarray]] = {}
@@ -626,6 +979,36 @@ def _family_plan(
             computers["morgan_scaffold"] = _morgan_scaffold_computer(morgan_vector)
     if "ecfp3" in requested:
         computers["ecfp3"] = _ecfp3_computer()
+    if "maccs" in requested:
+        computers["maccs"] = _maccs_computer()
+    if "fcfp" in requested or "fcfp_count" in requested:
+        fcfp_generator = _fcfp_generator()
+        if "fcfp" in requested:
+            computers["fcfp"] = _fcfp_computer(fcfp_generator)
+        if "fcfp_count" in requested:
+            computers["fcfp_count"] = _fcfp_count_computer(fcfp_generator)
+    if "topological" in requested:
+        computers["topological"] = _generator_bit_computer(
+            _rdkit_path_generator(TOPOLOGICAL_BITS), TOPOLOGICAL_BITS
+        )
+    if "topological_count" in requested:
+        computers["topological_count"] = _generator_count_computer(
+            _rdkit_path_generator(TOPOLOGICAL_BITS)
+        )
+    if "rdkit_count" in requested:
+        computers["rdkit_count"] = _generator_count_computer(
+            _rdkit_path_generator(RDKIT_FP_BITS)
+        )
+    if "pattern" in requested:
+        computers["pattern"] = _pattern_computer()
+    if "layered" in requested:
+        computers["layered"] = _layered_computer()
+    if "estate" in requested:
+        computers["estate"] = _estate_computer()
+    if "erg" in requested:
+        computers["erg"] = _erg_computer()
+    if "shape_3d" in requested:
+        computers["shape_3d"] = _shape3d_computer(n_conformers)
 
     if "rdkit_fingerprint" in requested:
         from rdkit import Chem
@@ -655,6 +1038,10 @@ def _family_plan(
             from pharmaml.chem.rism import _rism_family_columns
 
             names = _rism_family_columns()
+            width = len(names)
+            columns.extend(names)
+        elif family == "shape_3d":
+            names = list(_D3D_FAMILY_COLUMNS)
             width = len(names)
             columns.extend(names)
         else:

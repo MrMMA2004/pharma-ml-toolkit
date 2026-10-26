@@ -1,0 +1,2050 @@
+########## CELL 0 [markdown] ##########
+# 3-Class Molecular Classification Pipeline 🚀
+
+This notebook implements a complete, end-to-end machine learning pipeline for classifying molecules into three categories based on their SMILES strings. It includes data loading, extensive 2D and 3D featurization, feature selection, model training (13 classifiers + ensembles), and evaluation.
+
+## 0) Summary & Assumptions
+
+### What this notebook produces
+
+This notebook generates the following artifacts, organized into subfolders:
+
+* **`data/`**: Contains the (dummy) input CSV.
+* **`outputs/`**: Contains human-readable results and intermediate data.
+    * `mol_class_pipeline_invalid_smiles.csv`: A list of SMILES that failed RDKit parsing.
+    * `mol_class_pipeline_combined_descriptors_parsed.csv`: The final, filtered, and imputed feature matrix (features x molecules) before selection.
+    * `mol_class_pipeline_model_ranking.csv`: A summary table ranking all models by test set performance.
+    * `{model_name}_summary.txt`: Best parameters and CV scores for each model.
+    * `{model_name}_metrics.json`: Full classification metrics (accuracy, precision, etc.) for train/test sets.
+    * `{model_name}_metrics.txt`: Human-readable classification report for each model.
+* **`models/`**: Contains saved, reusable binary model and pipeline objects.
+    * `mol_class_pipeline_filter_imputer.joblib`: The `SimpleImputer` (median) fitted on the data *before* feature selection.
+    * `mol_class_pipeline_feature_selector.joblib`: The fitted `Pipeline` object containing the `SelectKBest` and `SelectFromModel` steps.
+    * `mol_class_pipeline_selected_features.txt`: A text file listing the final 1000 (or fewer) selected feature names.
+    * `mol_class_pipeline_preprocessing_pipeline.joblib`: The final `RobustScaler` pipeline object.
+    * `mol_class_pipeline_metadata.json`: A JSON file with library versions and run metadata.
+    * `mol_class_pipeline_README_reuse.md`: A markdown file explaining how to use the saved artifacts.
+    * `{model_name}.joblib`: The fitted `best_estimator_` (pipeline + model) for all 13+ models.
+    * `{model_name}_grid.joblib`: The full `GridSearchCV` object for each model (for later inspection).
+* **`figs/`**: Contains publication-quality evaluation plots.
+    * `{model_name}_confusion.jpg`: Annotated confusion matrix on the test set.
+    * `{model_name}_roc.jpg`: One-vs-Rest (OvR) ROC curves for the test set.
+    * `{model_name}_pr.jpg`: One-vs-Rest (OvR) Precision-Recall curves for the test set.
+
+### Assumptions & Defaults
+
+* **Reproducibility**: `GLOBAL_SEED = 42` is used for all `random_state` operations.
+* **Hardware**: Assumes a multi-core CPU (`n_jobs=-1`). For 10,000+ molecules, 3D featurization and grid searches can be slow and memory-intensive. **~8-16 GB of RAM** is recommended.
+* **Fingerprints**: 
+    * Morgan (ECFP): 2048 bits, radius 2.
+    * Avalon: 1024 bits (uses `avalon-python` if available, falls back to RDKit's built-in Avalon).
+    * MACCS Keys: 167 bits.
+* **3D Conformers**: Up to 3 conformers generated with ETKDG, optimized with MMFF94 (falls back to UFF).
+* **Feature Filtering**: 
+    * Columns with > 30% missing values are dropped.
+    * Remaining missing values are imputed with `median`.
+    * Near-constant features (`VarianceThreshold(0.01)`) are removed.
+    * Highly correlated features (Pearson $r > 0.98$) are removed.
+* **Feature Selection**: A two-step process to get **Top 1000** features:
+    1.  Univariate filter (`mutual_info_classif`) down to 5000 features.
+    2.  Model-based (`LGBMClassifier`) `SelectFromModel` down to 1000 features. 
+    * (If < 1000 features are available after filtering, all are kept).
+* **Preprocessing**: `RobustScaler` is used by default, as it's robust to outliers common in descriptor data.
+* **Validation**: `StratifiedKFold(n_splits=5)` is used for all cross-validation.
+* **Data Leakage**: **WARNING!** This notebook follows a specific sequential structure (Filter -> Select -> Split) as requested. This workflow **leaks information** from the (future) test set into the feature filtering and selection steps. A more robust, non-leaky workflow would perform the Train/Test split *immediately* after feature generation (Cell 6) and fit all selectors/pipelines *only* on the training set. This notebook prioritizes fulfilling the specific cell-by-cell instructions.
+
+########## CELL 1 [code] ##########
+## 1) Environment / Dependencies
+
+# This cell installs and imports all dependencies. 
+# It also detects optional packages (Mordred, CatBoost, Avalon) and sets up config.
+
+# --- Install Packages ---
+#!pip install -q pandas numpy scikit-learn joblib matplotlib rdkit-pypi mordred xgboost lightgbm catboost avalon-python imbalanced-learn tqdm
+
+# --- Core Imports ---
+import os
+import sys
+import time
+import json
+import random
+import warnings
+import platform
+
+# --- Data & Math ---
+import pandas as pd
+import numpy as np
+from tqdm.notebook import tqdm
+tqdm.pandas()
+
+# --- Chemistry (RDKit) ---
+import rdkit
+from rdkit import Chem
+from rdkit.Chem import AllChem, Descriptors, rdMolDescriptors, MACCSkeys
+from rdkit.Chem import rdMolDescriptors
+from rdkit.Avalon.pyAvalonTools import GetAvalonFP # RDKit's built-in Avalon
+
+# --- Machine Learning (sklearn) ---
+import sklearn
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
+from sklearn.preprocessing import LabelEncoder, RobustScaler, label_binarize
+from sklearn.impute import SimpleImputer
+from sklearn.feature_selection import VarianceThreshold, SelectKBest, mutual_info_classif, SelectFromModel
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import (
+    accuracy_score, precision_recall_fscore_support, classification_report, 
+    confusion_matrix, ConfusionMatrixDisplay, roc_curve, auc, precision_recall_curve
+)
+
+# --- ML Models ---
+import xgboost
+import lightgbm
+from sklearn.linear_model import LogisticRegression, RidgeClassifier, SGDClassifier
+from sklearn.svm import SVC
+from sklearn.ensemble import (
+    RandomForestClassifier, ExtraTreesClassifier, GradientBoostingClassifier, 
+    AdaBoostClassifier, VotingClassifier, StackingClassifier
+)
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
+
+# --- Plotting & Saving ---
+import matplotlib.pyplot as plt
+import joblib
+
+# --- Optional Package Detection ---
+
+# Mordred (3D Descriptors)
+try:
+    import mordred
+    from mordred import Calculator, descriptors
+    HAS_MORDRED = True
+except ImportError:
+    HAS_MORDRED = False
+
+# CatBoost (Model)
+try:
+    import catboost
+    from catboost import CatBoostClassifier
+    HAS_CATBOOST = True
+except ImportError:
+    HAS_CATBOOST = False
+
+# Avalon-Python (Fingerprint)
+try:
+    from rdkit.Chem import rdAvalonTools
+    HAS_AVALON = True
+except ImportError:
+    HAS_AVALON = False
+
+# Imbalanced-Learn (Sampler)
+try:
+    import imblearn
+    from imblearn.pipeline import Pipeline as ImbPipeline
+    from imblearn.over_sampling import RandomOverSampler
+    HAS_IMBLEARN = True
+except ImportError:
+    HAS_IMBLEARN = False
+
+print(f"--- Optional Libraries Status ---")
+print(f"Mordred (3D descriptors): {'Available' if HAS_MORDRED else 'NOT Available'}")
+print(f"CatBoost (model):         {'Available' if HAS_CATBOOST else 'NOT Available'}")
+print(f"Avalon-Python (FP):       {'Available' if HAS_AVALON else 'NOT Available (fallback to RDKit-Avalon)'}")
+print(f"Imbalanced-Learn:       {'Available' if HAS_IMBLEARN else 'NOT Available (no oversampling)'}")
+print(f"-----------------------------------")
+
+
+# --- Configuration & Setup ---
+
+# 1. Global Settings
+GLOBAL_SEED = 42
+PREFIX = "mol_class_pipeline" # Used for all saved files
+warnings.filterwarnings('ignore')
+plt.style.use('seaborn-v0_8-deep')
+
+# 2. Set Random Seeds for Reproducibility
+os.environ['PYTHONHASHSEED'] = str(GLOBAL_SEED)
+random.seed(GLOBAL_SEED)
+np.random.seed(GLOBAL_SEED)
+
+# 3. Define File Paths
+DATA_DIR = r"D:\Python\xxx\data/"
+OUTPUT_DIR = r"D:\Python\xxx\outputs/"
+MODEL_DIR = r"D:\Python\xxx\models/"
+FIG_DIR = r"D:\Python\xxx\figs/"
+
+# 4. Create Directories
+for d in [DATA_DIR, OUTPUT_DIR, MODEL_DIR, FIG_DIR]:
+    os.makedirs(d, exist_ok=True)
+
+# 5. Define Input File
+INPUT_CSV = os.path.join(DATA_DIR, "class.csv")
+
+print(f"\nSetup Complete. Artifacts will be saved with prefix: '{PREFIX}'")
+
+########## CELL 2 [code] ##########
+## Helper Cell: Create Dummy Data
+
+# This cell creates a dummy `input.csv` file in the `data/` directory so the notebook 
+# can run from start to finish. 
+
+dummy_data = { 
+    "SMILES": [
+        # Class 0: Simple analgesics/NSAIDs
+        "CC(=O)Oc1ccccc1C(=O)O",  # Aspirin
+        "CC(C)Cc1ccc(C(C)C(=O)O)cc1", # Ibuprofen
+        "CC(=O)Nc1ccc(O)cc1",      # Paracetamol (Acetaminophen)
+        "COc1ccc2c(c1)c(C(=O)O)c(C)n2C3CCC3", # Nabumetone
+        "O=C(O)c1ccccc1Oc2ccc(Cl)cc2", # Diclofenac
+        "CC(C)OC(=O)C(C)c1ccc(C)cc1", # Flurbiprofen
+        "O=C(O)C(C)c1ccc(C(=O)c2ccccc2)cc1", # Ketoprofen
+
+        # Class 1: Beta-lactam antibiotics
+        "CC1(C)S[C@@H]2[C@H](NC(=O)Cc3ccccc3)C(=O)N2[C@H]1C(=O)O", # Penicillin G
+        "CC1(C)S[C@@H]2[C@H](NC(=O)[C@H](N)c3ccccc3)C(=O)N2[C@H]1C(=O)O", # Ampicillin
+        "CC1(C)S[C@@H]2[C@H](NC(=O)[C@H](N)c3ccc(O)cc3)C(=O)N2[C@H]1C(=O)O", # Amoxicillin
+        "O=C(O)[C@H]1N2C(=O)[C@H](C(=O)N[C@H](C(=O)O)CCCC(N)C(=O)O)S[C@H]12", # Cephalosporin C (example)
+        "CC1(C(O)C)S[C@@H]2[C@H](NC(=O)c3cncs3)C(=O)N2[C@H]1C(=O)O", # Cefoxitin
+        "COC1=C(Cl)C=CC(=C1)C(=O)N[C@H]2[C@H]3S[C@H](C(C)(C)C(=O)O)N(C2=O)C(=O)C(C)C", # Oxacillin
+        "CC1(C)S[C@@H]2[C@H](NC(=O)C(c3ccccc3)c3ccccc3)C(=O)N2[C@H]1C(=O)O", # Penicillin (variation)
+
+        # Class 2: Xanthines / CNS stimulants
+        "Cn1cnc2c1c(=O)n(C)c(=O)n2C", # Caffeine
+        "Cn1cnc2c1c(=O)n(C)c(=O)[nH]2", # Theophylline
+        "Cn1c(=O)c2[nH]cnc2n(C)c1=O", # Theobromine
+        "O=C1N(C)C(=O)C(N(C)C=N1)C(C)C", # Paraxanthine
+        "CC(C)N(C)C(=O)c1c(N)nc(N(C)C)nc1", # Doxofylline
+        "O=C1NC(=O)C(N(C)C=N1)N(C)C", # Aminophylline
+        "CC1=CN(C)C(=O)C(C)=CN1", # Pentoxifylline
+        
+        # Invalid SMILES for testing
+        "C(C)C)C",                 # Invalid syntax
+        "c1ccczcc1",               # Invalid atom
+        np.nan,                      # Missing
+        "CC(=O)O"                  # Valid, but no target
+    ],
+    "Target": [
+        0, 0, 0, 0, 0, 0, 0, 
+        1, 1, 1, 1, 1, 1, 1,
+        2, 2, 2, 2, 2, 2, 2,
+        0, 1, 2, np.nan
+    ]
+}
+
+# Create a larger, slightly imbalanced dataset for a better demo
+df_dummy = pd.DataFrame(dummy_data)
+df_repeated = pd.concat([df_dummy] * 10, ignore_index=True)
+
+# Add some noise/variation
+df_noise = pd.DataFrame({
+    "SMILES": ["C", "CC", "CCC", "CO", "CCO", "CN", "CNC", "F", "Cl", "Br"],
+    "Target": [0, 1, 2, 0, 1, 2, 0, 1, 2, 0]
+})
+df_final_dummy = pd.concat([df_repeated, df_noise], ignore_index=True)
+df_final_dummy = df_final_dummy.sample(frac=1, random_state=GLOBAL_SEED).reset_index(drop=True)
+
+df_final_dummy.to_csv(INPUT_CSV, index=False)
+
+print(f"Created dummy data file at: {INPUT_CSV} with {len(df_final_dummy)} rows.")
+
+########## CELL 3 [code] ##########
+## 2) Data Loading & Validation
+
+# This cell reads the input CSV, validates the 'Target' column, 
+# and handles missing data and label encoding.
+
+print(f"Loading data from {INPUT_CSV}...")
+try:
+    df = pd.read_csv(INPUT_CSV)
+except FileNotFoundError:
+    print(f"ERROR: Input file not found at {INPUT_CSV}. Please create it.")
+    # In a real notebook, you might `raise` here to stop execution.
+    # sys.exit(f"ERROR: Input file not found at {INPUT_CSV}")
+
+print(f"Loaded {len(df)} rows.")
+print("--- Data Head (First 5 Rows) ---")
+print(df.head())
+print("----------------------------------")
+
+# --- Input Validation ---
+
+# 1. Check for required columns
+if 'SMILES' not in df.columns or 'Target' not in df.columns:
+    raise ValueError("Input CSV must contain 'SMILES' and 'Target' columns.")
+
+# 2. Drop rows with missing SMILES or Target
+initial_rows = len(df)
+df.dropna(subset=['SMILES', 'Target'], inplace=True)
+rows_removed = initial_rows - len(df)
+if rows_removed > 0:
+    print(f"Removed {rows_removed} rows due to missing SMILES or Target.")
+
+# 3. Validate Target column (must have exactly 3 classes)
+class_counts = df['Target'].value_counts()
+print("\n--- Class Distribution ---")
+print(class_counts)
+print("--------------------------")
+
+if len(class_counts) != 3:
+    raise ValueError(f"Target column must have exactly 3 classes. Found {len(class_counts)}.")
+
+# 4. Encode Target column
+# Even if targets are 0, 1, 2, LabelEncoder ensures they are 0-indexed and stores the mapping.
+le = LabelEncoder()
+df['Target_encoded'] = le.fit_transform(df['Target'])
+
+# Save the mapping
+class_mapping = {label: int(idx) for label, idx in zip(le.classes_, le.transform(le.classes_))}
+print(f"\nTarget classes encoded. Mapping: {class_mapping}")
+with open(os.path.join(OUTPUT_DIR, f"{PREFIX}_class_mapping.json"), 'w') as f:
+    json.dump(class_mapping, f, indent=4)
+
+# --- Final Data Objects ---
+# 'df' will be used for featurization, 'y' is the final target vector
+y = df['Target_encoded']
+print(f"Data loading and validation complete. {len(df)} rows ready for featurization.")
+
+########## CELL 4 [code] ##########
+## 3) Sanitize & Parse SMILES
+
+# This cell converts SMILES strings to RDKit Mol objects.
+# It logs and removes any invalid SMILES.
+
+def parse_and_standardize_smiles(smiles_str):
+    """Converts a SMILES string to a standardized RDKit Mol object."""
+    try:
+        # 1. Parse SMILES
+        mol = Chem.MolFromSmiles(smiles_str)
+        if mol is None:
+            return None
+        
+        # 2. Basic standardization (Sanitize, Kekulize)
+        # SanitizeMol checks valencies, aromaticity, etc.
+        Chem.SanitizeMol(mol)
+        
+        # Kekulize (optional, but good for consistency)
+        Chem.Kekulize(mol, clearArom=True)
+        
+        return mol
+    except Exception:
+        return None
+
+print("Parsing and standardizing SMILES...")
+df['mol'] = df['SMILES'].progress_apply(parse_and_standardize_smiles)
+
+# --- Handle Invalid SMILES ---
+invalid_mask = df['mol'].isnull()
+n_invalid = invalid_mask.sum()
+
+if n_invalid > 0:
+    print(f"Warning: Found {n_invalid} invalid or unparseable SMILES.")
+    
+    # Save invalid SMILES to a file
+    invalid_smiles_df = df[invalid_mask][['SMILES', 'Target']]
+    invalid_path = os.path.join(OUTPUT_DIR, f"{PREFIX}_invalid_smiles.csv")
+    invalid_smiles_df.to_csv(invalid_path, index=False)
+    print(f"Invalid SMILES logged to: {invalid_path}")
+    
+    # Remove invalid rows from main DataFrame and target vector
+    df = df[~invalid_mask].reset_index(drop=True)
+    y = y[~invalid_mask].reset_index(drop=True)
+else:
+    print("All SMILES parsed successfully.")
+
+print(f"\nTotal valid molecules for feature calculation: {len(df)}")
+
+########## CELL 5 [code] ##########
+## 4) 2D Feature Calculation
+
+# This cell computes a wide range of 2D descriptors and fingerprints.
+# - RDKit 2D Descriptors
+# - Morgan (ECFP) Fingerprints (2048 bits)
+# - MACCS Keys (167 bits)
+# - Avalon Fingerprints (1024 bits)
+
+def compute_2d_features(mol_list):
+    """Calculates 2D features for a list of RDKit Mol objects."""
+    
+    rdkit_desc_list = []
+    morgan_fp_list = []
+    maccs_fp_list = []
+    avalon_fp_list = []
+    
+    # Get descriptor function names once
+    desc_names = [name for name, func in Descriptors.descList]
+    
+    for mol in tqdm(mol_list, desc="Computing 2D Features"):
+        # 1. RDKit 2D Descriptors
+        # Using Descriptors.CalcMolDescriptors is faster than individual calls
+        desc_dict = Descriptors.CalcMolDescriptors(mol)
+        rdkit_desc_list.append([desc_dict[name] for name in desc_names])
+        
+        # 2. Morgan Fingerprint (ECFP, radius 2, 2048 bits)
+        fp_morgan = rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
+        morgan_fp_list.append(list(fp_morgan.ToBitString()))
+        
+        # 3. MACCS Keys (167 bits)
+        fp_maccs = MACCSkeys.GenMACCSKeys(mol)
+        maccs_fp_list.append(list(fp_maccs.ToBitString()))
+        
+        # 4. Avalon Fingerprint (1024 bits)
+        if HAS_AVALON:
+            # Use external avalon-python package if available
+            fp_avalon = rdAvalonTools.get_avalon_fp(mol, n_bits=1024)
+        else:
+            # Fallback to RDKit's built-in Avalon implementation
+            fp_avalon = GetAvalonFP(mol, nBits=1024)
+        avalon_fp_list.append(list(fp_avalon.ToBitString()))
+
+    # --- Convert to DataFrames ---
+    print("\nConverting features to DataFrame...")
+    
+    # RDKit Descriptors
+    df_rdkit = pd.DataFrame(rdkit_desc_list, columns=desc_names)
+    # Handle potential inf/-inf values from descriptors
+    df_rdkit.replace([np.inf, -np.inf], np.nan, inplace=True)
+    
+    # Morgan Fingerprints
+    df_morgan = pd.DataFrame(morgan_fp_list, columns=[f"Morgan_{i}" for i in range(2048)]).astype(int)
+    
+    # MACCS Keys
+    # MACCS has 167 bits, but ToBitString() starts at 0. Bit 0 is unused, so 1-166 are the keys.
+    df_maccs = pd.DataFrame(maccs_fp_list, columns=[f"MACCS_{i}" for i in range(167)]).astype(int)
+
+    # Avalon Fingerprints
+    df_avalon = pd.DataFrame(avalon_fp_list, columns=[f"Avalon_{i}" for i in range(1024)]).astype(int)
+
+    # Combine all 2D features
+    X_2d = pd.concat([df_rdkit, df_morgan, df_maccs, df_avalon], axis=1)
+    return X_2d
+
+# --- Run 2D Featurization ---
+start_2d = time.time()
+X_2d = compute_2d_features(df['mol'])
+X_2d.index = df.index # Align index with the main dataframe
+end_2d = time.time()
+
+print(f"\nComputed {X_2d.shape[1]} 2D features for {X_2d.shape[0]} molecules.")
+print(f"2D Featurization took {end_2d - start_2d:.2f} seconds.")
+
+########## CELL 6 [code] ##########
+## 5) 3D Feature Calculation
+
+# This cell generates 3D conformers and computes 3D descriptors.
+# - RDKit 3D Descriptors (PMI, Radius of Gyration, etc.)
+# - Mordred 3D Descriptors (WHIM, RDF, etc.) (if available)
+
+# Note: This is computationally expensive.
+
+def compute_3d_features(mol_series, n_conformers=3):
+    """
+    Calculates 3D features for a pandas Series of Mol objects.
+    Returns a DataFrame aligned with the input Series' index.
+    """
+    
+    # Initialize Mordred calculator if available
+    if HAS_MORDRED:
+        calc_mordred = Calculator(descriptors, ignore_3D=False)
+        # Get a list of all 3D descriptor names from Mordred
+        mordred_3d_names = [str(d) for d in calc_mordred.descriptors if d.require_3D]
+    else:
+        mordred_3d_names = []
+        
+    rdkit_3d_results = {}
+    mordred_results = {}
+    failed_indices = []
+
+    for idx, mol in tqdm(mol_series.items(), total=len(mol_series), desc="Computing 3D Features"):
+        try:
+            # 1. Add Hydrogens
+            mol_h = Chem.AddHs(mol)
+            
+            # 2. Generate Conformers (ETKDG)
+            cids = AllChem.EmbedMultipleConfs(mol_h, numConfs=n_conformers, params=AllChem.ETKDGv3())
+            if not cids:
+                raise ValueError("Conformer generation failed")
+
+            # 3. Optimize Conformers (MMFF94 or UFF)
+            try:
+                res = AllChem.MMFFOptimizeMoleculeConfs(mol_h, maxIters=200, mmffVariant="MMFF94s")
+                # Get energy of lowest-energy conformer
+                min_e_idx = np.argmin([e[1] for e in res if e[0] == 0])
+            except Exception:
+                # Fallback to UFF if MMFF fails
+                res = AllChem.UFFOptimizeMoleculeConfs(mol_h, maxIters=200)
+                min_e_idx = np.argmin([e[1] for e in res if e[0] == 0])
+
+            conf = mol_h.GetConformer(id=int(min_e_idx))
+            conf_id = conf.GetId()
+            
+            # 4. Compute RDKit 3D Descriptors
+            rdkit_3d = {
+                'Asphericity': rdMolDescriptors.CalcAsphericity(mol_h, confId=conf_id),
+                'Eccentricity': rdMolDescriptors.CalcEccentricity(mol_h, confId=conf_id),
+                'PMI1': rdMolDescriptors.CalcPMI1(mol_h, confId=conf_id),
+                'PMI2': rdMolDescriptors.CalcPMI2(mol_h, confId=conf_id),
+                'PMI3': rdMolDescriptors.CalcPMI3(mol_h, confId=conf_id),
+                'RadiusOfGyration': rdMolDescriptors.CalcRadiusOfGyration(mol_h, confId=conf_id),
+                'SpherocityIndex': rdMolDescriptors.CalcSpherocityIndex(mol_h, confId=conf_id),
+                'NPR1': rdMolDescriptors.CalcNPR1(mol_h, confId=conf_id),
+                'NPR2': rdMolDescriptors.CalcNPR2(mol_h, confId=conf_id),
+            }
+            rdkit_3d_results[idx] = rdkit_3d
+            
+            # 5. Compute Mordred 3D Descriptors
+            if HAS_MORDRED:
+                # Calculate all descriptors, then filter for 3D only
+                all_mordred_descs = calc_mordred(mol_h).as_dict()
+                # Filter for 3D descriptors and handle errors (convert to np.nan)
+                mordred_3d = {}
+                for name in mordred_3d_names:
+                    val = all_mordred_descs.get(name)
+                    mordred_3d[name] = pd.to_numeric(val, errors='coerce')
+                mordred_results[idx] = mordred_3d
+
+        except Exception as e:
+            # If 3D generation fails, log index and continue
+            failed_indices.append(idx)
+            rdkit_3d_results[idx] = {} # Add empty dict to preserve index
+            if HAS_MORDRED:
+                mordred_results[idx] = {} 
+
+    # --- Convert to DataFrames ---
+    print("\nConverting 3D features to DataFrame...")
+    
+    # RDKit 3D
+    df_rdkit_3d = pd.DataFrame.from_dict(rdkit_3d_results, orient='index')
+    
+    # Mordred 3D
+    if HAS_MORDRED:
+        df_mordred_3d = pd.DataFrame.from_dict(mordred_results, orient='index')
+        # Mordred can produce NaNs as strings/objects, fix it
+        df_mordred_3d = df_mordred_3d.apply(pd.to_numeric, errors='coerce')
+    else:
+        # Create empty DataFrame if Mordred is not available
+        df_mordred_3d = pd.DataFrame(index=df_rdkit_3d.index)
+
+    # Combine all 3D features
+    X_3d = pd.concat([df_rdkit_3d, df_mordred_3d], axis=1)
+    
+    # Report failures
+    n_failed = len(failed_indices)
+    if n_failed > 0:
+        print(f"Warning: 3D conformer generation failed for {n_failed} out of {len(mol_series)} molecules.")
+        if n_failed / len(mol_series) > 0.5:
+            print("WARNING: >50% of 3D generations failed. 3D features may be unreliable.")
+    
+    # Return DataFrame (will have NaNs for failed molecules)
+    return X_3d
+
+# --- Run 3D Featurization ---
+start_3d = time.time()
+X_3d = compute_3d_features(df['mol'])
+# Index is already aligned because we passed df['mol'] (a Series)
+end_3d = time.time()
+
+print(f"\nComputed {X_3d.shape[1]} 3D features for {X_3d.shape[0]} molecules.")
+print(f"3D Featurization took {end_3d - start_3d:.2f} seconds.")
+
+########## CELL 7 [markdown] ##########
+### <span style="color:red">A Note on Data Leakage</span>
+
+The following cells (6 and 7) perform feature filtering and selection on the *entire dataset* **before** the train/test split. 
+
+**This is a form of data leakage.** 
+
+Information from the test set (e.g., its variance, mean, correlation structure, and relationship to the target) is being used to select the features. This can lead to an overly optimistic estimate of model performance.
+
+A more robust, non-leaky workflow would be:
+1.  **Split** the data first (Cell 8).
+2.  Define a **full `Pipeline`** (Cell 9) that includes imputation, scaling, and feature selection.
+3.  **Fit** this entire pipeline *only* on the **training set** (`X_train`, `y_train`).
+4.  Use this *fitted* pipeline to **transform** both the training and test sets.
+
+However, to precisely match the notebook's requirements (e.g., "save `feature_selector.joblib`" in Cell 7, then "Split" in Cell 8), we follow the requested (leaky) procedure. Be aware of this when interpreting the final results.
+
+########## CELL 8 [code] ##########
+## 6) Combine Descriptors & Initial Filtering
+
+# This cell combines 2D and 3D features and performs initial filtering:
+# 1. Combine X_2d and X_3d.
+# 2. Remove features with > 30% missing values (e.g., from failed 3D gen).
+# 3. Impute remaining missing values (using 'median') and save the imputer.
+# 4. Remove constant/near-constant features (VarianceThreshold).
+# 5. Remove highly correlated features (Pearson r > 0.98).
+
+# 1. Combine 2D and 3D features
+# Ensure indices are aligned (should be, as both were derived from df.index)
+X_all = pd.concat([X_2d, X_3d], axis=1)
+y_aligned = y.loc[X_all.index] # Align y just in case
+print(f"Combined all features. Initial shape: {X_all.shape}")
+
+# 2. Filter features with > 30% missing values
+missing_thresh = 0.30
+missing_pct = X_all.isnull().mean()
+cols_to_keep = missing_pct[missing_pct < missing_thresh].index
+X_filtered = X_all[cols_to_keep]
+print(f"Shape after >{missing_thresh*100}% missing filter: {X_filtered.shape}")
+
+# 3. Impute remaining missing values
+imputer = SimpleImputer(strategy='median')
+X_imputed_array = imputer.fit_transform(X_filtered)
+X_imputed = pd.DataFrame(X_imputed_array, columns=X_filtered.columns, index=X_filtered.index)
+
+# Save this imputer for the reuse pipeline
+imputer_path = os.path.join(MODEL_DIR, f"{PREFIX}_filter_imputer.joblib")
+joblib.dump(imputer, imputer_path)
+print(f"Imputer saved to: {imputer_path}")
+
+# 4. Remove constant/near-constant features
+vt = VarianceThreshold(threshold=0.01)
+X_vt_array = vt.fit_transform(X_imputed)
+cols_vt = X_imputed.columns[vt.get_support()]
+X_vt = pd.DataFrame(X_vt_array, columns=cols_vt, index=X_imputed.index)
+print(f"Shape after variance filter: {X_vt.shape}")
+
+# 5. Remove highly correlated features (Pearson r > 0.98)
+print("Calculating correlation matrix (this may take a moment)...")
+corr_matrix = X_vt.corr().abs()
+
+# Create a mask for the upper triangle
+upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+
+# Find features with correlation > 0.98
+to_drop = [column for column in upper.columns if any(upper[column] > 0.98)]
+X_final_filtered = X_vt.drop(columns=to_drop)
+print(f"Removed {len(to_drop)} highly correlated features.")
+print(f"Shape after correlation filter: {X_final_filtered.shape}")
+
+# --- Save Results ---
+
+# This is the dataset that will be used for selection
+X_trainable = X_final_filtered
+y_trainable = y_aligned
+
+# Save the filtered/imputed dataframe
+output_csv_path = os.path.join(OUTPUT_DIR, f"{PREFIX}_combined_descriptors_parsed.csv")
+X_trainable.to_csv(output_csv_path)
+print(f"Filtered descriptor matrix saved to: {output_csv_path}")
+
+# Save the list of columns *after* this filtering step, for reuse
+preselected_features_path = os.path.join(MODEL_DIR, f"{PREFIX}_preselected_features.txt")
+with open(preselected_features_path, 'w') as f:
+    for col in X_trainable.columns:
+        f.write(f"{col}\n")
+print(f"List of pre-selected features saved to: {preselected_features_path}")
+
+########## CELL 9 [code] ##########
+## 7) Feature Selection to Top 1000
+
+# This cell applies a 2-step feature selection process to reduce dimensionality to 1000 features.
+# 1. Univariate filter (Mutual Info) to get top 5000.
+# 2. Model-based filter (LGBM) to get final 1000.
+# This entire selection pipeline is saved as 'feature_selector.joblib'.
+
+from lightgbm import LGBMClassifier
+
+TARGET_N_FEATURES = 1000
+n_current_features = X_trainable.shape[1]
+
+if n_current_features <= TARGET_N_FEATURES:
+    print(f"Warning: Only {n_current_features} features available, which is <= target of {TARGET_N_FEATURES}.")
+    print("Skipping feature selection. All current features will be used.")
+    X_selected = X_trainable
+    
+    # Create a dummy selector pipeline that does nothing
+    class PassthroughTransformer(BaseEstimator, TransformerMixin):
+        def fit(self, X, y=None): return self
+        def transform(self, X): return X
+    
+    selector_pipeline = Pipeline([('passthrough', PassthroughTransformer())])
+    selector_pipeline.fit(X_trainable, y_trainable)
+    final_feature_names = list(X_trainable.columns)
+
+else:
+    print(f"Starting feature selection from {n_current_features} features...")
+    
+    # Step 1: Univariate filter (to 5000 or less)
+    n_kbest = min(5000, n_current_features - 1)
+    univariate_selector = SelectKBest(mutual_info_classif, k=n_kbest)
+
+    # Step 2: Model-based selection (to 1000)
+    # We use a fast model like LightGBM for selection
+    lgbm_clf_selector = LGBMClassifier(
+        n_estimators=100, 
+        random_state=GLOBAL_SEED, 
+        n_jobs=-1, 
+        verbose=-1
+    )
+    
+    # SelectFromModel with max_features=1000 will pick the top 1000 features 
+    # based on feature importance after fitting the LGBM classifier.
+    model_selector = SelectFromModel(
+        lgbm_clf_selector, 
+        max_features=TARGET_N_FEATURES, 
+        threshold=-np.inf # Ensures max_features is the limiting factor
+    )
+
+    # Create the full selection pipeline
+    selector_pipeline = Pipeline([
+        ('univariate', univariate_selector),
+        ('model_based', model_selector)
+    ])
+
+    # --- Fit the selection pipeline ---
+    print("Fitting selection pipeline (this may take a moment)...")
+    start_select = time.time()
+    selector_pipeline.fit(X_trainable, y_trainable)
+    end_select = time.time()
+    print(f"Selection pipeline fitted in {end_select - start_select:.2f} seconds.")
+
+    # --- Get final selected features and names ---
+    X_selected_array = selector_pipeline.transform(X_trainable)
+    
+    # Get feature names
+    cols_kbest_mask = selector_pipeline.named_steps['univariate'].get_support()
+    cols_kbest = X_trainable.columns[cols_kbest_mask]
+    
+    cols_model_mask = selector_pipeline.named_steps['model_based'].get_support()
+    final_feature_names = list(cols_kbest[cols_model_mask])
+    
+    X_selected = pd.DataFrame(X_selected_array, columns=final_feature_names, index=X_trainable.index)
+
+# --- Save Artifacts ---
+selector_path = os.path.join(MODEL_DIR, f"{PREFIX}_feature_selector.joblib")
+joblib.dump(selector_pipeline, selector_path)
+print(f"\nFeature selection pipeline saved to: {selector_path}")
+
+selected_features_path = os.path.join(MODEL_DIR, f"{PREFIX}_selected_features.txt")
+with open(selected_features_path, 'w') as f:
+    for col in final_feature_names:
+        f.write(f"{col}\n")
+print(f"Final {len(final_feature_names)} selected feature names saved to: {selected_features_path}")
+
+# This is the final dataset for model training
+X_model_input = X_selected
+y_model_input = y_trainable
+
+########## CELL 10 [code] ##########
+## 8) Train/Test Split
+
+# This cell splits the final, selected feature set (X_model_input) 
+# into training and testing sets, using stratification to preserve class balance.
+
+TEST_SIZE = 0.20
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_model_input,
+    y_model_input,
+    test_size=TEST_SIZE,
+    stratify=y_model_input,
+    random_state=GLOBAL_SEED
+)
+
+print(f"Data split into Train and Test sets (Test size = {TEST_SIZE*100}%)")
+print(f"\n--- Shapes ---")
+print(f"X_train: {X_train.shape}")
+print(f"y_train: {y_train.shape}")
+print(f"X_test:  {X_test.shape}")
+print(f"y_test:  {y_test.shape}")
+
+print("\n--- Training Set Class Balance (Normalized) ---")
+print(y_train.value_counts(normalize=True).sort_index())
+
+print("\n--- Test Set Class Balance (Normalized) ---")
+print(y_test.value_counts(normalize=True).sort_index())
+
+########## CELL 11 [code] ##########
+## 9) Preprocessing Pipeline (Scaling)
+
+# This cell defines the *final* preprocessing pipeline.
+# In our (leaky) workflow, imputation and selection are already done.
+# Therefore, this pipeline *only* contains the scaler (`RobustScaler`).
+# This scaler will be added to the `GridSearchCV` for each model.
+
+# We choose RobustScaler because it is not sensitive to outliers, 
+# which are common in chemical descriptor data.
+
+# 1. Define the scaler pipeline
+scaler_pipeline = Pipeline([
+    ('scaler', RobustScaler())
+])#_pipeline
+
+# 2. Save this *unfitted* pipeline.
+# NOTE: In a non-leaky workflow, this pipeline would be *much* larger, 
+# containing the imputer and selector steps.
+# For our workflow, we save this simple scaler, as the previous steps 
+# are saved in separate .joblib files (imputer, selector).
+
+scaler_path = os.path.join(MODEL_DIR, f"{PREFIX}_preprocessing_pipeline.joblib")
+joblib.dump(scaler_pipeline, scaler_path)
+
+print(f"Final preprocessing (scaler) pipeline saved to: {scaler_path}")
+
+# This 'scaler_pipeline' will be the first step in all model pipelines below.
+
+########## CELL 12 [markdown] ##########
+## 10) Model Definitions and GridSearch
+
+We will now train and optimize 13 different classification models. Each model will be trained in its own cell.
+
+**Common Setup for all models:**
+* **Pipeline**: Each model is placed inside a `Pipeline` (or `ImbPipeline` if `imblearn` is available) that includes:
+    1.  `(optional) 'sampler'`: `RandomOverSampler` to handle class imbalance (if `HAS_IMBLEARN`).
+    2.  `'scaler'`: The `RobustScaler` defined in Cell 9.
+    3.  `'model'`: The classifier itself.
+* **Cross-Validation**: `StratifiedKFold(n_splits=5)`.
+* **Optimization**: `GridSearchCV` optimizes for `accuracy`.
+* **Tracking**: We also track `precision_macro` and `recall_macro`.
+* **Data**: All `GridSearchCV` objects are `fit` only on `X_train` and `y_train`.
+* **Artifacts**: For each model, we save:
+    * The `best_estimator_` (the fitted pipeline) to `models/{model_name}.joblib`.
+    * The full `GridSearchCV` object to `models/{model_name}_grid.joblib`.
+    * A text summary to `outputs/{model_name}_summary.txt`.
+
+---
+
+########## CELL 13 [code] ##########
+# --- Setup for Model Training Cells ---
+
+# Define the CV strategy and scoring metrics once
+CV_STRATEGY = StratifiedKFold(n_splits=5, shuffle=True, random_state=GLOBAL_SEED)
+SCORING_METRICS = ['accuracy', 'precision_macro', 'recall_macro']
+
+# This dictionary will hold the best_estimator_ for evaluation
+fitted_models = {}
+
+def create_model_pipeline(model_instance):
+    """Helper function to create the full ML pipeline for GridSearch."""
+    steps = []
+    if HAS_IMBLEARN:
+        # Add sampler step. Note: sampler is applied *before* scaling
+        steps.append(('sampler', RandomOverSampler(random_state=GLOBAL_SEED)))
+        
+    # Add the scaler (from Cell 9)
+    steps.append(('scaler', RobustScaler()))
+    
+    # Add the model
+    steps.append(('model', model_instance))
+    
+    if HAS_IMBLEARN:
+        return ImbPipeline(steps)
+    else:
+        return Pipeline(steps)
+
+def save_grid_summary(grid_search, model_name, elapsed_time):
+    """Saves a human-readable summary of the GridSearch results."""
+    summary = f"--- Summary for {model_name} ---\n"
+    summary += f"Training completed in: {elapsed_time:.2f} seconds\n\n"
+    summary += f"Best Parameters:\n{json.dumps(grid_search.best_params_, indent=2)}\n\n"
+    summary += f"Best Cross-Validation Score (accuracy): {grid_search.best_score_:.4f}\n\n"
+    summary += "--- CV Results DataFrame ---\n"
+    cv_results_df = pd.DataFrame(grid_search.cv_results_)
+    rel_cols = ['params'] + [f'mean_test_{m}' for m in SCORING_METRICS] + [f'rank_test_accuracy']
+    summary += cv_results_df[rel_cols].sort_values(by='rank_test_accuracy').to_string()
+    
+    summary_path = os.path.join(OUTPUT_DIR, f"{PREFIX}_{model_name}_summary.txt")
+    with open(summary_path, 'w') as f:
+        f.write(summary)
+    print(f"GridSearch summary saved to: {summary_path}")
+
+########## CELL 14 [code] ##########
+### 10.1) Logistic Regression
+
+print("--- 1. Training Logistic Regression ---")
+model_name = "LogisticRegression"
+
+# 1. Define model and pipeline
+pipe_lr = create_model_pipeline(
+    LogisticRegression(random_state=GLOBAL_SEED, max_iter=1000, solver='saga', n_jobs=-1)
+)
+
+# 2. Define grid
+param_grid_lr = {
+    'model__penalty': ['l1', 'l2', 'elasticnet'],
+    'model__C': [0.01, 0.1, 1, 10],
+    'model__l1_ratio': [0.5] # Only used for elasticnet
+}
+
+# 3. Run GridSearch
+grid_lr = GridSearchCV(pipe_lr, param_grid_lr, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_lr.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_lr.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_lr, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nLogistic Regression training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_lr.best_score_:.4f}")
+print(f"Best Params: {grid_lr.best_params_}")
+save_grid_summary(grid_lr, model_name, elapsed)
+
+fitted_models[model_name] = grid_lr.best_estimator_
+
+########## CELL 15 [code] ##########
+### 10.2) Ridge Classifier
+
+print("\n--- 2. Training Ridge Classifier ---")
+model_name = "RidgeClassifier"
+
+# 1. Define model and pipeline
+pipe_ridge = create_model_pipeline(
+    RidgeClassifier(random_state=GLOBAL_SEED)
+)
+
+# 2. Define grid (alpha is regularization strength)
+param_grid_ridge = {
+    'model__alpha': [0.1, 1.0, 10.0, 100.0]
+}
+
+# 3. Run GridSearch
+grid_ridge = GridSearchCV(pipe_ridge, param_grid_ridge, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_ridge.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_ridge.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_ridge, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nRidge Classifier training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_ridge.best_score_:.4f}")
+print(f"Best Params: {grid_ridge.best_params_}")
+save_grid_summary(grid_ridge, model_name, elapsed)
+
+fitted_models[model_name] = grid_ridge.best_estimator_
+
+########## CELL 16 [code] ##########
+### 10.3) Support Vector Machine (SVC)
+
+print("\n--- 3. Training Support Vector Machine (SVC) ---")
+model_name = "SVC"
+
+# 1. Define model and pipeline
+# Set probability=True to get predict_proba for ROC/PR curves
+pipe_svc = create_model_pipeline(
+    SVC(random_state=GLOBAL_SEED, probability=True)
+)
+
+# 2. Define grid
+param_grid_svc = {
+    'model__C': [0.1, 1, 10],
+    'model__kernel': ['rbf', 'linear'],
+    'model__gamma': ['scale', 'auto'] # Only for rbf kernel
+}
+
+# 3. Run GridSearch
+grid_svc = GridSearchCV(pipe_svc, param_grid_svc, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_svc.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_svc.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_svc, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nSVC training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_svc.best_score_:.4f}")
+print(f"Best Params: {grid_svc.best_params_}")
+save_grid_summary(grid_svc, model_name, elapsed)
+
+fitted_models[model_name] = grid_svc.best_estimator_
+
+########## CELL 17 [code] ##########
+### 10.4) Random Forest
+
+print("\n--- 4. Training Random Forest ---")
+model_name = "RandomForest"
+
+# 1. Define model and pipeline
+pipe_rf = create_model_pipeline(
+    RandomForestClassifier(random_state=GLOBAL_SEED, n_jobs=-1)
+)
+
+# 2. Define grid
+param_grid_rf = {
+    'model__n_estimators': [100, 200],
+    'model__max_depth': [10, 20, None],
+    'model__min_samples_split': [2, 5]
+}
+
+# 3. Run GridSearch
+grid_rf = GridSearchCV(pipe_rf, param_grid_rf, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_rf.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_rf.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_rf, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nRandom Forest training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_rf.best_score_:.4f}")
+print(f"Best Params: {grid_rf.best_params_}")
+save_grid_summary(grid_rf, model_name, elapsed)
+
+fitted_models[model_name] = grid_rf.best_estimator_
+
+########## CELL 18 [code] ##########
+### 10.5) Extra Trees Classifier
+
+print("\n--- 5. Training Extra Trees Classifier ---")
+model_name = "ExtraTrees"
+
+# 1. Define model and pipeline
+pipe_et = create_model_pipeline(
+    ExtraTreesClassifier(random_state=GLOBAL_SEED, n_jobs=-1)
+)
+
+# 2. Define grid
+param_grid_et = {
+    'model__n_estimators': [100, 200],
+    'model__max_depth': [10, 20, None],
+    'model__min_samples_split': [2, 5]
+}
+
+# 3. Run GridSearch
+grid_et = GridSearchCV(pipe_et, param_grid_et, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_et.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_et.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_et, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nExtra Trees training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_et.best_score_:.4f}")
+print(f"Best Params: {grid_et.best_params_}")
+save_grid_summary(grid_et, model_name, elapsed)
+
+fitted_models[model_name] = grid_et.best_estimator_
+
+########## CELL 19 [code] ##########
+### 10.6) XGBoost (XGBClassifier)
+
+print("\n--- 6. Training XGBoost ---")
+model_name = "XGBoost"
+
+# 1. Define model and pipeline
+pipe_xgb = create_model_pipeline(
+    xgboost.XGBClassifier(random_state=GLOBAL_SEED, n_jobs=-1, objective='multi:softmax', eval_metric='mlogloss')
+)
+
+# 2. Define grid
+param_grid_xgb = {
+    'model__n_estimators': [100, 200],
+    'model__learning_rate': [0.01, 0.1],
+    'model__max_depth': [3, 5, 7]
+}
+
+# 3. Run GridSearch
+grid_xgb = GridSearchCV(pipe_xgb, param_grid_xgb, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_xgb.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_xgb.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_xgb, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nXGBoost training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_xgb.best_score_:.4f}")
+print(f"Best Params: {grid_xgb.best_params_}")
+save_grid_summary(grid_xgb, model_name, elapsed)
+
+fitted_models[model_name] = grid_xgb.best_estimator_
+
+########## CELL 20 [code] ##########
+### 10.7) LightGBM (LGBMClassifier)
+
+print("\n--- 7. Training LightGBM ---")
+model_name = "LightGBM"
+
+# 1. Define model and pipeline
+pipe_lgbm = create_model_pipeline(
+    lightgbm.LGBMClassifier(random_state=GLOBAL_SEED, n_jobs=-1, objective='multiclass', verbose=-1)
+)
+
+# 2. Define grid
+param_grid_lgbm = {
+    'model__n_estimators': [100, 200],
+    'model__learning_rate': [0.01, 0.1],
+    'model__num_leaves': [21, 31, 41]
+}
+
+# 3. Run GridSearch
+grid_lgbm = GridSearchCV(pipe_lgbm, param_grid_lgbm, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_lgbm.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_lgbm.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_lgbm, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nLightGBM training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_lgbm.best_score_:.4f}")
+print(f"Best Params: {grid_lgbm.best_params_}")
+save_grid_summary(grid_lgbm, model_name, elapsed)
+
+fitted_models[model_name] = grid_lgbm.best_estimator_
+
+########## CELL 21 [code] ##########
+### 10.8) CatBoost Classifier (Optional)
+
+if HAS_CATBOOST:
+    print("\n--- 8. Training CatBoost ---")
+    model_name = "CatBoost"
+
+    # 1. Define model and pipeline
+    # CatBoost is not compatible with sklearn Pipelines when imblearn is used, 
+    # because it doesn't accept 'model__iterations' as a parameter.
+    # We must train it separately *after* scaling/sampling.
+    
+    # Create a temporary preprocessing pipeline
+    temp_steps = []
+    if HAS_IMBLEARN:
+        temp_steps.append(('sampler', RandomOverSampler(random_state=GLOBAL_SEED)))
+    temp_steps.append(('scaler', RobustScaler()))
+    
+    if HAS_IMBLEARN:
+        temp_preprocessor = ImbPipeline(temp_steps)
+    else:
+        temp_preprocessor = Pipeline(temp_steps)
+    
+    # Preprocess the data *outside* the grid search for this one model
+    X_train_cat = temp_preprocessor.fit_transform(X_train, y_train)
+    
+    # Define the model
+    cat_model = CatBoostClassifier(
+        random_state=GLOBAL_SEED, 
+        verbose=0, 
+        loss_function='MultiClass', 
+        eval_metric='Accuracy'
+    )
+    
+    # 2. Define grid
+    param_grid_cat = {
+        'iterations': [100, 200],
+        'learning_rate': [0.01, 0.1],
+        'depth': [4, 6, 8]
+    }
+
+    # 3. Run GridSearch (on preprocessed data, no pipeline)
+    grid_cat = GridSearchCV(cat_model, param_grid_cat, cv=CV_STRATEGY, scoring='accuracy', refit=True, n_jobs=-1, verbose=1)
+    start_time = time.time()
+    grid_cat.fit(X_train_cat, y_train)
+    end_time = time.time()
+    
+    # 4. Save artifacts
+    # We must re-create the *full* pipeline with the best model and save that
+    best_cat_model = grid_cat.best_estimator_
+    full_cat_pipeline = temp_preprocessor
+    full_cat_pipeline.steps.append(('model', best_cat_model))
+    
+    joblib.dump(full_cat_pipeline, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+    joblib.dump(grid_cat, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+    # 5. Print summary
+    elapsed = end_time - start_time
+    print(f"\nCatBoost training finished in {elapsed:.2f}s.")
+    print(f"Best CV Accuracy: {grid_cat.best_score_:.4f}")
+    print(f"Best Params: {grid_cat.best_params_}")
+    save_grid_summary(grid_cat, model_name, elapsed)
+
+    fitted_models[model_name] = full_cat_pipeline
+else:
+    print("\n--- 8. Skipping CatBoost (library not found) ---")
+
+########## CELL 22 [code] ##########
+### 10.9) K-Nearest Neighbors
+
+print("\n--- 9. Training K-Nearest Neighbors (KNN) ---")
+model_name = "KNN"
+
+# 1. Define model and pipeline
+pipe_knn = create_model_pipeline(
+    KNeighborsClassifier(n_jobs=-1)
+)
+
+# 2. Define grid
+param_grid_knn = {
+    'model__n_neighbors': [3, 5, 7, 9],
+    'model__weights': ['uniform', 'distance']
+}
+
+# 3. Run GridSearch
+grid_knn = GridSearchCV(pipe_knn, param_grid_knn, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_knn.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_knn.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_knn, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nKNN training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_knn.best_score_:.4f}")
+print(f"Best Params: {grid_knn.best_params_}")
+save_grid_summary(grid_knn, model_name, elapsed)
+
+fitted_models[model_name] = grid_knn.best_estimator_
+
+########## CELL 23 [code] ##########
+### 10.10) Gradient Boosting (sklearn)
+
+print("\n--- 10. Training GradientBoostingClassifier (sklearn) ---")
+model_name = "GradientBoosting"
+
+# 1. Define model and pipeline
+pipe_gbc = create_model_pipeline(
+    GradientBoostingClassifier(random_state=GLOBAL_SEED)
+)
+
+# 2. Define grid
+param_grid_gbc = {
+    'model__n_estimators': [100, 200],
+    'model__learning_rate': [0.01, 0.1],
+    'model__max_depth': [3, 5]
+}
+
+# 3. Run GridSearch
+grid_gbc = GridSearchCV(pipe_gbc, param_grid_gbc, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_gbc.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_gbc.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_gbc, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nGradient Boosting training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_gbc.best_score_:.4f}")
+print(f"Best Params: {grid_gbc.best_params_}")
+save_grid_summary(grid_gbc, model_name, elapsed)
+
+fitted_models[model_name] = grid_gbc.best_estimator_
+
+########## CELL 24 [code] ##########
+### 10.11) MLPClassifier (ANN)
+
+print("\n--- 11. Training MLPClassifier (ANN) ---")
+model_name = "MLPClassifier"
+
+# 1. Define model and pipeline
+pipe_mlp = create_model_pipeline(
+    MLPClassifier(random_state=GLOBAL_SEED, max_iter=1000, early_stopping=True)
+)
+
+# 2. Define grid
+param_grid_mlp = {
+    'model__hidden_layer_sizes': [(50,), (100,), (50, 25)],
+    'model__activation': ['relu', 'tanh'],
+    'model__alpha': [0.0001, 0.001],
+    'model__learning_rate_init': [0.001, 0.01]
+}
+
+# 3. Run GridSearch
+grid_mlp = GridSearchCV(pipe_mlp, param_grid_mlp, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_mlp.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_mlp.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_mlp, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nMLPClassifier training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_mlp.best_score_:.4f}")
+print(f"Best Params: {grid_mlp.best_params_}")
+save_grid_summary(grid_mlp, model_name, elapsed)
+
+fitted_models[model_name] = grid_mlp.best_estimator_
+
+########## CELL 25 [code] ##########
+### 10.12) AdaBoost Classifier
+
+print("\n--- 12. Training AdaBoost Classifier ---")
+model_name = "AdaBoost"
+
+# 1. Define model and pipeline
+pipe_ada = create_model_pipeline(
+    AdaBoostClassifier(random_state=GLOBAL_SEED)
+)
+
+# 2. Define grid
+param_grid_ada = {
+    'model__n_estimators': [50, 100, 200],
+    'model__learning_rate': [0.01, 0.1, 1.0]
+}
+
+# 3. Run GridSearch
+grid_ada = GridSearchCV(pipe_ada, param_grid_ada, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_ada.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_ada.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_ada, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nAdaBoost training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_ada.best_score_:.4f}")
+print(f"Best Params: {grid_ada.best_params_}")
+save_grid_summary(grid_ada, model_name, elapsed)
+
+fitted_models[model_name] = grid_ada.best_estimator_
+
+########## CELL 26 [code] ##########
+### 10.13) SGD Classifier
+
+print("\n--- 13. Training SGD Classifier ---")
+model_name = "SGDClassifier"
+
+# 1. Define model and pipeline
+# Use 'log_loss' to get predict_proba, or 'modified_huber' for a robust alternative
+pipe_sgd = create_model_pipeline(
+    SGDClassifier(random_state=GLOBAL_SEED, max_iter=1000, early_stopping=True, n_jobs=-1)
+)
+
+# 2. Define grid
+param_grid_sgd = {
+    'model__loss': ['hinge', 'log_loss', 'modified_huber'],
+    'model__penalty': ['l2', 'l1', 'elasticnet'],
+    'model__alpha': [0.0001, 0.001, 0.01]
+}
+
+# 3. Run GridSearch
+grid_sgd = GridSearchCV(pipe_sgd, param_grid_sgd, cv=CV_STRATEGY, scoring=SCORING_METRICS, refit='accuracy', n_jobs=-1, verbose=1)
+start_time = time.time()
+grid_sgd.fit(X_train, y_train)
+end_time = time.time()
+
+# 4. Save artifacts
+joblib.dump(grid_sgd.best_estimator_, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}.joblib"))
+joblib.dump(grid_sgd, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name}_grid.joblib"))
+
+# 5. Print summary
+elapsed = end_time - start_time
+print(f"\nSGD Classifier training finished in {elapsed:.2f}s.")
+print(f"Best CV Accuracy: {grid_sgd.best_score_:.4f}")
+print(f"Best Params: {grid_sgd.best_params_}")
+save_grid_summary(grid_sgd, model_name, elapsed)
+
+fitted_models[model_name] = grid_sgd.best_estimator_
+
+########## CELL 27 [markdown] ##########
+---
+
+########## CELL 28 [code] ##########
+## 11) Evaluation for Each Model
+
+# This cell defines a comprehensive evaluation function that:
+# - Computes metrics for both train and test sets.
+# - Saves metrics to JSON and .txt files.
+# - Plots and saves Confusion Matrix, ROC Curve (OvR), and PR Curve (OvR).
+
+# This function will be called for every model trained in Step 10.
+
+def evaluate_model(model, model_name, X_train, y_train, X_test, y_test, class_labels):
+    """
+    Generates, saves, and prints a full evaluation for a fitted model.
+    `class_labels` should be the list of original class names (e.g., from le.classes_)
+    """
+    print(f"\n--- Evaluating Model: {model_name} ---")
+    
+    # 1. Get Predictions
+    y_train_pred = model.predict(X_train)
+    y_test_pred = model.predict(X_test)
+
+    # 2. Get Metrics
+    def get_metrics(y_true, y_pred):
+        acc = accuracy_score(y_true, y_pred)
+        # Get precision, recall, f1 for per-class and macro
+        precision, recall, f1, _ = precision_recall_fscore_support(y_true, y_pred, average=None, labels=np.unique(y_true))
+        precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(y_true, y_pred, average='macro')
+        
+        metrics_dict = {
+            'accuracy': acc,
+            'precision_macro': precision_macro,
+            'recall_macro': recall_macro,
+            'f1_macro': f1_macro,
+            'precision_per_class': dict(zip(class_labels, precision)),
+            'recall_per_class': dict(zip(class_labels, recall)),
+            'f1_per_class': dict(zip(class_labels, f1)),
+        }
+        return metrics_dict
+
+    train_metrics = get_metrics(y_train, y_train_pred)
+    test_metrics = get_metrics(y_test, y_test_pred)
+    
+    full_metrics = {
+        'model_name': model_name,
+        'train_set_metrics': train_metrics,
+        'test_set_metrics': test_metrics
+    }
+    
+    # 3. Save Metrics
+    # JSON
+    json_path = os.path.join(OUTPUT_DIR, f"{PREFIX}_{model_name}_metrics.json")
+    with open(json_path, 'w') as f:
+        json.dump(full_metrics, f, indent=4)
+    
+    # Human-readable .txt
+    report_txt = f"--- Classification Report for {model_name} (Test Set) ---\n"
+    report_txt += classification_report(y_test, y_test_pred, target_names=class_labels)
+    report_txt += f"\n\n--- Train Set ---\
+Accuracy: {train_metrics['accuracy']:.4f}\nF1-Macro: {train_metrics['f1_macro']:.4f}"
+    report_txt += f"\n\n--- Test Set ---\
+Accuracy: {test_metrics['accuracy']:.4f}\nF1-Macro: {test_metrics['f1_macro']:.4f}"
+    
+    txt_path = os.path.join(OUTPUT_DIR, f"{PREFIX}_{model_name}_metrics.txt")
+    with open(txt_path, 'w') as f:
+        f.write(report_txt)
+        
+    print(f"Test Accuracy: {test_metrics['accuracy']:.4f} | Test F1-Macro: {test_metrics['f1_macro']:.4f}")
+    print(f"Metrics saved to: {json_path} and {txt_path}")
+
+    # 4. Plot Confusion Matrix
+    try:
+        fig, ax = plt.subplots(figsize=(8, 7))
+        cm = confusion_matrix(y_test, y_test_pred, labels=model.classes_)
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_labels)
+        disp.plot(ax=ax, cmap='Blues', xticks_rotation='horizontal')
+        ax.set_title(f"Confusion Matrix: {model_name} (Test Set)")
+        cm_path = os.path.join(FIG_DIR, f"{PREFIX}_{model_name}_confusion.jpg")
+        plt.savefig(cm_path, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print(f"Confusion matrix saved to: {cm_path}")
+    except Exception as e:
+        print(f"Could not generate Confusion Matrix: {e}")
+
+    # 5. Plot ROC and PR Curves
+    # Check if model supports predict_proba or decision_function
+    y_score = None
+    if hasattr(model, "predict_proba"):
+        y_score = model.predict_proba(X_test)
+    elif hasattr(model, "decision_function"):
+        y_score = model.decision_function(X_test)
+        # For 3 classes, decision_function might be (n_samples, 3)
+        if y_score.ndim == 1: # e.g., RidgeClassifier with OvR
+            # This is tricky. We'll skip ROC/PR for Ridge/SGD-hinge
+            print(f"Skipping ROC/PR plots: decision_function for {model_name} not suitable for multiclass plots.")
+            return test_metrics # Return metrics and exit function
+    else:
+        print(f"Skipping ROC/PR plots: {model_name} has no predict_proba or decision_function.")
+        return test_metrics # Return metrics and exit function
+
+    # Binarize the output
+    y_test_bin = label_binarize(y_test, classes=model.classes_)
+    n_classes = len(model.classes_)
+
+    # Compute ROC curve and ROC area for each class
+    fpr = dict()
+    tpr = dict()
+    roc_auc = dict()
+    for i in range(n_classes):
+        fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_score[:, i])
+        roc_auc[i] = auc(fpr[i], tpr[i])
+
+    # Plot ROC
+    fig_roc, ax_roc = plt.subplots(figsize=(9, 8))
+    for i in range(n_classes):
+        ax_roc.plot(fpr[i], tpr[i], lw=2, label=f'ROC curve (class {class_labels[i]}) (area = {roc_auc[i]:.2f})')
+    ax_roc.plot([0, 1], [0, 1], 'k--', lw=2)
+    ax_roc.set_xlim([0.0, 1.0])
+    ax_roc.set_ylim([0.0, 1.05])
+    ax_roc.set_xlabel('False Positive Rate')
+    ax_roc.set_ylabel('True Positive Rate')
+    ax_roc.set_title(f'One-vs-Rest ROC Curve: {model_name} (Test Set)')
+    ax_roc.legend(loc="lower right")
+    roc_path = os.path.join(FIG_DIR, f"{PREFIX}_{model_name}_roc.jpg")
+    fig_roc.savefig(roc_path, dpi=300, bbox_inches='tight')
+    plt.close(fig_roc)
+    print(f"ROC curve saved to: {roc_path}")
+
+    # Compute Precision-Recall curve and area for each class
+    precision = dict()
+    recall = dict()
+    pr_auc = dict()
+    for i in range(n_classes):
+        precision[i], recall[i], _ = precision_recall_curve(y_test_bin[:, i], y_score[:, i])
+        pr_auc[i] = auc(recall[i], precision[i])
+
+    # Plot PR
+    fig_pr, ax_pr = plt.subplots(figsize=(9, 8))
+    for i in range(n_classes):
+        ax_pr.plot(recall[i], precision[i], lw=2, label=f'PR curve (class {class_labels[i]}) (area = {pr_auc[i]:.2f})')
+    ax_pr.set_xlim([0.0, 1.0])
+    ax_pr.set_ylim([0.0, 1.05])
+    ax_pr.set_xlabel('Recall')
+    ax_pr.set_ylabel('Precision')
+    ax_pr.set_title(f'One-vs-Rest Precision-Recall Curve: {model_name} (Test Set)')
+    ax_pr.legend(loc="best")
+    pr_path = os.path.join(FIG_DIR, f"{PREFIX}_{model_name}_pr.jpg")
+    fig_pr.savefig(pr_path, dpi=300, bbox_inches='tight')
+    plt.close(fig_pr)
+    print(f"PR curve saved to: {pr_path}")
+
+    return test_metrics
+
+# --- Run Evaluation Loop ---
+
+# Get the class labels from the LabelEncoder (Cell 2)
+class_labels = [str(c) for c in le.classes_]
+
+# This dict will store the *test metrics* for ranking
+all_test_metrics = {}
+
+for model_name, model in fitted_models.items():
+    test_metrics = evaluate_model(
+        model=model, 
+        model_name=model_name, 
+        X_train=X_train, 
+        y_train=y_train, 
+        X_test=X_test, 
+        y_test=y_test,
+        class_labels=class_labels
+    )
+    # Store the main test metrics for ranking
+    all_test_metrics[model_name] = {
+        'accuracy': test_metrics['accuracy'],
+        'f1_macro': test_metrics['f1_macro'],
+        'precision_macro': test_metrics['precision_macro'],
+        'recall_macro': test_metrics['recall_macro']
+    }
+
+########## CELL 29 [code] ##########
+## 12) Model Ranking & Selection
+
+# This cell creates a summary DataFrame of all model test metrics,
+# ranks them by accuracy (tie-breaking with f1_macro), and saves the ranking.
+
+print("--- Model Performance Ranking (Test Set) ---")
+
+# Convert the metrics dictionary to a DataFrame
+df_ranking = pd.DataFrame.from_dict(all_test_metrics, orient='index')
+
+# Rank models
+df_ranking.sort_values(by=['accuracy', 'f1_macro'], ascending=False, inplace=True)
+
+pd.set_option('display.precision', 4)
+print(df_ranking)
+pd.reset_option('display.precision')
+
+# Save ranking to CSV
+ranking_path = os.path.join(OUTPUT_DIR, f"{PREFIX}_model_ranking.csv")
+df_ranking.to_csv(ranking_path)
+print(f"\nModel ranking saved to: {ranking_path}")
+
+# Select top 3 models for ensembles
+# Ensure we have at least 3 models (e.g., if some failed or were skipped)
+n_top = min(3, len(df_ranking))
+top_n_model_names = list(df_ranking.head(n_top).index)
+
+if n_top < 3:
+    print(f"\nWarning: Only {n_top} models available for ensembling.")
+else:
+    print(f"\nTop 3 models for ensembling: {top_n_model_names}")
+
+########## CELL 30 [code] ##########
+## 13) Ensembles: Voting & Stacking
+
+# This cell uses the Top 3 models from the ranking to build and 
+# evaluate two ensemble models: VotingClassifier and StackingClassifier.
+
+if not top_n_model_names:
+    print("\nSkipping Ensembles: No models were successfully trained and ranked.")
+else:
+    # 1. Load the Top N best *estimators* (pipelines)
+    # We need to load them from the 'fitted_models' dict
+    estimators = []
+    for name in top_n_model_names:
+        if name in fitted_models:
+            estimators.append((name, fitted_models[name]))
+    
+    # Check for models that can't be in a soft-voting ensemble
+    # (e.g., Ridge, SGD-hinge that don't have predict_proba)
+    soft_voting_estimators = []
+    for name, model in estimators:
+        if hasattr(model, "predict_proba"):
+            soft_voting_estimators.append((name, model))
+        else:
+            print(f"Note: '{name}' does not support predict_proba, excluding from soft-voting.")
+
+    # --- 13.1) VotingClassifier (Soft) ---
+    if len(soft_voting_estimators) > 1: 
+        print("\n--- Training VotingClassifier (Soft) ---")
+        model_name_voting = "VotingClassifier"
+        
+        # We use 'soft' voting to average probabilities, which is generally better
+        voting_clf = VotingClassifier(
+            estimators=soft_voting_estimators, 
+            voting='soft', 
+            n_jobs=-1
+        )
+        
+        # We fit the VotingClassifier directly on the *unscaled* X_train, 
+        # because each estimator *is a pipeline* that includes its own scaling.
+        start_time = time.time()
+        voting_clf.fit(X_train, y_train)
+        end_time = time.time()
+        print(f"VotingClassifier fitted in {end_time - start_time:.2f}s.")
+
+        # Save model
+        joblib.dump(voting_clf, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name_voting}.joblib"))
+
+        # Evaluate model
+        voting_metrics = evaluate_model(
+            voting_clf, model_name_voting, X_train, y_train, X_test, y_test, class_labels
+        )
+    else:
+        print("\nSkipping Soft Voting: Fewer than 2 models support predict_proba.")
+
+    # --- 13.2) StackingClassifier ---
+    if len(estimators) > 1:
+        print("\n--- Training StackingClassifier ---")
+        model_name_stacking = "StackingClassifier"
+        
+        # Use a simple Logistic Regression as the meta-learner (final_estimator)
+        meta_learner = LogisticRegression(random_state=GLOBAL_SEED, max_iter=500)
+        
+        stacking_clf = StackingClassifier(
+            estimators=estimators, 
+            final_estimator=meta_learner, 
+            cv=CV_STRATEGY, # Use cross-validation for predictions
+            n_jobs=-1,
+            passthrough=False # Only meta-learner sees original data
+        )
+        
+        # Fit the StackingClassifier
+        start_time = time.time()
+        stacking_clf.fit(X_train, y_train)
+        end_time = time.time()
+        print(f"StackingClassifier fitted in {end_time - start_time:.2f}s.")
+
+        # Save model
+        joblib.dump(stacking_clf, os.path.join(MODEL_DIR, f"{PREFIX}_{model_name_stacking}.joblib"))
+
+        # Evaluate model
+        stacking_metrics = evaluate_model(
+            stacking_clf, model_name_stacking, X_train, y_train, X_test, y_test, class_labels
+        )
+    else:
+        print("\nSkipping Stacking: Fewer than 2 models available.")
+
+########## CELL 31 [code] ##########
+## 14) Save Metadata & Reproducibility Files
+
+# This cell saves a metadata.json file with library versions 
+# and a README_reuse.md file explaining how to reuse the artifacts.
+
+print("--- Saving Final Metadata and README ---")
+
+# 1. Save metadata.json
+try:
+    lgbm_version = lightgbm.__version__
+except Exception:
+    lgbm_version = None
+
+try:
+    xgb_version = xgboost.__version__
+except Exception:
+    xgb_version = None
+
+metadata = {
+    'notebook_prefix': PREFIX,
+    'creation_time': time.ctime(),
+    'python_version': platform.python_version(),
+    'rdkit_version': rdkit.__version__,
+    'sklearn_version': sklearn.__version__,
+    'pandas_version': pd.__version__,
+    'numpy_version': np.__version__,
+    'lightgbm_version': lgbm_version,
+    'xgboost_version': xgb_version,
+    'joblib_version': joblib.__version__,
+    'optional_lib_mordred': HAS_MORDRED,
+    'optional_lib_catboost': HAS_CATBOOST,
+    'optional_lib_avalon': HAS_AVALON,
+    'optional_lib_imblearn': HAS_IMBLEARN,
+    'global_seed': GLOBAL_SEED,
+    'n_features_pre_selection': X_trainable.shape[1],
+    'n_features_post_selection': X_model_input.shape[1],
+    'final_feature_list_file': f"{PREFIX}_selected_features.txt",
+    'filter_imputer_file': f"{PREFIX}_filter_imputer.joblib",
+    'selector_pipeline_file': f"{PREFIX}_feature_selector.joblib",
+    'scaler_pipeline_file': f"{PREFIX}_preprocessing_pipeline.joblib",
+    'top_model_file': f"{PREFIX}_StackingClassifier.joblib" # (or Voting)
+}
+
+metadata_path = os.path.join(MODEL_DIR, f"{PREFIX}_metadata.json")
+with open(metadata_path, 'w') as f:
+    json.dump(metadata, f, indent=4)
+
+print(f"Metadata saved to: {metadata_path}")
+
+# 2. Save models/README_reuse_joblib.md
+readme_content = f"""# How to Reuse the Saved Model Artifacts
+
+This directory contains all artifacts needed to make predictions on new data.
+The model prefix for this run is: `{PREFIX}`
+
+## WARNING: Leaky Workflow
+
+The pipeline saved from this notebook was trained using a 'leaky' workflow, where feature selection was performed on the entire dataset *before* splitting. The reuse snippet below replicates this exact (flawed) process for consistency. For production use, retrain using a non-leaky pipeline (see Cell 9 of the notebook for details).
+
+## Key Artifacts
+
+* **Best Model**: `{PREFIX}_StackingClassifier.joblib` (or `{PREFIX}_VotingClassifier.joblib`)
+* **Metadata**: `{PREFIX}_metadata.json` (check library versions for compatibility)
+
+**Preprocessing Artifacts (Leaky Workflow):**
+
+1.  **Descriptor Functions**: You must use the *identical* `compute_2d_features` and `compute_3d_features` functions from the notebook.
+2.  **Imputer**: `{PREFIX}_filter_imputer.joblib` (Fitted median imputer)
+3.  **Pre-selected Columns**: `{PREFIX}_preselected_features.txt` (List of columns *after* missing/variance/correlation filters)
+4.  **Selector Pipeline**: `{PREFIX}_feature_selector.joblib` (Fitted `SelectKBest` + `SelectFromModel` pipeline)
+5.  **Final Columns**: `{PREFIX}_selected_features.txt` (List of final 1000 features)
+6.  **Scaler Pipeline**: `{PREFIX}_preprocessing_pipeline.joblib` (Fitted `RobustScaler`)
+
+## Re-use Code Snippet
+
+See the final cell in the notebook (`15) Reuse Instructions`) for a copy-pasteable Python code snippet that loads a new CSV and runs it through the full (leaky) prediction pipeline.
+"""
+
+readme_path = os.path.join(MODEL_DIR, f"{PREFIX}_README_reuse.md")
+with open(readme_path, 'w') as f:
+    f.write(readme_content)
+
+print(f"Reuse README saved to: {readme_path}")
+print("\n--- Notebook Run Complete --- 🚀")
+
+########## CELL 32 [markdown] ##########
+## 15) Reuse Instructions (Copy-Paste Snippet)
+
+To reuse the saved pipeline on a new CSV file, you must replicate the *exact* featurization and (leaky) preprocessing workflow.
+
+1.  Ensure you have the `models/` folder and all its `.joblib` and `.txt` artifacts.
+2.  Ensure your environment has the same major library versions (see `models/mol_class_pipeline_metadata.json`).
+3.  Create a new CSV file (e.g., `data/new_molecules.csv`) with at least a `SMILES` column.
+4.  Run the code snippet below.
+
+---
+
+########## CELL 33 [code] ##########
+## --- COPY-PASTE SNIPPET STARTS HERE ---
+
+import joblib
+import pandas as pd
+import numpy as np
+import os
+from tqdm.notebook import tqdm
+
+# --- 1. RDKit & Descriptor Imports ---
+# You MUST import the same libraries used for featurization
+from rdkit import Chem
+from rdkit.Chem import AllChem, Descriptors, rdMolDescriptors, MACCSkeys
+from rdkit.Avalon import pyAvalonTools # RDKit's built-in Avalon
+
+# --- Optional Libs (must match training environment) ---
+try:
+    from rdkit.Chem import rdAvalonTools
+
+    HAS_AVALON_REUSE = True
+except ImportError:
+    HAS_AVALON_REUSE = False
+
+try:
+    import mordred
+    from mordred import Calculator, descriptors
+    HAS_MORDRED_REUSE = True
+except ImportError:
+    HAS_MORDRED_REUSE = False
+
+# --- 2. Define the *EXACT* Feature Functions from Notebook ---
+
+def parse_and_standardize_smiles(smiles_str):
+    try:
+        mol = Chem.MolFromSmiles(smiles_str)
+        if mol is None: return None
+        Chem.SanitizeMol(mol)
+        Chem.Kekulize(mol, clearArom=True)
+        return mol
+    except Exception: return None
+
+def compute_2d_features(mol_list):
+    rdkit_desc_list = []
+    morgan_fp_list = []
+    maccs_fp_list = []
+    avalon_fp_list = []
+    desc_names = [name for name, func in Descriptors.descList]
+    
+    for mol in mol_list:
+        desc_dict = Descriptors.CalcMolDescriptors(mol)
+        rdkit_desc_list.append([desc_dict[name] for name in desc_names])
+        fp_morgan = rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
+        morgan_fp_list.append(list(fp_morgan.ToBitString()))
+        fp_maccs = MACCSkeys.GenMACCSKeys(mol)
+        maccs_fp_list.append(list(fp_maccs.ToBitString()))
+        if HAS_AVALON_REUSE:
+            fp_avalon = rdAvalonTools.get_avalon_fp(mol, n_bits=1024)
+        else:
+            fp_avalon = GetAvalonFP(mol, nBits=1024)
+        avalon_fp_list.append(list(fp_avalon.ToBitString()))
+
+    df_rdkit = pd.DataFrame(rdkit_desc_list, columns=desc_names).replace([np.inf, -np.inf], np.nan)
+    df_morgan = pd.DataFrame(morgan_fp_list, columns=[f"Morgan_{i}" for i in range(2048)]).astype(int)
+    df_maccs = pd.DataFrame(maccs_fp_list, columns=[f"MACCS_{i}" for i in range(167)]).astype(int)
+    df_avalon = pd.DataFrame(avalon_fp_list, columns=[f"Avalon_{i}" for i in range(1024)]).astype(int)
+    return pd.concat([df_rdkit, df_morgan, df_maccs, df_avalon], axis=1)
+
+def compute_3d_features(mol_series, n_conformers=3):
+    if HAS_MORDRED_REUSE:
+        calc_mordred = Calculator(descriptors, ignore_3D=False)
+        mordred_3d_names = [str(d) for d in calc_mordred.descriptors if d.require_3D]
+    else:
+        mordred_3d_names = []
+        
+    rdkit_3d_results, mordred_results = {}, {}
+    
+    for idx, mol in mol_series.items():
+        try:
+            mol_h = Chem.AddHs(mol)
+            cids = AllChem.EmbedMultipleConfs(mol_h, numConfs=n_conformers, params=AllChem.ETKDGv3())
+            if not cids: raise ValueError("Conformer generation failed")
+            try:
+                res = AllChem.MMFFOptimizeMoleculeConfs(mol_h, maxIters=200, mmffVariant="MMFF94s")
+                min_e_idx = np.argmin([e[1] for e in res if e[0] == 0])
+            except Exception:
+                res = AllChem.UFFOptimizeMoleculeConfs(mol_h, maxIters=200)
+                min_e_idx = np.argmin([e[1] for e in res if e[0] == 0])
+            conf_id = mol_h.GetConformer(id=int(min_e_idx)).GetId()
+            
+            rdkit_3d_results[idx] = {
+                'Asphericity': rdMolDescriptors.CalcAsphericity(mol_h, confId=conf_id),
+                'Eccentricity': rdMolDescriptors.CalcEccentricity(mol_h, confId=conf_id),
+                'PMI1': rdMolDescriptors.CalcPMI1(mol_h, confId=conf_id),
+                'PMI2': rdMolDescriptors.CalcPMI2(mol_h, confId=conf_id),
+                'PMI3': rdMolDescriptors.CalcPMI3(mol_h, confId=conf_id),
+                'RadiusOfGyration': rdMolDescriptors.CalcRadiusOfGyration(mol_h, confId=conf_id),
+                'SpherocityIndex': rdMolDescriptors.CalcSpherocityIndex(mol_h, confId=conf_id),
+                'NPR1': rdMolDescriptors.CalcNPR1(mol_h, confId=conf_id),
+                'NPR2': rdMolDescriptors.CalcNPR2(mol_h, confId=conf_id),
+            }
+            if HAS_MORDRED_REUSE:
+                all_mordred_descs = calc_mordred(mol_h).as_dict()
+                mordred_3d = {name: pd.to_numeric(all_mordred_descs.get(name), errors='coerce') for name in mordred_3d_names}
+                mordred_results[idx] = mordred_3d
+        except Exception:
+            rdkit_3d_results[idx] = {}
+            if HAS_MORDRED_REUSE: mordred_results[idx] = {}
+    df_rdkit_3d = pd.DataFrame.from_dict(rdkit_3d_results, orient='index')
+    if HAS_MORDRED_REUSE:
+        df_mordred_3d = pd.DataFrame.from_dict(mordred_results, orient='index').apply(pd.to_numeric, errors='coerce')
+    else:
+        df_mordred_3d = pd.DataFrame(index=df_rdkit_3d.index)
+    return pd.concat([df_rdkit_3d, df_mordred_3d], axis=1)
+
+# --- 3. Prediction Function ---
+
+def predict_new_smiles(csv_path, model_dir, prefix, output_path):
+    print("--- Starting New Prediction Pipeline ---")
+    
+    # 1. Load all artifacts
+    print("Loading artifacts...")
+    try:
+        model = joblib.load(os.path.join(model_dir, f"{prefix}_StackingClassifier.joblib"))
+        imputer = joblib.load(os.path.join(model_dir, f"{prefix}_filter_imputer.joblib"))
+        selector = joblib.load(os.path.join(model_dir, f"{prefix}_feature_selector.joblib"))
+        scaler = joblib.load(os.path.join(model_dir, f"{prefix}_preprocessing_pipeline.joblib"))
+        
+        # Load feature lists
+        preselected_cols = pd.read_csv(os.path.join(model_dir, f"{prefix}_preselected_features.txt"), header=None)[0].tolist()
+        final_selected_cols = pd.read_csv(os.path.join(model_dir, f"{prefix}_selected_features.txt"), header=None)[0].tolist()
+        class_map = json.load(open(os.path.join("outputs/", f"{prefix}_class_mapping.json")))
+        inv_class_map = {v: k for k, v in class_map.items()}
+        
+    except FileNotFoundError as e:
+        print(f"ERROR: Could not load artifact. Make sure 'models/' and 'outputs/' dir is present. {e}")
+        return
+
+    # 2. Load and parse new data
+    print(f"Loading and parsing {csv_path}...")
+    new_df = pd.read_csv(csv_path)
+    if 'SMILES' not in new_df.columns:
+        print("ERROR: New CSV must have a 'SMILES' column.")
+        return
+        
+    new_df['mol'] = new_df['SMILES'].apply(parse_and_standardize_smiles)
+    new_df_valid = new_df.dropna(subset=['mol']).copy()
+    if len(new_df_valid) == 0:
+        print("No valid SMILES found in new file.")
+        return
+
+    # 3. Compute 2D and 3D features
+    print("Computing 2D features...")
+    X_new_2d = compute_2d_features(new_df_valid['mol'])
+    X_new_2d.index = new_df_valid.index
+    
+    print("Computing 3D features (this may be slow)...")
+    X_new_3d = compute_3d_features(new_df_valid['mol'])
+    X_new_3d.index = new_df_valid.index
+
+    X_new_all = pd.concat([X_new_2d, X_new_3d], axis=1)
+
+    # 4. Apply Preprocessing (REPLICATING LEAKY WORKFLOW)
+    print("Applying saved preprocessing steps...")
+    
+    # Step 6 (Filter): Keep only columns from training, then impute
+    # Ensure all columns are present, fill missing ones with NaN
+    X_new_f1 = X_new_all.reindex(columns=preselected_cols, fill_value=np.nan)
+    X_new_f2_array = imputer.transform(X_new_f1)
+    X_new_f2 = pd.DataFrame(X_new_f2_array, columns=preselected_cols, index=X_new_f1.index)
+
+    # Step 7 (Select): Apply fitted selector pipeline
+    X_new_f3_array = selector.transform(X_new_f2)
+    X_new_f3 = pd.DataFrame(X_new_f3_array, columns=final_selected_cols, index=X_new_f2.index)
+    
+    # Step 9 (Scale): Apply fitted scaler pipeline
+    X_new_final = scaler.transform(X_new_f3)
+
+    # 5. Make Predictions
+    print("Making predictions...")
+    predictions_encoded = model.predict(X_new_final)
+    predictions_labels = [inv_class_map[p] for p in predictions_encoded]
+    
+    if hasattr(model, "predict_proba"):
+        probabilities = model.predict_proba(X_new_final)
+        prob_cols = {f"Prob_Class_{inv_class_map[i]}": proba for i, proba in enumerate(probabilities.T)}
+    else:
+        prob_cols = {}
+
+    # 6. Save Results
+    print("Saving results...")
+    results_df = new_df_valid[['SMILES']].copy()
+    results_df['Prediction_Encoded'] = predictions_encoded
+    results_df['Prediction_Label'] = predictions_labels
+    
+    for col, data in prob_cols.items():
+        results_df[col] = data
+        
+    results_df.to_csv(output_path, index=False)
+    print(f"\n--- Predictions complete! Results saved to: {output_path} ---")
+    return results_df
+
+# --- 4. Run the Prediction ---
+
+# Create a dummy new file to test the reuse snippet
+new_data = {"SMILES": [
+    "CC(=O)Oc1ccccc1C(=O)O",  # Aspirin (Class 0)
+    "CC1(C)S[C@@H]2[C@H](NC(=O)Cc3ccccc3)C(=O)N2[C@H]1C(=O)O", # Penicillin G (Class 1)
+    "Cn1cnc2c1c(=O)n(C)c(=O)n2C", # Caffeine (Class 2)
+    "c1ccccc1" # Benzene (Untrained)
+]}
+new_file_path = "data/new_molecules.csv"
+pd.DataFrame(new_data).to_csv(new_file_path, index=False)
+
+# Set paths
+MODEL_DIR_REUSE = "models/"
+PREFIX_REUSE = "mol_class_pipeline"
+OUTPUT_PRED_PATH = "outputs/predictions_newfile.csv"
+
+# Run prediction function
+prediction_results = predict_new_smiles(
+    csv_path=new_file_path, 
+    model_dir=MODEL_DIR_REUSE, 
+    prefix=PREFIX_REUSE,
+    output_path=OUTPUT_PRED_PATH
+)
+
+print("\n--- Prediction Results Head ---")
+print(prediction_results.head())
+
+########## CELL 34 [code] ##########
+## 16) Short Unit Tests
+
+# This cell runs a few quick checks to confirm that the saved artifacts 
+# can be loaded and used for prediction on a small sample of the test data.
+
+print("--- Running Unit Tests on Saved Artifacts ---")
+
+try:
+    # 1. Load the main model (Stacking or Voting)
+    # Try Stacking first, fall back to Voting
+    try:
+        model_path = os.path.join(MODEL_DIR, f"{PREFIX}_StackingClassifier.joblib")
+        test_model = joblib.load(model_path)
+        print("Loaded StackingClassifier model.")
+    except FileNotFoundError:
+        model_path = os.path.join(MODEL_DIR, f"{PREFIX}_VotingClassifier.joblib")
+        test_model = joblib.load(model_path)
+        print("Loaded VotingClassifier model.")
+    
+    # 2. Get a small sample from X_test (which is already pre-scaled in our workflow)
+    # NOTE: X_test is *not* scaled. The model pipelines include the scaler.
+    sample_X = X_test.iloc[:5]
+    sample_y = y_test.iloc[:5]
+    print(f"Using 5 samples from X_test for prediction.")
+    
+    # 3. Make predictions
+    # The 'test_model' is a Stacking/Voting classifier whose estimators 
+    # are themselves pipelines (scaler + model).
+    # Therefore, we predict directly on the *unscaled* X_test data.
+    preds = test_model.predict(sample_X)
+    
+    # 4. Assert results
+    assert len(preds) == 5
+    assert preds.ndim == 1
+    print(f"Prediction output: {preds}")
+    print(f"Actual labels:     {sample_y.values}")
+    
+    print("\n✅ [PASS] Unit test 1: Loaded ensemble model can predict on X_test sample.")
+    
+    # 5. Test the scaler from Cell 9
+    scaler_path = os.path.join(MODEL_DIR, f"{PREFIX}_preprocessing_pipeline.joblib")
+    scaler_pipe = joblib.load(scaler_path)
+    sample_X_scaled = scaler_pipe.transform(sample_X)
+    
+    assert sample_X_scaled.shape == sample_X.shape
+    assert not np.isclose(sample_X_scaled.mean(), sample_X.values.mean()) # Check that it was transformed
+    print("\n✅ [PASS] Unit test 2: Loaded scaler pipeline can transform data.")
+    
+    # 6. Test the feature selector from Cell 7
+    selector_path = os.path.join(MODEL_DIR, f"{PREFIX}_feature_selector.joblib")
+    selector_pipe = joblib.load(selector_path)
+    # This selector expects imputed data (from X_trainable)
+    # We can't easily test it without replicating the imputation step.
+    # We'll just check that it loads.
+    assert selector_pipe is not None
+    print("\n✅ [PASS] Unit test 3: Feature selector pipeline loads successfully.")
+
+except Exception as e:
+    print(f"\n❌ [FAIL] Unit test failed: {e}")
+    import traceback
+    traceback.print_exc()

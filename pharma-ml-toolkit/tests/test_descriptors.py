@@ -18,6 +18,8 @@ import pytest
 rdkit = pytest.importorskip("rdkit")
 
 from pharmaml.chem.descriptors import (
+    D3D_COLUMNS,
+    compute_3d_descriptors,
     compute_descriptors,
     compute_fingerprints,
     compute_maccs,
@@ -26,6 +28,7 @@ from pharmaml.exceptions import DataValidationError
 
 ETHANOL = "CCO"
 BENZENE = "c1ccccc1"
+ASPIRIN = "CC(=O)Oc1ccccc1C(=O)O"
 INVALID = "not_a_smiles"
 
 MORDED_INSTALLED = importlib.util.find_spec("mordred") is not None
@@ -530,3 +533,116 @@ class TestMordredDescriptorSet:
             )
         records = [r for r in caplog.records if "descriptor cells" in r.getMessage()]
         assert len(records) == 1, caplog.text
+
+
+# ---------------------------------------------------------------------------
+# 3D shape descriptors (xxx.ipynb cell 6's RDKit half, 100x-147)
+# ---------------------------------------------------------------------------
+
+
+class TestCompute3dDescriptors:
+    """The ETKDG/MMFF/UFF shape-descriptor pipeline and its contracts.
+
+    Every embedding runs at the fixed ETKDG seed 42, so all value pins
+    below are exact on this RDKit build (2026.09.1) and deterministic
+    across runs.
+    """
+
+    def test_d3d_columns_contract(self) -> None:
+        assert D3D_COLUMNS == (
+            "Asphericity",
+            "Eccentricity",
+            "PMI1",
+            "PMI2",
+            "PMI3",
+            "RadiusOfGyration",
+            "SpherocityIndex",
+            "NPR1",
+            "NPR2",
+        )
+
+    def test_aspirin_shape_and_pinned_values(self) -> None:
+        frame = compute_3d_descriptors([ASPIRIN], progress=False)
+        assert list(frame.columns) == ["SMILES", *D3D_COLUMNS]
+        assert frame.index.name == "original_index"
+        row = frame[list(D3D_COLUMNS)].iloc[0]
+        # Pinned against the ETKDG(42)/MMFF94s pipeline on this build.
+        assert float(row["PMI1"]) == pytest.approx(463.515414, abs=1e-4)
+        assert float(row["RadiusOfGyration"]) == pytest.approx(2.428345, abs=1e-5)
+        assert float(row["SpherocityIndex"]) == pytest.approx(0.09743, abs=1e-4)
+
+    def test_aspirin_descriptor_sanity(self) -> None:
+        values = compute_3d_descriptors([ASPIRIN], progress=False)[
+            list(D3D_COLUMNS)
+        ].iloc[0].to_numpy()
+        assert np.isfinite(values).all()  # 9 finite ...
+        assert (values >= 0.0).all()  # ... positive-ish shape descriptors
+        # Principal moments are ordered; both NPRs live in (0, 1].
+        pmi1, pmi2, pmi3 = values[2], values[3], values[4]
+        assert pmi1 <= pmi2 <= pmi3
+        assert 0.0 < values[7] <= 1.0  # NPR1
+        assert 0.0 < values[8] <= 1.0  # NPR2
+        assert values[7] <= values[8]  # NPR1 <= NPR2 (Rodger's plane)
+
+    def test_deterministic_across_calls(self) -> None:
+        first = compute_3d_descriptors([ASPIRIN, ETHANOL], progress=False)
+        second = compute_3d_descriptors([ASPIRIN, ETHANOL], progress=False)
+        pd.testing.assert_frame_equal(
+            first[list(D3D_COLUMNS)], second[list(D3D_COLUMNS)]
+        )
+
+    def test_single_conformer_works(self) -> None:
+        frame = compute_3d_descriptors([ASPIRIN], n_conformers=1, progress=False)
+        row = frame[list(D3D_COLUMNS)].iloc[0].to_numpy()
+        assert np.isfinite(row).all()
+        assert row[2] <= row[3] <= row[4]  # PMI ordering survives one conf
+
+    def test_invalid_smiles_dropped_valid_rows_nan_free(self) -> None:
+        frame = compute_3d_descriptors(
+            [ASPIRIN, INVALID, ETHANOL], progress=False
+        )
+        assert frame.index.tolist() == [0, 2]  # the invalid row is gone
+        assert frame["SMILES"].tolist() == [ASPIRIN, ETHANOL]
+        assert np.isfinite(frame[list(D3D_COLUMNS)].to_numpy()).all()
+
+    def test_failed_molecule_keeps_nan_row(self, monkeypatch) -> None:
+        """A molecule whose 3D pipeline fails keeps its ROW as NaN.
+
+        The notebook's failed-molecule behaviour: ``failed_indices``
+        receives the index and the row stays (NaN cells), it is not
+        dropped the way unparseable SMILES are.
+        """
+        from pharmaml.chem import descriptors as descriptors_module
+
+        def broken(mol_h, n_conformers):  # pragma: no cover - stub
+            raise ValueError("embedding exploded")
+
+        monkeypatch.setattr(descriptors_module, "_shape_vector", broken)
+        frame = compute_3d_descriptors([ASPIRIN, ETHANOL], progress=False)
+        assert frame.shape == (2, 10)  # both rows kept
+        assert frame[list(D3D_COLUMNS)].isna().all().all()
+
+    def test_uff_fallback_for_mmff_untypable_molecule(self) -> None:
+        """MMFF typing fails for selenium atoms (flag -1 results) -- the
+        UFF fallback must take over and still produce finite values."""
+        frame = compute_3d_descriptors(["C[Se]C"], progress=False)
+        row = frame[list(D3D_COLUMNS)].iloc[0].to_numpy()
+        assert np.isfinite(row).all()
+        assert row[2] <= row[3] <= row[4]
+
+    def test_bare_string_rejected(self) -> None:
+        with pytest.raises(DataValidationError, match="single string"):
+            compute_3d_descriptors(ETHANOL, progress=False)
+
+    def test_empty_input_rejected(self) -> None:
+        with pytest.raises(DataValidationError, match="empty"):
+            compute_3d_descriptors([], progress=False)
+
+    def test_all_invalid_input_rejected(self) -> None:
+        with pytest.raises(DataValidationError, match="No valid SMILES"):
+            compute_3d_descriptors([INVALID, "also bad"], progress=False)
+
+    @pytest.mark.parametrize("value", [0, -1, 2.5, "3", True])
+    def test_non_positive_or_non_int_conformers_rejected(self, value) -> None:
+        with pytest.raises(DataValidationError, match="n_conformers"):
+            compute_3d_descriptors([ETHANOL], n_conformers=value, progress=False)

@@ -1,14 +1,16 @@
 """Molecular descriptors and fingerprints (RDKit-backed, lazy import).
 
 Upgrades ``others/Ml/Descriptor calculator.py``, ``Morgan_calculator.py``,
-``ECFP_calculation.py`` and ``Mordred_calculation.py`` into one module
-with:
+``ECFP_calculation.py``, ``Mordred_calculation.py`` and ``xxx.ipynb``
+cell 6's 3D block into one module with:
 
 * a lazy RDKit import that raises an actionable
   :class:`~pharmaml.exceptions.DependencyError`,
 * explicit invalid-SMILES accounting (the original silently asserted
   "we are sure all SMILES are valid"),
-* reproducible fingerprints via fixed seeds/radii.
+* reproducible fingerprints via fixed seeds/radii,
+* reproducible 3D shape descriptors (ETKDGv3 at the fixed seed 42,
+  MMFF94s relaxation with the UFF fallback).
 
 Examples
 --------
@@ -63,12 +65,34 @@ pharmaml.exceptions.DataValidationError: radius must be >= 0, got -1
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: radius must be an integer >= 0, got '2'
+
+>>> from pharmaml.chem.descriptors import D3D_COLUMNS, compute_3d_descriptors
+>>> len(D3D_COLUMNS)                             # the 3D shape descriptor contract
+9
+>>> frame = compute_3d_descriptors(["CC(=O)Oc1ccccc1C(=O)O"], progress=False)  # aspirin
+>>> list(frame.columns) == ["SMILES", *D3D_COLUMNS]
+True
+>>> round(float(frame["PMI1"].iloc[0]), 2), round(float(frame["RadiusOfGyration"].iloc[0]), 3)
+(463.52, 2.428)
+>>> row = frame[list(D3D_COLUMNS)].iloc[0].to_numpy()
+>>> bool(row[2] <= row[3] <= row[4])            # PMI1 <= PMI2 <= PMI3
+True
+>>> twin = compute_3d_descriptors(["CC(=O)Oc1ccccc1C(=O)O"], progress=False)
+>>> float(twin["PMI1"].iloc[0]) == float(frame["PMI1"].iloc[0])   # deterministic
+True
+>>> frame = compute_3d_descriptors(["CCO", "not-a-smiles", "CCC"], progress=False)
+>>> list(frame.index), frame["SMILES"].tolist()   # invalid row dropped, valid rows clean
+([0, 2], ['CCO', 'CCC'])
+>>> compute_3d_descriptors("CCO", progress=False)  # bare string -> typed error
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: smiles must be a list or pandas.Series of SMILES strings, not a single string (got 'CCO'); wrap it in a list to compute one molecule
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Literal
+from collections.abc import Callable, Iterable
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -78,9 +102,32 @@ from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
 
-__all__ = ["compute_descriptors", "compute_fingerprints", "compute_maccs", "require_rdkit"]
+__all__ = [
+    "D3D_COLUMNS",
+    "compute_3d_descriptors",
+    "compute_descriptors",
+    "compute_fingerprints",
+    "compute_maccs",
+    "require_rdkit",
+]
 
 FingerprintKind = Literal["morgan", "rdkit", "atom_pair", "avalon"]
+
+#: The nine RDKit 3D shape descriptor columns, in output order (after
+#: ``SMILES``) -- the RDKit half of ``xxx.ipynb`` cell 6's 3D block
+#: (the cell's mordred WHIM/RDF half stays with the mordred
+#: ``descriptor_set`` of :func:`compute_descriptors`).
+D3D_COLUMNS: tuple[str, ...] = (
+    "Asphericity",
+    "Eccentricity",
+    "PMI1",
+    "PMI2",
+    "PMI3",
+    "RadiusOfGyration",
+    "SpherocityIndex",
+    "NPR1",
+    "NPR2",
+)
 
 
 def require_rdkit():
@@ -488,3 +535,236 @@ def compute_maccs(smiles: pd.Series | list[str]) -> tuple[np.ndarray, list[int]]
         DataStructs.ConvertToNumpyArray(fp, arr := np.zeros((n_bits,), dtype=np.uint8))
         matrix[row] = arr
     return matrix, valid_idx
+
+
+def _shape_vector(mol_h: Any, n_conformers: int) -> np.ndarray:
+    """Embed, optimise and describe one hydrogenated molecule in 3D.
+
+    The ``xxx.ipynb`` cell 6 pipeline: ETKDGv3 embedding at the fixed
+    seed 42 with ``n_conformers`` conformers, MMFF94s relaxation (200
+    iterations) with the UFF fallback the notebook carries, then the
+    nine :data:`D3D_COLUMNS` shape descriptors read off the
+    lowest-energy successfully optimised conformer.  The molecule must
+    already carry explicit hydrogens (``Chem.AddHs``).
+
+    Raises
+    ------
+    ValueError
+        When no conformer embeds, or neither force field can optimise
+        any conformer to a finite energy -- the caller decides the
+        failure policy (``compute_3d_descriptors`` keeps a NaN row).
+    """
+    from rdkit.Chem import rdDistGeom, rdForceFieldHelpers, rdMolDescriptors
+
+    # rdDistGeom/rdForceFieldHelpers instead of the AllChem facade: the
+    # AllChem re-export module is what rdkit-stubs leaves untyped (the
+    # rism module's own pin -- same embedding calls, same stubs).
+    params = rdDistGeom.ETKDGv3()
+    # rdkit-stubs types randomSeed as EmbedParameters (a stub bug); the
+    # runtime attribute is the integer RNG seed (the rism module's pin).
+    params.randomSeed = 42  # type: ignore[assignment]
+    conf_ids = list(
+        rdDistGeom.EmbedMultipleConfs(mol_h, numConfs=n_conformers, params=params)
+    )
+    if not conf_ids:
+        raise ValueError("ETKDGv3 embedding produced no conformers")
+
+    try:
+        results = rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(
+            mol_h, maxIters=200, mmffVariant="MMFF94s"
+        )
+        # Flag -1 means the MMFF typing failed for that conformer (RDKit
+        # reports it as (-1, -1.0)) -- the sanity failure that triggers
+        # the notebook's UFF fallback, here detected explicitly instead
+        # of through the exception path alone.
+        mmff_failed = any(flag < 0 for flag, _energy in results)
+    except Exception:  # noqa: BLE001 — RDKit raises a zoo per molecule
+        mmff_failed = True
+        results = []
+    if mmff_failed:
+        try:
+            results = rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol_h, maxIters=200)
+        except Exception as exc:
+            raise ValueError(
+                f"neither MMFF nor UFF could optimise the molecule ({type(exc).__name__})"
+            ) from exc
+
+    # Successfully optimised conformers: flag 0 (converged) or 1 (hit the
+    # iteration cap but still carries a valid optimised geometry+energy);
+    # only -1 (typing failure) is unusable.  The notebook filtered to
+    # flag == 0 alone, which empties the list whenever every conformer
+    # hits the cap and silently NaNs an optimisable molecule.
+    usable = [
+        (position, float(energy))
+        for position, (flag, energy) in enumerate(results)
+        if flag >= 0 and np.isfinite(energy)
+    ]
+    if not usable:
+        raise ValueError("no conformer optimised with a finite energy")
+    best_position = min(usable, key=lambda pair: pair[1])[0]
+    # conf_ids is aligned with the conformer-list order (a freshly
+    # hydrogenated molecule numbers its conformers 0..n-1), mirroring
+    # the notebook's GetConformer(id=argmin) access.
+    conf_id = conf_ids[best_position]
+    # The calculator order matches D3D_COLUMNS exactly (the notebook's
+    # own dict literal, spelled as direct calls so rdkit-stubs types it).
+    return np.asarray(
+        [
+            rdMolDescriptors.CalcAsphericity(mol_h, confId=conf_id),
+            rdMolDescriptors.CalcEccentricity(mol_h, confId=conf_id),
+            rdMolDescriptors.CalcPMI1(mol_h, confId=conf_id),
+            rdMolDescriptors.CalcPMI2(mol_h, confId=conf_id),
+            rdMolDescriptors.CalcPMI3(mol_h, confId=conf_id),
+            rdMolDescriptors.CalcRadiusOfGyration(mol_h, confId=conf_id),
+            rdMolDescriptors.CalcSpherocityIndex(mol_h, confId=conf_id),
+            rdMolDescriptors.CalcNPR1(mol_h, confId=conf_id),
+            rdMolDescriptors.CalcNPR2(mol_h, confId=conf_id),
+        ],
+        dtype=float,
+    )
+
+
+def compute_3d_descriptors(
+    smiles: pd.Series | list[str],
+    n_conformers: int = 3,
+    progress: bool = True,
+) -> pd.DataFrame:
+    """Compute RDKit 3D shape descriptors for a list of SMILES.
+
+    The library port of ``xxx.ipynb`` cell 6's RDKit half: for every
+    valid molecule the hydrogenated structure is embedded with ETKDGv3
+    (fixed seed 42, ``n_conformers`` conformers), relaxed with MMFF94s
+    (200 iterations, UFF fallback -- the notebook's own fallback, also
+    triggered by MMFF typing failures), and the nine
+    :data:`D3D_COLUMNS` shape descriptors are read off the
+    lowest-energy successfully optimised conformer.
+
+    Parameters
+    ----------
+    smiles:
+        Iterable of SMILES strings (a DataFrame column works directly).
+        A bare string is rejected -- wrap it in a list.
+    n_conformers:
+        Number of ETKDG conformers per molecule (the notebook's default
+        3).  Must be an integer >= 1; bools are rejected like the other
+        integer parameters of this module.
+    progress:
+        Show a tqdm progress bar for large batches.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per *valid* molecule, indexed by the original position
+        (index name ``original_index``), with a ``SMILES`` column
+        followed by the nine :data:`D3D_COLUMNS` columns (float).  A
+        molecule whose embedding or optimisation fails keeps its row
+        with all-NaN descriptor cells -- the notebook's
+        failed-molecule behaviour -- instead of being dropped; invalid
+        SMILES are dropped with a warning naming their input index,
+        exactly like :func:`compute_descriptors`.
+
+    Raises
+    ------
+    DependencyError
+        If RDKit is not installed.
+    DataValidationError
+        If ``smiles`` is a bare string or empty, ``n_conformers`` is
+        not an integer >= 1, or no SMILES parses to a valid molecule.
+
+    Notes
+    -----
+    Determinism: the ETKDGv3 embedding uses the fixed seed 42 and the
+    optimiser is deterministic, so repeated calls on the same input
+    return identical descriptor values.  Deviations from the notebook,
+    both deliberate: (1) the lowest-energy pick considers conformers
+    that hit the iteration cap (MMFF flag 1) as well as fully converged
+    ones -- the notebook's ``flag == 0`` filter empties on
+    capped-but-optimised molecules; (2) the mordred WHIM/RDF half of
+    the cell stays with the ``'mordred'`` ``descriptor_set`` of
+    :func:`compute_descriptors` rather than being silently dropped.
+    """
+    smiles_list = _as_smiles_list(smiles, "smiles")
+    if not smiles_list:
+        raise DataValidationError("smiles is empty -- pass at least one SMILES string")
+    if (
+        not isinstance(n_conformers, (int, np.integer))
+        or isinstance(n_conformers, bool)
+        or int(n_conformers) < 1
+    ):
+        raise DataValidationError(
+            f"n_conformers must be an integer >= 1, got {n_conformers!r}"
+        )
+    n_conformers = int(n_conformers)
+
+    Chem = require_rdkit()
+    molecules, valid_idx, failures = _smiles_to_molecules(smiles_list)
+    if failures:
+        _LOG.warning("Dropping %d invalid SMILES: %s", len(failures), failures[:5])
+    if not molecules:
+        raise DataValidationError("No valid SMILES found in the input")
+
+    iterator = molecules
+    if progress:
+        try:
+            from tqdm import tqdm
+
+            iterator = tqdm(molecules, desc="3D descriptors", unit="mol")
+        except ImportError:
+            iterator = molecules
+
+    rows: list[dict[str, float]] = []
+    n_failed = 0
+    for orig_idx, mol in zip(valid_idx, iterator):
+        try:
+            values = _shape_vector(Chem.AddHs(mol), n_conformers)
+            rows.append(dict(zip(D3D_COLUMNS, map(float, values))))
+        except Exception as exc:  # noqa: BLE001 — RDKit raises a zoo per molecule
+            n_failed += 1
+            _LOG.warning(
+                "3D descriptor computation failed for molecule at index %d (%r) "
+                "(%s: %s) -- kept as a NaN row",
+                orig_idx,
+                smiles_list[orig_idx],
+                type(exc).__name__,
+                exc,
+            )
+            rows.append({name: float("nan") for name in D3D_COLUMNS})
+
+    frame = pd.DataFrame(rows, columns=list(D3D_COLUMNS), dtype=float)
+    frame.insert(0, "SMILES", [str(smiles_list[i]) for i in valid_idx])
+    frame.index = pd.Index(valid_idx, name="original_index")
+    if rows and n_failed == len(rows):
+        _LOG.warning(
+            "3D descriptor computation failed for every valid molecule -- "
+            "the frame is all NaN"
+        )
+    _LOG.info(
+        "Computed %d 3D shape descriptors for %d molecules (%d NaN row(s), "
+        "n_conformers=%d)",
+        len(D3D_COLUMNS),
+        len(frame),
+        n_failed,
+        n_conformers,
+    )
+    return frame
+
+
+def _shape_computer(n_conformers: int = 3) -> Callable[[Any], np.ndarray]:
+    """Feature-factory computer: mol -> nine-value 3D shape vector.
+
+    The molecule must carry only implicit hydrogens (the feature
+    factory parses with ``Chem.MolFromSmiles`` and hydrogenates here).
+    A molecule that cannot be embedded or optimised yields an all-NaN
+    vector -- the family keeps the ROW (the notebook's behaviour)
+    instead of dropping the molecule.
+    """
+
+    def shape_vector(mol: Any) -> np.ndarray:
+        from rdkit import Chem
+
+        try:
+            return _shape_vector(Chem.AddHs(mol), n_conformers)
+        except Exception:  # noqa: BLE001 — RDKit raises a zoo per molecule
+            return np.full(len(D3D_COLUMNS), np.nan)
+
+    return shape_vector
