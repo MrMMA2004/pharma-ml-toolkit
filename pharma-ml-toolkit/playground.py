@@ -13274,12 +13274,114 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         self._board_host = self._figure_host(board, height=300)
 
+        # (100x-149) look.ipynb: the OOF stacking + residual-correction
+        # cell as a card of its own -- the notebook's single cell was a
+        # pIC50 regressor whose two "FIX" notes (the meta-learner trains
+        # on KFold out-of-fold predictions, the Ridge correction on OOF
+        # residuals -- never test rows) are the whole point; the board
+        # above fills with the meta-leaderboard while this card's host
+        # carries the notebook's step-18 parity scatter.
+        stack_card = make_card(
+            page.grid,
+            "Stacking leaderboard (OOF + residual)",
+            span=2,
+            row=7,
+            column=0,
+            subtitle="look.ipynb's out-of-fold stacking, upgraded: every "
+            "base model's KFold OOF predictions train each meta-learner, "
+            "the best blender gets the Ridge residual correction, and R² "
+            "is scored on the (optionally quantile-transformed) target.",
+        )
+        stack_row = ttk.Frame(stack_card, style="Card.TFrame")
+        grid_append(stack_card, stack_row, sticky="w")
+        stack_btn = self._action_button(
+            stack_row,
+            "Run OOF stacking",
+            self._ml_stack_oof,
+            tooltip="stack_oof_regressors -- look.ipynb's OOF meta-stacking "
+            "with its leakage fixes kept: the base models' KFold "
+            "out-of-fold predictions (never test rows) train every "
+            "meta-learner, the best blender's OOF residuals train the "
+            "Ridge correction, and the leaderboard above shows each "
+            "meta-learner's OOF and test R² side by side; the scatter "
+            "here is the best blender's test predictions.",
+        )
+        stack_btn.pack(side="left")
+        self._stack_base = ttk.Entry(stack_row, width=34)
+        self._stack_base.insert(0, "ridge, random_forest, gradient_boosting, extra_trees")
+        Tooltip(
+            self._stack_base,
+            "Base models, comma-separated registry names (ridge, svm, knn, "
+            "ann, xgboost, lightgbm, catboost, ...) -- the notebook's own "
+            "seven were Ridge/SVR/RF/GB/ExtraTrees/MLP/KNN plus the "
+            "XGB/LGBM/CatBoost trio; the default keeps four fast ones.",
+        )
+        self._stack_base.pack(side="left", padx=(8, 0))
+        self._stack_meta = ttk.Entry(stack_row, width=30)
+        self._stack_meta.insert(0, "ridge, huber_regression, lightgbm")
+        Tooltip(
+            self._stack_meta,
+            "Meta-learners (the blenders), comma-separated registry names "
+            "-- the notebook's Ridge/Huber/LightGBM/CatBoost quartet. "
+            "Empty uses the library default (ridge, huber_regression, "
+            "lightgbm).",
+        )
+        self._stack_meta.pack(side="left", padx=(8, 0))
+        stack_opts = ttk.Frame(stack_card, style="Card.TFrame")
+        grid_append(stack_card, stack_opts, sticky="w", pady=(6, 0))
+        self._stack_folds = ttk.Entry(stack_opts, width=4)
+        self._stack_folds.insert(0, "5")
+        Tooltip(
+            self._stack_folds,
+            "KFold splits for the out-of-fold predictions (2-10) -- the "
+            "notebook's own 5.",
+        )
+        self._stack_folds.pack(side="left")
+        ttk.Label(stack_opts, text="folds", style="CardMuted.TLabel").pack(
+            side="left", padx=(2, 8)
+        )
+        self._stack_test = ttk.Entry(stack_opts, width=4)
+        self._stack_test.insert(0, "20")
+        Tooltip(
+            self._stack_test,
+            "Test holdout percent (10-50) -- the notebook's own 80/20 "
+            "split, held out before any OOF arithmetic.",
+        )
+        self._stack_test.pack(side="left")
+        ttk.Label(stack_opts, text="% test", style="CardMuted.TLabel").pack(
+            side="left", padx=(2, 8)
+        )
+        self._stack_quantile = tk.BooleanVar(value=False)
+        quantile_check = ttk.Checkbutton(
+            stack_opts, text="Quantile target", variable=self._stack_quantile
+        )
+        Tooltip(
+            quantile_check,
+            "QuantileTransformer(output_distribution='normal') fit on the "
+            "train target -- look.ipynb's own transform; every R² the "
+            "card reports is on the TRANSFORMED scale.",
+        )
+        quantile_check.pack(side="left")
+        self._stack_residual = tk.BooleanVar(value=True)
+        residual_check = ttk.Checkbutton(
+            stack_opts, text="Residual correction", variable=self._stack_residual
+        )
+        Tooltip(
+            residual_check,
+            "A Ridge fitted on the best blender's OOF residuals "
+            "(look.ipynb's step 16 -- trained on the training folds' "
+            "residuals, never test rows) added to the blender's "
+            "prediction.",
+        )
+        residual_check.pack(side="left", padx=(10, 0))
+        self._stack_host = self._figure_host(stack_card, height=260)
+
         # -- ensemble builder (voting + stacking, members by hand) ---- #
         ensemble = make_card(
             page.grid,
             "Ensemble builder (voting & stacking)",
             span=2,
-            row=7,
+            row=8,
             column=0,
             subtitle="Combine several registry models into one ensemble: "
             "voting averages the members' predictions (soft = "
@@ -13360,7 +13462,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             page.grid,
             "Model persistence (save & reuse)",
             span=2,
-            row=8,
+            row=9,
             column=0,
             subtitle="One half saves the last trained model as a "
             "provenance-carrying bundle (joblib + metadata: "
@@ -13513,7 +13615,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             page.grid,
             "Applicability domain & prediction reliability",
             span=2,
-            row=9,
+            row=10,
             column=0,
             subtitle="The uploaded Applicability_domain_analysis.py: is the "
             "query compound inside the training descriptor space "
@@ -15776,6 +15878,177 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._board_status.configure(text=note)
 
         self._start_job(f"benchmarking feature families ({task})", work, render)
+
+    def _ml_stack_oof(self) -> None:
+        """Out-of-fold stacking leaderboard + residual card (100x-149).
+
+        ``look.ipynb``'s single cell -- the pIC50 regressor whose OOF
+        meta-stacking and Ridge residual correction were the notebook's
+        own leakage fixes -- as the GUI's stacking leaderboard: the
+        loaded dataset's numeric features and the picked target are
+        split on the main thread (the notebook's 80/20 holdout),
+        :func:`pharmaml.ml.stack_oof_regressors` does the KFold OOF
+        arithmetic in the worker, and the render fills the shared board
+        (one row per meta-learner, the ``+residual`` row last) plus the
+        card's parity scatter of the best blender's test predictions.
+        Regression only -- the notebook predicts pIC50, not a class.
+        """
+        if not self._require_pharmaml():
+            return
+        if not self._require("sklearn", "the OOF split") or not self._require(
+            "matplotlib", "the parity scatter"
+        ):
+            return
+        if self._ml_frame is None:
+            messagebox.showwarning("No dataset", "Open a CSV or load an example first.")
+            return
+        target = self._target_combo.get()
+        if not target:
+            messagebox.showwarning("No target", "Pick the column to predict.")
+            return
+        smiles_column = detect_smiles_column(self._ml_frame)
+        if target == smiles_column:
+            messagebox.showwarning(
+                "Target is the SMILES column",
+                "Pick a numeric target column -- the SMILES column is an "
+                "identifier, not a label to regress.",
+            )
+            return
+        # pre-flight (100x-62): the shared rule -- a zero-numeric-feature
+        # dataset fails before the OOF job starts.
+        numeric, dropped = numeric_feature_columns(self._ml_frame, target)
+        if not numeric:
+            messagebox.showwarning(
+                "No numeric features",
+                "Every non-target column is non-numeric"
+                + (f" ({', '.join(dropped)})" if dropped else "")
+                + ".  The models need numeric feature columns -- compute "
+                "descriptors first (the Chemistry tab's feature factory).",
+            )
+            return
+        task = self._task_combo.get()
+        if task == "auto":
+            task = self._infer_task(target)
+        if task != "regression":
+            messagebox.showwarning(
+                "Regression only",
+                "The OOF stacking card is a regressor (look.ipynb predicts "
+                f"pIC50) -- the current task resolves to {task}.  Train a "
+                "classification model from the Train card instead.",
+            )
+            return
+        try:
+            folds = parse_int(self._stack_folds.get(), "OOF folds", minimum=2, maximum=10)
+            test_percent = parse_int(
+                self._stack_test.get(), "test holdout percent", minimum=10, maximum=50
+            )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        base_models = [part.strip() for part in self._stack_base.get().split(",") if part.strip()]
+        if not base_models:
+            messagebox.showwarning(
+                "No base models",
+                "Name at least one base model (comma-separated registry "
+                "names, e.g. ridge, random_forest) -- the stack needs "
+                "something to blend.",
+            )
+            return
+        meta_models = [part.strip() for part in self._stack_meta.get().split(",") if part.strip()]
+        meta_models = meta_models or None  # empty -> the library default
+        quantile = bool(self._stack_quantile.get())
+        residual = bool(self._stack_residual.get())
+        n_base = len(base_models)
+        # the cleared-meta fallback rides the library's default trio, so
+        # the job label keeps its shape either way.
+        n_meta = len(meta_models) if meta_models else 3
+
+        # (100x-142) main-thread capture: the worker must never touch a
+        # tkinter widget NOR re-read the frame -- and the split itself is
+        # built here too, exactly like _ml_train selects features
+        # (numeric_feature_columns drops the target and every non-numeric
+        # column, SMILES included) with the notebook's random_state=42.
+        frame = self._ml_frame
+        from sklearn.model_selection import train_test_split
+
+        x_train, x_test, y_train, y_test = train_test_split(
+            frame[numeric], frame[target], test_size=test_percent / 100.0, random_state=42
+        )
+
+        def work(report: Any) -> Any:
+            from pharmaml.ml import stack_oof_regressors
+
+            def on_step(info: dict[str, Any]) -> None:
+                report(info["index"], info["total"], info["label"])
+
+            return stack_oof_regressors(
+                x_train,
+                y_train,
+                x_test,
+                y_test,
+                base_models=base_models,
+                meta_models=meta_models,
+                n_splits=folds,
+                target_transform="quantile" if quantile else "none",
+                residual=residual,
+                random_state=42,
+                on_step=on_step,
+            )
+
+        def render(result: Any) -> None:
+            self._board_frame = result.leaderboard
+            self._board_tree.delete(*self._board_tree.get_children())
+            columns = [str(column) for column in result.leaderboard.columns]
+            self._board_tree["columns"] = columns
+            for column in columns:
+                self._board_tree.heading(column, text=column)
+                self._board_tree.column(column, width=140, minwidth=80, stretch=True)
+            for _, row in result.leaderboard.iterrows():
+                self._board_tree.insert(
+                    "", "end", values=[_cell_text(value, limit=30) for value in row.tolist()]
+                )
+            note = (
+                f"{folds}-fold OOF stacking · {n_base} base model(s) × "
+                f"{n_meta} meta-learner(s) · best blender: {result.best_meta} "
+                f"(test R² {format_number(result.best_test_r2)})"
+            )
+            if result.residual_test_r2 is not None:
+                note += f" · +residual test R² {format_number(result.residual_test_r2)}"
+            note += (
+                " · quantile transform on: R² is on the TRANSFORMED scale"
+                if quantile
+                else " · R² on the raw target scale"
+            )
+            self._board_status.configure(text=note)
+            # the notebook's step-18 parity scatter, built on the main
+            # thread (a plain Figure never touches Tk from the worker;
+            # this one is small enough to draw inline): the best
+            # blender's test predictions against the transformed truth,
+            # the y=x diagonal as the red dashed reference.
+            from matplotlib.figure import Figure
+
+            figure = Figure(figsize=(6.2, 4.4))
+            axes = figure.add_subplot(1, 1, 1)
+            axes.scatter(
+                result.y_test_trans,
+                result.best_test_prediction,
+                alpha=0.6,
+                edgecolor="k",
+                linewidth=0.5,
+            )
+            low = float(min(result.y_test_trans.min(), result.best_test_prediction.min()))
+            high = float(max(result.y_test_trans.max(), result.best_test_prediction.max()))
+            axes.plot([low, high], [low, high], linestyle="--", color="red")
+            axes.set_xlabel("True (target scale)")
+            axes.set_ylabel("Predicted")
+            title = f"OOF stacking — {result.best_meta}"
+            if result.residual_test_r2 is not None:
+                title += " + residual"
+            axes.set_title(title)
+            figure.tight_layout()
+            self._render_figure(self._stack_host, figure)
+
+        self._start_job(f"OOF stacking ({n_base} base × {n_meta} meta)", work, render)
 
     # -- calibration + leaderboard figures (the 100x-119 review) ----- #
     def _ml_plot_calibration(self) -> None:

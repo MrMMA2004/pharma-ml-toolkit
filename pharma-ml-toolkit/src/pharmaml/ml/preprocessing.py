@@ -71,8 +71,17 @@ pharmaml.exceptions.DataValidationError: y is empty -- make_train_test_split nee
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import partial
+from typing import Any
+
 import numpy as np
 import pandas as pd
+from sklearn.feature_selection import (
+    SelectKBest,
+    f_regression,
+    mutual_info_regression,
+)
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
@@ -90,6 +99,7 @@ __all__ = [
     "has_categorical_columns",
     "make_train_test_split",
     "remove_outliers_iqr",
+    "select_kbest_union",
     "split_features_target",
 ]
 
@@ -397,3 +407,146 @@ def remove_outliers_iqr(
     kept = frame.loc[mask].reset_index(drop=True)
     _LOG.info("IQR outlier filter: kept %d of %d rows", len(kept), len(frame))
     return kept
+
+
+#: Score functions :func:`select_kbest_union` accepts, mapped to the
+#: sklearn implementations.  ``mutual_info_regression`` is pinned with
+#: ``random_state=42`` (via :func:`functools.partial`) so its k-nearest
+#: neighbour density estimates -- and therefore the selection -- are
+#: reproducible run to run.
+_KBEST_METHODS: dict[str, Callable[..., Any]] = {
+    "f_regression": f_regression,
+    "mutual_info_regression": partial(mutual_info_regression, random_state=42),
+}
+
+
+def select_kbest_union(
+    X_train: pd.DataFrame,
+    y_train: pd.Series | np.ndarray,
+    X_test: pd.DataFrame,
+    k: int = 256,
+    methods: tuple[str, ...] = ("f_regression", "mutual_info_regression"),
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+    """Select the UNION of per-method top-k columns (upgrades look.ipynb).
+
+    The notebook's step-6 selector pair -- one
+    :class:`~sklearn.feature_selection.SelectKBest` per scoring function
+    (default: ``f_regression`` and ``mutual_info_regression``), each
+    keeping its own top-``k`` columns -- with the two kept-sets UNIONed
+    (``np.unique`` of the concatenated ``get_support(indices=True)``
+    positions, so the union is deduplicated and returned in the
+    ORIGINAL ``X_train`` column order).  A union keeps the columns only
+    MI likes (nonlinear signal an F-test misses) alongside the F-test
+    favourites -- the notebook's own rationale.
+
+    BOTH selectors are fitted on ``(X_train, y_train)`` only and are
+    then merely *applied* to ``X_test`` as a pure column subset -- the
+    notebook's leakage fix ("feature selection on training data only")
+    kept as the contract: nothing here ever refits on the test frame.
+
+    Parameters
+    ----------
+    X_train, X_test:
+        Feature tables sharing the same columns (order-insensitive;
+        both outputs follow ``X_train``'s original column order).
+    y_train:
+        Regression target aligned with ``X_train`` rows.
+    k:
+        Columns each method keeps (so the union has between ``k`` and
+        ``k * len(methods)`` columns).
+    methods:
+        Scoring functions to union over; ``mutual_info_regression`` is
+        seeded at 42, making the whole selection deterministic.
+
+    Returns
+    -------
+    tuple
+        ``(train_selected, test_selected, columns)`` -- the two column-
+        subset frames plus the selected column labels in original
+        ``X_train`` order.
+
+    Raises
+    ------
+    TypeError
+        When ``X_train``/``X_test`` are not pandas DataFrames (the
+        selection is by column NAME).
+    ValueError
+        When ``k`` is not a positive int (bools rejected), ``k``
+        exceeds the feature count, ``methods`` is empty or names an
+        unknown scoring function, or ``X_train``/``X_test`` do not
+        carry the same columns.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from sklearn.datasets import make_regression
+    >>> from pharmaml.ml.preprocessing import select_kbest_union
+    >>> X, y = make_regression(n_samples=50, n_features=12, n_informative=4, random_state=42)
+    >>> names = [f"descr_{i:02d}" for i in range(12)]
+    >>> X_train = pd.DataFrame(X[:40], columns=names)
+    >>> X_test = pd.DataFrame(X[40:], columns=names)
+    >>> train_sel, test_sel, columns = select_kbest_union(X_train, y[:40], X_test, k=3)
+    >>> 3 <= len(columns) <= 6                     # union of two top-3 lists
+    True
+    >>> list(train_sel.columns) == columns == list(test_sel.columns)
+    True
+    >>> _, _, again = select_kbest_union(X_train, y[:40], X_test, k=3)
+    >>> again == columns                           # mutual_info pinned at seed 42
+    True
+
+    >>> select_kbest_union(X_train, y[:40], X_test, k=99)
+    Traceback (most recent call last):
+    ...
+    ValueError: k=99 exceeds the 12 feature columns
+    """
+    if isinstance(k, bool) or not isinstance(k, int) or k <= 0:
+        raise ValueError(f"k must be a positive int, got {k!r}")
+    if not methods:
+        raise ValueError(
+            "methods tuple is empty -- pass at least one of: "
+            + ", ".join(sorted(_KBEST_METHODS))
+        )
+    unknown = [method for method in methods if method not in _KBEST_METHODS]
+    if unknown:
+        raise ValueError(
+            f"unknown feature-selection method(s) {unknown}; valid methods: "
+            + ", ".join(sorted(_KBEST_METHODS))
+        )
+    if not isinstance(X_train, pd.DataFrame) or not isinstance(X_test, pd.DataFrame):
+        raise TypeError(
+            "select_kbest_union selects columns by NAME and needs pandas "
+            f"DataFrames, got {type(X_train).__name__} and "
+            f"{type(X_test).__name__}"
+        )
+
+    train_columns = list(X_train.columns)
+    test_columns = list(X_test.columns)
+    if set(train_columns) != set(test_columns) or len(train_columns) != len(test_columns):
+        missing = sorted(set(train_columns) - set(test_columns), key=str)[:5]
+        extra = sorted(set(test_columns) - set(train_columns), key=str)[:5]
+        raise ValueError(
+            "X_train and X_test column mismatch -- missing from X_test: "
+            f"{missing}; extra in X_test: {extra}"
+        )
+
+    n_features = len(train_columns)
+    if k > n_features:
+        raise ValueError(f"k={k} exceeds the {n_features} feature columns")
+
+    target = np.asarray(y_train)
+    positions: list[np.ndarray] = []
+    for method in methods:
+        selector = SelectKBest(score_func=_KBEST_METHODS[method], k=k)
+        selector.fit(X_train, target)
+        positions.append(selector.get_support(indices=True))
+    union = np.unique(np.concatenate(positions))
+    columns = [train_columns[int(position)] for position in union]
+
+    _LOG.info(
+        "SelectKBest union: %d column(s) kept from %d method(s) x top-%d "
+        "(of %d feature columns)",
+        len(columns), len(methods), k, n_features,
+    )
+    # Pure column subsets of the caller's frames -- never refit on the
+    # test side (the notebook's leakage discipline).
+    return X_train.loc[:, columns].copy(), X_test.loc[:, columns].copy(), columns

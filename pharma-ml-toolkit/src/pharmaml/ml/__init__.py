@@ -41,8 +41,10 @@ from pharmaml.ml.preprocessing import (
     clean_numeric_frame,
     has_categorical_columns,
     make_train_test_split,
+    select_kbest_union,
     split_features_target,
 )
+from pharmaml.ml.stacking import OOFStackingResult, stack_oof_regressors
 from pharmaml.ml.training import benchmark_feature_families, compare_models, train_model
 from pharmaml.ml.tuner import (
     Hyperband,
@@ -70,6 +72,7 @@ __all__ = [
     "HyperParameters",
     "Hyperband",
     "ModelInputReport",
+    "OOFStackingResult",
     "PermutationImportance",
     "RandomSearch",
     "ResidualMLPClassifier",
@@ -102,7 +105,9 @@ __all__ = [
     "resolve_model_name",
     "resource_bounds",
     "save_model",
+    "select_kbest_union",
     "split_features_target",
+    "stack_oof_regressors",
     "train_model",
     "validate_bundle_input",
 ]

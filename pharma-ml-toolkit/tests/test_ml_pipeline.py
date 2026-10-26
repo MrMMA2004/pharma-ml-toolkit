@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.datasets import make_regression
 from sklearn.ensemble import (
     ExtraTreesClassifier,
     ExtraTreesRegressor,
@@ -49,6 +50,7 @@ from pharmaml.ml.preprocessing import (
     clean_numeric_frame,
     make_train_test_split,
     remove_outliers_iqr,
+    select_kbest_union,
     split_features_target,
 )
 from pharmaml.ml.training import compare_models, train_model
@@ -2353,3 +2355,88 @@ class TestBenchmarkFeatureFamilies:
             families=("maccs",), model="ridge", cv=2,
         )
         assert int(board["n_samples"].iloc[0]) == 11
+
+
+class TestSelectKBestUnion:
+    """``pharmaml.ml.preprocessing.select_kbest_union`` -- the look.ipynb
+    top-k-by-F UNION top-k-by-MI column selector (fitted on train,
+    applied to test as a pure column subset)."""
+
+    def _frames(
+        self, n_samples: int = 60, n_features: int = 12
+    ) -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray]:
+        X, y = make_regression(
+            n_samples=n_samples, n_features=n_features,
+            n_informative=4, random_state=42,
+        )
+        names = [f"descr_{i:02d}" for i in range(n_features)]
+        split = n_samples * 3 // 4
+        return (
+            pd.DataFrame(X[:split], columns=names),
+            pd.DataFrame(X[split:], columns=names),
+            y[:split],
+        )
+
+    def test_union_size_and_column_alignment(self) -> None:
+        X_train, X_test, y_train = self._frames()
+        train_sel, test_sel, columns = select_kbest_union(X_train, y_train, X_test, k=5)
+        # the union of two top-5 lists holds between 5 and 10 columns
+        assert 5 <= len(columns) <= 10
+        assert list(train_sel.columns) == columns
+        assert list(test_sel.columns) == columns
+        assert train_sel.shape == (45, len(columns))
+        assert test_sel.shape == (15, len(columns))
+
+    def test_determinism(self) -> None:
+        X_train, X_test, y_train = self._frames()
+        _, _, columns_a = select_kbest_union(X_train, y_train, X_test, k=4)
+        _, _, columns_b = select_kbest_union(X_train, y_train, X_test, k=4)
+        assert columns_a == columns_b
+
+    def test_leakage_contract_train_subset_and_untouched_test(self) -> None:
+        X_train, X_test, y_train = self._frames()
+        test_before = X_test.copy()
+        train_sel, test_sel, columns = select_kbest_union(X_train, y_train, X_test, k=5)
+        # the train side is EXACTLY the selected columns of the input
+        # frame -- selection is a pure subset, never a refit
+        pd.testing.assert_frame_equal(train_sel, X_train.loc[:, columns])
+        pd.testing.assert_frame_equal(test_sel, X_test.loc[:, columns])
+        # and the caller's test frame is left untouched
+        pd.testing.assert_frame_equal(X_test, test_before)
+
+    def test_single_method_keeps_exactly_k(self) -> None:
+        X_train, X_test, y_train = self._frames()
+        _, _, columns = select_kbest_union(
+            X_train, y_train, X_test, k=5, methods=("f_regression",)
+        )
+        assert len(columns) == 5
+
+    def test_k_zero_raises(self) -> None:
+        X_train, X_test, y_train = self._frames()
+        with pytest.raises(ValueError, match="k must be a positive int"):
+            select_kbest_union(X_train, y_train, X_test, k=0)
+
+    def test_k_bool_raises(self) -> None:
+        X_train, X_test, y_train = self._frames()
+        with pytest.raises(ValueError, match="k must be a positive int"):
+            select_kbest_union(X_train, y_train, X_test, k=True)  # type: ignore[arg-type]
+
+    def test_k_exceeds_features_raises(self) -> None:
+        X_train, X_test, y_train = self._frames()
+        with pytest.raises(ValueError, match="exceeds the 12 feature columns"):
+            select_kbest_union(X_train, y_train, X_test, k=99)
+
+    def test_unknown_method_raises(self) -> None:
+        X_train, X_test, y_train = self._frames()
+        with pytest.raises(ValueError, match="unknown feature-selection method"):
+            select_kbest_union(X_train, y_train, X_test, k=3, methods=("chi2",))
+
+    def test_empty_methods_raises(self) -> None:
+        X_train, X_test, y_train = self._frames()
+        with pytest.raises(ValueError, match="methods tuple is empty"):
+            select_kbest_union(X_train, y_train, X_test, k=3, methods=())
+
+    def test_column_mismatch_raises(self) -> None:
+        X_train, X_test, y_train = self._frames()
+        with pytest.raises(ValueError, match="column mismatch"):
+            select_kbest_union(X_train, y_train, X_test.iloc[:, :6], k=3)

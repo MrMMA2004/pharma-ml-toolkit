@@ -746,6 +746,45 @@ an order of magnitude). With internal scaling the deep models are competitive
 from the first epochs: in the cell line notebook's leaderboard `dnn` posts the
 best CV RMSE (0.47 vs 0.49 for the tuned elastic net).
 
+#### Out-of-fold stacking (`stack_oof_regressors`) — the look.ipynb blender
+
+When one model is not enough, stack them *honestly*: base models'
+shuffled-KFold out-of-fold predictions build the meta-feature matrix (a
+blender never scores a row it was trained on), the bases refit on the full
+train set for test meta-features, and the meta-learners compete on a
+`test_r2`-ranked leaderboard — the winner gets a Ridge residual-corrector
+fitted on its own OOF residuals:
+
+```python
+from sklearn.model_selection import train_test_split
+from pharmaml.ml import stack_oof_regressors, select_kbest_union
+
+X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42)
+# optional: the univariate union selector (fit on train only)
+X_tr, X_te, kept = select_kbest_union(X_tr, y_tr, X_te, k=256)
+
+stack = stack_oof_regressors(
+    X_tr, y_tr, X_te, y_te,
+    base_models=["ridge", "random_forest", "gradient_boosting", "extra_trees"],
+    meta_models=["ridge", "huber_regression", "lightgbm"],   # None → that default
+    n_splits=5, residual=True,
+)
+stack.leaderboard          # model / oof_r2 / test_r2 (+ '<best>+residual' row)
+stack.best_meta, stack.best_test_r2, stack.residual_test_r2
+```
+
+`target_transform="quantile"` threads the notebook's
+`QuantileTransformer(output_distribution='normal')` through the target
+(fitted on the training target only); every score is then on the
+TRANSFORMED scale — the notebook's own convention, stated honestly in the
+docstring. Deterministic end to end (seeded KFold, seeded MI, seeded
+transformer); a failing meta-learner keeps a NaN row and sinks instead of
+killing the leaderboard. The GUI twin is the ML tab's
+"Stacking leaderboard (OOF + residual)" card. Upgrades `look.ipynb` — whose
+uploaded cell carried three syntax slips and six duplicate descriptor
+columns (MolWt et al. are already inside `Descriptors.descList`), fixed
+here, not ported.
+
 #### Hierarchical SVR (`hsvr`) — local specialists for heterogeneous data
 
 One global kernel SVR underfits when different regions of chemical space carry

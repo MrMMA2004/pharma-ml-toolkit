@@ -12518,3 +12518,328 @@ class TestReview148Gui:
         assert "2-fold family benchmark over the 18 2D families" in status
         assert "shape_3d and rism opt-in only" in status
         assert quiet_dialogs == []
+
+
+# ---------------------------------------------------------------------------
+# Round 100x-149 -- look.ipynb: the OOF stacking + residual card
+# ---------------------------------------------------------------------------
+class TestReview149Gui:
+    """look.ipynb's single cell (the OOF meta-stacking pIC50 regressor)
+    absorbed as the "Stacking leaderboard (OOF + residual)" card: base and
+    meta models as registry names, the KFold OOF folds and the holdout
+    percent, the quantile-target toggle, the Ridge residual correction,
+    the shared board leaderboard, and the notebook's step-18 parity
+    scatter.  The library call is stubbed in the end-to-end test -- the
+    card's own plumbing (guards, main-thread split, render, note) is what
+    these tests pin; the real stack_oof_regressors has its own suite."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _plant_frame(app: Any) -> None:
+        """A 16-row regression frame: two numeric features, a SMILES
+        column (the split must drop it) and a continuous pIC50 target."""
+        import pandas as pd
+
+        frame = pd.DataFrame(
+            {
+                "SMILES": ["CCO", "CCCO", "CCCCO", "CCCOO"] * 4,
+                "x1": [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0] * 2,
+                "x2": [7.0, 6.5, 6.0, 5.5, 5.0, 4.5, 4.0, 3.5] * 2,
+                "pIC50": [2.0, 2.4, 2.8, 3.2, 4.0, 4.4, 4.8, 5.2] * 2,
+            }
+        )
+        app._ml_adopt_frame(frame, TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
+        app._target_combo.set("pIC50")
+        app._task_combo.set("regression")
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_round_source_pins(self, playground: Any) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "def _ml_stack_oof" in source
+        assert '"Stacking leaderboard (OOF + residual)"' in source
+        assert '"Run OOF stacking"' in source
+        assert '"Quantile target"' in source
+        assert '"Residual correction"' in source
+        # the library import stays lazy INSIDE work() (the benchmark
+        # card's convention) -- the card's guards render even while
+        # stack_oof_regressors is absent from an older install.
+        assert "from pharmaml.ml import stack_oof_regressors" in source
+
+    def test_stack_widgets_exist(self, app: Any, playground: Any) -> None:
+        assert (
+            app._stack_base.get() == "ridge, random_forest, gradient_boosting, extra_trees"
+        )
+        assert app._stack_meta.get() == "ridge, huber_regression, lightgbm"
+        assert app._stack_folds.get() == "5"
+        assert app._stack_test.get() == "20"
+        # BooleanVar attrs (not _var-suffixed -- the task's contract
+        # names), so the automatic session machinery carries them.
+        assert isinstance(app._stack_quantile, playground.tk.Variable)
+        assert not app._stack_quantile.get()
+        assert isinstance(app._stack_residual, playground.tk.Variable)
+        assert app._stack_residual.get()  # the correction ships ticked
+        assert app._stack_host.winfo_exists()
+
+    def test_stack_inputs_ride_the_session(self, app: Any) -> None:
+        payload = app._collect_session()
+        assert payload["variables"]["_stack_folds"] == "5"
+        assert payload["variables"]["_stack_test"] == "20"
+        assert payload["variables"]["_stack_base"] == (
+            "ridge, random_forest, gradient_boosting, extra_trees"
+        )
+        assert payload["variables"]["_stack_meta"] == "ridge, huber_regression, lightgbm"
+        assert payload["variables"]["_stack_quantile"] is False
+        assert payload["variables"]["_stack_residual"] is True
+
+    # -- the guards ---------------------------------------------------------- #
+
+    def test_stack_guards_no_dataset(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ml_stack_oof()
+        assert any("No dataset" in str(a) for a in quiet_dialogs)
+
+    def test_stack_guards_regression_only(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        import pandas as pd
+
+        frame = pd.DataFrame({"x1": [1.0, 2.0, 3.0, 4.0], "label": [0, 1, 0, 1]})
+        app._ml_adopt_frame(frame, TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
+        app._target_combo.set("label")
+        app._task_combo.set("classification")
+        app._ml_stack_oof()
+        assert any("Regression only" in str(a) for a in quiet_dialogs)
+        # the auto path infers the same verdict from the 2-value target
+        quiet_dialogs.clear()
+        app._task_combo.set("auto")
+        app._ml_stack_oof()
+        assert any("Regression only" in str(a) for a in quiet_dialogs)
+
+    def test_stack_guards_target_is_smiles(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        self._plant_frame(app)
+        app._target_combo.set("SMILES")
+        app._ml_stack_oof()
+        assert any("SMILES column" in str(a) for a in quiet_dialogs)
+
+    def test_stack_guards_no_numeric_features(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        import pandas as pd
+
+        frame = pd.DataFrame({"SMILES": ["CCO", "CCCO"], "pIC50": [2.0, 3.0]})
+        app._ml_adopt_frame(frame, TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
+        app._target_combo.set("pIC50")
+        app._task_combo.set("regression")
+        app._ml_stack_oof()
+        assert any("No numeric features" in str(a) for a in quiet_dialogs)
+
+    def test_stack_guards_bad_folds_and_split(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        self._plant_frame(app)
+        app._stack_folds.delete(0, "end")
+        app._stack_folds.insert(0, "11")
+        app._ml_stack_oof()
+        assert any(
+            "OOF folds" in str(a) and "above the maximum" in str(a) for _n, a in quiet_dialogs
+        )
+        quiet_dialogs.clear()
+        app._stack_folds.delete(0, "end")
+        app._stack_folds.insert(0, "5")
+        app._stack_test.delete(0, "end")
+        app._stack_test.insert(0, "5")
+        app._ml_stack_oof()
+        assert any(
+            "test holdout percent" in str(a) and "below the minimum" in str(a)
+            for _n, a in quiet_dialogs
+        )
+
+    def test_stack_guards_no_base_models(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        self._plant_frame(app)
+        app._stack_base.delete(0, "end")
+        app._ml_stack_oof()
+        assert any("No base models" in str(a) for a in quiet_dialogs)
+
+    # -- the end-to-end plumbing, library stubbed --------------------------- #
+
+    def test_stack_end_to_end_stubbed(
+        self, app: Any, quiet_dialogs: list[Any], monkeypatch: Any
+    ) -> None:
+        import numpy as np
+        import pandas as pd
+
+        import pharmaml.ml as ml_module
+
+        calls: dict[str, Any] = {}
+        notes: list[str] = []
+        original_report = app._report_progress
+
+        def spy(done: int, total: object = None, note: str = "") -> None:
+            if note:
+                notes.append(note)
+            original_report(done, total, note)
+
+        monkeypatch.setattr(app, "_report_progress", spy)
+
+        def fake_stack(x_train, y_train, x_test, y_test, **kwargs):
+            calls["x_train"], calls["y_train"] = x_train, y_train
+            calls["x_test"], calls["y_test"] = x_test, y_test
+            calls["kwargs"] = kwargs
+            on_step = kwargs.get("on_step")
+            if on_step is not None:
+                on_step({"step": "base", "index": 1, "total": 2, "label": "ridge"})
+                on_step({"step": "meta", "index": 2, "total": 2, "label": "lightgbm"})
+            truth = np.linspace(-1.5, 1.5, len(y_test))
+            prediction = truth + np.linspace(0.05, -0.05, len(y_test))
+            want_residual = bool(kwargs.get("residual"))
+            rows = {
+                "model": ["ridge", "huber_regression", "lightgbm"],
+                "oof_r2": [0.71, 0.74, 0.78],
+                "test_r2": [0.70, 0.73, 0.77],
+            }
+            if want_residual:
+                rows["model"].append("lightgbm+residual")
+                rows["oof_r2"].append(None)
+                rows["test_r2"].append(0.79)
+            from types import SimpleNamespace
+
+            return SimpleNamespace(
+                oof_frame=pd.DataFrame({"ridge": [0.1, 0.2]}),
+                leaderboard=pd.DataFrame(rows),
+                best_meta="lightgbm",
+                best_test_r2=0.77,
+                residual_test_r2=0.79 if want_residual else None,
+                target_transform=kwargs.get("target_transform", "none"),
+                base_models=list(kwargs.get("base_models") or []),
+                meta_models=["ridge", "huber_regression", "lightgbm"],
+                n_splits=kwargs.get("n_splits", 5),
+                y_test_trans=truth,
+                best_test_prediction=prediction,
+            )
+
+        monkeypatch.setattr(ml_module, "stack_oof_regressors", fake_stack)
+        self._plant_frame(app)
+        app._stack_base.delete(0, "end")
+        app._stack_base.insert(0, " ridge , ridge ")  # stripping is part of the contract
+        app._stack_meta.delete(0, "end")  # empty -> the library default (None)
+        app._stack_folds.delete(0, "end")
+        app._stack_folds.insert(0, "2")
+        app._stack_test.delete(0, "end")
+        app._stack_test.insert(0, "25")
+        app._stack_quantile.set(True)
+        app._ml_stack_oof()
+        assert self._drain_jobs(app), "stacking job hung"
+
+        # the main-thread split: numeric columns only, the notebook's
+        # random_state=42 holdout, 25% of 16 rows held out.
+        assert list(calls["x_train"].columns) == ["x1", "x2"]
+        assert list(calls["x_test"].columns) == ["x1", "x2"]
+        assert len(calls["x_train"]) == 12 and len(calls["x_test"]) == 4
+        assert len(calls["y_train"]) == 12 and len(calls["y_test"]) == 4
+        kwargs = calls["kwargs"]
+        assert kwargs["base_models"] == ["ridge", "ridge"]
+        assert kwargs["meta_models"] is None  # the cleared entry -> the default
+        assert kwargs["n_splits"] == 2
+        assert kwargs["target_transform"] == "quantile"
+        assert kwargs["residual"] is True
+        assert kwargs["random_state"] == 42
+        assert callable(kwargs["on_step"])
+        assert "ridge" in notes and "lightgbm" in notes  # on_step fed the bar
+
+        # the shared board: one row per meta-learner, +residual last.
+        assert list(app._board_tree["columns"]) == ["model", "oof_r2", "test_r2"]
+        rows = app._board_tree.get_children()
+        assert len(rows) == 4
+        assert app._board_tree.item(rows[0], "values") == ("ridge", "0.7100", "0.7000")
+        assert app._board_tree.item(rows[-1], "values")[0].endswith("+residual")
+        status = app._board_status.cget("text")
+        assert "2-fold OOF stacking" in status
+        assert "2 base model(s) × 3 meta-learner(s)" in status
+        assert "best blender: lightgbm" in status
+        assert "+residual test R² 0.7900" in status
+        assert "TRANSFORMED scale" in status
+
+        # the card's own host carries the notebook's step-18 scatter.
+        figure = getattr(app._stack_host, "_pg_figure", None)
+        assert figure is not None
+        axes = figure.axes[0]
+        assert axes.get_title() == "OOF stacking — lightgbm + residual"
+        assert axes.get_xlabel() == "True (target scale)"
+        assert axes.get_ylabel() == "Predicted"
+        assert len(axes.lines) == 1  # the y=x diagonal
+        assert axes.lines[0].get_linestyle() == "--"
+        assert axes.lines[0].get_color() == "red"
+        assert quiet_dialogs == []
+
+        # residual off: the library returns None, the title and the note
+        # drop the correction, and the raw-scale note replaces the
+        # transformed-scale one.
+        app._stack_residual.set(False)
+        app._stack_quantile.set(False)
+        app._ml_stack_oof()
+        assert self._drain_jobs(app), "second stacking job hung"
+        assert calls["kwargs"]["residual"] is False
+        assert calls["kwargs"]["target_transform"] == "none"
+        assert len(app._board_tree.get_children()) == 3
+        status = app._board_status.cget("text")
+        assert "+residual" not in status
+        assert "raw target scale" in status
+        figure = getattr(app._stack_host, "_pg_figure", None)
+        assert figure is not None
+        assert figure.axes[0].get_title() == "OOF stacking — lightgbm"
+        assert quiet_dialogs == []
+
+    # -- the real library, once Task 4-a's module lands --------------------- #
+
+    def test_stack_end_to_end_real_library(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """The un-stubbed contract run -- skipped until pharmaml.ml
+        actually carries stack_oof_regressors (the library lands in
+        parallel with this round); the stubbed test above pins the card
+        either way."""
+        import pharmaml.ml as ml_module
+
+        if not hasattr(ml_module, "stack_oof_regressors"):
+            pytest.skip("stack_oof_regressors not landed yet (Task 4-a)")
+        self._plant_frame(app)
+        app._stack_base.delete(0, "end")
+        app._stack_base.insert(0, "ridge")
+        app._stack_meta.delete(0, "end")
+        app._stack_meta.insert(0, "ridge")
+        app._stack_folds.delete(0, "end")
+        app._stack_folds.insert(0, "2")
+        app._ml_stack_oof()
+        assert self._drain_jobs(app, timeout=240.0), "real stacking job hung"
+        columns = set(app._board_tree["columns"])
+        assert columns == {"model", "oof_r2", "test_r2"}
+        assert len(app._board_tree.get_children()) >= 2  # ridge + the residual row
+        assert "OOF stacking" in app._board_status.cget("text")
+        assert getattr(app._stack_host, "_pg_figure", None) is not None
+        assert quiet_dialogs == []

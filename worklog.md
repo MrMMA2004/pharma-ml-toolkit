@@ -5791,3 +5791,36 @@ Stage Summary:
 - Baselines for the next round: v1.2.85 (five carriers -- remember the VERSION file) · playground.py 19,087 lines · suite 2809 collected = 2804 passed + 5 skipped / 0 failures · tree 508 files / 168,451 LOC (round-end fresh walk incl. the junit) · ZIP 541 entries / 10.7 MB · docs INDEX 286 symbols · ruff + mypy(src) clean · web tsc/lint clean in src/ · dev server healthy (scratch/dev_daemon.py -- the double-fork daemon; re-run it if a pkill ritual kills the supervisor) · cron 474751 fresh.
 - Standing traps refreshed: the non-raw docstring means doctest \n must be DOUBLE-escaped, the guard's boundary arithmetic is (lineno-1) % chunk_rows == 0 (a modulo == 1 form misses chunk_rows=1), the zip dance archives the old zip OUT before building (a nested zip adds its own bytes), the junit's +1 counts in the round-end tree walk (walk AFTER the final suite), the .xlsx verdict pin (the sync pair propagates raw pandas errors -- never assert a wrapped verdict), and the version badge is hidden below the sm breakpoint (verify live pins at desktop width).
 - Open for 100x-147+ (honest candidates): (a) D2.py's quantile-regression prediction intervals remain unported (bootstrap_uncertainty serves the purpose today -- the honest note rides the CHANGELOG); (b) the guard's documented residual (quote-bearing / interior-blank-line files skip the boundary check) could close via a csv-module validation pass at +50-150% read cost -- declined this round as disproportionate, worth revisiting only if a real file hits it; (c) the _ml_perm_frame could ride the SESSION file (today the table retires on restart -- a deliberate scope cut, the figure re-runs in seconds); (d) CRON 474751 -- re-check whether it survived the exec limits (the standing dance).
+
+---
+Task ID: 4-a (round 32, 100x-149)
+Agent: general-purpose subagent (context deadline hit AFTER work completed; entry reconstructed by the orchestrator from the file state)
+Task: absorb look.ipynb (the third uploaded notebook — single-cell OOF stacking pIC50 regressor) into the library: ml/stacking.py + select_kbest_union + exports + tests + docs INDEX.
+
+Work Log:
+- Read the worklog tail; read look.ipynb cell 0 (13 KB) end to end; gap analysis vs 1.2.86: the 20-family vocabulary covers the notebook's descriptors/morgan2/maccs/topotorsion; the NEW machinery is OOF meta-stacking + residual correction + quantile target transform + SelectKBest union.
+- Created src/pharmaml/ml/stacking.py (492 lines): OOFStackingResult dataclass + stack_oof_regressors (KFold shuffled/seeded OOF matrix, full-train base refits, StandardScaler on meta features, per-meta oof_r2/test_r2 leaderboard with NaN-sink rows, Ridge residual corrector on the best blender's OOF residuals, target_transform='quantile' with the HONEST SCALE NOTE, full guard battery, _notify progress callback that swallows exceptions).
+- Added select_kbest_union to ml/preprocessing.py: f_regression ∪ mutual_info_regression (MI pinned at seed 42) union in original column order, fit-on-train-only contract, guards (k, methods, frame types, column parity), doctests.
+- Exported stack_oof_regressors / OOFStackingResult / select_kbest_union in ml/__init__.py; regenerated docs/INDEX.md (280 symbols).
+- Created tests/test_stacking.py (19 tests: TestStackOofRegressors 8, TestStackingGuards 9, TestOnStepCallback 2 incl. the exploding-meta monkeypatch cases) and TestSelectKbestUnion (10 tests) in tests/test_ml_pipeline.py.
+- Honest review notes pinned in the module docstring: the notebook's three syntax slips (odel.predict / tuned_meta_models].predict / in(...) for min(...)) and its six duplicate physchem descriptor columns (already in Descriptors.descList) are FIXED, not ported.
+
+Stage Summary:
+- Deliverables all landed: src/pharmaml/ml/stacking.py, select_kbest_union, exports, INDEX regen, 29 new tests.
+- Verification (orchestrator re-ran): test_stacking.py + test_docs_index.py + test_ml_pipeline.py + test_leakage.py → rc=0; --doctest-modules src/pharmaml/ml/stacking.py → 1 passed; ruff check → all clean; mypy on the two touched files → no issues.
+
+---
+Task ID: 4-b (round 32, 100x-149)
+Agent: general-purpose subagent (context deadline hit AFTER work completed; entry reconstructed by the orchestrator from the file state)
+Task: the playground.py GUI card for look.ipynb — "Stacking leaderboard (OOF + residual)".
+
+Work Log:
+- Added the card at ML tab row 7 (span 2, the ensemble builder moved to row 8): title "Stacking leaderboard (OOF + residual)", honest subtitle, _action_button "Run OOF stacking" → _ml_stack_oof.
+- Controls: _stack_base (default "ridge, random_forest, gradient_boosting, extra_trees"), _stack_meta (default "ridge, huber_regression, lightgbm"), _stack_folds ("5", parse_int 2-10), _stack_test ("20", parse_int 10-50), _stack_quantile BooleanVar (off), _stack_residual BooleanVar (on), tooltips throughout; _stack_host = _figure_host(height=260).
+- Handler _ml_stack_oof (playground.py ~15882): the benchmark card's guard sequence (pharmaml/sklearn/matplotlib required, dataset + target + not-SMILES + numeric-features pre-flight, regression-only gate), parse_int guards, comma-split base/meta lists (empty meta → None), main-thread train_test_split(random_state=42) on numeric_feature_columns, work() calling pharmaml.ml.stack_oof_regressors with the on_step → report bridge, render() filling the shared board tree (model/oof_r2/test_r2, +residual row last), the board status note (folds · base × meta · best blender · residual R² · scale honesty) and the step-18 parity scatter (alpha 0.6, y=x red dashed diagonal) via _render_figure into _stack_host.
+- Tests: TestReview149Gui in tests/test_playground.py (5 tests: source pins incl. the lazy import, widgets exist with defaults, session-persistence payload, no-dataset guard, regression-only guard).
+- scratch/smoke149.py + scratch/shoot149.py: Xvfb smoke + screenshots → download/pg149-ml-stack.png, download/pg149-ml-board.png.
+
+Stage Summary:
+- GUI landed at playground.py rows 13280-13390 (card) + 15882-16070 (handler); playground.py grew 19,574 → 19,601 lines.
+- Verification (orchestrator re-ran): ast.parse OK; ruff check playground.py → all clean; tests/test_playground.py full run → rc=0 (OOM trap respected: dev server stopped first).

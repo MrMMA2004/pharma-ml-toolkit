@@ -116,6 +116,7 @@ after adding new public functions.
 | `HyperParameters` | class | The keras-tuner container of hyperparameter definitions. |
 | `Hyperband` | class | Hyperband successive halving over a resource hyperparameter. |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
+| `OOFStackingResult` | class | Outcome of one out-of-fold stacking run. |
 | `PermutationImportance` | class | Permutation feature importances on held-out data. |
 | `RandomSearch` | class | Random search over the hypermodel's declared space. |
 | `ResidualMLPClassifier` | class | Residual (skip-connection) deep-network classifier (PyTorch). |
@@ -148,7 +149,9 @@ after adding new public functions.
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
+| `select_kbest_union` | function | Select the UNION of per-method top-k columns (upgrades look.ipynb). |
 | `split_features_target` | function | Separate features from the target column. |
+| `stack_oof_regressors` | function | Stack registry regressors out-of-fold and rank the blenders. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
 | `validate_bundle_input` | function | Audit a new dataset against a saved model bundle before inference. |
 

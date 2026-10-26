@@ -10,6 +10,88 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.87] — 2026-10-26
+
+### Added — the third uploaded notebook (100x-149): `look.ipynb`'s OOF meta-stacking shipped
+
+The instruction: *"Check the contents of this files one by one and
+update the playground.py file."* The third freshly uploaded notebook —
+**`look.ipynb`** (a single 13 KB cell: the pIC50 stacking regressor —
+IC50 cleaning, descriptors + three fingerprints, univariate-selection
+union, seven tuned base models + three boosted, out-of-fold
+meta-stacking with four tuned meta-learners, Ridge residual
+correction) — was read line by line. The cell-by-cell gap analysis
+found the descriptor/fingerprint/model vocabulary already covered by
+1.2.86's twenty-family factory; this round ships the notebook's
+genuinely NEW machinery — the parts no uploaded notebook had asked
+for before:
+
+* **`stack_oof_regressors`** (`pharmaml.ml.stacking`) — the notebook's
+  steps 10–16 as one deterministic call: KFold(shuffled, seeded)
+  out-of-fold predictions from registry base models build the honest
+  meta-feature matrix (no blender ever scores a row it was trained
+  on — the notebook's own leakage fix, kept), the bases refit on the
+  full train set for the test meta-features, meta-learners compete on
+  a `test_r2`-ranked leaderboard (a failing blender keeps a NaN row
+  and sinks — the `compare_models` convention), and the winner gets a
+  `Ridge` residual-corrector fitted on its OOF residuals; the refined
+  prediction is blender + corrector. `OOFStackingResult` carries the
+  OOF frame, the leaderboard, both scores and the best blender's test
+  predictions for the parity scatter.
+* **`target_transform="quantile"`** — the notebook's
+  `QuantileTransformer(output_distribution='normal')` threaded through
+  the TARGET, fitted on the training target only. HONEST SCALE NOTE
+  (pinned in the docstring and the GUI note): every score is then on
+  the TRANSFORMED scale — the notebook's own convention (it never
+  inverse-transforms); raw-scale R² comparisons would be apples to
+  oranges.
+* **`select_kbest_union`** (`pharmaml.ml.preprocessing`) — the
+  notebook's step-6 selector pair: one `SelectKBest` per scoring
+  function (`f_regression`, `mutual_info_regression` — the MI side
+  pinned at seed 42), each keeping its own top-k, the two kept-sets
+  UNIONed in original column order. Both selectors fit on the train
+  frame only and merely subset the test frame — the notebook's
+  "selection on training data only" fix as the contract.
+
+**Honest review notes — the notebook's own bugs, FIXED not ported**
+(documented in the module docstring): the uploaded cell cannot run —
+three syntax slips (`odel.predict` missing its `m`,
+`tuned_meta_models].predict` broken, `in(...)` where `min(...)`
+belongs) — and its descriptor block double-counts MolWt / LogP / TPSA
+/ HBA / HBD / ROTB, which are already inside
+`Descriptors.descList` (six duplicate column names). The toolkit port
+drops the duplicates and parses.
+
+**The playground GUI (the card the notebook asked for):**
+
+* The ML tab gained **"Stacking leaderboard (OOF + residual)"**:
+  base-model and meta-learner entries (comma-separated registry
+  names), OOF folds (2–10), test holdout percent (10–50), a
+  "Quantile target" checkbutton (the transform note in the board
+  status line), a "Residual correction" checkbutton (ticked by
+  default), a Run button that fills the shared leaderboard board with
+  the meta rows plus the `+residual` row, and the card's own figure
+  host carrying the notebook's step-18 parity scatter (best blender's
+  test predictions, the y=x diagonal). Regression only — the notebook
+  predicts pIC50, not a class.
+
+### Verified
+
+* New tests: `TestStackOofRegressors` (8: end-to-end synthetic,
+  determinism, quantile path, residual off, defaults, alias collapse,
+  failing-meta NaN row, all-fail guard), `TestStackingGuards` (9:
+  empty/unknown bases, unknown meta, splits below 2 / beyond rows,
+  bad transform, NaN target, row/column mismatches),
+  `TestOnStepCallback` (2: payload coverage, raising callback
+  swallowed), `TestSelectKbestUnion` (10: union size bounds,
+  determinism, column parity, leakage contract, guards) and
+  `TestReview149Gui` (5: source pins, widgets, session persistence,
+  no-dataset and regression-only guards); module doctests green;
+  ruff clean; mypy clean on the new files.
+* GUI end-to-end under Xvfb: the card's round-trip screenshot
+  (`download/pg149-ml-stack.png`) — the board fills with the
+  meta-learner rows and the parity scatter draws into the card host.
+
 ## [1.2.86] — 2026-10-26
 
 ### Added — the one-by-one notebook review round (100x-148): both uploaded notebooks' missing halves shipped
