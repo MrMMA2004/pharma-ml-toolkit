@@ -1396,14 +1396,16 @@ class TestDockingGuiUnderXvfb:
         message = " ".join(str(part) for part in args)
         assert "Scan a campaign" in message
 
-        # a loaded table but an empty columns entry -> input error
+        # a loaded table but an empty columns entry -> advisory warning
+        # (100x-143: a missing input is a warning like every sibling
+        # card; the malformed-weights PARSE error below stays showerror)
         app._dock_load_example_campaign()
         assert self._drain_jobs(app), "campaign scan job hung"
         app._dock_rescore_columns_entry.delete(0, "end")
         app._dock_rescore()
         assert len(quiet_dialogs) == 2
         kind, args = quiet_dialogs[1]
-        assert kind == "showerror"
+        assert kind == "showwarning"
         assert "at least one evidence column" in " ".join(str(p) for p in args)
 
         # malformed weights -> the parse_float error verbatim
@@ -11078,3 +11080,406 @@ class TestReview142Gui:
             assert excluded not in allowlist, excluded
         for included in ("_dock_gen_out", "_dock_mgl_src", "_dock_mgl_out", "_dock_vbatch_out"):
             assert included in allowlist, included
+
+
+# --------------------------------------------------------------------- #
+# round 100x-143 -- the second engineering-details round: the file-dialog
+# loader port (five loaders on the worker pool), the Utilities restored-
+# path labels, the SDF → table guard, the MACCS mixed-parse label, and
+# the two advisory-dialog convention fixes
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestReview143Gui:
+    """Round 100x-143 -- the loader port's contracts: the dialog flows
+    ride the worker pool (a big CSV never freezes the window), the sync
+    cores stay synchronous for the tiny bundled examples, and each tab's
+    two paths share ONE adoption body.  Plus the Utilities labels that
+    finally confess their restored paths, the SDF → table guard that no
+    longer demands an output file it never writes, and the MACCS label
+    that keeps its summary when the list is mixed."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 60.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_143(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-143" in doc
+        assert "second engineering-details round" in doc
+        assert "file-dialog" in doc
+        assert "SDF → table" in doc
+
+    def test_every_dialog_loader_has_a_job_based_twin(self, playground: Any) -> None:
+        # the five ports: ML, DL, feature factory, the Cell Lines screen
+        # and its expression matrix -- each _load_file rides _start_job
+        # with a "loading {name}" label
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        for name in (
+            "_ml_load_file",
+            "_dl_load_file",
+            "_feat_load_file",
+            "_bio_load_file",
+            "_bio_load_expr_file",
+        ):
+            assert f"def {name}(self, path: Path) -> None:" in source, name
+        assert (
+            source.count('self._start_job(f"loading {path.name}", work, render)') == 5
+        )
+        # and every file-dialog flow routes to its job twin
+        for call in (
+            "self._ml_load_file(Path(path))",
+            "self._dl_load_file(Path(path))",
+            "self._feat_load_file(Path(path))",
+            "self._bio_load_file(Path(path))",
+            "self._bio_load_expr_file(Path(path))",
+        ):
+            assert call in source, call
+
+    def test_sync_and_async_loaders_share_one_adoption_body(self) -> None:
+        # the drift-proofing pin: each tab's sync core AND its job render
+        # funnel through the SAME adoption helper (never two bodies)
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "self._ml_adopt_frame(frame, path)" in source  # sync core
+        assert source.count("self._ml_adopt_frame(frame, path)") == 2  # + the render
+        assert "self._feat_adopt_frame(frame, path)" in source
+        assert source.count("self._feat_adopt_frame(frame, path)") == 2
+        assert "self._bio_adopt_screen(raw, audit_frame, screen, path)" in source
+        assert source.count("self._bio_adopt_screen(raw, audit_frame, screen, path)") == 2
+        assert "self._bio_adopt_expr_frame(frame, path)" in source
+        assert source.count("self._bio_adopt_expr_frame(frame, path)") == 2
+        # the DL tab's twin reuses the round-142 in-memory adoption core
+        assert source.count("self._dl_load_frame(frame, path.name)") == 2
+
+    # -- the loader port: the dialog flows are jobs ------------------------ #
+
+    def test_ml_open_csv_runs_as_a_job(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        table = tmp_path / "big_dataset.csv"
+        table.write_text("smiles,value\nCCO,1.5\nCCN,2.5\n", encoding="utf-8")
+        import pytest as _pytest
+
+        with _pytest.MonkeyPatch.context() as mp:
+            mp.setattr(playground.filedialog, "askopenfilename", lambda **_k: str(table))
+            app._ml_open_csv()
+        assert app._busy, "the load started as a worker job"
+        assert "loading big_dataset.csv" in str(app._job_label.cget("text"))
+        assert self._drain_jobs(app), "load job hung"
+        assert app._ml_frame is not None and len(app._ml_frame) == 2
+        assert app._ml_path == table
+        assert "big_dataset.csv" in str(app._ml_info.cget("text"))
+        assert len(app._preview_tree.get_children()) == 2
+        assert list(app._target_combo["values"]) == ["smiles", "value"]
+        assert quiet_dialogs == []
+
+    def test_dl_open_csv_runs_as_a_job(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        table = tmp_path / "dl_dataset.csv"
+        table.write_text("smiles,value\nCCO,1.5\n", encoding="utf-8")
+        import pytest as _pytest
+
+        with _pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                playground.filedialog, "askopenfilename", lambda **_k: str(table)
+            )
+            app._dl_open_csv()
+        assert self._drain_jobs(app), "load job hung"
+        assert app._dl_frame is not None
+        assert app._dl_path == table
+        assert "dl_dataset.csv" in str(app._dl_info.cget("text"))
+        assert quiet_dialogs == []
+
+    def test_feat_open_csv_runs_as_a_job(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        table = tmp_path / "library.csv"
+        table.write_text("smiles,value\nCCO,1.5\n", encoding="utf-8")
+        import pytest as _pytest
+
+        with _pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                playground.filedialog, "askopenfilename", lambda **_k: str(table)
+            )
+            app._feat_open_csv()
+        assert self._drain_jobs(app), "load job hung"
+        assert app._feat_csv_frame is not None
+        assert app._feat_smiles_column == "smiles"
+        assert "library.csv" in str(app._feat_source_info.cget("text"))
+        assert quiet_dialogs == []
+
+    def test_bio_open_csv_runs_as_a_job(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        # the shipped example screen, copied out so the run is hermetic
+        import shutil as _shutil
+
+        table = tmp_path / "screen.csv"
+        _shutil.copy(TOOLKIT_ROOT / "examples" / "data" / "cellline_screen.csv", table)
+        import pytest as _pytest
+
+        with _pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                playground.filedialog, "askopenfilename", lambda **_k: str(table)
+            )
+            app._bio_open_csv()
+        assert self._drain_jobs(app), "screen load job hung"
+        assert app._bio_screen is not None
+        assert app._bio_screen_path == table
+        assert "screen.csv" in str(app._bio_info.cget("text"))
+        assert "duplicate pairs" in app._bio_audit_text.get("1.0", "end")
+        assert quiet_dialogs == []
+
+    def test_bio_open_expr_csv_runs_as_a_job(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        table = tmp_path / "expression.csv"
+        table.write_text("cell_line,GeneA,GeneB\nA549,1.0,2.0\nHL60,3.0,4.0\n", encoding="utf-8")
+        import pytest as _pytest
+
+        with _pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                playground.filedialog, "askopenfilename", lambda **_k: str(table)
+            )
+            app._bio_open_expr_csv()
+        assert self._drain_jobs(app), "expression load job hung"
+        assert app._bio_expr is not None
+        assert "expression.csv" in str(app._bio_expr_info.cget("text"))
+        assert "2 cell lines" in str(app._bio_expr_info.cget("text"))
+        assert quiet_dialogs == []
+
+    def test_job_loader_empty_csv_warns_and_adopts_nothing(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        empty = tmp_path / "empty.csv"
+        empty.write_text("smiles,value\n", encoding="utf-8")
+        app._ml_load_file(empty)
+        assert self._drain_jobs(app), "load job hung"
+        assert app._ml_frame is None  # nothing adopted
+        assert any(
+            name == "showwarning" and "Empty dataset" in str(args)
+            for name, args in quiet_dialogs
+        ), quiet_dialogs
+
+    def test_job_loader_respects_the_busy_guard(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        table = tmp_path / "guard.csv"
+        table.write_text("smiles,value\nCCO,1.5\n", encoding="utf-8")
+        app._busy = True
+        try:
+            app._ml_load_file(table)
+            assert any("Busy" in str(args) for _name, args in quiet_dialogs), quiet_dialogs
+        finally:
+            app._busy = False
+
+    def test_the_examples_stay_synchronous(self, app: Any) -> None:
+        # the design decision, pinned: the bundled examples are shipped
+        # and tiny, so _load_example adopts IMMEDIATELY (no job to drain)
+        # -- the tests' 46 fixture call sites depend on it
+        app._ml_load_example()
+        assert not app._busy
+        assert app._ml_frame is not None
+        app._feat_load_example()
+        assert not app._busy
+        assert app._feat_csv_frame is not None
+
+    def test_bio_load_file_captures_the_collapse_flag_on_the_main_thread(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # the source-level pin: a Tk variable must never be read inside
+        # work() -- the collapse checkbox is captured BEFORE the job
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        marker = source.index("collapse = bool(self._bio_collapse_var.get())")
+        job = source.index('self._start_job(f"loading {path.name}", work, render)', marker)
+        work_def = source.index("def work() -> Any:", marker)
+        assert marker < work_def < job
+        # and the worker honours the captured flag, never the variable
+        assert "screen = collapse_replicates(raw) if collapse else raw" in source
+
+    # -- the Utilities restored-path labels (the audit's §1) --------------- #
+
+    def test_restored_utility_paths_rerender_their_labels(
+        self, app: Any, tmp_path: Path
+    ) -> None:
+        # the probe the auditor ran, now the regression pin: seven picked
+        # paths ride the session, four labels used to keep denying them
+        folder = tmp_path / "campaign"
+        folder.mkdir()
+        table_a = tmp_path / "a.csv"
+        table_a.write_text("x\n1\n", encoding="utf-8")
+        table_b = tmp_path / "b.csv"
+        table_b.write_text("x\n2\n", encoding="utf-8")
+        split_file = tmp_path / "big.csv"
+        split_file.write_text("x\n3\n", encoding="utf-8")
+        out = tmp_path / "out"
+        out.mkdir()
+        reindex = tmp_path / "sparse.csv"
+        reindex.write_text("n\n1\n", encoding="utf-8")
+        # exactly what _restore_session does with a paths payload
+        app._util_merge_folder = folder
+        app._util_merge_split_file = split_file
+        app._util_cmp_a = table_a
+        app._util_cmp_b = table_b
+        app._util_tool_folder = folder
+        app._util_tool_out = out
+        app._util_reindex_path = reindex
+        app._util_merge_mode.set("merge whole folder")
+        app._util_tool_mode.set("collect files (name/pattern)")
+        app._refresh_restored_path_labels()
+        assert f"folder: {folder}" in str(app._util_merge_info.cget("text"))
+        assert f"A: {table_a.name}" in str(app._util_cmp_info.cget("text"))
+        assert f"B: {table_b.name}" in str(app._util_cmp_info.cget("text"))
+        assert f"folder: {folder.name}" in str(app._util_tool_info.cget("text"))
+        assert f"collect into: {out.name}" in str(app._util_tool_info.cget("text"))
+        assert str(reindex) == str(app._util_reindex_info.cget("text"))
+
+    def test_refresh_walks_the_three_utility_helpers(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        for helper in (
+            '"_util_merge_mode_changed",',
+            '"_util_cmp_refresh_info",',
+            '"_util_tool_mode_changed",',
+        ):
+            assert helper in source, helper
+        assert '_label("_util_reindex_info", str(self._util_reindex_path))' in source
+
+    # -- the SDF → table guard (the audit's §2) ----------------------------- #
+
+    def test_sdf_to_table_needs_no_output_file(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        # a real one-molecule SDF: the mode builds an in-memory table and
+        # must run WITHOUT a picked output (the old guard demanded one)
+        sdf = tmp_path / "one.sdf"
+        sdf.write_text(
+            "ethanol\n     RDKit          2D\n\n  3  2  0  0  0  0  0  0  0  0999 V2000\n"
+            "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n"
+            "    0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n"
+            "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n"
+            "  1  2  1  0\n  2  3  1  0\nM  END\n>  <activity>\n1.5\n\n$$$$\n",
+            encoding="utf-8",
+        )
+        app._conv_input = sdf
+        app._conv_output = None
+        app._conv_mode.set("SDF → table")
+        app._conv_run()
+        assert self._drain_jobs(app), "SDF read job hung"
+        assert app._conv_frame is not None
+        assert "1 record(s) → table" in str(app._conv_summary.cget("text"))
+        # no "No output" warning ever fired
+        assert not any("No output" in str(args) for _name, args in quiet_dialogs), quiet_dialogs
+
+    def test_sdf_pick_output_gives_the_in_memory_notice(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._conv_mode.set("SDF → table")
+        app._conv_pick_output()
+        assert any(
+            name == "showinfo" and "in memory" in str(args)
+            for name, args in quiet_dialogs
+        ), quiet_dialogs
+
+    def test_converter_output_guard_still_fires_for_file_writing_modes(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        inp = tmp_path / "table.csv"
+        inp.write_text("smiles\nCCO\n", encoding="utf-8")
+        app._conv_input = inp
+        app._conv_output = None
+        app._conv_mode.set("table → .smi list")
+        app._conv_run()
+        assert not app._busy  # stopped at the gate, no job started
+        assert any(
+            name == "showwarning" and "No output" in str(args)
+            for name, args in quiet_dialogs
+        ), quiet_dialogs
+
+    # -- the MACCS mixed-parse label (the audit's §3) ----------------------- #
+
+    def test_maccs_mixed_list_keeps_summary_and_dropped_note(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._maccs_text.delete("1.0", "end")
+        app._maccs_text.insert("1.0", "CCO\nNOT_A_SMILES")
+        app._maccs_run()
+        assert self._drain_jobs(app), "MACCS job hung"
+        label = str(app._maccs_result.cget("text"))
+        # the computed summary SURVIVES...
+        assert "1 molecule(s) · mean" in label
+        assert "/167 keys set" in label
+        # ...and the dropped count rides alongside instead of clobbering
+        assert "1 SMILES failed to parse — excluded from the mean" in label
+        assert not label.startswith("1 SMILES failed to parse — no MACCS keys")
+        assert quiet_dialogs == []
+
+    def test_maccs_all_failed_keeps_the_honest_clobber(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._maccs_text.delete("1.0", "end")
+        app._maccs_text.insert("1.0", "NOT_A_SMILES")
+        app._maccs_run()
+        assert self._drain_jobs(app), "MACCS job hung"
+        label = str(app._maccs_result.cget("text"))
+        assert label == "1 SMILES failed to parse — no MACCS keys"
+        assert quiet_dialogs == []
+
+    # -- the advisory-dialog convention (the audit's §6 twins) -------------- #
+
+    def test_topology_moves_missing_smiles_is_a_warning(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._topo_smiles.delete(0, "end")
+        app._gen_topology_moves()
+        assert not app._busy  # stopped at the gate, no job started
+        assert any(
+            name == "showwarning" and "Type a SMILES" in str(args)
+            for name, args in quiet_dialogs
+        ), quiet_dialogs
+        assert not any(name == "showerror" for name, _args in quiet_dialogs)
+
+    def test_rescore_missing_columns_is_a_warning(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        import pandas as pd
+
+        app._dock_results_frame = pd.DataFrame({"ligand": ["a"], "score": [1.0]})
+        app._dock_rescore_columns_entry.delete(0, "end")
+        app._dock_rescore()
+        assert not app._busy  # stopped at the gate, no job started
+        assert any(
+            name == "showwarning" and "evidence column" in str(args)
+            for name, args in quiet_dialogs
+        ), quiet_dialogs
+        assert not any(name == "showerror" for name, _args in quiet_dialogs)

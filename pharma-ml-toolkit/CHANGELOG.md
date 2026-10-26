@@ -10,6 +10,95 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.82] — 2026-10-26
+
+### Fixed — the round-28 engineering review (100x-143): every file-dialog CSV loader off the main thread, the Utilities restored-path labels, and three audit findings
+
+The instruction this round: *"Review the current codebase and
+implementation, troubleshoot potential issues, and continue improving
+the engineering details."* A fresh one-by-one audit covered the regions
+round 27 never reached line-by-line (Home, Chemistry, PK/PD, Cell
+Lines, the Generative tail and Utilities — every candidate verified by
+grep or an Xvfb probe before reporting); its findings plus the loader
+port the previous round itself flagged are all fixed.
+
+**The loader port (the audit's §4, every tab):**
+
+* **Five file-dialog loaders now ride the worker pool.** Data & ML,
+  Deep Learning, the feature factory, the Cell Lines screen (load +
+  audit + replicate collapse) and its expression matrix ALL ran
+  `read_table` / `pd.read_csv` on the main thread — a
+  multi-hundred-megabyte CSV froze the whole window while every other
+  long operation already showed a progress bar. Each tab gained a
+  `_load_file` job twin (`_start_job("loading {name}")`, the Docking
+  tab's own proven pattern); the bundled examples stay synchronous
+  (shipped and tiny), and each tab's sync core and job render share
+  ONE adoption body (`_ml_adopt_frame`, `_dl_load_frame`,
+  `_feat_adopt_frame`, `_bio_adopt_screen`, `_bio_adopt_expr_frame`)
+  so the two paths can never drift apart. The Cell Lines collapse
+  checkbox is captured on the MAIN thread (a Tk variable is never read
+  from a worker), and the busy guard inside `_start_job` is the
+  Ctrl+O guard's twin — a load can never swap a frame under a running
+  trainer.
+
+**The new audit's findings, fixed:**
+
+* **The Utilities restored-path labels (the round's one real bug).**
+  Seven picked paths ride the session across merge & split / table
+  compare / campaign file tools / reindex, but
+  `_refresh_restored_path_labels()` walked only the Docking cards and
+  the converter pair — the four Utilities labels kept their launch
+  placeholders after a restore while the run silently used the
+  restored paths. The refresh now runs the three cards' own
+  mode-aware helpers (`_util_merge_mode_changed`,
+  `_util_cmp_refresh_info`, `_util_tool_mode_changed`) and writes the
+  reindex picker's full-path text — round 27's "every restored path
+  re-renders its picker's info label" promise, finally kept.
+* **"SDF → table" demanded an output file it never writes.** The
+  converter's run guard fired for every non-pIC50 mode, but the SDF
+  branch returns an in-memory table (tree + "Save table CSV…") and
+  ignores the output path entirely — the pIC50 mode's own exemption,
+  extended to its in-memory twin, plus the same in-memory notice when
+  picking an output for either mode.
+* **The MACCS mixed-parse label clobbered itself.** With a list where
+  some molecules parsed and some failed, the dropped-molecules message
+  overwrote the computed summary AND lied ("no MACCS keys" is false
+  when molecules parsed). The summary now wins with the dropped count
+  riding alongside; the full clobber is reserved for the
+  nothing-parsed case where it is actually true.
+* **Two advisory missing-input dialogs used `showerror`** where the
+  app convention is `showwarning` (the descriptor card's own "Empty
+  SMILES" pattern): the surgery card's "Type a SMILES in the molecule
+  row first" and the rescore card's "name at least one evidence
+  column" are now warnings — parse errors keep their `showerror`.
+
+**The notebook tour (the round's documentation candidate):**
+`complete_docking_workflow.ipynb` §12 gained the census + workers>1
+cell — `vina_batch_progress` demonstrated on a three-ligand tree (one
+docked, one crashed with a zero-byte log, one untouched → "1/3 already
+docked · 2 to go"), and `run_vina_batch(..., max_parallel=2,
+skip_existing=True)` showing the honest engine gate; the recap table
+gained the Resume census row. The web finder's localStorage memory was
+audited against the desktop's round-27 "tab:title" discipline and
+verified already stronger (keys on unique catalog ids, tab label
+always shown) — no change needed.
+
+### Verification
+
+* 2699 collected = 2694 passed + 5 skipped / 0 failures (bare pytest,
+  dev server stopped — the OOM lesson; +21 tests this round:
+  TestReview143Gui covering all five job loaders end-to-end, the
+  empty-CSV warning via the render path, the busy guard, the
+  synchronous-example design pin, the main-thread collapse capture,
+  the Utilities label re-render, the SDF guard exemption + notice +
+  still-firing twin, both MACCS label verdicts, and the two
+  showwarning convention pins).
+* Doctests green; ruff clean; mypy `src/` clean (65 files);
+  playground.py at the 61-error pre-existing baseline; `--self-test`
+  green on Xvfb; the notebook re-executed with nbclient and the
+  `_no_output` twin regenerated (4 source pins + the census output +
+  the home-path leak gate).
+
 ## [1.2.81] — 2026-10-26
 
 ### Added — the round-27 engineering review (100x-142): a one-by-one audit of every tab, nine latent bugs fixed, and three workflow features

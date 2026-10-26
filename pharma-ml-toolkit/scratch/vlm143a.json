@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS. The bottom status bar clearly displays the text \"loading wide_library.csv\".\n2) PASS. A green progress bar is visible in the bottom right corner, just to the left of the loading label.\n3) PASS. All widgets, including tabs, buttons, and input fields, are fully rendered and the interface shows no signs of freezing or blank areas.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792988537,
+  "id": "2026102612221427f19f8379ba46f7",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102612221427f19f8379ba46f7",
+  "usage": {
+    "completion_tokens": 75,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1502,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1577
+  }
+}

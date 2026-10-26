@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS. The status bar at the bottom right clearly displays \"loading wide_library.csv — done in 1 s\".\n2) PASS. The dataset info label directly below the file selector shows \"wide_library.csv — 300,000 rows x 3 columns\".\n3) PASS. The preview table is populated with multiple data rows (e.g., CC00 through CC07) and their corresponding values.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792988566,
+  "id": "202610261222239e49300e28df4dac",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610261222239e49300e28df4dac",
+  "usage": {
+    "completion_tokens": 83,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1515,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1598
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS. The 'folder:' label displays the path '/tmp/pgl43_util_v37mik3s/campaign' instead of the placeholder text.\n2) PASS. The labels for Table A and Table B show 'screen_a.csv' and 'screen_b.csv' respectively.\n3) FAIL. The 'Approved drugs @ report' card shows 'no approval exports picked yet' rather than a folder or output path.\n4) FAIL. The 'Reindex' card is not visible in the provided image, so its status cannot be verified as showing a full CSV path.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792988576,
+  "id": "202610261222539e45e119007b49a1",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610261222539e45e119007b49a1",
+  "usage": {
+    "completion_tokens": 119,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1563,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1682
+  }
+}

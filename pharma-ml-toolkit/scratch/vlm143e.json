@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS. The label displays \"2 molecule(s) · mean 15.0/167 keys set\".\n2) PASS. The label also includes the note \"1 SMILES failed to parse ... excluded from the mean\" on the same line.\n3) PASS. The row \"CCO: 9/167 · CC(=O)Oc1ccccc1C(=O)O: 21/167\" is clearly visible below the summary.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792988666,
+  "id": "202610261224248d1da3ee7efd44e4",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610261224248d1da3ee7efd44e4",
+  "usage": {
+    "completion_tokens": 97,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1559,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1656
+  }
+}

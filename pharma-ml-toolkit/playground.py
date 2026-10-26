@@ -434,6 +434,21 @@ Design notes
   the same skip rule and naming the run itself uses -- "N already
   docked, M to go" is a promise the run keeps, and toggling resume
   with both folders picked runs it on its own).
+  (100x-143) The second engineering-details round: EVERY file-dialog
+  CSV loader now rides the worker pool (Data & ML, Deep Learning, the
+  feature factory, the Cell Lines screen AND its expression matrix --
+  a multi-hundred-megabyte table used to freeze the whole window; the
+  bundled examples stay synchronous because they are shipped and
+  tiny, and each tab's sync core and job loader share ONE adoption
+  body so the two paths can never drift apart).  The Utilities
+  session-paths finally re-render their picker labels after a restore
+  (seven restored paths, four labels that used to keep denying them),
+  "SDF → table" no longer demands an output file it never writes (the
+  in-memory notice the pIC50 mode always had), the MACCS card's mixed
+  parse result keeps its computed summary with the dropped count
+  riding alongside (instead of a false "no MACCS keys" clobber), and
+  the two advisory missing-input dialogs joined the app's showwarning
+  convention.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -4208,6 +4223,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "_dock_refresh_vina_info",
             "_dock_vbatch_refresh_info",
             "_dock_mgl_refresh_info",
+            # (100x-143) the Utilities cards' own helpers: seven picked
+            # paths ride the session across merge & split / table compare
+            # / campaign file tools, but their four info labels kept the
+            # launch placeholders after a restore -- the run silently used
+            # the restored paths while the label denied them (the audit's
+            # §1 finding; round 27's own "every restored path re-renders
+            # its picker's info label" promise, finally kept).
+            "_util_merge_mode_changed",
+            "_util_cmp_refresh_info",
+            "_util_tool_mode_changed",
         ):
             with contextlib.suppress(Exception):
                 getattr(self, helper)()
@@ -4242,6 +4267,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "_conv_info",
                 f"input: {_name_of('_conv_input')}\noutput: {_name_of('_conv_output')}",
             )
+        # (100x-143) the reindex card's picker writes the FULL path into
+        # its label -- the restore now writes the same text (the fourth
+        # Utilities label of the audit's §1 finding).
+        if isinstance(getattr(self, "_util_reindex_path", None), Path):
+            _label("_util_reindex_info", str(self._util_reindex_path))
 
     def _on_close(self) -> None:
         """Window close: save the session (unless disabled), then exit."""
@@ -6195,10 +6225,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _conv_pick_output(self) -> None:
         mode = self._conv_mode.get()
-        if mode.startswith("append pIC50"):
+        if mode.startswith(("append pIC50", "SDF")):
+            # (100x-143) "SDF → table" joins the pIC50 mode in memory:
+            # both build a table for the tree + "Save table CSV…" and
+            # never write the picked output file (the run used to demand
+            # one anyway -- the audit's §6 twin).
             messagebox.showinfo(
-                "pIC50 mode",
-                "The pIC50 mode keeps everything in memory -- use the "
+                "In-memory mode",
+                "This mode keeps everything in memory -- use the "
                 "'Save table CSV…' button after the run instead of an "
                 "output file.",
             )
@@ -6261,7 +6295,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._start_job(f"appending pIC50 to {input_path.name}", work, render)
             return
 
-        if self._conv_output is None:
+        # (100x-143) "SDF → table" returns an in-memory table (tree +
+        # "Save table CSV…") and never writes the output file -- the
+        # guard no longer demands one for it (the pIC50 mode's own
+        # exemption, extended to its in-memory twin).
+        if self._conv_output is None and not mode.startswith("SDF"):
             messagebox.showwarning("No output", "Pick the output file for this mode first.")
             return
         output_path = self._conv_output
@@ -6698,16 +6736,27 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(payload: Any) -> None:
             matrix, kept = payload
             on_bits = matrix.sum(axis=1) if matrix.size else []
-            if len(kept):
+            dropped = len(smiles) - len(kept)
+            # (100x-143) a mixed list kept BOTH messages once -- the
+            # dropped note clobbered the computed summary and lied ("no
+            # MACCS keys" is false when molecules parsed).  The summary
+            # now wins, the dropped count rides ALONGSIDE it, and the
+            # full clobber is reserved for the nothing-parsed case where
+            # it is actually true.
+            if kept:
                 per = "  ·  ".join(f"{s[:16]}: {int(bits)}/167" for s, bits in zip(kept, on_bits))
                 mean = float(on_bits.mean())
+                text = (
+                    f"{len(kept)} molecule(s) · mean {mean:.1f}/167 keys set\n{per}"
+                )
+                if dropped:
+                    text += f"\n{dropped} SMILES failed to parse — excluded from the mean"
                 self._maccs_result.configure(
-                    text=(f"{len(kept)} molecule(s) · mean {mean:.1f}/167 keys set\n{per}"),
+                    text=text,
                     style="Field.TLabel",
                     justify="left",
                 )
-            dropped = len(smiles) - len(kept)
-            if dropped:
+            elif dropped:
                 self._maccs_result.configure(
                     text=f"{dropped} SMILES failed to parse — no MACCS keys"
                 )
@@ -6866,7 +6915,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             filetypes=[("SMILES table", "*.csv *.tsv"), ("All files", "*.*")],
         )
         if path:
-            self._feat_load_path(Path(path))
+            # (100x-143) the dialog flow is job-based -- a big CSV never
+            # freezes the window (the tiny bundled example stays sync).
+            self._feat_load_file(Path(path))
 
     def _feat_load_example(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
@@ -6881,6 +6932,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._feat_load_path(path)
 
     def _feat_load_path(self, path: Path) -> None:
+        """Synchronous read + adopt (examples, tests, programmatic relays).
+
+        (100x-143) The file-dialog flow now rides :meth:`_feat_load_file`
+        (a worker-thread job); this synchronous core stays for the tiny
+        bundled examples and for callers that need the frame RIGHT NOW.
+        """
         try:
             from pharmaml.utils.io import read_table
 
@@ -6888,6 +6945,37 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not read the CSV", exc)
             return
+        self._feat_adopt_frame(frame, path)
+
+    def _feat_load_file(self, path: Path) -> None:
+        """(100x-143) Job-based read + adopt -- the file-dialog flow.
+
+        A multi-hundred-megabyte CSV used to freeze the whole window
+        (``read_table`` ran on the main thread, the Docking tab's own
+        loader already proved the job pattern); the read now rides the
+        same worker pool every calculation uses, with the status bar
+        carrying ``loading {name}``.  Adoption (the SMILES-column sniff
+        and the numeric-candidate scan) stays on the main thread --
+        the shared :meth:`_feat_adopt_frame` feeds both paths, so the
+        sync and async loaders can never drift apart.
+        """
+
+        def work() -> Any:
+            from pharmaml.utils.io import read_table
+
+            return read_table(path)
+
+        def render(frame: Any) -> None:
+            self._feat_adopt_frame(frame, path)
+
+        self._start_job(f"loading {path.name}", work, render)
+
+    def _feat_adopt_frame(self, frame: Any, path: Path) -> None:
+        """Adopt a parsed CSV as the feature factory's source table.
+
+        (100x-143) Extracted from ``_feat_load_path`` so the sync loader
+        and the job-based file loader share ONE adoption body.
+        """
         if frame.empty:
             messagebox.showwarning("Empty CSV", f"{path.name} has no rows.")
             return
@@ -8788,7 +8876,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
         )
         if path:
-            self._bio_load_path(Path(path))
+            # (100x-143) the dialog flow is job-based -- a big screen
+            # (audit + replicate collapse included) never freezes the
+            # window; the tiny bundled example stays sync.
+            self._bio_load_file(Path(path))
 
     def _bio_load_example(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "screen loading"):
@@ -8802,6 +8893,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._bio_load_path(path)
 
     def _bio_load_path(self, path: Path) -> None:
+        """Synchronous load + audit + adopt (examples, tests, relays).
+
+        (100x-143) The file-dialog flow now rides :meth:`_bio_load_file`
+        (a worker-thread job); this synchronous core stays for the tiny
+        bundled example and for callers that need the screen RIGHT NOW.
+        """
         try:
             from pharmaml.biology import (
                 audit_response_table,
@@ -8817,6 +8914,46 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not read the response screen", exc)
             return
+        self._bio_adopt_screen(raw, audit_frame, screen, path)
+
+    def _bio_load_file(self, path: Path) -> None:
+        """(100x-143) Job-based load + audit + adopt -- the dialog flow.
+
+        A big screen used to freeze the window (``load_response_table``
+        + ``audit_response_table`` + ``collapse_replicates`` all ran on
+        the main thread -- the audit's §4 finding, this tab's own twin
+        of the loader port).  The read/audit/collapse pipeline now
+        rides the worker pool; the collapse checkbox is captured on the
+        MAIN thread (a Tk variable must never be read from a worker)
+        and the adoption reuses the shared :meth:`_bio_adopt_screen`,
+        so the sync and async loaders can never drift apart.
+        """
+        collapse = bool(self._bio_collapse_var.get())
+
+        def work() -> Any:
+            from pharmaml.biology import (
+                audit_response_table,
+                collapse_replicates,
+                load_response_table,
+            )
+
+            raw = load_response_table(path)
+            audit_frame = audit_response_table(raw)
+            screen = collapse_replicates(raw) if collapse else raw
+            return raw, audit_frame, screen
+
+        def render(payload: tuple[Any, Any, Any]) -> None:
+            raw, audit_frame, screen = payload
+            self._bio_adopt_screen(raw, audit_frame, screen, path)
+
+        self._start_job(f"loading {path.name}", work, render)
+
+    def _bio_adopt_screen(self, raw: Any, audit_frame: Any, screen: Any, path: Path) -> None:
+        """Adopt a parsed screen (audit text, combos, info label).
+
+        (100x-143) Extracted from ``_bio_load_path`` so the sync loader
+        and the job-based file loader share ONE adoption body.
+        """
         self._bio_screen = screen
         self._bio_screen_path = path
         self._bio_collapsed = screen is not raw
@@ -9045,7 +9182,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             filetypes=[("CSV table", "*.csv"), ("All files", "*.*")],
         )
         if path:
-            self._bio_load_expr_path(Path(path))
+            # (100x-143) the dialog flow is job-based -- a wide
+            # expression matrix never freezes the window.
+            self._bio_load_expr_file(Path(path))
 
     def _bio_load_expr_example(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "expression loading"):
@@ -9059,6 +9198,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._bio_load_expr_path(path)
 
     def _bio_load_expr_path(self, path: Path) -> None:
+        """Synchronous read + adopt (examples, tests, relays)."""
         try:
             import pandas as pd
 
@@ -9071,6 +9211,39 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not read the expression table", exc)
             return
+        self._bio_adopt_expr_frame(frame, path)
+
+    def _bio_load_expr_file(self, path: Path) -> None:
+        """(100x-143) Job-based read + adopt -- the file-dialog flow.
+
+        A wide expression matrix used to freeze the window
+        (``pd.read_csv`` ran on the main thread, twice -- the indexed
+        read plus the fallback); the read now rides the worker pool,
+        the status bar carries ``loading {name}``, and the adoption
+        reuses the shared :meth:`_bio_adopt_expr_frame`.
+        """
+
+        def work() -> Any:
+            import pandas as pd
+
+            try:
+                return pd.read_csv(path, index_col="cell_line")
+            except ValueError:
+                # user tables name their identifier column differently --
+                # fall back to the first column as the cell-line index
+                return pd.read_csv(path, index_col=0)
+
+        def render(frame: Any) -> None:
+            self._bio_adopt_expr_frame(frame, path)
+
+        self._start_job(f"loading {path.name}", work, render)
+
+    def _bio_adopt_expr_frame(self, frame: Any, path: Path) -> None:
+        """Adopt a parsed expression matrix (info label + state reset).
+
+        (100x-143) Extracted from ``_bio_load_expr_path`` so the sync
+        loader and the job-based file loader share ONE adoption body.
+        """
         if frame.empty:
             messagebox.showwarning("Empty table", f"{path.name} has no rows.")
             return
@@ -11146,7 +11319,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if name.strip()
         ]
         if not columns:
-            messagebox.showerror("Input", "name at least one evidence column")
+            # (100x-143) advisory missing-input -> showwarning, the app
+            # convention (an empty field is not a parse error).
+            messagebox.showwarning(
+                "No evidence columns", "Name at least one evidence column."
+            )
             return
         weights: list[float] | None = None
         raw_weights = self._dock_rescore_weights_entry.get().strip()
@@ -13120,7 +13297,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
         )
         if path:
-            self._ml_load_path(Path(path))
+            # (100x-143) the dialog flow is job-based -- a big CSV never
+            # freezes the window (examples stay sync: shipped + tiny).
+            self._ml_load_file(Path(path))
 
     def _ml_clean_frame(self) -> None:
         """Drop non-numeric columns (the rar's own remover script).
@@ -13207,6 +13386,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._ml_load_path(path)
 
     def _ml_load_path(self, path: Path) -> None:
+        """Synchronous read + adopt (examples, tests, programmatic relays).
+
+        (100x-143) The file-dialog flow now rides :meth:`_ml_load_file`
+        (a worker-thread job); this synchronous core stays for the tiny
+        bundled examples and for callers that need the frame RIGHT NOW.
+        """
         try:
             from pharmaml.utils.io import read_table
 
@@ -13214,6 +13399,38 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not read the dataset", exc)
             return
+        self._ml_adopt_frame(frame, path)
+
+    def _ml_load_file(self, path: Path) -> None:
+        """(100x-143) Job-based read + adopt -- the file-dialog flow.
+
+        A big CSV used to freeze the whole window (``read_table`` ran on
+        the main thread); the read now rides the worker pool like every
+        other long operation, the status bar carries ``loading {name}``,
+        and a read failure surfaces as the standard job error dialog.
+        The busy guard inside :meth:`_start_job` IS the Ctrl+O guard's
+        twin -- a load can never swap ``_ml_frame`` under a running
+        trainer.  Adoption stays on the main thread via the shared
+        :meth:`_ml_adopt_frame`, so the sync and async loaders can never
+        drift apart.
+        """
+
+        def work() -> Any:
+            from pharmaml.utils.io import read_table
+
+            return read_table(path)
+
+        def render(frame: Any) -> None:
+            self._ml_adopt_frame(frame, path)
+
+        self._start_job(f"loading {path.name}", work, render)
+
+    def _ml_adopt_frame(self, frame: Any, path: Path) -> None:
+        """Adopt a parsed CSV as the Data & ML tab's dataset.
+
+        (100x-143) Extracted from ``_ml_load_path`` so the sync loader
+        and the job-based file loader share ONE adoption body.
+        """
         if frame.empty:
             messagebox.showwarning("Empty dataset", f"{path.name} has no rows.")
             return
@@ -15202,7 +15419,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
         )
         if path:
-            self._dl_load_path(Path(path))
+            # (100x-143) the dialog flow is job-based -- a big CSV never
+            # freezes the window (examples stay sync: shipped + tiny).
+            self._dl_load_file(Path(path))
 
     def _dl_load_example(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
@@ -15242,6 +15461,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
 
     def _dl_load_path(self, path: Path) -> None:
+        """Synchronous read + adopt (examples, tests, programmatic relays).
+
+        (100x-143) The file-dialog flow now rides :meth:`_dl_load_file`
+        (a worker-thread job); this synchronous core stays for the tiny
+        bundled examples, for the tests, and for the Apply-best relay
+        (which needs the frame adopted BEFORE it sets the target).
+        """
         try:
             from pharmaml.utils.io import read_table
 
@@ -15254,6 +15480,31 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         self._dl_load_frame(frame, path.name)
         self._dl_path = path
+
+    def _dl_load_file(self, path: Path) -> None:
+        """(100x-143) Job-based read + adopt -- the file-dialog flow.
+
+        A big CSV used to freeze the whole window (``read_table`` ran on
+        the main thread); the read now rides the worker pool, the status
+        bar carries ``loading {name}``, and a read failure surfaces as
+        the standard job error dialog.  Adoption reuses
+        :meth:`_dl_load_frame` (the SAME body the sync loader and the
+        Apply-best relay use), so the three paths can never drift.
+        """
+
+        def work() -> Any:
+            from pharmaml.utils.io import read_table
+
+            return read_table(path)
+
+        def render(frame: Any) -> None:
+            if frame.empty:
+                messagebox.showwarning("Empty dataset", f"{path.name} has no rows.")
+                return
+            self._dl_load_frame(frame, path.name)
+            self._dl_path = path
+
+        self._start_job(f"loading {path.name}", work, render)
 
     def _dl_train(self) -> None:
         if not self._require_pharmaml():
@@ -16059,7 +16310,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         smiles = self._topo_smiles.get().strip()
         if not smiles:
-            messagebox.showerror("Input", "Type a SMILES in the molecule row first.")
+            # (100x-143) the app convention: an advisory missing-input
+            # notice is a warning (the descriptor card's own "Empty
+            # SMILES" pattern), not an error dialog.
+            messagebox.showwarning("No SMILES", "Type a SMILES in the molecule row first.")
             return
 
         def work() -> Any:

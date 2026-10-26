@@ -1231,3 +1231,27 @@ no-overwrite + warning + live button, the census button + auto trace
 pin, and the library export + wiring pins). The docs-index symbol
 test re-synced (277 symbols). The version chain moved to 1.2.81
 across all four carriers.
+
+### Round 28 (100x-143) — the second engineering review: every file-dialog CSV loader off the main thread, the Utilities restored-path labels, and the audit's remaining findings
+
+| What shipped | The contract |
+| --- | --- |
+| The five-loader port | The Data & ML / Deep Learning / feature-factory / Cell Lines screen / Cell Lines expression file-dialog flows all ran `read_table` / `pd.read_csv` on the MAIN thread — a multi-hundred-megabyte CSV froze the window while every long calculation already showed a progress bar (the round-27 audit's own §4 finding, plus the Cell Lines twins the fresh audit added). Each tab gained a `_load_file` job twin over `_start_job("loading {name}")` (the Docking tab's proven pattern); the bundled examples stay synchronous (shipped, tiny — the 46 test fixture call sites depend on it), and each tab's sync core and job render share ONE adoption body (`_ml_adopt_frame`, `_dl_load_frame`, `_feat_adopt_frame`, `_bio_adopt_screen`, `_bio_adopt_expr_frame`) so the two paths can never drift. The Cell Lines collapse checkbox is captured on the main thread (a Tk variable is never read from a worker). |
+| The Utilities restored-path labels | Round 27's `_SESSION_PATH_ATTRS` restored seven Utilities paths, but `_refresh_restored_path_labels()` walked only the Docking cards + the converter pair — the four Utilities info labels kept their launch placeholders while the run silently used the restored paths (the fresh audit's one real bug; round 27's "every restored path re-renders its picker's info label" promise, finally kept). The refresh now runs the three cards' own mode-aware helpers and writes the reindex picker's full-path text. |
+| "SDF → table" without the phantom output file | The converter's run guard demanded an output file for every non-pIC50 mode, but the SDF branch returns an in-memory table (tree + "Save table CSV…") and never writes it — the guard now exempts SDF mode (the pIC50 exemption extended to its in-memory twin), and picking an output for either in-memory mode gets the same honest notice. |
+| The MACCS mixed-parse label | A list where some molecules parsed and some failed lost its computed summary to a false "no MACCS keys" clobber. The summary now wins with the dropped count riding alongside; the full clobber is reserved for the nothing-parsed case where it is actually true. |
+| Two advisory dialogs joined the showwarning convention | The surgery card's "Type a SMILES in the molecule row first." and the rescore card's "Name at least one evidence column." were showerror where every sibling card shows a warning for missing input; parse errors keep their showerror. |
+| The notebook census tour | `complete_docking_workflow.ipynb` §12 gained the census + workers>1 cell (the round-27 worklog's own documentation candidate): `vina_batch_progress` on a three-ligand tree (one docked, one crashed via a zero-byte log, one untouched → "1/3 already docked · 2 to go") and `run_vina_batch(..., max_parallel=2, skip_existing=True)` showing the honest engine gate; the recap table gained the Resume census row. The web finder's localStorage memory was audited against the desktop's "tab:title" discipline and verified already stronger (keys on unique catalog ids, tab label always shown) — no change needed. |
+
+The axes after the round: unchanged (rar 118, uploads 14/14, zero-hit 0)
+— the second engineering-depth round. 21 new tests: TestReview143Gui
+(test_playground.py — the five job loaders end-to-end through the real
+dialog monkeypatch pattern, the empty-CSV warning via the render path,
+the busy guard, the synchronous-example design pin, the main-thread
+collapse capture pin, the shared-adoption-body source pins, the
+Utilities label re-render probe, the SDF guard exemption + in-memory
+notice + still-firing twin, both MACCS label verdicts, and the two
+showwarning convention pins) + the rescore-gates standing contract
+updated to the new warning. The notebook re-executed and its
+`_no_output` twin regenerated. The version chain moved to 1.2.82
+across all four carriers.
