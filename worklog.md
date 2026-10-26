@@ -5824,3 +5824,31 @@ Work Log:
 Stage Summary:
 - GUI landed at playground.py rows 13280-13390 (card) + 15882-16070 (handler); playground.py grew 19,574 → 19,601 lines.
 - Verification (orchestrator re-ran): ast.parse OK; ruff check playground.py → all clean; tests/test_playground.py full run → rc=0 (OOM trap respected: dev server stopped first).
+
+---
+Task ID: 2-b (round 32 close-out, 100x-149)
+Agent: orchestrator (Z.ai Code main session)
+Task: "Continue. Then check the contents of this files one by one and update the playground.py file. Then review the current codebase and implementation, troubleshoot potential issues, and continue improving the engineering details." — the third uploaded notebook (look.ipynb) absorbed end to end; the 1.2.86 round's lost subagent outputs verified; full close-out to v1.2.87.
+
+Work Log:
+- Context recovery: verified the previous round's W1-W8 library work and GUI integration WERE all landed (compute_3d_descriptors, ten fingerprint families, shape_3d, pic50_to_ic50, plot_pr_curves, per_class, sgd_classifier, benchmark_feature_families + the GUI cards; CHANGELOG 1.2.86 written; VERSION already 1.2.86).
+- VENV REPAIR (the 10th reset, standing trap): rdkit/torch/ruff/mypy gone → ran scratch/venv_repair_9.sh (rdkit 2026.09.1, torch 2.14.1+cpu, ruff, mypy, -e . --no-deps; Xvfb :99 respawned). Verified pharmaml 1.2.86 imports.
+- look.ipynb reviewed line by line (single 13 KB cell): IC50 cleaning → pIC50; descList + 6 DUPLICATE physchem columns; morgan2/maccs/topotorsion; VarianceThreshold; SelectKBest f_regression k=256 UNION mutual_info k=256; QuantileTransformer(output_distribution='normal') on the TARGET; 7 tuned base models + XGB/LGBM/CatBoost; KFold(5) OOF matrix; 4 tuned meta-learners; Ridge residual correction; R² reporting + bar/scatter. Found the notebook UNRUNNABLE as uploaded: three syntax slips (odel.predict / tuned_meta_models].predict / in(...) for min(...)).
+- Dispatched Tasks 4-a (library) and 4-b (GUI) as parallel subagents; both hit context deadlines AFTER completing their file work (verified on disk; entries reconstructed above). Display trap noted for the record: tool output rendering eats `[me` sequences (board[metric_column] displays as boardetric_column]) — always hex-verify before "fixing".
+- OOM trap respected: stopped the Next.js dev server before the suites (the first playground run was SIGKILLed at 83% with the server up; clean after).
+- FULL SUITE (double-fork runner scratch/run_full_suite_149.py, junit149.xml): **2954 collected = 2948 passed + 6 skipped / 0 failures / 0 errors (609.9 s)** — was 2920 at 1.2.86. ruff clean (src + tests + playground); mypy clean on the new files; stacking.py doctests green; tests/test_playground.py full run green.
+- Notebook re-execution ritual after the bump: scratch/reexecute_all_notebooks_64.py — 8 notebooks, 201 s; test_notebook_variants.py (119 tests) green after.
+- Version bumped 1.2.86 → 1.2.87 in the FIVE carriers: VERSION, pyproject.toml, src/pharmaml/__init__.py, CHANGELOG.md ([1.2.87] entry), web src/lib/toolkit-version.ts.
+- README: new "#### Out-of-fold stacking (stack_oof_regressors) — the look.ipynb blender" section (usage example, honest scale note, determinism, the fixed-not-ported bug list) before the hsvr section.
+- ZIP: download/pharma-ml-toolkit-v1.2.87.zip — 562 entries / testzip CLEAN / 11.0 MB (11,605,098 B), built with toolkit-fs.ts's ZIP_EXCLUDE_ARGS; first build had ONE home-path leak (scratch/junit149.xml skip messages — the standing junit trap) → ran scratch/scrub_home_paths_137.py (scrubbed junit149.xml), rebuilt, full-archive leak scan CLEAN (zero /home/z/). The old v1.2.86.zip archived to /home/z/my-project/download/ (never nest zips).
+- playground --self-test green on Xvfb (:99): "UI built, every tab visited, manual hyperparameters + progress/ETA verified, no errors".
+- Web sync: SHIPPED_TOOLKIT_VERSION 1.2.86 → 1.2.87; the stale hardcoded "2907 passing tests" stat refreshed to 2948 in 7 places (overview.tsx ×3, download-panel.tsx ×4 incl. page.tsx hero); tsc --noEmit: ZERO errors in src/ (the examples/websocket + scratch probe errors are the standing baseline); eslint clean; dev server restarted (setsid bun run dev, port 3000, / answers 200).
+- Agent-browser E2E: / renders (title "PharmaML Toolkit — ML · Pharma · Docking"), header badge v1.2.87, hero stats 521 files / 171,805 LOC / 2948 passing tests (live census), Download tab offers pharma-ml-toolkit-v1.2.87.zip (≈ 22.14 MB, built on the fly from the live tree); dev.log clean (no errors during the visits).
+- git: one commit d874fd6 (toolkit + web + archived zip, clean status after).
+- CRON: the disabled webDevReview-15min-148 (exec-limits stall, run_count=1 — the standing trap) deleted; fresh webDevReview-15min-149 created (job 475513, 0 */15 * * * ?, Asia/Tehran).
+
+Stage Summary:
+- v1.2.87 ships: stack_oof_regressors + OOFStackingResult (ml/stacking.py, 492 lines), select_kbest_union (ml/preprocessing.py), the ML tab's "Stacking leaderboard (OOF + residual)" card + _ml_stack_oof handler + parity scatter, 34 new tests (19 stacking + 10 kbest + 5 GUI), docs INDEX at 280 symbols.
+- Baselines for the next round: v1.2.87 (five carriers) · playground.py 19,601 lines · suite 2954 collected = 2948 passed + 6 skipped / 0 failures · docs INDEX 280 symbols · ruff + mypy clean · web tsc(src)/lint clean · dev server healthy · cron 475513 fresh · zip v1.2.87 (562 entries, leak-scan clean).
+- Standing traps refreshed: the venv reset (10th — recipe scratch/venv_repair_9.sh), the OOM-vs-dev-server dance, the `[me` display-eating artifact (hex-verify before "fixing"), the subagent context-deadline failure mode (verify file state on disk, reconstruct worklog entries), the junit home-path scrub, the CRON exec-limits stall (recreate at run_count=1), the version bump's notebook ritual (201 s), the five version carriers.
+- Next-round candidates: the look.ipynb review is complete (all three uploaded notebooks absorbed); natural follow-ups: a Stacking.py/Stacking reg.py script upgrade note pointing at stack_oof_regressors, the OOF leaderboard export-to-CSV button, or the fourth uploaded artifact (Applicability_domain_analysis.py — uploaded 2026-10-23, may deserve the same one-by-one review).
