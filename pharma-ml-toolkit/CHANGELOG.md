@@ -10,6 +10,119 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.86] — 2026-10-26
+
+### Added — the one-by-one notebook review round (100x-148): both uploaded notebooks' missing halves shipped
+
+The instruction this round: *"Check the contents of this files one by
+one and update the playground.py file."* Both freshly uploaded
+notebooks were read cell by cell — **`xxx.ipynb`** (35 cells: the
+3-class molecular classification pipeline — featurization, filtering,
+selection, 13 GridSearch classifiers, ensembles, evaluation) and
+**`fak_ml.ipynb`** (183 cells: the BindingDB SYK pIC50 regression —
+descriptor + 16-fingerprint benchmarks, hypertuning, external drug
+prediction, hit triage). The cell-by-cell gap analysis against the
+toolkit found ~70% coverage; this round ships the missing 30%.
+
+**The feature factory grew from 9 to TWENTY families:**
+
+* The ten `fak_ml.ipynb` fingerprint families (cell 40's datamol
+  benchmark vocabulary), each verified **byte-exact against
+  `dm.to_fp`** on real molecules: `maccs` (167 structure-key bits),
+  `fcfp` / `fcfp_count` (feature-invariant Morgan, 2048), `topological`
+  / `topological_count` (the 4-atom TORSION generator with count
+  simulation — datamol's own `fp.py` maps 'topological' there, NOT to
+  the path fingerprint a first draft confused it with), `rdkit_count`
+  (the path generator at `numBitsPerFeature=1`, datamol's count
+  default — a naive generator double-counts: aspirin 602 vs 301),
+  `pattern` (2048 substructure-screening bits), `layered` (2048),
+  `estate` (the 79 E-State atom-type COUNTS) and `erg` (the 315-float
+  reduced-graph fingerprint, ±inf → NaN). Honest build note pinned in
+  the tests: datamol's own `fp_to_array` crashes on ethanol's empty
+  torsion-count sparse vector — OUR zero vector is the right answer.
+* **`shape_3d`** — `xxx.ipynb` cell 6's 3D block as a family:
+  `compute_3d_descriptors` (ETKDGv3 conformers at the fixed seed 42,
+  MMFF94s relaxation with the notebook's UFF fallback, also triggered
+  by MMFF typing failures, lowest-energy conformer selection) feeding
+  the nine rdMolDescriptors shape descriptors (Asphericity,
+  Eccentricity, PMI1-3, RadiusOfGyration, SpherocityIndex, NPR1/2). A
+  failed 3D pipeline keeps the ROW as NaN — the notebook's
+  failed-molecule behaviour.
+* The full matrix is now ~27,700 columns (was ~12,860); every prefix
+  stays unique (the exact-inverse `family_of_column` contract), and
+  the GUI picker grew to twenty ticked-by-default checkboxes with the
+  honest widths.
+
+**The library ports:**
+
+* **`benchmark_feature_families`** — `fak_ml.ipynb` cells 40-47's
+  `test_fp` loop (one LGBM per datamol fingerprint) as a
+  `compare_models`-convention leaderboard over the 18 2D families
+  (the two 3D families stay opt-in — conformer embedding would
+  dominate the run): per-family CV score/std, fit time, feature and
+  sample counts, progress callback, NaN rows sink honestly.
+* **`pic50_to_ic50` / `add_ic50_column`** — the notebook's
+  `dm.molar.log_to_molar` inverse, with exponent arithmetic so integer
+  pIC50s land on exact decimal powers (datamol's own product returns
+  999.9999999999999 for pIC50 6; this returns 1000.0 — probed).
+* **`plot_pr_curves`** — `xxx.ipynb` cell 28's OvR Precision-Recall
+  curves (previously missing from the toolkit entirely), with each
+  class's average precision in the legend AND the honest no-skill
+  baseline at the class prevalence (a line the notebook's own plot
+  omitted).
+* **`ClassificationReport.per_class`** — the notebook's
+  `precision_recall_fscore_support(average=None)` table as a
+  `str(label) → {precision, recall, f1, support}` dict (backward
+  compatible: direct constructions keep `None`).
+* **`sgd_classifier`** — the notebook's 13th classifier in the
+  registry (hinge / log_loss / modified_huber grid; the notebook's
+  `early_stopping=True` deliberately NOT the factory default — it
+  reserves a validation split that raises on screens smaller than
+  2 × n_classes rows).
+
+**The playground GUI (every notebook flow now has a button):**
+
+* The Results card grew live **"ROC curves"** and **"PR curve"**
+  buttons (the ROC figure previously rode only the saved report
+  bundle; the PR curves existed nowhere).
+* The classification metrics render the **per-class line** (P · R ·
+  F1 · n per label) under the macro aggregates.
+* The Predict card gained **"pIC50 → IC50 nM"** (auto-detects the
+  prediction column) and the **potency-threshold triage** (≤ 100 / 300
+  / 500 / 1000 nM — the notebook's `query('IC50 < 300')` shortlist;
+  the tree shows the hits, Save CSV still writes the full table).
+* The Leaderboard gained **"Benchmark feature families"** (model +
+  folds entries, the board fills with the per-family ranking).
+* The model picker lists `sgd_classifier` automatically; the module
+  docstring and the factory subtitle tell the twenty-family story.
+
+### Fixed
+
+* The first-draft `topological` family used the path generator
+  (byte-identical to `rdkit_fingerprint` — a silent duplicate);
+  corrected to the torsion generator with datamol's exact defaults
+  after reading datamol's own `fp.py` mapping table (the parity test
+  now pins all ten families against `dm.to_fp`).
+* `test_features_docstring_count_honest` and the width-label pins
+  updated for the vocabulary growth (9 → 20 families, ~12,860 →
+  ~27,700 columns).
+
+### Verified
+
+* `pytest` (bare, testpaths): full suite green — the new tests:
+  `TestFakmlFamilies` (10: datamol parity, prefix uniqueness,
+  shape_3d determinism/NaN/degenerate, ethanol torsion zero-vector),
+  `TestPic50ToIc50` (13) + `TestAddIc50Column` (6),
+  `TestPrCurves` (5), `TestPerClassMetrics` (5), `TestSgdClassifier`
+  (6), `TestBenchmarkFeatureFamilies` (11), `TestReview148Gui` (15),
+  plus the updated contract pins; ruff clean, mypy clean (zero
+  errors, was 65-baseline-clean before and after), doctests green on
+  features/converters/descriptors/training.
+* GUI end-to-end under Xvfb: the twenty-family factory run, the
+  per-class line after a multiclass train, the PR button drawing into
+  the Results host, the IC50 conversion + triage round-trip
+  (1/100/1000/10000 nM), and the 18-family benchmark board.
+
 ## [1.2.85] — 2026-10-26
 
 ### Added — the fourth engineering-details round (100x-146): the indexed progressive reader, the chunk-boundary guard, the loader phase notes, and the permutation Save-CSV twin

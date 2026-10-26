@@ -181,8 +181,9 @@ class TestRegistry:
 
     def test_registry_has_twenty_eight_entries(self) -> None:
         entries = list_models(only_available=False)
-        # 26 + voting + stacking (1.2.49): every dual-task family
-        assert len(entries) == 28
+        # 26 + voting + stacking (1.2.49) + sgd_classifier (1.2.86,
+        # xxx.ipynb cell 26): every dual-task family
+        assert len(entries) == 29
         dnn_entries = [e for e in entries if e["name"] in {"dnn", "dnn_residual"}]
         assert len(dnn_entries) == 2
         assert {e["name"] for e in entries} >= {
@@ -194,10 +195,11 @@ class TestRegistry:
             "pls",
             "gaussian_process",
             "gaussian_process_classifier",
+            "sgd_classifier",
         }
         if not all(e["available"] for e in dnn_entries):
             pytest.skip("torch not installed in this environment")
-        assert len(list_models()) == 28
+        assert len(list_models()) == 29
 
     def test_aliases_resolve(self) -> None:
         assert resolve_model_name("deep_mlp") == "dnn"
@@ -237,8 +239,8 @@ class TestRegistry:
         flagged = {e["name"]: e["available"] for e in entries}
         assert flagged["dnn"] is False and flagged["dnn_residual"] is False
         # only_available=True drops them (26 core/boosting/hsvr/pls/gp/gpc
-        # + voting/stacking entries remain)
-        assert len(list_models()) == 26
+        # + voting/stacking + sgd_classifier entries remain)
+        assert len(list_models()) == 27
         with pytest.raises(DependencyError, match="torch"):
             build_model("dnn", "classification")
 

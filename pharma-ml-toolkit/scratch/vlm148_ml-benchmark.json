@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) **PASS** – The table displays 6 visible rows (estate, descriptors, layered, pattern, erg, maccs) and the status line confirms a total of 18 families.\n2) **PASS** – The columns are family, n_features, n_samples, neg_root_mean_squared_error (mean), neg_root_mean_squared_error (std), fit_time_s, and folds.\n3) **PASS** – The text at the top explicitly states \"2-fold family benchmark over the 18 2D families (shape_3d and rism opt-in only)\".\n4) **PASS** – A \"Benchmark feature families\" button is present alongside a model input (set to \"ridge\") and a folds input (set to \"2\").\n5) **PASS** – All text is clearly legible with no signs of overlapping, clipping, or garbling.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793029710,
+  "id": "2026102623482723db16c8aa834d4b",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102623482723db16c8aa834d4b",
+  "usage": {
+    "completion_tokens": 179,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1572,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1751
+  }
+}

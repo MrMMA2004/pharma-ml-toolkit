@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) **PASS** – The buttons \"pIC50 → IC50 nM\" and \"Triage hits\" are present, and the potency combobox shows \"100\" with unit \"nM\".\n2) **PASS** – The info line explicitly states \"3 of 6 row(s) at or below 100 nM\", matching the requirement.\n3) **PASS** – The table displays only 3 rows (the triaged subset) and includes an \"IC50_nM\" column.\n4) **PASS** – All text is fully legible, properly spaced, and free from overlaps or clipping.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793029707,
+  "id": "202610262348136b6f2dcd751f4bb2",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610262348136b6f2dcd751f4bb2",
+  "usage": {
+    "completion_tokens": 127,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1560,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1687
+  }
+}

@@ -11,10 +11,12 @@ import pytest
 from pharmaml.chem.converters import (
     EndpointDatasetReport,
     EndpointValue,
+    add_ic50_column,
     add_pic50_column,
     ic50_to_pic50,
     ki_to_pki,
     parse_endpoint,
+    pic50_to_ic50,
     prepare_pic50_dataset,
     split_table_into_chunks,
 )
@@ -285,3 +287,86 @@ class TestSplitTable:
         pd.DataFrame({"x": [1]}).to_csv(source, index=False)
         with pytest.raises(DataValidationError):
             split_table_into_chunks(source, tmp_path, chunk_rows=0)
+
+
+# ---------------------------------------------------------------------------
+# pic50_to_ic50 / add_ic50_column (100x-148, fak_ml.ipynb cells 102/150)
+# ---------------------------------------------------------------------------
+class TestPic50ToIc50:
+    """The inverse conversion the notebook's hit triage needs."""
+
+    @pytest.mark.parametrize(
+        ("pic50", "expected"),
+        [(9.0, 1.0), (8.0, 10.0), (7.0, 100.0), (6.0, 1000.0), (0.0, 1e9)],
+    )
+    def test_known_values(self, pic50: float, expected: float) -> None:
+        assert pic50_to_ic50(pic50) == expected
+
+    def test_exact_decimal_powers(self) -> None:
+        """Integer pIC50s land on exact powers (no datamol float noise)."""
+        assert pic50_to_ic50(6.0) == 1000.0  # dm.molar gives 999.9999999999999
+        assert pic50_to_ic50(5.0) == 10000.0
+
+    @pytest.mark.parametrize("value", [0.5, 4.3, 7.5, 11.2])
+    def test_round_trip_with_ic50_to_pic50(self, value: float) -> None:
+        # Non-integer powers round-trip to float ulp accuracy only
+        # (integer pIC50s are exact -- the test_known_values pins those).
+        assert ic50_to_pic50(pic50_to_ic50(value)) == pytest.approx(value)
+
+    def test_unit_validation(self) -> None:
+        with pytest.raises(DataValidationError, match="Unknown concentration unit"):
+            pic50_to_ic50(7.0, unit="Moles")
+
+    def test_unit_variants(self) -> None:
+        assert pic50_to_ic50(6.0, unit="M") == pytest.approx(1e-6)
+        assert pic50_to_ic50(6.0, unit="uM") == pytest.approx(1.0)
+        assert pic50_to_ic50(6.0, unit="pM") == pytest.approx(1e6)  # 1e-6 M in pM
+
+    def test_nan_passes_through(self) -> None:
+        result = pic50_to_ic50(float("nan"))
+        assert result is not None and math.isnan(result)
+
+    def test_inf_becomes_nan(self) -> None:
+        for value in (float("inf"), float("-inf")):
+            result = pic50_to_ic50(value)
+            assert result is not None and math.isnan(result)
+
+    def test_unparseable_returns_none(self) -> None:
+        assert pic50_to_ic50("not-a-number") is None
+        assert pic50_to_ic50(None) is None
+
+
+class TestAddIc50Column:
+    """The table twin -- the prediction sheet gains its nM column."""
+
+    def test_appends_default_column(self) -> None:
+        frame = pd.DataFrame({"pIC50": [5.0, 6.0, 7.0], "SMILES": ["C", "CC", "CCC"]})
+        result = add_ic50_column(frame)
+        assert list(result.columns) == ["pIC50", "SMILES", "IC50_nM"]
+        assert result["IC50_nM"].tolist() == [10000.0, 1000.0, 100.0]
+
+    def test_source_frame_not_mutated(self) -> None:
+        frame = pd.DataFrame({"pIC50": [6.0]})
+        add_ic50_column(frame)
+        assert "IC50_nM" not in frame.columns
+
+    def test_missing_column_raises(self) -> None:
+        with pytest.raises(DataValidationError, match="Missing required column"):
+            add_ic50_column(pd.DataFrame({"SMILES": ["C"]}))
+
+    def test_unparseable_keeps_rows_as_nan_by_default(self) -> None:
+        frame = pd.DataFrame({"pIC50": [6.0, "text", None]})
+        result = add_ic50_column(frame)
+        assert len(result) == 3  # drop_invalid defaults False
+        assert result["IC50_nM"].isna().tolist() == [False, True, True]
+
+    def test_drop_invalid_removes_rows(self) -> None:
+        frame = pd.DataFrame({"pIC50": [6.0, "text", 7.0]})
+        result = add_ic50_column(frame, drop_invalid=True)
+        assert len(result) == 2
+        assert result["IC50_nM"].tolist() == [1000.0, 100.0]
+
+    def test_custom_out_col(self) -> None:
+        frame = pd.DataFrame({"pIC50": [6.0]})
+        result = add_ic50_column(frame, out_col="IC50 (nM)")
+        assert result["IC50 (nM)"].tolist() == [1000.0]

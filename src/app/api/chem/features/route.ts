@@ -5,16 +5,29 @@ import { bridgeErrorResponse, runPythonBridge } from "@/lib/python-bridge";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Must match FEATURE_FAMILIES in pharmaml/chem/features.py (the 8th
- * family is the 3D-RISM-KH solvation descriptor set). */
+/** Must match FEATURE_FAMILIES in pharmaml/chem/features.py — the
+ * twenty-family vocabulary (the ten fak_ml.ipynb datamol families +
+ * xxx.ipynb's shape_3d joined the original nine; rism closes). */
 const FAMILY_VALUES = [
   "descriptors",
   "atompair_count",
   "ecfp",
+  "ecfp3",
   "avalon_count",
   "rdkit_fingerprint",
   "morgan_full",
   "morgan_scaffold",
+  "maccs",
+  "fcfp",
+  "fcfp_count",
+  "topological",
+  "topological_count",
+  "rdkit_count",
+  "pattern",
+  "layered",
+  "estate",
+  "erg",
+  "shape_3d",
   "rism",
 ] as const;
 
@@ -23,7 +36,7 @@ const bodySchema = z.object({
     .array(z.string().min(1, "SMILES strings must not be empty").max(500))
     .min(1, "pass at least one SMILES")
     .max(20, "the web calculator handles at most 20 molecules per run"),
-  families: z.array(z.enum(FAMILY_VALUES)).min(1).max(8).optional(),
+  families: z.array(z.enum(FAMILY_VALUES)).min(1).max(20).optional(),
   k: z.number().int().min(1).max(1500),
 });
 

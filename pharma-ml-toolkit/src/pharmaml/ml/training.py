@@ -529,3 +529,191 @@ def compare_models(
     frame = pd.DataFrame(rows)
     column = f"{metric}_mean"
     return frame.sort_values(column, ascending=False).reset_index(drop=True)
+
+
+def benchmark_feature_families(
+    smiles: pd.Series | list[str],
+    y: pd.Series | list | np.ndarray,
+    task: str,
+    families: list[str] | tuple[str, ...] | None = None,
+    model: str | None = None,
+    cv: int = 3,
+    n_jobs: int = 1,
+    scoring: str | None = None,
+    on_family: Callable[[dict[str, Any]], None] | None = None,
+) -> pd.DataFrame:
+    """Cross-validated leaderboard ACROSS feature families, one model fixed.
+
+    The library port of ``fak_ml.ipynb`` cells 40-47 (the notebook's
+    ``test_fp`` loop: one LGBMRegressor per datamol fingerprint type,
+    r2/RMSE collected into a comparison chart).  Here the benchmark
+    runs over the toolkit's own :data:`~pharmaml.chem.features.FEATURE_FAMILIES`
+    vocabulary with ONE fixed registry model, so the board isolates the
+    FEATURISATION effect the way the notebook's loop isolated the
+    fingerprint effect.
+
+    Parameters
+    ----------
+    smiles:
+        SMILES strings, one per molecule (row ``i`` aligns with ``y[i]``
+        positionally).
+    y:
+        Targets, positional alignment with ``smiles``.  Molecules the
+        featuriser drops take their target row with them.
+    task:
+        ``'classification'`` or ``'regression'``.
+    families:
+        Feature families to benchmark; defaults to every family EXCEPT
+        ``shape_3d`` and ``rism`` (the two 3D-geometry families embed
+        conformers per molecule -- minutes on a real library, opt-in
+        only; the notebook's own loop covered 2D fingerprints only).
+    model:
+        Registry name of the benchmark model; defaults to
+        ``lightgbm`` when installed (the notebook's own choice),
+        otherwise ``ridge`` (regression) / ``logistic_regression``
+        (classification) -- the fastest always-available twins.
+    cv:
+        Fold count (at least 2).
+    n_jobs:
+        Workers for ``cross_validate``.
+    scoring:
+        Primary metric; same defaults and fallbacks as
+        :func:`compare_models` (ROC-AUC ovo for classification with
+        balanced-accuracy fallback for proba-less estimators, negative
+        RMSE for regression).
+    on_family:
+        Optional progress callback invoked after each family finishes
+        (successfully or not) with the payload
+        ``{'family': name, 'index': i, 'total': n}`` -- the GUI
+        progress heartbeat.  It must never raise.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per family with ``family``, ``n_features``,
+        ``n_samples``, ``<metric>_mean``, ``<metric>_std``,
+        ``fit_time_s`` and ``folds``, sorted by the primary metric
+        (descending).  A family that fails to featurise or
+        cross-validate keeps its row with a NaN score and sinks to the
+        bottom instead of killing the board.  Only the metric columns
+        are reproducible (``fit_time_s`` is wall-clock).
+
+    Raises
+    ------
+    ModelError
+        If ``task`` is invalid, ``cv < 2``, a family name is outside
+        the feature vocabulary, ``model`` is unknown or task
+        incompatible, ``scoring`` is not a scikit-learn scorer name,
+        or the dataset has fewer aligned rows than ``cv`` folds.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.training import benchmark_feature_families
+    >>> smiles = ["CCO", "CCCCO", "CCCCCCO", "CCCCCCCCO",
+    ...           "CC(=O)O", "CCC(=O)O", "CCCC(=O)O", "O=C(O)C1CCCO1"]
+    >>> y = [2.0, 3.0, 4.0, 5.0, 2.5, 3.5, 4.5, 3.0]
+    >>> board = benchmark_feature_families(smiles, y, task="regression",
+    ...                                    families=("estate",), model="ridge", cv=2)
+    >>> list(board.columns)
+    ['family', 'n_features', 'n_samples', 'neg_root_mean_squared_error_mean', 'neg_root_mean_squared_error_std', 'fit_time_s', 'folds']
+    >>> board["family"].tolist()
+    ['estate']
+    >>> int(board["n_features"].iloc[0]), int(board["n_samples"].iloc[0])
+    (79, 8)
+    """
+    if task not in {"classification", "regression"}:
+        raise ModelError(f"task must be 'classification' or 'regression', got {task!r}")
+    if isinstance(cv, int) and cv < 2:
+        raise ModelError(f"cv must be >= 2 folds, got {cv}")
+    if isinstance(scoring, str) and scoring not in get_scorer_names():
+        raise ModelError(
+            f"Unknown scoring {scoring!r}; valid metric names are listed by "
+            "sklearn.metrics.get_scorer_names() (e.g. 'roc_auc', "
+            "'balanced_accuracy', 'neg_root_mean_squared_error')"
+        )
+
+    # Lazy imports keep this module's import path rdkit-free (the same
+    # rule the features module holds for lightgbm/sklearn).
+    from pharmaml.chem.features import FEATURE_FAMILIES, compute_feature_frame
+
+    if families is None:
+        # The notebook's own loop covered 2D fingerprints only; the two
+        # 3D-geometry families (conformer embedding per molecule) stay
+        # opt-in -- minutes on a real library.
+        families = [
+            name for name in FEATURE_FAMILIES if name not in {"shape_3d", "rism"}
+        ]
+    family_list = list(families)
+    if not family_list:
+        raise ModelError("families is empty -- pass at least one feature family name")
+    unknown = sorted(set(family_list) - set(FEATURE_FAMILIES))
+    if unknown:
+        raise ModelError(
+            f"unknown feature family {unknown[0]!r}; valid families are: "
+            + ", ".join(FEATURE_FAMILIES)
+        )
+
+    if model is None:
+        lightgbm_spec = MODEL_REGISTRY["lightgbm"]
+        model = "lightgbm" if lightgbm_spec.available else (
+            "ridge" if task == "regression" else "logistic_regression"
+        )
+        _LOG.info("benchmark_feature_families default model: %s", model)
+
+    y_series = pd.Series(y) if not isinstance(y, pd.Series) else y.reset_index(drop=True)
+    if len(smiles) != len(y_series):
+        raise ModelError(
+            f"smiles and y must be row-aligned (got {len(smiles)} SMILES "
+            f"and {len(y_series)} targets)"
+        )
+
+    encode = False  # every feature family emits numeric columns by contract
+    pipeline = Pipeline(
+        [
+            ("prep", build_preprocessor(encode_categorical=encode)),
+            ("est", build_model(model, task)),  # unknown/task-mismatch -> ModelError
+        ]
+    )
+    metric = scoring or _select_scorer(pipeline, task)
+
+    rows: list[dict[str, Any]] = []
+    for position, family in enumerate(family_list, start=1):
+        try:
+            frame, _report = compute_feature_frame(smiles, families=(family,))
+            aligned_y = y_series.iloc[list(frame.index)]
+            if len(aligned_y) < cv:
+                raise ModelError(
+                    f"cv={cv} folds exceeds the number of aligned samples "
+                    f"(n_samples={len(aligned_y)}) for family {family!r}"
+                )
+            result = cross_validate(
+                pipeline, frame.to_numpy(), aligned_y.to_numpy(),
+                cv=cv, scoring=metric, n_jobs=n_jobs,
+            )
+            scores = result["test_score"]
+            if np.isnan(scores).any():
+                _LOG.warning(
+                    "Family %s produced NaN CV scores for metric %r "
+                    "(degenerate folds); keeping the row as NaN",
+                    family, metric,
+                )
+            rows.append(
+                {
+                    "family": family,
+                    "n_features": int(frame.shape[1]),
+                    "n_samples": int(frame.shape[0]),
+                    f"{metric}_mean": float(np.mean(scores)),
+                    f"{metric}_std": float(np.std(scores)),
+                    "fit_time_s": float(np.mean(result["fit_time"])),
+                    "folds": cv,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 — keep the board alive on failures
+            _LOG.warning("Family %s failed during benchmarking: %s", family, exc)
+            rows.append({"family": family, f"{metric}_mean": np.nan, "folds": cv})
+        if on_family is not None:
+            on_family({"family": family, "index": position, "total": len(family_list)})
+
+    board = pd.DataFrame(rows)
+    column = f"{metric}_mean"
+    return board.sort_values(column, ascending=False).reset_index(drop=True)

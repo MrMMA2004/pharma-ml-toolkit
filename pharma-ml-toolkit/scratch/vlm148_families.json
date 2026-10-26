@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) **PASS** – The grid contains 20 checkboxes, including the specific examples (MACCS keys (167), FCFP bits, topological torsion, E-State counts (79), ERG reduced graph (315), and 3D shape descriptors).\n2) **PASS** – The label at the bottom of the grid reads \"20 families selected · ~27,759 columns will be computed\".\n3) **PASS** – The checkboxes are arranged in two neat columns with consistent alignment and no overlapping text.\n4) **PASS** – All text in the input fields, labels, and checkbox names is fully visible and legible.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793029693,
+  "id": "2026102623481083f6205a6c90435f",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102623481083f6205a6c90435f",
+  "usage": {
+    "completion_tokens": 132,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1546,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1678
+  }
+}

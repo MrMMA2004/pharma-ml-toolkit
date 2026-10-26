@@ -1330,3 +1330,18 @@ TestReview146Gui (test_playground.py ×17). One standing pin updated
 (the round-143 collapse-capture contract, its line deliberately
 changed by the phase notes). docs/INDEX.md re-synced (286 symbols).
 The version chain moved to 1.2.85 across all five carriers.
+
+### Round 32 (100x-148) — the one-by-one notebook review round: both uploads' missing halves shipped (20 families, PR curves, the IC50 triage, the family benchmark)
+
+| What shipped | The contract |
+| --- | --- |
+| The cell-by-cell notebook review | Both freshly uploaded notebooks read cell by cell (xxx.ipynb: 35 cells — the 3-class classification pipeline; fak_ml.ipynb: 183 cells — the BindingDB SYK pIC50 regression), each capability mapped against the toolkit (~70% covered), every gap below shipped this round. |
+| Ten datamol fingerprint families | maccs (167), fcfp + fcfp_count (2048 each), topological + topological_count (the TORSION generator, datamol's own mapping — a first draft used the path generator and silently duplicated rdkit_fingerprint), rdkit_count (numBitsPerFeature=1, datamol's count default), pattern, layered (2048 each), estate (79 counts), erg (315 floats, ±inf→NaN). Every family byte-exact against dm.to_fp (TestFakmlFamilies, tests/test_features.py ×10 incl. the ethanol-torsion zero-vector where datamol's own fp_to_array crashes). |
+| shape_3d (xxx.ipynb cell 6's 3D block) | compute_3d_descriptors: ETKDGv3 seed-42 conformers, MMFF94s→UFF fallback (typing failures included), lowest-energy conformer, the nine rdMolDescriptors shape descriptors; failed pipelines keep NaN rows; single atoms embed as honest degenerate zeros (probed — [Cl-], [He] all embed on this build). |
+| pic50_to_ic50 / add_ic50_column | fak_ml's dm.molar.log_to_molar inverse with exponent arithmetic (integer pIC50s land on exact powers; datamol itself returns 999.9999999999999 for 6.0); series + table twins, NaN/±inf honesty, unit validation (tests/test_converters.py ×21). |
+| plot_pr_curves | xxx.ipynb cell 28's OvR PR curves (previously absent toolkit-wide) with average precision per class and the no-skill prevalence baselines the notebook's own plot omitted (tests/test_viz.py ×5). |
+| ClassificationReport.per_class | The notebook's per-class precision/recall/f1/support table, str(label) keys, backward-compatible default None (tests/test_multiclass.py ×5). |
+| sgd_classifier | The notebook's 13th classifier; hinge/log_loss/modified_huber grid; early_stopping deliberately NOT the factory default (breaks screens < 2×n_classes — pinned in notes + tests, tests/test_ml_pipeline.py ×6). Registry counts 28 → 29. |
+| benchmark_feature_families | fak_ml's test_fp loop (one LGBM per fingerprint) as a compare_models-convention family leaderboard over the 18 2D families (3D families opt-in), progress callback, NaN rows sink (tests/test_ml_pipeline.py ×11). |
+| The playground GUI | The family picker at 20 ticked checkboxes (honest widths, library-order labels), live ROC + PR buttons on the Results card, the per-class metrics line, the Predict card's pIC50→IC50 button + potency-threshold triage (≤100/300/500/1000 nM, full table preserved), the Leaderboard's family-benchmark row, sgd on the model picker (TestReview148Gui, tests/test_playground.py ×15). |
+| Version / docs | 1.2.86 across the five carriers; CHANGELOG [1.2.86]; docs/INDEX.md re-synced (301 symbols — the new chem/ml/viz exports ride the package __all__); README test pins updated. |

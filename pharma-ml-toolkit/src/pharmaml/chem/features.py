@@ -40,13 +40,18 @@ the notebook glue with explicit contracts:
   are both gone); the Murcko scaffold uses
   ``MurckoScaffold.GetScaffoldForMol`` (the rar's ``GetMurckoScaffold``
   no longer exists in RDKit 2026.09); the ten ``fak_ml.ipynb`` families
-  ride the same generator spellings, with two honest build notes:
-  ``rdFingerprintGenerator`` on RDKit 2026.09 has no
-  ``GetTopologicalFingerprintGenerator`` (the topological/path
-  fingerprint generator IS ``GetRDKitFPGenerator``) and no
-  ``GetCountFingerprintAsBitVect`` (the folded count vector arrives as
-  ``GetCountFingerprintAsNumPy``), so ``topological``/``topological_count``
-  and ``rdkit_count`` read those spellings.
+  reproduce datamol's own ``fp.py`` mapping exactly, with three honest
+  build notes: (1) datamol's 'topological' name maps to
+  ``GetTopologicalTorsionGenerator`` (the 4-atom torsion fingerprint
+  with ``countSimulation=True`` -- NOT the RDKit path fingerprint, a
+  first draft here confused the two; the torsion bits are verified
+  byte-exact against ``dm.to_fp(fp_type='topological')``);
+  (2) datamol's 'rdkit-count' carries ``numBitsPerFeature=1`` while the
+  bit flavour 'rdkit' uses 2 -- the count family must halve its naive
+  generator counts to match (aspirin: 301 features, not the 602 a
+  default generator double-counts); (3) the generator objects expose no
+  ``GetCountFingerprintAsBitVect`` on RDKit 2026.09, so the folded count
+  vectors arrive as ``GetCountFingerprintAsNumPy``.
 * **Strictly optional LightGBM.**  :func:`rank_features` imports lightgbm
   lazily and falls back to random forests when it is not installed, so
   this module's import path needs only rdkit + numpy + pandas
@@ -278,7 +283,8 @@ MACCS_BITS = 167
 #: Bit length of the FCFP (feature-invariant Morgan) fingerprint, both
 #: the bit and the count flavour.
 FCFP_BITS = 2048
-#: Bit length of the topological (RDKit path) fingerprint, both flavours.
+#: Bit length of the topological-torsion fingerprint, both flavours
+#: (datamol's 'topological' -- the 4-atom torsion generator).
 TOPOLOGICAL_BITS = 2048
 #: Bit length of the pattern fingerprint (substructure screening bits).
 PATTERN_BITS = 2048
@@ -633,25 +639,46 @@ def _fcfp_count_computer(generator: Any) -> Callable[[Any], np.ndarray]:
     return fcfp_count_vector
 
 
-def _rdkit_path_generator(fp_size: int) -> Any:
-    """The RDKit path ('topological') fingerprint generator.
+def _torsion_generator() -> Any:
+    """The topological-torsion generator (datamol's 'topological').
 
-    ``rdFingerprintGenerator`` on this build has no
-    ``GetTopologicalFingerprintGenerator``; the topological/path
-    fingerprint generator IS ``GetRDKitFPGenerator`` -- the honest
-    spelling adaptation behind the ``topological``, ``topological_count``
-    and ``rdkit_count`` families.  The notebook's own 'topological' and
-    'rdkit' types differ only in the generator-vs-legacy call, and at
-    these defaults the two spellings are byte-identical on this build
-    (verified: ethanol and aspirin set the same bits through both), so
-    ``topological`` duplicates ``rdkit_fingerprint``'s values and
-    ``topological_count`` duplicates ``rdkit_count``'s -- kept as
-    separate vocabulary entries because the notebook's 16-type list
-    carries both spellings.
+    The fak_ml notebook benchmarks ``dm.to_fp(fp_type='topological')``;
+    datamol's own ``fp.py`` maps that name to
+    ``rdFingerprintGenerator.GetTopologicalTorsionGenerator`` -- the
+    4-atom torsion fingerprint with ``countSimulation=True`` -- NOT the
+    RDKit path fingerprint (a first draft here made that mistake; the
+    torsion generator reproduces datamol's bits byte-exactly, verified
+    on ethanol and aspirin).  Both the ``topological`` and
+    ``topological_count`` families ride this generator with datamol's
+    exact default arguments.
     """
     from rdkit.Chem import rdFingerprintGenerator
 
-    return rdFingerprintGenerator.GetRDKitFPGenerator(fpSize=fp_size)
+    return rdFingerprintGenerator.GetTopologicalTorsionGenerator(
+        includeChirality=False,
+        torsionAtomCount=4,
+        countSimulation=True,
+        countBounds=None,
+        fpSize=TOPOLOGICAL_BITS,
+        atomInvariantsGenerator=None,
+    )
+
+
+def _rdkit_count_generator() -> Any:
+    """The RDKit path generator at ONE bit per feature (datamol's count).
+
+    datamol's ``rdkit-count`` default is ``numBitsPerFeature=1`` (the
+    bit flavour 'rdkit' uses 2) -- the count vector therefore counts
+    each PATH once instead of double-counting its two set bits, which
+    is why a naive ``GetRDKitFPGenerator(fpSize=2048)`` count comes out
+    at exactly twice datamol's (aspirin: 602 vs 301 -- probed).  This
+    generator reproduces the notebook's numbers exactly.
+    """
+    from rdkit.Chem import rdFingerprintGenerator
+
+    return rdFingerprintGenerator.GetRDKitFPGenerator(
+        fpSize=RDKIT_FP_BITS, numBitsPerFeature=1
+    )
 
 
 def _generator_bit_computer(generator: Any, bits: int) -> Callable[[Any], np.ndarray]:
@@ -849,18 +876,18 @@ def compute_feature_frame(
       atomInvariantsGenerator=GetMorganFeatureAtomInvGen())``), bit
       flavour via ``GetFingerprint`` and count flavour via
       ``GetCountFingerprintAsNumPy``.
-    * ``topological`` / ``topological_count`` / ``rdkit_count``: the
-      RDKit path fingerprint generator
-      ``GetRDKitFPGenerator(fpSize=2048)`` (there is no
-      ``GetTopologicalFingerprintGenerator`` on this build -- the
-      topological/path generator IS this one); bit flavour via
-      ``GetFingerprint``, count flavours via
-      ``GetCountFingerprintAsNumPy``.  At these defaults the generator
-      bits are byte-identical to the legacy ``rdkit_fingerprint``
-      family's, so ``topological`` (and ``topological_count`` vs
-      ``rdkit_count``) duplicate values by construction -- separate
-      vocabulary entries because the notebook's 16-type list carries
-      both spellings.
+    * ``topological`` / ``topological_count``: the topological-TORSION
+      generator ``GetTopologicalTorsionGenerator(torsionAtomCount=4,
+      countSimulation=True, fpSize=2048)`` -- datamol's own mapping for
+      its 'topological' fp type (the notebook's benchmark vocabulary),
+      verified byte-exact against ``dm.to_fp`` on ethanol and aspirin;
+      bit flavour via ``GetFingerprint``, count flavour via
+      ``GetCountFingerprintAsNumPy``.
+    * ``rdkit_count``: the RDKit path generator at
+      ``numBitsPerFeature=1`` (datamol's 'rdkit-count' default -- the
+      bit flavour sets TWO bits per path, so a default-generator count
+      double-counts; this spelling counts each path once and matches
+      ``dm.to_fp(fp_type='rdkit-count')`` exactly).
     * ``pattern``: ``Chem.PatternFingerprint(mol, fpSize=2048)``;
       ``layered``: ``Chem.LayeredFingerprint(mol, fpSize=2048)``.
     * ``estate``: ``Chem.EState.Fingerprinter.FingerprintMol`` -> the
@@ -987,17 +1014,19 @@ def _family_plan(
             computers["fcfp"] = _fcfp_computer(fcfp_generator)
         if "fcfp_count" in requested:
             computers["fcfp_count"] = _fcfp_count_computer(fcfp_generator)
-    if "topological" in requested:
-        computers["topological"] = _generator_bit_computer(
-            _rdkit_path_generator(TOPOLOGICAL_BITS), TOPOLOGICAL_BITS
-        )
-    if "topological_count" in requested:
-        computers["topological_count"] = _generator_count_computer(
-            _rdkit_path_generator(TOPOLOGICAL_BITS)
-        )
+    if "topological" in requested or "topological_count" in requested:
+        torsion_generator = _torsion_generator()
+        if "topological" in requested:
+            computers["topological"] = _generator_bit_computer(
+                torsion_generator, TOPOLOGICAL_BITS
+            )
+        if "topological_count" in requested:
+            computers["topological_count"] = _generator_count_computer(
+                torsion_generator
+            )
     if "rdkit_count" in requested:
         computers["rdkit_count"] = _generator_count_computer(
-            _rdkit_path_generator(RDKIT_FP_BITS)
+            _rdkit_count_generator()
         )
     if "pattern" in requested:
         computers["pattern"] = _pattern_computer()
@@ -1379,7 +1408,7 @@ def selection_metadata(
     dict
         Keys: ``selected_features`` (rank order), ``descriptor_names``
         (selected ``desc_`` columns with the prefix stripped),
-        ``fingerprint_sizes`` (family -> bit length for the seven
+        ``fingerprint_sizes`` (family -> bit length for the seventeen
         fingerprint families in scope), ``family_counts``,
         ``families_computed``, ``k_requested``, ``method``,
         ``n_molecules``, ``dropped`` (``[row, smiles]`` lists) and

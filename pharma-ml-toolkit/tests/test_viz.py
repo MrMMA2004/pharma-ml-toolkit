@@ -49,6 +49,7 @@ from pharmaml.viz import (
     plot_operator_trajectory,
     plot_pareto_front,
     plot_permutation_importance,
+    plot_pr_curves,
     plot_predicted_vs_actual,
     plot_receptor_atom_types,
     plot_residuals,
@@ -195,6 +196,57 @@ class TestRocCurves:
 
         with pytest.raises(ModelError, match="classes_"):
             plot_roc_curves(Stub(), [[0.0], [1.0]], [0, 1])
+
+
+class TestPrCurves:
+    """The PR twin of TestRocCurves (xxx.ipynb cell 28's PR half)."""
+
+    def test_binary(self, trained_classifier, close_all):
+        result, _, X_test, y_test = trained_classifier
+        fig = plot_pr_curves(result.model, X_test, y_test)
+        legend = [text.get_text() for text in fig.axes[0].get_legend().get_texts()]
+        assert any("AP" in text for text in legend)
+        assert any("no skill" in text for text in legend)  # the prevalence baseline
+
+    def test_multiclass_per_class_curves(self, close_all):
+        from sklearn.datasets import make_classification as mk
+        from sklearn.linear_model import LogisticRegression
+
+        X, y = mk(n_samples=150, n_features=5, n_informative=4, n_redundant=0,
+                  n_classes=3, n_clusters_per_class=1, random_state=3)
+        model = LogisticRegression(max_iter=2000).fit(X, y)
+        fig = plot_pr_curves(model, X, y)
+        legend = [text.get_text() for text in fig.axes[0].get_legend().get_texts()]
+        # 3 AP entries + 3 no-skill baselines
+        assert sum("AP" in text for text in legend) == 3
+        assert sum("no skill" in text for text in legend) == 3
+
+    def test_prevalence_baseline_is_honest(self, close_all):
+        """The baseline rides the actual class prevalence, not 0.5."""
+        from sklearn.linear_model import LogisticRegression
+
+        X = [[0.0], [1.0], [2.0], [3.0], [4.0], [5.0]]
+        y = [0, 0, 0, 0, 1, 1]  # prevalence 1/3
+        model = LogisticRegression().fit(X, y)
+        fig = plot_pr_curves(model, X, y)
+        legend = [text.get_text() for text in fig.axes[0].get_legend().get_texts()]
+        baseline = next(t for t in legend if "no skill" in t)
+        assert "0.33" in baseline
+
+    def test_model_without_proba_rejected(self, trained_classifier, close_all):
+        from sklearn.linear_model import RidgeClassifier
+
+        model = RidgeClassifier().fit([[0], [1], [2], [3]], [0, 1, 0, 1])
+        with pytest.raises(ModelError):
+            plot_pr_curves(model, [[0], [1]], [0, 1])
+
+    def test_stub_without_classes_rejected(self, close_all):
+        class Stub:
+            def predict_proba(self, X):
+                return np.array([[0.5, 0.5]] * len(X))
+
+        with pytest.raises(ModelError, match="classes_"):
+            plot_pr_curves(Stub(), [[0.0], [1.0]], [0, 1])
 
 
 class TestCalibrationCurve:

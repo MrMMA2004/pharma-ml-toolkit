@@ -43,7 +43,7 @@ from pharmaml.ml.preprocessing import (
     make_train_test_split,
     split_features_target,
 )
-from pharmaml.ml.training import compare_models, train_model
+from pharmaml.ml.training import benchmark_feature_families, compare_models, train_model
 from pharmaml.ml.tuner import (
     Hyperband,
     HyperParameters,
@@ -77,6 +77,7 @@ __all__ = [
     "TrialResult",
     "TunerResults",
     "applicability_domain",
+    "benchmark_feature_families",
     "bootstrap_uncertainty",
     "build_ann_classifier",
     "build_ann_regressor",

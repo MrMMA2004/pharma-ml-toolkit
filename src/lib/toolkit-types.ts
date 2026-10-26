@@ -822,15 +822,29 @@ export interface DockingRescoreResponse {
 /* Feature Factory (chem features + top-K selection)                   */
 /* ------------------------------------------------------------------ */
 
-/** The eight descriptor/fingerprint/solvation families of pharmaml.chem.features. */
+/** The twenty descriptor/fingerprint/solvation families of
+ * pharmaml.chem.features (the ten fak_ml.ipynb datamol families +
+ * xxx.ipynb's shape_3d joined the original nine). */
 export type FeatureFamily =
   | "descriptors"
   | "atompair_count"
   | "ecfp"
+  | "ecfp3"
   | "avalon_count"
   | "rdkit_fingerprint"
   | "morgan_full"
   | "morgan_scaffold"
+  | "maccs"
+  | "fcfp"
+  | "fcfp_count"
+  | "topological"
+  | "topological_count"
+  | "rdkit_count"
+  | "pattern"
+  | "layered"
+  | "estate"
+  | "erg"
+  | "shape_3d"
   | "rism";
 
 /** One ranked, selected feature row returned by /api/chem/features. */

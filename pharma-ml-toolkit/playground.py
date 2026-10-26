@@ -16,8 +16,10 @@ A tabbed graphical interface opens with every calculation domain of the
   coordination numbers, excluded volume, dipole, charge asymmetry,
   over an embedded 3D geometry with the SPC / TIP3P site models),
   and the feature factory: the rar's own pipeline grown to a
-  9-family, ~12,860-column descriptor + fingerprint matrix (the
-  RISM-KH family included), ranked and cut to a top-K selection --
+  20-family, ~27,700-column descriptor + fingerprint matrix (the
+  ten fak_ml.ipynb datamol families and the shape_3d 3D block
+  included, the RISM-KH family closing), ranked and cut to a top-K
+  selection --
   plus (100x-119) the canonical-tautomer & 3D-structure card
   (canonicalize_tautomer + a multi-conformer 3D PDB writer with its
   ETKDG/UFF report), the 167-key MACCS fingerprint card, and the
@@ -495,6 +497,27 @@ Design notes
   a new dataset retires the previous run's derived tables (the
   cleaned / prep / permutation frames no longer masquerade as the
   new dataset's).
+
+  (100x-148) The one-by-one notebook review round -- both uploaded
+  notebooks (``xxx.ipynb``: the 3-class molecular classification
+  pipeline; ``fak_ml.ipynb``: the BindingDB pIC50 SYK regression)
+  checked cell by cell and their missing halves shipped: the feature
+  factory grew from 9 to TWENTY families (the ten ``fak_ml`` datamol
+  fingerprint types -- MACCS, FCFP +/- counts, topological torsion
+  +/- counts, one-bit-per-path RDKit counts, pattern, layered,
+  E-State counts, ERG -- plus ``xxx.ipynb`` cell 6's ``shape_3d``
+  family: ETKDGv3/MMFF94s->UFF conformers and the nine rdMolDescriptors
+  shape descriptors), the model registry gained ``sgd_classifier``
+  (the notebook's 13th classifier), the Results card grew live
+  ROC-curve and Precision-Recall-curve buttons (the PR curves with
+  their honest per-class prevalence baselines -- previously missing
+  from the toolkit entirely), the classification metrics render the
+  per-class precision/recall/F1/support line (``xxx.ipynb`` cell 28's
+  table), the Predict card converts predicted pIC50 back to IC50 nM
+  and TRIAGES hits by potency thresholds (``fak_ml``'s cells
+  102-175), and the Leaderboard gained the family BENCHMARK
+  (``benchmark_feature_families`` -- the notebook's 16-fingerprint
+  ``test_fp`` loop as one button over the 2D families).
 
 Command line helpers (useful for scripting and CI)::
 
@@ -1456,6 +1479,9 @@ def parse_smiles_lines(text: str) -> list[str]:
 #: ``(pharmaml family name, checkbox label)``.  The bit widths mirror
 #: ``pharmaml.chem.features``; the descriptor family's width depends on
 #: the installed RDKit and is resolved at build time instead.
+#: (100x-148) the ten fak_ml.ipynb families (cell 40's datamol
+#: benchmark vocabulary) + the shape_3d family (xxx.ipynb cell 6's
+#: 3D block) join the original nine.
 _FEATURE_FAMILY_LABELS: tuple[tuple[str, str], ...] = (
     ("descriptors", "RDKit descriptors"),
     ("atompair_count", "Atom-pair counts (2048)"),
@@ -1465,6 +1491,17 @@ _FEATURE_FAMILY_LABELS: tuple[tuple[str, str], ...] = (
     ("rdkit_fingerprint", "RDKit fingerprint (2048)"),
     ("morgan_full", "Morgan full (2048)"),
     ("morgan_scaffold", "Morgan scaffold (2048)"),
+    ("maccs", "MACCS keys (167)"),
+    ("fcfp", "FCFP bits — feature invariants (2048)"),
+    ("fcfp_count", "FCFP counts (2048)"),
+    ("topological", "Topological torsion bits (2048)"),
+    ("topological_count", "Topological torsion counts (2048)"),
+    ("rdkit_count", "RDKit path counts — 1 bit/path (2048)"),
+    ("pattern", "Pattern bits (2048)"),
+    ("layered", "Layered bits (2048)"),
+    ("estate", "E-State counts (79)"),
+    ("erg", "ERG reduced graph (315)"),
+    ("shape_3d", "3D shape descriptors (9 — ETKDG/MMFF)"),
     ("rism", "RISM-KH solvation (10)"),
 )
 
@@ -1477,6 +1514,17 @@ _FEATURE_FAMILY_BITS: dict[str, int] = {
     "rdkit_fingerprint": 2048,
     "morgan_full": 2048,
     "morgan_scaffold": 2048,
+    "maccs": 167,
+    "fcfp": 2048,
+    "fcfp_count": 2048,
+    "topological": 2048,
+    "topological_count": 2048,
+    "rdkit_count": 2048,
+    "pattern": 2048,
+    "layered": 2048,
+    "estate": 79,
+    "erg": 315,
+    "shape_3d": 9,
     "rism": 10,
 }
 
@@ -5678,9 +5726,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=2,
             column=0,
             span=2,
-            subtitle="The rar's own ML pipeline as a card: 9 descriptor / "
-            "fingerprint families (~12,860 columns per molecule), "
-            "ranked and cut to the top K you keep -- including "
+            subtitle="The rar's own ML pipeline as a card: 20 descriptor / "
+            "fingerprint families (~27,700 columns per molecule), "
+            "ranked and cut to the top K you keep -- the ten "
+            "fak_ml.ipynb families, the shape_3d 3D descriptors, "
             "the RISM-KH solvation family and D2.py's radius-3 ECFP.",
         )
         source_row = ttk.Frame(factory, style="Card.TFrame")
@@ -13083,9 +13132,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "Save figure…",
             self._save_ml_figure,
             tooltip="Save the figure this card is currently showing -- the "
-            "parity plot, calibration, learning curve or permutation "
-            "importance, whichever drew last -- as PNG, SVG or PDF "
-            "(unlike Ctrl+S, which saves the last figure drawn anywhere).",
+            "parity plot, calibration, learning curve, permutation "
+            "importance, ROC or PR curves, whichever drew last -- as "
+            "PNG, SVG or PDF (unlike Ctrl+S, which saves the last "
+            "figure drawn anywhere).",
         )
         save_ml_figure_btn.pack(side="left", padx=(10, 0))
         # (100x-146) the permutation table's own save twin: the figure
@@ -13100,6 +13150,31 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "figure, ready for a report; a new Train run retires it.",
         )
         perm_save_btn.pack(side="left", padx=(10, 0))
+        # (100x-148) xxx.ipynb cell 28's discrimination pair as live
+        # buttons -- the ROC curves used to ride only the report
+        # bundle; the PR curves existed nowhere in the toolkit.
+        roc_btn = self._action_button(
+            ml_result_buttons,
+            "ROC curves",
+            self._ml_plot_roc,
+            tooltip="One-vs-rest ROC curves of the last trained "
+            "classifier (plot_roc_curves) -- the notebook's per-model "
+            "_roc.jpg made interactive; binary gets the positive-class "
+            "curve, 3+ classes get one per class with the AUC in the "
+            "legend.",
+        )
+        roc_btn.pack(side="left", padx=(10, 0))
+        pr_btn = self._action_button(
+            ml_result_buttons,
+            "PR curve",
+            self._ml_plot_pr,
+            tooltip="One-vs-rest Precision-Recall curves of the last "
+            "trained classifier (plot_pr_curves) -- xxx.ipynb's "
+            "_pr.jpg twin, with the average precision per class in the "
+            "legend AND the honest no-skill baseline at each class's "
+            "prevalence (a line the notebook's own plot omitted).",
+        )
+        pr_btn.pack(side="left", padx=(10, 0))
         ml_result_note = ttk.Label(
             ml_result_buttons, text="", style="CardMuted.TLabel", wraplength=430, justify="left"
         )
@@ -13119,12 +13194,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=6,
             column=0,
             subtitle="Compare models fills it with the cross-validated "
-            "registry ranking; a hyperparameter search fills it "
-            "with the trial ranking, best first.",
+            "registry ranking; Benchmark feature families (below) "
+            "fills it with the per-family ranking; a hyperparameter "
+            "search fills it with the trial ranking, best first.",
         )
         self._board_status = ttk.Label(
             board,
-            text="empty — run Compare models or a hyperparameter search",
+            text="empty — run Compare models, Benchmark feature families, "
+            "or a hyperparameter search",
             style="CardMuted.TLabel",
             wraplength=620,
             justify="left",
@@ -13158,6 +13235,43 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "anywhere).",
         )
         save_board_figure_btn.pack(side="left", padx=(10, 0))
+        # (100x-148) fak_ml.ipynb cells 40-47: the notebook's 16-fingerprint
+        # benchmark as a family leaderboard -- one fixed model, every
+        # 2D feature family, the score column answering "which
+        # featurisation carries the signal?"
+        bench_row = ttk.Frame(board, style="Card.TFrame")
+        grid_append(board, bench_row, sticky="w", pady=(6, 0))
+        bench_btn = self._action_button(
+            bench_row,
+            "Benchmark feature families",
+            self._ml_benchmark_families,
+            tooltip="One fixed model cross-validated over EVERY 2D "
+            "feature family (benchmark_feature_families -- the "
+            "notebook's test_fp loop over datamol's 16 fingerprint "
+            "types): the board fills with one row per family, "
+            "scored by the task's objective.  The two 3D families "
+            "(shape_3d, rism) stay out -- conformer embedding per "
+            "molecule would dominate the run; needs a SMILES column "
+            "in the loaded dataset.",
+        )
+        bench_btn.pack(side="left")
+        self._bench_model = ttk.Entry(bench_row, width=22)
+        self._bench_model.insert(0, "auto")
+        Tooltip(
+            self._bench_model,
+            "The benchmark model: a registry name (lightgbm, ridge, "
+            "random_forest, ...) or 'auto' -- lightgbm when installed "
+            "(the notebook's own benchmark model), else the fastest "
+            "always-available twin for the task.",
+        )
+        self._bench_model.pack(side="left", padx=(8, 0))
+        self._bench_cv = ttk.Entry(bench_row, width=4)
+        self._bench_cv.insert(0, "3")
+        Tooltip(self._bench_cv, "CV folds for the family benchmark (2-10).")
+        self._bench_cv.pack(side="left", padx=(8, 0))
+        ttk.Label(bench_row, text="folds", style="CardMuted.TLabel").pack(
+            side="left", padx=(2, 0)
+        )
         self._board_host = self._figure_host(board, height=300)
 
         # -- ensemble builder (voting + stacking, members by hand) ---- #
@@ -13344,6 +13458,45 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "classifiers).",
         )
         save_pred_btn.pack(side="left")
+        # (100x-148) fak_ml.ipynb cells 102-111/150-175: the prediction
+        # sheet's pIC50 -> IC50 (nM) column + the potency-threshold triage
+        # the notebook ran to shortlist its SYK candidates.
+        ic50_btn = self._action_button(
+            predict_buttons,
+            "pIC50 → IC50 nM",
+            self._ml_predict_add_ic50,
+            tooltip="Convert the prediction column (or any pIC50-ish "
+            "column) back to IC50 in nM (pic50_to_ic50 -- the "
+            "notebook's dm.molar.log_to_molar step, exponent arithmetic "
+            "so integer pIC50s land on exact powers) and append it as "
+            "IC50_nM; the notebook then filtered by potency thresholds "
+            "-- the triage combo below does exactly that.",
+        )
+        ic50_btn.pack(side="left", padx=(10, 0))
+        ttk.Label(
+            predict_buttons, text="potency ≤", style="CardMuted.TLabel"
+        ).pack(side="left", padx=(10, 4))
+        self._predict_threshold = ttk.Combobox(
+            predict_buttons,
+            state="readonly",
+            width=9,
+            values=("100", "300", "500", "1000", "no filter"),
+        )
+        self._predict_threshold.set("100")
+        self._predict_threshold.pack(side="left")
+        ttk.Label(predict_buttons, text="nM", style="CardMuted.TLabel").pack(
+            side="left", padx=(4, 0)
+        )
+        triage_btn = self._action_button(
+            predict_buttons,
+            "Triage hits",
+            self._ml_predict_triage,
+            tooltip="Filter the prediction table to the potent rows "
+            "(IC50_nM at or below the threshold -- the notebook's "
+            "query('IC50 < 300') shortlist); the tree shows the hits, "
+            "Save predictions CSV… still writes the FULL table.",
+        )
+        triage_btn.pack(side="left", padx=(10, 0))
         self._predict_tree_frame = ttk.Frame(load_side, style="Card.TFrame")
         self._predict_tree_frame.pack(fill="both", expand=True, pady=(6, 0))
         self._predict_tree = ttk.Treeview(self._predict_tree_frame, show="headings", height=7)
@@ -14431,6 +14584,130 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         self._save_frame_dialog(frame, "Save the predictions", "predictions.csv", "Predictions")
 
+    # -- (100x-148) the notebook's pIC50 -> IC50 hit triage ---------- #
+    def _fill_predict_tree(self, result: Any) -> None:
+        """(Re)populate the prediction tree from a frame (the shared twin)."""
+        tree = self._predict_tree
+        tree.delete(*tree.get_children())
+        columns = [str(column) for column in result.columns]
+        tree["columns"] = columns
+        for column in columns:
+            width = 190 if column.lower() in ("smiles", "prediction") else 110
+            tree.heading(column, text=column)
+            tree.column(
+                column,
+                width=width,
+                minwidth=56,
+                stretch=(column.lower() in ("smiles", "prediction")),
+            )
+        for row in result.head(30).to_dict("records"):
+            tree.insert(
+                "", "end", values=[_cell_text(row[column], limit=40) for column in columns]
+            )
+
+    def _predict_pic50_column(self, frame: Any) -> str | None:
+        """The prediction column to read pIC50 from (best honest guess)."""
+        for candidate in ("prediction", "predicted_pic50", "pred_pic50", "pIC50", "pic50"):
+            if candidate in frame.columns:
+                return candidate
+        for column in frame.columns:
+            lowered = str(column).lower()
+            if "pic50" in lowered or lowered == "prediction":
+                return str(column)
+        return None
+
+    def _ml_predict_add_ic50(self) -> None:
+        """Append the IC50_nM column (fak_ml.ipynb cells 102/150).
+
+        The notebook's ``dm.molar.log_to_molar`` step: predicted pIC50
+        back to nM, exponent arithmetic so integer pIC50s land on exact
+        decimal powers.
+        """
+        frame = getattr(self, "_ml_predictions", None)
+        if frame is None:
+            messagebox.showinfo("Nothing to convert", "Predict with a loaded bundle first.")
+            return
+        if not self._require_pharmaml():
+            return
+        source = self._predict_pic50_column(frame)
+        if source is None:
+            messagebox.showwarning(
+                "No pIC50 column",
+                "The prediction table has no pIC50-like column (looking for "
+                "prediction / pIC50); train a regression model on pIC50 "
+                "first.",
+            )
+            return
+
+        def work() -> Any:
+            from pharmaml.chem.converters import add_ic50_column
+
+            return add_ic50_column(frame, pic50_col=source, out_col="IC50_nM")
+
+        def render(result: Any) -> None:
+            self._ml_predictions = result
+            self._fill_predict_tree(result)
+            n_valid = int(result["IC50_nM"].notna().sum())
+            self._ml_bundle_info.configure(
+                text=(
+                    f"IC50_nM appended from {source} — {n_valid} of "
+                    f"{len(result)} row(s) converted; the potency triage "
+                    "below shortlists the potent ones"
+                ),
+                style="Field.TLabel",
+            )
+
+        self._start_job("pIC50 -> IC50 conversion", work, render)
+
+    def _ml_predict_triage(self) -> None:
+        """Shortlist the potent rows (fak_ml.ipynb cells 103-111/153-175).
+
+        The notebook's ``query('IC50 < 300')`` -- the tree shows the
+        hits, ``Save predictions CSV…`` still writes the full table.
+        """
+        frame = getattr(self, "_ml_predictions", None)
+        if frame is None:
+            messagebox.showinfo("Nothing to triage", "Predict with a loaded bundle first.")
+            return
+        if "IC50_nM" not in frame.columns:
+            messagebox.showinfo(
+                "No IC50 column",
+                "Add the IC50_nM column first (the pIC50 → IC50 nM button).",
+            )
+            return
+        raw = self._predict_threshold.get()
+        if raw == "no filter":
+            self._fill_predict_tree(frame)
+            self._ml_bundle_info.configure(
+                text=f"showing all {len(frame)} row(s) — no potency filter",
+                style="Field.TLabel",
+            )
+            return
+        try:
+            threshold = float(raw)
+        except ValueError:
+            messagebox.showerror("Input", f"The potency threshold {raw!r} is not a number.")
+            return
+
+        def work() -> Any:
+            import pandas as pd
+
+            hits = frame[pd.to_numeric(frame["IC50_nM"], errors="coerce") <= threshold]
+            return hits
+
+        def render(hits: Any) -> None:
+            self._fill_predict_tree(hits)
+            self._ml_bundle_info.configure(
+                text=(
+                    f"{len(hits)} of {len(frame)} row(s) at or below "
+                    f"{threshold:g} nM — the tree shows the hits; Save "
+                    "predictions CSV… still writes the FULL table"
+                ),
+                style="Field.TLabel",
+            )
+
+        self._start_job("potency triage", work, render)
+
     # -- applicability-domain card (100x-118: the upload) ------------- #
     def _ml_ad_refresh_source(self) -> None:
         """Refresh the AD card's source line + bundle-mode visibility.
@@ -14975,6 +15252,30 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ttk.Label(self._ml_metrics, text=value, style="Field.TLabel", font=self._mono).grid(
                 row=index // 4, column=(index % 4) * 2 + 1, sticky="w", padx=(0, 18)
             )
+        # (100x-148) xxx.ipynb cell 28's per-class table: the notebook's
+        # precision_recall_fscore_support(average=None) dict rendered as
+        # one honest line per class under the macro aggregates.
+        per_class = getattr(report, "per_class", None)
+        if task == "classification" and per_class:
+            base_row = (len(pairs) + 3) // 4  # below the last macro row
+            ttk.Label(
+                self._ml_metrics,
+                text="per class",
+                style="CardMuted.TLabel",
+            ).grid(row=base_row, column=0, sticky="w", padx=(0, 6))
+            text = "   ".join(
+                f"{label}: P {entry['precision']:.2f} · R {entry['recall']:.2f} · "
+                f"F1 {entry['f1']:.2f} · n {int(entry['support'])}"
+                for label, entry in per_class.items()
+            )
+            ttk.Label(
+                self._ml_metrics,
+                text=text,
+                style="Field.TLabel",
+                font=self._mono,
+                wraplength=860,
+                justify="left",
+            ).grid(row=base_row, column=1, columnspan=7, sticky="w", padx=(0, 18))
 
     def _ml_tune(self) -> None:
         """Run a hyperparameter search over the chosen family.
@@ -15396,6 +15697,86 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         self._start_job(f"comparing models ({task})", work, render)
 
+    def _ml_benchmark_families(self) -> None:
+        """Cross-validate one model over every 2D feature family (100x-148).
+
+        ``fak_ml.ipynb`` cells 40-47 (``test_fp`` -- the notebook's
+        16-fingerprint benchmark with an LGBMRegressor each) as a
+        leaderboard button: the loaded dataset needs a SMILES column
+        and a target; the board fills with one row per family.
+        """
+        if not self._require_pharmaml():
+            return
+        if self._ml_frame is None:
+            messagebox.showwarning("No dataset", "Open a CSV or load an example first.")
+            return
+        smiles_column = detect_smiles_column(self._ml_frame)
+        if smiles_column is None:
+            messagebox.showwarning(
+                "No SMILES column",
+                "The family benchmark featurises SMILES -- the loaded "
+                "dataset has no SMILES-like column (looking for "
+                "smiles / canonical_smiles / ...).",
+            )
+            return
+        target = self._target_combo.get()
+        if not target or target == smiles_column:
+            messagebox.showwarning("No target", "Pick the column to predict.")
+            return
+        task = self._task_combo.get()
+        if task == "auto":
+            task = self._infer_task(target)
+        try:
+            folds = parse_int(self._bench_cv.get(), "benchmark folds", minimum=2, maximum=10)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        model_name = self._bench_model.get().strip()
+        # (100x-142) main-thread capture: the worker must never touch a
+        # tkinter widget (the frame and its columns are read here).
+        frame = self._ml_frame
+
+        def work(report: Any) -> Any:
+            from pharmaml.ml import benchmark_feature_families
+
+            def on_family(info: dict[str, Any]) -> None:
+                report(info["index"], info["total"], info["family"])
+
+            return benchmark_feature_families(
+                frame[smiles_column],
+                frame[target],
+                task,
+                model=None if model_name in ("", "auto") else model_name,
+                cv=folds,
+                n_jobs=1,
+                on_family=on_family,
+            )
+
+        def render(board: Any) -> None:
+            self._board_frame = board
+            self._board_tree.delete(*self._board_tree.get_children())
+            columns = [str(column) for column in board.columns]
+            self._board_tree["columns"] = columns
+            for column in columns:
+                self._board_tree.heading(column, text=column)
+                self._board_tree.column(column, width=140, minwidth=80, stretch=True)
+            for _, row in board.iterrows():
+                self._board_tree.insert(
+                    "", "end", values=[_cell_text(value, limit=30) for value in row.tolist()]
+                )
+            metric_column = next(c for c in board.columns if c.endswith("_mean"))
+            n_nan = int(board[metric_column].isna().sum())
+            note = (
+                f"{folds}-fold family benchmark over the 18 2D families "
+                "(shape_3d and rism opt-in only) — the score column is "
+                "the task's objective (higher is better)"
+            )
+            if n_nan:
+                note += f"; {n_nan} family(ies) failed and sank"
+            self._board_status.configure(text=note)
+
+        self._start_job(f"benchmarking feature families ({task})", work, render)
+
     # -- calibration + leaderboard figures (the 100x-119 review) ----- #
     def _ml_plot_calibration(self) -> None:
         """Reliability diagram of the last trained classifier."""
@@ -15438,6 +15819,89 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         self._start_job("calibration curve", work, render)
+
+    def _ml_plot_roc(self) -> None:
+        """One-vs-rest ROC curves of the last trained classifier (100x-148).
+
+        ``xxx.ipynb`` cell 28's ``_roc.jpg`` as a live Results-card
+        button -- the figure previously shipped only inside the saved
+        report bundle.
+        """
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo("No trained model", "Train a classification model first.")
+            return
+        trained, _report, task, _x_tr, _y_tr, x_test, y_test, target = run
+        if task != "classification":
+            messagebox.showinfo(
+                "Classification only",
+                f"The last run trained a {task} model — the ROC curve "
+                "needs a classifier's scores.",
+            )
+            return
+        if not self._require_pharmaml() or not self._require("matplotlib", "the ROC curves"):
+            return
+
+        def work() -> Any:
+            from pharmaml.viz import plot_roc_curves
+
+            return plot_roc_curves(
+                trained.model,
+                x_test,
+                y_test,
+                title=f"ROC curves — {trained.name} ({target})",
+            )
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._ml_host, figure)
+            self._ml_result_note.configure(
+                text="ROC curves replace the parity figure — "
+                "Train & evaluate brings it back"
+            )
+
+        self._start_job("ROC curves", work, render)
+
+    def _ml_plot_pr(self) -> None:
+        """One-vs-rest PR curves of the last trained classifier (100x-148).
+
+        ``xxx.ipynb`` cell 28's ``_pr.jpg`` as a live Results-card
+        button -- the plot previously missing from the toolkit entirely;
+        the honest no-skill baseline (each class's prevalence) is drawn
+        where the notebook plotted plain curves.
+        """
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo("No trained model", "Train a classification model first.")
+            return
+        trained, _report, task, _x_tr, _y_tr, x_test, y_test, target = run
+        if task != "classification":
+            messagebox.showinfo(
+                "Classification only",
+                f"The last run trained a {task} model — the precision-recall "
+                "curve needs a classifier's scores.",
+            )
+            return
+        if not self._require_pharmaml() or not self._require("matplotlib", "the PR curve"):
+            return
+
+        def work() -> Any:
+            from pharmaml.viz import plot_pr_curves
+
+            return plot_pr_curves(
+                trained.model,
+                x_test,
+                y_test,
+                title=f"Precision-Recall — {trained.name} ({target})",
+            )
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._ml_host, figure)
+            self._ml_result_note.configure(
+                text="PR curves replace the parity figure — "
+                "Train & evaluate brings it back"
+            )
+
+        self._start_job("PR curve", work, render)
 
     def _ml_plot_leaderboard(self) -> None:
         """The compare-models leaderboard as a bar figure."""

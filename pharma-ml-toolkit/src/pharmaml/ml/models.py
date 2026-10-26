@@ -63,6 +63,7 @@ from sklearn.linear_model import (
     LogisticRegression,
     Ridge,
     RidgeClassifier,
+    SGDClassifier,
 )
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.neural_network import MLPClassifier, MLPRegressor
@@ -372,6 +373,26 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         factory=lambda: RidgeClassifier(random_state=42),
         param_grid={"alpha": [0.1, 1.0, 10.0]},
         notes="L2 linear classifier (upgrades Ridge.py)",
+    ),
+    "sgd_classifier": ModelSpec(
+        name="sgd_classifier",
+        task="classification",
+        factory=lambda: SGDClassifier(max_iter=1000, random_state=42),
+        param_grid={
+            "loss": ["hinge", "log_loss", "modified_huber"],
+            "penalty": ["l2", "l1", "elasticnet"],
+            "alpha": [0.0001, 0.001, 0.01],
+        },
+        notes=(
+            "Linear SGD classifier (xxx.ipynb cell 26; loss='log_loss' "
+            "and 'modified_huber' enable predict_proba, plain 'hinge' "
+            "does not -- the leaderboard's balanced-accuracy fallback "
+            "and the voting guard both know.  The notebook's "
+            "early_stopping=True is deliberately NOT the factory default: "
+            "it reserves a validation split that raises on screens with "
+            "fewer than 2*n_classes rows; enable it via manual "
+            "hyperparameters when your dataset is large enough)"
+        ),
     ),
     "lasso_logistic": ModelSpec(
         name="lasso_logistic",
@@ -712,6 +733,8 @@ MODEL_ALIASES: dict[str, str] = {
     "huberreg": "huber_regression",
     "ridge": "ridge",
     "ridge_cls": "ridge_classifier",
+    "sgd": "sgd_classifier",
+    "sgdclassifier": "sgd_classifier",
     "lasso": "lasso",
     "enet": "elastic_net",
     "elasticnet": "elastic_net",

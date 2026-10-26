@@ -138,6 +138,7 @@ __all__ = [
     "plot_learning_curve",
     "plot_model_comparison",
     "plot_permutation_importance",
+    "plot_pr_curves",
     "plot_predicted_vs_actual",
     "plot_residuals",
     "plot_roc_curves",
@@ -334,6 +335,103 @@ def plot_roc_curves(
     ax.set_xlim(-0.02, 1.02)
     ax.set_ylim(-0.02, 1.05)
     ax.legend(loc="lower right", fontsize=9)
+    return fig
+
+
+def plot_pr_curves(
+    model: Any,
+    X_test: np.ndarray | pd.DataFrame,
+    y_test: np.ndarray | pd.Series | list,
+    title: str = "Precision-Recall curves",
+) -> Any:
+    """Precision-Recall curves — binary or one-vs-rest multiclass.
+
+    The ``xxx.ipynb`` cell 28 evaluation's PR half (the notebook drew
+    OvR PR curves for every model; the toolkit shipped only the ROC
+    twin).  Mirrors :func:`plot_roc_curves`'s contract exactly:
+
+    * binary targets    → one curve for the positive class, with its
+      average precision (AP) in the legend;
+    * 3+ class targets  → one one-vs-rest curve per class, each with
+      its AP, each in a different house colour.
+
+    Where ROC's chance line is the diagonal, PR's honest baseline is
+    the class PREVALENCE (a no-skill classifier predicts positives at
+    that rate): each multiclass curve carries its own dashed baseline
+    at that class's positive fraction, and the binary curve carries
+    one at the positive-class prevalence — the "no skill" line every
+    PR-curve explainer draws but the notebook's own plot omitted.
+
+    Parameters
+    ----------
+    model:
+        Fitted estimator or Pipeline exposing ``predict_proba``.
+    X_test, y_test:
+        Held-out features and labels.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    ModelError
+        If the model lacks ``predict_proba`` or the fitted
+        ``classes_`` attribute (the same guards as
+        :func:`plot_roc_curves`).
+    """
+    from sklearn.metrics import average_precision_score, precision_recall_curve
+
+    if not hasattr(model, "predict_proba"):
+        raise ModelError(
+            "plot_pr_curves needs a model with predict_proba; "
+            "fit a probabilistic classifier (logistic_regression, random_forest, ...)"
+        )
+    if not hasattr(model, "classes_"):
+        raise ModelError(
+            "plot_pr_curves needs a FITTED model: predict_proba is present "
+            "but classes_ is not (classes_ is set during fit)"
+        )
+
+    proba = np.asarray(model.predict_proba(X_test))
+    classes = list(model.classes_)
+    y_true = np.asarray(y_test)
+
+    fig, ax = new_figure(figsize=(7.0, 6.0))
+
+    if len(classes) == 2:
+        scores = proba[:, 1]
+        binary_truth = (y_true == classes[1]).astype(int)
+        precision, recall, _ = precision_recall_curve(binary_truth, scores)
+        ap = average_precision_score(binary_truth, scores)
+        prevalence = float(binary_truth.mean())
+        ax.axhline(prevalence, linestyle="--", color="#9CA3AF",
+                   label=f"no skill ({prevalence:.2f})")
+        ax.plot(recall, precision, color=PALETTE[0], lw=2.2,
+                label=f"AP {classes[1]}={ap:.3f}")
+    else:
+        for index, cls in enumerate(classes):
+            binary_truth = (y_true == cls).astype(int)
+            scores = proba[:, index]
+            try:
+                precision, recall, _ = precision_recall_curve(binary_truth, scores)
+                ap = average_precision_score(binary_truth, scores)
+            except ValueError as exc:
+                _LOG.warning("PR curve for class %r skipped: %s", cls, exc)
+                continue
+            prevalence = float(binary_truth.mean())
+            color = PALETTE[index % len(PALETTE)]
+            ax.axhline(prevalence, linestyle="--", color=color, alpha=0.35,
+                       lw=1.0, label=f"no skill {cls} ({prevalence:.2f})")
+            ax.plot(recall, precision, lw=2.0, color=color,
+                    label=f"AP {cls}={ap:.3f}")
+
+    ax.set_xlabel("Recall")
+    ax.set_ylabel("Precision")
+    ax.set_title(title)
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(-0.02, 1.05)
+    ax.legend(loc="upper right", fontsize=9)
     return fig
 
 

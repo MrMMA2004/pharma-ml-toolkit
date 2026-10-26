@@ -1809,19 +1809,21 @@ class TestFeatureFactoryGuiUnderXvfb:
         return len(rdMolDescriptors.Properties.GetAvailableProperties())
 
     def test_default_pasted_variance_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
-        # the shipped defaults: pasted drug SMILES, all 9 families ticked
+        # the shipped defaults: pasted drug SMILES, all 20 families ticked
+        # (100x-148: the ten fak_ml families + shape_3d joined the nine)
         assert app._feat_source_var.get() == "Pasted SMILES"
-        assert "9 families selected" in app._feat_width_label.cget("text")
-        assert f"~{12_800 + 10 + self._descriptor_count():,} columns" in app._feat_width_label.cget(
+        assert "20 families selected" in app._feat_width_label.cget("text")
+        expected_columns = 12_800 + 7 * 2048 + 167 + 79 + 315 + 9 + 10 + self._descriptor_count()
+        assert f"~{expected_columns:,} columns" in app._feat_width_label.cget(
             "text"
         )
         app._feat_k_entry.delete(0, "end")
         app._feat_k_entry.insert(0, "50")
         app._feat_ranker_combo.set("Variance (no target needed)")
         app._feat_compute()
-        assert self._drain_jobs(app), "feature factory job hung"
+        assert self._drain_jobs(app, timeout=240.0), "feature factory job hung"
         summary = app._feat_summary.cget("text")
-        assert f"{12_800 + 10 + self._descriptor_count():,} features" in summary
+        assert f"{expected_columns:,} features" in summary
         assert "3 molecules" in summary
         assert "median-survivors" in summary
         assert "variance" in summary
@@ -1836,17 +1838,13 @@ class TestFeatureFactoryGuiUnderXvfb:
         assert len(rows) == 50
         first = app._feat_tree.item(rows[0], "values")
         assert first[0] == "1"  # rank column counts from 1
+        # (100x-148) the top-50 variance features may now come from any
+        # of the twenty families -- the vocabulary pin moved to the
+        # library's own FEATURE_FAMILIES.
+        from pharmaml.chem.features import FEATURE_FAMILIES as _LIB_FAMILIES
+
         families_seen = {app._feat_tree.item(row, "values")[2] for row in rows}
-        assert families_seen <= {
-            "descriptors",
-            "atompair_count",
-            "ecfp",
-            "avalon_count",
-            "rdkit_fingerprint",
-            "morgan_full",
-            "morgan_scaffold",
-            "rism",  # the 8th family (1.2.49)
-        }
+        assert families_seen <= set(_LIB_FAMILIES)
         assert quiet_dialogs == []
 
     def test_exports_rar_style_csv_and_metadata_json(
@@ -12016,10 +12014,11 @@ class TestReview145Gui:
         names = [family for family, _label in playground._FEATURE_FAMILY_LABELS]
         assert names.index("ecfp3") == names.index("ecfp") + 1
 
-    def test_factory_subtitle_mentions_nine_families(self) -> None:
+    def test_factory_subtitle_mentions_twenty_families(self) -> None:
         source = PLAYGROUND_PATH.read_text(encoding="utf-8")
-        assert "9 descriptor / " in source
+        assert "20 descriptor / " in source
         assert "radius-3 ECFP" in source
+        assert "fak_ml.ipynb families" in source  # (100x-148) the ten new ones
 
 
 class TestReview146Gui:
@@ -12073,16 +12072,21 @@ class TestReview146Gui:
         assert "chunk BOUNDARY" in doc
         assert "AUDIT and COLLAPSE" in doc
         assert "Save-CSV twin" in doc
-        # the stale family count from the pre-ecfp3 era is gone
+        # the stale family counts from earlier eras are gone (100x-148
+        # grew the vocabulary again: 9 -> 20 families)
         assert "8-family" not in doc
-        assert "9-family" in doc
+        assert "9-family" not in doc
+        assert "20-family" in doc
 
     def test_features_docstring_count_honest(self) -> None:
         from pathlib import Path as _Path
 
         source = _Path(__file__).resolve().parents[1] / "src" / "pharmaml" / "chem" / "features.py"
         text = source.read_text(encoding="utf-8")
-        assert "the seven\n        fingerprint families" in text
+        # (100x-148) the fingerprint count grew 7 -> 17 with the ten
+        # fak_ml.ipynb families; the stale seven-count must be gone.
+        assert "seventeen fingerprint families" in text
+        assert "the seven\n        fingerprint families" not in text
 
     # -- the stale derived-state fix ---------------------------------------- #
 
@@ -12264,4 +12268,253 @@ class TestReview146Gui:
         assert self._drain_jobs(app), "screen load job hung"
         assert "auditing rows" in notes
         assert "collapsing replicates" in notes  # the collapse box defaults on
+        assert quiet_dialogs == []
+
+
+# ---------------------------------------------------------------------------
+# Round 100x-148 -- the one-by-one notebook review (xxx + fak_ml)
+# ---------------------------------------------------------------------------
+class TestReview148Gui:
+    """Both uploaded notebooks checked cell by cell; the missing halves
+    shipped: 20 feature families, sgd_classifier, live ROC/PR buttons,
+    the per-class metrics line, the pIC50 -> IC50 triage, and the
+    family benchmark button."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_148(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-148" in doc
+        assert "benchmark_feature_families" in doc
+        assert "sgd_classifier" in doc
+        assert "shape_3d" in doc
+        assert "IC50 nM" in doc
+
+    def test_round_source_pins(self, playground: Any) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "def _ml_plot_roc" in source
+        assert "def _ml_plot_pr" in source
+        assert "def _ml_benchmark_families" in source
+        assert "def _ml_predict_add_ic50" in source
+        assert "def _ml_predict_triage" in source
+        assert "def _fill_predict_tree" in source
+        assert '"Benchmark feature families"' in source
+        assert '"pIC50 → IC50 nM"' in source
+        assert '"Triage hits"' in source
+        assert '"ROC curves"' in source
+        assert '"PR curve"' in source
+
+    # -- the twenty-family picker ------------------------------------------ #
+
+    def test_family_picker_carries_twenty_families(self, app: Any) -> None:
+        assert len(app._feat_family_vars) == 20
+        for family, var in app._feat_family_vars.items():
+            assert bool(var.get()), family  # every family ticked by default
+        for family in (
+            "maccs", "fcfp", "fcfp_count", "topological", "topological_count",
+            "rdkit_count", "pattern", "layered", "estate", "erg", "shape_3d",
+        ):
+            assert family in app._feat_family_vars
+
+    def test_family_bits_match_the_library(self, playground: Any) -> None:
+        """The GUI width map mirrors pharmaml.chem.features exactly."""
+        from pharmaml.chem.features import FAMILY_PREFIXES
+
+        assert set(playground._FEATURE_FAMILY_BITS) == {
+            family for family in FAMILY_PREFIXES if family != "descriptors"
+        }
+        assert playground._FEATURE_FAMILY_BITS["maccs"] == 167
+        assert playground._FEATURE_FAMILY_BITS["estate"] == 79
+        assert playground._FEATURE_FAMILY_BITS["erg"] == 315
+        assert playground._FEATURE_FAMILY_BITS["shape_3d"] == 9
+
+    def test_labels_listed_in_library_order(self, playground: Any) -> None:
+        from pharmaml.chem.features import FEATURE_FAMILIES
+
+        names = [family for family, _label in playground._FEATURE_FAMILY_LABELS]
+        assert names == list(FEATURE_FAMILIES)
+
+    # -- the sgd classifier on the picker ---------------------------------- #
+
+    def test_sgd_classifier_on_the_model_picker(self, app: Any) -> None:
+        app._task_combo.set("classification")
+        app._ml_task_changed()
+        values = list(app._model_combo.cget("values"))
+        assert "sgd_classifier" in values
+
+    # -- the per-class metrics line ----------------------------------------- #
+
+    def test_per_class_line_after_multiclass_train(self, app: Any) -> None:
+        import pandas as pd
+
+        frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data" / "qsar_multiclass.csv")
+        app._ml_adopt_frame(frame, TOOLKIT_ROOT / "examples" / "data" / "qsar_multiclass.csv")
+        app._model_combo.set("logistic_regression")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        # the per-class line lives under the macro aggregates
+        labels = [
+            child.cget("text")
+            for child in app._ml_metrics.winfo_children()
+            if child.winfo_class() == "TLabel"
+        ]
+        assert "per class" in labels
+        per_class_line = next(
+            text for text in labels if text.startswith("0:") or ": P " in text and "· R " in text
+        )
+        assert "F1" in per_class_line
+        # every class of the example's target appears
+        for cls in sorted(frame["Target"].unique()):
+            assert str(cls) in per_class_line
+
+    # -- the ROC / PR buttons ------------------------------------------------ #
+
+    def test_roc_button_guards_regression_runs(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        # no trained model at all -> the guard fires
+        app._ml_plot_roc()
+        assert any("No trained model" in str(a) for a in quiet_dialogs)
+
+    def test_pr_button_draws_after_multiclass_train(self, app: Any) -> None:
+        import pandas as pd
+
+        frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data" / "qsar_multiclass.csv")
+        app._ml_adopt_frame(frame, TOOLKIT_ROOT / "examples" / "data" / "qsar_multiclass.csv")
+        app._model_combo.set("logistic_regression")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        app._ml_plot_pr()
+        assert self._drain_jobs(app), "PR job hung"
+        note = app._ml_result_note.cget("text")
+        assert "PR curves replace the parity figure" in note
+        # a figure landed in the Results card's host (both the TkAgg
+        # canvas path and the PNG fallback set _pg_figure)
+        assert getattr(app._ml_host, "_pg_figure", None) is not None
+        assert app._ml_host.winfo_children()
+
+    # -- the pIC50 -> IC50 triage -------------------------------------------- #
+
+    def test_predict_add_ic50_and_triage(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        import pandas as pd
+
+        app._ml_predictions = pd.DataFrame(
+            {
+                "SMILES": ["CCO", "CCN", "CCCO", "CCCCO"],
+                "prediction": [9.0, 7.0, 6.0, 5.0],  # 1, 100, 1000, 10000 nM
+            }
+        )
+        app._ml_predict_add_ic50()
+        assert self._drain_jobs(app), "IC50 conversion job hung"
+        result = app._ml_predictions
+        assert "IC50_nM" in result.columns
+        assert result["IC50_nM"].tolist() == [1.0, 100.0, 1000.0, 10000.0]
+        assert "IC50_nM" in list(app._predict_tree["columns"])
+        info = app._ml_bundle_info.cget("text")
+        assert "IC50_nM appended from prediction" in info
+        assert "4 of 4" in info
+        # the triage at 100 nM keeps the two potent rows
+        app._predict_threshold.set("100")
+        app._ml_predict_triage()
+        assert self._drain_jobs(app), "triage job hung"
+        info = app._ml_bundle_info.cget("text")
+        assert "2 of 4 row(s) at or below 100 nM" in info
+        # the full table survived -- Save writes everything
+        assert len(app._ml_predictions) == 4
+        # "no filter" restores the full view
+        app._predict_threshold.set("no filter")
+        app._ml_predict_triage()
+        assert "showing all 4 row(s)" in app._ml_bundle_info.cget("text")
+        assert quiet_dialogs == []
+
+    def test_predict_triage_needs_the_ic50_column(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        import pandas as pd
+
+        app._ml_predictions = pd.DataFrame({"SMILES": ["CCO"], "prediction": [7.0]})
+        app._ml_predict_triage()
+        assert any("No IC50 column" in str(a) for a in quiet_dialogs)
+
+    def test_predict_add_ic50_needs_a_pic50_column(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        import pandas as pd
+
+        app._ml_predictions = pd.DataFrame({"SMILES": ["CCO"]})
+        app._ml_predict_add_ic50()
+        assert any("No pIC50 column" in str(a) for a in quiet_dialogs)
+
+    # -- the family benchmark ------------------------------------------------- #
+
+    def test_benchmark_guards_no_dataset(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ml_benchmark_families()
+        assert any("No dataset" in str(a) for a in quiet_dialogs)
+
+    def test_benchmark_guards_no_smiles_column(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        import pandas as pd
+
+        app._ml_frame = pd.DataFrame({"x": [1.0, 2.0], "y": [0, 1]})
+        app._target_combo.set("y")
+        app._ml_benchmark_families()
+        assert any("No SMILES column" in str(a) for a in quiet_dialogs)
+
+    def test_benchmark_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        import pandas as pd
+
+        frame = pd.DataFrame(
+            {
+                "SMILES": [
+                    "CCO", "CCCO", "CCCCO", "CCCOO",
+                    "CC(=O)O", "CCC(=O)O", "O=C(O)C1CCCO1", "CCOC(=O)c1ccc(N)cc1",
+                ],
+                "pIC50": [2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5],
+            }
+        )
+        app._ml_adopt_frame(frame, TOOLKIT_ROOT / "examples" / "data" / "qsar_regression.csv")
+        app._target_combo.set("pIC50")
+        app._task_combo.set("regression")
+        app._bench_model.delete(0, "end")
+        app._bench_model.insert(0, "ridge")  # fast: the entry's default is lightgbm
+        app._bench_cv.delete(0, "end")
+        app._bench_cv.insert(0, "2")
+        app._ml_benchmark_families()
+        assert self._drain_jobs(app, timeout=240.0), "benchmark job hung"
+        rows = len(app._board_tree.get_children())
+        assert rows == 18  # the 18 2D families, shape_3d and rism opted out
+        columns = list(app._board_tree["columns"])
+        assert columns[:3] == ["family", "n_features", "n_samples"]
+        assert any(column.endswith("_mean") for column in columns)
+        status = app._board_status.cget("text")
+        assert "2-fold family benchmark over the 18 2D families" in status
+        assert "shape_3d and rism opt-in only" in status
         assert quiet_dialogs == []

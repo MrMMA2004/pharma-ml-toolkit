@@ -265,3 +265,85 @@ class TestMulticlassEnsembles:
             build_voting(
                 "classification", ["ridge_classifier", "knn"], voting="soft"
             )
+
+
+# ---------------------------------------------------------------------------
+# Per-class metrics (100x-148, xxx.ipynb cell 28's per-class table)
+# ---------------------------------------------------------------------------
+class TestPerClassMetrics:
+    """evaluate_model's per_class dict -- the notebook's per-class table."""
+
+    def test_three_class_report_carries_per_class(self, split) -> None:
+        X_train, X_test, y_train, y_test = split
+        result = train_model(
+            "logistic_regression", "classification", X_train, y_train, tune=False
+        )
+        report = evaluate_model(result.model, X_test, y_test, "classification")
+        assert isinstance(report, ClassificationReport)
+        assert report.per_class is not None
+        assert set(report.per_class) == {"0", "1", "2"}  # str(label) keys
+        for entry in report.per_class.values():
+            assert set(entry) == {"precision", "recall", "f1", "support"}
+            assert 0.0 <= entry["precision"] <= 1.0
+            assert 0.0 <= entry["recall"] <= 1.0
+            assert 0.0 <= entry["f1"] <= 1.0
+
+    def test_per_class_support_sums_to_n(self, split) -> None:
+        X_train, X_test, y_train, y_test = split
+        result = train_model(
+            "logistic_regression", "classification", X_train, y_train, tune=False
+        )
+        report = evaluate_model(result.model, X_test, y_test, "classification")
+        assert report.per_class is not None
+        assert sum(entry["support"] for entry in report.per_class.values()) == (
+            report.n_samples
+        )
+
+    def test_per_class_matches_manual_computation(self, split) -> None:
+        """The dict equals sklearn's own per-class arrays for the same fit."""
+        from sklearn.metrics import precision_recall_fscore_support
+
+        X_train, X_test, y_train, y_test = split
+        result = train_model(
+            "logistic_regression", "classification", X_train, y_train, tune=False
+        )
+        report = evaluate_model(result.model, X_test, y_test, "classification")
+        y_pred = result.model.predict(X_test)
+        precision, recall, f1, support = precision_recall_fscore_support(
+            y_test, y_pred, average=None, labels=report.labels, zero_division=0
+        )
+        assert report.per_class is not None
+        for index, label in enumerate(report.labels):
+            entry = report.per_class[str(label)]
+            assert entry["precision"] == pytest.approx(float(precision[index]))
+            assert entry["recall"] == pytest.approx(float(recall[index]))
+            assert entry["f1"] == pytest.approx(float(f1[index]))
+            assert entry["support"] == float(support[index])
+
+    def test_per_class_appears_in_as_dict(self, split) -> None:
+        X_train, X_test, y_train, y_test = split
+        result = train_model(
+            "logistic_regression", "classification", X_train, y_train, tune=False
+        )
+        report = evaluate_model(result.model, X_test, y_test, "classification")
+        payload = report.as_dict()
+        assert "per_class" in payload
+        assert payload["per_class"] is report.per_class
+
+    def test_direct_construction_keeps_backward_compatibility(self) -> None:
+        """Reports built field-by-field (no per_class) still construct."""
+        report = ClassificationReport(
+            accuracy=1.0,
+            balanced_accuracy=1.0,
+            f1_macro=1.0,
+            f1_weighted=1.0,
+            precision_macro=1.0,
+            recall_macro=1.0,
+            mcc=1.0,
+            roc_auc=1.0,
+            confusion=np.eye(2, dtype=int),
+            labels=[0, 1],
+            n_samples=4,
+        )
+        assert report.per_class is None
+        assert "per_class" not in report.as_dict()

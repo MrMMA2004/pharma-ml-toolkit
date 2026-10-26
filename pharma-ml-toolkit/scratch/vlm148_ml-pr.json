@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS: The figure displays multiple colored per-class curves, a legend with \"AP\" values for each class, and dashed horizontal lines representing the no-skill baseline.\n2) PASS: The \"per class\" line explicitly lists the classes (inactive, moderate, strong/weak) along with their corresponding Precision, Recall, F1, and sample size (n) metrics.\n3) PASS: The button row clearly includes both the \"ROC curves\" and \"PR curve\" buttons.\n4) PASS: All text elements, including labels, metrics, and legend entries, are fully legible without any overlapping or clipping.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793029690,
+  "id": "202610262348085623e5a7099a4ed3",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610262348085623e5a7099a4ed3",
+  "usage": {
+    "completion_tokens": 127,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1543,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1670
+  }
+}

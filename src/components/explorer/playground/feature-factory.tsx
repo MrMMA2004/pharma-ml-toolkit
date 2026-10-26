@@ -52,15 +52,29 @@ import { toast } from "sonner";
 /* Constants (mirror pharmaml.chem.features)                           */
 /* ------------------------------------------------------------------ */
 
-/** Column budget per family — matches the library's bit constants. */
+/** Column budget per family — matches the library's bit constants
+ * (the ten fak_ml.ipynb datamol families + xxx.ipynb's shape_3d
+ * joined the original nine; mirrors pharmaml.chem.features). */
 const FAMILY_BITS: Record<FeatureFamily, number> = {
   descriptors: 43, // RDKit rdMolDescriptors.Properties() on this build
   atompair_count: 2048,
   ecfp: 2048,
+  ecfp3: 2048,
   avalon_count: 512,
   rdkit_fingerprint: 2048,
   morgan_full: 2048,
   morgan_scaffold: 2048,
+  maccs: 167,
+  fcfp: 2048,
+  fcfp_count: 2048,
+  topological: 2048,
+  topological_count: 2048,
+  rdkit_count: 2048,
+  pattern: 2048,
+  layered: 2048,
+  estate: 79,
+  erg: 315,
+  shape_3d: 9, // ETKDG/MMFF 3D shape descriptors (xxx.ipynb cell 6)
   rism: 10, // 3D-RISM-KH solvation descriptors (pharmaml.chem.rism)
 };
 
@@ -68,10 +82,22 @@ const FAMILY_LABELS: Record<FeatureFamily, string> = {
   descriptors: "RDKit descriptors",
   atompair_count: "Atom-pair counts",
   ecfp: "ECFP bits",
+  ecfp3: "ECFP3 (radius 3)",
   avalon_count: "Avalon counts",
   rdkit_fingerprint: "RDKit fingerprint",
   morgan_full: "Morgan bits",
   morgan_scaffold: "Morgan-on-scaffold",
+  maccs: "MACCS keys",
+  fcfp: "FCFP bits",
+  fcfp_count: "FCFP counts",
+  topological: "Topological torsion",
+  topological_count: "Torsion counts",
+  rdkit_count: "RDKit path counts",
+  pattern: "Pattern bits",
+  layered: "Layered bits",
+  estate: "E-State counts",
+  erg: "ERG reduced graph",
+  shape_3d: "3D shape descriptors",
   rism: "RISM-KH solvation",
 };
 
@@ -96,10 +122,11 @@ const TABLE_ROW_CAP = 200;
 
 type Status = "idle" | "running" | "done" | "error";
 
-/** Feature factory: SMILES list -> 8-family 10,000+ column matrix ->
+/** Feature factory: SMILES list -> 20-family 27,000+ column matrix ->
  *  variance ranking -> top-K selection, computed with real RDKit through
- *  the pharmaml.chem.features API on the server (the 8th family is the
- *  3D-RISM-KH solvation descriptor set). */
+ *  the pharmaml.chem.features API on the server (the ten fak_ml.ipynb
+ *  datamol fingerprint families and xxx.ipynb's shape_3d 3D block join
+ *  the original nine; the RISM-KH solvation family closes the frame). */
 export function FeatureFactory() {
   const [smilesText, setSmilesText] = useState(DEFAULT_SMILES);
   const [families, setFamilies] = useState<FeatureFamily[]>(ALL_FAMILIES);

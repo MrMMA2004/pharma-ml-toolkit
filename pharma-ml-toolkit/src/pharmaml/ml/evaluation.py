@@ -108,6 +108,7 @@ from sklearn.metrics import (
     matthews_corrcoef,
     mean_absolute_error,
     mean_squared_error,
+    precision_recall_fscore_support,
     precision_score,
     r2_score,
     recall_score,
@@ -138,7 +139,19 @@ __all__ = [
 
 @dataclass(slots=True)
 class ClassificationReport:
-    """Structured classification metrics on a held-out set."""
+    """Structured classification metrics on a held-out set.
+
+    Attributes
+    ----------
+    per_class:
+        The ``xxx.ipynb`` cell 28 per-class table (the notebook's
+        ``precision_recall_fscore_support(average=None)`` dict), keyed by
+        the class label rendered as ``str`` (JSON frames need string
+        keys) with ``precision`` / ``recall`` / ``f1`` / ``support``
+        entries; ``None`` only when a caller constructs the report
+        directly without it.  Constructed by :func:`evaluate_model`
+        alongside the macro aggregates.
+    """
 
     accuracy: float
     balanced_accuracy: float
@@ -151,10 +164,11 @@ class ClassificationReport:
     confusion: np.ndarray
     labels: list[Any]
     n_samples: int
+    per_class: dict[str, dict[str, float]] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Flat dict for DataFrame/JSON consumption."""
-        return {
+        payload: dict[str, Any] = {
             "accuracy": self.accuracy,
             "balanced_accuracy": self.balanced_accuracy,
             "f1_macro": self.f1_macro,
@@ -165,6 +179,9 @@ class ClassificationReport:
             "roc_auc": self.roc_auc,
             "n_samples": self.n_samples,
         }
+        if self.per_class is not None:
+            payload["per_class"] = self.per_class
+        return payload
 
     def __str__(self) -> str:  # pragma: no cover - presentation only
         auc_text = "n/a" if self.roc_auc is None else f"{self.roc_auc:.4f}"
@@ -385,6 +402,22 @@ def evaluate_model(
             _LOG.warning("ROC-AUC could not be computed: %s", exc)
             roc_auc = None
 
+        # The notebook's per-class table (xxx.ipynb cell 28):
+        # precision/recall/f1/support per label, keyed by str(label)
+        # for the JSON/DataFrame consumers.
+        per_precision, per_recall, per_f1, per_support = precision_recall_fscore_support(
+            y_true, y_pred, average=None, labels=labels, zero_division=0
+        )
+        per_class = {
+            str(label): {
+                "precision": float(per_precision[index]),
+                "recall": float(per_recall[index]),
+                "f1": float(per_f1[index]),
+                "support": float(per_support[index]),
+            }
+            for index, label in enumerate(labels)
+        }
+
         return ClassificationReport(
             accuracy=float(accuracy_score(y_true, y_pred)),
             balanced_accuracy=float(balanced_accuracy_score(y_true, y_pred)),
@@ -399,6 +432,7 @@ def evaluate_model(
             confusion=confusion_matrix(y_true, y_pred, labels=labels),
             labels=labels,
             n_samples=len(y_true),
+            per_class=per_class,
         )
 
     if task == "regression":

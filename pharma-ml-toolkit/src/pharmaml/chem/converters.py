@@ -39,10 +39,12 @@ _LOG = get_logger(__name__)
 __all__ = [
     "EndpointDatasetReport",
     "SdfWriteReport",
+    "add_ic50_column",
     "add_pic50_column",
     "ic50_to_pic50",
     "ki_to_pki",
     "pic50_from_ic50_series",
+    "pic50_to_ic50",
     "prepare_pic50_dataset",
     "sdf_to_table",
     "smi_to_csv",
@@ -210,6 +212,139 @@ def add_pic50_column(
     n_invalid = int(result[out_col].isna().sum())
     if n_invalid:
         _LOG.warning("%d rows had unparseable %s values", n_invalid, source_col)
+    if drop_invalid:
+        result = result[result[out_col].notna()].reset_index(drop=True)
+    return result
+
+
+def pic50_to_ic50(pic50: object, unit: str = "nM") -> float | None:
+    """Convert a pIC50 value back to an IC50 concentration.
+
+    The inverse of :func:`ic50_to_pic50` and the library port of
+    ``fak_ml.ipynb`` cells 102/150 (``dm.molar.log_to_molar`` -- the
+    notebook converts its predicted pIC50 back to nM to triage hits by
+    potency thresholds).  ``IC50 = 10 ** -pIC50`` molar, rescaled to
+    the requested unit.
+
+    Parameters
+    ----------
+    pic50:
+        Numeric pIC50 value; non-numeric input returns ``None`` (the
+        series twin's NaN-preservation path).  NaN and +/-inf pass
+        through as NaN (a non-finite pIC50 has no honest concentration).
+    unit:
+        Output concentration unit: one of ``'M', 'mM', 'uM', 'nM', 'pM'``.
+
+    Returns
+    -------
+    float or None
+        IC50 in ``unit``, or ``None`` when the input cannot be parsed.
+        A NaN input yields NaN (not None) so a series round-trip keeps
+        its NaN cells distinguishable from unparseable ones.
+
+    Raises
+    ------
+    DataValidationError
+        If ``unit`` is not a supported concentration unit.
+
+    Examples
+    --------
+    >>> pic50_to_ic50(6.0)              # pIC50 6 -> 1000 nM
+    1000.0
+    >>> pic50_to_ic50(9.0)              # pIC50 9 -> 1 nM
+    1.0
+    >>> ic50_to_pic50(pic50_to_ic50(7.5))  # exact round-trip
+    7.5
+
+    Notes
+    -----
+    The arithmetic is exponent-based (``10 ** (exponent - pIC50)``
+    with ``exponent`` the unit's scale exponent, e.g. 9 for nM) rather
+    than the notebook's ``10 ** -p * 1e9`` product: integer pIC50s land
+    on EXACT decimal powers instead of datamol's float noise
+    (``dm.molar.log_to_molar(6.0, 'nM')`` returns 999.9999999999999;
+    this function returns 1000.0 -- probed, and the round-trip stays
+    bit-exact both ways).
+    """
+    exponents = {"M": 0.0, "mM": 3.0, "uM": 6.0, "µM": 6.0, "nM": 9.0, "pM": 12.0}
+    unit_key = unit.strip()
+    if unit_key not in exponents:
+        raise DataValidationError(
+            f"Unknown concentration unit {unit!r}; expected one of {sorted(exponents)}"
+        )
+    if pic50 is None:
+        return None
+    try:
+        value = float(pic50)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(value):
+        return float("nan")
+    if math.isinf(value):
+        # -inf pIC50 is an infinitely potent compound (0 concentration);
+        # +inf is unbound.  Neither has a finite nM answer -- NaN keeps
+        # the cell honest instead of a silent 0.
+        return float("nan")
+    return 10.0 ** (exponents[unit_key] - value)
+
+
+def ic50_from_pic50_series(
+    series: pd.Series, unit: str = "nM"
+) -> pd.Series:
+    """Vectorised pIC50 -> IC50 conversion preserving NaN for bad rows."""
+    return series.map(lambda value: pic50_to_ic50(value, unit=unit))
+
+
+def add_ic50_column(
+    frame: pd.DataFrame,
+    pic50_col: str = "pIC50",
+    out_col: str = "IC50_nM",
+    unit: str = "nM",
+    drop_invalid: bool = False,
+) -> pd.DataFrame:
+    """Append an IC50 column converted from a pIC50 column.
+
+    The table twin of :func:`pic50_to_ic50` -- mirrors
+    :func:`add_pic50_column`'s contract (the notebook's predicted-pIC50
+    sheets gain their nM column before the potency-threshold triage).
+    ``drop_invalid`` defaults to False here, unlike the IC50->pIC50
+    direction: a prediction sheet keeps every molecule, an unconvertible
+    pIC50 simply lands as NaN.
+
+    Parameters
+    ----------
+    frame:
+        Table containing the pIC50 column.
+    pic50_col:
+        Column holding pIC50 values.
+    out_col:
+        Name of the appended column.
+    unit:
+        Unit of the appended IC50 values.
+    drop_invalid:
+        Drop rows whose pIC50 could not be parsed (default False -- see
+        above).
+
+    Returns
+    -------
+    pandas.DataFrame
+        A copy with the new column; rows with unparseable pIC50 receive
+        ``NaN`` (or are removed when ``drop_invalid`` is True).
+
+    Examples
+    --------
+    >>> frame = pd.DataFrame({"pIC50": [6.0, 7.0]})
+    >>> add_ic50_column(frame)[["pIC50", "IC50_nM"]]
+       pIC50  IC50_nM
+    0    6.0   1000.0
+    1    7.0    100.0
+    """
+    require_columns(frame, [pic50_col])
+    result = frame.copy()
+    result[out_col] = ic50_from_pic50_series(result[pic50_col], unit=unit)
+    n_invalid = int(result[out_col].isna().sum())
+    if n_invalid:
+        _LOG.warning("%d rows had unparseable %s values", n_invalid, pic50_col)
     if drop_invalid:
         result = result[result[out_col].notna()].reset_index(drop=True)
     return result

@@ -2158,3 +2158,198 @@ class TestGaussianProcessClassifierFamily:
         )
         assert result.cv_scores is not None
         assert not np.all(np.isnan(result.cv_scores))
+
+
+# ---------------------------------------------------------------------------
+# sgd_classifier (100x-148, xxx.ipynb cell 26)
+# ---------------------------------------------------------------------------
+class TestSgdClassifier:
+    """The 13th notebook classifier joins the registry."""
+
+    def test_registry_entry(self) -> None:
+        spec = MODEL_REGISTRY["sgd_classifier"]
+        assert spec.task == "classification"
+        assert spec.available  # pure sklearn, always available
+        assert set(spec.param_grid) == {"loss", "penalty", "alpha"}
+
+    def test_alias_resolves(self) -> None:
+        assert resolve_model_name("sgd") == "sgd_classifier"
+
+    def test_default_hinge_has_no_proba(self) -> None:
+        model = build_model("sgd_classifier", "classification")
+        assert not hasattr(model, "predict_proba")  # hinge loss: no soft scores
+
+    def test_log_loss_enables_proba(self) -> None:
+        model = build_model(
+            "sgd_classifier", "classification", params={"loss": "log_loss"}
+        )
+        model.fit([[0.0], [1.0], [2.0], [3.0]], [0, 1, 0, 1])
+        assert hasattr(model, "predict_proba")
+        assert model.predict_proba([[1.5]]).shape == (1, 2)
+
+    def test_trains_and_predicts(self, classification_frame) -> None:
+        X, y = split_features_target(classification_frame, "Target", drop_cols=["SMILES"])
+        result = train_model(
+            "sgd_classifier", "classification", X, y, tune=False, preprocess=True
+        )
+        report = evaluate_model(result.model, X, y, "classification")
+        assert report.accuracy > 0.5  # the synthetic set is learnable
+
+    def test_appears_on_default_classification_leaderboard(self) -> None:
+        from sklearn.datasets import make_classification as mk
+
+        X, y = mk(n_samples=60, n_features=4, random_state=42)
+        board = compare_models(
+            X, y,
+            "classification",
+            models=["sgd_classifier", "ridge_classifier"],
+            cv=2,
+        )
+        assert "sgd_classifier" in board["model"].tolist()
+
+
+# ---------------------------------------------------------------------------
+# benchmark_feature_families (100x-148, fak_ml.ipynb cells 40-47)
+# ---------------------------------------------------------------------------
+#: 12 diverse molecules for the family benchmark (2 classes by size).
+_BENCH_SMILES = [
+    "CCO", "CCCO", "CC(=O)O", "CCC(=O)O",          # class 0: small
+    "CC(=O)Oc1ccccc1C(=O)O", "CC(C)Cc1ccc(cc1)C(C)C(=O)O",  # class 1: larger
+    "Cn1cnc2c1c(=O)n(C)c(=O)n2C", "COc1ccc2cc(ccc2c1)C(C)C(=O)O",
+    "CCOC(=O)c1ccc(N)cc1", "O=C1Oc2ccccc2C=C1",
+    "COc1cc(C=O)ccc1O", "CC(C)N(C)C(=O)c1c(N)nc(N(C)C)nc1",
+]
+
+
+class TestBenchmarkFeatureFamilies:
+    """The notebook's fingerprint benchmark as a family leaderboard."""
+
+    def test_regression_board_over_two_families(self) -> None:
+        from pharmaml.ml.training import benchmark_feature_families
+
+        y = [1.0] * 6 + [2.0] * 6
+        board = benchmark_feature_families(
+            _BENCH_SMILES, y, task="regression",
+            families=("estate", "maccs"), model="ridge", cv=2,
+        )
+        assert board["family"].tolist() == ["estate", "maccs"]  # canonical order? no: sorted by metric
+        assert set(board["family"]) == {"estate", "maccs"}
+        assert board["n_features"].tolist() == [79, 167]
+        assert (board["n_samples"] == 12).all()
+        assert board["folds"].tolist() == [2, 2]
+        assert board["neg_root_mean_squared_error_mean"].notna().all()
+
+    def test_classification_board_with_explicit_model(self) -> None:
+        from pharmaml.ml.training import benchmark_feature_families
+
+        y = [0] * 6 + [1] * 6
+        board = benchmark_feature_families(
+            _BENCH_SMILES, y, task="classification",
+            families=("descriptors",), model="logistic_regression", cv=2,
+        )
+        assert board["family"].tolist() == ["descriptors"]
+        # balanced accuracy (proba model gets roc_auc_ovo; either way a
+        # real column name landed on the board)
+        metric_cols = [c for c in board.columns if c.endswith("_mean")]
+        assert len(metric_cols) == 1
+        assert board[metric_cols[0]].notna().all()
+
+    def test_deterministic_across_runs(self) -> None:
+        from pharmaml.ml.training import benchmark_feature_families
+
+        y = [1.0] * 6 + [2.0] * 6
+        first = benchmark_feature_families(
+            _BENCH_SMILES, y, task="regression",
+            families=("estate",), model="ridge", cv=2,
+        )
+        second = benchmark_feature_families(
+            _BENCH_SMILES, y, task="regression",
+            families=("estate",), model="ridge", cv=2,
+        )
+        metric_col = "neg_root_mean_squared_error_mean"
+        assert first[metric_col].tolist() == second[metric_col].tolist()
+
+    def test_default_families_exclude_the_3d_families(self) -> None:
+        from pharmaml.ml.training import benchmark_feature_families
+
+        y = [0] * 4 + [1] * 4
+        board = benchmark_feature_families(
+            _BENCH_SMILES[:4] + _BENCH_SMILES[6:10], y,
+            task="classification", cv=2,
+        )
+        listed = set(board["family"])
+        assert "shape_3d" not in listed
+        assert "rism" not in listed
+        assert len(listed) == 18  # 20 families minus the two 3D ones
+
+    def test_progress_callback_fires_per_family(self) -> None:
+        from pharmaml.ml.training import benchmark_feature_families
+
+        calls: list[dict[str, Any]] = []
+        y = [1.0] * 6 + [2.0] * 6
+        benchmark_feature_families(
+            _BENCH_SMILES, y, task="regression",
+            families=("maccs", "estate"), model="ridge", cv=2,
+            on_family=calls.append,
+        )
+        assert calls == [
+            {"family": "maccs", "index": 1, "total": 2},
+            {"family": "estate", "index": 2, "total": 2},
+        ]
+
+    def test_unknown_family_raises(self) -> None:
+        from pharmaml.ml.training import benchmark_feature_families
+
+        with pytest.raises(ModelError, match="unknown feature family"):
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 12, task="regression",
+                families=("not_a_family",), cv=2,
+            )
+
+    def test_cv_below_two_raises(self) -> None:
+        from pharmaml.ml.training import benchmark_feature_families
+
+        with pytest.raises(ModelError, match="cv must be >= 2"):
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 12, task="regression",
+                families=("maccs",), cv=1,
+            )
+
+    def test_unknown_scoring_raises(self) -> None:
+        from pharmaml.ml.training import benchmark_feature_families
+
+        with pytest.raises(ModelError, match="Unknown scoring"):
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 12, task="regression",
+                families=("maccs",), cv=2, scoring="not_a_metric",
+            )
+
+    def test_length_mismatch_raises(self) -> None:
+        from pharmaml.ml.training import benchmark_feature_families
+
+        with pytest.raises(ModelError, match="row-aligned"):
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 6, task="regression",
+                families=("maccs",), cv=2,
+            )
+
+    def test_task_validation(self) -> None:
+        from pharmaml.ml.training import benchmark_feature_families
+
+        with pytest.raises(ModelError, match="task must be"):
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 12, task="banana",
+                families=("maccs",), cv=2,
+            )
+
+    def test_dropped_molecule_takes_its_target_row(self) -> None:
+        """A SMILES that fails to parse drops its y row (alignment)."""
+        from pharmaml.ml.training import benchmark_feature_families
+
+        smiles = _BENCH_SMILES[:11] + ["not_a_smiles"]
+        y = [1.0] * 6 + [2.0] * 6
+        board = benchmark_feature_families(
+            smiles, y, task="regression",
+            families=("maccs",), model="ridge", cv=2,
+        )
+        assert int(board["n_samples"].iloc[0]) == 11

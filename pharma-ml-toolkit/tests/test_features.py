@@ -156,6 +156,17 @@ class TestModuleContract:
             "rdkit_fingerprint",
             "morgan_full",
             "morgan_scaffold",
+            "maccs",
+            "fcfp",
+            "fcfp_count",
+            "topological",
+            "topological_count",
+            "rdkit_count",
+            "pattern",
+            "layered",
+            "estate",
+            "erg",
+            "shape_3d",
             "rism",
         )
 
@@ -169,6 +180,17 @@ class TestModuleContract:
             "rdkit_fingerprint": "rdkit_bit_",
             "morgan_full": "morgan_full_bit_",
             "morgan_scaffold": "morgan_scaffold_bit_",
+            "maccs": "maccs_bit_",
+            "fcfp": "fcfp_bit_",
+            "fcfp_count": "fcfp_count_",
+            "topological": "topo_bit_",
+            "topological_count": "topo_count_",
+            "rdkit_count": "rdkit_count_",
+            "pattern": "pattern_bit_",
+            "layered": "layered_bit_",
+            "estate": "estate_bit_",
+            "erg": "erg_",
+            "shape_3d": "d3d_",
             "rism": "rism_",
         }
         assert list(FAMILY_PREFIXES) == list(FEATURE_FAMILIES)
@@ -503,10 +525,25 @@ class TestFullFamilyRun:
             "rdkit_fingerprint": 2048,
             "morgan_full": 2048,
             "morgan_scaffold": 2048,
+            "maccs": 167,
+            "fcfp": 2048,
+            "fcfp_count": 2048,
+            "topological": 2048,
+            "topological_count": 2048,
+            "rdkit_count": 2048,
+            "pattern": 2048,
+            "layered": 2048,
+            "estate": 79,
+            "erg": 315,
+            "shape_3d": 9,
             "rism": RISM_DESCRIPTOR_COUNT,
         }
         assert list(report.families) == list(FEATURE_FAMILIES)  # canonical order
-        assert report.total_columns == 12_800 + RISM_DESCRIPTOR_COUNT + n_props
+        # 12,800 (the original seven blocks incl. avalon) + the ten
+        # fak_ml families (7 x 2048 + 167 + 79 + 315) + shape_3d's 9.
+        assert report.total_columns == (
+            12_800 + 7 * 2048 + 167 + 79 + 315 + 9 + RISM_DESCRIPTOR_COUNT + n_props
+        )
         assert report.total_columns > 10_000  # the headline contract
         assert report.total_columns == sum(report.families.values())
         assert frame.shape == (8, report.total_columns)
@@ -971,11 +1008,195 @@ class TestSelectionMetadata:
             "morgan_scaffold": 2048,
             "avalon_count": 512,
             "atompair_count": 2048,
+            "maccs": 167,
+            "fcfp": 2048,
+            "fcfp_count": 2048,
+            "topological": 2048,
+            "topological_count": 2048,
+            "rdkit_count": 2048,
+            "pattern": 2048,
+            "layered": 2048,
+            "estate": 79,
+            "erg": 315,
         }
         assert meta["n_molecules"] == 8
         assert meta["dropped"] == [[8, "not_a_smiles"], [9, ""]]
-        assert meta["total_features"] == 12_800 + RISM_DESCRIPTOR_COUNT + len(
-            rdMolDescriptors.Properties.GetAvailableProperties()
+        assert meta["total_features"] == (
+            12_800 + 7 * 2048 + 167 + 79 + 315 + 9 + RISM_DESCRIPTOR_COUNT + len(
+                rdMolDescriptors.Properties.GetAvailableProperties()
+            )
         )
         assert meta["k_requested"] == 3
         assert meta["selected_features"] == selection.selected
+
+
+# ---------------------------------------------------------------------------
+# The ten fak_ml.ipynb fingerprint families + shape_3d (100x-148)
+# ---------------------------------------------------------------------------
+class TestFakmlFamilies:
+    """Cell 40's 16 datamol fingerprint types, ported as first-class families.
+
+    The ten new families must reproduce ``dm.to_fp`` byte-exactly (the
+    notebook's own benchmark vocabulary) with two honest exceptions,
+    pinned below: datamol's empty-sparse bug on ethanol torsion counts,
+    and shape_3d, which has no datamol counterpart.
+    """
+
+    FAKML_TYPES: tuple[tuple[str, str, str], ...] = (
+        # (datamol type, OUR family name, column prefix)
+        ("maccs", "maccs", "maccs_bit_"),
+        ("fcfp", "fcfp", "fcfp_bit_"),
+        ("fcfp-count", "fcfp_count", "fcfp_count_"),
+        ("topological", "topological", "topo_bit_"),
+        ("topological-count", "topological_count", "topo_count_"),
+        ("rdkit-count", "rdkit_count", "rdkit_count_"),
+        ("pattern", "pattern", "pattern_bit_"),
+        ("layered", "layered", "layered_bit_"),
+        ("estate", "estate", "estate_bit_"),
+        ("erg", "erg", "erg_"),
+    )
+
+    def test_prefix_uniqueness_all_pairs(self) -> None:
+        """No family prefix may be a prefix of another (exact inverse)."""
+        prefixes = list(FAMILY_PREFIXES.values())
+        for i, first in enumerate(prefixes):
+            for second in prefixes[i + 1 :]:
+                assert not second.startswith(first), (
+                    f"prefix {first!r} is a prefix of {second!r}"
+                )
+                assert not first.startswith(second), (
+                    f"prefix {second!r} is a prefix of {first!r}"
+                )
+
+    def test_real_column_names_new_families(self) -> None:
+        assert family_of_column("maccs_bit_166") == "maccs"
+        assert family_of_column("fcfp_bit_0") == "fcfp"
+        assert family_of_column("fcfp_count_2047") == "fcfp_count"
+        assert family_of_column("topo_bit_9") == "topological"
+        assert family_of_column("topo_count_9") == "topological_count"
+        assert family_of_column("rdkit_count_5") == "rdkit_count"
+        assert family_of_column("pattern_bit_1") == "pattern"
+        assert family_of_column("layered_bit_1") == "layered"
+        assert family_of_column("estate_bit_78") == "estate"
+        assert family_of_column("erg_314") == "erg"
+        assert family_of_column("d3d_pmi1") == "shape_3d"
+
+    def test_datamol_parity(self) -> None:
+        """Every new family matches dm.to_fp byte-exactly (the benchmark vocab)."""
+        datamol = pytest.importorskip("datamol")
+        from rdkit import Chem
+
+        families = tuple(family for _dm, family, _prefix in self.FAKML_TYPES)
+        frame, report = compute_feature_frame(
+            [ASPIRIN, ETHANOL, "Cn1cnc2c1c(=O)n(C)c(=O)n2C"],
+            families=families,
+        )
+        assert report.n_valid == 3
+        mols = [Chem.MolFromSmiles(s) for s in (ASPIRIN, ETHANOL, "Cn1cnc2c1c(=O)n(C)c(=O)n2C")]
+        for dm_type, _family, prefix in self.FAKML_TYPES:
+            columns = [c for c in frame.columns if c.startswith(prefix)]
+            assert len(columns) > 0, f"family columns missing for {dm_type}"
+            for row, mol in enumerate(mols):
+                if dm_type == "topological-count" and row == 1:
+                    # datamol's own fp_to_array bug: ethanol has no
+                    # 4-atom torsion, the empty sparse count vect
+                    # crashes its unpack -- OUR zero vector is the
+                    # honest answer (pinned in the next test).
+                    continue
+                reference = np.asarray(datamol.to_fp(mol, fp_type=dm_type), dtype=float)
+                ours = frame.iloc[row][columns].to_numpy(dtype=float)
+                assert np.allclose(reference, ours, equal_nan=True), (
+                    f"{dm_type} diverged from datamol on row {row}"
+                )
+
+    def test_ethanol_torsion_count_is_zero_vector(self) -> None:
+        """Ethanol has no 4-atom torsion: an all-zero count row, not a drop."""
+        frame, report = compute_feature_frame([ETHANOL], families=("topological_count",))
+        assert report.n_valid == 1
+        columns = [c for c in frame.columns if c.startswith("topo_count_")]
+        assert len(columns) == 2048
+        assert not frame.iloc[0][columns].to_numpy().any()
+
+    def test_bit_sizes(self) -> None:
+        from pharmaml.chem.features import (
+            ERG_BITS,
+            ESTATE_BITS,
+            MACCS_BITS,
+            TOPOLOGICAL_BITS,
+        )
+
+        assert (MACCS_BITS, TOPOLOGICAL_BITS, ESTATE_BITS, ERG_BITS) == (167, 2048, 79, 315)
+
+    def test_shape_3d_family(self) -> None:
+        frame, report = compute_feature_frame([ASPIRIN, ETHANOL], families=("shape_3d",))
+        assert report.families == {"shape_3d": 9}
+        assert list(frame.columns) == [
+            "d3d_asphericity",
+            "d3d_eccentricity",
+            "d3d_pmi1",
+            "d3d_pmi2",
+            "d3d_pmi3",
+            "d3d_radius_of_gyration",
+            "d3d_spherocity_index",
+            "d3d_npr1",
+            "d3d_npr2",
+        ]
+        values = frame.to_numpy()
+        assert np.isfinite(values).all()
+        # PMI ordering + NPR bounds hold for both molecules.
+        assert (values[:, 2] <= values[:, 3] + 1e-9).all()
+        assert (values[:, 3] <= values[:, 4] + 1e-9).all()
+        assert (values[:, 7] <= values[:, 8] + 1e-9).all()
+        assert (values[:, 7] > 0).all() and (values[:, 8] <= 1.0 + 1e-9).all()
+
+    def test_shape_3d_is_deterministic(self) -> None:
+        first, _ = compute_feature_frame([ASPIRIN], families=("shape_3d",))
+        second, _ = compute_feature_frame([ASPIRIN], families=("shape_3d",))
+        assert first.equals(second)
+
+    def test_shape_3d_nan_row_for_failed_pipeline(self, monkeypatch) -> None:
+        """A failed 3D pipeline keeps the ROW as NaN (xxx.ipynb's behaviour).
+
+        Probed honestly: no tested SMILES fails BOTH force fields on
+        this build (even ``[He]`` embeds with degenerate zeros), so the
+        features-level NaN contract is pinned through the same broken
+        ``_shape_vector`` the descriptors suite uses -- the row must
+        stay, the values must go.
+        """
+        from pharmaml.chem import descriptors as descriptors_module
+
+        def broken(mol_h, n_conformers):  # pragma: no cover - stub
+            raise ValueError("embedding exploded")
+
+        monkeypatch.setattr(descriptors_module, "_shape_vector", broken)
+        frame, report = compute_feature_frame([ASPIRIN], families=("shape_3d",))
+        assert report.n_valid == 1  # the row is kept
+        values = frame.to_numpy()
+        assert values.shape == (1, 9)
+        assert np.isnan(values).all()
+
+    def test_shape_3d_single_atom_degenerate_zeros(self) -> None:
+        """A single-atom molecule embeds to a POINT: finite zeros, kept.
+
+        Probed: ``[Cl-]`` and friends all embed on this build; their
+        moment-of-inertia descriptors are legitimately zero for a point
+        particle -- the honest degenerate geometry, not a failure.
+        """
+        frame, report = compute_feature_frame(["[Cl-]"], families=("shape_3d",))
+        assert report.n_valid == 1
+        values = frame.to_numpy()
+        assert np.isfinite(values).all()
+        assert (values[:, 2:5] == 0).all()  # PMI1-3 of a point particle
+
+    def test_new_families_rank_and_select(self) -> None:
+        """The new families flow through the two-layer selection unchanged."""
+        frame, _report = compute_feature_frame(
+            [ASPIRIN, ETHANOL, "Cn1cnc2c1c(=O)n(C)c(=O)n2C", "CC(C)Cc1ccc(cc1)C(C)C(=O)O"],
+            families=("maccs", "estate", "erg", "shape_3d"),
+        )
+        scores = pd.Series(
+            np.linspace(1.0, 0.0, frame.shape[1]), index=frame.columns
+        )
+        selection = select_top_features(frame, scores, k=5)
+        assert len(selection.selected) == 5
+        assert selection.family_counts  # at least one family survived layer 1

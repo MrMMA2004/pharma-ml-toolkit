@@ -40,16 +40,25 @@ after adding new public functions.
 |---|---|---|
 | `ATOMPAIR_BITS` | constant |  |
 | `AVALON_BITS` | constant |  |
+| `D3D_COLUMNS` | constant |  |
+| `D3D_DESCRIPTOR_COUNT` | constant |  |
 | `ECFP3_BITS` | constant |  |
 | `ECFP3_RADIUS` | constant |  |
 | `ECFP_BITS` | constant |  |
+| `ERG_BITS` | constant |  |
+| `ESTATE_BITS` | constant |  |
 | `FAMILY_PREFIXES` | constant |  |
+| `FCFP_BITS` | constant |  |
 | `FEATURE_FAMILIES` | constant |  |
+| `LAYERED_BITS` | constant |  |
+| `MACCS_BITS` | constant |  |
 | `MORGAN_BITS` | constant |  |
 | `MORGAN_RADIUS` | constant |  |
+| `PATTERN_BITS` | constant |  |
 | `RDKIT_FP_BITS` | constant |  |
 | `RISM_DESCRIPTORS` | constant |  |
 | `RISM_DESCRIPTOR_COUNT` | constant |  |
+| `TOPOLOGICAL_BITS` | constant |  |
 | `UNSUPPORTED_METALS` | constant |  |
 | `EndpointDatasetReport` | class | Audit record for one :func:`prepare_pic50_dataset` run. |
 | `FeatureReport` | class | Audit record for one :func:`compute_feature_frame` run. |
@@ -57,20 +66,24 @@ after adding new public functions.
 | `PdbLigandReport` | class | Audit record for one :func:`smiles_to_pdb` conversion. |
 | `SdfWriteReport` | class | Audit of one :func:`table_to_sdf` conversion. |
 | `TableComparison` | class | Set reconciliation of one ligand column across two tables. |
+| `add_ic50_column` | function | Append an IC50 column converted from a pIC50 column. |
 | `add_pic50_column` | function | Append a pIC50 column to a table of measurements. |
 | `annotate_with_smiles` | function | Annotate ligand-name columns with SMILES from a reference table. |
 | `canonicalize_tautomer` | function | Return the canonical-tautomer SMILES of ``smiles``. |
 | `compare_tables` | function | Compare one ligand-name column across two tables. |
+| `compute_3d_descriptors` | function | Compute RDKit 3D shape descriptors for a list of SMILES. |
 | `compute_descriptors` | function | Compute molecular descriptors for a list of SMILES. |
 | `compute_feature_frame` | function | Compute a multi-family feature matrix for a batch of SMILES. |
 | `compute_fingerprints` | function | Compute fingerprints for a list of SMILES. |
 | `compute_maccs` | function | Compute the 167-bit MACCS key fingerprints. |
 | `compute_rism_descriptors` | function | Compute 3D-RISM-KH-inspired solvation descriptors for SMILES. |
 | `family_of_column` | function | Return the feature family a frame column belongs to. |
+| `ic50_from_pic50_series` | function | Vectorised pIC50 -> IC50 conversion preserving NaN for bad rows. |
 | `ic50_to_pic50` | function | Convert an IC50 measurement to pIC50 = -log10(IC50 [M]). |
 | `ki_to_pki` | function | Convert an inhibition constant to pKi = -log10(Ki [M]). |
 | `merge_table_folder` | function | Merge every table of one extension directly inside ``directory``. |
 | `merge_tables` | function | Row-wise merge of several tables, ignoring the index. |
+| `pic50_to_ic50` | function | Convert a pIC50 value back to an IC50 concentration. |
 | `prepare_pic50_dataset` | function | Turn a raw SMILES + EC50 table into a modelling-ready pEC50 set. |
 | `rank_features` | function | Rank feature columns by importance, descending. |
 | `sdf_to_table` | function | Read an SD file back into a table (SMILES, tags and titles). |
@@ -110,6 +123,7 @@ after adding new public functions.
 | `TrialResult` | class | One evaluated trial. |
 | `TunerResults` | class | The outcome of one :meth:`RandomSearch.search` / Hyperband run. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
+| `benchmark_feature_families` | function | Cross-validated leaderboard ACROSS feature families, one model fixed. |
 | `bootstrap_uncertainty` | function | Bootstrap-ensemble prediction uncertainty (the upload's step 6). |
 | `build_ann_classifier` | function | sklearn MLP classifier hypermodel (the legacy ANN upgrade). |
 | `build_ann_regressor` | function | sklearn MLP regressor hypermodel (the legacy ANN upgrade). |
@@ -326,6 +340,7 @@ after adding new public functions.
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
 | `plot_pareto_front` | function | One scatter per MultiObjective run: dominated points muted, front lit. |
 | `plot_permutation_importance` | function | Top-N permutation importances as signed bars with error bars. |
+| `plot_pr_curves` | function | Precision-Recall curves — binary or one-vs-rest multiclass. |
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
 | `plot_receptor_atom_types` | function | Bar chart of the AutoDock atom-type census of a receptor. |
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |
