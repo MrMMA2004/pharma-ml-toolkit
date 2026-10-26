@@ -15,6 +15,7 @@ from pharmaml.ml.applicability import (
     applicability_domain,
     bootstrap_uncertainty,
     knn_applicability_domain,
+    quantile_prediction_intervals,
 )
 
 try:  # matplotlib gates only the figure test
@@ -358,3 +359,195 @@ class TestApplicabilityDomainPlot:
 
         with pytest.raises(DataValidationError, match="ApplicabilityDomainResult"):
             plot_applicability_domain({"nope": True})
+
+
+class TestQuantilePredictionIntervals:
+    """The D2.py prediction-interval port (100x-151).
+
+    The upload's own block trained three IDENTICAL plain forests, so
+    its advertised 90% interval had width zero and coverage 0% — these
+    tests pin the honest contract the upload meant.
+    """
+
+    @staticmethod
+    def _noisy_data(n: int = 200) -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(42)
+        x = pd.DataFrame({"a": rng.uniform(0.0, 10.0, n)})
+        y = pd.Series(2.0 * x["a"] + 1.0 + rng.normal(0.0, 1.0, n))
+        return x, y
+
+    def test_bounds_bracket_and_cover(self) -> None:
+        x, y = self._noisy_data()
+        res = quantile_prediction_intervals(
+            x, y, x.iloc[::2], y.iloc[::2], n_estimators=80)
+        assert res.n_test == 100
+        assert (res.lower <= res.upper).all()
+        assert res.mean_width > 0.0          # the upload's bug: width 0
+        assert res.coverage is not None and 0.7 <= res.coverage <= 0.98
+
+    def test_coverage_counts_match(self) -> None:
+        x, y = self._noisy_data()
+        truth = y.iloc[::2]
+        res = quantile_prediction_intervals(
+            x, y, x.iloc[::2], truth, n_estimators=60)
+        inside = (truth.values >= res.lower) & (truth.values <= res.upper)
+        assert res.n_covered == int(inside.sum())
+        assert res.coverage == pytest.approx(float(inside.mean()))
+
+    def test_median_between_bounds_typically(self) -> None:
+        x, y = self._noisy_data()
+        res = quantile_prediction_intervals(
+            x, y, x.iloc[::4], n_estimators=60)
+        # the median fit is independent of the bounds; it sits inside
+        # them on the overwhelming majority of rows (not pinned to all
+        # -- crossing is counted, never hidden)
+        within = (res.median >= res.lower) & (res.median <= res.upper)
+        assert float(within.mean()) > 0.9
+
+    def test_no_y_test_leaves_coverage_none(self) -> None:
+        x, y = self._noisy_data(80)
+        res = quantile_prediction_intervals(
+            x, y, x.iloc[::4], n_estimators=30)
+        assert res.coverage is None
+        assert res.n_covered is None
+        assert res.mean_width > 0.0 and res.n_test == 20
+
+    def test_deterministic_across_runs(self) -> None:
+        x, y = self._noisy_data(120)
+        first = quantile_prediction_intervals(
+            x, y, x.iloc[::3], n_estimators=40)
+        second = quantile_prediction_intervals(
+            x, y, x.iloc[::3], n_estimators=40)
+        np.testing.assert_array_equal(first.lower, second.lower)
+        np.testing.assert_array_equal(first.upper, second.upper)
+        np.testing.assert_array_equal(first.median, second.median)
+
+    def test_seed_matters_only_for_stochastic_subsample(self) -> None:
+        # With subsample=1.0 (the default) the gradient-boosting fits
+        # carry NO stochastic element -- the seed is irrelevant and two
+        # runs agree bit-for-bit (pinned first so the knob's honesty
+        # cannot silently regress into a placebo).
+        x, y = self._noisy_data(120)
+        plain_a = quantile_prediction_intervals(
+            x, y, x.iloc[::3], n_estimators=40, random_state=42)
+        plain_b = quantile_prediction_intervals(
+            x, y, x.iloc[::3], n_estimators=40, random_state=7)
+        np.testing.assert_array_equal(plain_a.lower, plain_b.lower)
+        # subsample < 1.0 turns on stochastic gradient boosting, and
+        # THERE the seed does its work.
+        stochastic_a = quantile_prediction_intervals(
+            x, y, x.iloc[::3], n_estimators=40, subsample=0.8,
+            random_state=42)
+        stochastic_b = quantile_prediction_intervals(
+            x, y, x.iloc[::3], n_estimators=40, subsample=0.8,
+            random_state=7)
+        assert not np.allclose(stochastic_a.lower, stochastic_b.lower)
+
+    def test_bad_subsample_rejected(self) -> None:
+        x, y = self._noisy_data(40)
+        for bad in (0.0, -0.5, 1.5, float("nan")):
+            with pytest.raises(ModelError, match="subsample must be in"):
+                quantile_prediction_intervals(
+                    x, y, x.iloc[:2], n_estimators=10, subsample=bad)
+
+    def test_progress_callback_fires_three_times(self) -> None:
+        x, y = self._noisy_data(80)
+        calls: list[tuple[int, int]] = []
+
+        def report(done: int, total: int) -> None:
+            calls.append((done, total))
+
+        quantile_prediction_intervals(
+            x, y, x.iloc[:4], n_estimators=20, progress=report)
+        assert calls == [(1, 3), (2, 3), (3, 3)]
+
+    def test_broken_progress_reporter_swallowed(self) -> None:
+        x, y = self._noisy_data(80)
+
+        def broken(done: int, total: int) -> None:
+            raise RuntimeError("reporter exploded")
+
+        res = quantile_prediction_intervals(
+            x, y, x.iloc[:4], n_estimators=20, progress=broken)
+        assert res.n_test == 4               # the run survived the reporter
+
+    def test_as_frame_columns(self) -> None:
+        x, y = self._noisy_data(80)
+        res = quantile_prediction_intervals(
+            x, y, x.iloc[::4], y.iloc[::4], n_estimators=30)
+        frame = res.as_frame(y.iloc[::4])
+        assert list(frame.columns) == [
+            "actual", "pred_median", "pred_lower", "pred_upper",
+            "interval_width",
+        ]
+        np.testing.assert_allclose(
+            frame["interval_width"].values, res.upper - res.lower)
+        without = res.as_frame()
+        assert "actual" not in without.columns
+        assert len(without) == 20
+
+    def test_alpha_bounds_rejected(self) -> None:
+        x, y = self._noisy_data(40)
+        for bad in (0.0, 0.5, 1.0, -0.1):
+            with pytest.raises(ModelError, match="alpha must be in"):
+                quantile_prediction_intervals(
+                    x, y, x.iloc[:2], alpha=bad, n_estimators=10)
+
+    def test_bad_estimators_and_rate_rejected(self) -> None:
+        x, y = self._noisy_data(40)
+        with pytest.raises(ModelError, match="n_estimators must be"):
+            quantile_prediction_intervals(x, y, x.iloc[:2], n_estimators=0)
+        for bad in (0.0, -0.1, float("inf"), float("nan")):
+            with pytest.raises(ModelError, match="learning_rate must be"):
+                quantile_prediction_intervals(
+                    x, y, x.iloc[:2], n_estimators=10, learning_rate=bad)
+
+    def test_feature_mismatch_rejected(self) -> None:
+        x, y = self._noisy_data(40)
+        wide = pd.DataFrame({"a": x["a"], "b": 10.0 - x["a"]})
+        with pytest.raises(ModelError, match="descriptor spaces must match"):
+            quantile_prediction_intervals(
+                wide, y, x.iloc[:4], n_estimators=10)
+        with pytest.raises(ModelError, match="descriptor spaces must match"):
+            quantile_prediction_intervals(
+                x, y, wide.iloc[:4], n_estimators=10)
+
+    def test_row_mismatch_rejected(self) -> None:
+        x, y = self._noisy_data(40)
+        with pytest.raises(ModelError, match="y_train has"):
+            quantile_prediction_intervals(
+                x, y.iloc[:30], x.iloc[:4], n_estimators=10)
+        with pytest.raises(ModelError, match="y_test has"):
+            quantile_prediction_intervals(
+                x, y, x.iloc[:2], y.iloc[:3], n_estimators=10)
+
+    def test_non_finite_rejected(self) -> None:
+        x, y = self._noisy_data(40)
+        bad_x = x.copy()
+        bad_x.loc[0, "a"] = np.nan
+        with pytest.raises(DataValidationError, match="X_train"):
+            quantile_prediction_intervals(
+                bad_x, y, x.iloc[:4], n_estimators=10)
+        bad_y = y.copy()
+        bad_y.iloc[0] = np.nan
+        with pytest.raises(DataValidationError, match="y_train contains"):
+            quantile_prediction_intervals(
+                x, bad_y, x.iloc[:4], n_estimators=10)
+        bad_truth = y.iloc[:4].copy()
+        bad_truth.iloc[0] = np.inf
+        with pytest.raises(DataValidationError, match="y_test contains"):
+            quantile_prediction_intervals(
+                x, y, x.iloc[:4], bad_truth, n_estimators=10)
+
+    def test_non_numeric_y_rejected(self) -> None:
+        x, _y = self._noisy_data(40)
+        with pytest.raises(DataValidationError, match="y_train must be numeric"):
+            quantile_prediction_intervals(
+                x, ["low", "high"] * 20, x.iloc[:4], n_estimators=10)
+
+    def test_str_summary_mentions_width(self) -> None:
+        x, y = self._noisy_data(80)
+        res = quantile_prediction_intervals(
+            x, y, x.iloc[:4], y.iloc[:4], n_estimators=20)
+        text = str(res)
+        assert "mean_width=" in text and "coverage=" in text

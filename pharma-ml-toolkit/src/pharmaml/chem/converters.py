@@ -172,6 +172,25 @@ def pic50_from_ic50_series(
     return series.map(lambda value: ic50_to_pic50(value, unit=unit))
 
 
+def _require_out_col(out_col: object, function: str) -> str:
+    """Validate an append column label (100x-151 audit, Finding 3).
+
+    ``out_col=None`` or an empty/whitespace label slips past the
+    collision guards (``None in frame.columns`` is False unless a
+    ``None``-named column already exists) and pandas then appends a
+    ``None``-named column -- no clobber, but a label that breaks CSV
+    round-trips and column lookups confusingly.  Refused here with the
+    same typed error the collision guards raise, so all three append
+    siblings validate their label the same way.
+    """
+    if not isinstance(out_col, str) or not out_col.strip():
+        raise DataValidationError(
+            f"out_col must be a non-empty column name, got {out_col!r} -- "
+            f"{function} appends a named column, never a blank one"
+        )
+    return out_col
+
+
 def add_pic50_column(
     frame: pd.DataFrame,
     source_col: str = "IC50 (nM)",
@@ -206,6 +225,7 @@ def add_pic50_column(
         removed when ``drop_invalid`` is True, otherwise they receive
         ``NaN``.
     """
+    out_col = _require_out_col(out_col, "add_pic50_column")
     require_columns(frame, [source_col])
     if out_col == source_col or out_col in frame.columns:
         # The twin of prepare_pic50_dataset's round-146 guard: these
@@ -292,7 +312,13 @@ def pic50_to_ic50(pic50: object, unit: str = "nM") -> float | None:
         return None
     try:
         value = float(pic50)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError joined the net in 100x-151 (audit Finding 2):
+        # float() on a Python bigint (e.g. 10**400, reachable through
+        # an object-dtype column) raises "int too large to convert to
+        # float" -- the same absurd-cell class the pow-side Overflow
+        # guard below already contains, so the lex side must not be
+        # the one raw traceback left standing.
         return None
     if math.isnan(value):
         return float("nan")
@@ -364,6 +390,7 @@ def add_ic50_column(
     0    6.0   1000.0
     1    7.0    100.0
     """
+    out_col = _require_out_col(out_col, "add_ic50_column")
     require_columns(frame, [pic50_col])
     if out_col == pic50_col or out_col in frame.columns:
         # The add_pic50_column twin of prepare_pic50_dataset's round-146
@@ -618,6 +645,11 @@ def prepare_pic50_dataset(
     # the result dict (the round-146 audit's duplicate-key finding) --
     # refuse it up front instead.
     _reserved_result_columns = ("SMILES", "n_measurements", "endpoint_median")
+    if not isinstance(out_col, str) or not out_col.strip():
+        raise DataValidationError(
+            f"out_col must be a non-empty column name, got {out_col!r} -- "
+            "pick a different name for the converted endpoint"
+        )
     if out_col in _reserved_result_columns:
         raise DataValidationError(
             f"out_col {out_col!r} collides with a reserved result column "

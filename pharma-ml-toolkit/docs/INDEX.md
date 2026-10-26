@@ -118,6 +118,7 @@ after adding new public functions.
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
 | `OOFStackingResult` | class | Outcome of one out-of-fold stacking run. |
 | `PermutationImportance` | class | Permutation feature importances on held-out data. |
+| `QuantileIntervals` | class | Prediction intervals from gradient-boosted quantile regression. |
 | `RandomSearch` | class | Random search over the hypermodel's declared space. |
 | `ResidualMLPClassifier` | class | Residual (skip-connection) deep-network classifier (PyTorch). |
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
@@ -146,6 +147,7 @@ after adding new public functions.
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
 | `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
 | `predict_with_uncertainty` | function | Predictive mean and per-row standard deviation of a GP model. |
+| `quantile_prediction_intervals` | function | Central-``1 - alpha`` prediction intervals via quantile regression. |
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
@@ -345,6 +347,7 @@ after adding new public functions.
 | `plot_permutation_importance` | function | Top-N permutation importances as signed bars with error bars. |
 | `plot_pr_curves` | function | Precision-Recall curves — binary or one-vs-rest multiclass. |
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
+| `plot_prediction_intervals` | function | Parity scatter with the quantile-regression prediction band. |
 | `plot_receptor_atom_types` | function | Bar chart of the AutoDock atom-type census of a receptor. |
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |
 | `plot_rl_introspection` | function | One figure per RL run: the score story + the prior-drift diagnostics. |

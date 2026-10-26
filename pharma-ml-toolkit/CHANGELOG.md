@@ -10,6 +10,93 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.89] — 2026-10-26
+
+### Added — the sixth engineering review (100x-151): the D2.py prediction intervals, ported honestly
+
+The instruction: *"Review the current codebase and implementation,
+troubleshoot potential issues, and continue improving the engineering
+details."* The round audited the round-33 additions line by line (the
+least-reviewed code in the tree — 3 real defects found, 17 suspected
+findings disproven and recorded in `scratch/audit_151.txt`), fixed all
+three, and shipped the one upload capability that had been the standing
+open candidate since round 30:
+
+* **`quantile_prediction_intervals`** (`pharmaml.ml`) — the
+  `D2.py` uncertainty block, ported honestly. The upload's
+  `generate_uncertainty_quantification` trained THREE plain
+  `RandomForestRegressor`s on the same data with no quantile loss, so
+  the three forests were bit-for-bit IDENTICAL: interval width 0.0 on
+  every row, empirical coverage 0.0%, and the "90% Prediction
+  Interval" its plot legend advertised did not exist
+  (`RandomForestRegressor` has no quantile mode in scikit-learn at
+  all — probed). This round fits what the upload *meant*:
+  `GradientBoostingRegressor(loss="quantile")` at the `α/2` / `0.5` /
+  `1−α/2` quantiles, returning a typed `QuantileIntervals` record
+  (bounds, median fit, empirical coverage against the held-out truth,
+  mean width, and quantile crossings COUNTED and repaired by swapping
+  — never hidden). Deterministic by default (`subsample=1.0` carries
+  no stochastic element; a stochastic configuration is seeded through
+  `random_state` — the seed-honesty pinned by test). The
+  ensemble-std sibling `bootstrap_uncertainty` answers the other
+  question (model wobble, not residual noise) — cross-referenced in
+  both docstrings.
+* **`plot_prediction_intervals`** (`pharmaml.viz`) — the GP ±σ plot's
+  twin for bracket-shaped uncertainty: parity scatter of the median
+  fit, the band drawn through the test rows sorted by actual value
+  (the upload's deliberate calibration-style choice, kept), the
+  coverage + mean-width box, and a crossed-bounds guard (raw crossed
+  input reaching the plot is a caller bug — the record repairs
+  crossings).
+* **The GUI twin** — the ML tab Results card's **Prediction
+  intervals** button (regression-only gate, α entry defaulting to
+  0.1, the honest coverage/width/crossing note, the figure replacing
+  the parity plot until the next train) plus **Save intervals…** (the
+  five-format table export, retiring on the next train — the
+  permutation card's 100x-146 twin). Live smoke: 52 held-out rows,
+  84.6% coverage, mean width 6.26, 0 crossings.
+
+### Fixed — the round-33 audit's three findings
+
+* **The board's "Save table…" twin promised four fillers; only three
+  fed it** (RISK). The hyperparameter search's render filled the
+  board TREE + status but never assigned `_board_frame` — right after
+  a search, clicking "Save table…" either lied ("Nothing to save…
+  or a hyperparameter search first" with the trial ranking plainly
+  visible) or exported the PREVIOUS run's leaderboard as "the numbers
+  behind the bars" (a cross-KIND stale export). The render now builds
+  the trials frame (full configuration text, float scores, ranked
+  1..n, failed trials last) — the fourth filler the button, its
+  tooltip, its guard message and the 1.2.88 CHANGELOG bullet all
+  promised. Pinned behaviorally (the frame, the stale-leaderboard
+  replacement) and at the source level for all four fillers.
+* **`pic50_to_ic50`'s overflow fix missed the lex side** — `float()`
+  on a Python bigint (`10**400`, reachable through an object-dtype
+  column) raises `OverflowError` that escaped the
+  `(TypeError, ValueError)` net: the same absurd-cell class the
+  round fixed on the pow side. `OverflowError` joined the net (the
+  value is unparseable-as-float → `None`).
+* **`out_col` label validation stopped one step short** —
+  `out_col=None`/`""`/whitespace passed all three siblings' collision
+  guards and pandas appended a `None`-named column (no clobber, but a
+  label that breaks CSV round-trips and lookups). All three
+  (`add_ic50_column`, `add_pic50_column`, `prepare_pic50_dataset`)
+  now refuse blank labels with the same typed error.
+* **By-catch (latent round-33 ordering defect)**: the notebooks'
+  committed outputs printed 1.2.87 against a 1.2.88 tree — the
+  re-execution ritual had run *before* the version bump. The ritual
+  now ran after the 1.2.89 bump; all 119 variant tests green.
+
+### Verified
+
+* 3018 collected = **3012 passed + 6 skipped / 0 failures** (651 s,
+  junit151.xml — the 8 first-run failures were all the stale-notebook
+  version tests, fixed by the ritual above); +47 tests over 1.2.88
+  (18 quantile intervals, 8 interval plots, 10 converter guards, 3
+  board-filler regressions, 8 GUI). ruff clean (`.`); mypy clean (66
+  files); applicability doctests green; `--self-test` green on Xvfb;
+  leakage guard green (the audit's scratch notes leak-scanned clean).
+
 ## [1.2.88] — 2026-10-26
 
 ### Fixed — the fifth engineering review (100x-150): three audit findings, the board's Save-table twin

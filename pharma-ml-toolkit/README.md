@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (**2965 tests**).
+exceptions, input validation, and pytest coverage** (**3012 tests**).
 
 ---
 
@@ -269,7 +269,7 @@ pharma-ml-toolkit/
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
 ├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
-├── tests/                   # 2965 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
+├── tests/                   # 3012 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -784,6 +784,40 @@ killing the leaderboard. The GUI twin is the ML tab's
 uploaded cell carried three syntax slips and six duplicate descriptor
 columns (MolWt et al. are already inside `Descriptors.descList`), fixed
 here, not ported.
+
+#### Prediction intervals (`quantile_prediction_intervals`) — the D2.py uncertainty block, ported honestly
+
+How wide a bracket does a prediction deserve? The quantile-regression
+answer: fit gradient-boosted quantile losses at the `α/2`, `0.5` and
+`1−α/2` quantiles, and report the empirical coverage of the bracket
+against the held-out truth:
+
+```python
+from pharmaml.ml import quantile_prediction_intervals
+
+result = quantile_prediction_intervals(X_train, y_train, X_test, y_test, alpha=0.1)
+result.coverage          # e.g. 0.9 — share of test rows inside the bracket
+result.mean_width        # mean of (upper - lower)
+result.median            # the middle fit's point predictions
+result.n_crossing        # quantile crossings, counted and repaired (swapped)
+result.as_frame(y_test)  # actual / pred_median / pred_lower / pred_upper / interval_width
+```
+
+The companion figure is `pharmaml.viz.plot_prediction_intervals`
+(a parity scatter with the sorted-by-actual band and the coverage box —
+the GP ±σ plot's twin for bracket-shaped uncertainty), and the GUI twin
+is the ML tab Results card's **Prediction intervals** button (α entry,
+"Save intervals…" table export, retires on the next train).
+Deterministic by default (`subsample=1.0` has no stochastic element; a
+stochastic configuration is seeded through `random_state`).
+The ensemble-std sibling `bootstrap_uncertainty` answers a different
+question — how much the *model* wobbles under resampled training data,
+not where the *residual noise* puts the truth.
+Upgrades `D2.py` — whose `generate_uncertainty_quantification` trained
+three IDENTICAL plain `RandomForestRegressor`s (no quantile loss:
+`RandomForestRegressor` has no quantile mode in scikit-learn at all),
+so its advertised "90% Prediction Interval" had width 0.0 on every row
+and empirical coverage 0.0% — fixed here, not ported.
 
 #### Hierarchical SVR (`hsvr`) — local specialists for heterogeneous data
 

@@ -870,6 +870,121 @@ def plot_gp_uncertainty(
     return fig
 
 
+def plot_prediction_intervals(
+    y_true: np.ndarray | pd.Series | list,
+    y_pred: np.ndarray | list,
+    y_lower: np.ndarray | list,
+    y_upper: np.ndarray | list,
+    alpha: float = 0.1,
+    metrics: Mapping[str, float] | None = None,
+    title: str = "Prediction intervals (quantile regression)",
+) -> Any:
+    """Parity scatter with the quantile-regression prediction band.
+
+    The honest twin of :func:`plot_gp_uncertainty` for models whose
+    uncertainty is a bracket, not a sigma: the median predictions
+    scatter against the truth, the interval endpoints draw a band
+    around them, and the coverage statistic — the share of test points
+    whose interval actually straddles the truth — is annotated, because
+    a calibrated quantile trio straddles ~``1 - alpha`` of them and a
+    miscalibrated one visibly less.
+
+    The band is drawn through the test rows sorted by actual value —
+    the ``D2.py`` upload's deliberate calibration-style choice, kept:
+    in the parity plane the ribbon stays visually coherent instead of
+    zig-zagging with row order.
+
+    Parameters
+    ----------
+    y_true, y_pred:
+        Held-out targets and the median quantile predictions.
+    y_lower, y_upper:
+        The interval endpoints per test row (``y_lower <= y_upper``).
+    alpha:
+        The interval's tail mass, used only for the legend label
+        (default 0.1 — a 90% band).
+    metrics:
+        Optional summary box content, same contract as
+        :func:`plot_predicted_vs_actual`.
+
+    Raises
+    ------
+    DataValidationError
+        On length mismatches, empty input, or crossed bounds
+        (``y_lower > y_upper`` — the quantile record repairs crossings,
+        so raw crossed input reaching this plot is a caller bug).
+    """
+    truth = np.asarray(y_true, dtype=float)
+    prediction = np.asarray(y_pred, dtype=float)
+    lower = np.asarray(y_lower, dtype=float)
+    upper = np.asarray(y_upper, dtype=float)
+    if truth.shape != prediction.shape or truth.shape != lower.shape \
+            or truth.shape != upper.shape:
+        raise DataValidationError(
+            f"y_true {truth.shape}, y_pred {prediction.shape}, y_lower "
+            f"{lower.shape} and y_upper {upper.shape} must match"
+        )
+    if truth.size == 0:
+        raise DataValidationError("no values to plot (empty y_true/y_pred)")
+    if np.any(lower > upper):
+        bad = int((lower > upper).sum())
+        raise DataValidationError(
+            f"y_lower exceeds y_upper on {bad} row(s) -- prediction "
+            "intervals must be ordered bounds"
+        )
+    if not 0.0 < alpha < 1.0:
+        raise DataValidationError(f"alpha must be in (0, 1), got {alpha!r}")
+
+    fig, ax = new_figure(figsize=(6.4, 6.0))
+    low = float(min(truth.min(), prediction.min(), lower.min()))
+    high = float(max(truth.max(), prediction.max(), upper.max()))
+    pad = 0.05 * (high - low or 1.0)
+    limits = (low - pad, high + pad)
+    ax.plot(limits, limits, linestyle="--", color="#9CA3AF",
+            label="perfect prediction (ŷ = y)")
+    order = np.argsort(truth, kind="stable")
+    ax.fill_between(
+        truth[order],
+        lower[order],
+        upper[order],
+        alpha=0.25,
+        color=PALETTE[2],
+        linewidth=0,
+        label=f"{(1.0 - alpha) * 100:.0f}% prediction interval",
+    )
+    covered = (truth >= lower) & (truth <= upper)
+    coverage = float(covered.mean())
+    mean_width = float((upper - lower).mean())
+    ax.scatter(truth, prediction, s=28, alpha=0.85, color=PALETTE[0],
+               edgecolor="white", linewidth=0.4, zorder=3,
+               label="median prediction")
+    ax.set_xlim(*limits)
+    ax.set_ylim(*limits)
+    ax.set_xlabel("actual")
+    ax.set_ylabel("predicted (ŷ)")
+    ax.set_title(title)
+
+    lines = [
+        f"coverage = {coverage * 100:.1f}%",
+        f"mean width = {mean_width:.4g}",
+    ]
+    if metrics:
+        lines.append("  ".join(f"{key}={value:.4g}" for key, value in metrics.items()))
+    ax.text(
+        0.03,
+        0.97,
+        "\n".join(lines),
+        transform=ax.transAxes,
+        va="top",
+        ha="left",
+        fontsize=9,
+        bbox={"boxstyle": "round,pad=0.35", "facecolor": "white",
+              "edgecolor": "#D1D5DB", "alpha": 0.9},
+    )
+    ax.legend(loc="lower right", fontsize=9)
+    return fig
+
+
 def plot_residuals(
     y_true: np.ndarray | pd.Series | list,
     y_pred: np.ndarray | list,

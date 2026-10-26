@@ -4,9 +4,11 @@ hyperparameter tuning, applicability-domain analysis."""
 from pharmaml.ml.applicability import (
     ApplicabilityDomainResult,
     BootstrapUncertainty,
+    QuantileIntervals,
     applicability_domain,
     bootstrap_uncertainty,
     knn_applicability_domain,
+    quantile_prediction_intervals,
 )
 from pharmaml.ml.evaluation import (
     PermutationImportance,
@@ -74,6 +76,7 @@ __all__ = [
     "ModelInputReport",
     "OOFStackingResult",
     "PermutationImportance",
+    "QuantileIntervals",
     "RandomSearch",
     "ResidualMLPClassifier",
     "ResidualMLPRegressor",
@@ -102,6 +105,7 @@ __all__ = [
     "make_train_test_split",
     "permutation_feature_importance",
     "predict_with_uncertainty",
+    "quantile_prediction_intervals",
     "resolve_model_name",
     "resource_bounds",
     "save_model",

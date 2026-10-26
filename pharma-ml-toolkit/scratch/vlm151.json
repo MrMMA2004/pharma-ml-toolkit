@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) **FAIL**: There is no 'Prediction intervals' button visible in the Results card button row.\n2) **FAIL**: There is no alpha entry field or Greek alpha label present in the interface shown.\n3) **FAIL**: There is no 'Save intervals...' button visible in the button row.\n4) **PASS**: The figure area displays a scatter plot with a grey interval band and a summary box indicating coverage (94.5%).\n5) **PASS**: The figure's title explicitly mentions 'Prediction intervals', and the internal summary box provides the coverage percentage.\n6) **PASS**: The layout appears clean with properly aligned widgets, readable text, and no visual overlapping or cut-off elements.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793052527,
+  "id": "20261027060845c872646f9d4c4ee8",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261027060845c872646f9d4c4ee8",
+  "usage": {
+    "completion_tokens": 142,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1569,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1711
+  }
+}

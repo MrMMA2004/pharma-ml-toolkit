@@ -149,6 +149,14 @@ class TestAddPIC50Column:
         with pytest.raises(DataValidationError, match="appends, never overwrites"):
             add_pic50_column(frame, out_col=collision)
 
+    @pytest.mark.parametrize("blank", [None, "", "   "])
+    def test_blank_out_col_refused(self, blank: object) -> None:
+        """(100x-151 audit, Finding 3) the reverse twin gets the same
+        label validation the 100x-150 round gave its collision guard."""
+        frame = pd.DataFrame({"IC50 (nM)": [100.0]})
+        with pytest.raises(DataValidationError, match="non-empty column name"):
+            add_pic50_column(frame, out_col=blank)
+
 
 class TestPreparePic50Dataset:
     """D2.py's process_data, upgraded (100x-145)."""
@@ -164,6 +172,15 @@ class TestPreparePic50Dataset:
         frame = pd.DataFrame({"Ligand SMILES": ["CCO"], "EC50 (nM)": [100.0]})
         with pytest.raises(DataValidationError, match="reserved result column"):
             prepare_pic50_dataset(frame, out_col=reserved)
+
+    @pytest.mark.parametrize("blank", [None, "", "   "])
+    def test_blank_out_col_refused(self, blank: object) -> None:
+        """(100x-151 audit, Finding 3) the third sibling gets the same
+        label validation -- a None-named result column breaks the
+        bundle's CSV round-trips."""
+        frame = pd.DataFrame({"Ligand SMILES": ["CCO"], "EC50 (nM)": [100.0]})
+        with pytest.raises(DataValidationError, match="non-empty column name"):
+            prepare_pic50_dataset(frame, out_col=blank)
 
     def test_end_to_end_with_d2_spelling(self) -> None:
         frame = pd.DataFrame(
@@ -371,6 +388,26 @@ class TestPic50ToIc50:
         assert not weak <= 100.0
         assert not weak <= 1000.0
 
+    def test_bigint_lex_overflow_returns_none(self) -> None:
+        """(100x-151 audit, Finding 2) the lex side of the overflow net.
+
+        ``float()`` on a Python bigint (``10**400``, reachable through
+        an object-dtype column) raises OverflowError -- the same
+        absurd-cell class the pow-side guard contains; the lex net
+        must swallow it into ``None`` like every other unparseable
+        value, never a raw traceback.
+        """
+        assert pic50_to_ic50(10**400) is None
+        assert pic50_to_ic50(-(10**400)) is None
+        # through the column twin: an object-dtype cell carrying a
+        # bigint lands as NaN, not as a crash
+        frame = pd.DataFrame(
+            {"pIC50": pd.Series([6.0, 10**400], dtype=object)}
+        )
+        result = add_ic50_column(frame)
+        assert result["IC50_nM"].tolist()[0] == 1000.0
+        assert pd.isna(result["IC50_nM"].tolist()[1])
+
 
 class TestAddIc50Column:
     """The table twin -- the prediction sheet gains its nM column."""
@@ -427,3 +464,16 @@ class TestAddIc50Column:
         frame = pd.DataFrame({"pIC50": [6.0, -300.0]})
         result = add_ic50_column(frame)
         assert result["IC50_nM"].tolist() == [1000.0, float("inf")]
+
+    @pytest.mark.parametrize("blank", [None, "", "   "])
+    def test_blank_out_col_refused(self, blank: object) -> None:
+        """(100x-151 audit, Finding 3) a label is not optional.
+
+        ``out_col=None``/``""``/whitespace used to pass the collision
+        guards and append a None-/empty-named column -- no clobber, but
+        a label that breaks CSV round-trips and column lookups.
+        Refused up front now, matching prepare_pic50_dataset's rigor.
+        """
+        frame = pd.DataFrame({"pIC50": [6.0]})
+        with pytest.raises(DataValidationError, match="non-empty column name"):
+            add_ic50_column(frame, out_col=blank)

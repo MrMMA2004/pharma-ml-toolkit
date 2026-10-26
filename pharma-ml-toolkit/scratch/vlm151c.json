@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) **PASS** – A 'Prediction intervals' button is clearly visible in the second row of the Results card's button area.\n2) **PASS** – There is a small entry field displaying '0.1' immediately followed by the Greek alpha symbol (α) label.\n3) **PASS** – The 'Save intervals...' button is located to the right of the alpha entry field in the button row.\n4) **PASS** – The figure displays a scatter plot with a shaded 90% prediction interval band and an internal summary box stating 'coverage = 84.6%'.\n5) **PASS** – The status note line above the figure explicitly mentions 'coverage 84.6% of held-out rows'.\n6) **PASS** – The layout is clean, with all widgets properly spaced and no overlapping or clipped elements at the right edge.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793052658,
+  "id": "20261027061055112bca0f2b654e6f",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261027061055112bca0f2b654e6f",
+  "usage": {
+    "completion_tokens": 175,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1567,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1742
+  }
+}

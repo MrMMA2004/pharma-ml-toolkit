@@ -36,6 +36,15 @@ which always counts the point as its own first neighbour and deflates
 the mean by roughly ``distance/k`` — every threshold was slightly too
 small, every domain slightly too tight).
 
+A third uncertainty readout joins the two domain questions in
+100x-151: :func:`quantile_prediction_intervals` — the ``D2.py``
+upload's prediction-interval block, ported honestly (its shipped code
+fit three IDENTICAL plain forests, so the advertised 90% interval had
+width zero; this module fits the quantile-regression trio the upload
+meant).  Where the bootstrap spread asks how much the *model* wobbles
+under resampled training data, the quantile bounds bracket where the
+*residual noise* puts the true value.
+
 Examples
 --------
 >>> import numpy as np, pandas as pd
@@ -134,6 +143,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
+from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils import resample
@@ -146,9 +156,11 @@ _LOG = get_logger(__name__)
 __all__ = [
     "ApplicabilityDomainResult",
     "BootstrapUncertainty",
+    "QuantileIntervals",
     "applicability_domain",
     "bootstrap_uncertainty",
     "knn_applicability_domain",
+    "quantile_prediction_intervals",
 ]
 
 #: Progress callback contract: ``report(done, total)`` after each
@@ -601,6 +613,336 @@ def bootstrap_uncertainty(
         kind=kind,
         fit_seconds=fit_seconds,
     )
+
+
+@dataclass(slots=True)
+class QuantileIntervals:
+    """Prediction intervals from gradient-boosted quantile regression.
+
+    The third uncertainty readout (the ``D2.py`` upload's
+    ``generate_uncertainty_quantification``, ported honestly in
+    100x-151): two quantile-regression fits bracket every prediction
+    with a central-``1 - alpha`` interval, and the median fit carries
+    the point estimate.
+
+    Attributes
+    ----------
+    alpha:
+        The interval's tail mass — the bounds target the
+        ``alpha/2`` and ``1 - alpha/2`` quantiles (default 0.1, the
+        upload's 90% interval).
+    lower / median / upper:
+        Per-row interval bound / median prediction / upper bound on
+        the query rows.  The bounds are the CROSSING-REPAIRED pair:
+        separately-fit quantile models can cross on individual rows
+        (``lower > upper``), every crossing is counted in
+        ``n_crossing`` and the exported pair is swapped so
+        ``lower <= upper`` always holds.
+    coverage:
+        Share of query rows whose true value falls inside the interval
+        (``None`` when no ``y_test`` was supplied).
+    mean_width:
+        Mean of ``upper - lower`` across the query rows.
+    n_test:
+        Number of query rows.
+    n_covered:
+        Rows inside the interval (``None`` without ``y_test``).
+    n_crossing:
+        Rows where the raw quantile pair crossed (swapped in the
+        exported bounds — quantile crossing is a known pathology of
+        independently fit quantile models, reported not hidden).
+    fit_seconds:
+        Wall-clock cost of the three fits.
+    """
+
+    alpha: float
+    lower: np.ndarray
+    median: np.ndarray
+    upper: np.ndarray
+    n_test: int
+    mean_width: float
+    n_crossing: int
+    coverage: float | None = None
+    n_covered: int | None = None
+    fit_seconds: float = 0.0
+
+    def as_frame(self, y_test: object = None) -> pd.DataFrame:
+        """The upload's interval table, one row per query compound.
+
+        Columns: ``actual, pred_median, pred_lower, pred_upper,
+        interval_width`` — the ``actual`` column appears only when the
+        true values are supplied (mirrors the coverage being optional).
+        """
+        data: dict[str, Any] = {}
+        if y_test is not None:
+            data["actual"] = np.asarray(y_test, dtype=float)
+        data["pred_median"] = self.median
+        data["pred_lower"] = self.lower
+        data["pred_upper"] = self.upper
+        data["interval_width"] = self.upper - self.lower
+        return pd.DataFrame(data)
+
+    def __str__(self) -> str:  # pragma: no cover - presentation only
+        text = (f"alpha={self.alpha:g} n_test={self.n_test} "
+                f"mean_width={self.mean_width:.4g} "
+                f"crossing={self.n_crossing}")
+        if self.coverage is not None:
+            text += f" coverage={self.coverage:.1%}"
+        return text
+
+
+def quantile_prediction_intervals(
+    X_train: pd.DataFrame | np.ndarray,
+    y_train: pd.Series | np.ndarray | list,
+    X_test: pd.DataFrame | np.ndarray,
+    y_test: pd.Series | np.ndarray | list | None = None,
+    *,
+    alpha: float = 0.1,
+    n_estimators: int = 200,
+    learning_rate: float = 0.1,
+    max_depth: int | None = 3,
+    subsample: float = 1.0,
+    random_state: int = 42,
+    progress: ProgressCallback | None = None,
+) -> QuantileIntervals:
+    """Central-``1 - alpha`` prediction intervals via quantile regression.
+
+    The honest port of ``D2.py``'s uncertainty block, whose shipped
+    code was structurally broken: it fit THREE plain
+    ``RandomForestRegressor`` instances on the same data with no
+    quantile loss, so the three forests were bit-for-bit identical —
+    interval width 0.0 on every row, empirical coverage 0.0%, and the
+    "90% Prediction Interval" the plot legend advertised did not exist
+    (``RandomForestRegressor`` has no quantile mode in scikit-learn at
+    all — probed on 1.5.2).  This function fits what the upload
+    *meant*: ``GradientBoostingRegressor(loss="quantile")`` at the
+    ``alpha/2`` / ``0.5`` / ``1 - alpha/2`` quantiles — the classic
+    scikit-learn quantile-regression route (probed: a 5/50/95% trio
+    returns ~90% empirical coverage on noisy synthetic data, with
+    non-degenerate widths and correct ordering).
+
+    The ensemble-std sibling of this readout is
+    :func:`bootstrap_uncertainty`; the two answer different questions —
+    the bootstrap spread measures how much the *model* wobbles under
+    resampled training data, the quantile bounds bracket where the
+    *residual noise* puts the true value.
+
+    Deterministic by default: with ``subsample=1.0`` (the default)
+    the gradient-boosting fits carry no stochastic element at all, so
+    two runs agree bit-for-bit whatever the seed; a stochastic
+    configuration (``subsample < 1.0``) is seeded through
+    ``random_state`` (the upload's forests were seeded but
+    identical-by-construction, a stronger and less useful guarantee).
+
+    Parameters
+    ----------
+    X_train, y_train:
+        Training descriptors and target (finite; ``y_train`` may not
+        carry NaN — a quantile loss has no honest answer for a missing
+        target).
+    X_test:
+        Query rows — same column count as ``X_train``.
+    y_test:
+        Optional true values for the coverage statistic.
+    alpha:
+        Tail mass (default 0.1 — the upload's 90% interval); must lie
+        in ``(0, 0.5)``.
+    n_estimators / learning_rate / max_depth / subsample:
+        The gradient-boosting knobs shared by all three quantile fits
+        (``subsample < 1.0`` turns on stochastic gradient boosting —
+        seeded through ``random_state``).
+    random_state:
+        Seed of every fit (the knob behind the stochastic
+        configuration's determinism).
+    progress:
+        Optional ``report(done, total)`` fired after each of the three
+        fits (a broken reporter is logged and swallowed — it must
+        never be able to kill a running analysis).
+
+    Returns
+    -------
+    QuantileIntervals
+
+    Raises
+    ------
+    ModelError
+        On an out-of-range ``alpha``, non-positive ``n_estimators`` /
+        ``learning_rate``, or disagreeing row / feature counts.
+    DataValidationError
+        On non-numeric / non-finite descriptor matrices or targets.
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> rng = np.random.default_rng(42)
+    >>> x = pd.DataFrame({"a": rng.uniform(0.0, 10.0, 80)})
+    >>> y = pd.Series(2.0 * x["a"] + 1.0 + rng.normal(0.0, 0.5, 80))
+    >>> res = quantile_prediction_intervals(
+    ...     x, y, x.iloc[::4], y.iloc[::4], alpha=0.2, n_estimators=60)
+    >>> bool((res.lower <= res.upper).all())   # bounds never cross
+    True
+    >>> 0.0 <= res.coverage <= 1.0
+    True
+    >>> res.n_test, res.mean_width > 0.0
+    (20, True)
+    >>> frame = res.as_frame(y.iloc[::4])
+    >>> list(frame.columns)
+    ['actual', 'pred_median', 'pred_lower', 'pred_upper', 'interval_width']
+    >>> no_truth = quantile_prediction_intervals(x, y, x.iloc[::4],
+    ...     alpha=0.2, n_estimators=60)
+    >>> no_truth.coverage is None and no_truth.n_covered is None
+    True
+
+    Error contracts (the house style):
+
+    >>> quantile_prediction_intervals(x, y, x.iloc[:2], alpha=0.5)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: alpha must be in (0, 0.5) -- 0.5 would collapse the interval onto the median, got 0.5
+    >>> quantile_prediction_intervals(x, y, x.iloc[:2], n_estimators=0)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: n_estimators must be >= 1, got 0
+    >>> x2 = pd.DataFrame({"a": x["a"], "b": 10.0 - x["a"]})
+    >>> quantile_prediction_intervals(x2, y, pd.DataFrame({"b": [1.0]}))
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: X_test has 1 feature(s) but X_train has 2 -- the descriptor spaces must match
+    >>> quantile_prediction_intervals(x, y, x.iloc[:2], y.iloc[:3])
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: y_test has 3 value(s) but X_test has 2 rows
+    """
+    if not 0.0 < alpha < 0.5:
+        raise ModelError(
+            f"alpha must be in (0, 0.5) -- 0.5 would collapse the "
+            f"interval onto the median, got {alpha!r}"
+        )
+    if n_estimators < 1:
+        raise ModelError(f"n_estimators must be >= 1, got {n_estimators}")
+    if not (learning_rate > 0.0 and np.isfinite(learning_rate)):
+        raise ModelError(
+            f"learning_rate must be a positive finite number, got "
+            f"{learning_rate!r}"
+        )
+    if not 0.0 < subsample <= 1.0:
+        raise ModelError(
+            f"subsample must be in (0, 1], got {subsample!r}"
+        )
+    train = _numeric_matrix(X_train, "X_train")
+    test = _numeric_matrix(X_test, "X_test")
+    if train.shape[1] != test.shape[1]:
+        raise ModelError(
+            f"X_test has {test.shape[1]} feature(s) but X_train has "
+            f"{train.shape[1]} -- the descriptor spaces must match"
+        )
+    y = _numeric_vector(y_train, "y_train", finite=True)
+    if y.shape[0] != train.shape[0]:
+        raise ModelError(
+            f"y_train has {y.shape[0]} value(s) but X_train has "
+            f"{train.shape[0]} rows"
+        )
+    truth: np.ndarray | None = None
+    if y_test is not None:
+        truth = _numeric_vector(y_test, "y_test", finite=True)
+        if truth.shape[0] != test.shape[0]:
+            raise ModelError(
+                f"y_test has {truth.shape[0]} value(s) but X_test has "
+                f"{test.shape[0]} rows"
+            )
+
+    started = time.perf_counter()
+    lower = median = upper = np.zeros(0)
+    for index, quantile in enumerate((alpha / 2.0, 0.5, 1.0 - alpha / 2.0)):
+        model = GradientBoostingRegressor(
+            loss="quantile",
+            alpha=quantile,
+            n_estimators=n_estimators,
+            learning_rate=learning_rate,
+            max_depth=max_depth,
+            subsample=subsample,
+            random_state=random_state,
+        )
+        model.fit(train, y)
+        prediction = np.asarray(model.predict(test), dtype=float).reshape(-1)
+        if index == 0:
+            lower = prediction
+        elif index == 1:
+            median = prediction
+        else:
+            upper = prediction
+        if progress is not None:
+            try:
+                progress(index + 1, 3)
+            except Exception:  # noqa: BLE001 — a broken reporter must not kill the run
+                _LOG.debug("progress callback failed", exc_info=True)
+    fit_seconds = time.perf_counter() - started
+
+    # Quantile crossing (a known pathology of separately fit quantile
+    # models): count it, then swap the crossed pairs so the exported
+    # bounds always satisfy lower <= upper.  minimum/maximum (not a
+    # sequential pair of np.where swaps) so the repair can never
+    # reference its own output.
+    crossed = lower > upper
+    n_crossing = int(crossed.sum())
+    if n_crossing:
+        _LOG.debug(
+            "quantile crossing on %d/%d row(s) -- bounds swapped",
+            n_crossing, int(lower.size),
+        )
+        lower, upper = np.minimum(lower, upper), np.maximum(lower, upper)
+
+    coverage: float | None = None
+    n_covered: int | None = None
+    if truth is not None:
+        inside = (truth >= lower) & (truth <= upper)
+        n_covered = int(inside.sum())
+        coverage = float(inside.mean())
+    mean_width = float((upper - lower).mean())
+    _LOG.debug(
+        "quantile intervals: alpha=%g n_test=%d coverage=%s width=%.4g "
+        "crossing=%d in %.2fs",
+        alpha, int(lower.size),
+        "n/a" if coverage is None else f"{coverage:.1%}",
+        mean_width, n_crossing, fit_seconds,
+    )
+    return QuantileIntervals(
+        alpha=float(alpha),
+        lower=lower,
+        median=median,
+        upper=upper,
+        n_test=int(lower.size),
+        mean_width=mean_width,
+        n_crossing=n_crossing,
+        coverage=coverage,
+        n_covered=n_covered,
+        fit_seconds=fit_seconds,
+    )
+
+
+def _numeric_vector(
+    values: object, name: str, *, finite: bool
+) -> np.ndarray:
+    """Coerce a target sequence to a flat float array (house guards).
+
+    ``ValueError``/``TypeError`` from the coercion become
+    :class:`DataValidationError`; when ``finite`` is set the result may
+    not carry NaN either (a quantile loss has no honest answer for a
+    missing target).
+    """
+    try:
+        array = np.asarray(values, dtype=float).reshape(-1)
+    except (TypeError, ValueError) as error:
+        raise DataValidationError(
+            f"{name} must be numeric, got non-numeric value(s): {error}"
+        ) from error
+    if finite and array.size and not np.isfinite(array).all():
+        bad = int((~np.isfinite(array)).sum())
+        raise DataValidationError(
+            f"{name} contains {bad} NaN/inf value(s) -- quantile "
+            "regression needs finite targets"
+        )
+    return array
 
 
 def applicability_domain(

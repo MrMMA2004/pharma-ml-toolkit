@@ -12960,3 +12960,296 @@ class TestReview150Gui:
             add_ic50_column(  # Finding 3: the collision guard
                 pd.DataFrame({"pIC50": [6.0], "SMILES": ["CCO"]}), out_col="pIC50"
             )
+
+
+class TestReview151Gui:
+    """The 100x-151 round's GUI surface: the FOURTH board filler (the
+    hyperparameter trial ranking) actually feeding the Save-table twin
+    the button's texts promise -- the round's audit Finding 1 (the tune
+    render used to fill only the tree, leaving the button to lie or
+    export the previous run's stale leaderboard)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 150.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def test_tune_render_feeds_the_board_save_frame(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """Finding 1, behaviorally: after a search the trial ranking IS
+        the frame the Save-table button exports -- full configuration
+        text, float scores, ranked 1..n."""
+        import pandas as pd
+
+        app._ml_load_example()
+        app._tune_trials.set("4")
+        app._ml_tune()
+        assert self._drain_jobs(app), "tune job hung"
+        board = getattr(app, "_board_frame", None)
+        assert board is not None, "the tune render left the board frame unset"
+        assert isinstance(board, pd.DataFrame)
+        assert list(board.columns) == [
+            "rank", "trial", "configuration", "score", "score_std",
+        ]
+        assert len(board) == 4
+        assert board["rank"].tolist() == [1, 2, 3, 4]
+        assert board["score"].notna().all()
+        assert board["score"].dtype.kind == "f"
+        # the tree the user SEES and the frame the button EXPORTS agree
+        tree_rows = len(app._board_tree.get_children())
+        assert tree_rows == len(board)
+        assert quiet_dialogs == []
+
+    def test_tune_render_replaces_a_stale_leaderboard(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """The cross-KIND stale export the audit described: a previous
+        compare_models run's leaderboard must not survive a search as
+        the exportable table."""
+        import pandas as pd
+
+        app._board_frame = pd.DataFrame(
+            {"model": ["ridge"], "test_r2": [0.61]}  # a stale leaderboard
+        )
+        app._ml_load_example()
+        app._tune_trials.set("4")
+        app._ml_tune()
+        assert self._drain_jobs(app), "tune job hung"
+        board = app._board_frame
+        assert "model" not in board.columns  # the leaderboard is GONE
+        assert "configuration" in board.columns  # the trials table is here
+        assert quiet_dialogs == []
+
+    def test_all_four_fillers_assign_the_frame(self) -> None:
+        """The audit's gap (i): every render that fills the board tree
+        must also assign the backing frame -- pinned at the source level
+        (the behavioral tests above cover the tune path; this pin keeps
+        a regression from deleting the assignment from the other three
+        renders unnoticed)."""
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assignments = [
+            line.strip()
+            for line in source.splitlines()
+            if line.strip() == "self._board_frame = board"
+            or line.strip() == "self._board_frame = result.leaderboard"
+            or line.strip() == "self._board_frame = pd.DataFrame(board_rows, columns=board_columns)"
+        ]
+        # compare_models + benchmark (both '= board') + stacking
+        # ('= result.leaderboard') + the tune render (100x-151)
+        assert len(assignments) >= 4, assignments
+
+
+class TestPredictionIntervalsGui:
+    """The 100x-151 round's feature GUI: D2.py's uncertainty block as
+    the Results card's "Prediction intervals" button -- the honest port
+    (GradientBoostingRegressor(loss="quantile") at alpha/2, 0.5 and
+    1-alpha/2, where the upload trained three IDENTICAL plain forests
+    whose advertised "90% interval" had width 0 and coverage 0%), the
+    alpha entry, the coverage/width/crossing status note, the interval
+    table (the Save-intervals payload) and its train-retirement."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 150.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _train_ridge(app: Any) -> None:
+        """The light regression run every behavioral test below needs:
+        the bundled regression example + ridge (fast, deterministic)."""
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+
+    # -- the source pins ------------------------------------------------------ #
+
+    def test_intervals_button_source_pins(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert '"Prediction intervals"' in source
+        assert "def _ml_plot_intervals" in source
+        assert "self._ml_plot_intervals" in source
+        assert '"Save intervals…"' in source
+        assert "def _ml_intervals_save" in source
+        assert "_interval_alpha" in source
+        # state + retire: the init pin (the house annotation) plus BOTH
+        # train renders clearing the table -- three retirement sites in
+        # all, the 146 permutation twin's split (the init's ": Any"
+        # breaks the plain-string match, so the two are counted apart).
+        assert "self._ml_intervals_frame: Any = None" in source
+        assert source.count("self._ml_intervals_frame = None") == 2
+        # the lazy-import convention: the pharmaml calls live INSIDE
+        # work(), so the guards render even on an older install.
+        assert "from pharmaml.ml import quantile_prediction_intervals" in source
+        assert "from pharmaml.viz import plot_prediction_intervals" in source
+
+    # -- the guards ----------------------------------------------------------- #
+
+    def test_no_trained_model_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ml_plot_intervals()
+        assert any("Train a model first" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+
+    def test_regression_only_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """A classification run reaches the task gate: the quantile trio
+        brackets a continuous endpoint, a classifier has no honest
+        interval here (and no job starts)."""
+        import pandas as pd
+
+        frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data" / "qsar_multiclass.csv")
+        app._ml_adopt_frame(frame, TOOLKIT_ROOT / "examples" / "data" / "qsar_multiclass.csv")
+        app._model_combo.set("logistic_regression")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        app._ml_plot_intervals()
+        assert any("Regression only" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+
+    def test_alpha_parse_guards(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """alpha must parse to a finite float within (0.01, 0.49) -- the
+        interval's tail mass; a bad entry is a dialog, never a job."""
+        self._train_ridge(app)
+        assert self._drain_jobs(app), "train job hung"
+        app._interval_alpha.delete(0, "end")
+        app._interval_alpha.insert(0, "0.6")  # above the 0.49 maximum
+        app._ml_plot_intervals()
+        assert any("Input" in str(a) and "alpha" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+        quiet_dialogs.clear()
+        app._interval_alpha.delete(0, "end")
+        app._interval_alpha.insert(0, "abc")  # not a number at all
+        app._ml_plot_intervals()
+        assert any("Input" in str(a) and "alpha" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+
+    # -- the real run --------------------------------------------------------- #
+
+    def test_intervals_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """The full flow against the REAL library: ridge on the example,
+        then the quantile trio -- the bracket table (one row per
+        held-out compound), the honest note, no dialogs."""
+        self._train_ridge(app)
+        assert self._drain_jobs(app), "train job hung"
+        assert app._ml_intervals_frame is None  # retired by the new run
+        app._ml_plot_intervals()
+        assert self._drain_jobs(app), "intervals job hung"
+        frame = app._ml_intervals_frame
+        assert frame is not None
+        assert list(frame.columns) == [
+            "actual", "pred_median", "pred_lower", "pred_upper", "interval_width",
+        ]
+        # one row per held-out compound (the run tuple's y_test -- the
+        # same row count as x_test, the trio's query set)
+        assert len(frame) == len(app._ml_last_run[6])
+        assert len(frame) > 0
+        # the bounds are ordered (the crossing repair did its job)
+        assert (frame["pred_lower"] <= frame["pred_upper"]).all()
+        note = app._ml_result_note.cget("text")
+        assert "coverage" in note
+        assert "mean width" in note
+        assert "crossed bound(s) repaired" in note
+        assert app._busy is False
+        assert quiet_dialogs == []
+
+    # -- the Save-intervals twin ---------------------------------------------- #
+
+    def test_intervals_save_writes_the_table(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        app._ml_intervals_frame = pd.DataFrame(
+            {
+                "actual": [6.1, 5.2],
+                "pred_median": [6.0, 5.3],
+                "pred_lower": [5.5, 4.8],
+                "pred_upper": [6.6, 5.9],
+                "interval_width": [1.1, 1.1],
+            }
+        )
+        target = tmp_path / "prediction_intervals.csv"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda t="", _p=target, **k: str(_p)
+        )
+        app._ml_intervals_save()
+        assert target.exists()
+        content = target.read_text(encoding="utf-8")
+        assert "pred_median" in content and "interval_width" in content
+        assert "6.1" in content and "5.5" in content
+        # the write-through confirmed itself with the Saved dialog
+        assert any("Saved" in str(a) for a in quiet_dialogs)
+
+    def test_intervals_save_needs_a_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ml_intervals_save()
+        assert any("prediction intervals first" in str(a) for a in quiet_dialogs)
+
+    # -- the retirement ------------------------------------------------------- #
+
+    def test_intervals_retire_on_new_train(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """A new train retires the old run's interval table -- the stale
+        bounds would name the OLD model's split (the 146 twin's rule)."""
+        import pandas as pd
+
+        app._ml_intervals_frame = pd.DataFrame({"pred_median": [1.0]})  # stale
+        self._train_ridge(app)
+        assert self._drain_jobs(app), "train job hung"
+        assert app._ml_intervals_frame is None
+        assert quiet_dialogs == []

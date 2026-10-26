@@ -1,0 +1,465 @@
+ROUND 34 STATIC AUDIT (100x-151, Task 1-a) — the round-33 additions + D2.py
+============================================================================
+Scope: v1.2.88's three audit fixes, the board Save-table twin, the GUI
+recompute refreshes, the 17 round-33 tests, scratch/dev_daemon_150.py, and
+the Ml/D2.py upload read end to end (818 lines) for the gap map.
+Method: read-only on repo source; one DISCLOSED probe
+(scratch/probe_audit_151.py — stdlib + numpy/sklearn, no pharmaml imports,
+no repo writes) pinning the sklearn 1.5.2 quantile semantics and the D2
+zero-width-interval claim. Everything else verified by grep/read.
+
+------------------------------------------------------------
+PART 1 — THE ROUND-33 ADDITIONS
+------------------------------------------------------------
+
+1. training.py — benchmark_feature_families' hoisted guard (595-738)
+   VERIFIED CLEAN, all four sub-questions:
+   (a) Arithmetic: the guard (675-687) compares len(y_series) — the
+       PRE-featurisation row count, taken AFTER the smiles/y alignment
+       check (670-674) — against cv. The docstring (607) says "fewer
+       aligned rows than cv folds"; y_series IS the aligned target, so
+       the wording matches the code.
+   (b) Fires before featurisation: the guard sits at 675, the family
+       loop starts at 699 and compute_feature_frame only runs at 701
+       inside the loop — no featurisation work is spent on a doomed
+       request. Pinned by test_ml_pipeline.py:2359-2374.
+   (c) Swallow contract intact: the hoisted guard is OUTSIDE the
+       per-family try (700), so it cannot be masked. The in-loop twin
+       (703-707) raises INSIDE the try and is honestly swallowed into a
+       NaN row — exactly what the reworded docstring (610-613) promises,
+       pinned by test_ml_pipeline.py:2376-2393 (5 aligned rows, maccs
+       drops 1 -> 4 < cv=5 -> NaN row kept, not raised).
+   (d) Message vs compare_models' twin: tails are identical
+       ("-- no fold can be built; lower cv or supply more data"); the
+       noun phrase differs — "aligned samples" (684) vs "samples" (418)
+       vs train_models' "training rows" (272). Each is semantically
+       accurate for its own guard (see FINDING 4 note); the shared test
+       pin matches only the common prefix, so no test depends on the
+       drift.
+   Alignment double-check (ledger): aligned_y = y_series.iloc[list(
+   frame.index)] (702) is correct because compute_feature_frame indexes
+   surviving rows by ORIGINAL row position under index name
+   "original_index" (chem/features.py:826-829) and y_series was
+   reset_index(drop=True) at 669.
+
+2. converters.py — pic50_to_ic50's overflow convention (229-313)
+   VERIFIED CLEAN on the shipped contract:
+   - try/except shape (293-313): None -> None; unparseable -> None
+     (TypeError/ValueError net); NaN -> NaN (297-298); +/-inf -> NaN
+     (299-303, the "no honest concentration" convention); the pow side
+     catches OverflowError -> inf (304-313), mirroring the silent-0.0
+     underflow end. Docstring Returns (247-259) documents all four
+     outcomes incl. the ~-299 nM threshold and the unit-dependence
+     (exponent 9 is nM-specific; 'M' shifts the boundary ~-308, 'pM'
+     ~-296 — the docstring correctly scopes the number to nM).
+   - nan input: returns NaN, not None — distinguishable from
+     unparseable, pinned (test_converters.py:338-340).
+   - unit exponents {M:0, mM:3, uM:6, µM:6, nM:9, pM:12} (285) with
+     .strip() tolerance — pinned by test_unit_variants (333-336) and
+     the unit-validation raise (329-331).
+   - The GUI triage claim VERIFIED by reading the code: the triage
+     filter is pd.to_numeric(frame["IC50_nM"], errors="coerce") <=
+     threshold (playground.py:14825) — inf <= threshold is False, so an
+     overflow cell (an impossibly WEAK compound) is never shortlisted
+     as a hit; NaN cells are equally excluded. The library-level pin is
+     test_overflow_cell_fails_potency_triage_not_passes_it
+     (test_converters.py:368-372).
+   - REMAINING reachable raw crash: the LEX side — float(pic50) with a
+     python bigint raises OverflowError ("int too large to convert to
+     float"), which is NOT in the (TypeError, ValueError) net at
+     293-296 (probe C: float(10**400) raises). Direct calls hit it
+     trivially; through add_ic50_column it needs an object-dtype pIC50
+     column holding a >308-digit int (read_table can produce
+     object-dtype cells for numerics that overflow int64/float64).
+     Probe C also cleared the siblings: float(Decimal('1e400')) -> inf
+     (no raise; lands in the isinf->NaN branch) and pandas int64 cells
+     convert cleanly. -> FINDING 2 (POLISH).
+
+3. converters.py — add_ic50_column / add_pic50_column collision guards
+   (209-218, 367-374) + the three-sibling consistency
+   VERIFIED CLEAN:
+   - Both guards are `out_col == source_col or out_col in
+     frame.columns` — the second clause covers ALL existing columns
+     (the first is redundant-but-harmless defense: require_columns at
+     209/367 already guarantees source_col is among them).
+   - Sibling consistency: prepare_pic50_dataset refuses out_col in the
+     three RESERVED result columns ("collides with a reserved result
+     column", 620-626) because it builds a fresh frame; the two append
+     twins refuse any EXISTING column ("already exists in the frame",
+     "appends, never overwrites"). Different surfaces, same kind
+     (DataValidationError, up front, never a clobber) — consistent by
+     construction. Pinned: test_converters.py:139-150 (3 collisions),
+     410-423 (3 collisions), 156-166 (3 reserved names).
+   - Bypass analysis: pandas labels are case-sensitive, so a
+     differently-cased/whitespaced out_col appends a NEW column —
+     there is no clobber to bypass. Duplicate labels still trip `in
+     frame.columns`. MultiIndex labels compare as tuples — fine.
+   - out_col=None / out_col="" (off-contract, typed str): the guard
+     passes and pandas happily appends a None-named / empty-named
+     column — no crash, no clobber, just a weird label. -> FINDING 3
+     (POLISH, a one-line validate-out_col guard would match
+     prepare_pic50_dataset's rigor).
+   - unit=None: `unit.strip()` AttributeErrors before anything else —
+     raw crash, but strictly off-contract (unit: str = "nM"); the
+     ic50_to_pic50 twin (148) has the identical shape. Ledgered.
+
+4. playground.py — _ml_board_save + the Save-table button (13244-13259,
+   16229-16249)
+   (a) Needs-a-board guard: board is None -> showinfo listing the four
+       run sources (16240-16246); pinned by
+       test_board_save_needs_a_board (test_playground.py:12899-12902).
+       An EMPTY (0-row, non-None) frame would export a header-only file
+       — no crash, and unreachable from the three real fill paths
+       (each guarantees >= 1 row).
+   (b) Write-through: _save_frame_dialog (18976-19010) ->
+       filedialog.asksaveasfilename (five filetypes) -> export_table
+       (viz/report.py:350-394; index=False for CSV/TSV, records JSON,
+       styled HTML, markdown). Pinned end-to-end by
+       test_board_save_writes_the_table (12904-12919): monkeypatched
+       dialog -> real CSV with model/ridge/0.61 on disk.
+   (c) WHICH paths feed the backing frame: compare_models render
+       (15812), benchmark render (15886), OOF stacking render (16027) —
+       all three assign _board_frame. The HYPERPARAMETER render
+       (15593-15637) fills the board TREE and STATUS but NEVER assigns
+       _board_frame — while the button tooltip (13252-13257), the
+       handler docstring (16233-16235), the guard message (16243-16244)
+       AND the CHANGELOG [1.2.88] Added bullet all explicitly promise
+       "a hyperparameter trial ranking". -> FINDING 1 (RISK).
+   (d) Index handling: all three frame sources carry model/family as a
+       COLUMN with a reset RangeIndex (training.py:529-531 and 736-738;
+       stacking.py:431-434); the tree columns are set verbatim from
+       board.columns (15814-15815) and rows from row.tolist()
+       (15819-15822) — so the tree shows exactly the frame's columns
+       and export_table's index=False drops nothing but the RangeIndex.
+   (e) Stale-frame risk: the only tree/frame divergence is FINDING 1
+       (trials visible, previous leaderboard exportable). No path
+       clears the tree without also replacing the frame; loading a new
+       dataset deliberately leaves both (the board follows RUNS, the
+       same convention the permutation table adopted in 100x-146).
+       Mitigation that exists: the tune card's own "Save the trials
+       table" button (_ml_tune_save_trials, 15732-15763, plain
+       single-format CSV dialog via write_table) — so the trials are
+       exportable, just not through the board's five-format twin the
+       texts promise.
+
+5. playground.py — the GUI recompute refreshes
+   - Predict card IC50 button (_ml_predict_add_ic50, 14743-14790): the
+     stale-column drop (14769-14770) runs on the MAIN thread before
+     _start_job, and operates on a COPY (frame.drop returns a new
+     frame; _ml_predictions is only replaced in render). If the job
+     fails, the old frame survives untouched — no data loss. Status
+     note (14780-14786) counts notna() honestly ("N of M row(s)
+     converted").
+   - Convert tab append-pIC50 mode (_conv_run, 6462-6495): the drop
+     (6471-6476) runs INSIDE work() on the WORKER thread — a different
+     placement than the Predict twin, but equally safe: the frame it
+     drops from was read by read_table INSIDE the same closure, so
+     nothing is shared with the GUI thread. Both comments and status
+     notes (6485-6491: "N unconvertible (kept as NaN, never
+     fabricated)") are accurate. Not a defect; recorded so the next
+     round does not "fix" the asymmetry blind.
+   - Re-click semantics pinned end-to-end by
+     test_ic50_reclick_drops_the_stale_column (12923-12940): stale
+     [999, 999] -> recomputed [1000.0, 100.0], zero dialogs.
+
+6. The 17 round-33 tests — pinning verdict
+   Enumerated: test_converters.py TestPic50ToIc50 overflow/boundary/
+   triage x2 (351-372) + TestAddIc50Column collisions x3 (410-423) +
+   overflow-through-column x1 (425-429) + TestAddPIC50Column collisions
+   x3 (139-150) = 9; test_ml_pipeline.py x2 (2359-2393); test_playground.
+   py TestReview150Gui x6 (12891-12962) — 17 total, matching the
+   worklog's claim.
+   Contracts, not source text: the converters/ml_pipeline tests are
+   fully behavioral (values, raises, NaN-row survival, boundary -299.25
+   finite vs -299.26 inf). The GUI class mixes 3 behavioral
+   (needs-a-board, write-through, recompute) with 3 source pins
+   (button pins, refresh pins, library-guards-real) — the pins would
+   pass against a broken runtime, but each is corroborated by a
+   behavioral sibling, the suite's standing convention.
+   GAPS (not defects in what exists): (i) no test that the three
+   renders actually ASSIGN _board_frame — a regression deleting
+   `self._board_frame = board` from any render passes the suite (the
+   tests plant the frame); (ii) no hyperparameter-path test, which is
+   exactly how FINDING 1 shipped unnoticed; (iii) the too-small-dataset
+   test cannot distinguish "hoisted" from "first-family pre-try raise"
+   with a single family — immaterial to users, noted for the record.
+
+7. scratch/dev_daemon_150.py — sanity read CLEAN
+   Classic double-fork (fork -> setsid -> fork -> _exit), stdout/stderr
+   appended to dev.log unbuffered, stdin from /dev/null, chdir, execvp
+   bun. REPO = Path(__file__).resolve().parents[2] resolves to the
+   WORKSPACE root, which is the Next.js app root — verified by listing:
+   package.json + dev.log live there, the toolkit repo has no
+   package.json. The docstring's "repo-root" wording is loose (it is
+   the app root, not the toolkit repo) but the path is correct. If
+   execvp fails, the grandchild's traceback lands in dev.log (stderr
+   already redirected) — visible, acceptable.
+
+------------------------------------------------------------
+FINDINGS
+------------------------------------------------------------
+FINDING 1 (RISK — a shipped promise with no code behind it):
+  The board Save-table twin names FOUR board fillers; only THREE feed
+  it. The hyperparameter search's render (playground.py:15593-15637)
+  fills the board TREE + STATUS but never assigns self._board_frame,
+  while the button tooltip (13252-13257: "...or the hyperparameter
+  trial ranking"), the handler docstring (16233-16235), the
+  needs-a-board guard message (16243-16244: "...or a hyperparameter
+  search first") and the CHANGELOG [1.2.88] Added bullet ("the board
+  that compare_models, benchmark_feature_families, the OOF stacking
+  card and hyperparameter searches all fill") all promise the fourth
+  path. User-visible consequence right after a search: clicking "Save
+  table…" either lies ("Nothing to save ... or a hyperparameter search
+  first" with the trial ranking plainly visible in the tree) or, if an
+  earlier compare/benchmark/stacking run set the frame, exports the
+  PREVIOUS run's table as "the numbers behind the bars" — a cross-KIND
+  stale export. Minimal fix: build the trials frame in the render (the
+  row_values() cells already exist at 15603-15613) and assign
+  _board_frame alongside the tree fill; or, if the tune card's own
+  Save-trials button is deemed the answer, reword the four promise
+  sites. Add the missing render-assignment regression test (gap (i)).
+FINDING 2 (POLISH — the overflow fix missed the lex side):
+  pic50_to_ic50's first net catches (TypeError, ValueError)
+  (converters.py:293-296) but float() on a python bigint raises
+  OverflowError (probe C: float(10**400) -> "int too large to convert
+  to float"), so a direct call pic50_to_ic50(10**400) still escapes a
+  raw traceback out of the float|None|NaN contract the round hardened.
+  Through add_ic50_column it needs an object-dtype column with a
+  >308-digit int — narrow, but it is the same absurd-cell class the
+  round fixed on the pow side ("one absurd cell can never kill a whole
+  column conversion"). Minimal fix: add OverflowError to the except
+  tuple (return None — the value is unparseable-as-float) + a one-line
+  test. Decimal inputs are already safe (float(Decimal('1e400')) ->
+  inf -> the isinf->NaN branch).
+FINDING 3 (POLISH — out_col validation stops one step short):
+  add_ic50_column / add_pic50_column validate collisions but not the
+  label itself: out_col=None or out_col="" passes the guard and pandas
+  appends a None-named / empty-named column (converters.py:210/368) —
+  no clobber (the guards hold), but a frame carrying a None column
+  label breaks downstream CSV round-trips and column lookups
+  confusingly. prepare_pic50_dataset shows the stricter pattern
+  (reserved-name refusal, 620-626). Minimal fix: reject non-str or
+  empty/whitespace-only out_col with DataValidationError in both
+  twins; 2 lines + 2 tests.
+FINDING 4 (POLISH, note-grade — the 27-A message triple drift):
+  The three too-few-rows messages name their row count differently:
+  "training rows" (train_models, training.py:272), "samples"
+  (compare_models, 418), "aligned samples" (benchmark, 684). Each is
+  accurate for its guard and the shared tail is identical, so this is
+  consistency polish, not a defect; flagging it only so a future
+  message-pin test does not bless one spelling by accident.
+
+------------------------------------------------------------
+DISPROVEN LEDGER (suspected, investigated, cleared)
+------------------------------------------------------------
+ 1. Hoisted-guard arithmetic using the post-drop row count — cleared:
+    len(y_series) pre-featurisation, after the 670-674 alignment
+    check; docstring's "aligned rows" matches (675-687).
+ 2. The guard firing after featurisation work — cleared: 675 precedes
+    the loop (699); featurisation only at 701 (training.py).
+ 3. The per-family except masking the hoisted guard — cleared: guard
+    outside the try (700); the in-loop twin (703-707) is swallowed BY
+    DESIGN, docstring 610-613 + test_ml_pipeline.py:2376-2393.
+ 4. Non-int cv (sklearn splitter, float, np.int64) bypassing the
+    hoisted guard into the all-NaN board — cleared as off-contract AND
+    twin-consistent: compare_models (409/412) and train_models (267)
+    share the exact isinstance(int) shape; docstrings say "Fold
+    count"; bool is caught by the cv<2 branch (632-633).
+ 5. pic50_to_ic50 crashing on nan/±inf input — cleared: NaN->NaN
+    (297-298), ±inf->NaN (299-303); pinned test_converters.py:338-345.
+ 6. inf wrongly COUNTING as a triage hit — cleared: the filter is <=
+    threshold (playground.py:14825); inf and NaN both exclude; pinned
+    at library level (test_converters.py:368-372).
+ 7. Wrong unit exponents / unit crashes on 'M' vs 'nM' vs 'pM' —
+    cleared: {0,3,6,9,12} + µM alias + .strip() (285-290); pinned
+    (329-336). Nit kept in ledger: the docstring's unit list omits the
+    µM alias the error message advertises (289).
+ 8. Collision guards checking only the source column — cleared: `in
+    frame.columns` covers every column (210, 368); SMILES-collision
+    parametrizations pin it (139-150, 410-423).
+ 9. Case/whitespace/duplicate-label bypass of the collision guards —
+    cleared: pandas labels are case-sensitive, so variant spellings
+    append a NEW column (no clobber possible); duplicate labels still
+    satisfy `in frame.columns`.
+10. The board export losing or duplicating the model column (index vs
+    column) — cleared: model/family is a COLUMN with reset RangeIndex
+    on all three sources; tree columns copied verbatim from
+    board.columns; export_table index=False (report.py:367).
+11. An empty board frame crashing the save — cleared: header-only
+    export, no crash; unreachable from the real fill paths.
+12. The Predict-card main-thread drop racing the worker or mutating
+    shared state — cleared: drop returns a copy captured by the
+    closure; _ml_predictions replaced only in render; failure leaves
+    the old frame intact (14769-14790).
+13. The Convert-tab drop being unsafe on the worker thread — cleared:
+    the dropped-from frame is read inside the same work() closure
+    (6470-6479); nothing shared with the GUI thread.
+14. dev_daemon_150.py's parents[2] pointing at the wrong root —
+    cleared: it resolves to the Next.js app root (package.json +
+    dev.log verified there; the toolkit repo has none).
+15. benchmark's y-alignment breaking when compute_feature_frame resets
+    the index — cleared: surviving rows keep their ORIGINAL position
+    ("original_index", features.py:826-829); y_series reset at 669.
+16. The recompute status notes overclaiming — cleared: both notes count
+    notna() and name the kept-as-NaN rows (14780-14786, 6485-6491).
+17. filedialog being None crashing _ml_board_save headless — cleared:
+    the module-level import falls back to None only when tkinter
+    itself is absent (551-555), i.e. no GUI at all; the shared dialog
+    helper is 100x-121 vintage used by every table card alike.
+
+------------------------------------------------------------
+PART 2 — D2.py GAP MAP (Ml/D2.py, 818 lines, read end to end)
+------------------------------------------------------------
+Already ported (verified this round):
+- process_data (127-156) -> prepare_pic50_dataset (converters.py:522+):
+  EVERY quirk upgraded to a named, counted choice — on_bad_lines='skip'
+  (130) -> read_table's RAISING DataValidationError convention (the
+  honest opposite; the round-146 boundary guard closes the chunked-
+  reader hole); the censoring strip (144) -> magnitude kept +
+  rows_censored counted; 0 < v <= 1e9 (146) -> upper_limit=1e9 +
+  rows_out_of_range; the silent per-SMILES median collapse (152) ->
+  aggregate='median' + n_measurements/endpoint_median +
+  duplicates_collapsed; dropna -> rows_missing_smiles/rows_unparsable.
+  Accounting identity pinned (test_converters.py:168-193).
+- get_extended_descriptors (47-68, the hand-picked 20) -> superset
+  coverage: compute_descriptors(descriptor_set="rdkit_all") rides the
+  full Descriptors.descList (descriptors.py:326-355; descList includes
+  MolWt..MolMR, NHOHCount/NOCount, LabuteASA and every fr_* count, so
+  all 20 are inside); the [0.0]*20 silent fallback -> the per-molecule
+  drop-with-warning contract.
+- calculate_enhanced_features (70-100): the R3 half -> the ecfp3
+  family (features.py:219, 561-573); the R2 4096-bit half is a
+  DOCUMENTED deviation (the ecfp3 docstring itself states the upload's
+  dual-radius story and that the family reproduces the R3 half; the
+  toolkit's ecfp is 2048-bit radius 2 — bit length is a module
+  constant, not per-call).
+- Permutation importance (350-367) -> permutation_feature_importance
+  (evaluation.py:623) + plot_permutation_importance (viz/ml_plots.py:
+  1196) + the GUI button + Save-CSV twin (rounds 145/146).
+- The base/meta model suite (637-701: SVR, GradientBoosting, XGBoost,
+  LGBM, CatBoost / Ridge, Huber, LGBM) -> MODEL_REGISTRY names svm,
+  gradient_boosting, xgboost, lightgbm, catboost, ridge,
+  huber_regression (models.py:550-609, 430-451).
+- KFold(5, shuffle, 42) OOF meta-features via cross_val_predict
+  (656-689) + meta-learners + winner-by-test-R2 + full-train refit ->
+  stack_oof_regressors (ml/stacking.py, round 32) with the honest
+  fixes; single models -> train_models/compare_models.
+- Parity scatter with R2/R/RMSE box (329-348) -> plot_predicted_vs_
+  actual (viz/ml_plots.py:729); CV table r2/rmse/mae (244-289) ->
+  compare_models' board (+ plot_cv_scores); make_scorer(
+  mean_squared_error, squared=False) (252) is the spelling that DIES on
+  sklearn >= 1.6 — the toolkit's neg_root_mean_squared_error is the
+  modern survivor (honest note for the port docs).
+- Pickle artifacts + model_info (753-784) -> the bundle save/load
+  story (provenance, loaded-bundle predict in the GUI).
+- Excel exports everywhere -> write_table handles .xlsx (io.py:605-621;
+  export_table for the five visual formats).
+
+GENUINELY UNPORTED (the honest gap list):
+GAP 1 (the round's port target) — generate_uncertainty_quantification
+  (530-589): 90% prediction intervals via quantile regression, the
+  coverage statistic, the interval table (Experimental / Median /
+  Lower_5% / Upper_95% / Width) and the band plot. AS SHIPPED IT IS
+  BROKEN — the zero-width-interval bug CONFIRMED by probe B: the three
+  RandomForestRegressor(n_estimators=150, max_depth=10, seed 42)
+  instances are fit on the SAME (X_train, y_train) with NO quantile
+  loss, so the three forests are bit-for-bit IDENTICAL (lower ==
+  median == upper predictions, True/True), interval width is 0.0 on
+  every test row, empirical coverage 0.0% (0/100 rows inside), and the
+  "90% Prediction Interval" the plot legend advertises does not exist.
+  RandomForestRegressor is STRUCTURALLY incapable of the intent in
+  sklearn (probe A2: no loss= param, no alpha/quantile knob).
+  What sklearn 1.5.2 offers honestly (probe A1/A3/A4):
+  GradientBoostingRegressor(loss="quantile", alpha=q) — works, and a
+  5%/50%/95% trio gave 90.0% empirical train coverage with
+  non-degenerate widths and correct lower<=median<=upper ordering;
+  HistGradientBoostingRegressor(loss="quantile", quantile=q) — also
+  works (alpha= is NOT its knob). Suggested port shape:
+  quantile_prediction_intervals(model="gradient_boosting", alpha
+  0.05/0.5/0.95, coverage stat, interval frame, band plot via
+  fill_between) with the D2 bug listed as fixed-not-ported, and
+  bootstrap_uncertainty (applicability.py:494) cross-referenced as the
+  ensemble-std sibling it already has. Port-side honest note: D2's
+  fill_between sorts the band by np.sort(y_test) (561-563) — a
+  calibration-style x-axis choice worth deciding deliberately, not
+  inheriting silently.
+GAP 2 — decode_morgan_bit (102-125) + its consumer inside
+  analyze_correlations (211-240): bit-index -> atom-environment
+  decoding (SMARTS, central atom, example molecules, the
+  morgan_atom_environments.txt artifact). Nothing like it exists in
+  the toolkit (no bitInfo/FindAtomEnvironmentOfRadiusN usage). This is
+  the upload's best interpretability idea after permutation
+  importance and a natural chem/features sibling.
+GAP 3 — the correlation analysis bundle (169-242): per-feature Pearson
+  R vs target, the directional top-10 bar (red/green by sign), the
+  top-10+target heatmap, feeding GAP 2's bit decoding. The toolkit has
+  rank_features (variance/RF/LGBM) and select_kbest_union (F ∪ MI) —
+  related but neither is the signed correlation story.
+GAP 4 — the cross-model permutation HEATMAPS (376-470): features ×
+  models importance matrix (top 25) and meta-learner × base-model
+  matrix, with Excel twins. plot_permutation_importance is
+  single-model bars; the multi-model matrix view is unported.
+GAP 5 — SHAP (472-528): TreeExplainer beeswarm + top-20 bar. Standing
+  honest note: shap is not installed in the venv; the round-30 note
+  already says so. Remains unported (and would stay optional-gated).
+GAP 6 (small) — VarianceThreshold(0.01) (613): no variance-THRESHOLD
+  step in ml/preprocessing (rank_features(method="variance") ranks,
+  does not cut). A 3-line wrapper; relevant because binary fingerprint
+  columns make near-constant bits a real nuisance.
+GAP 7 (small) — the overfit gap / train-vs-test stat (279, 285) and
+  the test Pearson R (314): RegressionReport carries rmse/mae/r2/
+  max_error/n_samples (evaluation.py:196-213) — no train-side metrics,
+  no pearson r. compare_models is CV-only; plot_learning_curve shows
+  the gap visually but no number is reported.
+D2 quirks worth pinning in the eventual port notes (target 3):
+- on_bad_lines='skip' (130): silently DROPS malformed rows — the port
+  chose the raising convention (documented above); prepare_pic50_
+  dataset's docstring names the censoring/range/median upgrades but
+  does NOT name the bad-lines quirk — one sentence would finish the
+  honest ledger.
+- the model_info cv_results misattribution (775): for a META winner
+  ('Meta_LGBM') the lookup `winner_name.split('_')[-1]` fetches the
+  BASE 'LGBM' CV results — the meta-learners never got CV evaluation
+  at all (evaluate_model_cv only ran for base models, 663-678). A
+  subtle wrong-number-in-the-artifact bug; the port's bundle
+  provenance should not inherit it.
+- N_JOBS=16 hardware pin + warnings.filterwarnings('ignore') (28-29):
+  environment assumptions the library rightly refuses to make.
+- evaluate_model_cv's `squared=False` (252): removed in sklearn 1.6 —
+  D2.py as-is breaks on modern sklearn (see ported note above).
+
+------------------------------------------------------------
+PROBE DISCLOSURE
+------------------------------------------------------------
+scratch/probe_audit_151.py (run with the repo venv python, ~15 s):
+A0 sklearn 1.5.2; A1 GBR alpha= knob (quantile= rejected); A2 RF has
+NO quantile mode; A3 GBR quantile trio -> 90.0% train coverage,
+widths 0.81-5.53, ordering holds; A4 HGB spelling quantile=; B D2's
+block -> identical forests, width 0, coverage 0.0%; C float(10**400)
+OverflowError escapes the lex net; Decimal('1e400')->inf; pandas
+int64 cells clean. Output reproduced above where cited.
+
+------------------------------------------------------------
+VERDICT + NEXT ACTIONS
+------------------------------------------------------------
+The round-33 fixes themselves are sound: the hoisted guard does what
+its docstring now promises (before featurisation, swallow contract
+intact, alignment correct), the inf convention is coherent end to end
+(including the GUI triage semantics), and the collision guards close
+the clobber surface with sibling-consistent errors. The one real
+defect is in the round's FEATURE, not its fixes: the Save-table twin
+promises a fourth board filler that never feeds it (FINDING 1) — the
+same class of promise-vs-code gap the round's own audit theme hunts.
+FINDING 2 is the overflow fix's last corner (lex-side bigint);
+FINDINGS 3-4 are polish.
+Next actions for the close-out:
+ (1) FIX FINDING 1 — either assign _board_frame in the tune render
+     (build the frame from row_values; ~10 lines) or reword the four
+     promise sites; add the render-assignment regression test for all
+     four fillers.
+ (2) FINDING 2: add OverflowError to the float() net + boundary test.
+ (3) FINDING 3: out_col label validation in the two twins (+tests).
+ (4) The D2 port target (GAP 1) as specced above — GBR quantile trio,
+     coverage stat, interval frame, band plot, the zero-width bug in
+     the fixed-not-ported ledger; GAP 2 (bit decoding) is the best
+     follow-up candidate after it.

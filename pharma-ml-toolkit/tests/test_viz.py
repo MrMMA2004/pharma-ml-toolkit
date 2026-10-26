@@ -51,6 +51,7 @@ from pharmaml.viz import (
     plot_permutation_importance,
     plot_pr_curves,
     plot_predicted_vs_actual,
+    plot_prediction_intervals,
     plot_receptor_atom_types,
     plot_residuals,
     plot_rl_introspection,
@@ -2584,3 +2585,75 @@ class TestContentsForwardTooltips:
         ).read_text(encoding="utf-8")
         assert "the return link gained in 100x-139, applied" in source
         assert "symmetrically to the forward leg" in source
+
+
+class TestPredictionIntervalsPlot:
+    """100x-151 — plot_prediction_intervals: the quantile-regression
+    band twin of the GP coverage plot (the D2.py upload's honest port).
+    """
+
+    def test_basic_figure_and_labels(self, close_all):
+        fig = plot_prediction_intervals(
+            [1.0, 2.0, 3.0], [1.1, 1.9, 3.2], [0.8, 1.7, 2.9], [1.4, 2.2, 3.5]
+        )
+        ax = fig.axes[0]
+        assert ax.get_xlabel() == "actual"
+        assert ax.get_ylabel() == "predicted (ŷ)"
+        assert "quantile regression" in ax.get_title()
+
+    def test_coverage_annotation_text(self, close_all):
+        fig = plot_prediction_intervals(
+            [1.0, 2.0, 3.0], [1.1, 1.9, 3.2], [0.8, 1.7, 2.9], [1.4, 2.2, 3.5]
+        )
+        # all three truths sit inside their brackets -> 100.0% coverage
+        texts = [t.get_text() for t in fig.axes[0].texts]
+        assert any("coverage" in t and "100.0%" in t for t in texts)
+        assert any("mean width" in t for t in texts)
+
+    def test_band_label_carries_the_level(self, close_all):
+        fig = plot_prediction_intervals(
+            [1.0, 2.0], [1.1, 1.9], [0.8, 1.7], [1.4, 2.2], alpha=0.2
+        )
+        legend = "\n".join(
+            line.get_label() or "" for line in fig.axes[0].get_lines()
+        ) + "\n" + "\n".join(
+            coll.get_label() or "" for coll in fig.axes[0].collections
+        )
+        assert "80% prediction interval" in legend
+
+    def test_shape_mismatch_raises_typed(self, close_all):
+        with pytest.raises(DataValidationError, match="must match"):
+            plot_prediction_intervals(
+                [1.0, 2.0], [1.0], [0.5, 1.5], [0.6, 1.6])
+
+    def test_empty_raises_typed(self, close_all):
+        with pytest.raises(DataValidationError, match="empty y_true/y_pred"):
+            plot_prediction_intervals([], [], [], [])
+
+    def test_crossed_bounds_raise_typed(self, close_all):
+        with pytest.raises(DataValidationError, match="ordered bounds"):
+            plot_prediction_intervals(
+                [1.0, 2.0], [1.1, 1.9], [1.5, 1.7], [1.4, 2.2])
+
+    def test_bad_alpha_raises_typed(self, close_all):
+        with pytest.raises(DataValidationError, match="alpha must be in"):
+            plot_prediction_intervals(
+                [1.0], [1.1], [0.8], [1.4], alpha=0.0)
+
+    def test_end_to_end_from_the_quantile_record(self, regression_frame, close_all):
+        from pharmaml.ml import quantile_prediction_intervals
+
+        ds = load_dataset(
+            _write_csv(regression_frame, "qi_fixture.csv"), target="pIC50"
+        )
+        X_train, X_test, y_train, y_test = make_train_test_split(
+            ds.X, ds.y, test_size=0.25, random_state=42
+        )
+        res = quantile_prediction_intervals(
+            X_train, y_train, X_test, y_test, n_estimators=60)
+        fig = plot_prediction_intervals(
+            y_test, res.median, res.lower, res.upper, alpha=0.1)
+        texts = [t.get_text() for t in fig.axes[0].texts]
+        assert any("coverage" in t for t in texts)
+        # the record's own statistic rides the annotation
+        assert any(f"{res.coverage * 100:.1f}%" in t for t in texts)

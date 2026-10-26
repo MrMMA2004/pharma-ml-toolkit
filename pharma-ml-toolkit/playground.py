@@ -2351,6 +2351,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # a new run lands (the old table names the old model's
         # features), not when a new dataset is loaded.
         self._ml_perm_frame: Any = None
+        # (100x-151) the last run's prediction-interval table (the
+        # Save-intervals payload) -- same retirement rule as the
+        # permutation twin above: a new train lands, the old run's
+        # bracketed bounds are nobody's export.
+        self._ml_intervals_frame: Any = None
         # -- Hyperparameter-search card state (100x-90) ------------- #
         # (TunerResults, estimator token, task, target column) of the
         # last search -- the Apply-best and Save-trials payloads.
@@ -13156,11 +13161,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "figure, ready for a report; a new Train run retires it.",
         )
         perm_save_btn.pack(side="left", padx=(10, 0))
+        # (100x-151) the discrimination + uncertainty pair moved to
+        # their OWN row -- the single row overflowed the card's width
+        # the moment the interval twins joined it (the ROC button
+        # clipped at the right edge, the new buttons invisible).
+        ml_result_buttons2 = ttk.Frame(results, style="Card.TFrame")
+        grid_append(results, ml_result_buttons2, sticky="w", pady=(6, 0))
         # (100x-148) xxx.ipynb cell 28's discrimination pair as live
         # buttons -- the ROC curves used to ride only the report
         # bundle; the PR curves existed nowhere in the toolkit.
         roc_btn = self._action_button(
-            ml_result_buttons,
+            ml_result_buttons2,
             "ROC curves",
             self._ml_plot_roc,
             tooltip="One-vs-rest ROC curves of the last trained "
@@ -13171,7 +13182,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         roc_btn.pack(side="left", padx=(10, 0))
         pr_btn = self._action_button(
-            ml_result_buttons,
+            ml_result_buttons2,
             "PR curve",
             self._ml_plot_pr,
             tooltip="One-vs-rest Precision-Recall curves of the last "
@@ -13181,8 +13192,48 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "prevalence (a line the notebook's own plot omitted).",
         )
         pr_btn.pack(side="left", padx=(10, 0))
+        # (100x-151) D2.py's uncertainty block, ported honestly: the
+        # upload's "90% Prediction Interval" was three IDENTICAL plain
+        # forests (width 0, coverage 0%) -- the real thing is the
+        # quantile-regression trio the upload meant all along.
+        intervals_btn = self._action_button(
+            ml_result_buttons2,
+            "Prediction intervals",
+            self._ml_plot_intervals,
+            tooltip="Gradient-boosted quantile regression (quantile_prediction_intervals) "
+            "-- the α/2, 0.5 and 1-α/2 fits bracket every held-out "
+            "prediction, and the coverage statistic reports the share of "
+            "test rows the band actually straddles. This is D2.py's "
+            "uncertainty step done right: the upload trained three "
+            "IDENTICAL plain forests (no quantile loss -- width 0, "
+            "coverage 0%) where sklearn's quantile loss was meant; the "
+            "crossed quantile bounds are counted and repaired, not "
+            "hidden. Needs the last run's train AND test split, so "
+            "regression runs only.",
+        )
+        intervals_btn.pack(side="left", padx=(10, 0))
+        self._interval_alpha = ttk.Entry(ml_result_buttons2, width=4)
+        self._interval_alpha.insert(0, "0.1")
+        self._interval_alpha.pack(side="left", padx=(8, 0))
+        ttk.Label(ml_result_buttons2, text="α", style="CardMuted.TLabel").pack(
+            side="left", padx=(2, 0)
+        )
+        # (100x-151) the interval table's own save twin (the permutation
+        # table's 100x-146 shape): the figure export keeps the picture,
+        # this keeps the bracketed numbers.
+        interval_save_btn = self._action_button(
+            ml_result_buttons2,
+            "Save intervals…",
+            self._ml_intervals_save,
+            tooltip="Save the last run's prediction-interval TABLE "
+            "(actual, pred_median, pred_lower, pred_upper, "
+            "interval_width) through the five-format dialog (CSV, TSV, "
+            "Markdown, JSON, styled HTML) -- the bounds behind the "
+            "band, ready for a report; a new Train run retires it.",
+        )
+        interval_save_btn.pack(side="left", padx=(10, 0))
         ml_result_note = ttk.Label(
-            ml_result_buttons, text="", style="CardMuted.TLabel", wraplength=430, justify="left"
+            ml_result_buttons2, text="", style="CardMuted.TLabel", wraplength=430, justify="left"
         )
         ml_result_note.pack(side="left", padx=(10, 0))
         self._ml_result_note = ml_result_note
@@ -14338,6 +14389,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # table -- the Save-CSV payload would otherwise name the OLD
             # model's features while the card shows the new model.
             self._ml_perm_frame = None
+            # (100x-151) the interval table too -- the old run's
+            # quantile bounds bracket nothing the new model predicts.
+            self._ml_intervals_frame = None
             gp = self._ml_gp_sigma(trained, x_test)
             self._fill_ml_metrics(trained, report, task, dropped, gp=gp)
             self._ml_ad_refresh_source()
@@ -14471,6 +14525,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # table -- the Save-CSV payload would otherwise name the OLD
             # model's features while the card shows the new model.
             self._ml_perm_frame = None
+            # (100x-151) the interval table too -- the old run's
+            # quantile bounds bracket nothing the new model predicts.
+            self._ml_intervals_frame = None
             self._fill_ml_metrics(trained, report, task, dropped)
             self._ml_ad_refresh_source()
             members_named = "+".join(members)
@@ -15590,6 +15647,41 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 reverse=True,
             )
             failed = [t for t in results.trials if t.failed]
+            # The board's Save-table twin exports this frame (100x-151
+            # audit, Finding 1): the trial ranking the tree shows is the
+            # FOURTH filler the button's texts promise.  The frame
+            # carries the FULL configuration text and clean export
+            # headers -- the tree truncates at 52 characters and spells
+            # the spread column "± std" for display only.
+            import pandas as pd
+
+            board_columns = ["rank", "trial", "configuration", "score", "score_std"]
+            if ladder is not None:
+                board_columns.insert(3, "resource")
+            board_rows: list[dict[str, Any]] = []
+            for rank, trial in enumerate(ranked, start=1):
+                row: dict[str, Any] = {
+                    "rank": rank,
+                    "trial": trial.trial_id,
+                    "configuration": tune_config_text(trial.hyperparameters),
+                }
+                if ladder is not None:
+                    row["resource"] = trial.resource
+                row["score"] = trial.score
+                row["score_std"] = trial.score_std
+                board_rows.append(row)
+            for trial in failed:
+                row = {
+                    "rank": None,
+                    "trial": trial.trial_id,
+                    "configuration": tune_config_text(trial.hyperparameters),
+                }
+                if ladder is not None:
+                    row["resource"] = trial.resource
+                row["score"] = trial.score
+                row["score_std"] = trial.score_std
+                board_rows.append(row)
+            self._board_frame = pd.DataFrame(board_rows, columns=board_columns)
             self._board_tree.delete(*self._board_tree.get_children())
             if ladder is None:
                 columns = ["rank", "trial", "configuration", "score", "± std"]
@@ -16378,6 +16470,104 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         self._save_frame_dialog(
             frame, "Save the permutation-importance table", "permutation_importance.csv"
+        )
+
+    def _ml_plot_intervals(self) -> None:
+        """Prediction intervals of the last regression run (100x-151).
+
+        D2.py's uncertainty block as a Results-card button, ported
+        honestly: the upload's "90% Prediction Interval" trained three
+        IDENTICAL plain ``RandomForestRegressor`` instances -- no
+        quantile loss, so lower == median == upper on every row (width
+        0, coverage 0%; the forest simply has no quantile mode in
+        scikit-learn).  What the upload MEANT is
+        ``GradientBoostingRegressor(loss="quantile")`` at the
+        ``alpha/2`` / ``0.5`` / ``1 - alpha/2`` quantiles, and that is
+        what this button runs: the parity scatter with the interval
+        band, the empirical coverage statistic (the share of held-out
+        rows the band actually straddles -- a calibrated trio sits near
+        ``1 - alpha``), the mean width, and the count of crossed
+        quantile bounds (repaired by the swap, reported not hidden).
+        The interval table rides the render as ``_ml_intervals_frame``
+        -- the card's Save-intervals twin writes it.
+        """
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo(
+                "No trained model",
+                "Train a model first -- the prediction intervals need "
+                "the last run's train/test split.",
+            )
+            return
+        trained, _report, task, x_train, y_train, x_test, y_test, target = run
+        if task != "regression":
+            messagebox.showinfo(
+                "Regression only",
+                f"The last run trained a {task} model — the quantile trio "
+                "brackets a continuous endpoint; a classifier's label "
+                "has no honest interval here.",
+            )
+            return
+        if not self._require_pharmaml() or not self._require("matplotlib", "the figure"):
+            return
+        try:
+            alpha = parse_float(
+                self._interval_alpha.get(), "alpha", minimum=0.01, maximum=0.49
+            )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.ml import quantile_prediction_intervals
+            from pharmaml.viz import plot_prediction_intervals
+
+            result = quantile_prediction_intervals(
+                x_train, y_train, x_test, y_test, alpha=alpha
+            )
+            figure = plot_prediction_intervals(
+                y_test,
+                result.median,
+                result.lower,
+                result.upper,
+                alpha=alpha,
+                title=f"Prediction intervals — {trained.name} ({target})",
+            )
+            return result, figure
+
+        def render(payload: tuple[Any, Any]) -> None:
+            result, figure = payload
+            self._render_figure(self._ml_host, figure)
+            self._ml_intervals_frame = result.as_frame(y_test)
+            self._ml_result_note.configure(
+                text=(
+                    "prediction intervals replace the parity figure — "
+                    "Train & evaluate brings it back · "
+                    f"coverage {result.coverage:.1%} of held-out rows · "
+                    f"mean width {result.mean_width:.4g} · "
+                    f"{result.n_crossing} crossed bound(s) repaired"
+                )
+            )
+
+        self._start_job("prediction intervals", work, render)
+
+    def _ml_intervals_save(self) -> None:
+        """(100x-151) Save the last prediction-interval table.
+
+        The figure export keeps the band picture; this twin keeps the
+        NUMBERS (actual, pred_median, pred_lower, pred_upper,
+        interval_width) through the five-format dialog -- the
+        permutation table's 100x-146 shape.  Retires with the run: a
+        new train clears it.
+        """
+        frame = getattr(self, "_ml_intervals_frame", None)
+        if frame is None:
+            messagebox.showinfo(
+                "Nothing to save", "Run the prediction intervals first."
+            )
+            return
+        self._save_frame_dialog(
+            frame, "Save the prediction-interval table", "prediction_intervals.csv"
         )
 
     # ------------------------------------------------------------------ #

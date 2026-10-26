@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the screenshot, here is a precise description of the **top third** of the interface:\n\n### **Card Title**\n*   **Results**\n\n### **Buttons (and associated input fields)**\n*   **Calibration curve** (Button)\n    *   Input field: **10** (labeled **bins**)\n*   **Learning curve** (Button)\n    *   Input field: **5** (labeled **folds**)\n*   **Permutation importance** (Button)\n    *   Input field: **5** (labeled **repeats**)\n*   **Save figure** (Button)\n*   **Save CSV** (Button)\n*   **ROC curves** (Button)\n*   **PR c...** (Button, likely \"PR curves\" or similar)\n\n### **Entry Fields with Labels**\n*   **model**: `ridge (regression)`\n*   **R²**: `0.8468`\n*   **RMSE**: `1.1362`\n*   **MAE**: `0.8606`\n*   **CV score**: `no CV`\n*   **fit time**: `0.00 s`",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793052553,
+  "id": "202610270609086be0e2dcb4894e48",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610270609086be0e2dcb4894e48",
+  "usage": {
+    "completion_tokens": 243,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1449,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1692
+  }
+}
