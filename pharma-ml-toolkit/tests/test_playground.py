@@ -12843,3 +12843,120 @@ class TestReview149Gui:
         assert "OOF stacking" in app._board_status.cget("text")
         assert getattr(app._stack_host, "_pg_figure", None) is not None
         assert quiet_dialogs == []
+
+
+class TestReview150Gui:
+    """The 100x-150 engineering review's GUI surface: the shared board's
+    Save-table twin (every frame that fills the leaderboard -- compare
+    models, the family benchmark, the OOF stacking leaderboard, a trial
+    ranking -- exports through the five-format dialog), and the two
+    recompute-refresh flows that keep the library's new append-only
+    add_*_column guards from turning a re-click into an error dialog."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the board Save-table twin ------------------------------------------ #
+
+    def test_board_save_button_source_pins(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert '"Save table…"' in source
+        assert "def _ml_board_save" in source
+        assert 'self._ml_board_save' in source
+        assert '"Save the leaderboard table"' in source
+        assert '"leaderboard.csv"' in source
+
+    def test_board_save_needs_a_board(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._board_frame = None
+        app._ml_board_save()
+        assert any("Compare models" in str(a) for a in quiet_dialogs)
+
+    def test_board_save_writes_the_table(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        app._board_frame = pd.DataFrame(
+            {"model": ["ridge", "random_forest"], "test_r2": [0.61, 0.58]}
+        )
+        target = tmp_path / "leaderboard.csv"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda t="", _p=target, **k: str(_p)
+        )
+        app._ml_board_save()
+        assert target.exists()
+        content = target.read_text(encoding="utf-8")
+        assert "model" in content and "ridge" in content and "0.61" in content
+
+    # -- the recompute refreshes (the append-only guards' GUI twins) ------- #
+
+    def test_ic50_reclick_drops_the_stale_column(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """A prediction frame that ALREADY carries IC50_nM re-clicks the
+        button: the stale column is dropped first, so the refresh is an
+        explicit recompute -- never an add_ic50_column collision error."""
+        import pandas as pd
+
+        frame = pd.DataFrame(
+            {"prediction": [6.0, 7.0], "IC50_nM": [999.0, 999.0]}  # stale values
+        )
+        app._ml_predictions = frame
+        app._ml_predict_add_ic50()
+        assert self._drain_jobs(app), "ic50 job hung"
+        result = app._ml_predictions
+        assert list(result.columns) == ["prediction", "IC50_nM"]
+        assert result["IC50_nM"].tolist() == [1000.0, 100.0]  # recomputed
+        assert quiet_dialogs == []
+
+    def test_refresh_source_pins(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        # the prediction card drops the stale IC50_nM before re-appending
+        assert 'if "IC50_nM" in frame.columns:' in source
+        assert 'frame = frame.drop(columns=["IC50_nM"])' in source
+        # the conversion card drops a pIC50 column the INPUT file carries
+        assert 'if "pIC50" in frame.columns:' in source
+        assert 'frame = frame.drop(columns=["pIC50"])' in source
+
+    def test_library_guards_are_real(self) -> None:
+        """The audit's three findings landed in the library itself."""
+        import pandas as pd
+
+        from pharmaml.chem.converters import add_ic50_column, pic50_to_ic50
+        from pharmaml.exceptions import DataValidationError
+
+        assert pic50_to_ic50(-300.0) == float("inf")  # Finding 2: no OverflowError
+        with pytest.raises(DataValidationError, match="appends, never overwrites"):
+            add_ic50_column(  # Finding 3: the collision guard
+                pd.DataFrame({"pIC50": [6.0], "SMILES": ["CCO"]}), out_col="pIC50"
+            )

@@ -207,6 +207,15 @@ def add_pic50_column(
         ``NaN``.
     """
     require_columns(frame, [source_col])
+    if out_col == source_col or out_col in frame.columns:
+        # The twin of prepare_pic50_dataset's round-146 guard: these
+        # functions APPEND, never overwrite -- a colliding out_col would
+        # silently clobber the source (or SMILES) column (100x-150
+        # audit, Finding 3).
+        raise DataValidationError(
+            f"out_col {out_col!r} already exists in the frame -- pick a "
+            "fresh column name (add_pic50_column appends, never overwrites)"
+        )
     result = frame.copy()
     result[out_col] = pic50_from_ic50_series(result[source_col], unit=unit)
     n_invalid = int(result[out_col].isna().sum())
@@ -240,7 +249,14 @@ def pic50_to_ic50(pic50: object, unit: str = "nM") -> float | None:
     float or None
         IC50 in ``unit``, or ``None`` when the input cannot be parsed.
         A NaN input yields NaN (not None) so a series round-trip keeps
-        its NaN cells distinguishable from unparseable ones.
+        its NaN cells distinguishable from unparseable ones.  A FINITE
+        pIC50 so extreme the answer overflows a float (below ~ -299 in
+        nM; a physically meaningless "IC50 beyond 1e308 nM") yields
+        ``inf`` -- the mathematical limit, the same honest convention
+        the underflow direction already follows silently
+        (``10 ** (9 - 400) == 0.0``), so one absurd cell can never
+        kill a whole column conversion with a raw OverflowError
+        (100x-150 audit, Finding 2).
 
     Raises
     ------
@@ -285,7 +301,16 @@ def pic50_to_ic50(pic50: object, unit: str = "nM") -> float | None:
         # +inf is unbound.  Neither has a finite nM answer -- NaN keeps
         # the cell honest instead of a silent 0.
         return float("nan")
-    return 10.0 ** (exponents[unit_key] - value)
+    try:
+        return 10.0 ** (exponents[unit_key] - value)
+    except OverflowError:
+        # A finite-but-absurd pIC50 (e.g. -300 in nM) asks for a
+        # concentration beyond float range.  CPython's float pow raises
+        # here instead of returning inf, so the limit is returned
+        # explicitly -- mirroring the underflow end, where the same
+        # absurd magnitude silently yields 0.0 and no raw traceback
+        # ever escapes this float|None|NaN contract.
+        return float("inf")
 
 
 def ic50_from_pic50_series(
@@ -340,6 +365,13 @@ def add_ic50_column(
     1    7.0    100.0
     """
     require_columns(frame, [pic50_col])
+    if out_col == pic50_col or out_col in frame.columns:
+        # The add_pic50_column twin of prepare_pic50_dataset's round-146
+        # guard: append, never overwrite (100x-150 audit, Finding 3).
+        raise DataValidationError(
+            f"out_col {out_col!r} already exists in the frame -- pick a "
+            "fresh column name (add_ic50_column appends, never overwrites)"
+        )
     result = frame.copy()
     result[out_col] = ic50_from_pic50_series(result[pic50_col], unit=unit)
     n_invalid = int(result[out_col].isna().sum())

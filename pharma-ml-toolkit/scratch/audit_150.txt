@@ -1,0 +1,284 @@
+STATIC AUDIT — round 33, Task 1-a (100x-150)
+Scope: the round-31 (100x-146→147, v1.2.86) library additions — the code with
+the least review mileage (that round's subagent worklog entries were lost to
+context deadlines; the round-32 close-out verified the work LANDED but nobody
+audited it until now).
+
+Audited, line by line:
+  src/pharmaml/chem/features.py     (compute_3d_descriptors consumer + shape_3d family,
+                                      the ten fak_ml families, FEATURE_FAMILIES /
+                                      FAMILY_PREFIXES / _FAMILY_BITS / _FINGERPRINT_SIZES,
+                                      family_of_column, selection_metadata)
+  src/pharmaml/chem/descriptors.py  (compute_3d_descriptors, _shape_vector, _shape_computer)
+  src/pharmaml/ml/evaluation.py     (ClassificationReport.per_class)
+  src/pharmaml/viz/ml_plots.py      (plot_pr_curves vs plot_roc_curves)
+  src/pharmaml/ml/models.py         (sgd_classifier registry entry)
+  src/pharmaml/ml/training.py       (benchmark_feature_families vs compare_models)
+  src/pharmaml/chem/converters.py   (pic50_to_ic50, add_ic50_column)
+  playground.py                     (family bitmap: _FEATURE_FAMILY_LABELS /
+                                      _FEATURE_FAMILY_BITS + the checkbox mint loop 5806-5815)
+  docs/INDEX.md                     (new-symbol coverage)
+  tests: test_features.py (TestFakmlFamilies), test_multiclass.py
+         (TestPerClassMetrics), test_viz.py (TestPrCurves),
+         test_ml_pipeline.py (TestSgdClassifier, TestBenchmarkFeatureFamilies),
+         test_converters.py (TestPic50ToIc50, TestAddIc50Column),
+         test_playground.py (TestReview148Gui / family-bitmap pins).
+
+Method: read-only, per the task (the venv is mid-repair; rdkit is gone). ONE
+stdlib-only runtime check (scratch/probe_audit_150.py, zero pharmaml imports)
+pinned the CPython float-power semantics behind Finding 2; everything else was
+verified by reading code + tests. Reproduce the probe with:
+    python scratch/probe_audit_150.py
+
+===============================================================================
+FINDING 1 (RISK — docstring lies; the promised typed guard is dead code)
+  File: src/pharmaml/ml/training.py, lines 601-607 (docstring) vs 684-688 + 711-713.
+  What: benchmark_feature_families' Raises section promises ModelError when
+        "the dataset has fewer aligned rows than cv folds". The only check for
+        that condition (``if len(aligned_y) < cv: raise ModelError(...)``,
+        lines 684-688) lives INSIDE the per-family ``try:`` whose blanket
+        ``except Exception`` (line 711) converts every raise — ModelError
+        included, it subclasses Exception via PharmaMLError — into a NaN board
+        row plus a log warning. The promised error can never propagate.
+  Why it matters: a too-small dataset (e.g. 2 molecules, cv=3) returns an
+        all-NaN leaderboard instead of the actionable ModelError — the exact
+        "100%-NaN leaderboard" degradation the sibling compare_models guards
+        against UP FRONT (training.py:411-421, the 27-A fix), whose docstring
+        wording was copied here. The two siblings' documented contracts
+        disagree with their behaviour. No test pins the raise (there is nothing
+        to pin — it never fires).
+  Fix sketch (minimal): hoist a dataset-level guard before the family loop,
+        mirroring compare_models:
+            if isinstance(cv, int) and len(y_series) < cv:
+                raise ModelError(f"cv={cv} folds exceeds the number of aligned "
+                                 f"rows (n={len(y_series)}) ...")
+        and keep the in-loop aligned-rows check as the honest per-family NaN
+        path (a family that drops molecules below cv). Delete or reword the
+        docstring clause if the swallow is the intended behaviour.
+
+FINDING 2 (RISK — raw OverflowError from the float|None|NaN contract; probed)
+  File: src/pharmaml/chem/converters.py, line 288 (``return 10.0 ** (exponents[unit_key] - value)``).
+  What: for a FINITE pIC50 below ≈ -299.2547 (nM) / -296.2547 (pM) /
+        -308.2547 (M) the exponent exceeds log10(DBL_MAX)=308.2547 and CPython
+        float ``**`` raises ``OverflowError: (34, 'Numerical result out of
+        range')`` — a raw traceback out of a function whose contract is
+        "float, None (unparseable) or NaN". The docstring handles None/NaN/
+        ±inf (lines 275-287) but not finite overflow. PROBED (scratch/
+        probe_audit_150.py): 10.0**(9-(-299.25)) = 1.78e308 fine;
+        10.0**(9-(-299.26)) -> OverflowError; 10.0**(9-(-300)) -> OverflowError.
+        The underflow direction is silent: 10.0**(9-400) = 0.0 (see observation
+        O2). The blast radius includes ic50_from_pic50_series and
+        add_ic50_column — ONE absurd cell in a prediction sheet kills the whole
+        conversion job with a raw traceback (add_ic50_column's worker runs it
+        bare, playground.py:14747).
+  Why it matters: the audit bar counts "guard gaps that crash with raw
+        tracebacks instead of typed errors". Reachability is narrow but real:
+        (a) a directly supplied pIC50 ≤ -299.26 (hand-entered value, dirty
+        join, another pipeline's unbounded output); (b) the extreme round
+        trip — the probe shows ic50_to_pic50 of an IC50 at DBL_MAX (a
+        parseable finite value) emits pIC50 ≈ -299.2547/-296.2547/-308.2547,
+        and the exact-boundary reverse pow OVERFLOWS for M, nM AND pM units.
+        The existing round-trip test only covers pIC50 0.5-11.2.
+  Fix sketch (minimal): decide the honest out-of-range answer and pin it —
+        either
+            try:
+                return 10.0 ** (exponents[unit_key] - value)
+            except OverflowError:
+                return float("inf")   # the mathematical limit, passes no-skill triage
+        or return NaN (the module's own "no honest concentration" convention,
+        same cell the ±inf branch uses). Either way add the boundary to
+        TestPic50ToIc50 and one line to the docstring's Returns/Notes.
+
+FINDING 3 (POLISH — silent column clobber; the round-146 guard precedent
+           stopped one function short)
+  File: src/pharmaml/chem/converters.py, lines 298-350 (add_ic50_column).
+  What: out_col is never validated. ``add_ic50_column(frame, pic50_col="pIC50",
+        out_col="pIC50")`` computes from the original column then silently
+        REPLACES it with IC50 values (the user loses the pIC50 column);
+        ``out_col="SMILES"`` destroys the SMILES column the same way. No
+        warning, no error. Round-146's FIX 3 added exactly this guard to
+        prepare_pic50_dataset (converters.py:585-594, refusing out_col in the
+        three reserved result columns, pinned by
+        test_out_col_collision_with_reserved_columns_refused) but the two
+        add_*_column twins were left without it — the module's own guard
+        convention is now inconsistent across three sibling functions
+        (add_pic50_column, lines 175-217, shares the gap; pre-round-31, listed
+        for context only).
+  Why it matters: silent data loss on a caller typo — the same defect class
+        the project itself chose to fix in round 146.
+  Fix sketch (minimal): next to require_columns, refuse the collision (at
+        minimum the self-clobber, ideally any existing column — the forward
+        twin's contract is "append", never overwrite):
+            if out_col == pic50_col or out_col in frame.columns:
+                raise DataValidationError(
+                    f"out_col {out_col!r} already exists in the frame -- pick a "
+                    "fresh column name (add_ic50_column appends, never overwrites)"
+                )
+        (match prepare_pic50_dataset's style; mirror onto add_pic50_column in
+        the same change or leave that for its own round, as you prefer).
+
+===============================================================================
+OBSERVATIONS (not defects — recorded so the next round can ignore them)
+  O1. benchmark_feature_families does not dedupe a duplicated family name in
+      ``families`` (compare_models collapses duplicate models via
+      dict.fromkeys, training.py:456): families=("maccs","maccs") yields two
+      identical board rows despite the "one row per family" phrasing. Caller
+      quirk, output is honest about what ran; noting for symmetry only.
+  O2. pic50_to_ic50's underflow direction returns 0.0 silently (probed:
+      pIC50=400 → 0.0 nM), which then PASSES the GUI potency triage
+      (playground.py:14797, ``IC50_nM <= threshold``) as a maximally potent
+      hit. Garbage-in-garbage-out on an absurd input; the math itself is the
+      correct limit. If Finding 2 is fixed with NaN, this end cleans itself up.
+  O3. on_family's "It must never raise" is a documented caller contract
+      (training.py:588), while round-32's stack_oof_regressors swallows
+      callback exceptions instead. A convention difference between the two
+      progress-callback families, not a bug in either.
+
+===============================================================================
+AREAS THAT CAME BACK CLEAN (one line each)
+  * compute_3d_descriptors + the shape_3d family — CLEAN. Guards (bare string,
+    empty, n_conformers int>=1 with bools rejected, no-valid-SMILES) all typed
+    and ordered before any RDKit work; ETKDGv3 randomSeed=42, single-threaded
+    MMFF/UFF → deterministic (pinned by test_shape_3d_is_deterministic);
+    failed 3D pipelines keep NaN rows both in compute_3d_descriptors
+    (descriptors.py:721-731) and inside the family (_shape_computer's catch,
+    pinned by the monkeypatch test); MMFF94s→UFF fallback triggers on BOTH the
+    exception path and the flag<0 typing failure (descriptors.py:580); the
+    lowest-energy pick includes iteration-capped conformers and BOTH deliberate
+    notebook deviations are documented in the Notes; 9 d3d_* columns match
+    D3D_COLUMNS (snake_case mapping pinned); conf_ids↔results alignment holds
+    (fresh AddHs molecule numbers conformers 0..n-1).
+  * The ten fingerprint families — CLEAN. Bit/count lengths all correct and
+    pinned (maccs 167, fcfp/fcfp_count 2048, topological/topological_count
+    2048, rdkit_count 2048, pattern 2048, layered 2048, estate 79, erg 315 —
+    _FAMILY_BITS matches the constants, test_bit_sizes pins the quartet);
+    bit-vs-count semantics spelled honestly (GetFingerprint vs
+    GetCountFingerprintAsNumPy, numBitsPerFeature=1 for rdkit_count,
+    countSimulation=True torsion); datamol byte-parity pinned for all ten with
+    the two honest exceptions (ethanol torsion zero-vector; shape_3d has no
+    datamol twin); ERG non-finite cells → NaN; registry trio
+    (FEATURE_FAMILIES 20 / _FAMILY_BITS 18 / _FINGERPRINT_SIZES 17) mutually
+    consistent, and the module docstring's "thirteen 2048-bit blocks + 512 +
+    167 + 79 + 315 + property list + 9 + 10 > 27,000 columns" arithmetic
+    checks out (27,759 on this build).
+  * Prefix uniqueness — CLEAN. All 20 FAMILY_PREFIXES pairwise
+    non-startswith (checked by hand over the sorted list AND pinned by
+    test_prefix_uniqueness_all_pairs); the risky-looking pairs all diverge
+    before the boundary (ecfp_bit_/ecfp3_bit_ at char 4; topo_bit_/topo_count_
+    and rdkit_bit_/rdkit_count_ after the shared stem; erg_ vs estate_bit_ at
+    char 3; d3d_ vs desc_ at char 2); family_of_column round-trips on real
+    column names from every new family.
+  * ClassificationReport.per_class — CLEAN. Labels are the sorted UNION of
+    truth+predictions, so binary ALWAYS lists both classes even when the model
+    predicts one; multiclass lists every class; keys are str(label) so
+    arbitrary hashables (strings included) serialise; the arrays come from
+    precision_recall_fscore_support(labels=labels, zero_division=0) in the
+    same order; support sums to n (pinned); as_dict carries per_class only
+    when present; direct construction keeps None (pinned); the label-type /
+    NaN / ±inf guard battery runs before it.
+  * plot_pr_curves — CLEAN. OvR binarisation ((y_true==cls).astype(int) with
+    the class's proba column); binary path uses column 1 + classes[1]
+    binarisation, the ROC twin's convention; AP in the legend; each curve
+    carries its own prevalence "no skill" baseline (honest, pinned by
+    test_prevalence_baseline_is_honest); axis limits (-0.02..1.02 x,
+    -0.02..1.05 y) sane for PR; guard parity with plot_roc_curves is exact
+    (both ModelError on missing predict_proba AND missing classes_, same
+    wording modulo the function name; both wrap only the MULTICLASS loop in
+    try/ValueError — the binary path propagates raw on both, symmetric).
+  * sgd_classifier — CLEAN. loss grid uses 'log_loss' (the modern spelling;
+    deprecated 'log' absent); random_state=42 wired in the factory;
+    max_iter=1000; the 3×3×3 grid is sklearn-valid (penalty='elasticnet'
+    rides the default l1_ratio=0.15 — no error); aliases 'sgd'/'sgdclassifier'
+    registered; notes honestly document hinge's missing predict_proba (the
+    balanced-accuracy fallback in _select_scorer and the soft-voting guard
+    both handle it — verified) and why early_stopping is not the default;
+    registry entry shape matches its siblings; 6 tests pin it, including
+    hinge-no-proba / log_loss-proba.
+  * benchmark_feature_families (modulo Finding 1) — CLEAN otherwise.
+    Per-family flow (compute → positional y alignment via frame.index →
+    cross_validate) correct, dropped molecules take their target row (pinned);
+    single-family edge works (doctest); family-name validation and empty-list
+    ModelError up front; unknown model / task mismatch raise OUTSIDE the
+    swallow (pipeline built pre-loop); NaN folds keep their row with a
+    warning; failed families sink (sort_values default na_position='last');
+    determinism threaded (registry factories seed 42, cv=int → unshuffled
+    folds; pinned by test_deterministic_across_runs); default families =
+    all 20 minus {shape_3d, rism} = 18 (pinned); on_family fires once per
+    family with index/total (pinned, 1-based like compare_models' on_model);
+    returned columns match the docstring.
+  * pic50_to_ic50 / add_ic50_column (modulo Findings 2/3) — CLEAN otherwise.
+    10**(exponent-p) is the right inverse (10**(9-p) in nM), exponent
+    arithmetic lands integer pIC50s on exact decimal powers (pinned; better
+    than datamol's 999.99...); unit vocabulary matches ic50_to_pic50 exactly
+    (M/mM/uM/µM/nM/pM, typed DataValidationError on unknown); None/non-numeric
+    → None, NaN → NaN, ±inf → NaN (all pinned); default out_col IC50_nM and
+    drop_invalid=False honestly documented (the asymmetry with the forward
+    twin explained); require_columns typed guard; source frame never mutated
+    (pinned); no rounding is performed or claimed.
+  * The playground family bitmap — CLEAN. _FEATURE_FAMILY_LABELS carries all
+    20 registry families in EXACT FEATURE_FAMILIES order (test_
+    labels_listed_in_library_order pins it); the checkbox mint loop
+    (playground.py:5806-5815) iterates that tuple, so every registry family
+    has exactly one ticked-by-default checkbox and vice versa (pinned by
+    test_family_picker_carries_twenty_families); _FEATURE_FAMILY_BITS mirrors
+    _FAMILY_BITS value-for-value (maccs 167, estate 79, erg 315, shape_3d 9,
+    rism 10; pinned by test_family_bits_match_the_library); the factory
+    subtitle's "20 families (~27,700 columns)" is arithmetically honest;
+    the descriptors width is probed live with a fallback estimate.
+  * docs/INDEX.md — CLEAN. All requested round-31/32 symbols present:
+    compute_3d_descriptors, pic50_to_ic50, add_ic50_column, plot_pr_curves,
+    benchmark_feature_families, stack_oof_regressors, select_kbest_union,
+    plus the carrying constants (FEATURE_FAMILIES → the shape_3d family,
+    MODEL_REGISTRY → the sgd_classifier entry, D3D_COLUMNS, MACCS_BITS,
+    ESTATE_BITS, ERG_BITS). sgd_classifier/shape_3d are registry keys, not
+    symbols — INDEX's __all__-derived convention covers them through the
+    constants, correctly.
+
+===============================================================================
+DISPROVEN (the honesty ledger — candidates investigated and rejected)
+  D1. "erg_ collides with estate_bit_ (prefix-of)" — diverges at the third
+      character ('erg' vs 'est'); same for d3d_/desc_ (char 2) and every other
+      pair (see the clean-area note; the pairwise test would have caught it).
+  D2. "compute_feature_frame's shape_3d NaN-row promise is broken because
+      _shape_vector raises" — _shape_computer wraps the call and returns the
+      NaN vector (descriptors.py:762-768); the row survives with NaN cells,
+      pinned by the monkeypatch test; only PARSE failures drop rows, which is
+      the documented contract.
+  D3. "per_class misses the negative class in binary when the model predicts
+      one class" — labels are the union of y_true and y_pred; both classes
+      always present; support of the un-predicted class honestly reports its
+      true count.
+  D4. "plot_pr_curves' binary branch uses the wrong proba column or pos_label"
+      — column 1 with (y_true==classes[1]) binarisation, byte-identical in
+      intent to the ROC twin's pos_label=classes[1] call.
+  D5. "benchmark_feature_families' default-families docstring drifts from the
+      code" — both exclude exactly {shape_3d, rism}; the GUI note ("18 2D
+      families") and the test agree.
+  D6. "the sgd param_grid crashes GridSearchCV via elasticnet-without-
+      l1_ratio" — sklearn's constructor default (0.15) applies; no raise; the
+      grid never sets an invalid combination.
+  D7. "pic50_to_ic50 has datamol's 999.99… float noise" — no: the exponent
+      form lands exact powers; the parity claim is probed and pinned.
+  D8. "add_ic50_column's failure rows break the frame (missing columns)" —
+      pandas fills NaN for absent keys; the board sorts NaN rows last; the
+      docstring's "sinks to the bottom" stays true.
+  D9. "the benchmark doctest depends on lightgbm being installed" — it pins
+      model="ridge" explicitly.
+  D10. "the GUI family checkbox count/width drifted after the 20-family
+       growth" — pinned end-to-end by three TestReview148Gui/GUI tests
+       (twenty vars, widths vs library, canonical order).
+
+===============================================================================
+NEXT ACTIONS (for the close-out round)
+  1. Fix Finding 1 (hoist the cv/rows ModelError above the swallow, or reword
+     the docstring) + add the too-small-dataset test that the round forgot.
+  2. Fix Finding 2 (try/except OverflowError with a decided, documented and
+     test-pinned answer) + the boundary test.
+  3. Fix Finding 3 (out_col guard on add_ic50_column, optionally the older
+     add_pic50_column twin in the same sweep) + the collision test.
+  4. When the venv is repaired: run scratch/probe_audit_150.py once more (it
+     is stdlib-only, it does not care about rdkit) and consider promoting it
+     into tests/test_converters.py as the boundary pin.
+
+— Task 1-a auditor, round 33 (100x-150). Static review; one stdlib probe;
+no repo files modified; scratch/probe_audit_150.py left behind.

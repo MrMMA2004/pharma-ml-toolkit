@@ -6468,6 +6468,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 from pharmaml.utils.io import read_table
 
                 frame = read_table(input_path)
+                if "pIC50" in frame.columns:
+                    # (100x-150) the append-only twin refuses collisions
+                    # now -- an input file that ALREADY carries a pIC50
+                    # column gets it dropped so the run is an explicit
+                    # recompute instead of an error.
+                    frame = frame.drop(columns=["pIC50"])
                 return add_pic50_column(
                     frame, source_col=source_col, out_col="pIC50", unit=unit, drop_invalid=False
                 )
@@ -13235,6 +13241,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "anywhere).",
         )
         save_board_figure_btn.pack(side="left", padx=(10, 0))
+        # (100x-150) the board TABLE's own save twin -- the same export
+        # the permutation card got in 100x-146, for every frame that
+        # fills this board: compare_models' ranking, the family
+        # benchmark, the stacking leaderboard, a trial ranking.
+        board_save_btn = self._action_button(
+            board_buttons,
+            "Save table…",
+            self._ml_board_save,
+            tooltip="Save the leaderboard TABLE this card is currently "
+            "showing -- the cross-validated model ranking, the feature-"
+            "family benchmark, the OOF stacking leaderboard or the "
+            "hyperparameter trial ranking -- as CSV, TSV, Markdown, "
+            "JSON or styled HTML; the numbers behind the bars, ready "
+            "for a report.",
+        )
+        board_save_btn.pack(side="left", padx=(10, 0))
         # (100x-148) fak_ml.ipynb cells 40-47: the notebook's 16-fingerprint
         # benchmark as a family leaderboard -- one fixed model, every
         # 2D feature family, the score column answering "which
@@ -14740,6 +14762,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "first.",
             )
             return
+        # (100x-150) the library's add_ic50_column now refuses a
+        # colliding out_col (append, never overwrite) -- a re-click on
+        # this button drops the stale IC50_nM first so the refresh is
+        # an explicit recompute instead of an error dialog.
+        if "IC50_nM" in frame.columns:
+            frame = frame.drop(columns=["IC50_nM"])
 
         def work() -> Any:
             from pharmaml.chem.converters import add_ic50_column
@@ -16197,6 +16225,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._render_figure(self._board_host, figure)
 
         self._start_job("leaderboard bars", work, render)
+
+    def _ml_board_save(self) -> None:
+        """Save the board's current table (100x-150, the perm card's twin).
+
+        The Save-figure button keeps the bars; this keeps the NUMBERS.
+        Whatever filled the shared board last -- the compare_models
+        ranking, the feature-family benchmark, the OOF stacking
+        leaderboard, a hyperparameter trial ranking -- goes through the
+        five-format export dialog (CSV/TSV/Markdown/JSON/HTML), so the
+        ranking behind the bars lands in a report without a re-run.
+        """
+        board = getattr(self, "_board_frame", None)
+        if board is None:
+            messagebox.showinfo(
+                "Nothing to save",
+                "Run Compare models, Benchmark feature families, the OOF "
+                "stacking card or a hyperparameter search first.",
+            )
+            return
+        self._save_frame_dialog(
+            board, "Save the leaderboard table", "leaderboard.csv", "leaderboard"
+        )
 
     def _ml_plot_learning_curve(self) -> None:
         """Train-set size vs CV score for the last trained model (100x-120).

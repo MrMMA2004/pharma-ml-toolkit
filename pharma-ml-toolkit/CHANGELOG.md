@@ -10,6 +10,70 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.88] — 2026-10-26
+
+### Fixed — the fifth engineering review (100x-150): three audit findings, the board's Save-table twin
+
+The instruction: *"Review the current codebase and implementation,
+troubleshoot potential issues, and continue improving the engineering
+details."* A line-by-line static audit of the round-31 additions (the
+code with the least review mileage — that round's subagent worklog
+entries were lost to context deadlines) found three real defects; all
+three are fixed and test-pinned, plus the round's one GUI feature:
+
+* **`benchmark_feature_families` promised a raise it could never
+  deliver** — the docstring's "fewer aligned rows than `cv` folds"
+  `ModelError` lived *inside* the per-family `try:` whose blanket
+  `except Exception` swallowed it into a NaN board row, so a 2-row
+  dataset with `cv=5` degraded into a 100%-NaN leaderboard instead of
+  the actionable error (the exact 27-A degradation `compare_models`
+  guards against up front). The guard is now hoisted above the loop
+  and fires before any featurisation work is spent; a family that
+  drops rows below `cv` only *after* featurisation (bad SMILES)
+  honestly keeps its NaN row.
+* **`pic50_to_ic50` crashed with a raw `OverflowError` on a finite
+  extreme pIC50** — `10 ** (exponent − pIC50)` overflows for pIC50
+  ≲ −299 (nM), and one absurd cell in a prediction sheet killed the
+  whole `add_ic50_column` job with a raw traceback out of a
+  `float | None | NaN` contract. The fix returns the mathematical
+  limit `inf` (probed: `10**(9−(−299.26))` raises; `−299.25` is
+  finite), mirroring the underflow end where `10**(9−400)` silently
+  yields `0.0` — and `inf` correctly *fails* the GUI potency triage
+  (an impossibly weak compound is never shortlisted as a hit).
+* **`add_ic50_column` / `add_pic50_column` silently clobbered on
+  out_col collision** — `out_col="pIC50"` replaced the source column,
+  `out_col="SMILES"` destroyed the identifier column, no warning; the
+  round-146 guard fixed exactly this in `prepare_pic50_dataset` but
+  stopped one function short of the two table twins. Both now refuse
+  with `DataValidationError` ("appends, never overwrites"), and the
+  GUI's two call sites turn a re-click into an explicit recompute
+  (the stale column is dropped first) instead of an error dialog.
+
+### Added
+
+* **The shared leaderboard's "Save table…" button** — the board that
+  `compare_models`, `benchmark_feature_families`, the OOF stacking
+  card and hyperparameter searches all fill finally has the export
+  twin the permutation card got in 100x-146: the numbers behind the
+  bars through the five-format dialog (CSV/TSV/Markdown/JSON/styled
+  HTML), ready for a report without a re-run.
+* **The environment-repair round's by-catch**: the venv's 11th reset
+  (rdkit/torch/mordred gone) was repaired in the foreground (the
+  sandbox reaps background pip installs mid-download), and the file
+  modes the reset corrupted (every tracked file turned executable,
+  115 `EXE002` ruff errors) were restored from the git index — the
+  `ruff check .` green convention holds again.
+
+### Verified
+
+* 2971 collected = **2965 passed + 6 skipped / 0 failures** (627 s,
+  junit150.xml, home-paths scrubbed); +17 tests over 1.2.87 (9
+  converter guards/overflow, 2 benchmark guards, 6 GUI pins). ruff
+  clean (`.` — modes restored); mypy clean (66 files); doctests green
+  (converters); notebooks re-executed (203 s) + 119 variant tests;
+  `--self-test` green on Xvfb; the leakage guard caught and scrubbed
+  the audit's own scratch notes before the archive shipped.
+
 ## [1.2.87] — 2026-10-26
 
 ### Added — the third uploaded notebook (100x-149): `look.ipynb`'s OOF meta-stacking shipped

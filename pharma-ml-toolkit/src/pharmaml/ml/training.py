@@ -603,8 +603,14 @@ def benchmark_feature_families(
     ModelError
         If ``task`` is invalid, ``cv < 2``, a family name is outside
         the feature vocabulary, ``model`` is unknown or task
-        incompatible, ``scoring`` is not a scikit-learn scorer name,
-        or the dataset has fewer aligned rows than ``cv`` folds.
+        incompatible, ``scoring`` is not a scikit-learn scorer name, or
+        the dataset has fewer aligned rows than ``cv`` folds — the
+        last guard (the compare_models 27-A twin) keeps a doomed
+        request from degrading into a 100%-NaN board where every
+        family fails with the identical splitter error; a family that
+        drops molecules below ``cv`` only AFTER featurisation (bad
+        SMILES) keeps its NaN row instead, per the swallow contract
+        below.
 
     Examples
     --------
@@ -665,6 +671,19 @@ def benchmark_feature_families(
         raise ModelError(
             f"smiles and y must be row-aligned (got {len(smiles)} SMILES "
             f"and {len(y_series)} targets)"
+        )
+    if isinstance(cv, int) and len(y_series) < cv:
+        # cross_validate runs for every family here; with fewer aligned
+        # rows than folds every single row would swallow the same raw
+        # splitter error inside the per-family try/except below and
+        # surface as an all-NaN board instead of an actionable message
+        # (the compare_models 27-A guard, hoisted in 100x-150 -- the
+        # audit caught the docstring promising this raise while the
+        # swallow made it unreachable).
+        raise ModelError(
+            f"cv={cv} folds exceeds the number of aligned samples "
+            f"(n_samples={len(y_series)}) -- no fold can be built; lower "
+            "cv or supply more data"
         )
 
     encode = False  # every feature family emits numeric columns by contract

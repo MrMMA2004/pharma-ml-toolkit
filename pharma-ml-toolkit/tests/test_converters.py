@@ -136,6 +136,19 @@ class TestAddPIC50Column:
         add_pic50_column(frame)
         assert "pIC50" not in frame.columns
 
+    @pytest.mark.parametrize("collision", ["IC50 (nM)", "SMILES", "pIC50"])
+    def test_out_col_collision_refused(self, collision: str) -> None:
+        """(100x-150 audit, Finding 3) the forward twin's own guard.
+
+        ``out_col="pIC50"`` on a frame that ALREADY carries a pIC50
+        column used to silently replace it with freshly computed values.
+        """
+        frame = pd.DataFrame(
+            {"IC50 (nM)": [100.0], "SMILES": ["CCO"], "pIC50": [7.0]}
+        )
+        with pytest.raises(DataValidationError, match="appends, never overwrites"):
+            add_pic50_column(frame, out_col=collision)
+
 
 class TestPreparePic50Dataset:
     """D2.py's process_data, upgraded (100x-145)."""
@@ -335,6 +348,29 @@ class TestPic50ToIc50:
         assert pic50_to_ic50("not-a-number") is None
         assert pic50_to_ic50(None) is None
 
+    def test_extreme_finite_overflow_becomes_inf(self) -> None:
+        """(100x-150 audit, Finding 2) the float|None|NaN contract holds.
+
+        A finite pIC50 below ~ -299 (nM) asks for a concentration
+        beyond float range; CPython's float pow raises OverflowError
+        there, which used to escape as a raw traceback and could kill a
+        whole add_ic50_column job.  The mathematical limit ``inf`` is
+        returned instead -- mirroring the underflow end, where an
+        equally absurd POSITIVE pIC50 silently yields 0.0.
+        """
+        assert pic50_to_ic50(-300.0) == float("inf")
+        assert pic50_to_ic50(-299.26) == float("inf")
+        # just INSIDE the double range: still a finite float
+        assert math.isfinite(pic50_to_ic50(-299.25))
+        # the underflow direction: the same absurd magnitude, silent 0.0
+        assert pic50_to_ic50(400.0) == 0.0
+
+    def test_overflow_cell_fails_potency_triage_not_passes_it(self) -> None:
+        """inf is the WEAK end: an absurd pIC50 never counts as a hit."""
+        weak = pic50_to_ic50(-300.0)
+        assert not weak <= 100.0
+        assert not weak <= 1000.0
+
 
 class TestAddIc50Column:
     """The table twin -- the prediction sheet gains its nM column."""
@@ -370,3 +406,24 @@ class TestAddIc50Column:
         frame = pd.DataFrame({"pIC50": [6.0]})
         result = add_ic50_column(frame, out_col="IC50 (nM)")
         assert result["IC50 (nM)"].tolist() == [1000.0]
+
+    @pytest.mark.parametrize("collision", ["pIC50", "SMILES", "IC50_nM"])
+    def test_out_col_collision_refused(self, collision: str) -> None:
+        """(100x-150 audit, Finding 3) append, never overwrite.
+
+        A colliding out_col used to silently clobber its twin (the
+        source pIC50 column, an unrelated SMILES column, or a stale
+        IC50_nM from an earlier run) -- the same defect class round 146
+        fixed in prepare_pic50_dataset.
+        """
+        frame = pd.DataFrame(
+            {"pIC50": [6.0], "SMILES": ["CCO"], "IC50_nM": [1000.0]}
+        )
+        with pytest.raises(DataValidationError, match="appends, never overwrites"):
+            add_ic50_column(frame, out_col=collision)
+
+    def test_overflow_cell_lands_as_inf_not_traceback(self) -> None:
+        """One absurd cell must not kill the whole column conversion."""
+        frame = pd.DataFrame({"pIC50": [6.0, -300.0]})
+        result = add_ic50_column(frame)
+        assert result["IC50_nM"].tolist() == [1000.0, float("inf")]

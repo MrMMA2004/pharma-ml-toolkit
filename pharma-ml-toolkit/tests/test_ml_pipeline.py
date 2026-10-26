@@ -2356,6 +2356,42 @@ class TestBenchmarkFeatureFamilies:
         )
         assert int(board["n_samples"].iloc[0]) == 11
 
+    def test_too_small_dataset_raises_not_all_nan_board(self) -> None:
+        """(100x-150 audit, Finding 1) the docstring's promised raise is real.
+
+        The per-family ``except Exception`` used to swallow the in-loop
+        ``len(aligned_y) < cv`` ModelError, so a 2-row dataset with cv=5
+        degraded into an all-NaN board -- the exact 27-A degradation
+        compare_models guards against up front.  The hoisted dataset
+        guard must fire BEFORE any featurisation work is spent.
+        """
+        from pharmaml.ml.training import benchmark_feature_families
+
+        with pytest.raises(ModelError, match="cv=5 folds exceeds"):
+            benchmark_feature_families(
+                _BENCH_SMILES[:2], [1.0, 2.0], task="regression",
+                families=("estate",), model="ridge", cv=5,
+            )
+
+    def test_family_dropping_below_cv_keeps_its_nan_row(self) -> None:
+        """The honest per-family path survives the hoisted guard.
+
+        A dataset large enough for cv but a family that DROPS rows below
+        cv after featurisation (bad SMILES) keeps its NaN board row --
+        the swallow contract the hoisted guard must not break.
+        """
+        from pharmaml.ml.training import benchmark_feature_families
+
+        smiles = _BENCH_SMILES[:4] + ["not_a_smiles"]
+        y = [1.0, 2.0, 1.0, 2.0, 9.0]  # 5 aligned rows; maccs drops 1 -> 4 < cv=5
+        board = benchmark_feature_families(
+            smiles, y, task="regression",
+            families=("maccs",), model="ridge", cv=5,
+        )
+        assert board["family"].tolist() == ["maccs"]
+        metric_col = "neg_root_mean_squared_error_mean"
+        assert board[metric_col].isna().all()  # swallowed, not raised
+
 
 class TestSelectKBestUnion:
     """``pharmaml.ml.preprocessing.select_kbest_union`` -- the look.ipynb
