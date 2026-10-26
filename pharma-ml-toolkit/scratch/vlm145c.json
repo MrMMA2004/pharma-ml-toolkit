@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS - The 'ECFP3 bits @ radius 3 (2048)' checkbox is present and clearly ticked.\n2) PASS - The label correctly reads '9 families selected · \"12,853 columns will be computed'.\n3) PASS - All specified families (RDKit descriptors, Atom-pair counts, ECFP bits, Avalon counts) are visible in the grid.\n4) PASS - The UI layout is clean with no overlapping or clipped widgets.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793006390,
+  "id": "20261026171947575ffe55b23640b7",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261026171947575ffe55b23640b7",
+  "usage": {
+    "completion_tokens": 98,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1546,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1644
+  }
+}

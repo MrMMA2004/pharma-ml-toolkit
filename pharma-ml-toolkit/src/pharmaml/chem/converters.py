@@ -25,6 +25,7 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -36,11 +37,13 @@ from pharmaml.utils.validation import require_columns
 _LOG = get_logger(__name__)
 
 __all__ = [
+    "EndpointDatasetReport",
     "SdfWriteReport",
     "add_pic50_column",
     "ic50_to_pic50",
     "ki_to_pki",
     "pic50_from_ic50_series",
+    "prepare_pic50_dataset",
     "sdf_to_table",
     "smi_to_csv",
     "split_table_into_chunks",
@@ -210,6 +213,324 @@ def add_pic50_column(
     if drop_invalid:
         result = result[result[out_col].notna()].reset_index(drop=True)
     return result
+
+
+@dataclass(frozen=True, slots=True)
+class EndpointDatasetReport:
+    """Audit record for one :func:`prepare_pic50_dataset` run.
+
+    The typed upgrade of ``D2.py``'s silent ``process_data`` counters:
+    every row that did not survive to the output frame is accounted
+    for by exactly one bucket, so ``rows_valid + rows_missing_smiles +
+    rows_unparsable + rows_out_of_range == rows_in`` and ``rows_out ==
+    rows_valid - duplicates_collapsed``.
+
+    Attributes
+    ----------
+    smiles_col:
+        Resolved SMILES column name.
+    endpoint_col:
+        Resolved endpoint column name.
+    unit:
+        Input concentration unit the values were read in.
+    aggregate:
+        Duplicate-resolution rule that was applied.
+    upper_limit:
+        Exclusive magnitude cap applied in the input unit.
+    rows_in:
+        Rows the input frame carried.
+    rows_missing_smiles:
+        Rows dropped because the SMILES cell was blank or NaN.
+    rows_unparsable:
+        Rows whose endpoint cell could not be parsed at all (blank,
+        text, or a non-positive magnitude).
+    rows_out_of_range:
+        Rows whose magnitude exceeded ``upper_limit``.
+    rows_censored:
+        Rows carried a ``<``/``>`` qualifier; the magnitude was used
+        and the row kept (counted inside ``rows_valid`` too).
+    rows_valid:
+        Rows that survived parsing and the range filter.
+    duplicates_collapsed:
+        Valid rows removed by the aggregate rule (0 when
+        ``aggregate="keep"``).
+    rows_out:
+        Rows in the returned frame.
+    """
+
+    smiles_col: str
+    endpoint_col: str
+    unit: str
+    aggregate: str
+    upper_limit: float
+    rows_in: int
+    rows_missing_smiles: int
+    rows_unparsable: int
+    rows_out_of_range: int
+    rows_censored: int
+    rows_valid: int
+    duplicates_collapsed: int
+    rows_out: int
+
+    def as_dict(self) -> dict[str, Any]:
+        """Flat dict for DataFrame/JSON consumption."""
+        return {
+            "smiles_col": self.smiles_col,
+            "endpoint_col": self.endpoint_col,
+            "unit": self.unit,
+            "aggregate": self.aggregate,
+            "upper_limit": self.upper_limit,
+            "rows_in": self.rows_in,
+            "rows_missing_smiles": self.rows_missing_smiles,
+            "rows_unparsable": self.rows_unparsable,
+            "rows_out_of_range": self.rows_out_of_range,
+            "rows_censored": self.rows_censored,
+            "rows_valid": self.rows_valid,
+            "duplicates_collapsed": self.duplicates_collapsed,
+            "rows_out": self.rows_out,
+        }
+
+    def __str__(self) -> str:
+        return (
+            f"smiles={self.smiles_col!r} endpoint={self.endpoint_col!r} "
+            f"unit={self.unit} aggregate={self.aggregate}\n"
+            f"rows: {self.rows_in} in -> {self.rows_out} out "
+            f"(valid {self.rows_valid}, duplicates collapsed "
+            f"{self.duplicates_collapsed})\n"
+            f"dropped: {self.rows_missing_smiles} missing SMILES, "
+            f"{self.rows_unparsable} unparsable, "
+            f"{self.rows_out_of_range} above {self.upper_limit:g} "
+            f"{self.unit}\n"
+            f"censored magnitudes used: {self.rows_censored}"
+        )
+
+
+#: Column-name candidates for the SMILES side of
+#: :func:`prepare_pic50_dataset` (D2.py's ``Ligand SMILES`` first --
+#: the upload's own spelling -- then the common alternatives).
+_SMILES_COLUMN_CANDIDATES: tuple[str, ...] = (
+    "Ligand SMILES",
+    "SMILES",
+    "smiles",
+    "ligand_smiles",
+)
+
+#: Column-name candidates for the endpoint side (D2.py's ``EC50 (nM)``
+#: first, then the IC50 sibling and the bare spellings).
+_ENDPOINT_COLUMN_CANDIDATES: tuple[str, ...] = (
+    "EC50 (nM)",
+    "IC50 (nM)",
+    "EC50_nM",
+    "IC50_nM",
+    "EC50",
+    "IC50",
+)
+
+
+def _resolve_endpoint_column(
+    frame: pd.DataFrame,
+    explicit: str | None,
+    candidates: tuple[str, ...],
+    role: str,
+) -> str:
+    """Pick an endpoint-prep column by explicit name or candidate list."""
+    if explicit is not None:
+        if explicit not in frame.columns:
+            raise DataValidationError(
+                f"{role} column {explicit!r} not found; available columns: "
+                + ", ".join(repr(str(name)) for name in frame.columns)
+            )
+        return explicit
+    for candidate in candidates:
+        if candidate in frame.columns:
+            return candidate
+    raise DataValidationError(
+        f"no {role} column found; tried "
+        + ", ".join(repr(str(name)) for name in candidates)
+        + ". Available columns: "
+        + ", ".join(repr(str(name)) for name in frame.columns)
+    )
+
+
+def prepare_pic50_dataset(
+    frame: pd.DataFrame,
+    smiles_col: str | None = None,
+    endpoint_col: str | None = None,
+    unit: str = "nM",
+    out_col: str = "pEC50",
+    upper_limit: float = 1e9,
+    aggregate: str = "median",
+) -> tuple[pd.DataFrame, EndpointDatasetReport]:
+    """Turn a raw SMILES + EC50 table into a modelling-ready pEC50 set.
+
+    The upgraded equivalent of ``D2.py``'s ``process_data``: the
+    original hard-coded ``Ligand SMILES`` / ``EC50 (nM)`` column pair,
+    silently stripped ``<``/``>`` qualifiers, a silent ``0 < EC50 <=
+    1e9`` range filter and a silent per-SMILES median collapse.  Here
+    every one of those steps is a named, counted, reversible choice:
+
+    * the SMILES and endpoint columns are auto-detected from the
+      upload's own spellings (or given explicitly),
+    * censored ``<``/``>`` entries keep their magnitude and are counted
+      in the report instead of being stripped in silence,
+    * the range filter (positive values at or below ``upper_limit``)
+    * duplicate SMILES collapse to one row under ``aggregate``
+      (``"median"`` -- D2.py's own rule -- ``"mean"``, ``"first"`` or
+      ``"keep"`` for no collapse),
+    * the conversion rides :func:`ic50_to_pic50`, so ``pEC50 =
+      -log10(endpoint [M])`` with the input ``unit`` respected.
+
+    Parameters
+    ----------
+    frame:
+        Table with a SMILES column and an endpoint column.
+    smiles_col:
+        Explicit SMILES column (default: auto-detect).
+    endpoint_col:
+        Explicit endpoint column (default: auto-detect).
+    unit:
+        Unit of the endpoint values (see :func:`ic50_to_pic50`).
+    out_col:
+        Name of the converted column in the result.
+    upper_limit:
+        Magnitude cap in the input unit (D2.py's 1e9 nM default; a
+        value ABOVE the cap drops the row as out-of-range).
+    aggregate:
+        ``"median"``, ``"mean"``, ``"first"`` or ``"keep"``.
+
+    Returns
+    -------
+    tuple
+        ``(result, report)``.  ``result`` carries the SMILES column
+        (renamed ``SMILES``), ``n_measurements``, the aggregated raw
+        magnitude in the input unit (``endpoint_median`` -- the name is
+        literal even for mean/first, see :attr:`aggregate`) and the
+        converted ``out_col``; one row per unique SMILES in input
+        order.  ``report`` is the :class:`EndpointDatasetReport` audit.
+
+    Raises
+    ------
+    DataValidationError
+        If a requested column is missing, ``aggregate`` or
+        ``upper_limit`` is invalid, or no row survives the pipeline.
+
+    Examples
+    --------
+    >>> frame = pd.DataFrame(
+    ...     {"Ligand SMILES": ["CCO", "CCO", "C", ""],
+    ...      "EC50 (nM)": ["<50", 200.0, "junk", 10.0]})
+    >>> out, report = prepare_pic50_dataset(frame)
+    >>> out["SMILES"].tolist(), out["n_measurements"].tolist()
+    (['CCO'], [2])
+    >>> round(float(out["pEC50"].iloc[0]), 3)   # median(50, 200) nM
+    6.903
+    >>> (report.rows_in, report.rows_valid, report.rows_out)
+    (4, 2, 1)
+    >>> (report.rows_censored, report.rows_unparsable,
+    ...  report.rows_missing_smiles, report.duplicates_collapsed)
+    (1, 1, 1, 1)
+    """
+    if aggregate not in ("median", "mean", "first", "keep"):
+        raise DataValidationError(
+            "aggregate must be 'median', 'mean', 'first' or 'keep', got "
+            f"{aggregate!r}"
+        )
+    if not (math.isfinite(upper_limit) and upper_limit > 0):
+        raise DataValidationError(
+            f"upper_limit must be a positive finite number, got {upper_limit!r}"
+        )
+    # Validate the unit early (a bad unit must not surface as NaN rows
+    # deep inside the conversion -- ic50_to_pic50 raises on unknown units).
+    ic50_to_pic50(1.0, unit=unit)
+
+    smiles_name = _resolve_endpoint_column(frame, smiles_col, _SMILES_COLUMN_CANDIDATES, "SMILES")
+    endpoint_name = _resolve_endpoint_column(
+        frame, endpoint_col, _ENDPOINT_COLUMN_CANDIDATES, "endpoint"
+    )
+
+    rows_in = len(frame)
+    rows_missing_smiles = 0
+    rows_unparsable = 0
+    rows_out_of_range = 0
+    rows_censored = 0
+
+    kept: list[tuple[str, float]] = []
+    for smiles_value, endpoint_value in zip(
+        frame[smiles_name], frame[endpoint_name], strict=False
+    ):
+        smiles_text = "" if smiles_value is None else str(smiles_value).strip()
+        if not smiles_text or smiles_text.lower() in {"nan", "none", "null"}:
+            rows_missing_smiles += 1
+            continue
+        parsed = parse_endpoint(endpoint_value)
+        if parsed is None:
+            rows_unparsable += 1
+            continue
+        if parsed.value > upper_limit:
+            rows_out_of_range += 1
+            continue
+        if parsed.is_censored:
+            rows_censored += 1
+        kept.append((smiles_text, parsed.value))
+
+    rows_valid = len(kept)
+    if not kept:
+        raise DataValidationError(
+            "no usable rows survived the endpoint preparation "
+            f"({rows_in} in: {rows_missing_smiles} missing SMILES, "
+            f"{rows_unparsable} unparsable, {rows_out_of_range} out of range)"
+        )
+
+    magnitudes = pd.Series([value for _smiles, value in kept], dtype=float)
+    if aggregate == "keep":
+        smiles_out = [smiles for smiles, _value in kept]
+        values_out = magnitudes
+        n_measurements = pd.Series(1, index=range(len(kept)), dtype=int)
+        duplicates_collapsed = 0
+    else:
+        work = pd.DataFrame({"SMILES": [smiles for smiles, _value in kept],
+                             "value": magnitudes})
+        how = {"median": "median", "mean": "mean", "first": "first"}[aggregate]
+        grouped = work.groupby("SMILES", sort=False)["value"]
+        values_out = grouped.agg(how).reset_index(drop=True)
+        smiles_out = work["SMILES"].drop_duplicates().tolist()
+        n_measurements = grouped.count().reset_index(drop=True).astype(int)
+        duplicates_collapsed = rows_valid - len(smiles_out)
+
+    pic50 = [ic50_to_pic50(value, unit=unit) for value in values_out]
+    result = pd.DataFrame(
+        {
+            "SMILES": smiles_out,
+            "n_measurements": n_measurements.to_numpy(),
+            "endpoint_median": values_out.to_numpy(),
+            out_col: pic50,
+        }
+    )
+    report = EndpointDatasetReport(
+        smiles_col=smiles_name,
+        endpoint_col=endpoint_name,
+        unit=unit,
+        aggregate=aggregate,
+        upper_limit=float(upper_limit),
+        rows_in=rows_in,
+        rows_missing_smiles=rows_missing_smiles,
+        rows_unparsable=rows_unparsable,
+        rows_out_of_range=rows_out_of_range,
+        rows_censored=rows_censored,
+        rows_valid=rows_valid,
+        duplicates_collapsed=duplicates_collapsed,
+        rows_out=len(result),
+    )
+    _LOG.info(
+        "prepared pEC50 dataset: %d rows in -> %d out (%d censored magnitudes "
+        "used, %d duplicates collapsed by %s)",
+        rows_in,
+        len(result),
+        rows_censored,
+        duplicates_collapsed,
+        aggregate,
+    )
+    return result, report
 
 
 def split_table_into_chunks(

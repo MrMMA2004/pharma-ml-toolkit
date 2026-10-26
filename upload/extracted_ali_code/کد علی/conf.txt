@@ -1,0 +1,14 @@
+receptor = PolystyreneRandomMin.pdbqt
+ligand = ligand.pdbqt
+
+center_x = 5.943
+center_y = 16.186
+center_z = -0.951
+
+size_x = 68
+size_y = 102
+size_z = 84
+
+exhaustiveness = 8
+num_modes = 9
+energy_range = 3

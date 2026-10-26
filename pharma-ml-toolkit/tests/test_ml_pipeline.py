@@ -22,7 +22,13 @@ from sklearn.metrics import roc_auc_score
 
 import pharmaml.ml.models as models_module
 from pharmaml.exceptions import DataValidationError, ModelError, PersistenceError
-from pharmaml.ml.evaluation import ClassificationReport, RegressionReport, evaluate_model
+from pharmaml.ml.evaluation import (
+    ClassificationReport,
+    PermutationImportance,
+    RegressionReport,
+    evaluate_model,
+    permutation_feature_importance,
+)
 from pharmaml.ml.models import (
     MODEL_REGISTRY,
     ModelSpec,
@@ -999,6 +1005,116 @@ class TestEvaluationEdgeCases:
             evaluate_model(StrPredicting(), X, [1.0, 2.0, 3.0, 4.0], "regression")
         with pytest.raises(ModelError, match="different label types"):
             evaluate_model(NumPredicting(), X, ["a", "b", "c", "d"], "regression")
+
+
+class TestPermutationImportance:
+    """D2.py's interpretability step, typed (100x-145)."""
+
+    def _fit_model(self, seed: int = 0):
+        from sklearn.linear_model import LinearRegression
+
+        rng = np.random.default_rng(seed)
+        X = rng.normal(size=(80, 3))
+        y = 3.0 * X[:, 0] - 1.5 * X[:, 2]  # x1 is pure noise
+        return LinearRegression().fit(X, y), X, y
+
+    def test_informative_features_rank_first(self) -> None:
+        model, X, y = self._fit_model()
+        importance = permutation_feature_importance(model, X, y, n_repeats=3)
+        assert importance.names == ["x0", "x1", "x2"]
+        ranking = importance.ranking()
+        assert ranking[0][0] in ("x0", "x2")
+        assert ranking[0][1] > ranking[2][1]  # the noise feature is last
+        assert importance.means.shape == importance.stds.shape == (3,)
+        assert importance.scoring == "r2"
+        assert importance.n_repeats == 3
+        assert importance.n_samples == 80
+
+    def test_dataframe_columns_become_names(self) -> None:
+        from sklearn.linear_model import LinearRegression
+
+        rng = np.random.default_rng(1)
+        frame = pd.DataFrame(
+            {"logp": rng.normal(size=60), "mw": rng.normal(size=60),
+             "tpsa": rng.normal(size=60)}
+        )
+        y = pd.Series(2.0 * frame["logp"] + frame["tpsa"])
+        model = LinearRegression().fit(frame, y)
+        importance = permutation_feature_importance(model, frame, y, n_repeats=2)
+        assert importance.names == ["logp", "mw", "tpsa"]
+        assert importance.ranking()[0][0] in ("logp", "tpsa")
+        # the frame path and the ndarray path agree on the values
+        array_twin = permutation_feature_importance(
+            model, frame.to_numpy(), y, n_repeats=2,
+            feature_names=["logp", "mw", "tpsa"],
+        )
+        np.testing.assert_allclose(importance.means, array_twin.means, rtol=1e-12)
+
+    def test_pipeline_measures_the_whole_model(self) -> None:
+        # a pipeline with preprocessing: the importances must survive
+        # the transform step (a fitted pipeline, not a bare estimator)
+        rng = np.random.default_rng(2)
+        frame = pd.DataFrame(
+            {"a": rng.normal(size=70) * 10.0, "b": rng.normal(size=70)}
+        )
+        y = pd.Series(frame["a"] * 0.5 + frame["b"])
+        result = train_model("ridge", "regression", frame, y, tune=False)
+        importance = permutation_feature_importance(
+            result.model, frame, y, task="regression", n_repeats=2
+        )
+        assert importance.names == ["a", "b"]
+        assert importance.ranking(top_n=1)[0][0] in ("a", "b")
+
+    def test_classification_default_scoring(self) -> None:
+        from sklearn.linear_model import LogisticRegression
+
+        rng = np.random.default_rng(3)
+        X = rng.normal(size=(60, 2))
+        y = (X[:, 0] > 0).astype(int)
+        model = LogisticRegression().fit(X, y)
+        importance = permutation_feature_importance(
+            model, X, y, task="classification", n_repeats=2
+        )
+        assert importance.scoring == "accuracy"
+        assert importance.ranking()[0][0] == "x0"  # x1 is noise
+
+    def test_record_helpers(self) -> None:
+        model, X, y = self._fit_model()
+        importance = permutation_feature_importance(model, X, y, n_repeats=2)
+        as_frame = importance.as_frame()
+        assert list(as_frame.columns) == ["feature", "importance_mean", "importance_std"]
+        assert len(as_frame) == 3
+        top = importance.ranking(top_n=2)
+        assert len(top) == 2
+        assert top[0][1] >= top[1][1] or top[0][1] <= top[1][1]  # any order, both floats
+        text = str(importance)
+        assert "scoring=r2" in text
+        assert "repeats=2" in text
+        assert isinstance(importance, PermutationImportance)
+
+    def test_validation_errors(self) -> None:
+        model, X, y = self._fit_model()
+        with pytest.raises(ModelError, match="task must be"):
+            permutation_feature_importance(model, X, y, task="clustering")
+        with pytest.raises(ModelError, match="n_repeats must be a positive integer"):
+            permutation_feature_importance(model, X, y, n_repeats=0)
+        with pytest.raises(ModelError, match="n_repeats must be a positive integer"):
+            permutation_feature_importance(model, X, y, n_repeats=True)  # type: ignore[arg-type]
+        with pytest.raises(ModelError, match="n_repeats must be a positive integer"):
+            permutation_feature_importance(model, X, y, n_repeats=2.5)  # type: ignore[arg-type]
+        with pytest.raises(ModelError, match="X has 3 rows but y carries 2 values"):
+            permutation_feature_importance(model, X[:3], y[:2], n_repeats=1)
+        with pytest.raises(ModelError, match="feature_names has 2 entries"):
+            permutation_feature_importance(
+                model, X, y, n_repeats=1, feature_names=["a", "b"]
+            )
+
+    def test_deterministic_with_seed(self) -> None:
+        model, X, y = self._fit_model(seed=4)
+        first = permutation_feature_importance(model, X, y, n_repeats=3, random_state=7)
+        second = permutation_feature_importance(model, X, y, n_repeats=3, random_state=7)
+        np.testing.assert_allclose(first.means, second.means, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(first.stds, second.stds, rtol=0.0, atol=0.0)
 
 
 class TestRegistryEdgeCases:

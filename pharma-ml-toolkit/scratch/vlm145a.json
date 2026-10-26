@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS: The Dataset card contains the 'EC50 → pEC50 prep' row with a 'median' combobox and 'duplicates' label.\n2) PASS: The status line correctly displays the row counts and mentions censored magnitudes, collapsed duplicates, and dropped rows.\n3) PASS: The preview table displays the specified columns with 4 rows of small molecule data.\n4) PASS: The UI layout is clean, readable, and free from overlapping or clipped elements.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793006365,
+  "id": "202610261719232484ba6febed4c53",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610261719232484ba6febed4c53",
+  "usage": {
+    "completion_tokens": 100,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1566,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1666
+  }
+}

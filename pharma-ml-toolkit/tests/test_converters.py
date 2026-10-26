@@ -9,11 +9,13 @@ import pandas as pd
 import pytest
 
 from pharmaml.chem.converters import (
+    EndpointDatasetReport,
     EndpointValue,
     add_pic50_column,
     ic50_to_pic50,
     ki_to_pki,
     parse_endpoint,
+    prepare_pic50_dataset,
     split_table_into_chunks,
 )
 from pharmaml.exceptions import DataValidationError
@@ -131,6 +133,130 @@ class TestAddPIC50Column:
         frame = pd.DataFrame({"IC50 (nM)": [100.0]})
         add_pic50_column(frame)
         assert "pIC50" not in frame.columns
+
+
+class TestPreparePic50Dataset:
+    """D2.py's process_data, upgraded (100x-145)."""
+
+    def test_end_to_end_with_d2_spelling(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "Ligand SMILES": ["CCO", "CCO", "C", "", "CCN"],
+                "EC50 (nM)": ["<50", 200.0, "junk", 10.0, 1e10],
+            }
+        )
+        result, report = prepare_pic50_dataset(frame)
+        assert result["SMILES"].tolist() == ["CCO"]
+        assert result["n_measurements"].tolist() == [2]
+        # median(50, 200) nM -> pEC50 = 9 - log10(125)
+        assert result["pEC50"].iloc[0] == pytest.approx(9 - math.log10(125.0))
+        assert report.rows_in == 5
+        assert report.rows_valid == 2
+        assert report.rows_out == 1
+        assert report.rows_censored == 1
+        assert report.rows_unparsable == 1
+        assert report.rows_missing_smiles == 1
+        assert report.rows_out_of_range == 1
+        assert report.duplicates_collapsed == 1
+        # The accounting identity: every input row lands in exactly one bucket.
+        assert (
+            report.rows_valid
+            + report.rows_missing_smiles
+            + report.rows_unparsable
+            + report.rows_out_of_range
+            == report.rows_in
+        )
+        assert report.rows_out == report.rows_valid - report.duplicates_collapsed
+
+    def test_aggregate_modes(self) -> None:
+        frame = pd.DataFrame(
+            {"SMILES": ["CCO", "CCO", "CCO"], "EC50 (nM)": [100.0, 200.0, 1000.0]}
+        )
+        median_result, median_report = prepare_pic50_dataset(frame, aggregate="median")
+        assert median_result["endpoint_median"].iloc[0] == pytest.approx(200.0)
+        assert median_report.duplicates_collapsed == 2
+        mean_result, _ = prepare_pic50_dataset(frame, aggregate="mean")
+        assert mean_result["endpoint_median"].iloc[0] == pytest.approx(1300.0 / 3)
+        first_result, _ = prepare_pic50_dataset(frame, aggregate="first")
+        assert first_result["endpoint_median"].iloc[0] == pytest.approx(100.0)
+        keep_result, keep_report = prepare_pic50_dataset(frame, aggregate="keep")
+        assert len(keep_result) == 3
+        assert keep_report.duplicates_collapsed == 0
+        assert keep_result["n_measurements"].tolist() == [1, 1, 1]
+
+    def test_explicit_columns_and_unit(self) -> None:
+        frame = pd.DataFrame({"smi": ["CCO"], "activity": [1000.0]})
+        result, report = prepare_pic50_dataset(
+            frame, smiles_col="smi", endpoint_col="activity", unit="uM"
+        )
+        # 1000 uM = 1e-3 M -> pEC50 = 3
+        assert result["pEC50"].iloc[0] == pytest.approx(3.0)
+        assert (report.smiles_col, report.endpoint_col, report.unit) == (
+            "smi",
+            "activity",
+            "uM",
+        )
+
+    def test_ic50_candidate_fallback(self) -> None:
+        frame = pd.DataFrame({"SMILES": ["CCO"], "IC50 (nM)": [100.0]})
+        _result, report = prepare_pic50_dataset(frame)
+        assert report.endpoint_col == "IC50 (nM)"
+
+    def test_upper_limit_filter_is_inclusive(self) -> None:
+        frame = pd.DataFrame({"SMILES": ["CCO", "CCN"], "EC50 (nM)": [100.0, 101.0]})
+        result, report = prepare_pic50_dataset(frame, upper_limit=100.0)
+        assert result["SMILES"].tolist() == ["CCO"]
+        assert report.rows_out_of_range == 1
+
+    def test_missing_columns_raise_with_candidates(self) -> None:
+        with pytest.raises(DataValidationError, match="no SMILES column found"):
+            prepare_pic50_dataset(pd.DataFrame({"compound": ["A"]}))
+        with pytest.raises(DataValidationError, match="no endpoint column found"):
+            prepare_pic50_dataset(pd.DataFrame({"SMILES": ["CCO"]}))
+        with pytest.raises(DataValidationError, match="'typo' not found"):
+            prepare_pic50_dataset(
+                pd.DataFrame({"SMILES": ["CCO"], "EC50 (nM)": [1.0]}),
+                smiles_col="typo",
+            )
+
+    def test_bad_aggregate_and_limit_raise(self) -> None:
+        frame = pd.DataFrame({"SMILES": ["CCO"], "EC50 (nM)": [1.0]})
+        with pytest.raises(DataValidationError, match="aggregate must be"):
+            prepare_pic50_dataset(frame, aggregate="sum")
+        with pytest.raises(DataValidationError, match="upper_limit must be"):
+            prepare_pic50_dataset(frame, upper_limit=0.0)
+        with pytest.raises(DataValidationError, match="upper_limit must be"):
+            prepare_pic50_dataset(frame, upper_limit=float("inf"))
+
+    def test_bad_unit_raises_early(self) -> None:
+        frame = pd.DataFrame({"SMILES": ["CCO"], "EC50 (nM)": [1.0]})
+        with pytest.raises(DataValidationError, match="Unknown concentration unit"):
+            prepare_pic50_dataset(frame, unit="furlongs")
+
+    def test_no_usable_rows_raises(self) -> None:
+        frame = pd.DataFrame({"SMILES": ["CCO"], "EC50 (nM)": ["junk"]})
+        with pytest.raises(DataValidationError, match="no usable rows"):
+            prepare_pic50_dataset(frame)
+
+    def test_report_str_and_as_dict(self) -> None:
+        frame = pd.DataFrame(
+            {"Ligand SMILES": ["CCO", "CCO"], "EC50 (nM)": ["<50", 200.0]}
+        )
+        _result, report = prepare_pic50_dataset(frame)
+        text = str(report)
+        assert "smiles='Ligand SMILES'" in text
+        assert "2 in -> 1 out" in text
+        assert "censored magnitudes used: 1" in text
+        as_dict = report.as_dict()
+        assert as_dict["rows_in"] == 2
+        assert as_dict["aggregate"] == "median"
+        assert isinstance(report, EndpointDatasetReport)
+
+    def test_source_frame_not_mutated(self) -> None:
+        frame = pd.DataFrame({"SMILES": ["CCO"], "EC50 (nM)": [100.0]})
+        prepare_pic50_dataset(frame)
+        assert "pEC50" not in frame.columns
+        assert len(frame) == 1
 
 
 class TestSplitTable:

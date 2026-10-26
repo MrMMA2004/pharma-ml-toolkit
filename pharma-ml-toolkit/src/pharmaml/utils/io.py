@@ -73,7 +73,13 @@ True
 >>> frame = read_table_with_progress(tiny, seen.append)   # under the threshold
 >>> len(frame), seen      # the plain reader -- no reports at all
 (1, [])
->>> prog.unlink(); tiny.unlink()
+>>> ragged = Path("/tmp/pharmaml_doctest_ragged.csv")    # 100x-145 parity line
+>>> _ = ragged.write_text("a;b\\n1;2\\n3;4;5\\n")
+>>> frame = read_table_with_progress(                     # sniffed ';' chokes...
+...     ragged, lambda *args: None, chunk_rows=10, size_threshold=1)
+>>> frame.shape, frame.columns.tolist()                  # ...delegate to sync
+((2, 1), ['a;b'])
+>>> prog.unlink(); tiny.unlink(); ragged.unlink()
 """
 
 from __future__ import annotations

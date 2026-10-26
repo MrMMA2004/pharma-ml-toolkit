@@ -48,6 +48,7 @@ from pharmaml.viz import (
     plot_model_comparison,
     plot_operator_trajectory,
     plot_pareto_front,
+    plot_permutation_importance,
     plot_predicted_vs_actual,
     plot_receptor_atom_types,
     plot_residuals,
@@ -536,6 +537,96 @@ class TestLeaderboardAndDiagnostics:
     def test_feature_importance_unsupported_model(self, close_all):
         with pytest.raises(DataValidationError):
             plot_feature_importance(object())
+
+    def test_permutation_importance_from_record(self, close_all):
+        from pharmaml.ml.evaluation import PermutationImportance
+
+        record = PermutationImportance(
+            names=["logp", "mw", "tpsa", "hbd"],
+            means=np.array([0.5, -0.2, 0.1, 0.02]),
+            stds=np.array([0.05, 0.02, 0.01, 0.005]),
+            scoring="r2",
+            n_repeats=5,
+            n_samples=30,
+        )
+        fig = plot_permutation_importance(record)
+        ax = fig.axes[0]
+        assert len(ax.patches) == 4
+        assert ax.get_xlabel() == "importance (Δ score when shuffled)"
+        # bottom -> top: tpsa, mw, logp, hbd -- largest |mean| last-shown
+        ticks = [t.get_text() for t in ax.get_yticklabels()]
+        assert ticks == ["hbd", "tpsa", "mw", "logp"]
+
+    def test_permutation_importance_from_frame(self, close_all):
+        from pharmaml.ml.evaluation import PermutationImportance
+
+        record = PermutationImportance(
+            names=["a", "b"],
+            means=np.array([0.4, 0.1]),
+            stds=np.array([0.02, 0.01]),
+            scoring="r2",
+            n_repeats=3,
+            n_samples=10,
+        )
+        fig = plot_permutation_importance(record.as_frame(), top_n=None)
+        assert len(fig.axes[0].patches) == 2
+
+    def test_permutation_importance_negative_renders_red(self, close_all):
+        from pharmaml.ml.evaluation import PermutationImportance
+
+        record = PermutationImportance(
+            names=["good", "noise"],
+            means=np.array([0.3, -0.1]),
+            stds=np.array([0.01, 0.01]),
+            scoring="r2",
+            n_repeats=2,
+            n_samples=10,
+        )
+        fig = plot_permutation_importance(record)
+        # bottom -> top: noise (negative, red), good (positive, teal)
+        assert fig.axes[0].patches[0].get_facecolor()[:3] != fig.axes[0].patches[1].get_facecolor()[:3]
+
+    def test_permutation_importance_contract_errors(self, close_all):
+        from pharmaml.ml.evaluation import PermutationImportance
+
+        record = PermutationImportance(
+            names=["a", "b"],
+            means=np.array([0.4, 0.1]),
+            stds=np.array([0.02, 0.01]),
+            scoring="r2",
+            n_repeats=3,
+            n_samples=10,
+        )
+        with pytest.raises(DataValidationError, match="top_n must be"):
+            plot_permutation_importance(record, top_n=0)
+        with pytest.raises(DataValidationError, match="must be a PermutationImportance record"):
+            plot_permutation_importance(object())
+        with pytest.raises(DataValidationError, match="must carry the columns feature"):
+            plot_permutation_importance(pd.DataFrame({"feature": ["a"]}))
+        ragged = PermutationImportance(
+            names=["a", "b"],
+            means=np.array([0.4]),
+            stds=np.array([0.02, 0.01]),
+            scoring="r2",
+            n_repeats=3,
+            n_samples=10,
+        )
+        with pytest.raises(DataValidationError, match="must carry one entry per feature"):
+            plot_permutation_importance(ragged)
+
+    def test_permutation_importance_end_to_end_with_model(self, close_all):
+        from pharmaml.ml.evaluation import permutation_feature_importance
+
+        rng = np.random.default_rng(5)
+        X = rng.normal(size=(50, 3))
+        y = 2.0 * X[:, 0]
+        from sklearn.linear_model import LinearRegression
+
+        model = LinearRegression().fit(X, y)
+        record = permutation_feature_importance(model, X, y, n_repeats=2)
+        fig = plot_permutation_importance(record, title="D2-style readout")
+        assert fig.axes[0].get_title() == "D2-style readout"
+        assert len(fig.axes[0].patches) == 3
 
     def test_cv_scores_array(self, close_all):
         fig = plot_cv_scores([0.7, 0.8, 0.75])

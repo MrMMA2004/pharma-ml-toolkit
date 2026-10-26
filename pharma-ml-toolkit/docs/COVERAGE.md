@@ -1284,3 +1284,26 @@ genuine 10 MB CSV with a throttled-but-real reader, the chained-job
 pair, the source guard pin, the Apply-best invariant pin). The
 docs-index symbol test re-synced (278 symbols). The version chain
 moved to 1.2.83 across all five carriers (the VERSION file included).
+
+### Round 30 (100x-145) — the "کد علی" upload audited file by file: D2.py's data prep, its permutation importance, and the radius-3 ECFP family
+
+| What shipped | The contract |
+| --- | --- |
+| The one-by-one verdict over the 8 uploaded files | `pdbqtgeneration.py` — byte-identical to the audited `niggaqt.py` (the MGLTools PDB → PDBQT batch card, 100x-141). `pdbfromsmile.py` — the STRICTER older twin of `nigga.py` (the LIGAND STRUCTURES card implements the tolerant version: auto-generated names, first-column SMILES fallback — a superset). `mismatchcheck.py` — the grid/torsion/completion audit card's TORSDOF-vs-active-REMARKs-vs-BRANCH rule, upgraded with MGLTools/Meeko convention auto-detection. `niggavinamulti.py` — the Vina config batch card's thread-pool + resume story (`run_vina_batch(skip_existing=True)` + the pre-flight census). `conf.txt` — the config-batch card's parsed-keys surface. `vina.exe` — an external engine binary (absorbed like the rar's own engines, never shipped). `Ml/pred.py` + `Ml/D2.py` — the round's genuine work, below. |
+| `prepare_pic50_dataset` (chem/converters.py) | `Ml/D2.py`'s `process_data` upgraded: auto-detected or explicit SMILES/endpoint columns (the upload's own `Ligand SMILES` / `EC50 (nM)` spellings first), censored `<`/`>` magnitudes kept AND counted (the original stripped them in silence), the `0 < EC50 ≤ upper_limit` cap (default 1e9 nM — D2.py's own), the duplicate-SMILES collapse as a parameter (`median`/`mean`/`first`/`keep`; the original hard-coded the median), the conversion through `ic50_to_pic50` (any unit), and a typed `EndpointDatasetReport` whose buckets satisfy the accounting identity (valid + missing-SMILES + unparsable + out-of-range == rows in; rows out == valid − duplicates collapsed). |
+| The EC50 → pEC50 prep card (Data & ML) | The Dataset card's third row: the duplicate-rule combobox + the prep button + the save button. The audit lands in the status line ("5 rows in → 2 out · 1 censored magnitudes used · 1 duplicates collapsed (median) …"), one click adopts the prepared set as the active dataset with pEC50 pre-picked as the target, and declining keeps the loaded frame untouched. |
+| `permutation_feature_importance` (ml/evaluation.py) | `Ml/D2.py`'s interpretability step, typed: a `PermutationImportance` record (names/means/stds/scoring/repeats/n) with `as_frame()` and first-declared-wins `ranking()`. Works with bare estimators AND fitted pipelines (the preprocessing reruns on every shuffle, so the measure reflects the whole model), defaults D2.py's own choices (r2/accuracy, 5 repeats, seed 42), pins `n_jobs=1` (the nested-parallelism trap the original's comment confessed), and raises the house `ModelError` for every bad input (task, repeats, row mismatch, names mismatch). |
+| `plot_permutation_importance` (viz/ml_plots.py) | The top-N signed horizontal bars with ±1 std whiskers — the spread the original threw away — and NEGATIVE means (a shuffle that HELPED: a noise feature) in the palette's red. Accepts the record or its `as_frame()` twin, rides the shared `_check_top_n` contract, and labels the axis honestly ("importance (Δ score when shuffled)"). |
+| The Permutation-importance button (Results card) | Runs on the last trained model's held-out rows with a repeats knob, replaces the parity figure like the calibration/learning-curve buttons before it, and rides the card's existing Save-figure export. Fractional/zero repeats are named in a dialog before anything runs. |
+| The `ecfp3` family (chem/features.py) | `Ml/D2.py`'s R3 fingerprint half as a first-class family: radius-3 Morgan at the toolkit's 2048-bit width, prefix `ecfp3_bit_`, canonical order right after `ecfp`, constants `ECFP3_BITS`/`ECFP3_RADIUS` exported. The honest divergence note: D2.py's R2 half ran 4096 bits where the toolkit's `ecfp` runs 2048 — combining `ecfp + ecfp3` covers the dual-radius story. The feature factory gained the checkbox ("ECFP3 bits — radius 3 (2048)", ticked by default) and the width preview/families session map pick it up for free. |
+| The ragged-semicolon doctest (io.py) | Round 29's open candidate (c): `read_table_with_progress`'s docstring now SHOWS the parity verdict the tests pinned — a sniffed `;` separator choking on a ragged body delegates to the sync reader's own mangled-frame verdict instead of raising past it. |
+
+The axes after the round: rar 118, uploads 22/22 (the "کد علی" zip's 8
+files join the 14 audited before — six already-covered verdicts
+documented above, two surfacing as this round's features), zero-hit 0.
+37 new tests: TestPreparePic50Dataset (test_converters.py ×12),
+TestPermutationImportance (test_ml_pipeline.py ×7), the permutation
+viz tests (test_viz.py ×5), TestEcfp3Family (test_features.py ×4),
+TestReview145Gui (test_playground.py ×15). Four standing family-list
+pins updated for ecfp3. docs/INDEX.md re-synced (285 symbols). The
+version chain moved to 1.2.84 across all five carriers.

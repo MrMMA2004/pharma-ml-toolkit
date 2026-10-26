@@ -10,10 +10,13 @@ the notebook glue with explicit contracts:
 * **One vocabulary.**  :data:`FEATURE_FAMILIES` fixes the canonical family
   order and :data:`FAMILY_PREFIXES` the column naming, so a feature frame
   is always ``desc_*`` + ``apc_bit_*`` + ``ecfp_bit_*`` +
-  ``avalon_count_*`` + ``rdkit_bit_*`` + ``morgan_full_bit_*`` +
-  ``morgan_scaffold_bit_*`` + ``rism_*`` (5 x 2048 + 512 + the current
-  RDKit property list + the ten 3D-RISM-KH solvation descriptors -- more
-  than 10,000 columns in total).
+  ``ecfp3_bit_*`` + ``avalon_count_*`` + ``rdkit_bit_*`` +
+  ``morgan_full_bit_*`` + ``morgan_scaffold_bit_*`` + ``rism_*``
+  (6 x 2048 + 512 + the current RDKit property list + the ten
+  3D-RISM-KH solvation descriptors -- more than 12,000 columns in
+  total).  The ``ecfp3`` family (radius-3 Morgan, the
+  ``Ml/D2.py`` upload's own R3 half of its dual-radius fingerprints)
+  joins the vocabulary as a first-class citizen.
 * **Failure accounting instead of silent drops.**  Molecules that fail to
   parse or compute are dropped from the frame and recorded with their
   original row index in :class:`FeatureReport`; only the Murcko-scaffold
@@ -66,7 +69,7 @@ ValueError: smiles is empty -- pass at least one SMILES string
 >>> compute_feature_frame(["CCO"], families=("ecfp", "typo"))
 Traceback (most recent call last):
 ...
-ValueError: unknown feature family 'typo'; valid families are: descriptors, atompair_count, ecfp, avalon_count, rdkit_fingerprint, morgan_full, morgan_scaffold, rism
+ValueError: unknown feature family 'typo'; valid families are: descriptors, atompair_count, ecfp, ecfp3, avalon_count, rdkit_fingerprint, morgan_full, morgan_scaffold, rism
 >>> compute_feature_frame(["CCO"], families=())
 Traceback (most recent call last):
 ...
@@ -74,10 +77,12 @@ ValueError: families is empty -- pass at least one family name
 
 >>> (family_of_column("desc_exactmw"), family_of_column("ecfp_bit_17"))
 ('descriptors', 'ecfp')
+>>> family_of_column("ecfp3_bit_2047")
+'ecfp3'
 >>> family_of_column("SMILES")
 Traceback (most recent call last):
 ...
-ValueError: unknown feature-column prefix in 'SMILES'; columns must start with one of: desc_, apc_bit_, ecfp_bit_, avalon_count_, rdkit_bit_, morgan_full_bit_, morgan_scaffold_bit_, rism_
+ValueError: unknown feature-column prefix in 'SMILES'; columns must start with one of: desc_, apc_bit_, ecfp_bit_, ecfp3_bit_, avalon_count_, rdkit_bit_, morgan_full_bit_, morgan_scaffold_bit_, rism_
 
 >>> frame, report = compute_feature_frame(["CCCCCCCC"], families=("morgan_scaffold",))
 >>> (frame.shape, float(frame.iloc[0].sum()), report.n_valid)   # acyclic: kept
@@ -141,6 +146,8 @@ _LOG = get_logger(__name__)
 __all__ = [
     "ATOMPAIR_BITS",
     "AVALON_BITS",
+    "ECFP3_BITS",
+    "ECFP3_RADIUS",
     "ECFP_BITS",
     "FAMILY_PREFIXES",
     "FEATURE_FAMILIES",
@@ -157,11 +164,12 @@ __all__ = [
     "selection_metadata",
 ]
 
-#: The eight feature families, in canonical output order.
+#: The nine feature families, in canonical output order.
 FEATURE_FAMILIES: tuple[str, ...] = (
     "descriptors",
     "atompair_count",
     "ecfp",
+    "ecfp3",
     "avalon_count",
     "rdkit_fingerprint",
     "morgan_full",
@@ -175,6 +183,7 @@ FAMILY_PREFIXES: dict[str, str] = {
     "descriptors": "desc_",
     "atompair_count": "apc_bit_",
     "ecfp": "ecfp_bit_",
+    "ecfp3": "ecfp3_bit_",
     "avalon_count": "avalon_count_",
     "rdkit_fingerprint": "rdkit_bit_",
     "morgan_full": "morgan_full_bit_",
@@ -186,6 +195,11 @@ FAMILY_PREFIXES: dict[str, str] = {
 ATOMPAIR_BITS = 2048
 #: Bit length of the ECFP (Morgan, radius 2) binary fingerprint.
 ECFP_BITS = 2048
+#: Bit length of the radius-3 ECFP fingerprint (``Ml/D2.py``'s own R3
+#: twin -- the dual-radius story the upload trained its D2 model on).
+ECFP3_BITS = 2048
+#: Morgan radius of the :data:`ecfp3` family.
+ECFP3_RADIUS = 3
 #: Bit length of the Avalon count fingerprint (the rar's 512-bit choice).
 AVALON_BITS = 512
 #: Bit length of the path-based RDKit fingerprint.
@@ -203,6 +217,7 @@ RISM_DESCRIPTOR_COUNT = 10
 _FAMILY_BITS: dict[str, int] = {
     "atompair_count": ATOMPAIR_BITS,
     "ecfp": ECFP_BITS,
+    "ecfp3": ECFP3_BITS,
     "avalon_count": AVALON_BITS,
     "rdkit_fingerprint": RDKIT_FP_BITS,
     "morgan_full": MORGAN_BITS,
@@ -210,11 +225,12 @@ _FAMILY_BITS: dict[str, int] = {
     "rism": RISM_DESCRIPTOR_COUNT,
 }
 
-#: Reference bit lengths recorded by :func:`selection_metadata` (the six
+#: Reference bit lengths recorded by :func:`selection_metadata` (the seven
 #: fingerprint families; ``descriptors`` is not a fingerprint and is
 #: covered by ``families_computed`` instead).
 _FINGERPRINT_SIZES: dict[str, int] = {
     "ecfp": ECFP_BITS,
+    "ecfp3": ECFP3_BITS,
     "rdkit_fingerprint": RDKIT_FP_BITS,
     "morgan_full": MORGAN_BITS,
     "morgan_scaffold": MORGAN_BITS,
@@ -411,6 +427,26 @@ def _morgan_computer() -> Callable[[Any], np.ndarray]:
     return morgan_vector
 
 
+def _ecfp3_computer() -> Callable[[Any], np.ndarray]:
+    """ECFP3 family: radius-3 2048-bit bit vector (``Ml/D2.py``'s R3).
+
+    The upload's dual-radius fingerprints were Morgan radius 2 (4096
+    bits) + radius 3 (2048 bits); this family reproduces the R3 half
+    at the toolkit's own 2048-bit width, capturing the wider atom
+    environments radius 2 cannot see.  Same modern
+    ``rdMolDescriptors`` spelling as :func:`_morgan_computer`.
+    """
+    from rdkit.Chem import rdMolDescriptors
+
+    def ecfp3_vector(mol: Any) -> np.ndarray:
+        fingerprint = rdMolDescriptors.GetMorganFingerprintAsBitVect(
+            mol, radius=ECFP3_RADIUS, nBits=ECFP3_BITS
+        )
+        return _onbits_vector(fingerprint, ECFP3_BITS)
+
+    return ecfp3_vector
+
+
 def _morgan_scaffold_computer(
     morgan_vector: Callable[[Any], np.ndarray],
 ) -> Callable[[Any], np.ndarray]:
@@ -483,7 +519,8 @@ def compute_feature_frame(
       repeated environments SUM; the deprecated ``GetAtomPairFingerprint``
       and the rar's datamol shortcut are both avoided).
     * ``ecfp`` / ``morgan_full``: ``GetMorganFingerprintAsBitVect`` at
-      radius 2, 2048 bits.
+      radius 2, 2048 bits.  ``ecfp3``: the same call at radius 3
+      (2048 bits) -- ``Ml/D2.py``'s wider-environment twin.
     * ``avalon_count``: ``pyAvalonTools.GetAvalonCountFP(mol, nBits=512)``.
     * ``rdkit_fingerprint``: ``Chem.RDKFingerprint(mol, fpSize=2048)``.
     * ``morgan_scaffold``: Murcko scaffold via
@@ -587,6 +624,8 @@ def _family_plan(
             computers["morgan_full"] = morgan_vector
         if "morgan_scaffold" in requested:
             computers["morgan_scaffold"] = _morgan_scaffold_computer(morgan_vector)
+    if "ecfp3" in requested:
+        computers["ecfp3"] = _ecfp3_computer()
 
     if "rdkit_fingerprint" in requested:
         from rdkit import Chem

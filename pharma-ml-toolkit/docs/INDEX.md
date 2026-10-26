@@ -40,6 +40,8 @@ after adding new public functions.
 |---|---|---|
 | `ATOMPAIR_BITS` | constant |  |
 | `AVALON_BITS` | constant |  |
+| `ECFP3_BITS` | constant |  |
+| `ECFP3_RADIUS` | constant |  |
 | `ECFP_BITS` | constant |  |
 | `FAMILY_PREFIXES` | constant |  |
 | `FEATURE_FAMILIES` | constant |  |
@@ -49,6 +51,7 @@ after adding new public functions.
 | `RISM_DESCRIPTORS` | constant |  |
 | `RISM_DESCRIPTOR_COUNT` | constant |  |
 | `UNSUPPORTED_METALS` | constant |  |
+| `EndpointDatasetReport` | class | Audit record for one :func:`prepare_pic50_dataset` run. |
 | `FeatureReport` | class | Audit record for one :func:`compute_feature_frame` run. |
 | `FeatureSelection` | class | Result of :func:`select_top_features`. |
 | `PdbLigandReport` | class | Audit record for one :func:`smiles_to_pdb` conversion. |
@@ -66,6 +69,7 @@ after adding new public functions.
 | `family_of_column` | function | Return the feature family a frame column belongs to. |
 | `ic50_to_pic50` | function | Convert an IC50 measurement to pIC50 = -log10(IC50 [M]). |
 | `ki_to_pki` | function | Convert an inhibition constant to pKi = -log10(Ki [M]). |
+| `prepare_pic50_dataset` | function | Turn a raw SMILES + EC50 table into a modelling-ready pEC50 set. |
 | `merge_table_folder` | function | Merge every table of one extension directly inside ``directory``. |
 | `merge_tables` | function | Row-wise merge of several tables, ignoring the index. |
 | `rank_features` | function | Rank feature columns by importance, descending. |
@@ -92,6 +96,7 @@ after adding new public functions.
 | `MODEL_ALIASES` | constant |  |
 | `MODEL_REGISTRY` | constant |  |
 | `ApplicabilityDomainResult` | class | Outcome of a full applicability-domain analysis. |
+| `PermutationImportance` | class | Permutation feature importances on held-out data. |
 | `BootstrapUncertainty` | class | Bootstrap-ensemble uncertainty of a fitted estimator. |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
@@ -118,6 +123,7 @@ after adding new public functions.
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
+| `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
 | `list_models` | function | List registry entries with availability information. |
@@ -317,6 +323,7 @@ after adding new public functions.
 | `plot_gp_uncertainty` | function | Parity scatter with ``± z·σ`` error bars — the GP's honest readout. |
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
+| `plot_permutation_importance` | function | Top-N permutation importances as signed bars with error bars. |
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
 | `plot_pareto_front` | function | One scatter per MultiObjective run: dominated points muted, front lit. |
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |

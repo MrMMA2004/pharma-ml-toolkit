@@ -2,10 +2,12 @@
 feature factory, similarity, tables, standardization."""
 
 from pharmaml.chem.converters import (
+    EndpointDatasetReport,
     SdfWriteReport,
     add_pic50_column,
     ic50_to_pic50,
     ki_to_pki,
+    prepare_pic50_dataset,
     sdf_to_table,
     smi_to_csv,
     split_table_into_chunks,
@@ -20,6 +22,8 @@ from pharmaml.chem.descriptors import (
 from pharmaml.chem.features import (
     ATOMPAIR_BITS,
     AVALON_BITS,
+    ECFP3_BITS,
+    ECFP3_RADIUS,
     ECFP_BITS,
     FAMILY_PREFIXES,
     FEATURE_FAMILIES,
@@ -60,6 +64,8 @@ from pharmaml.chem.tables import (
 __all__ = [
     "ATOMPAIR_BITS",
     "AVALON_BITS",
+    "ECFP3_BITS",
+    "ECFP3_RADIUS",
     "ECFP_BITS",
     "FAMILY_PREFIXES",
     "FEATURE_FAMILIES",
@@ -69,6 +75,7 @@ __all__ = [
     "RISM_DESCRIPTORS",
     "RISM_DESCRIPTOR_COUNT",
     "UNSUPPORTED_METALS",
+    "EndpointDatasetReport",
     "FeatureReport",
     "FeatureSelection",
     "PdbLigandReport",
@@ -88,6 +95,7 @@ __all__ = [
     "ki_to_pki",
     "merge_table_folder",
     "merge_tables",
+    "prepare_pic50_dataset",
     "rank_features",
     "sdf_to_table",
     "select_top_features",

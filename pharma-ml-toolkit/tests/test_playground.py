@@ -1809,10 +1809,10 @@ class TestFeatureFactoryGuiUnderXvfb:
         return len(rdMolDescriptors.Properties.GetAvailableProperties())
 
     def test_default_pasted_variance_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
-        # the shipped defaults: pasted drug SMILES, all 8 families ticked
+        # the shipped defaults: pasted drug SMILES, all 9 families ticked
         assert app._feat_source_var.get() == "Pasted SMILES"
-        assert "8 families selected" in app._feat_width_label.cget("text")
-        assert f"~{10_752 + 10 + self._descriptor_count():,} columns" in app._feat_width_label.cget(
+        assert "9 families selected" in app._feat_width_label.cget("text")
+        assert f"~{12_800 + 10 + self._descriptor_count():,} columns" in app._feat_width_label.cget(
             "text"
         )
         app._feat_k_entry.delete(0, "end")
@@ -1821,7 +1821,7 @@ class TestFeatureFactoryGuiUnderXvfb:
         app._feat_compute()
         assert self._drain_jobs(app), "feature factory job hung"
         summary = app._feat_summary.cget("text")
-        assert f"{10_752 + 10 + self._descriptor_count():,} features" in summary
+        assert f"{12_800 + 10 + self._descriptor_count():,} features" in summary
         assert "3 molecules" in summary
         assert "median-survivors" in summary
         assert "variance" in summary
@@ -11821,3 +11821,193 @@ class TestReview144Gui:
         assert path_assign - adopt < 80  # set together, a few lines apart
         assert source.count("self._ml_path = path") == 1
         assert "self._ml_frame = cleaned" in source  # the Clean card's swap
+
+
+class TestReview145Gui:
+    """Round 100x-145 -- the "کد علی" upload's Ml/ pair surfaces: D2.py's
+    process_data as the EC50 → pEC50 prep card (every silent step
+    counted, one-click adoption), its permutation-importance step as a
+    Results-card button, and the ecfp3 family in the feature factory."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 90.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_145(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-145" in doc
+        assert "prepare_pic50_dataset" in doc
+        assert "permutation" in doc.lower()
+        assert "ecfp3" in doc
+
+    # -- the EC50 -> pEC50 prep card --------------------------------------- #
+
+    def test_prep_card_source_pins(self, playground: Any) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert '"EC50 → pEC50 prep"' in source
+        assert "def _ml_prep_endpoint" in source
+        assert "def _ml_prep_save" in source
+        assert "from pharmaml.chem import prepare_pic50_dataset" in source
+        assert 'self._ml_aggregate_combo' in source
+
+    def test_prep_aggregate_combo_values(self, app: Any) -> None:
+        assert app._ml_aggregate_combo.cget("values") == (
+            "median",
+            "mean",
+            "first",
+            "keep",
+        )
+        assert app._ml_aggregate_combo.get() == "median"
+
+    def test_prep_needs_a_dataset(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ml_prep_endpoint()
+        assert any("No dataset" in str(a) for a in quiet_dialogs)
+
+    def test_prep_end_to_end_and_adoption(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        import pandas as pd
+
+        app._ml_frame = pd.DataFrame(
+            {
+                "Ligand SMILES": ["CCO", "CCO", "CCN", "C", ""],
+                "EC50 (nM)": ["<50", 200.0, 1000.0, "junk", 10.0],
+            }
+        )
+        monkeypatch.setattr(playground.messagebox, "askyesno", lambda *a, **k: True)
+        app._ml_prep_endpoint()
+        assert self._drain_jobs(app), "prep job hung"
+        assert app._ml_prep_frame is not None
+        assert app._ml_prep_frame["SMILES"].tolist() == ["CCO", "CCN"]
+        assert app._ml_prep_frame["n_measurements"].tolist() == [2, 1]
+        info = app._ml_info.cget("text")
+        assert "pEC50 prep" in info
+        assert "5 rows in" in info
+        assert "1 censored" in info
+        assert "1 duplicates collapsed" in info
+        # adoption: the prepared set became the dataset, pEC50 the target
+        assert app._ml_frame is app._ml_prep_frame
+        assert app._target_combo.get() == "pEC50"
+        preview_columns = list(app._preview_tree["columns"])
+        assert preview_columns == ["SMILES", "n_measurements", "endpoint_median", "pEC50"]
+        assert quiet_dialogs == []
+
+    def test_prep_declining_adoption_keeps_the_dataset(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        import pandas as pd
+
+        original = pd.DataFrame(
+            {"Ligand SMILES": ["CCO", "CCO"], "EC50 (nM)": [100.0, 200.0]}
+        )
+        app._ml_frame = original
+        monkeypatch.setattr(playground.messagebox, "askyesno", lambda *a, **k: False)
+        app._ml_prep_endpoint()
+        assert self._drain_jobs(app), "prep job hung"
+        assert app._ml_prep_frame is not None
+        assert app._ml_frame is original  # declined: nothing swapped
+
+    def test_prep_save_needs_a_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ml_prep_save()
+        assert any("EC50 → pEC50 prep first" in str(a) for a in quiet_dialogs)
+
+    # -- the permutation-importance button --------------------------------- #
+
+    def test_permutation_button_source_pins(self, playground: Any) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert '"Permutation importance"' in source
+        assert "def _ml_plot_permutation" in source
+        assert "from pharmaml.ml import permutation_feature_importance" in source
+        assert "from pharmaml.viz import plot_permutation_importance" in source
+
+    def test_permutation_needs_a_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ml_plot_permutation()
+        assert any("No trained model" in str(a) for a in quiet_dialogs)
+
+    def test_permutation_after_training(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        app._ml_plot_permutation()
+        assert self._drain_jobs(app), "permutation job hung"
+        assert len(app._ml_host.winfo_children()) == 1
+        assert "permutation importance" in app._ml_result_note.cget("text")
+        assert quiet_dialogs == []
+
+    def test_permutation_bad_repeats_is_named(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        app._perm_repeats.delete(0, "end")
+        app._perm_repeats.insert(0, "1.5")
+        app._ml_plot_permutation()
+        assert any("repeats" in str(a) for a in quiet_dialogs)
+
+    def test_permutation_zero_repeats_is_named(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        app._perm_repeats.delete(0, "end")
+        app._perm_repeats.insert(0, "0")
+        app._ml_plot_permutation()
+        assert any("repeats" in str(a) for a in quiet_dialogs)
+
+    # -- the ecfp3 family in the feature factory --------------------------- #
+
+    def test_feature_factory_carries_ecfp3(self, app: Any) -> None:
+        assert "ecfp3" in app._feat_family_vars
+        assert bool(app._feat_family_vars["ecfp3"].get())  # ticked by default
+
+    def test_ecfp3_labels_and_bits_pinned(self, playground: Any) -> None:
+        labels = dict(playground._FEATURE_FAMILY_LABELS)
+        assert labels["ecfp3"] == "ECFP3 bits — radius 3 (2048)"
+        assert playground._FEATURE_FAMILY_BITS["ecfp3"] == 2048
+        # canonical order: ecfp3 follows ecfp, mirroring the library
+        names = [family for family, _label in playground._FEATURE_FAMILY_LABELS]
+        assert names.index("ecfp3") == names.index("ecfp") + 1
+
+    def test_factory_subtitle_mentions_nine_families(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "9 descriptor / " in source
+        assert "radius-3 ECFP" in source

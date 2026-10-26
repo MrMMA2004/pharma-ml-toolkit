@@ -137,6 +137,7 @@ __all__ = [
     "plot_gp_uncertainty",
     "plot_learning_curve",
     "plot_model_comparison",
+    "plot_permutation_importance",
     "plot_predicted_vs_actual",
     "plot_residuals",
     "plot_roc_curves",
@@ -1041,6 +1042,143 @@ def plot_feature_importance(
         ax.text(value, pos, f" {value:.4g}", va="center", ha="left", fontsize=9)
     ax.set_yticks(positions, [names[i] for i in order])
     ax.set_xlabel("importance")
+    ax.set_title(title)
+    return fig
+
+
+def _extract_permutation(importance: Any) -> tuple[list[str], np.ndarray, np.ndarray]:
+    """Names / means / stds out of a record or its ``as_frame`` twin.
+
+    Accepts the :class:`~pharmaml.ml.evaluation.PermutationImportance`
+    record (attribute access), any object with the same three
+    attributes, or the DataFrame the record's ``as_frame`` returns
+    (``feature`` / ``importance_mean`` / ``importance_std`` columns).
+    """
+    names: Any = None
+    means: Any = None
+    stds: Any = None
+    if isinstance(importance, pd.DataFrame):
+        missing = [
+            column
+            for column in ("feature", "importance_mean", "importance_std")
+            if column not in importance.columns
+        ]
+        if missing:
+            raise DataValidationError(
+                "permutation frame must carry the columns feature / "
+                "importance_mean / importance_std (missing: "
+                + ", ".join(missing)
+                + ") -- pass the PermutationImportance record or its "
+                "as_frame() output"
+            )
+        names = importance["feature"].tolist()
+        means = importance["importance_mean"].to_numpy(dtype=float)
+        stds = importance["importance_std"].to_numpy(dtype=float)
+    else:
+        names = getattr(importance, "names", None)
+        means = getattr(importance, "means", None)
+        stds = getattr(importance, "stds", None)
+    if names is None or means is None or stds is None:
+        raise DataValidationError(
+            "importance must be a PermutationImportance record (names/"
+            "means/stds attributes) or its as_frame() DataFrame -- got "
+            f"{type(importance).__name__}"
+        )
+    names_list = [str(name) for name in list(names)]
+    means_array = np.asarray(means, dtype=float)
+    stds_array = np.asarray(stds, dtype=float)
+    if not (len(names_list) == len(means_array) == len(stds_array)):
+        raise DataValidationError(
+            f"names ({len(names_list)}), means ({len(means_array)}) and "
+            f"stds ({len(stds_array)}) must carry one entry per feature"
+        )
+    return names_list, means_array, stds_array
+
+
+def plot_permutation_importance(
+    importance: Any,
+    top_n: int | None = 15,
+    title: str = "Permutation importance",
+) -> Any:
+    """Top-N permutation importances as signed bars with error bars.
+
+    The figure ``D2.py`` drew from its raw
+    ``sklearn.inspection.permutation_importance`` result, upgraded with
+    the spread the original threw away: every bar carries its
+    ``±1 std`` whisker, and NEGATIVE means (shuffling the column HELPED
+    -- a noise feature) render in the palette's red instead of teal so
+    the eye cannot miss them.
+
+    Parameters
+    ----------
+    importance:
+        A :class:`~pharmaml.ml.evaluation.PermutationImportance` record
+        (or any object with ``names`` / ``means`` / ``stds``), or a
+        DataFrame with ``feature`` / ``importance_mean`` /
+        ``importance_std`` columns (the record's own ``as_frame``
+        output).
+    top_n:
+        How many features to show (largest ``|mean|`` first); ``None``
+        shows every feature.  Validated by :func:`_check_top_n`.
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``importance`` carries neither the record attributes nor
+        the DataFrame columns, the arrays disagree in length, or
+        ``top_n`` is invalid.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.evaluation import PermutationImportance
+    >>> import numpy as np
+    >>> record = PermutationImportance(
+    ...     names=["a", "b", "c"], means=np.array([0.5, -0.2, 0.1]),
+    ...     stds=np.array([0.05, 0.02, 0.01]), scoring="r2", n_repeats=5,
+    ...     n_samples=30)
+    >>> fig = plot_permutation_importance(record)
+    >>> ax = fig.axes[0]
+    >>> [tick.get_text() for tick in ax.get_yticklabels()]  # bottom -> top
+    ['c', 'b', 'a']
+    >>> ax.get_xlabel()
+    'importance (Δ score when shuffled)'
+    >>> plot_permutation_importance(record, top_n=0)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: top_n must be a positive integer or None, got 0
+    """
+    _check_top_n(top_n)
+    names, means, stds = _extract_permutation(importance)
+    keep = len(means) if top_n is None else min(int(top_n), len(means))
+    # Largest |mean| first (stable, first-declared-wins ties), then
+    # reversed for display so the strongest feature sits at the top.
+    order = np.argsort(-np.abs(means), kind="stable")[:keep][::-1]
+
+    fig, ax = new_figure(figsize=(8.4, 0.42 * len(order) + 1.7))
+    positions = np.arange(len(order))
+    colors = [PALETTE[3] if means[int(index)] < 0 else PALETTE[0] for index in order]
+    ax.barh(
+        positions,
+        means[order],
+        xerr=stds[order],
+        color=colors,
+        alpha=0.88,
+        height=0.62,
+        edgecolor="white",
+        error_kw={"elinewidth": 1.0, "capsize": 2.5, "ecolor": "#525252"},
+    )
+    for pos, value in zip(positions, means[order]):
+        ax.text(value, pos, f" {value:+.4g}", va="center",
+                ha="left" if value >= 0 else "right", fontsize=9)
+    ax.axvline(0.0, color="#525252", lw=0.8, ls=":")
+    ax.set_yticks(positions, [names[int(index)] for index in order])
+    ax.set_xlabel("importance (Δ score when shuffled)")
     ax.set_title(title)
     return fig
 

@@ -128,8 +128,10 @@ _NUMERIC_KINDS = frozenset("iufb")
 
 __all__ = [
     "ClassificationReport",
+    "PermutationImportance",
     "RegressionReport",
     "evaluate_model",
+    "permutation_feature_importance",
     "predict_with_uncertainty",
 ]
 
@@ -517,3 +519,199 @@ def predict_with_uncertainty(
     if noise > 0.0:
         sigma = np.sqrt(sigma**2 + noise**2)
     return mean, sigma
+
+
+@dataclass(slots=True)
+class PermutationImportance:
+    """Permutation feature importances on held-out data.
+
+    The typed upgrade of ``D2.py``'s inline
+    ``sklearn.inspection.permutation_importance`` call: the original
+    fished ``importances_mean`` out of the raw result and lost the
+    spread; this record keeps both, plus the feature names, so callers
+    can print, serialise, or plot without re-deriving anything.
+
+    Attributes
+    ----------
+    names:
+        Feature labels (column names or positional ``x0, x1, ...``).
+    means:
+        Mean importance per feature (a score DROP when the column is
+        shuffled -- negative values mean the shuffle helped, a classic
+        sign of a noise feature).
+    stds:
+        Standard deviation of the importance across the repeats.
+    scoring:
+        The scoring rule that was used.
+    n_repeats:
+        How many shuffles per feature were run.
+    n_samples:
+        Rows in the evaluation set.
+    """
+
+    names: list[str]
+    means: np.ndarray
+    stds: np.ndarray
+    scoring: str | None
+    n_repeats: int
+    n_samples: int
+
+    def as_frame(self) -> pd.DataFrame:
+        """The importances as a DataFrame (name, mean, std columns)."""
+        return pd.DataFrame(
+            {
+                "feature": self.names,
+                "importance_mean": np.asarray(self.means, dtype=float),
+                "importance_std": np.asarray(self.stds, dtype=float),
+            }
+        )
+
+    def ranking(self, top_n: int | None = None) -> list[tuple[str, float]]:
+        """``[(feature, mean_importance), ...]`` descending by |mean|.
+
+        Ties resolve first-declared-wins (a stable argsort on the
+        negated absolute means), matching the viz layer's convention.
+        """
+        means = np.asarray(self.means, dtype=float)
+        order = np.argsort(-np.abs(means), kind="stable")
+        keep = len(means) if top_n is None else min(int(top_n), len(means))
+        return [(self.names[int(index)], float(means[int(index)])) for index in order[:keep]]
+
+    def __str__(self) -> str:  # pragma: no cover - presentation only
+        top = self.ranking(top_n=5)
+        rendered = ", ".join(f"{name}={value:+.4f}" for name, value in top)
+        return (
+            f"permutation importance (scoring={self.scoring}, "
+            f"repeats={self.n_repeats}, n={self.n_samples}): {rendered}"
+        )
+
+
+def permutation_feature_importance(
+    model: Any,
+    X: pd.DataFrame | np.ndarray,
+    y: pd.Series | np.ndarray | list,
+    task: str = "regression",
+    n_repeats: int = 5,
+    random_state: int = 42,
+    scoring: str | None = None,
+    feature_names: list[str] | None = None,
+) -> PermutationImportance:
+    """Permutation importances of a fitted model on held-out data.
+
+    Shuffles one feature column at a time and measures how much the
+    score drops -- the importance metric ``D2.py`` computed for every
+    base model and meta-learner before drawing its heatmaps.  Works
+    with any fitted sklearn-compatible estimator or Pipeline (the
+    pipeline's preprocessing reruns on every shuffle, so the measure
+    reflects the WHOLE model, not just the final step).
+
+    Parameters
+    ----------
+    model:
+        Fitted estimator or sklearn Pipeline.
+    X:
+        Feature rows (raw, unpreprocessed -- a pipeline transforms them).
+    y:
+        True targets for the same rows.
+    task:
+        ``"regression"`` or ``"classification"`` -- picks the default
+        scoring when ``scoring`` is ``None`` (``"r2"`` / ``"accuracy"``,
+        D2.py's own choices).
+    n_repeats:
+        Shuffles per feature (D2.py used 5).
+    random_state:
+        Seed for the shuffler.
+    scoring:
+        Explicit sklearn scoring string; ``None`` uses the task default.
+    feature_names:
+        Labels for the columns; ``None`` reads ``X.columns`` when ``X``
+        is a DataFrame, else ``x0, x1, ...``.
+
+    Returns
+    -------
+    PermutationImportance
+
+    Raises
+    ------
+    ModelError
+        If ``task`` is unknown, ``n_repeats`` is not a positive
+        integer, or ``X`` and ``y`` disagree on the row count.
+    DependencyError
+        If scikit-learn is not installed.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from sklearn.linear_model import LinearRegression
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.normal(size=(60, 3))
+    >>> y = 3.0 * X[:, 0] - 1.0 * X[:, 2]          # x1 is pure noise
+    >>> model = LinearRegression().fit(X, y)
+    >>> imp = permutation_feature_importance(model, X, y, n_repeats=3)
+    >>> imp.names
+    ['x0', 'x1', 'x2']
+    >>> imp.ranking()[0][0], round(imp.ranking()[0][1], 1)
+    ('x0', 1.9)
+    >>> imp.means.shape, imp.stds.shape
+    ((3,), (3,))
+    """
+    if task not in ("regression", "classification"):
+        raise ModelError(
+            f"task must be 'regression' or 'classification', got {task!r}"
+        )
+    if not isinstance(n_repeats, int) or isinstance(n_repeats, bool) or n_repeats < 1:
+        raise ModelError(f"n_repeats must be a positive integer, got {n_repeats!r}")
+    try:
+        from sklearn.inspection import permutation_importance as _sk_perm
+    except ImportError as exc:  # pragma: no cover - environment guard
+        from pharmaml.exceptions import DependencyError
+
+        raise DependencyError(
+            "permutation_feature_importance needs scikit-learn"
+        ) from exc
+
+    x_values = X.values if isinstance(X, pd.DataFrame) else np.asarray(X)
+    y_values = np.asarray(y).ravel()
+    if len(x_values) != len(y_values):
+        raise ModelError(
+            f"X has {len(x_values)} rows but y carries {len(y_values)} values"
+        )
+    if feature_names is not None and len(feature_names) != x_values.shape[1]:
+        raise ModelError(
+            f"feature_names has {len(feature_names)} entries but X carries "
+            f"{x_values.shape[1]} columns"
+        )
+    if feature_names is None:
+        feature_names = (
+            [str(name) for name in X.columns] if isinstance(X, pd.DataFrame) else
+            [f"x{index}" for index in range(x_values.shape[1])]
+        )
+    if scoring is None:
+        scoring = "r2" if task == "regression" else "accuracy"
+
+    result = _sk_perm(
+        model,
+        X if isinstance(X, pd.DataFrame) else x_values,
+        y_values,
+        n_repeats=n_repeats,
+        random_state=random_state,
+        scoring=scoring,
+        n_jobs=1,  # nested parallelism broke D2.py's runs; the honest fix
+    )
+    means = np.asarray(result.importances_mean, dtype=float)
+    stds = np.asarray(result.importances_std, dtype=float)
+    _LOG.info(
+        "permutation importance over %d features (%s, %d repeats, n=%d)",
+        len(feature_names),
+        scoring,
+        n_repeats,
+        len(y_values),
+    )
+    return PermutationImportance(
+        names=feature_names,
+        means=means,
+        stds=stds,
+        scoring=scoring,
+        n_repeats=int(n_repeats),
+        n_samples=len(y_values),
+    )

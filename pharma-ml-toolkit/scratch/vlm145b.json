@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS: The chart is titled 'Permutation importance — ridge (pIC50)' and displays horizontal bars of varying lengths.\n2) PASS: Thin horizontal lines with caps (error-bar whiskers) are visible at the ends of the bars.\n3) PASS: The text 'permutation importance replaces the parity figure' is located to the right of the buttons.\n4) PASS: The chart is fully rendered without blank axes or overlapping UI, and metric rows are visible above it.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793006377,
+  "id": "202610261719343a7a5153e7a5470a",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610261719343a7a5153e7a5470a",
+  "usage": {
+    "completion_tokens": 100,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1541,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1641
+  }
+}

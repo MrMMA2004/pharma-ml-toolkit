@@ -462,6 +462,24 @@ Design notes
   the Apply-best relay's frame/path invariant is stated where it
   lives (the sync fallback exists for programmatic plants, never for
   a normal load).
+  (100x-145) The "کد علی" upload audited file by file (8 files: the
+  docking quartet already covered -- ``pdbqtgeneration.py`` is
+  byte-identical to the audited ``niggaqt.py``, ``pdbfromsmile.py``
+  is the stricter older twin of ``nigga.py``, ``mismatchcheck.py``
+  and ``niggavinamulti.py`` both ride the audit / Vina-batch cards --
+  plus ``conf.txt`` and the ``vina.exe`` external engine), leaving
+  the ``Ml/`` pair as the round's work: the Data & ML tab gained the
+  EC50 → pEC50 PREP card (``prepare_pic50_dataset`` -- D2.py's
+  ``process_data`` with every silent step counted out loud: the
+  censored ``<``/``>`` magnitudes kept AND counted, the 1e9-nM cap,
+  the per-SMILES median collapse with a duplicate-rule combo, one
+  click adopting the prepared set with pEC50 as the target), the
+  Results card gained the PERMUTATION IMPORTANCE button (D2.py's own
+  interpretability step on the held-out rows, ±1 std whiskers and
+  noise features in red, the repeats a knob), and the feature factory
+  gained the ``ecfp3`` family (radius-3 Morgan, the upload's R3
+  fingerprint half) -- while ``read_table_with_progress``'s docstring
+  finally shows the ragged-semicolon parity verdict the tests pinned.
 
 Command line helpers (useful for scripting and CI)::
 
@@ -1427,6 +1445,7 @@ _FEATURE_FAMILY_LABELS: tuple[tuple[str, str], ...] = (
     ("descriptors", "RDKit descriptors"),
     ("atompair_count", "Atom-pair counts (2048)"),
     ("ecfp", "ECFP bits (2048)"),
+    ("ecfp3", "ECFP3 bits — radius 3 (2048)"),
     ("avalon_count", "Avalon counts (512)"),
     ("rdkit_fingerprint", "RDKit fingerprint (2048)"),
     ("morgan_full", "Morgan full (2048)"),
@@ -1438,6 +1457,7 @@ _FEATURE_FAMILY_LABELS: tuple[tuple[str, str], ...] = (
 _FEATURE_FAMILY_BITS: dict[str, int] = {
     "atompair_count": 2048,
     "ecfp": 2048,
+    "ecfp3": 2048,
     "avalon_count": 512,
     "rdkit_fingerprint": 2048,
     "morgan_full": 2048,
@@ -5631,10 +5651,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=2,
             column=0,
             span=2,
-            subtitle="The rar's own ML pipeline as a card: 8 descriptor / "
-            "fingerprint families (~10,810 columns per molecule), "
-            "ranked and cut to the top K you keep -- now including "
-            "the RISM-KH solvation family.",
+            subtitle="The rar's own ML pipeline as a card: 9 descriptor / "
+            "fingerprint families (~12,860 columns per molecule), "
+            "ranked and cut to the top K you keep -- including "
+            "the RISM-KH solvation family and D2.py's radius-3 ECFP.",
         )
         source_row = ttk.Frame(factory, style="Card.TFrame")
         grid_append(factory, source_row, sticky="w")
@@ -12657,6 +12677,52 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         clean_save_btn.pack(side="left", padx=(10, 0))
         self._ml_cleaned_frame: Any = None
 
+        # (100x-145) D2.py's process_data as one button: the raw EC50
+        # table becomes a modelling-ready pEC50 set with the whole
+        # silent pipeline (censored stripping, range filter, the
+        # per-SMILES median collapse) counted out loud.
+        prep_row = ttk.Frame(data, style="Card.TFrame")
+        prep_row.grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        self._ml_aggregate_combo = ttk.Combobox(
+            prep_row,
+            state="readonly",
+            width=8,
+            values=("median", "mean", "first", "keep"),
+        )
+        self._ml_aggregate_combo.set("median")
+        Tooltip(
+            self._ml_aggregate_combo,
+            "How duplicate SMILES collapse to one row -- D2.py's own "
+            "rule was the MEDIAN of the replicate EC50s; 'keep' does "
+            "no collapsing at all.",
+        )
+        self._ml_aggregate_combo.pack(side="left")
+        ttk.Label(prep_row, text="duplicates", style="CardMuted.TLabel").pack(
+            side="left", padx=(2, 0)
+        )
+        prep_btn = self._action_button(
+            prep_row,
+            "EC50 → pEC50 prep",
+            self._ml_prep_endpoint,
+            tooltip="The Ml/D2.py upload's process_data, counted out "
+            "loud: auto-detects the SMILES and EC50 (nM) columns, "
+            "keeps censored < / > magnitudes and counts them, drops "
+            "values above 1e9 nM, collapses replicate SMILES under "
+            "the duplicate rule and writes pEC50 = 9 - log10(EC50). "
+            "The audit lands in the status line; one click adopts "
+            "the prepared set as the active dataset.",
+        )
+        prep_btn.pack(side="left", padx=(10, 0))
+        prep_save_btn = self._action_button(
+            prep_row,
+            "Save prep CSV…",
+            self._ml_prep_save,
+            tooltip="The last prepared pEC50 table (SMILES, "
+            "n_measurements, endpoint_median, pEC50).",
+        )
+        prep_save_btn.pack(side="left", padx=(10, 0))
+        self._ml_prep_frame: Any = None
+
         preview = make_card(page.grid, "Preview (first 12 rows)", span=2, row=1, column=0)
         tree_frame = ttk.Frame(preview, style="Card.TFrame")
         grid_append(preview, tree_frame, sticky="nsew", weight=True)
@@ -12951,6 +13017,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ttk.Label(ml_result_buttons, text="folds", style="CardMuted.TLabel").pack(
             side="left", padx=(2, 0)
         )
+        # (100x-145) D2.py's permutation importance -- "which features
+        # does the model actually lean on?" answered on the held-out
+        # rows, with the spread the original threw away.
+        perm_btn = self._action_button(
+            ml_result_buttons,
+            "Permutation importance",
+            self._ml_plot_permutation,
+            tooltip="Shuffle one column at a time and watch the "
+            "held-out score drop (permutation_feature_importance) -- "
+            "the importance D2.py computed for every model before "
+            "drawing its heatmaps, now with ±1 std whiskers per "
+            "feature and noise features (negative bars) in red.",
+        )
+        perm_btn.pack(side="left", padx=(10, 0))
+        self._perm_repeats = ttk.Entry(ml_result_buttons, width=5)
+        self._perm_repeats.insert(0, "5")
+        self._perm_repeats.pack(side="left", padx=(8, 0))
+        ttk.Label(ml_result_buttons, text="repeats", style="CardMuted.TLabel").pack(
+            side="left", padx=(2, 0)
+        )
         # 100x-128: the per-card export -- the parity, calibration or
         # learning-curve figure, whichever drew LAST on this card.
         save_ml_figure_btn = self._action_button(
@@ -12958,9 +13044,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "Save figure…",
             self._save_ml_figure,
             tooltip="Save the figure this card is currently showing -- the "
-            "parity plot, calibration or learning curve, whichever "
-            "drew last -- as PNG, SVG or PDF (unlike Ctrl+S, which "
-            "saves the last figure drawn anywhere).",
+            "parity plot, calibration, learning curve or permutation "
+            "importance, whichever drew last -- as PNG, SVG or PDF "
+            "(unlike Ctrl+S, which saves the last figure drawn anywhere).",
         )
         save_ml_figure_btn.pack(side="left", padx=(10, 0))
         ml_result_note = ttk.Label(
@@ -13476,6 +13562,77 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo("Nothing to save", "Run the numeric cleanup first.")
             return
         self._save_frame_dialog(frame, "Save the cleaned dataset", "cleaned_dataset.csv")
+
+    def _ml_prep_endpoint(self) -> None:
+        """D2.py's process_data, counted out loud (100x-145).
+
+        The raw EC50 table becomes a modelling-ready pEC50 set: the
+        censored magnitudes, the 1e9-nM cap and the per-SMILES median
+        collapse all report their counts, and one click adopts the
+        prepared set as the active dataset with pEC50 as the target.
+        """
+        if not self._require_pharmaml():
+            return
+        if getattr(self, "_ml_frame", None) is None:
+            messagebox.showwarning("No dataset", "Load a dataset first.")
+            return
+        frame = self._ml_frame
+        aggregate = self._ml_aggregate_combo.get()
+
+        def work() -> Any:
+            from pharmaml.chem import prepare_pic50_dataset
+
+            return prepare_pic50_dataset(frame, aggregate=aggregate)
+
+        def render(prepared: Any) -> None:
+            result, report = prepared
+            self._ml_prep_frame = result
+            self._ml_info.configure(
+                text=(
+                    f"pEC50 prep: {report.rows_in:,} rows in → "
+                    f"{report.rows_out:,} out · {report.rows_censored} censored "
+                    f"magnitudes used · {report.duplicates_collapsed} duplicates "
+                    f"collapsed ({aggregate}) · dropped {report.rows_unparsable} "
+                    f"unparsable, {report.rows_out_of_range} out of range, "
+                    f"{report.rows_missing_smiles} without SMILES"
+                )
+            )
+            if messagebox.askyesno(
+                "Use the prepared set?",
+                f"{report.rows_in:,} rows in → {report.rows_out:,} unique "
+                f"compounds out.\n\n"
+                f"Censored magnitudes used: {report.rows_censored}\n"
+                f"Duplicates collapsed: {report.duplicates_collapsed}\n"
+                f"Dropped: {report.rows_unparsable} unparsable, "
+                f"{report.rows_out_of_range} out of range, "
+                f"{report.rows_missing_smiles} without SMILES\n\n"
+                "Make the pEC50 table the active dataset\n"
+                "(the next Train run targets pEC50)?",
+            ):
+                self._ml_frame = result
+                columns = [str(column) for column in result.columns]
+                self._preview_tree.delete(*self._preview_tree.get_children())
+                self._preview_tree["columns"] = columns
+                for column in columns:
+                    self._preview_tree.heading(column, text=column)
+                    self._preview_tree.column(column, width=96, minwidth=64, stretch=True)
+                for _, row in result.head(12).iterrows():
+                    self._preview_tree.insert(
+                        "", "end", values=[_cell_text(value) for value in row.tolist()]
+                    )
+                chosen = "pEC50"
+                self._target_combo["values"] = columns
+                self._target_combo.set(chosen)
+                self._refresh_model_choices(self._infer_task(chosen, result))
+
+        self._start_job("EC50 → pEC50 prep", work, render)
+
+    def _ml_prep_save(self) -> None:
+        frame = getattr(self, "_ml_prep_frame", None)
+        if frame is None:
+            messagebox.showinfo("Nothing to save", "Run the EC50 → pEC50 prep first.")
+            return
+        self._save_frame_dialog(frame, "Save the prepared pEC50 dataset", "pec50_dataset.csv")
 
     def _ml_load_example(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
@@ -15291,6 +15448,58 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         self._start_job("learning curve", work, render)
+
+    def _ml_plot_permutation(self) -> None:
+        """Permutation importance of the last trained model (100x-145).
+
+        D2.py's own interpretability step as a Results-card button:
+        every feature column is shuffled on the held-out rows and the
+        score drop (with its ±1 std whisker) is drawn top-first --
+        the noise features a shuffle HELPED render in red.
+        """
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo(
+                "No trained model",
+                "Train a model first -- the permutation importance needs "
+                "the last run's held-out rows.",
+            )
+            return
+        trained, _report, task, _x_train, _y_train, x_test, y_test, target = run
+        if not self._require_pharmaml() or not self._require("matplotlib", "the figure"):
+            return
+        if not self._require("sklearn", "the permutation importance"):
+            return
+        try:
+            repeats = parse_int(self._perm_repeats.get(), "repeats", minimum=1, maximum=50)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        model_name = trained.name
+
+        def work() -> Any:
+            from pharmaml.ml import permutation_feature_importance
+            from pharmaml.viz import plot_permutation_importance
+
+            importance = permutation_feature_importance(
+                trained.model,
+                x_test,
+                y_test,
+                task=task,
+                n_repeats=repeats,
+            )
+            return plot_permutation_importance(
+                importance,
+                title=f"Permutation importance — {model_name} ({target})",
+            )
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._ml_host, figure)
+            self._ml_result_note.configure(
+                text="permutation importance replaces the parity figure — Train & evaluate brings it back"
+            )
+
+        self._start_job("permutation importance", work, render)
 
     # ------------------------------------------------------------------ #
     # Deep Learning tab (100x-61) -- the pharmaml.ml.neural estimators

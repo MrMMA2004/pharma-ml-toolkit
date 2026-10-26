@@ -96,6 +96,7 @@ from pharmaml.viz.ml_plots import (
     plot_gp_uncertainty,
     plot_learning_curve,
     plot_model_comparison,
+    plot_permutation_importance,
     plot_predicted_vs_actual,
     plot_residuals,
     plot_roc_curves,
@@ -153,6 +154,7 @@ __all__ = [
     # generative figures
     "plot_operator_trajectory",
     "plot_pareto_front",
+    "plot_permutation_importance",
     "plot_predicted_vs_actual",
     "plot_receptor_atom_types",
     "plot_residuals",

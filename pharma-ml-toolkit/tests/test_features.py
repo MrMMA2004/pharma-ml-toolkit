@@ -38,6 +38,8 @@ rdkit = pytest.importorskip("rdkit")
 from pharmaml.chem.features import (
     ATOMPAIR_BITS,
     AVALON_BITS,
+    ECFP3_BITS,
+    ECFP3_RADIUS,
     ECFP_BITS,
     FAMILY_PREFIXES,
     FEATURE_FAMILIES,
@@ -149,6 +151,7 @@ class TestModuleContract:
             "descriptors",
             "atompair_count",
             "ecfp",
+            "ecfp3",
             "avalon_count",
             "rdkit_fingerprint",
             "morgan_full",
@@ -161,6 +164,7 @@ class TestModuleContract:
             "descriptors": "desc_",
             "atompair_count": "apc_bit_",
             "ecfp": "ecfp_bit_",
+            "ecfp3": "ecfp3_bit_",
             "avalon_count": "avalon_count_",
             "rdkit_fingerprint": "rdkit_bit_",
             "morgan_full": "morgan_full_bit_",
@@ -173,11 +177,13 @@ class TestModuleContract:
         assert (
             ATOMPAIR_BITS,
             ECFP_BITS,
+            ECFP3_BITS,
+            ECFP3_RADIUS,
             AVALON_BITS,
             RDKIT_FP_BITS,
             MORGAN_BITS,
             MORGAN_RADIUS,
-        ) == (2048, 2048, 512, 2048, 2048, 2)
+        ) == (2048, 2048, 2048, 3, 512, 2048, 2048, 2)
 
     def test_module_import_path_is_lightweight(self) -> None:
         """Module level may import only rdkit/numpy/pandas (plus the package).
@@ -435,8 +441,49 @@ class TestFamilyValues:
 
 
 # ---------------------------------------------------------------------------
-# The full 8-family run over the shipped ligand library
+# The full 9-family run over the shipped ligand library
 # ---------------------------------------------------------------------------
+class TestEcfp3Family:
+    """The radius-3 family (100x-145, ``Ml/D2.py``'s R3 half).
+
+    Pins the properties that make ecfp3 a genuine new family rather
+    than a renamed ecfp: the wider environments radius 3 sees, the
+    2048-bit width, and the round-trip through ``family_of_column``.
+    """
+
+    def test_radius3_sees_more_environments_than_radius2(self) -> None:
+        """Aspirin's radius-3 neighbourhoods outnumber its radius-2 ones."""
+        frame, report = compute_feature_frame(
+            ["CC(=O)Oc1ccccc1C(=O)O"], families=("ecfp", "ecfp3")
+        )
+        assert report.families == {"ecfp": 2048, "ecfp3": 2048}
+        r2_bits = int(frame.iloc[0, :2048].to_numpy().sum())
+        r3_bits = int(frame.iloc[0, 2048:].to_numpy().sum())
+        assert r3_bits > r2_bits > 0
+        # And they are genuinely DIFFERENT vectors, not a reordering.
+        assert (frame.iloc[0, :2048].to_numpy() != frame.iloc[0, 2048:].to_numpy()).any()
+
+    def test_column_prefixes_and_round_trip(self) -> None:
+        frame, _report = compute_feature_frame(["CCO"], families=("ecfp3",))
+        assert frame.shape == (1, 2048)
+        assert frame.columns[0] == "ecfp3_bit_0"
+        assert frame.columns[-1] == "ecfp3_bit_2047"
+        assert family_of_column("ecfp3_bit_123") == "ecfp3"
+        # No prefix collision: ecfp_bit_ vs ecfp3_bit_ resolve exactly.
+        assert family_of_column("ecfp_bit_123") == "ecfp"
+
+    def test_default_run_includes_ecfp3(self) -> None:
+        """A bare compute_feature_frame() call computes the new family too."""
+        frame, report = compute_feature_frame(["CCO"])
+        assert "ecfp3" in report.families
+        assert report.families["ecfp3"] == ECFP3_BITS
+        assert "ecfp3_bit_0" in frame.columns
+
+    def test_canonical_order_puts_ecfp3_after_ecfp(self) -> None:
+        assert FEATURE_FAMILIES.index("ecfp3") == FEATURE_FAMILIES.index("ecfp") + 1
+        assert ECFP3_RADIUS == 3
+
+
 class TestFullFamilyRun:
     """The 10,000+-column contract over examples/data/ligand_library.csv."""
 
@@ -451,6 +498,7 @@ class TestFullFamilyRun:
             "descriptors": n_props,
             "atompair_count": 2048,
             "ecfp": 2048,
+            "ecfp3": 2048,
             "avalon_count": 512,
             "rdkit_fingerprint": 2048,
             "morgan_full": 2048,
@@ -458,7 +506,7 @@ class TestFullFamilyRun:
             "rism": RISM_DESCRIPTOR_COUNT,
         }
         assert list(report.families) == list(FEATURE_FAMILIES)  # canonical order
-        assert report.total_columns == 10_752 + RISM_DESCRIPTOR_COUNT + n_props
+        assert report.total_columns == 12_800 + RISM_DESCRIPTOR_COUNT + n_props
         assert report.total_columns > 10_000  # the headline contract
         assert report.total_columns == sum(report.families.values())
         assert frame.shape == (8, report.total_columns)
@@ -917,6 +965,7 @@ class TestSelectionMetadata:
         meta = selection_metadata(selection, report, k=3)
         assert meta["fingerprint_sizes"] == {
             "ecfp": 2048,
+            "ecfp3": 2048,
             "rdkit_fingerprint": 2048,
             "morgan_full": 2048,
             "morgan_scaffold": 2048,
@@ -925,7 +974,7 @@ class TestSelectionMetadata:
         }
         assert meta["n_molecules"] == 8
         assert meta["dropped"] == [[8, "not_a_smiles"], [9, ""]]
-        assert meta["total_features"] == 10_752 + RISM_DESCRIPTOR_COUNT + len(
+        assert meta["total_features"] == 12_800 + RISM_DESCRIPTOR_COUNT + len(
             rdMolDescriptors.Properties.GetAvailableProperties()
         )
         assert meta["k_requested"] == 3
