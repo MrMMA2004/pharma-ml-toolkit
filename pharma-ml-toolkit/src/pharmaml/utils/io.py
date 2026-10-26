@@ -54,11 +54,32 @@ PosixPath('/tmp/pharmaml_doctest_profile.csv')
 >>> runs.is_dir()
 True
 >>> shutil.rmtree("/tmp/pharmaml_doctest_nested")
+
+>>> from pharmaml.utils.io import read_table_with_progress
+>>> prog = Path("/tmp/pharmaml_doctest_progress.csv")
+>>> _ = prog.write_text("ligand,pic50\\n" + "".join(f"L{i:03d},{i:03d}.5\\n" for i in range(40)))
+>>> seen = []
+>>> frame = read_table_with_progress(
+...     prog, lambda done, total, note: seen.append((done, total, note)),
+...     chunk_rows=10, size_threshold=1,
+... )
+>>> len(frame), frame["pic50"].tolist()[:3]
+(40, [0.5, 1.5, 2.5])
+>>> seen[0], seen[-1][0]
+((10, 41, ''), 40)
+>>> tiny = Path("/tmp/pharmaml_doctest_progress_tiny.csv")
+>>> _ = tiny.write_text("ligand,pic50\\naspirin,3.2\\n")
+>>> seen.clear()
+>>> frame = read_table_with_progress(tiny, seen.append)   # under the threshold
+>>> len(frame), seen      # the plain reader -- no reports at all
+(1, [])
+>>> prog.unlink(); tiny.unlink()
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -69,6 +90,7 @@ from pharmaml.logger import get_logger
 __all__ = [
     "ensure_directory",
     "read_table",
+    "read_table_with_progress",
     "safe_filename",
     "write_table",
 ]
@@ -101,6 +123,187 @@ def _read_csv_sniffing(file_path: Path) -> pd.DataFrame:
                 except pd.errors.ParserError:
                     continue
     return frame
+
+
+def _finalise_columns(frame: pd.DataFrame, file_path: Path) -> pd.DataFrame:
+    """Strip header whitespace and refuse duplicated names (shared rule).
+
+    Both readers (:func:`read_table` and :func:`read_table_with_progress`)
+    funnel through here, so the chunked path can never drift from the
+    plain one on column hygiene.
+    """
+    frame.columns = [str(col).strip() for col in frame.columns]
+    duplicated = sorted(
+        {col for col in frame.columns if list(frame.columns).count(col) > 1}
+    )
+    if duplicated:
+        # Two headers that differed only in surrounding whitespace ("Ligand"
+        # vs "Ligand ") collapse here; pandas would then hand every
+        # column access a DataFrame instead of a Series and fail far away
+        # from the real cause.
+        raise DataValidationError(
+            f"Duplicate column name(s) after stripping whitespace in {file_path}: "
+            f"{duplicated} -- rename the conflicting header(s) in the source file"
+        )
+    return frame
+
+
+def _sniff_separator(file_path: Path) -> str:
+    """The separator a comma read betrays in a mangled single-column header.
+
+    Mirrors the retry ladder of :func:`_read_csv_sniffing` -- a purely
+    semicolon/tab/pipe-delimited file reads as ONE mangled column whose
+    header carries the separator, so the chunked reader can start with
+    the right separator without reading the whole file twice.  A header
+    that is itself comma-malformed sniffs to ``";"`` (the sync reader's
+    own first fallback).
+    """
+    try:
+        head = pd.read_csv(file_path, nrows=0)
+    except pd.errors.ParserError:
+        return ";"
+    if head.shape[1] == 1:
+        header = str(head.columns[0])
+        for sep in (";", "\t", "|"):
+            if sep in header:
+                return sep
+    return ","
+
+
+def _estimate_csv_rows(file_path: Path, sample_bytes: int = 64 * 1024) -> int | None:
+    """Estimate a CSV's row count from its own bytes-per-line average.
+
+    Samples the first ``sample_bytes``, counts the newlines and scales
+    the file size by the sampled average -- an honest estimate for a
+    determinate progress bar (the last chunk may overshoot it; the
+    reader clamps the fraction).  ``None`` when the sample carries no
+    newline at all (a single giant line) -- callers then report
+    open-ended counts instead of a fake total.
+    """
+    total = file_path.stat().st_size
+    with file_path.open("rb") as handle:
+        sample = handle.read(sample_bytes)
+    newlines = sample.count(b"\n")
+    if newlines == 0:
+        return None
+    per_line = len(sample) / newlines
+    if per_line <= 0:  # pragma: no cover - impossible for a newline>0 sample
+        return None
+    return max(round(total / per_line), 1)
+
+
+def read_table_with_progress(
+    path: str | Path,
+    report: Callable[[int, int | None, str], None],
+    *,
+    chunk_rows: int = 50_000,
+    size_threshold: int = 8 * 1024 * 1024,
+) -> pd.DataFrame:
+    """Read a table, reporting row progress for large CSV-like files.
+
+    Small files (below ``size_threshold`` bytes) and Excel inputs go
+    straight through :func:`read_table` -- ``report`` never fires and
+    the behaviour is byte-for-byte the plain reader's.  CSV-like files
+    at/above the threshold are read in ``chunk_rows`` chunks with
+    ``report(rows_done, rows_estimated, "")`` pushed after every chunk,
+    so a GUI can carry a determinate bar with an ETA while a
+    multi-hundred-megabyte table streams in.  The estimated total comes
+    from the file's own bytes-per-line average (see
+    :func:`_estimate_csv_rows`) -- an estimate that converges as chunks
+    land, never a lie: the final chunk may overshoot and the caller's
+    fraction simply clamps.
+
+    Parameters
+    ----------
+    path:
+        Input file path (same extensions as :func:`read_table`).
+    report:
+        Progress callback -- ``(done_rows, estimated_rows_or_None,
+        note)`` per chunk, the exact shape the playground's status-bar
+        reporter already speaks.
+    chunk_rows:
+        Rows per chunk on the progressive path.
+    size_threshold:
+        Files at/above this many bytes read progressively; smaller ones
+        take the plain reader (they are fast enough that reports would
+        be noise).
+
+    Returns
+    -------
+    pandas.DataFrame
+        The same parsed, column-hygiene-checked table
+        :func:`read_table` returns (a parity the tests pin).
+
+    Raises
+    ------
+    DataValidationError
+        If the file does not exist, has an unsupported extension, or
+        fails to parse -- the plain reader's own errors, unchanged.
+    """
+    file_path = Path(path)
+    if not file_path.is_file():
+        raise DataValidationError(f"Input file not found: {file_path}")
+    suffix = file_path.suffix.lower()
+    if suffix not in _CSV_LIKE or file_path.stat().st_size < size_threshold:
+        # small file or Excel: the plain reader is fast enough -- no
+        # progress reports, no behavioural difference at all
+        return read_table(file_path)
+    chunk_rows = max(int(chunk_rows), 1)
+    separator = _sniff_separator(file_path)
+    estimated = _estimate_csv_rows(file_path)
+    chunks: list[pd.DataFrame] = []
+    done = 0
+
+    def _drain(sep: str) -> None:
+        nonlocal done
+        with pd.read_csv(file_path, sep=sep, chunksize=chunk_rows) as reader:
+            for chunk in reader:
+                chunks.append(chunk)
+                done += len(chunk)
+                if len(chunk):
+                    # the header-only file yields one EMPTY chunk -- a
+                    # 0-rows "progress" blip would be noise, not news
+                    report(done, estimated, "")
+
+    try:
+        try:
+            _drain(separator)
+        except pd.errors.ParserError:
+            if separator == ";":
+                # the sniffed separator itself chokes on a ragged body:
+                # delegate to the sync reader, whose ladder ends by
+                # returning its OWN verdict -- a mangled comma frame
+                # for this very file (never a different answer than
+                # read_table gives the same bytes)
+                return read_table(file_path)
+            # the sync reader's own fallback: a comma-malformed body
+            # re-reads semicolon-delimited from the top
+            chunks.clear()
+            done = 0
+            try:
+                _drain(";")
+            except pd.errors.ParserError:
+                # BOTH separators choke: the sync ladder's verdict is
+                # the honest one (a clean DataValidationError for a
+                # truly malformed file)
+                return read_table(file_path)
+    except DataValidationError:
+        raise
+    except Exception as exc:  # pandas raises a wide variety of errors
+        raise DataValidationError(f"Failed to parse '{file_path}': {exc}") from exc
+    if not chunks:
+        # defensive floor: a reader that yields no chunks at all (pandas
+        # today always yields one, even for a header-only file) -- the
+        # plain reader's verdict is the honest one
+        return read_table(file_path)
+    frame = pd.concat(chunks, ignore_index=True)
+    _LOG.debug(
+        "Progressively read %d rows x %d columns from %s",
+        len(frame),
+        frame.shape[1],
+        file_path,
+    )
+    return _finalise_columns(frame, file_path)
 
 
 def read_table(path: str | Path, sheet_name: str | int = 0) -> pd.DataFrame:
@@ -145,19 +348,7 @@ def read_table(path: str | Path, sheet_name: str | int = 0) -> pd.DataFrame:
     except Exception as exc:  # pandas raises a wide variety of errors
         raise DataValidationError(f"Failed to parse '{file_path}': {exc}") from exc
 
-    frame.columns = [str(col).strip() for col in frame.columns]
-    duplicated = sorted(
-        {col for col in frame.columns if list(frame.columns).count(col) > 1}
-    )
-    if duplicated:
-        # Two headers that differed only in surrounding whitespace ("Ligand"
-        # vs "Ligand ") collapse here; pandas would then hand every
-        # column access a DataFrame instead of a Series and fail far away
-        # from the real cause.
-        raise DataValidationError(
-            f"Duplicate column name(s) after stripping whitespace in {file_path}: "
-            f"{duplicated} -- rename the conflicting header(s) in the source file"
-        )
+    frame = _finalise_columns(frame, file_path)
     _LOG.debug("Read %d rows x %d columns from %s", len(frame), frame.shape[1], file_path)
     return frame
 

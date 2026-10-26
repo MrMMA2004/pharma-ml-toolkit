@@ -449,6 +449,19 @@ Design notes
   riding alongside (instead of a false "no MACCS keys" clobber), and
   the two advisory missing-input dialogs joined the app's showwarning
   convention.
+  (100x-144) The third engineering-details round: the three MULTI-file
+  pickers ride the session too (the merge & split tables, the approval
+  exports and the distribute-files list persist as ``paths_multi``
+  with the same existence-guarded, never-overwrite discipline the
+  single paths have -- and their labels confess the restored picks),
+  while a large CSV now loads with a DETERMINATE progress bar
+  (``read_table_with_progress`` streams chunk-by-chunk with a
+  rows-done/estimated counter and an ETA -- the Data & ML, Deep
+  Learning, feature-factory and Cell Lines screen loaders all report;
+  small files keep the plain reader's behaviour byte for byte), and
+  the Apply-best relay's frame/path invariant is stated where it
+  lives (the sync fallback exists for programmatic plants, never for
+  a normal load).
 
 Command line helpers (useful for scripting and CI)::
 
@@ -697,6 +710,23 @@ _SESSION_PATH_ATTRS: frozenset[str] = frozenset(
     }
 )
 
+#: (100x-144) The MULTI-file pickers (``askopenfilenames`` lists) that
+#: ride the session as ``paths_multi`` -- the Utilities tab's three
+#: list-holding pickers.  Every single-path rule carries over: each
+#: file must still EXIST on this machine (a vanished file drops out,
+#: the survivors keep their order), a live pick is never overwritten,
+#: and the picker's info label re-renders after the restore.
+_SESSION_PATH_LIST_ATTRS: frozenset[str] = frozenset(
+    {
+        # -- utilities: merge & split -- "merge picked tables" ------- #
+        "_util_merge_files",
+        # -- utilities: approved drugs -- the approval exports -------- #
+        "_util_appr_files",
+        # -- utilities: campaign file tools -- "distribute files" ----- #
+        "_util_tool_files",
+    }
+)
+
 
 def parse_geometry(text: str) -> tuple[int, int, int, int] | None:
     """Split a Tk geometry string into ``(w, h, x, y)`` (or ``None``).
@@ -719,6 +749,7 @@ def dump_session(
     families: dict[str, bool],
     texts: dict[str, str],
     paths: dict[str, str] | None = None,
+    paths_multi: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """Assemble the JSON-serialisable session payload (pure normaliser).
 
@@ -727,6 +758,10 @@ def dump_session(
     (100x-142) ``paths`` carries the picked file/folder PATHS (str keys,
     absolute paths as strings) -- the docking/util pickers a restart
     used to forget.  Older payloads without the key stay loadable.
+    (100x-144) ``paths_multi`` carries the MULTI-file picks (str keys,
+    lists of absolute path strings) -- the three Utilities pickers that
+    hold whole lists; always present, so a payload without them
+    round-trips identically.
     """
     payload = {
         "format": SESSION_FORMAT,
@@ -739,6 +774,15 @@ def dump_session(
         # always present (100x-142): a payload without picked paths
         # round-trips identically -- an empty dict, never a missing key
         "paths": {str(name): str(path) for name, path in (paths or {}).items()},
+        # always present (100x-144): same discipline for the list picks
+        # -- only list-valued entries ride, only their str members (a
+        # stray non-list value drops its entry instead of being
+        # char-split into single-character "paths")
+        "paths_multi": {
+            str(name): [str(path) for path in files if isinstance(path, str)]
+            for name, files in (paths_multi or {}).items()
+            if isinstance(files, list)
+        },
     }
     return payload
 
@@ -780,6 +824,18 @@ def load_session(raw: Any) -> dict[str, Any] | None:
     if not isinstance(paths, dict):
         paths = {}
     paths = {str(name): str(path) for name, path in paths.items() if isinstance(path, str)}
+    # (100x-144) the multi-file picks -- same optionality, same
+    # wholesale coercion: an entry survives only when its value is a
+    # list, and only its string members ride (a foreign file degrades
+    # to shorter honest lists, never a half-typed payload)
+    paths_multi = raw.get("paths_multi")
+    if not isinstance(paths_multi, dict):
+        paths_multi = {}
+    paths_multi = {
+        str(name): [str(path) for path in files if isinstance(path, str)]
+        for name, files in paths_multi.items()
+        if isinstance(files, list)
+    }
     return {
         "format": SESSION_FORMAT,
         "theme": theme,
@@ -789,6 +845,7 @@ def load_session(raw: Any) -> dict[str, Any] | None:
         "families": families,
         "texts": texts,
         "paths": paths,
+        "paths_multi": paths_multi,
     }
 
 
@@ -1622,7 +1679,7 @@ _DL_ARCHITECTURES: tuple[str, ...] = (
 _DL_ACTIVATIONS: tuple[str, ...] = ("relu", "tanh", "gelu", "sigmoid")
 
 #: The keyboard-shortcut hint row (100x-65): one quiet line above the
-#: status bar listing every global accelerator.  The five entries mirror
+#: status bar listing every global accelerator.  The seven entries mirror
 #: the ``bind_all`` sequences in ``_build_menu`` (the test suite pins the
 #: set together, so a new binding without a hint -- or vice versa --
 #: fails loudly).
@@ -3211,7 +3268,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     callback(result)
                 except Exception as exc:  # noqa: BLE001 - render errors are ours
                     self._show_error("Could not display the result", exc)
-        self._on_done = None
+        # (100x-144) the chained-job guard: a render callback that
+        # called _start_job re-set _on_done for its follow-up job --
+        # wiping it here would discard that job's result silently.
+        # Only an idle app still holds a stale callback worth clearing.
+        if not self._busy:
+            self._on_done = None
         self.after(80, self._poll_jobs)
 
     def report_callback_exception(self, exc: Any, val: Any, tb: Any) -> None:
@@ -3572,6 +3634,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             for name in sorted(_SESSION_PATH_ATTRS)
             if isinstance(getattr(self, name, None), Path)
         }
+        # (100x-144) the multi-file picks -- same discipline for the
+        # three list-holding pickers; only genuine Path members ride,
+        # in their picked order
+        paths_multi: dict[str, list[str]] = {}
+        for name in sorted(_SESSION_PATH_LIST_ATTRS):
+            picked = getattr(self, name, None)
+            if isinstance(picked, list):
+                paths_multi[name] = [str(p) for p in picked if isinstance(p, Path)]
         return dump_session(
             theme=self._theme,
             geometry=self.geometry(),
@@ -3580,6 +3650,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             families=families,
             texts=texts,
             paths=paths,
+            paths_multi=paths_multi,
         )
 
     def _write_session_file(self) -> bool:
@@ -4160,6 +4231,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if candidate.exists():
                 setattr(self, name, candidate)
                 restored_paths += 1
+        # (100x-144) the multi-file picks -- per-file existence filter
+        # (the survivors keep their picked order; a vanished file drops
+        # out instead of poisoning the run), a live non-empty pick is
+        # never overwritten, and only allowlisted attrs ever land.
+        for name, raw_files in session.get("paths_multi", {}).items():
+            if name not in _SESSION_PATH_LIST_ATTRS:
+                continue
+            current = getattr(self, name, None)
+            if isinstance(current, list) and current:
+                continue  # the user re-picked this session -- keep theirs
+            kept = [Path(p) for p in raw_files if Path(p).exists()]
+            if kept:
+                setattr(self, name, kept)
+                restored_paths += len(kept)
         if restored_paths:
             self._refresh_restored_path_labels()
             self._job_label.configure(
@@ -4272,6 +4357,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # Utilities label of the audit's §1 finding).
         if isinstance(getattr(self, "_util_reindex_path", None), Path):
             _label("_util_reindex_info", str(self._util_reindex_path))
+        # (100x-144) the approval card's picker writes its list inline
+        # (no mode-changed helper of its own) -- the restore mirrors the
+        # picker's exact format so a restored list of approval exports
+        # confesses itself like a fresh pick would.
+        appr_files = [
+            p for p in getattr(self, "_util_appr_files", []) if isinstance(p, Path)
+        ]
+        if appr_files:
+            shown = ", ".join(p.name for p in appr_files[:3])
+            if len(appr_files) > 3:
+                shown += f" … (+{len(appr_files) - 3})"
+            _label("_util_appr_info", shown)
 
     def _on_close(self) -> None:
         """Window close: save the session (unless disabled), then exit."""
@@ -6957,13 +7054,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         carrying ``loading {name}``.  Adoption (the SMILES-column sniff
         and the numeric-candidate scan) stays on the main thread --
         the shared :meth:`_feat_adopt_frame` feeds both paths, so the
-        sync and async loaders can never drift apart.
+        sync and async loaders can never drift apart.  (100x-144) The
+        read streams through ``read_table_with_progress`` -- a large
+        library CSV carries a determinate rows/ETA bar.
         """
 
-        def work() -> Any:
-            from pharmaml.utils.io import read_table
+        def work(report: Any) -> Any:
+            from pharmaml.utils.io import read_table_with_progress
 
-            return read_table(path)
+            return read_table_with_progress(path, report)
 
         def render(frame: Any) -> None:
             self._feat_adopt_frame(frame, path)
@@ -8930,14 +9029,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         """
         collapse = bool(self._bio_collapse_var.get())
 
-        def work() -> Any:
+        def work(report: Any) -> Any:
             from pharmaml.biology import (
                 audit_response_table,
                 collapse_replicates,
                 load_response_table,
             )
 
-            raw = load_response_table(path)
+            # (100x-144) the reporter rides straight through the loader
+            # -- a big screen's read streams chunk-by-chunk while the
+            # audit/collapse phases (fast, in-memory) stay silent
+            raw = load_response_table(path, report=report)
             audit_frame = audit_response_table(raw)
             screen = collapse_replicates(raw) if collapse else raw
             return raw, audit_frame, screen
@@ -13412,13 +13514,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         twin -- a load can never swap ``_ml_frame`` under a running
         trainer.  Adoption stays on the main thread via the shared
         :meth:`_ml_adopt_frame`, so the sync and async loaders can never
-        drift apart.
+        drift apart.  (100x-144) The read streams through
+        ``read_table_with_progress`` -- a large CSV carries a determinate
+        bar (``rows done / estimated`` with the ETA) instead of the
+        open-ended marquee.
         """
 
-        def work() -> Any:
-            from pharmaml.utils.io import read_table
+        def work(report: Any) -> Any:
+            from pharmaml.utils.io import read_table_with_progress
 
-            return read_table(path)
+            return read_table_with_progress(path, report)
 
         def render(frame: Any) -> None:
             self._ml_adopt_frame(frame, path)
@@ -13430,6 +13535,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         (100x-143) Extracted from ``_ml_load_path`` so the sync loader
         and the job-based file loader share ONE adoption body.
+        (100x-144) The invariant the Apply-best relay leans on: frame
+        and path are set TOGETHER here (and nowhere else), so
+        ``_ml_frame is None`` implies ``_ml_path is None`` for every
+        flow that went through a loader -- a path without a frame can
+        only ever come from a programmatic plant.
         """
         if frame.empty:
             messagebox.showwarning("Empty dataset", f"{path.name} has no rows.")
@@ -14901,6 +15011,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # search actually scored -- instead of re-reading the original
             # CSV from _ml_path (the old behaviour resurrected every row
             # the Clean card had removed).
+            # (100x-144) the invariant, stated: _ml_adopt_frame sets frame
+            # and path TOGETHER and nothing ever clears the frame alone,
+            # so the elif below is a safety net for programmatic callers
+            # (tests, relays) that plant a path without a frame -- the
+            # sync core re-reads it honestly rather than silently
+            # training on nothing.
             if self._ml_frame is not None:
                 self._dl_load_frame(
                     self._ml_frame,
@@ -15490,12 +15606,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         the standard job error dialog.  Adoption reuses
         :meth:`_dl_load_frame` (the SAME body the sync loader and the
         Apply-best relay use), so the three paths can never drift.
+        (100x-144) The read streams through ``read_table_with_progress``
+        -- a large CSV carries a determinate rows/ETA bar.
         """
 
-        def work() -> Any:
-            from pharmaml.utils.io import read_table
+        def work(report: Any) -> Any:
+            from pharmaml.utils.io import read_table_with_progress
 
-            return read_table(path)
+            return read_table_with_progress(path, report)
 
         def render(frame: Any) -> None:
             if frame.empty:

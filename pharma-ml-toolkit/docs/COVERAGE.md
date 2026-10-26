@@ -1255,3 +1255,32 @@ showwarning convention pins) + the rescore-gates standing contract
 updated to the new warning. The notebook re-executed and its
 `_no_output` twin regenerated. The version chain moved to 1.2.82
 across all four carriers.
+
+### Round 29 (100x-144) — the third engineering review: the multi-file session picks, the determinate loader bar, and the audit's parity/normaliser fixes
+
+| What shipped | The contract |
+| --- | --- |
+| The `paths_multi` session key | The three Utilities MULTI-file pickers (the merge & split tables, the approval exports, the distribute-files list — `askopenfilenames` selections) now ride the session file as an always-present key with the single paths' own discipline: per-file existence filtering (a vanished file drops out, the survivors keep their order), never overwriting a live pick, and a `_SESSION_PATH_LIST_ATTRS` allowlist exactly three entries wide. `dump_session` drops a non-list value instead of char-splitting it into single-character "paths" (the audit's §5); `load_session` sanitises foreign payloads to shorter honest lists; the approval card's inline label re-renders after a restore in the picker's own "first three + … (+N)" format (the merge/tools labels already rode their mode-aware helpers from round 28). |
+| `read_table_with_progress` (new public reader) | CSV-like files at/above the 8 MiB threshold stream in 50k-row chunks with `(rows_done, rows_estimated, "")` reported per chunk — the estimate from the file's own bytes-per-line average (64 KiB sample), degrading to an honest `None` for a giant first line. Small files and Excel pass straight through `read_table` (no reports, no behavioural difference). `_finalise_columns` is ONE shared rule for both readers, and ragged edge cases delegate to the sync reader's own verdict — the audit's §3 parity break (a sniffed `;` separator choking on a ragged body raised where `read_table` silently returned its mangled comma frame) is closed by delegation, so the two readers can never disagree on the same bytes. |
+| The four loaders report | The Data & ML / Deep Learning / feature-factory job loaders take the reporter (`work(report)` → `read_table_with_progress(path, report)`) and the Cell Lines screen forwards it through `load_response_table(..., report=...)` — a new optional callback that never fires for DataFrame callers. A large CSV now carries a determinate bar ("loading x — 900000/1499898 · ~1 s left") instead of the open-ended marquee; the expression-matrix loader keeps the marquee by design (its indexed read has its own fallback semantics). |
+| The chained-job guard | `_poll_jobs` clears `_on_done` only when the app is idle — a render callback that chains straight into a follow-up job (round 27's own documented scenario) keeps its callback instead of having it silently wiped one line later (the audit's §2; round 27's fix was one line short of its own promise). Pinned by a direct `_poll_jobs` exercise: the chained callback survives and still fires; the idle twin still clears. |
+| The Apply-best invariant (the handover's item b) | Stated where it lives: `_ml_adopt_frame` sets frame and path TOGETHER and nothing ever clears the frame alone, so the relay's `elif _ml_path` branch is a safety net for programmatic plants, never a state a normal load can reach — pinned by a source-order test (the adoption body is the ONLY `self._ml_path = path` site, the Clean card swaps the frame alone). |
+
+The axes after the round: unchanged (rar 118, uploads 14/14, zero-hit 0)
+— the third engineering-depth round. 27 new tests: TestReadTableWithProgress
+(test_io.py ×11 — the small-file plain-reader passthrough, the
+chunk/estimate contract, dtype-and-value parity across three delimiters
+via `assert_frame_equal`, the header-only twin, the ragged-semicolon
+parity verdict, the malformed-file clean error, the missing/Excel
+routes, the giant-first-line degradation, the estimator's two honest
+sides, the duplicate-header refusal, the export surface) + the biology
+pair (the 12 MB streamed screen with exact final report, the
+DataFrame-never-fires pin) + TestReview144Gui (test_playground.py ×14 —
+the round docstring pins, the paths_multi round trip/sanitise/collect,
+the vanished-file filter with order, the live-pick guard, the foreign
+allowlist, the approval label format, the allowlist contents, the
+reporting-loader source pins, the live determinate-bar test over a
+genuine 10 MB CSV with a throttled-but-real reader, the chained-job
+pair, the source guard pin, the Apply-best invariant pin). The
+docs-index symbol test re-synced (278 symbols). The version chain
+moved to 1.2.83 across all five carriers (the VERSION file included).

@@ -55,6 +55,7 @@ Examples
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeAlias
@@ -64,7 +65,7 @@ import pandas as pd
 
 from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
-from pharmaml.utils.io import read_table
+from pharmaml.utils.io import read_table, read_table_with_progress
 from pharmaml.utils.validation import require_columns
 
 _LOG = get_logger(__name__)
@@ -290,6 +291,7 @@ def load_response_table(
     compound_column: str = "compound",
     tissue_column: str | None = None,
     metrics: list[str] | None = None,
+    report: Callable[[int, int | None, str], None] | None = None,
 ) -> ResponseScreen:
     """Load a drug-response screen from a DataFrame or csv/xlsx path.
 
@@ -298,7 +300,9 @@ def load_response_table(
     data:
         Long-format table (one row per cell line x compound pair) as a
         DataFrame or a path read via
-        :func:`pharmaml.utils.io.read_table`.
+        :func:`pharmaml.utils.io.read_table` (streamed through
+        :func:`pharmaml.utils.io.read_table_with_progress` when
+        ``report`` is given).
     cell_column, compound_column:
         Names of the identifier columns.
     tissue_column:
@@ -313,6 +317,13 @@ def load_response_table(
         *never* auto-detected; pass one explicitly to have its
         ``True``/``False`` values treated as 1/0 (or its datetimes
         coerced, which is the caller's responsibility).
+    report:
+        Optional progress callback forwarded to
+        :func:`pharmaml.utils.io.read_table_with_progress` when ``data``
+        is a path -- ``(done_rows, estimated_rows_or_None, note)`` per
+        chunk, so a big screen streams in with a determinate progress
+        bar.  DataFrame inputs (and ``None``, the default) read exactly
+        as before; the callback never fires for them.
 
     Returns
     -------
@@ -332,7 +343,14 @@ def load_response_table(
     if isinstance(data, pd.DataFrame):
         frame = data.copy()
     elif isinstance(data, (str, Path)):
-        frame = read_table(data)
+        # (100x-144) a path input with a reporter streams through the
+        # progressive reader -- a big screen loads with a determinate
+        # bar; without one (and for every DataFrame caller) the plain
+        # reader's behaviour is unchanged
+        if report is None:
+            frame = read_table(data)
+        else:
+            frame = read_table_with_progress(data, report)
     else:
         raise DataValidationError(
             "data must be a pandas DataFrame or a path to a csv/xlsx file, "

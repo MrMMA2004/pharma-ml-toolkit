@@ -298,7 +298,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "2694 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite)",
+    after: "2721 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite)",
   },
   {
     aspect: "Interface",
@@ -356,8 +356,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "468";
-  const loc = stats ? fmtInt(stats.totalLines) : "162,446";
+  const fileCount = stats ? fmtInt(stats.files) : "484";
+  const loc = stats ? fmtInt(stats.totalLines) : "164,673";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -443,8 +443,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="2694"
-                countTo={2694}
+                value="2721"
+                countTo={2721}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

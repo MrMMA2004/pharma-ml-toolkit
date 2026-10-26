@@ -341,6 +341,7 @@ after adding new public functions.
 |---|---|---|
 | `ensure_directory` | function | Create ``path`` (and parents) if missing; return the resolved Path. |
 | `read_table` | function | Read a CSV/TSV or Excel file into a DataFrame. |
+| `read_table_with_progress` | function | Read a table, reporting row progress for large CSV-like files. |
 | `safe_filename` | function | Sanitise a string into a portable filename. |
 | `write_table` | function | Write a DataFrame to CSV or Excel honouring the extension. |
 

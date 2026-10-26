@@ -10,6 +10,86 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.83] — 2026-10-26
+
+### Added — the round-29 engineering review (100x-144): multi-file picks ride the session, large CSVs load with a determinate progress bar, and the audit's parity/normaliser fixes
+
+The instruction this round: *"Review the current codebase and
+implementation, troubleshoot potential issues, and continue improving
+the engineering details."* A read-only audit covered the regions no
+round had audited line-by-line (the module header, the round-28 loader
+twins themselves, and this round's fresh additions); its findings are
+fixed below, alongside the three open candidates round 28's own
+handover listed.
+
+**The multi-file session picks (the handover's item a):**
+
+* **The three Utilities list pickers persist across restarts.** The
+  merge & split tables, the approval exports and the distribute-files
+  list (`askopenfilenames` selections) now ride the session file as a
+  new always-present `paths_multi` key with the single paths' own
+  discipline: every file must still exist on this machine (a vanished
+  file drops out, the survivors keep their picked order), a live pick
+  is never overwritten, and only allowlisted attributes ever land.
+  `dump_session` refuses to char-split a stray non-list value (an
+  entry drops instead), `load_session` sanitises foreign payloads to
+  shorter honest lists, and the approval card's inline label
+  re-renders after a restore in its picker's exact "first three +
+  … (+N)" format (the merge/tools labels ride their existing
+  mode-aware helpers).
+
+**The determinate loader bar (the handover's item c):**
+
+* **`read_table_with_progress`** (new public reader in
+  `pharmaml.utils.io`): CSV-like files at/above 8 MiB stream in
+  `chunk_rows` chunks with `(rows_done, rows_estimated, "")` pushed
+  per chunk; the estimate comes from the file's own bytes-per-line
+  average (sampled from the first 64 KiB) and degrades to an honest
+  `None` for a giant first line. Small files and Excel inputs pass
+  straight through `read_table` — no reports, no behavioural
+  difference. Column hygiene (`_finalise_columns`) is ONE shared rule
+  for both readers, and ragged edge cases delegate to the sync
+  reader's own verdict so the two can never disagree (the audit's §3
+  parity break: a sniffed `;` separator choking on a ragged body now
+  returns the same mangled frame `read_table` returns, and a truly
+  malformed file raises the same clean `DataValidationError`).
+* **The four read_table loaders report.** Data & ML, Deep Learning,
+  the feature factory and the Cell Lines screen
+  (`load_response_table(..., report=...)`, a new optional callback a
+  DataFrame caller never fires) all stream their reads — a large CSV
+  now carries a determinate bar with "rows done / estimated · ETA"
+  instead of the open-ended marquee (proven live on a 22 MB / 1.5M-row
+  load: `loading wide_library.csv — 900000/1499898 · ~1 s left`).
+  The expression-matrix loader keeps the marquee by design (its
+  indexed read has its own fallback semantics).
+* **The chained-job guard (the audit's §2):** `_poll_jobs` clears
+  `_on_done` only when the app is idle — a render callback that chains
+  straight into a follow-up job keeps its callback instead of having
+  it silently wiped (round 27's fix was one line short of its own
+  promise; no current handler chains, but the guard is now pinned).
+
+**Engineering details:**
+
+* The Apply-best relay's frame/path invariant is stated where it lives
+  (the handover's item b): `_ml_adopt_frame` sets frame and path
+  TOGETHER and nothing ever clears the frame alone, so the relay's
+  `elif _ml_path` branch is a safety net for programmatic plants, not
+  a state a normal load can reach.
+* A header-only CSV's single empty chunk no longer emits a spurious
+  0-rows progress blip; the shortcut-hints comment confesses its seven
+  entries; `load_response_table`'s docstring names the streaming
+  reader; a stale test pin (the Cell Lines collapse capture) follows
+  the loader's new one-argument `work` signature.
+
+**Verification:** suite **2726 collected = 2721 passed + 5 skipped /
+0 failures** (+27: `TestReadTableWithProgress` ×11, the biology
+report-forwarding pair, `TestReview144Gui` ×14); ruff clean; mypy
+`src/` clean (65 files); `--self-test` green on Xvfb; doctests green
+on both touched modules; docs/INDEX regenerated (278 symbols);
+notebooks re-executed at 1.2.83; VLM review PASS on all three desktop
+shots (the mid-job determinate bar, the restored merge list, the
+restored approval list).
+
 ## [1.2.82] — 2026-10-26
 
 ### Fixed — the round-28 engineering review (100x-143): every file-dialog CSV loader off the main thread, the Utilities restored-path labels, and three audit findings

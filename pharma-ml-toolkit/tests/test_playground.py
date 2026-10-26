@@ -398,6 +398,10 @@ class TestSessionHelpers:
             # (100x-142) the picked-paths key -- always present, empty
             # when the payload carries none (older files stay loadable)
             "paths": {},
+            # (100x-144) the multi-file picks -- same always-present
+            # discipline (an older payload degrades to empty lists,
+            # never a missing key the restore would have to defend)
+            "paths_multi": {},
         }
 
     def test_dump_load_round_trip_is_lossless(self, playground: Any) -> None:
@@ -11320,10 +11324,13 @@ class TestReview143Gui:
     ) -> None:
         # the source-level pin: a Tk variable must never be read inside
         # work() -- the collapse checkbox is captured BEFORE the job
+        # (100x-144: the loader's work now TAKES the reporter, so the
+        # pin searches the one-argument form -- zero-argument matches
+        # would hit the NEXT tab handler instead)
         source = PLAYGROUND_PATH.read_text(encoding="utf-8")
         marker = source.index("collapse = bool(self._bio_collapse_var.get())")
         job = source.index('self._start_job(f"loading {path.name}", work, render)', marker)
-        work_def = source.index("def work() -> Any:", marker)
+        work_def = source.index("def work(report: Any) -> Any:", marker)
         assert marker < work_def < job
         # and the worker honours the captured flag, never the variable
         assert "screen = collapse_replicates(raw) if collapse else raw" in source
@@ -11483,3 +11490,334 @@ class TestReview143Gui:
             for name, args in quiet_dialogs
         ), quiet_dialogs
         assert not any(name == "showerror" for name, _args in quiet_dialogs)
+
+
+# --------------------------------------------------------------------- #
+# round 100x-144 -- the third engineering-details round: the multi-file
+# pickers ride the session (paths_multi), a large CSV loads with a
+# determinate rows/ETA bar (read_table_with_progress), the chained-job
+# guard in _poll_jobs, and the audit's parity/normaliser fixes
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestReview144Gui:
+    """Round 100x-144 -- the three Utilities list pickers persist across
+    restarts with the single paths' own existence-guarded discipline,
+    the four read_table loaders stream their reads with a determinate
+    progress bar, and a render callback that chains a job keeps its
+    follow-up callback (the audit's §2)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 60.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_144(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-144" in doc
+        assert "third engineering-details round" in doc
+        assert "paths_multi" in doc
+        assert "read_table_with_progress" in doc
+
+    # -- the feature: the multi-file picks ride the session ---------------- #
+
+    def test_paths_multi_round_trips_and_sanitises(self, playground: Any) -> None:
+        payload = playground.dump_session(
+            theme="light",
+            geometry="",
+            tab=0,
+            variables={},
+            families={},
+            texts={},
+            paths={},
+            paths_multi={"_util_merge_files": ["a.csv", "b.csv"]},
+        )
+        assert playground.load_session(payload) == payload
+        # a foreign value: non-list entries drop, non-str members drop
+        loaded = playground.load_session(
+            {
+                "format": playground.SESSION_FORMAT,
+                "theme": "light",
+                "geometry": "",
+                "tab": 0,
+                "variables": {},
+                "families": {},
+                "texts": {},
+                "paths": {},
+                "paths_multi": {
+                    "_util_appr_files": "not a list",
+                    "_util_tool_files": ["ok.tsv", 42, None],
+                },
+            }
+        )
+        assert loaded is not None
+        assert loaded["paths_multi"] == {"_util_tool_files": ["ok.tsv"]}
+        # and dump never char-splits a stray string value (the audit's §5)
+        guarded = playground.dump_session(
+            theme="light",
+            geometry="",
+            tab=0,
+            variables={},
+            families={},
+            texts={},
+            paths={},
+            paths_multi={"_util_merge_files": "xy12"},
+        )
+        assert guarded["paths_multi"] == {}
+
+    def test_collect_session_rides_the_three_lists(
+        self, app: Any, tmp_path: Path
+    ) -> None:
+        a = tmp_path / "a.csv"
+        b = tmp_path / "b.csv"
+        a.write_text("x\n1\n", encoding="utf-8")
+        b.write_text("x\n2\n", encoding="utf-8")
+        app._util_merge_files = [a, b]
+        app._util_appr_files = [b]
+        app._util_tool_files = []
+        collected = app._collect_session()
+        assert collected["paths_multi"] == {
+            "_util_appr_files": [str(b)],
+            "_util_merge_files": [str(a), str(b)],
+            "_util_tool_files": [],
+        }
+
+    def test_restore_filters_vanished_files_and_keeps_order(
+        self, playground: Any, app: Any, tmp_path: Path
+    ) -> None:
+        a = tmp_path / "a.csv"
+        b = tmp_path / "b.csv"
+        gone = tmp_path / "gone.csv"
+        a.write_text("x\n1\n", encoding="utf-8")
+        b.write_text("x\n2\n", encoding="utf-8")
+        gone.write_text("x\n3\n", encoding="utf-8")
+        app._util_merge_mode.set("merge picked tables")
+        app._util_tool_mode.set("distribute files to sub-folders")
+        app._session = playground.load_session(
+            {
+                "format": 1,
+                "theme": "light",
+                "geometry": "",
+                "tab": 0,
+                "variables": {},
+                "families": {},
+                "texts": {},
+                "paths": {},
+                "paths_multi": {
+                    "_util_merge_files": [str(a), str(gone), str(b)],
+                    "_util_appr_files": [str(a), str(b)],
+                    "_util_tool_files": [str(gone)],
+                },
+            }
+        )
+        gone.unlink()  # the mailed session's third file vanished
+        app._restore_session()
+        assert app._util_merge_files == [a, b]  # order kept, vanished dropped
+        assert app._util_appr_files == [a, b]
+        assert app._util_tool_files == []  # a fully-vanished list stays empty
+        # the labels confess the restored picks
+        merge_label = str(app._util_merge_info.cget("text"))
+        assert "2 table(s): a.csv, b.csv" in merge_label
+        assert str(app._util_appr_info.cget("text")) == "a.csv, b.csv"
+        # the status bar counts every restored file (2 + 2)
+        status = str(app._job_label.cget("text"))
+        assert "4 picked path(s) back" in status
+
+    def test_restore_never_overwrites_a_live_pick(
+        self, playground: Any, app: Any, tmp_path: Path
+    ) -> None:
+        a = tmp_path / "a.csv"
+        b = tmp_path / "b.csv"
+        a.write_text("x\n1\n", encoding="utf-8")
+        b.write_text("x\n2\n", encoding="utf-8")
+        app._util_merge_files = [b]  # the user re-picked THIS session
+        app._session = playground.load_session(
+            {
+                "format": 1,
+                "theme": "light",
+                "geometry": "",
+                "tab": 0,
+                "variables": {},
+                "families": {},
+                "texts": {},
+                "paths": {},
+                "paths_multi": {"_util_merge_files": [str(a), str(b)]},
+            }
+        )
+        app._restore_session()
+        assert app._util_merge_files == [b]
+
+    def test_restore_ignores_foreign_names(
+        self, playground: Any, app: Any, tmp_path: Path
+    ) -> None:
+        inside = tmp_path / "inside.csv"
+        inside.write_text("x\n1\n", encoding="utf-8")
+        app._session = playground.load_session(
+            {
+                "format": 1,
+                "theme": "light",
+                "geometry": "",
+                "tab": 0,
+                "variables": {},
+                "families": {},
+                "texts": {},
+                "paths": {},
+                "paths_multi": {"_ml_path": [str(inside)], "bad": [str(inside)]},
+            }
+        )
+        app._restore_session()
+        assert app._ml_path is None  # outside the allowlist, never adopted
+        assert app._util_merge_files == []
+
+    def test_refresh_renders_the_approval_label_in_picker_format(
+        self, app: Any, tmp_path: Path
+    ) -> None:
+        files = [tmp_path / f"f{i}.csv" for i in range(4)]
+        for i, path in enumerate(files):
+            path.write_text(f"x\n{i}\n", encoding="utf-8")
+        app._util_appr_files = list(files)
+        app._refresh_restored_path_labels()
+        assert (
+            str(app._util_appr_info.cget("text"))
+            == "f0.csv, f1.csv, f2.csv … (+1)"
+        )
+
+    def test_the_multi_allowlist_is_exactly_the_three_utilities(
+        self, playground: Any
+    ) -> None:
+        assert playground._SESSION_PATH_LIST_ATTRS == frozenset(
+            {"_util_merge_files", "_util_appr_files", "_util_tool_files"}
+        )
+
+    # -- the feature: the loaders report a determinate bar ------------------ #
+
+    def test_the_reporting_loaders_stream_through_the_progressive_reader(
+        self,
+    ) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        # the three read_table loaders take the reporter...
+        assert source.count("def work(report: Any) -> Any:") >= 4
+        assert source.count("return read_table_with_progress(path, report)") == 3
+        # ...and the Cell Lines screen forwards it through the loader API
+        assert "raw = load_response_table(path, report=report)" in source
+
+    def test_ml_loader_carries_a_determinate_bar_mid_job(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any], tmp_path: Path,
+        monkeypatch: Any,
+    ) -> None:
+        import time
+
+        # a genuinely large CSV past the reader's 8 MiB gate -- the read
+        # streams chunk-by-chunk; the reports are THROTTLED (a wrapper
+        # around the REAL reader, never a stub) so the busy window
+        # outlives several 150 ms poller ticks and the test cannot race
+        rows = 800_000
+        table = tmp_path / "wide_load.csv"
+        lines = ["smiles,value"] + [f"CCO,{i}.5" for i in range(rows)]
+        table.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        assert table.stat().st_size > 8 * 1024 * 1024  # past the gate
+
+        import pharmaml.utils.io as io_mod
+
+        real_reader = io_mod.read_table_with_progress
+
+        def throttled(path: Any, report: Any, **kwargs: Any) -> Any:
+            def slow_report(done: int, total: Any, note: str) -> None:
+                time.sleep(0.15)
+                report(done, total, note)
+
+            return real_reader(path, slow_report, **kwargs)
+
+        monkeypatch.setattr(io_mod, "read_table_with_progress", throttled)
+        app._ml_load_file(table)
+        assert app._busy
+        modes: set[str] = set()
+        labels: set[str] = set()
+        deadline = time.time() + 90.0
+        while time.time() < deadline:
+            app.update()
+            modes.add(str(app._progress.cget("mode")))
+            labels.add(str(app._job_label.cget("text")))
+            if not app._busy:
+                break
+            time.sleep(0.02)
+        assert not app._busy, "big load hung"
+        assert "determinate" in modes, modes  # the bar switched mid-job
+        assert any(
+            "/" in text and "loading wide_load.csv" in text for text in labels
+        ), sorted(labels)[-3:]
+        assert app._ml_frame is not None and len(app._ml_frame) == rows
+        assert "done in" in str(app._job_label.cget("text"))
+        assert quiet_dialogs == []
+
+    # -- the audit's §2: the chained-job guard ------------------------------ #
+
+    def test_poll_jobs_keeps_a_chained_jobs_callback(self, app: Any) -> None:
+        chained: list[Any] = []
+
+        def render(result: Any) -> None:
+            # a render callback that chains straight into a follow-up
+            # job -- exactly what _start_job would set up for it
+            app._on_done = lambda r: chained.append(r)
+            app._busy = True
+
+        app._on_done = render
+        app._jobs.put(("payload", None))
+        app._poll_jobs()  # drains the result directly
+        assert app._on_done is not None  # the follow-up callback survived
+        app._on_done("late")  # and it still fires
+        assert chained == ["late"]
+
+    def test_poll_jobs_clears_the_stale_callback_when_idle(self, app: Any) -> None:
+        app._on_done = lambda _r: None
+        app._jobs.put(("x", None))
+        app._poll_jobs()
+        assert app._on_done is None
+
+    def test_the_chained_job_guard_is_pinned_in_source(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "if not self._busy:\n            self._on_done = None" in source
+
+    # -- the Apply-best invariant (the handover's item b) ------------------- #
+
+    def test_tune_apply_states_the_frame_path_invariant(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        # the invariant comment lives at the relay...
+        assert "the invariant, stated" in source
+        assert "_ml_adopt_frame sets frame" in source
+        # ...and the adoption body is the ONLY place a path assignment
+        # follows its frame (the Clean card swaps the frame alone)
+        adopt = source.index("self._ml_frame = frame")
+        path_assign = source.index("self._ml_path = path", adopt)
+        assert path_assign - adopt < 80  # set together, a few lines apart
+        assert source.count("self._ml_path = path") == 1
+        assert "self._ml_frame = cleaned" in source  # the Clean card's swap

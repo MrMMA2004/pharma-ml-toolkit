@@ -131,6 +131,40 @@ class TestLoadResponseTable:
         assert screen.tissue_col is None
         assert "tissue" not in screen.metrics  # string column, not a metric
 
+    def test_path_input_with_a_reporter_streams_progress(self, tmp_path) -> None:
+        # (100x-144) the report kwarg forwards to the progressive reader
+        # -- a big screen loads with a determinate bar; the screen itself
+        # is identical to the plain read
+        path = tmp_path / "big_screen.csv"
+        frame = _screen_frame()
+        # pad past the reader's small-file gate (default 8 MiB) -- 12
+        # rows x 30k repeats ~= 12 MB of genuine CSV
+        padded = frame.loc[frame.index.repeat(30_000)].reset_index(drop=True)
+        padded.to_csv(path, index=False)
+        seen: list[tuple[int, object, str]] = []
+
+        def report(done: int, total: object, note: str) -> None:
+            seen.append((done, total, note))
+
+        screen = load_response_table(path, report=report)
+        plain = load_response_table(path)
+        assert len(screen.frame) == len(plain.frame) == len(padded)
+        assert screen.metrics == plain.metrics == ["LN_IC50", "AUC"]
+        assert seen and all(entry[2] == "" for entry in seen)
+        assert seen[-1][0] == len(padded)  # the final report is exact
+
+    def test_dataframe_input_with_a_reporter_never_fires_it(self) -> None:
+        # the callback is a PATH-only affordance -- DataFrame callers
+        # (and the default None) read exactly as before
+        fired: list[tuple[int, object, str]] = []
+
+        def report(done: int, total: object, note: str) -> None:
+            fired.append((done, total, note))
+
+        screen = load_response_table(_screen_frame(), report=report)
+        assert isinstance(screen, ResponseScreen)
+        assert fired == []
+
 
 class TestResponseScreen:
     def test_properties(self) -> None:
