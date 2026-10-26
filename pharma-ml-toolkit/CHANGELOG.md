@@ -10,6 +10,89 @@ newline-stripping surprises: `cat VERSION`) and in
 `pyproject.toml` → `[project] version`. The downloadable archive is
 named `pharma-ml-toolkit-v<version>.zip`.
 
+## [1.2.85] — 2026-10-26
+
+### Added — the fourth engineering-details round (100x-146): the indexed progressive reader, the chunk-boundary guard, the loader phase notes, and the permutation Save-CSV twin
+
+The instruction this round: *"Review the current codebase and
+implementation, troubleshoot potential issues, and continue improving
+the engineering details."* The fresh one-by-one audit (the round-145
+additions end to end plus the never-audited module tail) harvested one
+real parity break, one stale-state risk and four polish items — every
+finding probe-verified, ten candidate concerns disproven with reasons
+(the standing ledger).
+
+**The chunk-boundary parity guard (the audit's headline finding):**
+
+* pandas' own low-memory chunked C parser silently TRUNCATES a row
+  that carries extra fields and lands exactly on a chunk boundary —
+  the plain reader raises `ParserError` for the same bytes, so
+  `read_table_with_progress` could hand back different DATA than
+  `read_table` (the one hole in the round-144 parity promise, caught
+  by the audit's boundary-aligned probe). **`_guard_ragged_boundaries`**
+  scans the physical lines once (bytes only, no parsing) and rejects
+  such files up front with the sync reader's own verdict; it bows out
+  for quote-bearing and interior-blank-line files (where lines cannot
+  be aligned to records — pandas' own mid-chunk raises still cover
+  those) and needs no rule for SHORT rows (both parsers pad them with
+  `NaN`). The guard re-runs for the semicolon retry in the separator
+  ladder, and its boundary arithmetic holds for `chunk_rows=1`.
+* **`read_indexed_table_with_progress`** is the new public indexed
+  twin: the expression-matrix loader's plain
+  `pd.read_csv(path, index_col=...)` pair — preferred label first,
+  positional fallback on the missing-label `ValueError` — with the
+  determinate rows/ETA bar of the round-144 reader. The index is
+  preserved through the chunked concat, the label fallback fires only
+  while no chunk has landed (a LATER `ValueError` propagates for its
+  honest verdict instead of silently re-reading), no separator
+  sniffing happens (comma on both paths — a semicolon table is one
+  mangled column below the threshold AND above it), and ragged
+  boundary rows ride the same guard.
+* **The Cell Lines expression-matrix loader** — the last marquee in
+  the loader story, standing "by design" since round 28 — now streams
+  through the new reader: a wide matrix carries a determinate bar
+  instead of the open-ended marquee, byte-for-byte the plain pair on
+  small files.
+* **The Cell Lines screen loader's AUDIT/COLLAPSE phases now speak:**
+  after the streaming read completes, the status bar carries
+  "auditing rows" and (when the box is ticked) "collapsing replicates"
+  counter-style notes — a slow in-memory pass on a huge screen is
+  never a silently frozen bar.
+
+**The round's smaller features and fixes:**
+
+* **The permutation-importance Save-CSV twin:** the Results card's
+  "Save CSV…" writes the last run's table (feature,
+  importance_mean, importance_std — the ±1 std spread the whiskers
+  drew) while "Save figure…" keeps the picture; the table retires
+  when a new model trains (the old table names the old model's
+  features).
+* **Loading a new dataset retires the previous one's derived
+  tables** (the audit's stale-state finding): the Clean card's and
+  the prep card's Save buttons used to write the PREVIOUS dataset's
+  table while claiming to describe the new one —
+  `_ml_adopt_frame` clears both frames now.
+* **`prepare_pic50_dataset` refuses a colliding `out_col`** (the
+  audit's duplicate-key finding): `out_col="SMILES"` used to silently
+  clobber the SMILES column in the result dict — the three reserved
+  names are rejected up front with a typed error.
+* The module docstring's stale pre-ecfp3 family count ("8-family,
+  10,000+-column") is now honest ("9-family, ~12,860-column"), as is
+  `selection_metadata`'s ("the seven fingerprint families"); the
+  Save-figure docstring and empty hint name the permutation figure;
+  the prep card gates pandas like its Clean-card sibling.
+
+**Verification:** suite **2809 collected = 2804 passed + 5 skipped /
+0 failures** (+37: `TestGuardRaggedBoundaries` ×8,
+`TestReadIndexedTableWithProgress` ×9, the out_col collision ×3,
+`TestReview146Gui` ×17 — with the round-143 collapse-capture pin
+updated where the round deliberately changed its line); ruff clean;
+mypy `src/` clean (65 files); `--self-test` green on Xvfb; doctests
+green on all three touched modules (the io module gained the guard
+line and the full indexed-reader section); docs/INDEX regenerated
+(286 symbols); notebooks re-executed at 1.2.85 (208 s, twins
+regenerated, 119 variant tests green).
+
 ## [1.2.84] — 2026-10-26
 
 ### Added — the "کد علی" upload audit (100x-145): D2.py's data prep, its permutation importance, and the radius-3 ECFP family

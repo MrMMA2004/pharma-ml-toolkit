@@ -412,7 +412,11 @@ def prepare_pic50_dataset(
     ------
     DataValidationError
         If a requested column is missing, ``aggregate`` or
-        ``upper_limit`` is invalid, or no row survives the pipeline.
+        ``upper_limit`` is invalid, ``out_col`` collides with one of
+        the reserved result columns (``SMILES`` / ``n_measurements`` /
+        ``endpoint_median`` -- the collision would silently clobber
+        that column, so it is refused up front), or no row survives
+        the pipeline.
 
     Examples
     --------
@@ -429,6 +433,10 @@ def prepare_pic50_dataset(
     >>> (report.rows_censored, report.rows_unparsable,
     ...  report.rows_missing_smiles, report.duplicates_collapsed)
     (1, 1, 1, 1)
+    >>> prepare_pic50_dataset(frame, out_col="SMILES")   # reserved name
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: out_col 'SMILES' collides with a reserved result column (SMILES, n_measurements, endpoint_median) -- pick a different name for the converted endpoint
     """
     if aggregate not in ("median", "mean", "first", "keep"):
         raise DataValidationError(
@@ -438,6 +446,16 @@ def prepare_pic50_dataset(
     if not (math.isfinite(upper_limit) and upper_limit > 0):
         raise DataValidationError(
             f"upper_limit must be a positive finite number, got {upper_limit!r}"
+        )
+    # (100x-146) a colliding out_col would silently clobber its twin in
+    # the result dict (the round-146 audit's duplicate-key finding) --
+    # refuse it up front instead.
+    _reserved_result_columns = ("SMILES", "n_measurements", "endpoint_median")
+    if out_col in _reserved_result_columns:
+        raise DataValidationError(
+            f"out_col {out_col!r} collides with a reserved result column "
+            f"({', '.join(_reserved_result_columns)}) -- pick a different "
+            "name for the converted endpoint"
         )
     # Validate the unit early (a bad unit must not surface as NaN rows
     # deep inside the conversion -- ic50_to_pic50 raises on unknown units).

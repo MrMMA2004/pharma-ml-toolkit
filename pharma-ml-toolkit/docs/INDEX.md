@@ -69,9 +69,9 @@ after adding new public functions.
 | `family_of_column` | function | Return the feature family a frame column belongs to. |
 | `ic50_to_pic50` | function | Convert an IC50 measurement to pIC50 = -log10(IC50 [M]). |
 | `ki_to_pki` | function | Convert an inhibition constant to pKi = -log10(Ki [M]). |
-| `prepare_pic50_dataset` | function | Turn a raw SMILES + EC50 table into a modelling-ready pEC50 set. |
 | `merge_table_folder` | function | Merge every table of one extension directly inside ``directory``. |
 | `merge_tables` | function | Row-wise merge of several tables, ignoring the index. |
+| `prepare_pic50_dataset` | function | Turn a raw SMILES + EC50 table into a modelling-ready pEC50 set. |
 | `rank_features` | function | Rank feature columns by importance, descending. |
 | `sdf_to_table` | function | Read an SD file back into a table (SMILES, tags and titles). |
 | `select_top_features` | function | Select the top-K features with the rar's two-layer strategy. |
@@ -96,7 +96,6 @@ after adding new public functions.
 | `MODEL_ALIASES` | constant |  |
 | `MODEL_REGISTRY` | constant |  |
 | `ApplicabilityDomainResult` | class | Outcome of a full applicability-domain analysis. |
-| `PermutationImportance` | class | Permutation feature importances on held-out data. |
 | `BootstrapUncertainty` | class | Bootstrap-ensemble uncertainty of a fitted estimator. |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
@@ -104,6 +103,7 @@ after adding new public functions.
 | `HyperParameters` | class | The keras-tuner container of hyperparameter definitions. |
 | `Hyperband` | class | Hyperband successive halving over a resource hyperparameter. |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
+| `PermutationImportance` | class | Permutation feature importances on held-out data. |
 | `RandomSearch` | class | Random search over the hypermodel's declared space. |
 | `ResidualMLPClassifier` | class | Residual (skip-connection) deep-network classifier (PyTorch). |
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
@@ -123,13 +123,13 @@ after adding new public functions.
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
-| `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
 | `list_models` | function | List registry entries with availability information. |
 | `load_model` | function | Load a model bundle saved by :func:`save_model`. |
 | `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
+| `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
 | `predict_with_uncertainty` | function | Predictive mean and per-row standard deviation of a GP model. |
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
@@ -323,9 +323,9 @@ after adding new public functions.
 | `plot_gp_uncertainty` | function | Parity scatter with ``± z·σ`` error bars — the GP's honest readout. |
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
-| `plot_permutation_importance` | function | Top-N permutation importances as signed bars with error bars. |
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
 | `plot_pareto_front` | function | One scatter per MultiObjective run: dominated points muted, front lit. |
+| `plot_permutation_importance` | function | Top-N permutation importances as signed bars with error bars. |
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
 | `plot_receptor_atom_types` | function | Bar chart of the AutoDock atom-type census of a receptor. |
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |
@@ -347,6 +347,7 @@ after adding new public functions.
 | Symbol | Kind | Summary |
 |---|---|---|
 | `ensure_directory` | function | Create ``path`` (and parents) if missing; return the resolved Path. |
+| `read_indexed_table_with_progress` | function | Read an INDEXED table, reporting row progress for large CSVs (100x-146). |
 | `read_table` | function | Read a CSV/TSV or Excel file into a DataFrame. |
 | `read_table_with_progress` | function | Read a table, reporting row progress for large CSV-like files. |
 | `safe_filename` | function | Sanitise a string into a portable filename. |

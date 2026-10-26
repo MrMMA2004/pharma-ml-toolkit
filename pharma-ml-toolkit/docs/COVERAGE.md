@@ -1307,3 +1307,26 @@ viz tests (test_viz.py ×5), TestEcfp3Family (test_features.py ×4),
 TestReview145Gui (test_playground.py ×15). Four standing family-list
 pins updated for ecfp3. docs/INDEX.md re-synced (285 symbols). The
 version chain moved to 1.2.84 across all five carriers.
+
+### Round 31 (100x-146) — the fourth engineering-details round: the indexed progressive reader, the chunk-boundary guard, the loader phase notes, the permutation Save-CSV twin
+
+| What shipped | The contract |
+| --- | --- |
+| The one-by-one audit (subagent, read-only) | Round-145's own additions end to end (the prep card, the permutation button, the ecfp3 family, the four library functions) plus the never-audited module tail (print_banner / self_test / main and the 18438+ helpers). Harvest: 1 real parity break + 1 stale-state risk + 4 polish items, every finding probe-verified; 10 candidate concerns disproven with reasons (the session-ride of the new widgets, the ecfp3 map escape, the prep adoption invariant, the permutation worker purity, the needs-run guard ordering, the chunked double-reporting, three io candidates, the hidden-tail-edit census). |
+| `_guard_ragged_boundaries` (utils/io.py) | The audit's headline finding fixed: pandas' chunked C parser silently field-truncates a ragged row landing exactly on a chunk boundary (the plain reader raises for the same bytes) — the guard scans the physical lines once and rejects such files with the sync reader's own verdict. Scope honestly bounded: quote-bearing and interior-blank-line files skip the guard (lines cannot align to records there; pandas' own mid-chunk raises still cover them), short rows need none (both parsers pad with NaN), and the boundary arithmetic holds for chunk_rows=1 (the first-run catch). Wired into BOTH drain attempts of the separator ladder. |
+| `read_indexed_table_with_progress` (utils/io.py) | The new public indexed twin: the expression loader's plain `pd.read_csv(index_col=...)` pair with determinate progress. The index is preserved through the chunked concat; the label-missing ValueError fires at the reader's first chunk, and only that empty-chunks case re-drains with the positional fallback (a LATER ValueError propagates for its honest verdict); no separator sniffing (comma on both paths — a semicolon table is one mangled column below AND above the threshold); small files keep the plain pair byte-for-byte. |
+| The expression-matrix loader (Cell Lines) | The last open-ended marquee in the loader story (standing "by design" since round 28) streams through the new reader: a wide matrix carries the determinate rows/ETA bar; the `cell_line` label index with its positional fallback keeps its exact semantics. |
+| The screen loader's phase notes (Cell Lines) | After the streaming read, the status bar carries "auditing rows" and (box ticked) "collapsing replicates" counter-style notes — the AUDIT/COLLAPSE phases are never a silently frozen bar on a huge screen. The collapse flag is still captured on the main thread (the round-143 pin, updated to the new if/else shape). |
+| The permutation Save-CSV twin (Results card) | "Save CSV…" writes the last run's table (feature, importance_mean, importance_std) through the shared save-frame dialog; "Save figure…" keeps the picture. The table retires when a new model TRAINS (it follows the run, not the dataset). |
+| The stale derived-state fix (Data & ML) | The audit's §2: loading a new dataset now clears `_ml_cleaned_frame` and `_ml_prep_frame` — the Clean/prep Save buttons used to write the PREVIOUS dataset's table while claiming to describe the new one. |
+| The out_col collision guard (chem/converters.py) | The audit's §3: `prepare_pic50_dataset(out_col="SMILES")` used to silently clobber the SMILES column via a duplicate dict key — the three reserved result names are refused up front with a typed error. |
+| The honesty polish | The module docstring's stale "8-family, 10,000+-column" → "9-family, ~12,860-column"; `selection_metadata`'s "six fingerprint families" → seven; the Save-figure docstring/empty-hint name the permutation figure; the prep card gates pandas like its Clean-card sibling. |
+
+The axes after the round: rar 118, uploads 22/22 (unchanged — no new
+upload this round), zero-hit 0. 37 new tests: TestGuardRaggedBoundaries
+(test_io.py ×8), TestReadIndexedTableWithProgress (test_io.py ×9),
+the out_col collision pair (test_converters.py ×3 parametrized),
+TestReview146Gui (test_playground.py ×17). One standing pin updated
+(the round-143 collapse-capture contract, its line deliberately
+changed by the phase notes). docs/INDEX.md re-synced (286 symbols).
+The version chain moved to 1.2.85 across all five carriers.

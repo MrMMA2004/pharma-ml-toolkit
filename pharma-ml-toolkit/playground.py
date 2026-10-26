@@ -15,8 +15,8 @@ A tabbed graphical interface opens with every calculation domain of the
   Coulomb parts, water-site distribution peaks, first-shell
   coordination numbers, excluded volume, dipole, charge asymmetry,
   over an embedded 3D geometry with the SPC / TIP3P site models),
-  and the feature factory: the rar's own pipeline grown to an
-  8-family, 10,000+-column descriptor + fingerprint matrix (the
+  and the feature factory: the rar's own pipeline grown to a
+  9-family, ~12,860-column descriptor + fingerprint matrix (the
   RISM-KH family included), ranked and cut to a top-K selection --
   plus (100x-119) the canonical-tautomer & 3D-structure card
   (canonicalize_tautomer + a multi-conformer 3D PDB writer with its
@@ -480,6 +480,21 @@ Design notes
   gained the ``ecfp3`` family (radius-3 Morgan, the upload's R3
   fingerprint half) -- while ``read_table_with_progress``'s docstring
   finally shows the ragged-semicolon parity verdict the tests pinned.
+  (100x-146) The fourth engineering-details round closed the loader
+  story's last marquee: the Cell Lines expression matrix now streams
+  through ``read_indexed_table_with_progress`` (the indexed twin of
+  the round-144 reader -- the ``cell_line`` label index with its
+  positional fallback, preserved through the chunked concat, small
+  files byte-for-byte the plain pair), a ragged row landing exactly
+  on a chunk BOUNDARY is rejected up front by the new
+  ``_guard_ragged_boundaries`` (pandas' own chunked parser silently
+  truncates those rows -- the sync reader raises, and the parity
+  promise now holds for both readers), the Cell Lines screen loader
+  reports its AUDIT and COLLAPSE phases in the status bar, the
+  permutation-importance table gained its Save-CSV twin, and loading
+  a new dataset retires the previous run's derived tables (the
+  cleaned / prep / permutation frames no longer masquerade as the
+  new dataset's).
 
 Command line helpers (useful for scripting and CI)::
 
@@ -2276,6 +2291,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # reuses its split (X_train for the domain, X_test as the query
         # set -- 100x-118, the upload's workflow on the live run).
         self._ml_last_run: tuple[Any, Any, str, Any, Any, Any, Any, str] | None = None
+        # (100x-146) the dataset-derived tables -- the numeric cleanup's
+        # and the pEC50 prep's own save payloads.  They are cleared on
+        # every _ml_adopt_frame: a stale cleaned/prep table silently
+        # masquerading as the NEW dataset's (the round-146 audit's
+        # stale-state finding) is exactly the bug the clear prevents.
+        self._ml_cleaned_frame: Any = None
+        self._ml_prep_frame: Any = None
+        # (100x-146) the last run's permutation-importance table (the
+        # Save-CSV payload) -- derived from the RUN, so it retires when
+        # a new run lands (the old table names the old model's
+        # features), not when a new dataset is loaded.
+        self._ml_perm_frame: Any = None
         # -- Hyperparameter-search card state (100x-90) ------------- #
         # (TunerResults, estimator token, task, target column) of the
         # last search -- the Apply-best and Save-trials payloads.
@@ -9057,11 +9084,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
             # (100x-144) the reporter rides straight through the loader
-            # -- a big screen's read streams chunk-by-chunk while the
-            # audit/collapse phases (fast, in-memory) stay silent
+            # -- a big screen's read streams chunk-by-chunk; (100x-146)
+            # the AUDIT/COLLAPSE phases now speak too: a counter-style
+            # note after the read ("auditing rows...", "collapsing
+            # replicates") so a slow in-memory pass is never a silent
+            # frozen bar on a huge screen
             raw = load_response_table(path, report=report)
+            rows = len(raw.frame)
+            report(rows, None, "auditing rows")
             audit_frame = audit_response_table(raw)
-            screen = collapse_replicates(raw) if collapse else raw
+            if collapse:
+                report(rows, None, "collapsing replicates")
+                screen = collapse_replicates(raw)
+            else:
+                screen = raw
             return raw, audit_frame, screen
 
         def render(payload: tuple[Any, Any, Any]) -> None:
@@ -9343,17 +9379,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         read plus the fallback); the read now rides the worker pool,
         the status bar carries ``loading {name}``, and the adoption
         reuses the shared :meth:`_bio_adopt_expr_frame`.
+        (100x-146) The read itself streams through
+        ``read_indexed_table_with_progress`` -- the indexed twin of the
+        round-144 reader: a large matrix carries a determinate
+        rows/ETA bar instead of the open-ended marquee (the
+        ``cell_line`` label index with its positional fallback kept
+        byte-for-byte; small files keep the plain pair), and a ragged
+        row landing on a chunk boundary is rejected up front rather
+        than silently truncated by pandas' own chunked parser.
         """
 
-        def work() -> Any:
-            import pandas as pd
+        def work(report: Any) -> Any:
+            from pharmaml.utils.io import read_indexed_table_with_progress
 
-            try:
-                return pd.read_csv(path, index_col="cell_line")
-            except ValueError:
-                # user tables name their identifier column differently --
-                # fall back to the first column as the cell-line index
-                return pd.read_csv(path, index_col=0)
+            return read_indexed_table_with_progress(path, report, index_col="cell_line")
 
         def render(frame: Any) -> None:
             self._bio_adopt_expr_frame(frame, path)
@@ -13049,6 +13088,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "(unlike Ctrl+S, which saves the last figure drawn anywhere).",
         )
         save_ml_figure_btn.pack(side="left", padx=(10, 0))
+        # (100x-146) the permutation table's own save twin: the figure
+        # export keeps the picture, this keeps the numbers.
+        perm_save_btn = self._action_button(
+            ml_result_buttons,
+            "Save CSV…",
+            self._ml_perm_save,
+            tooltip="Save the last permutation-importance TABLE as CSV "
+            "(feature, importance_mean, importance_std -- the ±1 std "
+            "spread the whiskers drew) -- the numbers behind the "
+            "figure, ready for a report; a new Train run retires it.",
+        )
+        perm_save_btn.pack(side="left", padx=(10, 0))
         ml_result_note = ttk.Label(
             ml_result_buttons, text="", style="CardMuted.TLabel", wraplength=430, justify="left"
         )
@@ -13571,7 +13622,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         collapse all report their counts, and one click adopts the
         prepared set as the active dataset with pEC50 as the target.
         """
-        if not self._require_pharmaml():
+        if not self._require_pharmaml() or not self._require("pandas", "the pEC50 prep"):
             return
         if getattr(self, "_ml_frame", None) is None:
             messagebox.showwarning("No dataset", "Load a dataset first.")
@@ -13701,6 +13752,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if frame.empty:
             messagebox.showwarning("Empty dataset", f"{path.name} has no rows.")
             return
+        # (100x-146) a NEW dataset retires the previous one's derived
+        # tables: the Clean card's and the prep card's Save buttons
+        # would otherwise write the OLD dataset's table while claiming
+        # to describe the new one (the round-146 audit's stale-state
+        # finding).  The perm frame follows the RUN, not the dataset,
+        # so it is cleared where the run lands instead.
+        self._ml_cleaned_frame = None
+        self._ml_prep_frame = None
         self._ml_frame = frame
         self._ml_path = path
         columns = [str(column) for column in frame.columns]
@@ -13998,6 +14057,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # target rides along as the automatic --target drop); the AD
             # card reuses the split for the domain + query sets.
             self._ml_last_run = (trained, report, task, x_train, y_train, x_test, y_test, target)
+            # (100x-146) the new run retires the old one's permutation
+            # table -- the Save-CSV payload would otherwise name the OLD
+            # model's features while the card shows the new model.
+            self._ml_perm_frame = None
             gp = self._ml_gp_sigma(trained, x_test)
             self._fill_ml_metrics(trained, report, task, dropped, gp=gp)
             self._ml_ad_refresh_source()
@@ -14127,6 +14190,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         def render(payload: Any) -> None:
             trained, report, task, dropped, x_train, y_train, x_test, y_test = payload
             self._ml_last_run = (trained, report, task, x_train, y_train, x_test, y_test, target)
+            # (100x-146) the new run retires the old one's permutation
+            # table -- the Save-CSV payload would otherwise name the OLD
+            # model's features while the card shows the new model.
+            self._ml_perm_frame = None
             self._fill_ml_metrics(trained, report, task, dropped)
             self._ml_ad_refresh_source()
             members_named = "+".join(members)
@@ -15456,6 +15523,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         every feature column is shuffled on the held-out rows and the
         score drop (with its ±1 std whisker) is drawn top-first --
         the noise features a shuffle HELPED render in red.
+        (100x-146) The table itself rides the render as
+        ``_ml_perm_frame`` -- the card's Save-CSV twin writes it
+        (feature, importance_mean, importance_std) while the figure
+        export keeps the picture.
         """
         run = getattr(self, "_ml_last_run", None)
         if run is None:
@@ -15488,18 +15559,39 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 task=task,
                 n_repeats=repeats,
             )
-            return plot_permutation_importance(
+            figure = plot_permutation_importance(
                 importance,
                 title=f"Permutation importance — {model_name} ({target})",
             )
+            return importance, figure
 
-        def render(figure: Any) -> None:
+        def render(payload: tuple[Any, Any]) -> None:
+            importance, figure = payload
             self._render_figure(self._ml_host, figure)
+            self._ml_perm_frame = importance.as_frame()
             self._ml_result_note.configure(
                 text="permutation importance replaces the parity figure — Train & evaluate brings it back"
             )
 
         self._start_job("permutation importance", work, render)
+
+    def _ml_perm_save(self) -> None:
+        """(100x-146) Save the last permutation-importance table as CSV.
+
+        The figure export keeps the picture; this twin keeps the
+        NUMBERS (feature, importance_mean, importance_std -- the spread
+        the whiskers drew) in the audit card's own save-dialog shape.
+        Retires with the run: a new train clears it.
+        """
+        frame = getattr(self, "_ml_perm_frame", None)
+        if frame is None:
+            messagebox.showinfo(
+                "Nothing to save", "Run the permutation importance first."
+            )
+            return
+        self._save_frame_dialog(
+            frame, "Save the permutation-importance table", "permutation_importance.csv"
+        )
 
     # ------------------------------------------------------------------ #
     # Deep Learning tab (100x-61) -- the pharmaml.ml.neural estimators
@@ -17364,17 +17456,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         """Save the ML results card's live figure (100x-128).
 
         The card's single host carries whichever of the parity plot,
-        the calibration curve or the learning curve drew last -- the
-        honest per-card answer to ``Ctrl+S`` racing some other card's
-        figure.
+        the calibration curve, the learning curve or the permutation
+        importance drew last -- the honest per-card answer to
+        ``Ctrl+S`` racing some other card's figure.
         """
         self._save_card_figure(
             [self._ml_host],
             dialog_title="Save ML results figure",
             empty_hint=(
                 "Train a model (or draw the calibration / learning "
-                "curve) first -- this saves the figure the results "
-                "card is currently showing."
+                "curve / permutation importance) first -- this saves "
+                "the figure the results card is currently showing."
             ),
         )
 

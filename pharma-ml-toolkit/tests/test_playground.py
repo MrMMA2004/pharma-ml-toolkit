@@ -11333,7 +11333,16 @@ class TestReview143Gui:
         work_def = source.index("def work(report: Any) -> Any:", marker)
         assert marker < work_def < job
         # and the worker honours the captured flag, never the variable
-        assert "screen = collapse_replicates(raw) if collapse else raw" in source
+        # (100x-146 standing-contract update: the collapse branch grew
+        # its "collapsing replicates" phase note -- the flag-honouring
+        # shape is the explicit if/else now)
+        assert (
+            "if collapse:\n"
+            '                report(rows, None, "collapsing replicates")\n'
+            "                screen = collapse_replicates(raw)\n"
+            "            else:\n"
+            "                screen = raw"
+        ) in source
 
     # -- the Utilities restored-path labels (the audit's §1) --------------- #
 
@@ -12011,3 +12020,248 @@ class TestReview145Gui:
         source = PLAYGROUND_PATH.read_text(encoding="utf-8")
         assert "9 descriptor / " in source
         assert "radius-3 ECFP" in source
+
+
+class TestReview146Gui:
+    """Round 100x-146 -- the fourth engineering-details round: the
+    expression matrix streams through the indexed progressive reader,
+    ragged chunk-boundary rows are rejected up front, the Cell Lines
+    loader reports its audit/collapse phases, the permutation table
+    gained its Save-CSV twin, and a new dataset retires the previous
+    run's derived tables."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 90.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the round's documentation pins ------------------------------------ #
+
+    def test_module_docstring_records_round_146(self, playground: Any) -> None:
+        doc = playground.__doc__ or ""
+        assert "100x-146" in doc
+        assert "read_indexed_table_with_progress" in doc
+        assert "_guard_ragged_boundaries" in doc
+        assert "chunk BOUNDARY" in doc
+        assert "AUDIT and COLLAPSE" in doc
+        assert "Save-CSV twin" in doc
+        # the stale family count from the pre-ecfp3 era is gone
+        assert "8-family" not in doc
+        assert "9-family" in doc
+
+    def test_features_docstring_count_honest(self) -> None:
+        from pathlib import Path as _Path
+
+        source = _Path(__file__).resolve().parents[1] / "src" / "pharmaml" / "chem" / "features.py"
+        text = source.read_text(encoding="utf-8")
+        assert "the seven\n        fingerprint families" in text
+
+    # -- the stale derived-state fix ---------------------------------------- #
+
+    def test_adopt_frame_retires_the_derived_tables(self, app: Any) -> None:
+        import pandas as pd
+
+        # a previous dataset's derived tables sit on the app...
+        app._ml_cleaned_frame = pd.DataFrame({"old": [1]})
+        app._ml_prep_frame = pd.DataFrame({"old": [2]})
+        frame = pd.DataFrame({"smiles": ["CCO", "CCN"], "y": [1.0, 2.0]})
+        app._ml_adopt_frame(frame, app._ml_path or __import__("pathlib").Path("x.csv"))
+        assert app._ml_cleaned_frame is None
+        assert app._ml_prep_frame is None
+        assert app._ml_frame is frame  # the new dataset itself, adopted
+
+    def test_adopt_frame_clear_pins_in_source(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert (
+            "self._ml_cleaned_frame = None\n"
+            "        self._ml_prep_frame = None\n"
+            "        self._ml_frame = frame"
+        ) in source
+
+    def test_train_render_retires_the_perm_frame(self, app: Any) -> None:
+        import pandas as pd
+
+        app._ml_perm_frame = pd.DataFrame({"feature": ["stale"]})
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        assert app._ml_perm_frame is None
+
+    def test_train_render_clear_pins_in_source(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "self._ml_perm_frame: Any = None" in source  # the init
+        # both train renders retire the old run's table
+        assert source.count("self._ml_perm_frame = None") == 2
+
+    # -- the permutation Save-CSV twin -------------------------------------- #
+
+    def test_perm_save_button_source_pins(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert '"Save CSV…"' in source
+        assert "def _ml_perm_save" in source
+        assert 'self._ml_perm_save' in source
+        assert "permutation_importance.csv" in source
+
+    def test_perm_save_needs_a_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ml_perm_save()
+        assert any("permutation importance first" in str(a) for a in quiet_dialogs)
+
+    def test_perm_save_writes_the_table(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        app._ml_perm_frame = pd.DataFrame(
+            {"feature": ["logp", "mw"], "importance_mean": [0.21, -0.03],
+             "importance_std": [0.02, 0.01]}
+        )
+        target = tmp_path / "permutation_importance.csv"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda t="", _p=target, **k: str(_p)
+        )
+        app._ml_perm_save()
+        assert target.exists()
+        content = target.read_text(encoding="utf-8")
+        assert "logp" in content and "importance_mean" in content
+        assert "-0.03" in content
+
+    def test_perm_plot_stores_the_table(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        assert app._ml_perm_frame is None  # retired by the new run
+        app._ml_plot_permutation()
+        assert self._drain_jobs(app), "permutation job hung"
+        frame = app._ml_perm_frame
+        assert frame is not None
+        assert list(frame.columns) == ["feature", "importance_mean", "importance_std"]
+        assert len(frame) > 0
+
+    def test_save_ml_figure_docstring_names_permutation(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert (
+            "the calibration curve, the learning curve or the permutation\n"
+            "        importance drew last"
+        ) in source
+        assert "curve / permutation importance) first" in source
+
+    # -- the prep card's dependency gate ------------------------------------ #
+
+    def test_prep_endpoint_gates_pandas(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert (
+            'if not self._require_pharmaml() or not self._require("pandas", "the pEC50 prep"):'
+        ) in source
+
+    # -- the expression-matrix progressive loader --------------------------- #
+
+    def test_expr_loader_uses_the_indexed_reader(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert "def _bio_load_expr_file" in source
+        assert "from pharmaml.utils.io import read_indexed_table_with_progress" in source
+        assert 'read_indexed_table_with_progress(path, report, index_col="cell_line")' in source
+
+    def test_expr_loader_end_to_end_adopts_the_frame(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        path = tmp_path / "expression.csv"
+        frame = pd.DataFrame(
+            {"cell_line": ["A549", "MCF7", "HEK"], "g1": [1.0, 2.0, 3.0], "g2": [4.0, 5.0, 6.0]}
+        )
+        frame.to_csv(path, index=False)
+        app._bio_load_expr_file(path)
+        assert self._drain_jobs(app), "expression load job hung"
+        assert app._bio_expr is not None
+        assert list(app._bio_expr.index) == ["A549", "MCF7", "HEK"]
+        assert app._bio_expr.index.name == "cell_line"
+        info = app._bio_expr_info.cget("text")
+        assert "3 cell lines × 2 genes" in info
+        assert quiet_dialogs == []
+
+    def test_expr_loader_renamed_column_falls_back_positionally(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path
+    ) -> None:
+        import pandas as pd
+
+        path = tmp_path / "renamed.csv"
+        pd.DataFrame({"cl": ["A", "B"], "g": [1.0, 2.0]}).to_csv(path, index=False)
+        app._bio_load_expr_file(path)
+        assert self._drain_jobs(app), "expression load job hung"
+        assert list(app._bio_expr.index) == ["A", "B"]
+        assert app._bio_expr.index.name == "cl"
+
+    # -- the Cell Lines screen loader's phase notes ------------------------- #
+
+    def test_screen_loader_phase_notes_in_source(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert 'report(rows, None, "auditing rows")' in source
+        assert 'report(rows, None, "collapsing replicates")' in source
+        # the phase notes ride AFTER the streaming read
+        assert source.index("load_response_table(path, report=report)") < source.index(
+            'report(rows, None, "auditing rows")'
+        )
+
+    def test_screen_loader_reports_phases_live(
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        import pandas as pd
+
+        # a screen with a duplicate replicate so the collapse phase fires
+        path = tmp_path / "screen.csv"
+        pd.DataFrame(
+            {
+                "cell_line": ["A549", "A549", "MCF7"],
+                "compound": ["drug", "drug", "drug"],
+                "LN_IC50": [1.0, 1.5, 2.0],
+            }
+        ).to_csv(path, index=False)
+        notes: list[str] = []
+        original = app._report_progress
+
+        def spy(done: int, total: object = None, note: str = "") -> None:
+            if note:
+                notes.append(note)
+            original(done, total, note)
+
+        monkeypatch.setattr(app, "_report_progress", spy)
+        app._bio_load_file(path)
+        assert self._drain_jobs(app), "screen load job hung"
+        assert "auditing rows" in notes
+        assert "collapsing replicates" in notes  # the collapse box defaults on
+        assert quiet_dialogs == []

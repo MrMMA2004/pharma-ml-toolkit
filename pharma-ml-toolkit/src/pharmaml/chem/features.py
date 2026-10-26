@@ -992,7 +992,7 @@ def selection_metadata(
     dict
         Keys: ``selected_features`` (rank order), ``descriptor_names``
         (selected ``desc_`` columns with the prefix stripped),
-        ``fingerprint_sizes`` (family -> bit length for the six
+        ``fingerprint_sizes`` (family -> bit length for the seven
         fingerprint families in scope), ``family_counts``,
         ``families_computed``, ``k_requested``, ``method``,
         ``n_molecules``, ``dropped`` (``[row, smiles]`` lists) and

@@ -80,6 +80,51 @@ True
 >>> frame.shape, frame.columns.tolist()                  # ...delegate to sync
 ((2, 1), ['a;b'])
 >>> prog.unlink(); tiny.unlink(); ragged.unlink()
+
+>>> boundary = Path("/tmp/pharmaml_doctest_boundary.csv")   # 100x-146 guard line
+>>> _ = boundary.write_text("a,b\\n1,2\\n3,4\\n5,6,7\\n8,9\\n")
+>>> read_table_with_progress(                              # the ragged row lands
+...     boundary, lambda *args: None, chunk_rows=2, size_threshold=1)
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Failed to parse '/tmp/pharmaml_doctest_boundary.csv': Expected 2 fields in line 4, saw 3
+>>> boundary.unlink()
+
+>>> from pharmaml.utils.io import read_indexed_table_with_progress
+>>> expr = Path("/tmp/pharmaml_doctest_indexed.csv")
+>>> _ = expr.write_text(
+...     "cell_line,g1,g2\\n" + "".join(f"CL{i:02d},{i},{i * 2}\\n" for i in range(6)))
+>>> seen = []
+>>> frame = read_indexed_table_with_progress(
+...     expr, lambda done, total, note: seen.append((done, total, note)),
+...     index_col="cell_line", chunk_rows=2, size_threshold=1,
+... )
+>>> list(frame.index), frame["g2"].tolist(), frame.index.name
+(['CL00', 'CL01', 'CL02', 'CL03', 'CL04', 'CL05'], [0, 2, 4, 6, 8, 10], 'cell_line')
+>>> seen[0], seen[-1][0]
+((2, 7, ''), 6)
+>>> renamed = Path("/tmp/pharmaml_doctest_indexed_renamed.csv")
+>>> _ = renamed.write_text("cl,g\\nA,1\\nB,2\\nC,3\\nD,4\\n")
+>>> frame = read_indexed_table_with_progress(            # no cell_line column...
+...     renamed, lambda *a: None, index_col="cell_line", chunk_rows=2, size_threshold=1,
+... )
+>>> list(frame.index), frame.index.name                 # ...positional fallback
+(['A', 'B', 'C', 'D'], 'cl')
+>>> tiny = Path("/tmp/pharmaml_doctest_indexed_tiny.csv")
+>>> _ = tiny.write_text("cell_line,g\\nA,1\\nB,2\\n")
+>>> seen.clear()
+>>> frame = read_indexed_table_with_progress(tiny, seen.append, index_col="cell_line")
+>>> list(frame.index), seen                              # under the threshold
+(['A', 'B'], [])
+>>> boundary = Path("/tmp/pharmaml_doctest_indexed_boundary.csv")
+>>> _ = boundary.write_text("cl,g\\nA,1\\nB,2\\nC,3,9\\nD,4\\n")
+>>> read_indexed_table_with_progress(                    # ragged row lands on a
+...     boundary, lambda *a: None, index_col="cl", chunk_rows=2, size_threshold=1,
+... )                                                     # chunk boundary: rejected
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: Failed to parse '/tmp/pharmaml_doctest_indexed_boundary.csv': Expected 2 fields in line 4, saw 3
+>>> expr.unlink(); renamed.unlink(); tiny.unlink(); boundary.unlink()
 """
 
 from __future__ import annotations
@@ -95,6 +140,7 @@ from pharmaml.logger import get_logger
 
 __all__ = [
     "ensure_directory",
+    "read_indexed_table_with_progress",
     "read_table",
     "read_table_with_progress",
     "safe_filename",
@@ -198,6 +244,56 @@ def _estimate_csv_rows(file_path: Path, sample_bytes: int = 64 * 1024) -> int | 
     return max(round(total / per_line), 1)
 
 
+def _guard_ragged_boundaries(file_path: Path, separator: str, chunk_rows: int) -> None:
+    """Reject ragged rows that land exactly on a chunk boundary (100x-146).
+
+    pandas' low-memory chunked C parser silently TRUNCATES a row that
+    carries MORE fields than the header and happens to be the first
+    row of a chunk -- the plain reader raises ``ParserError`` for the
+    same bytes, so without this guard a progressive read could hand
+    back different DATA than the sync reader for the same file (the
+    one parity hole the round-146 audit caught).  The guard scans the
+    physical lines once (bytes only, no parsing) and raises the sync
+    reader's own verdict for exactly those rows.
+
+    The scan is only sound where physical lines equal records, so it
+    bows out silently (no guard, pandas' own mid-chunk raises still
+    apply) when the file carries any double quote -- which could open
+    a multi-line quoted field -- or any interior blank line -- which
+    ``skip_blank_lines`` drops, shifting every later boundary.  SHORT
+    rows need no guard at all: both parsers pad them with ``NaN``.
+    """
+    sep_bytes = separator.encode("utf-8")
+    with file_path.open("rb") as handle:
+        header = handle.readline()
+        if b'"' in header:
+            return
+        expected = header.count(sep_bytes) + 1
+        pending_blank = False
+        lineno = 0  # physical data lines, 1-based (the header excluded)
+        for raw in handle:
+            lineno += 1
+            if not raw.strip():
+                pending_blank = True
+                continue
+            if pending_blank:
+                # a blank line with data after it: every later record
+                # shifts off its physical line -- the guard bows out
+                return
+            pending_blank = False
+            if b'"' in raw:
+                return
+            if (
+                lineno > 1
+                and (lineno - 1) % chunk_rows == 0
+                and raw.count(sep_bytes) + 1 > expected
+            ):
+                raise DataValidationError(
+                    f"Failed to parse '{file_path}': Expected {expected} fields "
+                    f"in line {lineno + 1}, saw {raw.count(sep_bytes) + 1}"
+                )
+
+
 def read_table_with_progress(
     path: str | Path,
     report: Callable[[int, int | None, str], None],
@@ -245,6 +341,17 @@ def read_table_with_progress(
     DataValidationError
         If the file does not exist, has an unsupported extension, or
         fails to parse -- the plain reader's own errors, unchanged.
+
+    Notes
+    -----
+    (100x-146) A ragged row carrying extra fields that lands exactly on
+    a chunk boundary would be silently field-truncated by pandas' own
+    chunked parser (the plain reader raises for the same bytes);
+    :func:`_guard_ragged_boundaries` rejects such files up front so the
+    parity promise holds.  Quote-bearing and interior-blank-line files
+    skip the guard (their lines cannot be aligned to records); their
+    non-boundary ragged rows still raise inside pandas itself, and
+    short rows pad with ``NaN`` on both paths.
     """
     file_path = Path(path)
     if not file_path.is_file():
@@ -257,6 +364,7 @@ def read_table_with_progress(
     chunk_rows = max(int(chunk_rows), 1)
     separator = _sniff_separator(file_path)
     estimated = _estimate_csv_rows(file_path)
+    _guard_ragged_boundaries(file_path, separator, chunk_rows)
     chunks: list[pd.DataFrame] = []
     done = 0
 
@@ -286,6 +394,7 @@ def read_table_with_progress(
             # re-reads semicolon-delimited from the top
             chunks.clear()
             done = 0
+            _guard_ragged_boundaries(file_path, ";", chunk_rows)
             try:
                 _drain(";")
             except pd.errors.ParserError:
@@ -310,6 +419,140 @@ def read_table_with_progress(
         file_path,
     )
     return _finalise_columns(frame, file_path)
+
+
+def read_indexed_table_with_progress(
+    path: str | Path,
+    report: Callable[[int, int | None, str], None],
+    *,
+    index_col: str | int,
+    fallback_index_col: str | int = 0,
+    chunk_rows: int = 50_000,
+    size_threshold: int = 8 * 1024 * 1024,
+) -> pd.DataFrame:
+    """Read an INDEXED table, reporting row progress for large CSVs (100x-146).
+
+    The expression-matrix loader's plain ``pd.read_csv(path,
+    index_col=...)`` pair -- preferred label first, positional fallback
+    when the label is missing -- with the determinate progress of
+    :func:`read_table_with_progress`: CSV-like files at/above the
+    threshold stream chunk-by-chunk with ``report(rows_done,
+    rows_estimated, "")`` after every chunk, while smaller files take
+    the plain pair (``report`` never fires, byte-for-byte parity with
+    the synchronous loader).  The index is PRESERVED through the
+    chunked concat (no ``ignore_index``), so ``frame.index`` carries
+    the cell-line labels exactly as the plain reader hands them back.
+
+    The label-missing fallback keeps its own parity: the ``ValueError``
+    pandas raises for an absent label fires at the reader's FIRST chunk
+    (before any data lands), and only that empty-chunks case re-drains
+    with ``fallback_index_col`` -- a ``ValueError`` raised later (a
+    report callback, a mid-file conversion) propagates for its honest
+    verdict instead of silently re-reading the file.
+
+    Parameters
+    ----------
+    path:
+        Input file path.  CSV-like extensions take the progressive
+        path; anything else (or a small file) takes the plain pair.
+    report:
+        Progress callback -- ``(done_rows, estimated_rows_or_None,
+        note)`` per chunk, the status-bar reporter's own shape.
+    index_col:
+        The preferred index: a column label or a position.
+    fallback_index_col:
+        The index to fall back to when a LABEL is absent from the
+        header (the plain reader's own ``except ValueError`` twin).
+    chunk_rows:
+        Rows per chunk on the progressive path.
+    size_threshold:
+        Files at/above this many bytes read progressively.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The indexed table the plain ``pd.read_csv`` pair returns.
+
+    Raises
+    ------
+    DataValidationError
+        If the file does not exist, or the parse fails on the
+        progressive path (the plain pair's own pandas errors, wrapped
+        here for one consistent verdict type; the small-file path
+        re-raises them raw, exactly as the synchronous loader sees
+        them).
+
+    Notes
+    -----
+    Ragged chunk-boundary rows are rejected up front by
+    :func:`_guard_ragged_boundaries` with the same scope notes the
+    sibling reader documents (quote-bearing and interior-blank-line
+    files skip the guard).  No separator sniffing happens here -- the
+    plain pair reads commas only, so the progressive path reads commas
+    only; a semicolon-delimited table is one mangled column on BOTH
+    paths, never a different answer below the threshold than above it.
+    """
+    file_path = Path(path)
+    if not file_path.is_file():
+        raise DataValidationError(f"Input file not found: {file_path}")
+    suffix = file_path.suffix.lower()
+    if suffix not in _CSV_LIKE or file_path.stat().st_size < size_threshold:
+        # small file (or non-CSV extension): the plain indexed pair,
+        # label-missing fallback included -- byte-for-byte the sync twin
+        try:
+            return pd.read_csv(file_path, index_col=index_col)
+        except ValueError:
+            return pd.read_csv(file_path, index_col=fallback_index_col)
+    chunk_rows = max(int(chunk_rows), 1)
+    estimated = _estimate_csv_rows(file_path)
+    _guard_ragged_boundaries(file_path, ",", chunk_rows)
+    chunks: list[pd.DataFrame] = []
+    done = 0
+
+    def _drain(index: str | int) -> None:
+        nonlocal done
+        with pd.read_csv(
+            file_path, sep=",", chunksize=chunk_rows, index_col=index
+        ) as reader:
+            for chunk in reader:
+                chunks.append(chunk)
+                done += len(chunk)
+                if len(chunk):
+                    # the header-only file yields one EMPTY chunk -- a
+                    # 0-rows "progress" blip would be noise, not news
+                    report(done, estimated, "")
+
+    try:
+        try:
+            _drain(index_col)
+        except ValueError:
+            if chunks:
+                # data already landed: this is NOT the label-missing
+                # error (that one fires at the reader's first chunk) --
+                # re-raise for the honest verdict instead of re-reading
+                raise
+            chunks.clear()
+            done = 0
+            _drain(fallback_index_col)
+    except DataValidationError:
+        raise
+    except Exception as exc:  # pandas raises a wide variety of errors
+        raise DataValidationError(f"Failed to parse '{file_path}': {exc}") from exc
+    if not chunks:
+        # defensive floor: a reader that yields no chunks at all (pandas
+        # today always yields one) -- the plain pair's verdict is honest
+        try:
+            return pd.read_csv(file_path, index_col=index_col)
+        except ValueError:
+            return pd.read_csv(file_path, index_col=fallback_index_col)
+    frame = pd.concat(chunks)
+    _LOG.debug(
+        "Progressively read %d indexed rows x %d columns from %s",
+        len(frame),
+        frame.shape[1],
+        file_path,
+    )
+    return frame
 
 
 def read_table(path: str | Path, sheet_name: str | int = 0) -> pd.DataFrame:

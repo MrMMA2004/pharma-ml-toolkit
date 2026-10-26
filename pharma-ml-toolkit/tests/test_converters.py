@@ -138,6 +138,18 @@ class TestAddPIC50Column:
 class TestPreparePic50Dataset:
     """D2.py's process_data, upgraded (100x-145)."""
 
+    @pytest.mark.parametrize(
+        "reserved",
+        ["SMILES", "n_measurements", "endpoint_median"],
+    )
+    def test_out_col_collision_with_reserved_columns_refused(self, reserved: str) -> None:
+        # (100x-146) a colliding out_col used to silently clobber its
+        # twin in the result dict (the round-146 audit's duplicate-key
+        # finding) -- the pipeline refuses it up front now
+        frame = pd.DataFrame({"Ligand SMILES": ["CCO"], "EC50 (nM)": [100.0]})
+        with pytest.raises(DataValidationError, match="reserved result column"):
+            prepare_pic50_dataset(frame, out_col=reserved)
+
     def test_end_to_end_with_d2_spelling(self) -> None:
         frame = pd.DataFrame(
             {
