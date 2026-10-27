@@ -60,6 +60,16 @@ export const ZIP_EXCLUDE_ARGS: readonly string[] = [
   "*.egg-info",
   "*.egg-info/*",
   "*/src/*.egg-info/*",
+  // (100x-155) Release archives must never nest inside the streamed ZIP.
+  // The toolkit's download/ folder accumulates one historical archive per
+  // round (~12 MB each, already deflate-compressed — re-compression is
+  // useless), and they silently rode every download: the streamed archive
+  // ballooned from ~13 MB to 107 MB and the gateway reset the connection
+  // mid-stream (zip exit 14, "Connection reset by peer"). Info-ZIP's -x
+  // patterns match at any depth, so a bare "*.zip" keeps them all out —
+  // the same guard the release builder (scratch/build_zip_*.py) has had
+  // since round 36, finally mirrored at the route.
+  "*.zip",
   // Local virtualenvs / tool caches must never ship — a stray `uv venv`
   // inside the toolkit once added 265 MB to the archive.
   ".venv/*",
@@ -238,6 +248,45 @@ async function readProjectVersion(): Promise<string | null> {
       if (match) return match[1];
     }
     return null;
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Release artifact serving                                            */
+/* ------------------------------------------------------------------ */
+
+/** Directory holding the round-end release artifacts (the verification
+ *  screenshots + the versioned archive). It sits INSIDE the toolkit tree,
+ *  but `*.zip` is excluded from the streamed archive (ZIP_EXCLUDE_ARGS),
+ *  so the prebuilt release zip never nests inside itself. */
+const RELEASE_ZIP_DIR = path.join(TOOLKIT_ROOT, "download");
+
+/** Absolute path of the prebuilt release archive for a given version —
+ *  the round-end builder's output (testzip-verified, leak-scanned). */
+export function releaseZipAbsPath(version: string): string {
+  return path.join(RELEASE_ZIP_DIR, `pharma-ml-toolkit-v${version}.zip`);
+}
+
+export interface ReleaseZipInfo {
+  /** Exact byte size — becomes the download's Content-Length. */
+  bytes: number;
+  /** mtime in ms — folded into the ETag so an in-place rebuild revalidates. */
+  mtimeMs: number;
+}
+
+/** Stat the prebuilt release archive for `version`. Resolves null when the
+ *  file is absent, unreadable, or implausibly empty — callers fall back to
+ *  the on-the-fly streamer. Serving this file needs zero compression (the
+ *  download starts instantly) and yields the exact bytes of the shipped
+ *  release (a stable SHA-256 per version, so verified checksums stay
+ *  meaningful across downloads). */
+export async function statReleaseZip(version: string): Promise<ReleaseZipInfo | null> {
+  try {
+    const st = await fs.stat(releaseZipAbsPath(version));
+    if (!st.isFile() || st.size <= 0) return null;
+    return { bytes: st.size, mtimeMs: st.mtimeMs };
   } catch {
     return null;
   }

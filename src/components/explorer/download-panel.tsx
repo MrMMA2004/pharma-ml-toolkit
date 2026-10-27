@@ -359,6 +359,14 @@ export function DownloadPanel() {
    *  size badge shows a quiet pulse placeholder while it resolves. The
    *  UNCOMPRESSED tree size stays a separate, clearly-labelled chip. */
   const [zipBytes, setZipBytes] = useState<number | null>(null);
+  /** True when zipBytes is the EXACT release-artifact byte size (stat'd on
+   *  the server — not the streamer's ~estimate). Drives the badge (no "≈")
+   *  and the stable-checksum wording below. */
+  const [zipExact, setZipExact] = useState(false);
+  /** Download progress in percent while the archive streams (null while
+   *  idle, or when the server sent no Content-Length — the on-the-fly
+   *  fallback cannot know its size up front). */
+  const [progress, setProgress] = useState<number | null>(null);
 
   /** Archive version — live from the tree stats when loaded, else the shipped
    *  one; the download route stamps the same value into the filename and the
@@ -387,7 +395,9 @@ export function DownloadPanel() {
           "zipBytes" in data &&
           typeof (data as { zipBytes: unknown }).zipBytes === "number"
         ) {
-          setZipBytes((data as { zipBytes: number }).zipBytes);
+          const payload = data as { zipBytes: number; exact?: unknown };
+          setZipBytes(payload.zipBytes);
+          setZipExact(payload.exact === true);
         }
       })
       .catch(() => {
@@ -417,6 +427,7 @@ export function DownloadPanel() {
 
   async function download() {
     setDownloading(true);
+    setProgress(null);
     try {
       const res = await fetch("/api/toolkit/download");
       if (!res.ok) {
@@ -431,7 +442,31 @@ export function DownloadPanel() {
         }
         throw new Error(message);
       }
-      const blob = await res.blob();
+      // Stream the body chunk-by-chunk so the button can show REAL
+      // progress when the server sent Content-Length (the release
+      // artifact always does). Without a length the percent stays null
+      // and the button simply spins until the blob is complete.
+      const total = Number(res.headers.get("content-length") ?? 0);
+      let blob: Blob;
+      if (res.body) {
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+            received += value.byteLength;
+            setProgress(
+              total > 0 ? Math.min(100, Math.round((received / total) * 100)) : null
+            );
+          }
+        }
+        blob = new Blob(chunks as BlobPart[], { type: "application/zip" });
+      } else {
+        blob = await res.blob();
+      }
       if (blob.size < 1024) {
         throw new Error("The archive came back suspiciously small — try again.");
       }
@@ -452,6 +487,7 @@ export function DownloadPanel() {
       });
     } finally {
       setDownloading(false);
+      setProgress(null);
     }
   }
 
@@ -521,7 +557,7 @@ export function DownloadPanel() {
               {downloading ? (
                 <>
                   <Loader2 className="size-5 animate-spin" aria-hidden />
-                  Packaging…
+                  {progress !== null ? `Downloading… ${progress}%` : "Packaging…"}
                 </>
               ) : (
                 <>
@@ -531,8 +567,16 @@ export function DownloadPanel() {
                     v{version}
                   </span>
                   {zipBytes !== null ? (
-                    <span className="ml-1 rounded-full bg-primary-foreground/15 px-2 py-0.5 font-mono text-xs font-normal tabular-nums">
-                      ≈ {fmtBytes(zipBytes)}
+                    <span
+                      className="ml-1 rounded-full bg-primary-foreground/15 px-2 py-0.5 font-mono text-xs font-normal tabular-nums"
+                      aria-label={
+                        zipExact
+                          ? "release archive size (exact)"
+                          : "estimated archive size"
+                      }
+                    >
+                      {zipExact ? "" : "≈ "}
+                      {fmtBytes(zipBytes)}
                     </span>
                   ) : (
                     <span
@@ -546,7 +590,9 @@ export function DownloadPanel() {
               )}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Generated on the fly from the server copy — always in sync with the explorer.
+              {zipExact
+                ? "Streamed straight from the released artifact — byte-identical to the shipped archive."
+                : "Generated on the fly from the server copy — always in sync with the explorer."}
               {stats && zipBytes !== null
                 ? ` ${fmtBytes(stats.totalBytes)} of source in a ${fmtBytes(zipBytes)} archive.`
                 : ""}
@@ -719,7 +765,7 @@ export function DownloadPanel() {
             Verify the archive
           </CardTitle>
           <CardDescription className="text-xs">
-            The ZIP is rebuilt on the fly from the live tree — check your copy landed intact.
+            The ZIP is the released artifact for this version — check your copy landed intact.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 py-3">
@@ -754,8 +800,17 @@ export function DownloadPanel() {
             </p>
           </div>
           <p className="text-[11px] leading-snug text-muted-foreground">
-            Because the archive is regenerated per request, its SHA-256 differs between downloads — hash your own
-            copy to re-verify it later or share it with a colleague.
+            {zipExact ? (
+              <>
+                The archive is the released v{version} artifact — its SHA-256 is stable for this
+                version, so the checksum you verify today matches a colleague&rsquo;s copy tomorrow.
+              </>
+            ) : (
+              <>
+                Because the archive is regenerated per request, its SHA-256 differs between downloads — hash your own
+                copy to re-verify it later or share it with a colleague.
+              </>
+            )}
           </p>
         </CardContent>
       </Card>

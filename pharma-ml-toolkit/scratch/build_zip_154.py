@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""(100x-154) The round-end archive builder — v1.2.92.
+"""(100x-154, sweep patched 100x-155) The round-end archive builder — v1.2.92.
 
-The standing recipe, codified: archive-out the previous zip FIRST
-(the download/ folder must never hold two release zips — the
-nested-zip trap fired twice in earlier rounds), build the new archive
-OUTSIDE download/ (the 617th-entry lesson), scrub the fresh junit xml
-of build-machine paths, testzip + leak-scan the finished archive, and
-only then move it into download/.
+The standing recipe, codified: archive-out EVERY historical release zip
+FIRST (the download/ folder must never hold more than the archive being
+shipped — the nested-zip trap fired twice in earlier rounds, and the
+immediate-predecessor-only sweep let v1.2.84..v1.2.90 accumulate to 97 MB
+inside the tree, which the live streamer then nested into every download),
+build the new archive OUTSIDE download/ (the 617th-entry lesson), scrub the
+fresh junit xml of build-machine paths, testzip + leak-scan the finished
+archive, and only then move it into download/.
 
-Exclusions mirror the live streamer's ZIP_EXCLUDE_ARGS (the byte
-count the Download tab measures must match what ships): caches,
-virtualenvs, logs, egg-info — plus the release zips themselves.
+Exclusions mirror the live streamer's ZIP_EXCLUDE_ARGS (the byte count the
+Download tab measures must match what ships): caches, virtualenvs, logs,
+egg-info — plus the release zips themselves (the live streamer gained the
+same *.zip guard in 100x-155).
 """
 from __future__ import annotations
 
@@ -26,7 +29,6 @@ DOWNLOAD = ROOT / "download"
 REPO_DOWNLOAD = ROOT.parents[1] / "download"
 VERSION = (ROOT / "VERSION").read_text().strip()
 NAME = f"pharma-ml-toolkit-v{VERSION}.zip"
-PREV = "pharma-ml-toolkit-v1.2.91.zip"
 
 EXCLUDE_DIRS = {
     ".git", "__pycache__", ".pytest_cache", ".ruff_cache",
@@ -58,12 +60,24 @@ def iter_files():
 
 
 def main() -> int:
-    # 1. archive-out the previous release zip
-    prev = DOWNLOAD / PREV
-    if prev.exists():
-        REPO_DOWNLOAD.mkdir(exist_ok=True)
-        shutil.move(str(prev), str(REPO_DOWNLOAD / PREV))
-        print(f"archived OUT: {PREV} -> repo download/")
+    # 1. archive-out EVERY historical release zip (the 100x-155 sweep —
+    #    predecessor-only moves let seven archives accumulate; duplicates
+    #    already sitting in the repo download/ are dropped, not duplicated)
+    REPO_DOWNLOAD.mkdir(exist_ok=True)
+    for old in sorted(DOWNLOAD.glob("pharma-ml-toolkit-v*.zip")):
+        if old.name == NAME:
+            continue  # idempotent re-run safety (a crashed prior build)
+        dest = REPO_DOWNLOAD / old.name
+        if dest.exists():
+            if dest.read_bytes() == old.read_bytes():
+                old.unlink()
+                print(f"removed duplicate (byte-identical): {old.name}")
+            else:
+                shutil.move(str(old), str(dest.with_name(dest.name + ".conflict")))
+                print(f"archived OUT (conflict-renamed): {old.name}")
+        else:
+            shutil.move(str(old), str(dest))
+            print(f"archived OUT: {old.name} -> repo download/")
 
     # 2. scrub the fresh junit xml (the 137 recipe is idempotent)
     scrub = ROOT / "scratch" / "scrub_home_paths_137.py"
