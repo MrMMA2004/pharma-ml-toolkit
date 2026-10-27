@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (**3012 tests**).
+exceptions, input validation, and pytest coverage** (**3149 tests**).
 
 ---
 
@@ -269,7 +269,7 @@ pharma-ml-toolkit/
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
 ├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
-├── tests/                   # 3012 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
+├── tests/                   # 3149 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -544,6 +544,10 @@ from pharmaml.ml.preprocessing import make_train_test_split
 X_train, X_test, y_train, y_test = make_train_test_split(ds.X, ds.y)
 result = train_model("random_forest", ds.task, X_train, y_train)
 report = evaluate_model(result.model, X_test, y_test, ds.task)
+# regression? pass the train split too and the report gains the
+# overfit diagnosis: pearson_r, train_r2 and r2_gap (train − test).
+report = evaluate_model(result.model, X_test, y_test, ds.task,
+                        X_train=X_train, y_train=y_train)  # regression only
 ```
 
 What it does for you:
@@ -553,6 +557,12 @@ What it does for you:
 * **Task inference** — `infer_task()` treats any non-numeric target (or a numeric target
   with 2–`max_class_count` distinct values) as classification and continuous targets as
   regression; pass `task=` explicitly to override.
+* **The overfit gap as a number** — for regression, `evaluate_model`
+  accepts the training rows (`X_train=` / `y_train=`) and fills the
+  report's `pearson_r`, `train_r2`, `train_pearson_r` and `r2_gap`
+  (train R² − test R², signed) — an overfit *diagnostic*, never a
+  quality claim, and the pair is all-or-nothing and regression-only
+  (a classification train side has no rmse to mirror).
 * **Multiclass out of the box** — 2, 3, 10 classes: string or integer labels both work.
 * **Visible cleanup** — rows with a missing target are dropped (logged), non-numeric
   feature columns (SMILES, IDs) are excluded and reported in `dropped_columns`.
@@ -818,6 +828,51 @@ three IDENTICAL plain `RandomForestRegressor`s (no quantile loss:
 `RandomForestRegressor` has no quantile mode in scikit-learn at all),
 so its advertised "90% Prediction Interval" had width 0.0 on every row
 and empirical coverage 0.0% — fixed here, not ported.
+
+#### The interpretability bundle (`chem.interpret`) — decode_morgan_bit + signed correlations
+
+A fingerprint column finally *means* something. The D2.py upload's
+best remaining interpretability idea, closed as four first-class
+surfaces:
+
+```python
+from pharmaml.chem import decode_morgan_bit, signed_feature_correlations, filter_low_variance
+from pharmaml.viz import plot_signed_correlations, plot_correlation_heatmap
+
+# 1. Which atoms make this ECFP bit fire?
+record = decode_morgan_bit("CC(=O)Oc1ccccc1C(=O)O", 73)   # aspirin
+record.hits               # every (atom, radius) environment the bit fires on
+record.hits[0].environment_smiles   # the readable chemistry
+record.drawing            # the RDKit bit legend as an SVG string
+
+# 2. Which features pull the target up, which drag it down?
+corr = signed_feature_correlations(ds.X, ds.y)    # |r| descending, sign kept
+plot_signed_correlations(corr, top=10)            # teal up, warm down
+plot_correlation_heatmap(ds.X, columns=corr.head(10).index)
+
+# 3. Cut the columns that never move (the xxx.ipynb filter cell).
+kept = filter_low_variance(ds.X, threshold=0.01)
+kept.frame, kept.dropped    # the survivors + every cut's variance as evidence
+```
+
+Upgrades `D2.py` honestly: the original's decode passed the
+FINGERPRINT radius to `FindAtomEnvironmentOfRadiusN` while discarding
+the hit's own radius (for a bit that fired at radius 1 it drew the
+radius-2 environment — a real decode bug, fixed and pinned) and
+silently dropped every radius-0 hit; its correlation bundle
+correlated only the first 1000 features "for speed" and appended a
+fake `0.0` wherever `pearsonr` raised (a failed column masquerading
+as "no correlation" — dropped, never zeroed, here). The cross-model
+twin `cross_model_importances` + `plot_permutation_heatmap`
+(`pharmaml.ml` / `pharmaml.viz`) renders the features × models matrix
+the upload drew over its base models and meta-learner — same seed per
+model so differences reflect the *models*, not the shuffle luck, and
+a feature a model never saw renders grey ("no vote"), not a fake
+zero. The GUI twins ride the ML tab: the Results card's
+**Correlations… / Correlation heatmap / Decode ECFP bit…** row, the
+leaderboard's **Cross-model importance…**, and the feature factory's
+**Filter low variance…** (threshold entry, kept/dropped ledger, frame
+adoption).
 
 #### Hierarchical SVR (`hsvr`) — local specialists for heterogeneous data
 

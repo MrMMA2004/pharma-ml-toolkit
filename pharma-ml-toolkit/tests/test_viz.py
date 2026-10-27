@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import matplotlib
 import numpy as np
@@ -38,6 +38,7 @@ from pharmaml.viz import (
     plot_concentration_profile,
     plot_confusion_matrix,
     plot_consensus_ranking,
+    plot_correlation_heatmap,
     plot_cv_scores,
     plot_descriptor_distributions,
     plot_dose_accumulation,
@@ -48,6 +49,7 @@ from pharmaml.viz import (
     plot_model_comparison,
     plot_operator_trajectory,
     plot_pareto_front,
+    plot_permutation_heatmap,
     plot_permutation_importance,
     plot_pr_curves,
     plot_predicted_vs_actual,
@@ -56,6 +58,7 @@ from pharmaml.viz import (
     plot_residuals,
     plot_rl_introspection,
     plot_roc_curves,
+    plot_signed_correlations,
     plot_similarity_heatmap,
     plot_table_comparison,
     plot_top_ligands,
@@ -2657,3 +2660,121 @@ class TestPredictionIntervalsPlot:
         assert any("coverage" in t for t in texts)
         # the record's own statistic rides the annotation
         assert any(f"{res.coverage * 100:.1f}%" in t for t in texts)
+
+
+class TestPermutationHeatmap:
+    """GAP 3 — the cross-model permutation heatmap (features × models)."""
+
+    @staticmethod
+    def _record(names: list[str], means: list[float]) -> Any:
+        from pharmaml.ml.evaluation import PermutationImportance
+
+        return PermutationImportance(
+            names=names,
+            means=np.asarray(means, dtype=float),
+            stds=np.zeros(len(means)),
+            scoring="r2",
+            n_repeats=5,
+            n_samples=30,
+        )
+
+    def test_rows_and_columns(self, close_all) -> None:
+        panel = {
+            "ols": self._record(["signal", "noise"], [0.5, 0.0]),
+            "ridge": self._record(["signal", "noise"], [0.4, -0.1]),
+        }
+        fig = plot_permutation_heatmap(panel)
+        ax = fig.axes[0]
+        # Rows: strongest cross-model |importance| at the TOP.
+        assert [t.get_text() for t in ax.get_yticklabels()] == ["signal", "noise"]
+        assert [t.get_text() for t in ax.get_xticklabels()] == ["ols", "ridge"]
+        # 2x2 grid, every cell annotated.
+        assert len(ax.texts) == 4
+        assert ax.get_title().startswith("Cross-model permutation importance")
+
+    def test_top_truncation(self, close_all) -> None:
+        names = [f"f{i}" for i in range(6)]
+        means = [0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+        panel = {"m": self._record(names, means)}
+        fig = plot_permutation_heatmap(panel, top=3)
+        yticks = [t.get_text() for t in fig.axes[0].get_yticklabels()]
+        assert yticks == ["f0", "f1", "f2"]
+
+    def test_missing_feature_is_grey_no_text(self, close_all) -> None:
+        # Model B never saw 'extra' — its cell must be the honest grey
+        # "no vote", not a fake zero: 2 texts for the shared feature,
+        # 1 for A's extra, 0 for B's absent.
+        panel = {
+            "A": self._record(["shared", "extra"], [0.5, 0.3]),
+            "B": self._record(["shared"], [0.4]),
+        }
+        fig = plot_permutation_heatmap(panel)
+        assert len(fig.axes[0].texts) == 3
+
+    def test_frames_are_accepted(self, close_all) -> None:
+        panel = {
+            "ols": self._record(["a", "b"], [0.5, 0.1]).as_frame(),
+            "ridge": self._record(["a", "b"], [0.4, 0.0]).as_frame(),
+        }
+        fig = plot_permutation_heatmap(panel)
+        assert len(fig.axes[0].texts) == 4
+
+    def test_unannotated_when_wide(self, close_all) -> None:
+        names = [f"f{i}" for i in range(14)]
+        means = list(np.linspace(0.9, 0.1, 14))
+        panel = {"m": self._record(names, means)}
+        fig = plot_permutation_heatmap(panel, top=None)  # all 14 rows
+        ax = fig.axes[0]
+        assert len(ax.texts) == 0
+        assert "unannotated" in ax.get_title()
+
+    def test_custom_title_rides_through(self, close_all) -> None:
+        panel = {"m": self._record(["a", "b"], [0.5, 0.1])}
+        fig = plot_permutation_heatmap(panel, title="My panel")
+        assert fig.axes[0].get_title() == "My panel"
+
+    def test_contract_errors(self, close_all) -> None:
+        with pytest.raises(DataValidationError, match="importances is empty"):
+            plot_permutation_heatmap({})
+        with pytest.raises(DataValidationError, match="top_n must be"):
+            plot_permutation_heatmap({"m": self._record(["a"], [0.1])}, top=0)
+
+    def test_all_undefined_raises(self, close_all) -> None:
+        # A panel whose records are all EMPTY of features: the
+        # assembled matrix is entirely undefined and the plot refuses.
+        empty = self._record([], [])
+        with pytest.raises(DataValidationError, match="entirely undefined"):
+            plot_permutation_heatmap({"A": empty, "B": empty})
+
+    def test_end_to_end_from_cross_model_runner(self, close_all) -> None:
+        from sklearn.linear_model import LinearRegression, Ridge
+
+        from pharmaml.ml import cross_model_importances
+
+        rng = np.random.default_rng(42)
+        x = pd.DataFrame(
+            rng.uniform(size=(40, 3)), columns=["signal", "noise1", "noise2"]
+        )
+        y = pd.Series(4.0 * x["signal"] + rng.normal(0.0, 0.1, 40))
+        panel = {
+            "ols": LinearRegression().fit(x, y),
+            "ridge": Ridge(alpha=0.5).fit(x, y),
+        }
+        records = cross_model_importances(panel, x, y, n_repeats=3)
+        fig = plot_permutation_heatmap(records)
+        ax = fig.axes[0]
+        # 'signal' dominates both models -> top row.
+        assert ax.get_yticklabels()[0].get_text() == "signal"
+        assert len(ax.texts) == 6  # 3 features x 2 models
+
+    def test_interpret_bundle_exports_reachable(self, close_all) -> None:
+        # The GAP-2 siblings ride the SAME package-level surface this
+        # file imports them from: a callable pin, so a dropped
+        # viz/__init__ re-export fails HERE instead of silently
+        # surviving only through the ml_plots module path.
+        assert callable(plot_signed_correlations)
+        assert callable(plot_correlation_heatmap)
+        fig = plot_signed_correlations(
+            pd.Series([0.9, -0.8, 0.1], index=["a", "b", "c"]), top=2
+        )
+        assert len(fig.axes[0].patches) == 2

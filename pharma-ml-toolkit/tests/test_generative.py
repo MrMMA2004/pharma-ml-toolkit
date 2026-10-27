@@ -4568,3 +4568,92 @@ class TestParetoCrowding:
             objective, population_size=24, generations=8, seed=11,
         ).optimize())
         assert again.prune(5).smiles == pruned.smiles
+
+
+class TestBioisostereGaMode:
+    """The ``mutation="bioisostere"`` GA mode (round 100x-152 wiring).
+
+    The module shipped in an earlier round but was never wired into
+    the package surface or the GA -- its own doctest imported
+    ``from pharmaml.generative import bioisostere_moves`` and FAILED
+    under a bare ``pytest`` (the audit's red-suite bomb).  Both wires
+    are pinned here: the package-level export and the GA mode.
+    """
+
+    def test_package_level_exports(self) -> None:
+        from pharmaml.generative import bioisostere_moves, bioisostere_mutate
+
+        assert callable(bioisostere_moves)
+        assert callable(bioisostere_mutate)
+
+    def test_moves_benzene_to_pyridine(self) -> None:
+        from pharmaml.generative import bioisostere_moves
+
+        assert bioisostere_moves("c1ccccc1") == ["c1ccncc1"]
+
+    def test_mutate_draw_is_seed_deterministic(self) -> None:
+        import random
+
+        from pharmaml.generative import bioisostere_mutate
+
+        first = bioisostere_mutate("CC(=O)Oc1ccccc1C(=O)O", random.Random(42))
+        second = bioisostere_mutate("CC(=O)Oc1ccccc1C(=O)O", random.Random(42))
+        assert first == second
+        assert first is not None
+
+    def test_mutate_none_for_unparseable(self) -> None:
+        import random
+
+        from pharmaml.generative import bioisostere_mutate
+
+        assert bioisostere_mutate("not-a-smiles", random.Random(0)) is None
+
+    def test_ga_bioisostere_mode_wiring_and_determinism(self) -> None:
+        from pharmaml.generative import GeneticOptimizer
+        from pharmaml.generative.scoring import QedObjective
+
+        hetero_seeds = [
+            s for s in DEFAULT_CORPUS if any(ch in s for ch in ("N", "O", "S"))
+        ][:12]
+
+        def run() -> GenerationResult:
+            return GeneticOptimizer(
+                QedObjective(),
+                population_size=24,
+                generations=6,
+                seed=7,
+                mutation="bioisostere",
+            ).optimize(seed_smiles=hetero_seeds)
+
+        first, second = run(), run()
+        assert first.metadata["mutation"] == "bioisostere"
+        assert first.smiles == second.smiles  # deterministic given the seed
+        assert first.best_score > 0.0
+        assert all(canonical_smiles(smi) is not None for smi in first.smiles)
+
+    def test_ga_bioisostere_mode_adaptive_operator_book(self) -> None:
+        # adaptive operator selection must see the two-operator
+        # mutation family (bioisostere + character), like topology's.
+        from pharmaml.generative import GeneticOptimizer
+        from pharmaml.generative.scoring import QedObjective
+
+        optimizer = GeneticOptimizer(
+            QedObjective(),
+            population_size=8,
+            generations=2,
+            seed=3,
+            mutation="bioisostere",
+            operator_selection="adaptive",
+        )
+        result = optimizer.optimize(seed_smiles=["CCO", "CCN", "CCS"])
+        mutation_stats = result.metadata.get("operator_stats", {}).get("mutation", {})
+        assert set(mutation_stats) == {"bioisostere", "character"}
+
+    def test_unknown_mutation_still_rejected(self) -> None:
+        from pharmaml.generative import GeneticOptimizer
+        from pharmaml.generative.scoring import QedObjective
+
+        with pytest.raises(DataValidationError, match="mutation must be"):
+            GeneticOptimizer(
+                QedObjective(), population_size=8, generations=1, mutation="isosteres"
+            )

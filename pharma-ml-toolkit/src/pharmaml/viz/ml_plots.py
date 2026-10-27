@@ -117,7 +117,7 @@ pharmaml.exceptions.DataValidationError: history is missing column(s) ['train_lo
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -125,6 +125,7 @@ import pandas as pd
 
 from pharmaml.exceptions import DataValidationError, ModelError
 from pharmaml.logger import get_logger
+from pharmaml.utils.validation import require_columns
 from pharmaml.viz._compat import PALETTE, new_figure
 
 __all__ = [
@@ -132,16 +133,20 @@ __all__ = [
     "plot_calibration_curve",
     "plot_class_distribution",
     "plot_confusion_matrix",
+    "plot_correlation_heatmap",
     "plot_cv_scores",
     "plot_feature_importance",
     "plot_gp_uncertainty",
     "plot_learning_curve",
     "plot_model_comparison",
+    "plot_permutation_heatmap",
     "plot_permutation_importance",
     "plot_pr_curves",
     "plot_predicted_vs_actual",
+    "plot_prediction_intervals",
     "plot_residuals",
     "plot_roc_curves",
+    "plot_signed_correlations",
     "plot_training_history",
 ]
 
@@ -1393,6 +1398,481 @@ def plot_permutation_importance(
     ax.set_yticks(positions, [names[int(index)] for index in order])
     ax.set_xlabel("importance (Δ score when shuffled)")
     ax.set_title(title)
+    return fig
+
+
+def plot_permutation_heatmap(
+    importances: Mapping[str, Any],
+    *,
+    top: int | None = 10,
+    title: str = "",
+) -> Any:
+    """Cross-model permutation-importance heatmap (features × models).
+
+    The matrix figure ``D2.py`` drew after looping
+    ``permutation_importance`` over its base models and meta-learner
+    (the audit's GAP 3): which features does EVERY model lean on, and
+    where do the meta and the bases disagree?  Rows are features —
+    the ``top`` largest mean absolute importances ACROSS models —
+    columns are models, cells carry the model's own signed mean
+    importance for that feature.  A feature a model never saw (a
+    name absent from its record) renders light grey, honestly
+    "no vote" instead of a fake zero.
+
+    Parameters
+    ----------
+    importances:
+        Model display name → a
+        :class:`~pharmaml.ml.evaluation.PermutationImportance` record
+        (or ``as_frame()`` DataFrame) — the direct output of
+        :func:`~pharmaml.ml.evaluation.cross_model_importances`, or a
+        hand-assembled panel.
+    top:
+        How many feature rows to show (largest cross-model mean
+        ``|importance|`` first); ``None`` shows every feature.
+        Validated by :func:`_check_top_n`.
+    title:
+        Chart title; empty falls back to ``"Cross-model permutation
+        importance"``.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``importances`` is empty, a value carries neither the
+        record attributes nor the DataFrame columns (the
+        :func:`_extract_permutation` contract), or the assembled
+        matrix is entirely undefined.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pharmaml.ml.evaluation import PermutationImportance
+    >>> def rec(means):
+    ...     return PermutationImportance(
+    ...         names=["signal", "noise"], means=np.asarray(means),
+    ...         stds=np.zeros(2), scoring="r2", n_repeats=5, n_samples=30)
+    >>> panel = {"ols": rec([0.5, 0.0]), "ridge": rec([0.4, -0.1])}
+    >>> fig = plot_permutation_heatmap(panel)
+    >>> ax = fig.axes[0]
+    >>> [tick.get_text() for tick in ax.get_yticklabels()]   # rows
+    ['signal', 'noise']
+    >>> [tick.get_text() for tick in ax.get_xticklabels()]   # columns
+    ['ols', 'ridge']
+    >>> plot_permutation_heatmap({})
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: importances is empty — pass at least one model's PermutationImportance record (cross_model_importances builds the panel for you)
+    """
+    _check_top_n(top)
+    if not importances:
+        raise DataValidationError(
+            "importances is empty — pass at least one model's "
+            "PermutationImportance record (cross_model_importances builds "
+            "the panel for you)"
+        )
+
+    model_names = [str(name) for name in importances]
+    parsed = {
+        name: _extract_permutation(record) for name, record in importances.items()
+    }
+
+    # Feature order: every name in first-appearance order, ranked by
+    # the cross-model mean |importance| (stable, first-declared wins
+    # ties — the module's sort convention).
+    appearance: list[str] = []
+    magnitudes: dict[str, list[float]] = {}
+    for name in model_names:
+        names, means, _ = parsed[name]
+        for feature, mean in zip(names, means):
+            if feature not in magnitudes:
+                appearance.append(feature)
+                magnitudes[feature] = []
+            magnitudes[feature].append(abs(float(mean)))
+    cross_mean = {
+        feature: sum(magnitudes[feature]) / len(magnitudes[feature])
+        for feature in appearance
+    }
+    ordered = sorted(appearance, key=lambda f: -cross_mean[f])
+    keep = len(ordered) if top is None else min(int(top), len(ordered))
+    ordered = ordered[:keep]
+
+    # The matrix: rows = features (display order: strongest at the
+    # TOP, the bar-chart convention), columns = models, NaN where a
+    # model's record lacks the feature.
+    matrix = np.full((len(ordered), len(model_names)), np.nan)
+    for col, name in enumerate(model_names):
+        names, means, _ = parsed[name]
+        lookup = {feature: float(mean) for feature, mean in zip(names, means)}
+        for row, feature in enumerate(ordered):
+            if feature in lookup:
+                matrix[row, col] = lookup[feature]
+    if not np.isfinite(matrix).any():
+        raise DataValidationError(
+            "the assembled importance matrix is entirely undefined — no "
+            "model's record carries any of the selected features"
+        )
+
+    annotated = len(ordered) <= 12 and len(model_names) <= 12
+    rows = len(ordered)
+    fig, ax = new_figure(
+        figsize=(2.6 + 1.15 * len(model_names), 1.6 + 0.62 * rows)
+    )
+    from matplotlib.colors import LinearSegmentedColormap
+
+    cmap = LinearSegmentedColormap.from_list(
+        "pharmaml_signed", [PALETTE[3], "#FFFFFF", PALETTE[0]]
+    )
+    cmap.set_bad("#E5E7EB")  # features the model never saw
+    finite_max = float(np.nanmax(np.abs(matrix)))
+    bound = max(finite_max, 1e-12)  # a symmetric, zero-centred scale
+    image = ax.imshow(matrix, cmap=cmap, vmin=-bound, vmax=bound,
+                      aspect="auto")
+    fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04,
+                 label="importance (Δ score when shuffled)")
+
+    if annotated:
+        for row in range(rows):
+            for col in range(len(model_names)):
+                value = matrix[row, col]
+                if np.isnan(value):
+                    continue  # the grey cell already says "no vote"
+                ax.text(
+                    col, row, f"{value:+.2f}", ha="center", va="center",
+                    fontsize=8,
+                    color="white" if abs(value) > 0.6 * bound else "#1F2937",
+                )
+    ax.set_xticks(range(len(model_names)), model_names, rotation=30,
+                  ha="right", fontsize=9)
+    ax.set_yticks(range(rows), ordered, fontsize=9)
+    suffix = "" if annotated else f" — {rows} features, cells unannotated"
+    ax.set_title((title or "Cross-model permutation importance") + suffix)
+    ax.grid(False)
+    return fig
+
+
+def plot_signed_correlations(
+    correlations: pd.Series,
+    *,
+    top: int | None = 10,
+    title: str = "",
+    ax: Any = None,
+    metric_label: str = "Pearson r",
+) -> Any:
+    """Top-N signed feature-target correlations as a horizontal bar chart.
+
+    The ``D2.py`` upload's ``Top10_Correlation_Direction`` figure, in
+    the toolkit's visual language: the strongest correlations sit at
+    the TOP of the chart, POSITIVE bars render in the palette's teal
+    and NEGATIVE ones in its red (the upload used green/red — the
+    colour semantics are identical, the hues now match every other
+    figure), and every bar carries its signed value as text.
+
+    The whisker-free twin of :func:`plot_permutation_importance`:
+    a correlation has no ±std to draw, so the bars carry no error
+    whiskers — everything else (edge colours, the zero marker line,
+    the per-bar value labels, the largest-|value|-at-the-top display
+    order) mirrors that sibling exactly.
+
+    The Series is trusted, not re-sorted: the FIRST ``top`` entries
+    are plotted in the caller's order, reversed only for display (so
+    entry 0 — the strongest, if the Series came from
+    :func:`pharmaml.chem.interpret.signed_feature_correlations` —
+    lands at the top).  Pass a Series sorted by ``|r|`` descending;
+    an unsorted one plots its head, not its top.  NaN entries (an
+    undefined correlation) are dropped with a warning before the
+    head is taken, mirroring the computation side's honest drop.
+
+    Parameters
+    ----------
+    correlations:
+        Signed correlations indexed by feature name, ``|r|``
+        descending (the ``signed_feature_correlations`` output).
+    top:
+        How many entries to show; ``None`` shows every entry.
+        Validated by :func:`_check_top_n`.
+    title:
+        Chart title; empty falls back to ``"Top {n} features by
+        |{metric_label}|"``.
+    ax:
+        Draw onto an existing axes instead of a fresh figure (the
+        caller's axes are used as given — no restyling); the function
+        returns that axes' figure.
+    metric_label:
+        The x-axis label — ``"Pearson r"`` (default) or ``"Spearman ρ"``
+        for the rank flavour.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``correlations`` is not a ``pandas.Series``, its values
+        are not numeric, it is empty, every entry is NaN, or ``top``
+        is invalid.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from pharmaml.viz import close_figure
+    >>> corr = pd.Series({"logp": 0.9, "mw": -0.8, "tpsa": 0.3})
+    >>> fig = plot_signed_correlations(corr)
+    >>> chart = fig.axes[0]
+    >>> chart.get_xlabel()
+    'Pearson r'
+    >>> [tick.get_text() for tick in chart.get_yticklabels()]  # bottom -> top
+    ['tpsa', 'mw', 'logp']
+    >>> len(chart.patches)                                     # every bar
+    3
+    >>> close_figure(fig)
+    >>> fig = plot_signed_correlations(corr, top=2, metric_label="Spearman ρ")
+    >>> (len(fig.axes[0].patches), fig.axes[0].get_xlabel())
+    (2, 'Spearman ρ')
+    >>> close_figure(fig)
+    >>> plot_signed_correlations(pd.Series(dtype=float))
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: no correlations to plot (empty Series)
+    >>> plot_signed_correlations(pd.Series({"logp": float("nan")}))
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: every correlation is NaN (undefined -- constant columns?); nothing to plot
+    """
+    if not isinstance(correlations, pd.Series):
+        raise DataValidationError(
+            "correlations must be a pandas.Series sorted by |r| (the "
+            "signed_feature_correlations output), got "
+            f"{type(correlations).__name__}"
+        )
+    _check_top_n(top)
+    try:
+        values_all = correlations.to_numpy(dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise DataValidationError(
+            f"correlation values must be numeric ({exc})"
+        ) from exc
+    values_all = values_all.reshape(-1)
+    if values_all.size == 0:
+        raise DataValidationError("no correlations to plot (empty Series)")
+    finite = np.isfinite(values_all)
+    if not finite.all():
+        _LOG.warning(
+            "Dropping %d NaN correlation(s) before plotting (undefined "
+            "correlations are not a zero)",
+            int((~finite).sum()),
+        )
+    values = values_all[finite]
+    names = [str(name) for name, ok in zip(correlations.index, finite) if ok]
+    if values.size == 0:
+        raise DataValidationError(
+            "every correlation is NaN (undefined -- constant columns?); "
+            "nothing to plot"
+        )
+
+    keep = values.size if top is None else min(int(top), values.size)
+    # The caller's order is trusted (head, not top); reversed for
+    # display so the strongest entry sits at the top of the chart —
+    # the plot_permutation_importance display convention.
+    shown_values = values[:keep][::-1]
+    shown_names = names[:keep][::-1]
+
+    if ax is None:
+        fig, ax = new_figure(figsize=(8.4, 0.42 * keep + 1.7))
+    else:
+        fig = ax.figure
+    positions = np.arange(keep)
+    colors = [PALETTE[3] if value < 0 else PALETTE[0] for value in shown_values]
+    ax.barh(
+        positions,
+        shown_values,
+        color=colors,
+        alpha=0.88,
+        height=0.62,
+        edgecolor="white",
+    )
+    for pos, value in zip(positions, shown_values):
+        ax.text(value, pos, f" {value:+.4g}", va="center",
+                ha="left" if value >= 0 else "right", fontsize=9)
+    ax.axvline(0.0, color="#525252", lw=0.8, ls=":")
+    ax.set_yticks(positions, shown_names)
+    ax.set_xlabel(metric_label)
+    ax.set_title(title or f"Top {keep} features by |{metric_label}|")
+    return fig
+
+
+def plot_correlation_heatmap(
+    frame: pd.DataFrame,
+    *,
+    columns: Sequence[str] | None = None,
+    method: str = "pearson",
+    title: str = "",
+) -> Any:
+    """Feature × feature correlation heatmap (the seaborn-free port).
+
+    The ``D2.py`` upload's ``Feature_Correlation_Heatmap_with_pEC50``
+    figure: the upload called ``sns.heatmap`` on the top-10 features
+    plus the target; this port draws the same matrix in pure
+    matplotlib (``imshow`` + colour bar + tick labels) so the toolkit
+    keeps its matplotlib-only viz contract.  Pass the top-``top``
+    columns of :func:`pharmaml.chem.interpret.signed_feature_correlations`
+    plus the target column to reproduce the upload's exact figure.
+
+    Two deliberate deviations from the upload: the FULL matrix is
+    drawn (the original masked the upper triangle — a seaborn
+    styling habit; the symmetric mirror and the trivial 1.0 diagonal
+    cost nothing and aid scanning), and the diverging colormap is
+    built from the house palette (red → white → teal, mirroring
+    :func:`plot_signed_correlations`'s signed-bar colours) instead of
+    seaborn's ``coolwarm`` — pinned to the honest correlation range
+    ``[-1, 1]`` so the centre IS zero.  Cells whose correlation is
+    undefined (a constant column's NaN row) render light grey.
+
+    Parameters
+    ----------
+    frame:
+        Frame carrying the columns to correlate (NaN cells are
+        handled pairwise, the ``pandas.corr`` convention).
+    columns:
+        The columns to correlate, in display order; ``None`` uses
+        every NUMERIC column (non-numeric columns are skipped with a
+        warning, the ``clean_numeric_frame`` precedent — name them
+        explicitly and a non-numeric column raises instead).
+    method:
+        ``"pearson"`` (default) or ``"spearman"``.
+    title:
+        Chart title; empty falls back to ``"Feature correlation
+        heatmap"``.  The method (``" (spearman)"``) and, past 12
+        columns, an ``"cells unannotated"`` note are appended to the
+        effective title — the ``plot_confusion_matrix`` convention.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``frame`` is not a DataFrame, ``method`` is unknown,
+        ``columns`` names a missing or non-numeric column, fewer than
+        two numeric columns remain, or every correlation is undefined
+        (all-constant input).
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> from pharmaml.viz import close_figure
+    >>> rng = np.random.default_rng(42)
+    >>> frame = pd.DataFrame(rng.uniform(size=(60, 4)),
+    ...                       columns=["a", "b", "c", "d"])
+    >>> fig = plot_correlation_heatmap(frame)
+    >>> chart = fig.axes[0]
+    >>> [tick.get_text() for tick in chart.get_yticklabels()]
+    ['a', 'b', 'c', 'd']
+    >>> len(chart.texts)                       # 4x4 cells annotated
+    16
+    >>> close_figure(fig)
+    >>> wide = pd.DataFrame(rng.uniform(size=(30, 14)),
+    ...                     columns=[f"f{i}" for i in range(14)])
+    >>> fig = plot_correlation_heatmap(wide)   # >12 columns: no annotations
+    >>> len(fig.axes[0].texts)
+    0
+    >>> "unannotated" in fig.axes[0].get_title()
+    True
+    >>> close_figure(fig)
+    >>> plot_correlation_heatmap(frame, columns=["a", "missing"])
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: Missing required column(s) ['missing']. Available columns: ['a', 'b', 'c', 'd']
+    """
+    if method not in ("pearson", "spearman"):
+        raise DataValidationError(
+            f"method must be 'pearson' or 'spearman', got {method!r}"
+        )
+    if not isinstance(frame, pd.DataFrame):
+        raise DataValidationError(
+            f"frame must be a pandas.DataFrame, got {type(frame).__name__}"
+        )
+    if columns is not None:
+        column_list = list(columns)
+        require_columns(frame, column_list)
+        non_numeric = [
+            name
+            for name in column_list
+            if not pd.api.types.is_numeric_dtype(frame[name])
+        ]
+        if non_numeric:
+            raise DataValidationError(
+                f"column(s) {non_numeric} are not numeric -- a correlation "
+                "heatmap needs numeric columns; drop or coerce them first"
+            )
+    else:
+        column_list = [
+            name
+            for name in frame.columns
+            if pd.api.types.is_numeric_dtype(frame[name])
+        ]
+        skipped = [name for name in frame.columns if name not in column_list]
+        if skipped:
+            _LOG.warning(
+                "Skipping %d non-numeric column(s): %s", len(skipped), skipped[:10]
+            )
+    if len(column_list) < 2:
+        raise DataValidationError(
+            "need at least 2 numeric columns for a correlation heatmap, got "
+            f"{len(column_list)}: {column_list}"
+        )
+
+    matrix = frame.loc[:, column_list].corr(method=method)
+    values = matrix.to_numpy(dtype=float)
+    if not np.isfinite(values).any():
+        raise DataValidationError(
+            "every correlation is undefined (all columns constant?) -- "
+            "nothing to heat-map"
+        )
+
+    n = len(column_list)
+    # Per-cell annotations are only readable while cells stay
+    # inch-sized (the plot_confusion_matrix guard: a 464-class canvas
+    # once tried 176k text artists); past 12 columns the matrix
+    # renders as a plain heat-map with small ticks.
+    annotated = n <= 12
+    side = 2.2 + 1.1 * min(n, 12)
+    fig, ax = new_figure(figsize=(side, 2.2 + 1.0 * min(n, 12)))
+    from matplotlib.colors import LinearSegmentedColormap
+
+    cmap = LinearSegmentedColormap.from_list(
+        "pharmaml_signed", [PALETTE[3], "#FFFFFF", PALETTE[0]]
+    )
+    cmap.set_bad("#E5E7EB")  # undefined (constant-column) cells
+    image = ax.imshow(values, cmap=cmap, vmin=-1.0, vmax=1.0)
+    fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04, label=f"{method} r")
+
+    if annotated:
+        for i in range(n):
+            for j in range(n):
+                value = values[i, j]
+                if np.isnan(value):
+                    continue  # the grey cell already says "undefined"
+                ax.text(
+                    j, i, f"{value:+.2f}", ha="center", va="center",
+                    fontsize=9 if n <= 8 else 8,
+                    color="white" if abs(value) > 0.6 else "#1F2937",
+                )
+    tick_labels = [str(name) for name in column_list]
+    tick_size = 9 if annotated else max(4, 9 - n // 40)
+    ax.set_xticks(range(n), tick_labels, rotation=45, ha="right",
+                  fontsize=tick_size)
+    ax.set_yticks(range(n), tick_labels, fontsize=tick_size)
+    suffix = " (spearman)" if method != "pearson" else ""
+    if not annotated:
+        suffix += f" — {n} features, cells unannotated"
+    ax.set_title((title or "Feature correlation heatmap") + suffix)
+    ax.grid(False)
     return fig
 
 

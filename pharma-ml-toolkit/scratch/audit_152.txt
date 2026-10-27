@@ -1,0 +1,411 @@
+=======================================================================
+AUDIT 152 — round 35 (100x-152), Task ID 1-a
+Read-only static audit of the ROUND-34 additions (v1.2.89's
+least-reviewed code) + the untracked-files discovery (verified and
+EXPANDED — one live red-suite risk found).
+
+Method: line-by-line read of the six targets; rg cross-references;
+two probe scripts under scratch/ (imports pharmaml — allowed this
+round); every finding carries file:line + evidence.  Paths are
+repo-relative (toolkit repo = the pharma-ml-toolkit checkout; web
+repo = the Next.js app root one level above it).
+=======================================================================
+
+VERDICT (one paragraph)
+-----------------------
+The round-34 FEATURE itself is sound end to end: the quantile trio,
+the record, the plot, the GUI card and all three test classes do what
+their docstrings, tooltips and CHANGELOG bullets promise — guard
+parity, honest statistics, determinism pinned by test, retirement on
+both train renders, thread-safe job wiring, five-format save twin.
+The real risks live OUTSIDE the round's diff, in the tree's untracked
+strays restored after the round-34 close-out: bioisostere.py is
+unwired AND breaks the default pytest collection right now (FINDING 1,
+RISK — the next bare `pytest` goes red), and a superseded web draft
+waits to be deleted.  Two polish findings in the round's own code (the
+module __all__ miss; the knob-validation escape hatches), two
+note-grade (a stale tooltip enumeration; test-count/coverage gaps).
+17 quantile tests + 8 plot tests + 8 GUI tests re-run green this round.
+
+-----------------------------------------------------------------------
+FINDING 1 (RISK) — the untracked bioisostere.py is unwired and
+  BREAKS THE DEFAULT PYTEST COLLECTION as of this morning
+-----------------------------------------------------------------------
+Files: src/pharmaml/generative/bioisostere.py (untracked, 201 lines);
+       src/pharmaml/generative/__init__.py:89-131.
+
+Evidence (all verified live this session):
+* The module is imported by NOTHING.  generative/__init__.py exports
+  the structural sibling twins `ring_topology_moves` /
+  `ring_topology_mutate` (line 107) but NOT `bioisostere_moves` /
+  `bioisostere_mutate`; rg over src/, tests/, docs/, examples/,
+  notebooks/ finds zero importers.  Every "bioisostere" hit in
+  README.md:1090/1094, cli.py:836, genetic.py:30/647,
+  scaffold_hop.py:47-1311 and the notebooks is PROSE about the
+  crossover's segment-swap geometry, not the module.
+* The module's own docstring promises a GA `mutation="bioisostere"`
+  mode (bioisostere.py:181-182) — genetic.py has no such mode (only
+  character / scaffold / topology).
+* pyproject.toml sets testpaths=["tests","src"] + addopts
+  "--doctest-modules", so the module's doctest IS collected — and it
+  FAILS: its first line is `from pharmaml.generative import
+  bioisostere_moves` (bioisostere.py:37) → ImportError (package does
+  not export it).  Reproduced:
+      .venv/bin/python -m pytest src/pharmaml/generative/bioisostere.py
+      → FAILED ... UnexpectedException: ImportError
+  `.pytest_cache/v/cache/lastfailed` already records exactly this one
+  failure (a 03:53 run today); today's bare `pytest --collect-only`
+  counts 3019 items versus the round-34 suite's 3018 — the delta IS
+  the bioisostere doctest.  The next bare `pytest` (i.e. the round-35
+  full-suite ritual) collects 3019 with 1 failure.
+* Provenance (why it surfaced only now): both untracked files were
+  (re)written into the tree at 03:35 this morning (stat Birth
+  2026-10-27 03:35) with preserved Oct-17 mtimes — i.e. restored from
+  a pre-round-34 backup AFTER the last commit (2ff15e6, Oct 26 22:39)
+  and after the round-34 full-suite run (junit151.xml: 3018 items, no
+  bioisostere row).  No shipped zip contains it (checked all
+  download/*.zip), so it never shipped and was never committed.
+* The module itself is SOUND — probed live with rdkit this round:
+  benzene → ['c1ccncc1']; aspirin → salicylamide present; methyl
+  ester → amide present; mutate with Random(0) → 'c1ccncc1'; garbage
+  → None; dummies never mutated ([*:1]CC → 6 moves, attachment point
+  intact); empty/unknown `allowed` and max_smiles_length=0 → clean
+  DataValidationErrors.  All five doctest claims verify.
+* scratch/patch_bioisostere_37.py (also untracked) shows the round-37
+  integration DID import from the package level (line 82) and pinned
+  notebook demos — that state was lost in a reset; only the orphan
+  module and the patch script came back.
+
+Fix sketch (pick one, before the next full-suite run):
+  (a) WIRE IT UP (recommended, ~half a day): add
+      `from .bioisostere import bioisostere_moves, bioisostere_mutate`
+      + both names in __all__ (alphabetical slots beside the topology
+      twins), regen docs/INDEX.md (the ring_topology rows at 182-183
+      are the model), a CHANGELOG bullet, tests in test_generative.py
+      (moves/mutate/validation + the doctest pin), and — the honest
+      finish the docstring promises — the GA `mutation="bioisostere"`
+      mode in genetic.py.  Then `git add` both the module and the
+      wiring in one commit.
+  (b) REMOVE IT (5 minutes): `git clean`-style delete or move to
+      scratch/ so src/ no longer carries it; the suite stays at 3018.
+  NEVER `git add` the file in its current unwired state — that bakes
+  the red doctest into the repo.
+
+-----------------------------------------------------------------------
+FINDING 2 (POLISH) — plot_prediction_intervals is the ONLY public
+  function missing from its module's __all__
+-----------------------------------------------------------------------
+File: src/pharmaml/viz/ml_plots.py:130-146.
+
+Evidence: AST comparison across all five viz modules —
+  chem_plots 3/3, docking_plots 4/4, generative_plots 3/3,
+  pharma_plots 2/2 complete; ml_plots lists 15 of its 16 public
+  functions; the miss is `plot_prediction_intervals` (defined at
+  ml_plots.py:873).  The package-level route works (viz/__init__.py
+  imports it at line 102 and lists it in __all__ at line 162 — the
+  ruff RUF022 pass the close-out ran caught the PACKAGE list but not
+  the MODULE list), and docs/INDEX.md documents it under
+  `pharmaml.viz` (line 350), so every existing test passes — the
+  docs-index drift check walks `pharmaml.viz`, never
+  `pharmaml.viz.ml_plots`.  Consequences: `from
+  pharmaml.viz.ml_plots import *` silently omits the round's
+  function, and any future `__all__`-walking tool over the module
+  misses it.
+Fix sketch: insert `"plot_prediction_intervals",` in ml_plots.__all__
+between `plot_predicted_vs_actual` and `plot_residuals` (one line;
+no test change needed — the module's own doctest suite stays green).
+
+-----------------------------------------------------------------------
+FINDING 3 (POLISH) — knob-validation escape hatches in
+  quantile_prediction_intervals
+-----------------------------------------------------------------------
+File: src/pharmaml/ml/applicability.py:816-831.
+
+Evidence (probed, scratch/probe_audit_152.py P1):
+* `n_estimators=2.5` passes the `n_estimators < 1` guard (821) and
+  dies inside sklearn with a raw InvalidParameterError — outside the
+  ModelError convention the docstring promises for the knob (768-770).
+  A positive non-int is the one value class the guard misses.
+* `max_depth=-1` / `max_depth=0` are not validated AT ALL (the only
+  one of the five documented knobs without a house guard) → raw
+  InvalidParameterError from sklearn.
+* String-typed knobs (`alpha="0.1"`, `subsample="0.5"`,
+  `learning_rate="0.1"`, `n_estimators="10"`) raise raw TypeError.
+  This half is house-consistent — the sibling guards
+  (knn_applicability_domain's `k < 1` / `0.0 < percentile <= 100.0`,
+  applicability.py:432-440) behave identically — so it is a
+  whole-module convention, not a round defect (recorded as disproven
+  below; fix it module-wide or not at all).
+Fix sketch: `isinstance(n_estimators, (int, np.integer))` +
+`>= 1` in one guard; either validate max_depth (`None or int >= 1`)
+or drop it from the documented knob list; leave the string-TYPE cases
+to the module-wide convention unless a round takes them all.
+
+-----------------------------------------------------------------------
+FINDING 4 (POLISH, note-grade) — the "Save figure…" tooltip's
+  enumeration is stale for the round's new figure
+-----------------------------------------------------------------------
+File: playground.py:13145-13149 (tooltip), 18432-18448 (docstring).
+
+Evidence: the tooltip names "the parity plot, calibration, learning
+curve, permutation importance, ROC or PR curves, whichever drew last"
+— the prediction-intervals band the card can now be showing is
+missing (the _save_ml_figure docstring at 18435-18437 has the same
+drift and additionally still omits ROC/PR — a pre-round-148 stale
+list the round continued).  Mechanically the save is CORRECT: it
+exports whatever figure the card's host holds (_save_card_figure on
+self._ml_host), so an intervals band saves fine — only the
+enumeration lies.  Same class as the round-34 audit's F4 (noun
+drift); fix is a one-line tooltip/docstring touch whenever the card
+is next edited.
+
+-----------------------------------------------------------------------
+FINDING 5 (POLISH, note-grade) — test-coverage gaps + bookkeeping
+  drift in the round's own tests
+-----------------------------------------------------------------------
+Files: tests/test_applicability.py:364-553; tests/test_viz.py:2590-2659;
+       tests/test_playground.py:13071-13255.
+
+Evidence:
+* The crossing-repair branch (applicability.py:888-893) is NEVER
+  exercised by a forced crossing.  I probed 26 configurations
+  (alpha from 1e-6 to 0.4999999, train sizes 8-200, heteroscedastic
+  noise, subsample 0.5-0.8, depths 1-3, seeds 0-9): ZERO crossings —
+  GBR's shared-hyperparameter quantile fits essentially never cross
+  on sane data, so the GUI note will read "0 crossed bound(s)
+  repaired" in practice (honest, but the repair arithmetic —
+  provably correct elementwise np.minimum/np.maximum — has no test
+  that can fail it).  A two-line synthetic test (craft lower/upper
+  arrays with a crossing, assert swap+count) or extracting the repair
+  into a tiny helper would pin it.
+* The round's own bookkeeping says "18 tests
+  (TestQuantilePredictionIntervals)" (worklog round-34 close-out) —
+  the class has SEVENTEEN (recounted by running it this round: 17
+  passed).  TestPredictionIntervalsPlot = 8 and
+  TestPredictionIntervalsGui = 8 both match their records.
+* `QuantileIntervals.as_frame` with a mismatched-length y_test raises
+  a raw pandas ValueError ("All arrays must be of the same length",
+  probed P5) — presentation-layer only (the GUI passes the same
+  y_test it validated through the constructor), note-grade.
+
+-----------------------------------------------------------------------
+THE UNTRACKED-FILES VERDICTS (the brief's target 6, expanded)
+-----------------------------------------------------------------------
+1. src/pharmaml/__main__.py (29 lines) — COMMIT, safe as-is.
+   * Sound: standard `python -m pharmaml` delegation to
+     pharmaml.cli.main (pyproject's [project.scripts] console twin);
+     imports clean.
+   * Current: verified live — `python -m pharmaml --version` prints
+     "pharmaml 1.2.89", rc=0.
+   * Suite impact: NONE — pytest never collects __main__.py (direct
+     collection returns rc=5 "no tests collected"; the module-name
+     clash is pytest's built-in skip), so committing it cannot
+     redden anything.
+   * Referenced: only by its own docstring (nothing in README/tests/
+     docs/web invokes `python -m pharmaml` today) — but it is the
+     ONLY thing making the idiomatic invocation work, and since no
+     shipped zip contains it either, every zip user lacks it.  Low
+     value, zero risk, idiomatic: add it in the round's commit.
+
+2. src/pharmaml/generative/bioisostere.py — DO NOT COMMIT AS-IS
+   (FINDING 1).  The brief's premise "referenced by README/tests/cli"
+   is disproven — those are prose references to the crossover
+   concept.  Wire up (recommended; the module is sound and its
+   ring_topology siblings show the exact pattern) or remove before
+   the next full-suite run.  Committing it unwired ships a red
+   doctest.
+
+3. Web repo: src/components/explorer/data-file-preview.tsx
+   (251 lines) — DELETE (or at minimum never commit).
+   * It is a SUPERSEDED FIRST DRAFT: the COMMITTED
+     data-file-view.tsx (tracked, exports DataFileBadges /
+     DataFileSkeleton / DataFileView, handles csv + pdb + text) is
+     what the committed code-explorer.tsx actually imports and
+     renders (code-explorer.tsx:429-481 use DataFileBadges /
+     DataFileView); data-file-preview.tsx exports DataFilePreview,
+     which ZERO files import (only the agent-ctx task notes
+     25-F5-full-stack-developer.md mention it).
+   * No build impact either way: it type-checks and lints clean only
+     because it is valid dead code; deleting it cannot break tsc /
+     eslint / any page (nothing imports it).
+   * Committing it would add 251 lines of dead duplicate to the web
+     repo.  Delete it, or leave untracked if the web team wants to
+     mine its numeric-column heuristic comments first.
+
+4. Context sweep of the other 25 untracked paths (for the record):
+   the download/*.zip archive copies (v1.2.71/73/75/77-88), the
+   download/*.png and pg151 artifacts, scratch/patch_* / probe_* /
+   tree_129.json are the established artifact conventions (old zips
+   archived OUT of the toolkit repo, screenshots, one-off drivers) —
+   not anomalies.  `.zscripts/dev.pid` modified = the dev daemon
+   running.  agent-ctx/25-F5-full-stack-developer.md is the parallel
+   task's notes file.
+
+-----------------------------------------------------------------------
+VERIFIED CLEAN (the round-34 additions, line by line)
+-----------------------------------------------------------------------
+* applicability.py QuantileIntervals (619-691): field order valid,
+  slots dataclass, as_frame column contract matches docstring and
+  tests, __str__ presentation-only pragma consistent with siblings.
+* quantile_prediction_intervals (694-920): guard order sound (alpha
+  → n_estimators → learning_rate → subsample → X matrices → feature
+  count → y_train → y_test; alpha validated before any coercion);
+  alpha (0, 0.5) exclusive with NaN/inf correctly trapped by the
+  chained comparison; learning_rate's `> 0 and isfinite` catches NaN
+  AND inf; trio semantics correct — one GradientBoostingRegressor
+  (loss="quantile", alpha=q) per q in (alpha/2, 0.5, 1-alpha/2),
+  predictions reshaped flat; X coercion drops feature names (no
+  sklearn name warnings); NaN/inf rejected on X (matrix helper
+  217-228), y_train and y_test (finite vector helper 939-944); the
+  empty-array init (855) is dead-safe (loop always runs 3x);
+  progress ×3 with the swallow+log convention (874-878); crossing
+  counted pre-repair then repaired with elementwise min/max (886-893,
+  cannot self-reference — the draft bug the close-out caught is truly
+  gone); coverage inclusive on the REPAIRED bounds (895-901, probed:
+  library == independent recomputation); mean_width on repaired
+  bounds; determinism honest — subsample=1.0 default is
+  deterministic-without-seed, subsample<1 seeded and same-seed runs
+  bit-identical (probed P7); the docstring's every claim (the D2.py
+  confession, the probe numbers, the bootstrap sibling distinction)
+  matches the code and the round-151 probe record.
+* plot_prediction_intervals (873-985): guard parity with
+  plot_gp_uncertainty (shape/empty/negative-sigma↔crossed-bounds) plus
+  the new crossed-bounds and alpha-label guards; style parity —
+  PALETTE[0] scatter, PALETTE[2] band, the house grey identity line
+  (#9CA3AF) and summary-box chrome (#D1D5DB), same axis labels
+  ("actual" / "predicted (ŷ)"), legend lower-right, Agg new_figure,
+  no seaborn anywhere in the module; band sorted by actual with
+  kind="stable" (the documented upload choice); coverage/mean-width
+  box mirrors the GP twin; returns the Figure per the module
+  contract.
+* GUI wiring (playground.py): guard order matches the three sibling
+  handlers exactly (16176-16194 / 16223-16236 / 16265-16278 vs
+  16494-16519); thread-safety sound — work() only imports + fits +
+  builds an Agg figure, render() runs on the main thread through
+  _poll_jobs' after-loop (3325-3377), work() exceptions reach
+  messagebox.showerror("Calculation failed") (3354-3356) and render()
+  exceptions _show_error (3367-3370); the busy guard + button
+  registry (3189-3202, 3251-3261) disables the new buttons during
+  jobs; alpha entry parse_float rejects NaN/inf/empty before the
+  0.01-0.49 bounds (1096-1122) — a strict subset of the library's
+  (0, 0.5), so no library guard is reachable from the GUI; lazy
+  imports inside work() per convention; staleness —
+  _ml_intervals_frame retired on BOTH train renders (14394, 14530;
+  init at 2358), pinned by source-count == 2 + annotated-init and by
+  the behavioral retire test; the save twin has the needs-a-run
+  guard + _save_frame_dialog's own None guard, five-format dialog,
+  write-through "Saved" confirmation and _show_error path
+  (16554-16571, 19166-19200); the two-row layout (ml_result_buttons2,
+  13164-13238) is the VLM-fixed shape with the note label riding the
+  second row.
+* dev_daemon_150.py: parents[2] = the Next.js app root (package.json
+  + dev.log exist there; the toolkit repo has neither — verified);
+  double-fork order correct (setsid in the first child, second
+  fork's parent _exit(0), dup2 fds inheritable per PEP 446, chdir
+  then execvp); the trailing `return 1` is the standard dead code
+  after a successful exec.
+* Tests: all three classes re-run GREEN this round (17 + 8 + 8
+  passed).  They pin real behavior — the coverage band [0.7, 0.98]
+  on a real fit, coverage arithmetic recomputed independently, the
+  seed-honesty pair (placebo guard), progress call list [(1,3),(2,3),
+  (3,3)], the broken-reporter swallow, the five-column frame
+  contract, the real-library end-to-end GUI run (row count ==
+  y_test, ordered bounds, note contents, zero dialogs), a REAL
+  logistic multiclass train behind the regression-only gate, the
+  monkeypatched-dialog CSV write-through with content checks, and
+  the retrain retirement.  Only the GUI source-pin test is a pin,
+  per the suite's convention.
+
+-----------------------------------------------------------------------
+DISPROVEN LEDGER (suspected → investigated → why not a defect)
+-----------------------------------------------------------------------
+1.  Guard order wrong in _ml_plot_intervals → compared against the
+    three sibling handlers line by line → identical order.
+2.  work() touches Tk from the worker thread → read _start_job /
+    _poll_jobs → queue + after-loop; work() is pure compute.
+3.  Alpha entry "nan"/"inf"/"" reaches the library → parse_float
+    rejects non-finite explicitly (playground.py:1116-1117) → dialog.
+4.  Coverage uses exclusive or pre-repair bounds → code read + P3
+    probe → inclusive, computed after the min/max repair.
+5.  Crossing repair can reference its own output (the draft bug) →
+    elementwise np.minimum/np.maximum, no sequential np.where → safe.
+6.  random_state is a placebo → test_seed_matters_only_for_stochastic_
+    subsample pins it; P7: same-seed subsample<1 runs bit-identical.
+7.  NaN/inf X or y slips into the fits → _numeric_matrix (217-228) +
+    _numeric_vector(finite=True) (939-944); tests pin all three.
+8.  Empty X_test crashes sklearn → "X_test is empty" DataValidationError
+    (P6 probe).
+9.  y_test length mismatch unchecked → ModelError at 848-852 (doctest
+    + test pin).
+10. A broken progress reporter can kill the run → try/except + debug
+    log (874-878); behavioral test pins the survival.
+11. plot_prediction_intervals lacks sibling guard parity → compared
+    with plot_gp_uncertainty (812-825) → same guards + two new ones.
+12. The plot uses seaborn or off-PALETTE colours → module imports
+    matplotlib only; PALETTE[0]/[2] + house greys throughout.
+13. The band zig-zags with row order → np.argsort(truth, "stable")
+    (945) — the documented upload choice.
+14. The Save-intervals twin misses a guard / dialog / error path →
+    needs-a-run guard + _save_frame_dialog (19166-19200) has all
+    three; write-through test pins the CSV.
+15. One train render forgets to retire the interval frame → both
+    renders retire it (14394, 14530); source pin counts 2 + init.
+16. The two-row layout regressed the card (invisible buttons) → the
+    VLM-caught overflow was fixed in round 34 itself; suite re-ran
+    green after the change per the close-out; buttons + entry + note
+    all live on ml_result_buttons2 (13168-13238).
+17. Committing __main__.py would break the suite → pytest never
+    collects __main__.py (rc=5, built-in skip); `python -m pharmaml
+    --version` works live.
+18. bioisostere.py's functions are broken → all five doctest claims
+    verified live with rdkit; only the package export is missing
+    (that gap IS FINDING 1).
+19. dev_daemon_150.py's parents[2] points at the wrong root →
+    verified = the Next.js app root (package.json + dev.log there).
+20. The round's tests are vacuous source-pins → only the one GUI pin
+    test is a pin by convention; every other test runs real fits /
+    real dialogs / real writes (re-ran all 33 this round).
+
+-----------------------------------------------------------------------
+PROBES LEFT BEHIND
+-----------------------------------------------------------------------
+* scratch/probe_audit_152.py — P1..P7 as cited above (knob edge
+  cases, alpha extremes, coverage arithmetic, crossing hunt, as_frame
+  mismatch, empty-X/list-y, stochastic determinism).  Reproduce:
+  `.venv/bin/python scratch/probe_audit_152.py` (repo-relative; the
+  bioisostere/__/collection probes were run inline via -c and heredoc
+  — no files left).
+* Leak scan: this file and the probe script contain NO machine-home
+  path strings (checked before writing).
+
+NEXT ACTIONS (for the close-out)
+--------------------------------
+1. FINDING 1 first — decide wire-up vs removal for bioisostere.py
+   BEFORE any full-suite run; commit __main__.py alongside.
+2. FINDING 2 (one-line __all__ fix) — cheap, do it this round.
+3. FINDING 3 (n_estimators type guard; max_depth guard or doc trim).
+4. FINDING 4/5 — fold into the next card/test touch, or decline as
+   cosmetic per the F4 precedent.
+5. Delete the web draft data-file-preview.tsx (web repo side).
+=======================================================================
+
+-----------------------------------------------------------------------
+ADDENDUM (written 04:15, mid-audit) — PARALLEL WRITER ACTIVE
+-----------------------------------------------------------------------
+While this audit was in progress, a concurrent session modified
+pharma-ml-toolkit/src/pharmaml/viz/ml_plots.py at 04:03:42 (+327
+uncommitted lines, per git diff): it appends `plot_signed_correlations`
+and `plot_correlation_heatmap` (the round-34 close-out's open candidate
+(a) — GAP 2, the D2.py correlation bundle), adds the `Sequence` +
+`require_columns` imports, AND regenerates __all__ to 18/18 — which
+INCIDENTALLY FIXES FINDING 2 (plot_prediction_intervals is now listed
+in the module __all__ in the working tree; the fix is UNCOMMITTED and
+rides in the same diff as the in-progress feature).  The round-34
+plot_prediction_intervals function itself (873-985) is untouched by
+that diff (no hunk intersects it; 116 lines unchanged).  Everything
+else in this audit was verified against the pre-04:03:42 state and
+remains valid: FINDING 1 (bioisostere, untouched by the writer),
+FINDING 3 (applicability.py guards, untouched), FINDINGS 4-5
+(playground/tests, untouched).  Close-out note: when committing the
+parallel feature, confirm the __all__ entry survives — do not re-fix
+FINDING 2 blind; rg the current file first.

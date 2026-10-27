@@ -49,8 +49,10 @@ from pharmaml.chem.features import (
     RISM_DESCRIPTOR_COUNT,
     FeatureReport,
     FeatureSelection,
+    VarianceFilterResult,
     compute_feature_frame,
     family_of_column,
+    filter_low_variance,
     rank_features,
     select_top_features,
     selection_metadata,
@@ -1200,3 +1202,122 @@ class TestFakmlFamilies:
         selection = select_top_features(frame, scores, k=5)
         assert len(selection.selected) == 5
         assert selection.family_counts  # at least one family survived layer 1
+
+
+class TestFilterLowVariance:
+    """GAP 6 — the variance-THRESHOLD step (rank_features ranks, this cuts).
+
+    The ``xxx.ipynb`` filtering cell's ``VarianceThreshold(0.01)``:
+    the cut uses the SAME variance definition as ``rank_features``
+    (``fillna(0).var()``), so the ranker's scores and this filter's
+    verdicts can never disagree.
+    """
+
+    def test_notebook_semantics(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "moves": [1.0, 2.0, 3.0, 4.0],  # var 1.6667 — kept
+                "flat": [7.0, 7.0, 7.0, 7.0],  # var 0.0 — cut
+                "tiny": [1.0, 1.0, 1.0, 1.005],  # var ~6e-6 — cut
+            }
+        )
+        result = filter_low_variance(frame)
+        assert isinstance(result, VarianceFilterResult)
+        assert result.kept == ["moves"]
+        assert list(result.dropped) == ["flat", "tiny"]
+        assert result.dropped["flat"] == 0.0
+        assert result.dropped["tiny"] < 0.01
+        assert list(result.frame.columns) == ["moves"]
+
+    def test_threshold_edge_is_inclusive_keeper(self) -> None:
+        # sklearn VarianceThreshold semantics: STRICTLY below is cut;
+        # a variance exactly equal to the threshold survives.
+        frame = pd.DataFrame({"edge": [0.0, 0.1]})  # var 0.0025
+        result = filter_low_variance(frame, threshold=0.0025)
+        assert result.kept == ["edge"]
+        assert result.dropped == {}
+
+    def test_rank_features_agreement(self) -> None:
+        # The two functions share one variance definition: the score a
+        # column gets from rank_features(method='variance') is exactly
+        # the number in the dropped ledger.
+        frame = pd.DataFrame(
+            {
+                "a": [1.0, 2.0, 3.0, 4.0],
+                "b": [2.0, 2.0, 2.0, 2.0],
+                "c": [1.0, 1.0, 1.0, 1.1],
+            }
+        )
+        scores = rank_features(frame, method="variance")
+        result = filter_low_variance(frame, threshold=0.05)
+        for column, variance in result.dropped.items():
+            assert abs(scores[column] - variance) < 1e-12
+
+    def test_nan_fill_matches_ranker(self) -> None:
+        # NaN cells are zero-filled BEFORE the variance — the ranker's
+        # convention, pinned here so the twins cannot drift.
+        frame = pd.DataFrame({"hole": [1.0, 2.0, np.nan, 4.0]})
+        scores = rank_features(frame, method="variance")
+        result = filter_low_variance(frame, threshold=0.0)
+        assert result.kept == ["hole"]  # fillna(0) variance > 0
+        assert abs(scores["hole"] - result.dropped.get("hole", scores["hole"])) < 1e-12
+
+    def test_non_numeric_columns_pass_through(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "SMILES": ["CCO", "CCC", "CC", "C"],
+                "moves": [1.0, 2.0, 3.0, 4.0],
+                "flat": [7.0, 7.0, 7.0, 7.0],
+            }
+        )
+        result = filter_low_variance(frame)
+        assert result.kept == ["SMILES", "moves"]  # SMILES survives, in order
+        assert list(result.frame.columns) == ["SMILES", "moves"]
+        assert list(result.dropped) == ["flat"]
+
+    def test_all_numeric_dropped_is_honest(self) -> None:
+        frame = pd.DataFrame({"flat": [1.0, 1.0, 1.0, 1.0]})
+        result = filter_low_variance(frame)
+        assert result.kept == []
+        assert result.frame.shape == (4, 0)
+        assert list(result.dropped) == ["flat"]
+
+    def test_no_numeric_columns_returns_everything(self) -> None:
+        frame = pd.DataFrame({"SMILES": ["CCO", "CCC"]})
+        result = filter_low_variance(frame)
+        assert result.kept == ["SMILES"]
+        assert result.dropped == {}
+        assert list(result.frame.columns) == ["SMILES"]
+
+    def test_frame_is_a_copy(self) -> None:
+        frame = pd.DataFrame({"moves": [1.0, 2.0, 3.0, 4.0]})
+        result = filter_low_variance(frame)
+        result.frame.iloc[0, 0] = 999.0
+        assert float(frame["moves"].iloc[0]) == 1.0  # the input is untouched
+
+    def test_record_view(self) -> None:
+        frame = pd.DataFrame(
+            {"moves": [1.0, 2.0, 3.0, 4.0], "flat": [1.0, 1.0, 1.0, 1.0]}
+        )
+        result = filter_low_variance(frame)
+        assert result.n_kept == 1 and result.n_dropped == 1
+        payload = result.as_dict()
+        assert payload["n_kept"] == 1
+        assert payload["dropped"] == {"flat": 0.0}
+        assert payload["threshold"] == 0.01
+        assert "kept 1, dropped 1" in str(result)
+
+    def test_not_a_frame_raises(self) -> None:
+        with pytest.raises(ValueError, match="must be a pandas.DataFrame"):
+            filter_low_variance([[1.0, 2.0], [3.0, 4.0]])  # type: ignore[arg-type]
+
+    def test_bad_thresholds_raise(self) -> None:
+        frame = pd.DataFrame({"moves": [1.0, 2.0, 3.0, 4.0]})
+        for bad in (-0.01, float("inf"), float("nan")):
+            with pytest.raises(ValueError, match="finite number"):
+                filter_low_variance(frame, threshold=bad)
+
+    def test_single_row_raises(self) -> None:
+        frame = pd.DataFrame({"moves": [1.0]})
+        with pytest.raises(ValueError, match="at least 2 rows"):
+            filter_low_variance(frame)

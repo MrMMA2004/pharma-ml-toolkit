@@ -12,6 +12,7 @@ from pharmaml.ml.applicability import (
 )
 from pharmaml.ml.evaluation import (
     PermutationImportance,
+    cross_model_importances,
     evaluate_model,
     permutation_feature_importance,
     predict_with_uncertainty,
@@ -96,6 +97,7 @@ __all__ = [
     "build_voting",
     "clean_numeric_frame",
     "compare_models",
+    "cross_model_importances",
     "evaluate_model",
     "has_categorical_columns",
     "knn_applicability_domain",

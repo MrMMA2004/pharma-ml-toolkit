@@ -50,9 +50,9 @@ True
 ...         return np.asarray(X, dtype=float).ravel() + self.offset
 >>> y_reg = [1.0, 2.0, 3.0]
 >>> evaluate_model(OffsetRegressor(0.0), [[1.0], [2.0], [3.0]], y_reg, "regression").as_dict()
-{'rmse': 0.0, 'mae': 0.0, 'r2': 1.0, 'max_error': 0.0, 'n_samples': 3}
+{'rmse': 0.0, 'mae': 0.0, 'r2': 1.0, 'max_error': 0.0, 'n_samples': 3, 'pearson_r': 1.0}
 >>> evaluate_model(OffsetRegressor(1.0), [[1.0], [2.0], [3.0]], y_reg, "regression").as_dict()
-{'rmse': 1.0, 'mae': 1.0, 'r2': -0.5, 'max_error': 1.0, 'n_samples': 3}
+{'rmse': 1.0, 'mae': 1.0, 'r2': -0.5, 'max_error': 1.0, 'n_samples': 3, 'pearson_r': 1.0}
 >>> fitted = evaluate_model(OffsetRegressor(1.0), [[1.0], [2.0], [3.0]], y_reg,
 ...                         "regression", keep_predictions=True)
 >>> fitted.predictions.tolist()             # kept for parity plots
@@ -94,6 +94,7 @@ pharmaml.exceptions.ModelError: model predictions contain 1 infinite value(s) �
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -131,6 +132,7 @@ __all__ = [
     "ClassificationReport",
     "PermutationImportance",
     "RegressionReport",
+    "cross_model_importances",
     "evaluate_model",
     "permutation_feature_importance",
     "predict_with_uncertainty",
@@ -194,7 +196,34 @@ class ClassificationReport:
 
 @dataclass(slots=True)
 class RegressionReport:
-    """Structured regression metrics on a held-out set."""
+    """Structured regression metrics on a held-out set.
+
+    Attributes
+    ----------
+    pearson_r:
+        Pearson correlation of the held-out targets and predictions —
+        the ``fak_ml.ipynb`` per-fold metric.  ``None`` when the
+        correlation is undefined (a constant ``y_test`` or constant
+        predictions) or when a caller constructs the report directly
+        without it; ``evaluate_model`` always fills it when computable.
+    train_rmse / train_r2 / train_pearson_r:
+        The SAME three metrics computed on the TRAINING rows — filled
+        only when :func:`evaluate_model` was called with
+        ``X_train``/``y_train`` (the overfit diagnosis the D2.py audit
+        called for: the gap as a number, not a vibe).  ``None`` on
+        test-only reports.
+
+        The honest caveat rides the constructor docstring: TRAIN-side
+        metrics on a fitted model are an overfit DIAGNOSTIC, never a
+        quality claim — a ``train_r2`` far above ``r2`` is the whole
+        signal these fields exist to surface.
+
+    See Also
+    --------
+    r2_gap :
+        ``train_r2 - r2``, the overfit gap as one number (``None`` on
+        test-only reports).
+    """
 
     rmse: float
     mae: float
@@ -202,21 +231,54 @@ class RegressionReport:
     max_error: float
     n_samples: int
     predictions: np.ndarray | None = field(default=None, repr=False)
+    pearson_r: float | None = None
+    train_rmse: float | None = None
+    train_r2: float | None = None
+    train_pearson_r: float | None = None
+
+    @property
+    def r2_gap(self) -> float | None:
+        """Overfit gap ``train_r2 - r2`` (``None`` without train metrics).
+
+        Positive gaps mean the model fits its own training rows better
+        than held-out ones — the classic overfit readout; values near
+        zero mean the two sides generalise alike.  Negative gaps (test
+        scoring HIGHER than train) are unusual but honest (a lucky
+        split, or a small test set) and are reported as-is.
+        """
+        if self.train_r2 is None:
+            return None
+        return float(self.train_r2 - self.r2)
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "rmse": self.rmse,
             "mae": self.mae,
             "r2": self.r2,
             "max_error": self.max_error,
             "n_samples": self.n_samples,
         }
+        if self.pearson_r is not None:
+            payload["pearson_r"] = self.pearson_r
+        if self.train_rmse is not None:
+            payload["train_rmse"] = self.train_rmse
+            payload["train_r2"] = self.train_r2
+            payload["train_pearson_r"] = self.train_pearson_r
+            payload["r2_gap"] = self.r2_gap
+        return payload
 
     def __str__(self) -> str:  # pragma: no cover - presentation only
-        return (
+        text = (
             f"rmse={self.rmse:.4f}  mae={self.mae:.4f}  r2={self.r2:.4f}  "
             f"n={self.n_samples}"
         )
+        if self.pearson_r is not None:
+            text += f"  r={self.pearson_r:.4f}"
+        if self.train_r2 is not None:
+            text += (
+                f"  train_r2={self.train_r2:.4f}  gap={self.r2_gap:+.4f}"
+            )
+        return text
 
 
 def evaluate_model(
@@ -225,6 +287,9 @@ def evaluate_model(
     y_test: pd.Series | np.ndarray | list,
     task: str,
     keep_predictions: bool = False,
+    *,
+    X_train: pd.DataFrame | np.ndarray | None = None,
+    y_train: pd.Series | np.ndarray | list | None = None,
 ) -> ClassificationReport | RegressionReport:
     """Evaluate a fitted model on held-out data.
 
@@ -239,6 +304,15 @@ def evaluate_model(
     keep_predictions:
         For regression: attach predictions to the report (useful for
         scatter/parity plots downstream).
+    X_train, y_train:
+        The TRAINING rows the model was fitted on — REGRESSION ONLY.
+        When both are passed the :class:`RegressionReport` gains the
+        train-side mirror metrics (``train_rmse`` / ``train_r2`` /
+        ``train_pearson_r``) plus :attr:`RegressionReport.r2_gap`, the
+        overfit gap as one number.  Passing them for a classification
+        task, or passing only one of the pair, raises :class:`ModelError`
+        (the diagnostic is deliberately all-or-nothing: a half-filled
+        train side cannot be interpreted honestly).
 
     Returns
     -------
@@ -249,8 +323,28 @@ def evaluate_model(
     ModelError
         On invalid task, empty ``y_test``, prediction-length
         mismatch, NaN or ±inf values in ``y_test`` or the model
-        predictions (both tasks), or a label-type mismatch (a
-        numeric ``y_test`` with string predictions, or vice versa).
+        predictions (both tasks), a label-type mismatch (a
+        numeric ``y_test`` with string predictions, or vice versa),
+        or an inconsistent ``X_train``/``y_train`` pair (one without
+        the other, classification task, length mismatch with
+        ``X_train``, or non-finite/empty train targets/predictions).
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> from pharmaml.ml import train_model, evaluate_model
+    >>> rng = np.random.default_rng(42)
+    >>> x = pd.DataFrame({"a": rng.uniform(0.0, 1.0, 60)})
+    >>> y = pd.Series(3.0 * x["a"] + rng.normal(0.0, 0.05, 60))
+    >>> trained = train_model("ridge", "regression", x, y, tune=False, cv=2)
+    >>> report = evaluate_model(
+    ...     trained.model, x.iloc[:20], y.iloc[:20], "regression",
+    ...     X_train=x.iloc[20:], y_train=y.iloc[20:],
+    ... )
+    >>> report.train_r2 is not None and report.r2_gap is not None
+    True
+    >>> abs(report.pearson_r - 1.0) < 0.01   # a linear model on linear data
+    True
     """
     y_true = np.asarray(y_test)
     if y_true.size == 0:
@@ -334,6 +428,12 @@ def evaluate_model(
                     f"model predictions contain {n_inf} infinite value(s) — the "
                     "estimator returned non-finite values"
                 )
+
+    # The X_train/y_train pair is validated BEFORE the task branches:
+    # an inconsistent pair must raise for EITHER task (classification
+    # callers get the explicit rejection instead of silently ignored
+    # train rows), and the train-side predictions are computed once.
+    train_metrics = _train_side_metrics(model, X_train, y_train, want=task)
 
     if task == "classification":
         # .tolist() lives OUTSIDE np.unique so labels are plain python
@@ -443,9 +543,99 @@ def evaluate_model(
             max_error=float(np.max(np.abs(np.asarray(y_true, dtype=float) - y_pred))),
             n_samples=len(y_true),
             predictions=np.asarray(y_pred) if keep_predictions else None,
+            pearson_r=_pearson_r(y_true, y_pred),
+            train_rmse=train_metrics[0],
+            train_r2=train_metrics[1],
+            train_pearson_r=train_metrics[2],
         )
 
     raise ModelError(f"task must be 'classification' or 'regression', got {task!r}")
+
+
+def _pearson_r(y_true: np.ndarray, y_pred: np.ndarray) -> float | None:
+    """Pearson r of two 1-D vectors, ``None`` when undefined.
+
+    A constant side (zero variance) has no correlation — the ``None``
+    convention the classification report already uses for an undefined
+    ``roc_auc``.  Non-finite input cannot reach here (the caller's
+    guards run first).
+    """
+    a = np.asarray(y_true, dtype=float)
+    b = np.asarray(y_pred, dtype=float)
+    if a.size < 2 or b.size < 2 or a.std() == 0.0 or b.std() == 0.0:
+        return None
+    return float(np.corrcoef(a, b)[0, 1])
+
+
+def _train_side_metrics(
+    model: Any,
+    X_train: pd.DataFrame | np.ndarray | None,
+    y_train: pd.Series | np.ndarray | list | None,
+    *,
+    want: str,
+) -> tuple[float | None, float | None, float | None]:
+    """Train-side ``(rmse, r2, pearson_r)`` mirror metrics, or all-``None``.
+
+    The overfit diagnostic behind :attr:`RegressionReport.r2_gap`:
+    predicts on the TRAINING rows the model was fitted on and scores
+    them with the same three metrics the held-out side reports.  The
+    pair is all-or-nothing — absent entirely returns the ``None``
+    triple without touching the model; half-passed raises.
+
+    Raises
+    ------
+    ModelError
+        On a half-passed pair, a non-regression task, an empty
+        ``y_train``, a train prediction/target length mismatch, a
+        label-type mismatch, or NaN/±inf in the train targets or
+        predictions (the same guard family the test side carries).
+    """
+    if X_train is None and y_train is None:
+        return (None, None, None)
+    if X_train is None or y_train is None:
+        missing = "X_train" if X_train is None else "y_train"
+        raise ModelError(
+            f"X_train and y_train must be passed together — got only {missing}; "
+            "the train-side overfit diagnostic is all-or-nothing"
+        )
+    if want != "regression":
+        raise ModelError(
+            "X_train/y_train carry the regression-only overfit diagnostic, "
+            f"but task={want!r} — a classification train side has no "
+            "rmse/r2 to mirror"
+        )
+    y_tr = np.asarray(y_train)
+    if y_tr.size == 0:
+        raise ModelError(
+            "y_train is empty — pass the rows the model was fitted on, "
+            "or omit the X_train/y_train pair entirely"
+        )
+    y_tr_pred = np.asarray(model.predict(X_train)).reshape(-1)
+    if len(y_tr_pred) != len(y_tr):
+        raise ModelError(
+            f"train prediction length {len(y_tr_pred)} != train target "
+            f"length {len(y_tr)}"
+        )
+    if (y_tr.dtype.kind in _NUMERIC_KINDS) != (
+        y_tr_pred.dtype.kind in _NUMERIC_KINDS
+    ):
+        raise ModelError(
+            "y_train labels and train predictions carry different label "
+            f"types ({y_tr.dtype} vs {y_tr_pred.dtype})"
+        )
+    for name, vec in (("y_train", y_tr), ("train predictions", y_tr_pred)):
+        if vec.dtype.kind == "f":
+            n_bad = int(np.isnan(vec).sum() + np.isinf(vec).sum())
+            if n_bad:
+                raise ModelError(
+                    f"{name} contain(s) {n_bad} NaN/infinite value(s) — "
+                    "the train-side diagnostic needs finite numbers"
+                )
+    return (
+        float(np.sqrt(mean_squared_error(y_tr, y_tr_pred))),
+        float(r2_score(y_tr, y_tr_pred)),
+        _pearson_r(y_tr, y_tr_pred),
+    )
 
 
 def _gp_noise_std(gp: GaussianProcessRegressor) -> float:
@@ -749,3 +939,112 @@ def permutation_feature_importance(
         n_repeats=int(n_repeats),
         n_samples=len(y_values),
     )
+
+
+def cross_model_importances(
+    models: Mapping[str, Any],
+    X: pd.DataFrame | np.ndarray,
+    y: pd.Series | np.ndarray | list,
+    *,
+    task: str = "regression",
+    n_repeats: int = 5,
+    random_state: int = 42,
+    scoring: str | None = None,
+) -> dict[str, PermutationImportance]:
+    """Permutation importances for a WHOLE panel of fitted models.
+
+    The runner behind ``D2.py``'s cross-model importance heatmaps (the
+    audit's GAP 3): the original looped ``permutation_importance`` over
+    every base model and the meta-learner and drew the features x
+    models matrix to see WHICH features every model agrees on.  This
+    function is that loop, typed: one
+    :class:`PermutationImportance` record per model, keyed by the
+    caller's model name, ready for
+    :func:`pharmaml.viz.ml_plots.plot_permutation_heatmap`.
+
+    Parameters
+    ----------
+    models:
+        Fitted estimators keyed by display name, e.g. the ``named_steps``
+        survivors of a :func:`~pharmaml.ml.training.compare_models`
+        run or a hand-built ``{"RF": rf, "GB": gb, "meta": stack}``
+        panel (the meta-vs-base comparison the original drew).
+    X, y:
+        The evaluation rows (held-out or the full set — the caller's
+        choice; held-out keeps the measure honest, and the ORIGINAL
+        ran it on the test split).
+    task:
+        ``"regression"`` (default) or ``"classification"`` — selects
+        the default scorer when ``scoring`` is ``None``
+        (r2 / accuracy, the :func:`permutation_feature_importance`
+        convention).
+    n_repeats:
+        Shuffles per feature per model (default 5, the original's
+        value).
+    random_state:
+        Seed — the SAME seed runs for every model, so the shuffle
+        sequences align and cross-model differences reflect the MODELS,
+        not the shuffles.
+    scoring:
+        Explicit scorer label; ``None`` picks from ``task``.
+
+    Returns
+    -------
+    dict of str to PermutationImportance
+        One record per entry of ``models``, keyed the same, in the
+        mapping's own iteration order.
+
+    Raises
+    ------
+    ModelError
+        If ``models`` is empty, or any one model's permutation pass
+        raises — the failure names the offending model so a panel's
+        worth of work is not lost to an anonymous traceback.
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> from sklearn.linear_model import LinearRegression, Ridge
+    >>> rng = np.random.default_rng(42)
+    >>> x = pd.DataFrame(rng.uniform(size=(40, 3)),
+    ...                  columns=["signal", "noise1", "noise2"])
+    >>> y = pd.Series(4.0 * x["signal"] + rng.normal(0.0, 0.1, 40))
+    >>> panel = {"ols": LinearRegression().fit(x, y),
+    ...          "ridge": Ridge(alpha=0.5).fit(x, y)}
+    >>> records = cross_model_importances(panel, x, y)
+    >>> sorted(records)                       # every model reported
+    ['ols', 'ridge']
+    >>> records["ols"].names                  # same feature order both
+    ['signal', 'noise1', 'noise2']
+    >>> records["ols"].scoring                # the regression default
+    'r2'
+    """
+    if not models:
+        raise ModelError(
+            "models is empty — cross_model_importances needs at least one "
+            "fitted model keyed by its display name"
+        )
+    records: dict[str, PermutationImportance] = {}
+    for name, model in models.items():
+        try:
+            records[str(name)] = permutation_feature_importance(
+                model,
+                X,
+                y,
+                task=task,
+                n_repeats=n_repeats,
+                random_state=random_state,
+                scoring=scoring,
+            )
+        except Exception as exc:
+            raise ModelError(
+                f"model {name!r} failed its permutation importance pass: {exc}"
+            ) from exc
+    _LOG.info(
+        "cross-model permutation importances: %d model(s) over %d feature(s), "
+        "%d repeat(s) each",
+        len(records),
+        len(next(iter(records.values())).names),
+        n_repeats,
+    )
+    return records

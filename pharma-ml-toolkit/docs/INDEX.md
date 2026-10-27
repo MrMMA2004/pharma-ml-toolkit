@@ -60,12 +60,15 @@ after adding new public functions.
 | `RISM_DESCRIPTOR_COUNT` | constant |  |
 | `TOPOLOGICAL_BITS` | constant |  |
 | `UNSUPPORTED_METALS` | constant |  |
+| `AtomEnvironment` | class | One ``(atom, radius)`` hit a Morgan bit fires on. |
 | `EndpointDatasetReport` | class | Audit record for one :func:`prepare_pic50_dataset` run. |
 | `FeatureReport` | class | Audit record for one :func:`compute_feature_frame` run. |
 | `FeatureSelection` | class | Result of :func:`select_top_features`. |
+| `MorganBitInfo` | class | Decode record for one Morgan fingerprint bit on one molecule. |
 | `PdbLigandReport` | class | Audit record for one :func:`smiles_to_pdb` conversion. |
 | `SdfWriteReport` | class | Audit of one :func:`table_to_sdf` conversion. |
 | `TableComparison` | class | Set reconciliation of one ligand column across two tables. |
+| `VarianceFilterResult` | class | Result of :func:`filter_low_variance`. |
 | `add_ic50_column` | function | Append an IC50 column converted from a pIC50 column. |
 | `add_pic50_column` | function | Append a pIC50 column to a table of measurements. |
 | `annotate_with_smiles` | function | Annotate ligand-name columns with SMILES from a reference table. |
@@ -77,7 +80,9 @@ after adding new public functions.
 | `compute_fingerprints` | function | Compute fingerprints for a list of SMILES. |
 | `compute_maccs` | function | Compute the 167-bit MACCS key fingerprints. |
 | `compute_rism_descriptors` | function | Compute 3D-RISM-KH-inspired solvation descriptors for SMILES. |
+| `decode_morgan_bit` | function | Decode one Morgan fingerprint bit into its atom environments. |
 | `family_of_column` | function | Return the feature family a frame column belongs to. |
+| `filter_low_variance` | function | Cut feature columns whose variance is below ``threshold``. |
 | `ic50_from_pic50_series` | function | Vectorised pIC50 -> IC50 conversion preserving NaN for bad rows. |
 | `ic50_to_pic50` | function | Convert an IC50 measurement to pIC50 = -log10(IC50 [M]). |
 | `ki_to_pki` | function | Convert an inhibition constant to pKi = -log10(Ki [M]). |
@@ -89,6 +94,7 @@ after adding new public functions.
 | `sdf_to_table` | function | Read an SD file back into a table (SMILES, tags and titles). |
 | `select_top_features` | function | Select the top-K features with the rar's two-layer strategy. |
 | `selection_metadata` | function | Build the JSON-ready metadata dict for a feature-selection run. |
+| `signed_feature_correlations` | function | Signed correlation of every numeric column with ``target``. |
 | `similarity_scan` | function | Scan reference ligands against a target library (Tanimoto >= threshold). |
 | `smi_to_csv` | function | Stream a ``.smi`` file to CSV one line at a time. |
 | `smiles_to_pdb` | function | Generate an optimised 3D PDB ligand from a SMILES string. |
@@ -138,6 +144,7 @@ after adding new public functions.
 | `build_voting` | function | Build a voting ensemble (upgrades Voting.py / Voting reg.py). |
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
+| `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
@@ -178,6 +185,8 @@ after adding new public functions.
 | `SmilesRnn` | class | Character-level GRU SMILES generator (CPU-only, torch optional). |
 | `SubstructureObjective` | class | Hard pharmacophore constraint: 1.0 when ``smarts`` matches. |
 | `TpsaBandObjective` | class | Gaussian band on topological polar surface area (Å²).  See |
+| `bioisostere_moves` | function | Every distinct single-atom bioisostere mutant of ``smiles`` (sorted). |
+| `bioisostere_mutate` | function | Draw one single-atom bioisostere mutant of ``smiles`` (or ``None``). |
 | `pareto_front` | function | Extract the non-dominated molecules (Pareto front) of a run. |
 | `ring_topology_moves` | function | Every distinct one-step ring-size mutant of ``smiles`` (sorted). |
 | `ring_topology_mutate` | function | Draw one ring-size mutant of ``smiles`` with ``rng`` (or ``None``). |
@@ -334,6 +343,7 @@ after adding new public functions.
 | `plot_concentration_profile` | function | Plot one PK profile: linear + semi-log panels with AUC shading. |
 | `plot_confusion_matrix` | function | Heat-map of predicted-vs-true class counts. |
 | `plot_consensus_ranking` | function | Horizontal bars of ligands ranked by the 0–1 consensus. |
+| `plot_correlation_heatmap` | function | Feature × feature correlation heatmap (the seaborn-free port). |
 | `plot_cv_scores` | function | Per-fold CV scores as bars with the mean line and ±std band. |
 | `plot_descriptor_distributions` | function | Histogram grid over the numeric columns of a table. |
 | `plot_dose_accumulation` | function | One-compartment superposition of an intermittent IV regimen. |
@@ -344,6 +354,7 @@ after adding new public functions.
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
 | `plot_pareto_front` | function | One scatter per MultiObjective run: dominated points muted, front lit. |
+| `plot_permutation_heatmap` | function | Cross-model permutation-importance heatmap (features × models). |
 | `plot_permutation_importance` | function | Top-N permutation importances as signed bars with error bars. |
 | `plot_pr_curves` | function | Precision-Recall curves — binary or one-vs-rest multiclass. |
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
@@ -352,6 +363,7 @@ after adding new public functions.
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |
 | `plot_rl_introspection` | function | One figure per RL run: the score story + the prior-drift diagnostics. |
 | `plot_roc_curves` | function | Receiver-operating curves — binary or one-vs-rest multiclass. |
+| `plot_signed_correlations` | function | Top-N signed feature-target correlations as a horizontal bar chart. |
 | `plot_similarity_heatmap` | function | Heat-map of a pairwise similarity matrix. |
 | `plot_table_comparison` | function | Overlap breakdown of a ligand-table :class:`TableComparison`. |
 | `plot_top_ligands` | function | Horizontal bars of the strongest-binding ligands. |

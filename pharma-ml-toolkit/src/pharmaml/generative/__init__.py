@@ -86,6 +86,7 @@ imported lazily -- importing this subpackage needs neither.
 
 from __future__ import annotations
 
+from .bioisostere import bioisostere_moves, bioisostere_mutate
 from .corpus import DEFAULT_CORPUS
 from .genetic import GeneticOptimizer, run_genetic_optimization
 from .pareto import ParetoFront, pareto_front
@@ -122,6 +123,8 @@ __all__ = [
     "SmilesRnn",
     "SubstructureObjective",
     "TpsaBandObjective",
+    "bioisostere_moves",
+    "bioisostere_mutate",
     "pareto_front",
     "ring_topology_moves",
     "ring_topology_mutate",

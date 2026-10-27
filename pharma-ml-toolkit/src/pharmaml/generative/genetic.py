@@ -11,7 +11,13 @@ CPU-friendly and deterministic given ``seed``:
   -- OR, in ``mutation="topology"`` mode, a ring-size move drawn from
   :func:`~pharmaml.generative.ring_topology_mutate` (ring contraction /
   expansion, the single-parent medchem counterpart of the scaffold-hop
-  crossover's ring-topology geometry);
+  crossover's ring-topology geometry) -- OR, in ``mutation="bioisostere"``
+  mode, a single-atom heteroatom exchange drawn from
+  :func:`~pharmaml.generative.bioisostere_mutate` (the third single-parent
+  medchem axis: an ester O for an amide N, an ether O for a thioether S,
+  a ring CH2 for an N/O/S -- every mutant re-sanitised and
+  re-canonicalised; ``None`` draws fall back to the character mutation
+  so evolution never stalls);
 * **crossover** = single-point splice of two parents, sanitised the same
   way -- OR, with ``crossover="scaffold_hop"``, a BREED-style
   homologous-cut recombination (see
@@ -126,6 +132,7 @@ from .scaffold_hop import (
     _scaffold_hop_core,
     scaffold_hop_crossover,
 )
+from .bioisostere import bioisostere_mutate
 from .topology import ring_topology_mutate
 
 __all__ = ["GeneticOptimizer", "run_genetic_optimization"]
@@ -783,10 +790,10 @@ class GeneticOptimizer:
             raise DataValidationError(
                 f"max_smiles_length must be >= 20, got {max_smiles_length}"
             )
-        if mutation not in ("uniform", "scaffold", "topology"):
+        if mutation not in ("uniform", "scaffold", "topology", "bioisostere"):
             raise DataValidationError(
-                f"mutation must be 'uniform', 'scaffold' or 'topology', "
-                f"got {mutation!r}"
+                f"mutation must be 'uniform', 'scaffold', 'topology' or "
+                f"'bioisostere', got {mutation!r}"
             )
         if crossover not in ("splice", "scaffold_hop"):
             raise DataValidationError(
@@ -844,10 +851,20 @@ class GeneticOptimizer:
         a non-empty decoration pool) the scaffold-preserving operator
         fires next; ``None`` returns (acyclic parent, RDKit failure,
         over-length mutant) fall through to the classic character-level
-        mutation so evolution never stalls.
+        mutation so evolution never stalls.  In ``bioisostere`` mode a
+        single-atom heteroatom exchange is drawn (``None`` returns --
+        unparseable parent, every exchange fenced or sanitisation-
+        rejected, over-length mutant -- fall through) via
+        :func:`~pharmaml.generative.bioisostere.bioisostere_mutate`.
         """
         if self.mutation == "topology":
             mutant = ring_topology_mutate(
+                smiles, rng, max_smiles_length=self.max_smiles_length
+            )
+            if mutant is not None:
+                return mutant
+        if self.mutation == "bioisostere":
+            mutant = bioisostere_mutate(
                 smiles, rng, max_smiles_length=self.max_smiles_length
             )
             if mutant is not None:
@@ -1193,6 +1210,8 @@ class GeneticOptimizer:
         )
         if self.mutation == "topology":
             family_operators: tuple[str, ...] = ("topology", "character")
+        elif self.mutation == "bioisostere":
+            family_operators = ("bioisostere", "character")
         elif self.mutation == "scaffold" and decoration_pool:
             family_operators = ("scaffold", "character")
         else:
@@ -1311,6 +1330,10 @@ class GeneticOptimizer:
                     if drawn_family == family_operators[0]:
                         if self.mutation == "topology":
                             mutant = ring_topology_mutate(
+                                child, rng, max_smiles_length=self.max_smiles_length
+                            )
+                        elif self.mutation == "bioisostere":
+                            mutant = bioisostere_mutate(
                                 child, rng, max_smiles_length=self.max_smiles_length
                             )
                         else:

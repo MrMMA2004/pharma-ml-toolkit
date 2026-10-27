@@ -1,13 +1,109 @@
-# Changelog
+## [1.2.90] — 2026-10-27
 
-All notable changes to the PharmaML toolkit are documented here. The
-format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
-versions follow [semantic versioning](https://semver.org/) — **minor**
-bumps add features, **patch** bumps ship fixes.
+### Added — the seventh engineering review (100x-152): the D2.py interpretability bundle + the overfit gap, four audit gaps closed
 
-The current version is also in [`VERSION`](VERSION) (one line, no
-newline-stripping surprises: `cat VERSION`) and in
-`pyproject.toml` → `[project] version`. The downloadable archive is
+The instruction: *"Review the current codebase and implementation,
+troubleshoot potential issues, and continue improving the engineering
+details."* The round audited the round-34 additions line by line (the
+quantile intervals feature verified clean — the real risk lived
+elsewhere), repaired the environment after its twelfth reset, and
+closed four of the D2.py audit's standing gaps — the upload's best
+remaining interpretability ideas, each upgraded to the toolkit's
+typed-record conventions with every original defect documented
+honestly in the docstrings:
+
+* **`decode_morgan_bit`** (`pharmaml.chem.interpret`) — a Morgan
+  fingerprint bit finally *means* something: the bit-index →
+  atom-environment decoding the upload wrote to
+  `morgan_atom_environments.txt`. Returns a typed `MorganBitInfo`
+  record (every `(atom, radius)` hit the bit fires on, each decoded
+  with **the hit's own radius** — the original passed the fingerprint
+  radius and thus drew the wrong environment for any bit that fired
+  below it, a real decode bug, fixed and pinned; radius-0 hits are
+  KEPT, the original silently dropped them all; the `DrawMorganBit`
+  SVG legend rides along as `.drawing`). The multi-molecule example
+  hunt is deliberately a caller-side loop — one call decodes one
+  molecule completely instead of three molecules partially.
+* **`signed_feature_correlations`** (`pharmaml.chem.interpret`) — the
+  computation half of the upload's correlation bundle: every numeric
+  column correlated with the target, sorted by |r| descending with the
+  sign preserved. The original correlated only the first 1000 features
+  "for speed" and appended a **fake `0.0`** wherever `pearsonr`
+  raised — a failed column masquerading as "no correlation"; this port
+  correlates everything and *drops* undefined correlations (logged,
+  never zeroed). Pearson and Spearman both supported.
+* **`plot_signed_correlations` + `plot_correlation_heatmap`**
+  (`pharmaml.viz`) — the bundle's figure halves: the top-N signed bar
+  (teal pulls the target up, the warm negative draws it down — the
+  permutation-importance colour convention) and the pure-matplotlib
+  feature × feature heatmap (the upload called seaborn; the toolkit's
+  viz stays matplotlib-only) with the diverging house palette, a
+  zero-centred scale, grey undefined cells and annotations only while
+  matrices stay readable (≤ 12 columns).
+* **`cross_model_importances` + `plot_permutation_heatmap`**
+  (`pharmaml.ml` / `pharmaml.viz`) — the audit's GAP 3: the
+  features × models matrix the upload drew after looping
+  `permutation_importance` over its base models and meta-learner.
+  The runner keys one `PermutationImportance` record per fitted model
+  (same seed for every model, so cross-model differences reflect the
+  *models*, not the shuffle luck — pinned by test), and the heatmap
+  renders the top-N features by cross-model mean |importance| with a
+  grey "no vote" cell for a feature a model never saw — honestly
+  absent instead of a fake zero.
+* **`filter_low_variance`** (`pharmaml.chem.features`) — the audit's
+  GAP 6, the `xxx.ipynb` filtering cell's `VarianceThreshold(0.01)`:
+  `rank_features` *ranks* by variance, this *cuts* by it, with the
+  same `fillna(0).var()` definition so the two functions can never
+  disagree about a column (pinned by test). Returns a typed
+  `VarianceFilterResult` (the kept-column frame, the kept list, and
+  the dropped ledger — every cut carries its own variance as
+  evidence). Non-numeric columns pass through untouched with a
+  warning; a mid-round test caught the first cut silently *dropping*
+  the very carrier columns it promised to pass through — fixed before
+  ship.
+* **`RegressionReport`'s train side + `r2_gap`** (`pharmaml.ml`) — the
+  audit's GAP 7: `evaluate_model(..., X_train=, y_train=)` fills
+  `pearson_r` (the `fak_ml.ipynb` per-fold metric), `train_rmse`,
+  `train_r2`, `train_pearson_r` and the `r2_gap` property — the
+  overfit gap as one signed number instead of a vibe. The pair is
+  all-or-nothing (half-passed raises) and regression-only (a
+  classification train side has no rmse to mirror). The docstring
+  keeps the honest caveat: train-side metrics are an overfit
+  *diagnostic*, never a quality claim.
+
+### Fixed — the audit's untracked-files finding (the red-suite bomb)
+
+`src/pharmaml/generative/bioisostere.py` had shipped in the ZIPs since
+its round but was **never committed to git and never wired into the
+package** — imported by nothing, its own doctest importing
+`from pharmaml.generative import bioisostere_moves` and failing, a
+live failure waiting in every bare `pytest` run (the audit's Finding
+1). The module itself is sound (all five doctest claims verified live
+with RDKit), so this round *wired it up* instead of deleting it: both
+functions export from `pharmaml.generative`, and the genetic
+optimiser gains the **`mutation="bioisostere"`** mode the module was
+designed for — a single-atom heteroatom exchange drawn per offspring
+(ester O → amide N, ether O → thioether S, ring CH2 → N/O/S), with
+the adaptive operator-selection book seeing the two-operator mutation
+family exactly as topology mode does, and `None` draws falling back
+to the character mutation so evolution never stalls. `__main__.py`
+(the `python -m pharmaml` entry) joins the repo as well; the web-side
+orphan `data-file-preview.tsx` was left untracked deliberately (zero
+importers, superseded by the committed `data-file-view.tsx`).
+
+### The GUI (playground.py, +782 lines)
+
+Four first-class surfaces: the regression results now render the
+**Pearson r / train R² / R² gap (train−test)** line (tolerant of
+older persisted reports); the Results card's third button row carries
+**Correlations…**, **Correlation heatmap** and **Decode ECFP bit…**
+(the defaults derived from the last importance run and the loaded
+dataset); the leaderboard card gained **Cross-model importance…**
+(the trained model panel through the new runner + heatmap); and the
+feature factory card gained the **Filter low variance…** row with a
+threshold entry, the kept/dropped ledger, and frame adoption through
+the EC50 → pEC50 prep card's pattern.
+
 named `pharma-ml-toolkit-v<version>.zip`.
 
 ## [1.2.89] — 2026-10-26

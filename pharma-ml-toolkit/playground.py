@@ -2356,6 +2356,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # permutation twin above: a new train lands, the old run's
         # bracketed bounds are nobody's export.
         self._ml_intervals_frame: Any = None
+        # (100x-152) the OOF stacking card's last record plus the split
+        # it was built on -- the cross-model importance panel's
+        # "stacking winner" source.  The record keeps names and
+        # predictions, never the fitted estimators, so the panel
+        # REBUILDS the best blender on the stack's own train rows
+        # (labelled as a refit); a new dataset adopt retires it with
+        # the cleaned/prep twins (its split belongs to the OLD frame),
+        # and the panel's column-match guard is the belt-and-braces.
+        self._stack_last: tuple[Any, Any, Any, Any, Any, str] | None = None
         # -- Hyperparameter-search card state (100x-90) ------------- #
         # (TunerResults, estimator token, task, target column) of the
         # last search -- the Apply-best and Save-trials payloads.
@@ -5865,6 +5874,48 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             factory, text="", style="CardMuted.TLabel", wraplength=620, justify="left"
         )
         grid_append(factory, self._feat_family_label, sticky="w")
+        # (100x-152) xxx.ipynb's VarianceThreshold cell (the audit's GAP
+        # 6) as the selection card's honest CUT step: rank_features
+        # RANKS by variance, this button CUTS by it -- a column that
+        # never moves cannot separate actives from inactives.
+        variance_row = ttk.Frame(factory, style="Card.TFrame")
+        grid_append(factory, variance_row, sticky="w", pady=(6, 0))
+        variance_btn = self._action_button(
+            variance_row,
+            "Filter low variance…",
+            self._feat_filter_variance,
+            tooltip="filter_low_variance -- cut every feature column whose "
+            "variance is below the threshold (xxx.ipynb's "
+            "VarianceThreshold(0.01), D2.py's audit GAP 6; the same "
+            "variance definition rank_features ranks by, so a ranker's "
+            "scores and this filter's verdicts always agree).  The "
+            "kept/dropped ledger is reported beside the button, and "
+            "adopting the filtered frame (the EC50 → pEC50 prep card's "
+            "pattern) narrows the tree, the selection and the summary to "
+            "the survivors -- the next Save-CSV / histogram run cannot "
+            "name a dropped column.",
+        )
+        variance_btn.pack(side="left")
+        self._feat_variance_entry = ttk.Entry(variance_row, width=8)
+        self._feat_variance_entry.insert(0, "0.01")
+        Tooltip(
+            self._feat_variance_entry,
+            "A column is dropped when its variance is STRICTLY below this "
+            "(equal survives -- sklearn's VarianceThreshold semantics); "
+            "the notebook's own 0.01.",
+        )
+        self._feat_variance_entry.pack(side="left", padx=(8, 0))
+        ttk.Label(variance_row, text="threshold", style="CardMuted.TLabel").pack(
+            side="left", padx=(2, 0)
+        )
+        self._feat_variance_info = ttk.Label(
+            variance_row,
+            text="",
+            style="CardMuted.TLabel",
+            wraplength=330,
+            justify="left",
+        )
+        self._feat_variance_info.pack(side="left", padx=(10, 0))
         feat_tree_frame = ttk.Frame(factory, style="Card.TFrame")
         grid_append(factory, feat_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
         self._feat_tree = ttk.Treeview(
@@ -7444,6 +7495,130 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._render_figure(self._feat_host, figure)
 
         self._start_job("descriptor distributions", work, render)
+
+    def _feat_filter_variance(self) -> None:
+        """Cut low-variance columns from the computed frame (100x-152).
+
+        ``xxx.ipynb``'s ``VarianceThreshold(0.01)`` filtering cell (the
+        audit's GAP 6) as the selection card's honest CUT step:
+        :func:`~pharmaml.chem.features.rank_features` RANKS by variance,
+        :func:`~pharmaml.chem.features.filter_low_variance` CUTS by it
+        (the same variance definition, so the ranker's scores and this
+        filter's verdicts always agree), and every cut column carries
+        its variance in the record's ledger.  Adoption follows the
+        EC50 → pEC50 prep card's pattern -- an ``askyesno`` offers to
+        make the filtered frame the working one, and on yes the tree,
+        the selection and the summary all narrow to the survivors, so
+        the next Save-CSV / histogram run cannot name a dropped
+        column.
+        """
+        frame = getattr(self, "_feat_frame", None)
+        if frame is None or len(frame.columns) == 0:
+            messagebox.showinfo(
+                "No features yet",
+                "Compute & select features first -- the variance filter "
+                "needs the computed feature frame.",
+            )
+            return
+        if not self._require_pharmaml() or not self._require("pandas", "the variance filter"):
+            return
+        try:
+            threshold = parse_float(
+                self._feat_variance_entry.get(), "variance threshold", minimum=0.0
+            )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.chem import filter_low_variance
+
+            return filter_low_variance(frame, threshold=threshold)
+
+        def render(result: Any) -> None:
+            self._feat_variance_info.configure(
+                text=(
+                    f"kept {result.n_kept:,} · dropped {result.n_dropped:,} "
+                    f"(threshold {result.threshold:g})"
+                )
+            )
+            if result.n_dropped == 0:
+                # nothing to adopt -- the frame already passes the cut,
+                # and the info line above is the whole honest story.
+                return
+            if not messagebox.askyesno(
+                "Use the filtered frame?",
+                f"{result.n_kept:,} of {result.n_kept + result.n_dropped:,} "
+                f"feature columns survive the variance cut "
+                f"(threshold {result.threshold:g}).\n\n"
+                "Make the filtered frame the working feature frame\n"
+                "(the tree, the selection export and the histograms\n"
+                "run on the kept columns only)?",
+            ):
+                return
+            # the adoption: the working frame, the selection, the tree
+            # and the summary all narrow to the survivors -- a stale
+            # selected column naming a DROPPED frame column is exactly
+            # the round-146 stale-state bug this prevents.
+            self._feat_frame = result.frame
+            selection = getattr(self, "_feat_selection", None)
+            if selection is None:
+                return
+            from pharmaml.chem.features import FeatureSelection, family_of_column
+
+            kept = set(result.kept)
+            survivors = [name for name in selection.selected if name in kept]
+            counts: dict[str, int] = {}
+            for column in survivors:
+                family = family_of_column(column)
+                counts[family] = counts.get(family, 0) + 1
+            self._feat_selection = FeatureSelection(
+                scores=selection.scores,
+                selected=survivors,
+                family_counts=counts,
+                method=selection.method,
+            )
+            tree = self._feat_tree
+            tree.delete(*tree.get_children())
+            shown = survivors[:300]
+            for rank, column in enumerate(shown, start=1):
+                tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        rank,
+                        column,
+                        family_of_column(column),
+                        format_number(float(selection.scores[column])),
+                    ),
+                )
+            hidden = len(survivors) - len(shown)
+            self._feat_more_label.configure(
+                text=(
+                    f"+{hidden:,} more rows — save the CSV for the full list"
+                    if hidden > 0
+                    else ""
+                )
+            )
+            current = str(self._feat_summary.cget("text"))
+            self._feat_summary.configure(
+                text=(
+                    f"{current} · variance filter adopted: kept "
+                    f"{result.n_kept:,}, dropped {result.n_dropped:,}"
+                )
+            )
+            family_line = " · ".join(
+                f"{family} {count}" for family, count in counts.items()
+            )
+            self._feat_family_label.configure(
+                text=(
+                    f"selected per family: {family_line}"
+                    if family_line
+                    else "selected per family: (none)"
+                )
+            )
+
+        self._start_job("variance filter", work, render)
 
     # ------------------------------------------------------------------ #
     # PK / PD tab
@@ -13237,6 +13412,57 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         ml_result_note.pack(side="left", padx=(10, 0))
         self._ml_result_note = ml_result_note
+        # (100x-152) row three -- the interpretability bundle (D2.py's
+        # decode + correlation cells, the audit's GAP 2).  Rows one and
+        # two are full (the round-34 VLM overflow rule: never a seventh
+        # pack into them), so the new buttons start their OWN row.
+        ml_result_buttons3 = ttk.Frame(results, style="Card.TFrame")
+        grid_append(results, ml_result_buttons3, sticky="w", pady=(6, 0))
+        corr_btn = self._action_button(
+            ml_result_buttons3,
+            "Correlations…",
+            self._ml_plot_correlations,
+            tooltip="signed_feature_correlations + plot_signed_correlations -- "
+            "D2.py's Top10_Correlation_Direction figure, ported "
+            "honestly: EVERY numeric feature of the last run's split "
+            "correlated with the target (the upload cut the frame to "
+            "the first 1000 columns 'for speed' and invented fake 0.0 "
+            "cells for the failures), ranked by |r| with the SIGN "
+            "kept -- teal bars pull the target up, red bars pull it "
+            "down.  Computed on the run's held-out rows, the same "
+            "rows the permutation importance shuffles.",
+        )
+        corr_btn.pack(side="left")
+        corr_heat_btn = self._action_button(
+            ml_result_buttons3,
+            "Correlation heatmap",
+            self._ml_plot_correlation_heatmap,
+            tooltip="plot_correlation_heatmap -- D2.py's "
+            "Feature_Correlation_Heatmap_with_pEC50 figure: the "
+            "feature × feature (+ target) matrix over the top-10 "
+            "|r| columns, pure matplotlib (the upload called "
+            "seaborn), diverging red→white→teal pinned to the honest "
+            "[-1, 1] range.  The target column joins only while the "
+            "loaded frame still carries it (numeric, rows alignable "
+            "with the run's split) -- otherwise the matrix is "
+            "feature × feature and the note says so.",
+        )
+        corr_heat_btn.pack(side="left", padx=(10, 0))
+        decode_btn = self._action_button(
+            ml_result_buttons3,
+            "Decode ECFP bit…",
+            self._ml_decode_bit,
+            tooltip="decode_morgan_bit -- D2.py's bit-decode step: which "
+            "(atom, radius) environments hashed onto one ECFP bit "
+            "index, decoded to atom indices and environment "
+            "SMILES/SMARTS, the record echoed in full.  A bit the "
+            "molecule does not set is a NORMAL honest answer (the "
+            "error names the bit and the molecule); the radius and "
+            "fold length come from the frame's own ECFP family when "
+            "derivable, else the ecfp defaults (radius 2, 2048 "
+            "bits).",
+        )
+        decode_btn.pack(side="left", padx=(10, 0))
         self._ml_metrics = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, self._ml_metrics, sticky="ew")
         ttk.Label(
@@ -13343,6 +13569,41 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         Tooltip(self._bench_cv, "CV folds for the family benchmark (2-10).")
         self._bench_cv.pack(side="left", padx=(8, 0))
         ttk.Label(bench_row, text="folds", style="CardMuted.TLabel").pack(
+            side="left", padx=(2, 0)
+        )
+        # (100x-152) D2.py's cross-model importance heatmap (the audit's
+        # GAP 3): which features does EVERY fitted model lean on, and
+        # where do the meta and the bases disagree?
+        cross_row = ttk.Frame(board, style="Card.TFrame")
+        grid_append(board, cross_row, sticky="w", pady=(6, 0))
+        cross_btn = self._action_button(
+            cross_row,
+            "Cross-model importance…",
+            self._ml_cross_model_importance,
+            tooltip="cross_model_importances + plot_permutation_heatmap -- "
+            "D2.py's features × models matrix over the fitted models "
+            "the session actually holds: the last TRAINED model plus "
+            "the OOF stacking winner when a stack run is in the "
+            "session (the best blender REBUILT and refit on the "
+            "stack's own train split, labelled as one -- the record "
+            "keeps names and predictions, never estimators).  The "
+            "compare_models leaderboard cannot join: it keeps only "
+            "its cross-validated SCORES, the estimators are rebuilt "
+            "per fold and discarded.  Every model is shuffled under "
+            "the SAME seed, so the differences reflect the models, "
+            "not the shuffles; a feature a model never saw renders "
+            "grey 'no vote', never a fake zero.",
+        )
+        cross_btn.pack(side="left")
+        self._cross_repeats = ttk.Entry(cross_row, width=5)
+        self._cross_repeats.insert(0, "5")
+        Tooltip(
+            self._cross_repeats,
+            "Shuffles per feature per model (1-50) -- D2.py's own 5; "
+            "the same seed runs for every model.",
+        )
+        self._cross_repeats.pack(side="left", padx=(8, 0))
+        ttk.Label(cross_row, text="repeats", style="CardMuted.TLabel").pack(
             side="left", padx=(2, 0)
         )
         self._board_host = self._figure_host(board, height=300)
@@ -14088,6 +14349,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # so it is cleared where the run lands instead.
         self._ml_cleaned_frame = None
         self._ml_prep_frame = None
+        # (100x-152) the stacking panel source too -- its split belongs
+        # to the OLD dataset, and a stale member would masquerade as
+        # the new one's (the column-match guard in the panel handler is
+        # the belt-and-braces).
+        self._stack_last = None
         self._ml_frame = frame
         self._ml_path = path
         columns = [str(column) for column in frame.columns]
@@ -14369,12 +14635,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 n_jobs=1,
                 model_params=model_params,
             )
+            # (100x-152) the train-side diagnostics (the overfit gap as
+            # a number) ride the REGRESSION calls only -- evaluate_model
+            # raises ModelError the moment a classification report is
+            # offered the pair (and a classifier's honest overfit
+            # readout is the calibration curve, not a train/test R²
+            # gap).  The tune site stays bare on purpose: its winner is
+            # tuned on the CV folds, so a train-side metric would
+            # measure the tuner's own selection, not the gap.
+            train_side: dict[str, Any] = (
+                {"X_train": x_train, "y_train": y_train} if task == "regression" else {}
+            )
             report = evaluate_model(
                 trained.model,
                 x_test,
                 y_test,
                 task,
                 keep_predictions=(task == "regression"),
+                **train_side,
             )
             return trained, report, task, dropped, x_train, y_train, x_test, y_test
 
@@ -14509,12 +14787,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 cv_std=None,
                 fit_seconds=fit_seconds,
             )
+            # (100x-152) same regression-only train-side pair as the
+            # plain train site -- the ensemble's report carries the
+            # overfit gap too (ModelError if offered to a classifier).
+            train_side: dict[str, Any] = (
+                {"X_train": x_train, "y_train": y_train} if task == "regression" else {}
+            )
             report = evaluate_model(
                 estimator,
                 x_test,
                 y_test,
                 task,
                 keep_predictions=(task == "regression"),
+                **train_side,
             )
             return trained, report, task, dropped, x_train, y_train, x_test, y_test
 
@@ -15417,6 +15702,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
                 sigma = _np.asarray(gp[1], dtype=float)
                 pairs.append(("predictive σ (median)", format_number(float(_np.median(sigma)))))
+            # (100x-152) the overfit gap as a number (the audit's GAP 7):
+            # the held-out Pearson r, the train-side R², and the signed
+            # gap between them -- ONLY when the report carries the
+            # train-side fields (a session-restored report from an older
+            # bundle, or any pre-152 call, has none; the render must
+            # tolerate that, not crash on it).
+            pearson_r = getattr(report, "pearson_r", None)
+            train_r2 = getattr(report, "train_r2", None)
+            r2_gap = getattr(report, "r2_gap", None)
+            if pearson_r is not None:
+                pairs.append(("Pearson r", format_number(pearson_r)))
+            if train_r2 is not None:
+                pairs.append(("train R²", format_number(train_r2)))
+            if r2_gap is not None:
+                pairs.append(("R² gap (train−test)", f"{r2_gap:+.3f}"))
         else:
             auc = getattr(report, "roc_auc", None)
             pairs = [
@@ -16116,6 +16416,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         def render(result: Any) -> None:
+            # (100x-152) the cross-model importance panel's source: the
+            # record (names + predictions, never the fitted estimators)
+            # plus the split it was built on, so the panel can REBUILD
+            # and refit the best blender on the stack's own train rows.
+            self._stack_last = (result, x_train, y_train, x_test, y_test, target)
             self._board_frame = result.leaderboard
             self._board_tree.delete(*self._board_tree.get_children())
             columns = [str(column) for column in result.leaderboard.columns]
@@ -16570,6 +16875,462 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             frame, "Save the prediction-interval table", "prediction_intervals.csv"
         )
 
+    # -- interpretability bundle (100x-152, the audit's GAP 2) -------- #
+
+    def _ml_plot_correlations(self) -> None:
+        """Signed feature-target correlations of the last run (100x-152).
+
+        D2.py's ``Top10_Correlation_Direction`` figure as a Results-card
+        button: :func:`signed_feature_correlations` correlates EVERY
+        numeric feature of the last run's held-out split with the
+        target (the upload correlated only the first 1000 columns "for
+        speed" and appended a fake ``0.0`` wherever ``pearsonr`` raised
+        -- a failed column masquerading as "no correlation"; this port
+        never invents a zero, undefined correlations are dropped), and
+        :func:`plot_signed_correlations` draws the top-10 signed bars --
+        teal pulls the target up, red pulls it down.  The same rows the
+        permutation importance shuffles, the card's own convention.
+        """
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo(
+                "No trained model",
+                "Train a model first -- the correlation bundle needs the "
+                "last run's feature frame and target.",
+            )
+            return
+        _trained, _report, _task, _x_train, _y_train, x_test, y_test, target = run
+        if not self._require_pharmaml() or not self._require("matplotlib", "the figure"):
+            return
+
+        def work() -> Any:
+            from pharmaml.chem.interpret import signed_feature_correlations
+            from pharmaml.viz import plot_signed_correlations
+
+            correlations = signed_feature_correlations(x_test, y_test, method="pearson")
+            figure = plot_signed_correlations(
+                correlations,
+                top=10,
+                title=f"Top signed correlations — {target} (held-out rows)",
+            )
+            return correlations, figure
+
+        def render(payload: tuple[Any, Any]) -> None:
+            correlations, figure = payload
+            self._render_figure(self._ml_host, figure)
+            self._ml_result_note.configure(
+                text=(
+                    "signed correlations replace the parity figure — Train & "
+                    "evaluate brings it back · "
+                    f"{len(correlations)} numeric feature(s) ranked by |r| · "
+                    f"over the run's {len(x_test)} held-out rows"
+                )
+            )
+
+        self._start_job("signed correlations", work, render)
+
+    def _ml_plot_correlation_heatmap(self) -> None:
+        """Feature × feature (+ target) correlation heatmap (100x-152).
+
+        D2.py's ``Feature_Correlation_Heatmap_with_pEC50`` figure: the
+        top-10 ``|r|`` columns of the same ranking the Correlations
+        button draws, now as the full matrix in pure matplotlib (the
+        upload called seaborn).  The target column rides along only
+        while the loaded frame still carries it (numeric, and its rows
+        align with the run's split) -- otherwise the matrix is honestly
+        feature × feature and the note says so; the tooltip documents
+        the same limitation.
+        """
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo(
+                "No trained model",
+                "Train a model first -- the correlation heatmap needs the "
+                "last run's feature frame and target.",
+            )
+            return
+        _trained, _report, _task, _x_train, _y_train, x_test, y_test, target = run
+        if not self._require_pharmaml() or not self._require("matplotlib", "the figure"):
+            return
+        # (100x-142) the session frame is captured on the MAIN thread:
+        # reading self._ml_frame inside work() raced a concurrent
+        # dataset swap (Ctrl+O during the job).
+        session_frame = self._ml_frame
+        target_available = False
+        if session_frame is not None and target in session_frame.columns:
+            import pandas as pd
+
+            target_available = pd.api.types.is_numeric_dtype(session_frame[target])
+
+        def work() -> Any:
+            from pharmaml.chem.interpret import signed_feature_correlations
+            from pharmaml.viz import plot_correlation_heatmap
+
+            correlations = signed_feature_correlations(x_test, y_test, method="pearson")
+            top_columns = [str(name) for name in correlations.head(10).index]
+            # the heatmap frame starts as the run's own held-out rows
+            # (every top column lives there by construction); the
+            # target joins only when the session frame holds it AND its
+            # rows still align with the split -- a swapped dataset
+            # makes the join dishonest, so it is skipped, not faked.
+            frame = x_test.copy()
+            joined = False
+            if target_available:
+                try:
+                    frame[target] = session_frame.loc[frame.index, target].to_numpy()
+                    joined = True
+                except (KeyError, IndexError, ValueError):
+                    joined = False
+            columns = list(top_columns) + ([target] if joined else [])
+            figure = plot_correlation_heatmap(
+                frame,
+                columns=columns,
+                title=(
+                    f"Correlation heatmap — top 10 |r| "
+                    f"{'+ ' + target if joined else '(target not joined)'}"
+                ),
+            )
+            return figure, joined, len(columns), len(frame)
+
+        def render(payload: tuple[Any, bool, int, int]) -> None:
+            figure, joined, n_columns, n_rows = payload
+            self._render_figure(self._ml_host, figure)
+            note = (
+                "correlation heatmap replaces the parity figure — Train & "
+                "evaluate brings it back · "
+                f"{n_columns} column(s) over the run's {n_rows} held-out rows"
+            )
+            if joined:
+                note += f" (top 10 |r| + {target})"
+            else:
+                note += (
+                    " (top 10 |r| only — the target column is not in the "
+                    "loaded frame, or its rows no longer align with the split)"
+                )
+            self._ml_result_note.configure(text=note)
+
+        self._start_job("correlation heatmap", work, render)
+
+    def _ml_decode_bit(self) -> None:
+        """Ask for a bit index + SMILES, then decode (100x-152).
+
+        D2.py's bit-decode step's asking surface: a small dialog with
+        both fields prefilled from the session -- the bit index
+        defaults to the most important ``ecfp_bit_`` column of the last
+        permutation-importance run (the bit the model actually leans
+        on), the SMILES to the first molecule of the loaded dataset.
+        The decode itself lives in :meth:`_ml_decode_bit_run` so tests
+        and future relays can drive one without the dialog.
+        """
+        if tk is None:  # pragma: no cover - headless import
+            return
+        if not self._require_pharmaml() or not self._require("rdkit", "the ECFP bit decode"):
+            return
+        bit_default, smiles_default = self._ml_decode_bit_defaults()
+        radius, n_bits = self._ml_ecfp_parameters()
+        win = tk.Toplevel(self)
+        win.title("Decode an ECFP bit")
+        win.configure(background=BG)
+        win.transient(self)
+        try:
+            win.geometry(f"+{self.winfo_rootx() + 160}+{self.winfo_rooty() + 120}")
+        except tk.TclError:  # pragma: no cover - unmapped parent
+            pass
+        ttk.Label(
+            win,
+            text=(
+                "Which bit does the model lean on, and WHAT is it?  The "
+                "index is decoded against every (atom, radius) environment "
+                f"that hashed onto it (radius {radius}, {n_bits} bits -- the "
+                "frame's own ECFP family when derivable, else the ecfp "
+                "defaults).  A bit this molecule does not set is a NORMAL, "
+                "honest answer: the error names the bit and the molecule."
+            ),
+            style="CardMuted.TLabel",
+            wraplength=430,
+            justify="left",
+        ).pack(anchor="w", padx=14, pady=(12, 4))
+        ttk.Label(win, text="bit index", style="CardMuted.TLabel").pack(anchor="w", padx=14)
+        bit_entry = ttk.Entry(win, width=12)
+        bit_entry.insert(0, bit_default)
+        bit_entry.pack(anchor="w", padx=14, pady=(0, 8))
+        ttk.Label(win, text="SMILES", style="CardMuted.TLabel").pack(anchor="w", padx=14)
+        smiles_entry = ttk.Entry(win, width=52)
+        smiles_entry.insert(0, smiles_default)
+        smiles_entry.pack(anchor="w", padx=14, pady=(0, 8))
+
+        def run_decode() -> None:
+            bit_text = bit_entry.get()
+            smiles_text = smiles_entry.get()
+            win.destroy()
+            self._ml_decode_bit_run(bit_text, smiles_text)
+
+        buttons = ttk.Frame(win, style="Card.TFrame")
+        buttons.pack(anchor="w", padx=14, pady=(0, 12))
+        decode_btn = self._action_button(
+            buttons,
+            "Decode",
+            run_decode,
+            primary=True,
+            tooltip="decode_morgan_bit -- the bit-info map of the folded "
+            "Morgan fingerprint, every hit decoded to its atom indices "
+            "and environment SMILES/SMARTS, the record echoed in full.",
+        )
+        decode_btn.pack(side="left")
+        close_btn = self._action_button(buttons, "Close", win.destroy)
+        close_btn.pack(side="left", padx=(10, 0))
+
+    def _ml_decode_bit_defaults(self) -> tuple[str, str]:
+        """Prefill the decode dialog from the session (honest fallbacks).
+
+        The bit index defaults to the most important ``ecfp_bit_`` /
+        ``ecfp3_bit_`` column of the last permutation-importance table
+        (the run's own feature ranking, importance-descending -- the
+        bit the model actually leans on), else ``0``; the SMILES to the
+        first molecule of the loaded dataset, else the empty string
+        (the run guard then asks for one).
+        """
+        bit = 0
+        perm_frame = getattr(self, "_ml_perm_frame", None)
+        if perm_frame is not None and "feature" in perm_frame.columns:
+            for name in perm_frame["feature"].astype(str).head(50):
+                match = re.fullmatch(r"ecfp3?_bit_(\d+)", name)
+                if match is not None:
+                    bit = int(match.group(1))
+                    break
+        smiles = ""
+        frame = self._ml_frame
+        if frame is not None and len(frame) > 0:
+            column = detect_smiles_column(frame)
+            if column is not None:
+                first = frame[column].iloc[0]
+                if first is not None and str(first).strip():
+                    smiles = str(first).strip()
+        return str(bit), smiles
+
+    def _ml_ecfp_parameters(self) -> tuple[int, int]:
+        """The ECFP radius / fold length the session's features imply.
+
+        Reads the last run's feature columns (the model's own inputs,
+        falling back to the loaded frame when no run exists yet): an
+        ``ecfp3_bit_`` prefix means D2.py's radius-3 family, an
+        ``ecfp_bit_`` prefix the radius-2 ecfp family, and a frame with
+        neither (plain descriptors, or nothing loaded) falls back to
+        the ecfp family constants -- radius 2, 2048 bits -- the family
+        the feature factory's ECFP columns are built with.
+        """
+        columns: list[str] = []
+        run = getattr(self, "_ml_last_run", None)
+        if run is not None:
+            _trained, _report, _task, _x_tr, _y_tr, x_test, _y_test, _target = run
+            columns = [str(name) for name in x_test.columns]
+        elif self._ml_frame is not None:
+            columns = [str(name) for name in self._ml_frame.columns]
+        from pharmaml.chem import ECFP3_BITS, ECFP3_RADIUS, MORGAN_BITS, MORGAN_RADIUS
+
+        if any(name.startswith("ecfp_bit_") for name in columns):
+            return MORGAN_RADIUS, MORGAN_BITS
+        if any(name.startswith("ecfp3_bit_") for name in columns):
+            return ECFP3_RADIUS, ECFP3_BITS
+        return MORGAN_RADIUS, MORGAN_BITS
+
+    def _ml_decode_bit_run(self, bit_text: str, smiles_text: str) -> None:
+        """Decode one Morgan bit -- the dialog's worker entry point.
+
+        The guards live here (not in the dialog) so a relay can drive a
+        decode directly: an empty SMILES is the honest info box (the
+        default comes from the loaded dataset -- no dataset, no
+        default), a non-integer bit is the Input dialog, and a bit the
+        molecule does not set is the NORMAL DataValidationError path --
+        the standard job error box, whose message already names the bit
+        and the molecule.  The record is echoed as the ``__str__`` plus
+        one line per hit (atom index, radius, environment SMILES); the
+        SVG bit legend stays a library/CLI affordance (Tk has no SVG
+        host), so the decode runs ``with_drawing=False``.
+        """
+        if not self._require_pharmaml():
+            return
+        if not self._require("rdkit", "the ECFP bit decode"):
+            return
+        smiles = str(smiles_text).strip()
+        if not smiles:
+            messagebox.showinfo(
+                "No SMILES",
+                "Type a SMILES to decode -- the dialog defaults to the "
+                "loaded dataset's first molecule, but no dataset with a "
+                "SMILES column is loaded right now.",
+            )
+            return
+        try:
+            bit = parse_int(bit_text, "bit index", minimum=0)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        radius, n_bits = self._ml_ecfp_parameters()
+
+        def work() -> Any:
+            from pharmaml.chem.interpret import decode_morgan_bit
+
+            return decode_morgan_bit(
+                smiles, bit, radius=radius, n_bits=n_bits, with_drawing=False
+            )
+
+        def render(info: Any) -> None:
+            lines = [str(info), "", "atom environments (hit · radius · environment):"]
+            lines.extend(
+                f"  atom {hit.atom_index} · radius {hit.radius} · {hit.environment_smiles}"
+                for hit in info.hits
+            )
+            messagebox.showinfo(
+                f"ECFP bit {bit} — {n_bits} bits, radius {radius}", "\n".join(lines)
+            )
+
+        self._start_job(f"decoding ECFP bit {bit}", work, render)
+
+    def _ml_cross_model_importance(self) -> None:
+        """Cross-model permutation-importance heatmap (100x-152, GAP 3).
+
+        D2.py's features × models matrix over the fitted models the
+        session ACTUALLY holds -- and the session is honest about what
+        that is: the compare_models leaderboard keeps only its
+        cross-validated SCORES (the estimators are rebuilt per fold and
+        discarded), and the OOF stacking record keeps its leaderboard
+        and predictions, never the fitted blenders.  The panel
+        therefore runs over the last TRAINED model (Train & evaluate),
+        joined by the OOF stacking winner when a stack run is in the
+        session -- the best blender REBUILT and refit on the stack's
+        own train split, labelled ``(refit)`` -- and only while its
+        feature columns still match the panel's rows (a swapped
+        dataset makes the join dishonest, so the member is skipped and
+        the note says so).  Every model is shuffled under the SAME
+        seed, so the differences reflect the models, not the shuffles.
+        """
+        run = getattr(self, "_ml_last_run", None)
+        stack = getattr(self, "_stack_last", None)
+        if run is None and stack is None:
+            messagebox.showinfo(
+                "No fitted models",
+                "Neither a trained model nor an OOF stacking run is in the "
+                "session.  The compare_models leaderboard keeps only its "
+                "cross-validated scores -- the estimators are rebuilt per "
+                "fold and discarded -- and the stacking card keeps its "
+                "leaderboard and predictions, so the panel needs at least "
+                "one TRAINED model: run Train & evaluate (or the OOF "
+                "stacking card) first.",
+            )
+            return
+        if not self._require_pharmaml() or not self._require("matplotlib", "the figure"):
+            return
+        if not self._require("sklearn", "the permutation importance"):
+            return
+        try:
+            repeats = parse_int(self._cross_repeats.get(), "repeats", minimum=1, maximum=50)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        # (100x-142) the panel is assembled on the MAIN thread -- the
+        # run tuple, the stack record and the entry text are Tk-side
+        # state the worker must never touch.
+        task = "regression"
+        x_eval: Any = None
+        y_eval: Any = None
+        eval_target = ""
+        models: dict[str, Any] = {}
+        if run is not None:
+            trained, _report, task, _x_tr, _y_tr, x_test, y_test, target = run
+            models[trained.name] = trained.model
+            x_eval, y_eval, eval_target = x_test, y_test, target
+        stack_pieces: tuple[Any, Any, Any] | None = None
+        skip_note = ""
+        if stack is not None:
+            result, sx_train, sy_train, sx_test, sy_test, stack_target = stack
+            if task != "regression":
+                skip_note = (
+                    "stacking winner skipped — the OOF blender is a "
+                    "regressor and the panel's task is classification"
+                )
+            else:
+                if x_eval is None:
+                    # no trained model in the session: the stack's own
+                    # held-out rows carry the panel.
+                    x_eval, y_eval, eval_target = sx_test, sy_test, stack_target
+                if [str(name) for name in x_eval.columns] == [
+                    str(name) for name in sx_train.columns
+                ]:
+                    stack_pieces = (result, sx_train, sy_train)
+                else:
+                    skip_note = (
+                        "stacking winner skipped — its feature columns no "
+                        "longer match the panel's (the dataset changed since "
+                        "the stack run)"
+                    )
+        if not models and stack_pieces is None:
+            # belt-and-braces: a stack record whose own splits disagree
+            # would leave the panel empty (a stale record can only get
+            # here through a programmatic plant) -- the honest box, not
+            # the library's ModelError crash dialog.
+            messagebox.showinfo(
+                "No fitted models",
+                f"The panel ended up empty ({skip_note or 'no joinable model'}) "
+                "-- train a model (or re-run the OOF stacking card) first.",
+            )
+            return
+
+        def work() -> Any:
+            from pharmaml.ml import cross_model_importances
+            from pharmaml.viz import plot_permutation_heatmap
+
+            panel = dict(models)
+            quantile = False
+            if stack_pieces is not None:
+                stack_result, sx_train, sy_train = stack_pieces
+                from pharmaml.ml.models import build_stacking
+
+                # the record keeps NAMES, not estimators -- the best
+                # blender is rebuilt and refit on the stack's own train
+                # split, honestly labelled "(refit)" in the panel.
+                blender = build_stacking(
+                    "regression",
+                    list(stack_result.base_models),
+                    meta_model=stack_result.best_meta,
+                )
+                blender.fit(sx_train, sy_train)
+                panel[f"stacking {stack_result.best_meta} (refit)"] = blender
+                quantile = stack_result.target_transform == "quantile"
+            importances = cross_model_importances(
+                panel, x_eval, y_eval, task=task, n_repeats=repeats
+            )
+            figure = plot_permutation_heatmap(
+                importances,
+                top=10,
+                title=f"Cross-model permutation importance — {eval_target}",
+            )
+            return figure, list(panel), quantile
+
+        def render(payload: tuple[Any, list[str], bool]) -> None:
+            figure, names, quantile = payload
+            self._render_figure(self._board_host, figure)
+            note = (
+                f"cross-model permutation importance · {len(names)} model(s) "
+                f"({', '.join(names)}) · {repeats} shuffle(s) per feature, "
+                "the same seed for every model"
+            )
+            if any("(refit)" in name for name in names):
+                note += (
+                    " · the stacking winner is REBUILT and refit on its own "
+                    "train split (the record keeps names, not estimators)"
+                )
+                if quantile:
+                    note += (
+                        " · the stack's leaderboard scored the TRANSFORMED "
+                        "target; the refit shares the panel's raw scale"
+                    )
+            if skip_note:
+                note += f" · {skip_note}"
+            self._board_status.configure(text=note)
+
+        self._start_job("cross-model importance", work, render)
+
     # ------------------------------------------------------------------ #
     # Deep Learning tab (100x-61) -- the pharmaml.ml.neural estimators
     # ------------------------------------------------------------------ #
@@ -17001,12 +17762,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             started = _time.perf_counter()
             network.fit(x_train, y_train, on_epoch=on_epoch)
             seconds = _time.perf_counter() - started
+            # (100x-152) the deep run's report carries the train-side
+            # diagnostics too (the ML Results card's twin line) -- the
+            # same regression-only gate; a classifier's honest overfit
+            # readout is the calibration curve, not an R² gap.
+            train_side: dict[str, Any] = (
+                {"X_train": x_train, "y_train": y_train} if task == "regression" else {}
+            )
             report = evaluate_model(
                 network,
                 x_test,
                 y_test,
                 task,
                 keep_predictions=(task == "regression"),
+                **train_side,
             )
             return network, report, task, dropped, y_test, seconds, x_test
 
@@ -17069,6 +17838,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 ("RMSE", format_number(report.rmse)),
                 ("MAE", format_number(report.mae)),
             ]
+            # (100x-152) the overfit gap line, the ML Results card's
+            # twin: the deep run's report carries the train-side fields
+            # too, and an older/restored report without them renders
+            # without the line (the getattr-None contract).
+            pearson_r = getattr(report, "pearson_r", None)
+            train_r2 = getattr(report, "train_r2", None)
+            r2_gap = getattr(report, "r2_gap", None)
+            if pearson_r is not None:
+                pairs.append(("Pearson r", format_number(pearson_r)))
+            if train_r2 is not None:
+                pairs.append(("train R²", format_number(train_r2)))
+            if r2_gap is not None:
+                pairs.append(("R² gap (train−test)", f"{r2_gap:+.3f}"))
         else:
             pairs += [
                 ("accuracy", format_number(report.accuracy)),

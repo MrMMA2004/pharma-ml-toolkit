@@ -12104,11 +12104,19 @@ class TestReview146Gui:
 
     def test_adopt_frame_clear_pins_in_source(self) -> None:
         source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        # (100x-152) the adoption body also retires the stacking panel
+        # source (_stack_last) -- its split belongs to the OLD dataset.
         assert (
             "self._ml_cleaned_frame = None\n"
             "        self._ml_prep_frame = None\n"
-            "        self._ml_frame = frame"
-        ) in source
+            "        # (100x-152) the stacking panel source too"
+            in source
+        )
+        assert (
+            "        self._stack_last = None\n"
+            "        self._ml_frame = frame\n"
+            "        self._ml_path = path" in source
+        )
 
     def test_train_render_retires_the_perm_frame(self, app: Any) -> None:
         import pandas as pd
@@ -13252,4 +13260,677 @@ class TestPredictionIntervalsGui:
         self._train_ridge(app)
         assert self._drain_jobs(app), "train job hung"
         assert app._ml_intervals_frame is None
+        assert quiet_dialogs == []
+
+
+# --------------------------------------------------------------------- #
+# the 100x-152 round's GUI surfaces (the audit's GAPs 2, 3, 6, 7)
+# --------------------------------------------------------------------- #
+class TestOverfitGapGui:
+    """Surface A: the train-side diagnostics on RegressionReport wired
+    through the three regression evaluate_model call sites (the tune
+    site stays bare -- its winner is tuned on the CV folds) and
+    rendered as the Results card's honest overfit line -- Pearson r,
+    train R² and the SIGNED gap, only when the report carries the
+    fields (an older session-restored report has none)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 150.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _train_ridge(app: Any) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+
+    @staticmethod
+    def _metric_labels(app: Any) -> list[str]:
+        return [str(child.cget("text")) for child in app._ml_metrics.winfo_children()]
+
+    # -- the source pins ------------------------------------------------------ #
+
+    def test_overfit_gap_source_pins(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        # the three regression call sites pass the pair (the plain
+        # train site, the ensemble site, the deep-learning site); the
+        # tune site tunes on CV folds and stays bare -- a fourth
+        # occurrence here means somebody wired it.
+        assert source.count('{"X_train": x_train, "y_train": y_train}') == 3
+        # the render tolerance contract: both metric grids read the
+        # fields through getattr-None (an older report has none).
+        assert source.count('getattr(report, "pearson_r", None)') == 2
+        assert source.count('getattr(report, "train_r2", None)') == 2
+        assert source.count('getattr(report, "r2_gap", None)') == 2
+        assert '("R² gap (train−test)", f"{r2_gap:+.3f}")' in source
+        # the lazy-import convention keeps pharmaml calls inside work()
+        assert "from pharmaml.ml import evaluate_model, train_model" in source
+
+    # -- the real run --------------------------------------------------------- #
+
+    def test_overfit_gap_metrics_after_ridge(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """The real library end to end: the ridge run's report carries
+        the train-side fields, the grid renders them, and the gap value
+        is the report's own train_r2 - r2 with the +/- sign."""
+        import re
+
+        self._train_ridge(app)
+        assert self._drain_jobs(app), "train job hung"
+        labels = self._metric_labels(app)
+        assert "Pearson r" in labels
+        assert "train R²" in labels
+        assert "R² gap (train−test)" in labels
+        _report = app._ml_last_run[1]
+        assert _report.pearson_r is not None
+        assert _report.train_r2 is not None
+        assert _report.r2_gap is not None
+        index = labels.index("R² gap (train−test)")
+        gap_text = labels[index + 1]  # the value cell follows its label
+        assert re.fullmatch(r"[+-]\d+\.\d{3}", gap_text), gap_text
+        assert abs(float(gap_text) - _report.r2_gap) < 5e-4
+        pearson_text = labels[labels.index("Pearson r") + 1]
+        assert abs(float(pearson_text) - _report.pearson_r) < 5e-4
+        assert quiet_dialogs == []
+
+    def test_overfit_gap_tolerates_reports_without_train_side(self, app: Any) -> None:
+        """A report WITHOUT the train-side fields (an older bundle's
+        persisted report, any pre-152 call) renders the plain grid with
+        no train line and no crash -- both metric grids; a report WITH
+        them renders the line on the deep grid too."""
+        import types
+
+        bare = types.SimpleNamespace(r2=0.5, rmse=0.1, mae=0.05)
+        trained = types.SimpleNamespace(name="stub", cv_mean=None, cv_std=None, fit_seconds=0.1)
+        app._fill_ml_metrics(trained, bare, "regression", [])
+        labels = self._metric_labels(app)
+        assert "R²" in labels  # the plain grid still renders
+        assert "Pearson r" not in labels
+        assert "train R²" not in labels
+        assert "R² gap (train−test)" not in labels
+        network = types.SimpleNamespace(
+            get_params=lambda: {"hidden_layers": (8,)},
+            n_features_in_=3,
+            history_=[],
+            n_iter_=0,
+        )
+        app._fill_dl_metrics(network, bare, "regression", [], 0.02)
+        dl_labels = [str(child.cget("text")) for child in app._dl_metrics.winfo_children()]
+        assert "train R²" not in dl_labels
+        # ... and a report WITH the fields renders the full line
+        full = types.SimpleNamespace(
+            r2=0.80, rmse=0.2, mae=0.1, pearson_r=0.91, train_r2=0.97, r2_gap=0.17
+        )
+        app._fill_dl_metrics(network, full, "regression", [], 0.02)
+        dl_labels = [str(child.cget("text")) for child in app._dl_metrics.winfo_children()]
+        assert "Pearson r" in dl_labels and "train R²" in dl_labels
+        index = dl_labels.index("R² gap (train−test)")
+        assert dl_labels[index + 1] == "+0.170"
+
+    def test_classification_run_keeps_the_plain_render(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """The classification call sites never pass the pair (a
+        ModelError would kill the job) and the render stays untouched."""
+        import pandas as pd
+
+        frame = pd.read_csv(TOOLKIT_ROOT / "examples" / "data" / "qsar_multiclass.csv")
+        app._ml_adopt_frame(frame, TOOLKIT_ROOT / "examples" / "data" / "qsar_multiclass.csv")
+        app._model_combo.set("logistic_regression")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        labels = self._metric_labels(app)
+        assert "accuracy" in labels  # the classification render untouched
+        assert "Pearson r" not in labels
+        assert "train R²" not in labels
+        assert "R² gap (train−test)" not in labels
+        assert quiet_dialogs == []
+
+
+class TestInterpretabilityGui:
+    """Surface B: the Results card's interpretability bundle (row three,
+    ml_result_buttons3) -- the signed-correlation bar, its heatmap twin
+    over the top-10 |r| columns (+ target when the session frame holds
+    it), and the ECFP bit decode with its prefilled dialog."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 150.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _train_ridge(app: Any) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+
+    # -- the source pins ------------------------------------------------------ #
+
+    def test_interpret_buttons_source_pins(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        for pin in (
+            '"Correlations…"',
+            "def _ml_plot_correlations",
+            "self._ml_plot_correlations",
+            '"Correlation heatmap"',
+            "def _ml_plot_correlation_heatmap",
+            "self._ml_plot_correlation_heatmap",
+            '"Decode ECFP bit…"',
+            "def _ml_decode_bit",
+            "def _ml_decode_bit_run",
+            "def _ml_decode_bit_defaults",
+            "def _ml_ecfp_parameters",
+        ):
+            assert pin in source, pin
+        # the two-row layout discipline: rows one and two are full, the
+        # bundle starts its OWN row (the round-34 VLM overflow rule).
+        assert "ml_result_buttons3" in source
+        assert 'grid_append(results, ml_result_buttons3, sticky="w", pady=(6, 0))' in source
+        # the lazy-import convention: the pharmaml calls live INSIDE
+        # work(), so the guards render even on an older install.
+        assert "from pharmaml.chem.interpret import signed_feature_correlations" in source
+        assert "from pharmaml.chem.interpret import decode_morgan_bit" in source
+        assert "from pharmaml.viz import plot_signed_correlations" in source
+        assert "from pharmaml.viz import plot_correlation_heatmap" in source
+
+    # -- the guards ----------------------------------------------------------- #
+
+    def test_correlations_need_a_run(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._ml_plot_correlations()
+        assert any("Train a model first" in str(a) for a in quiet_dialogs)
+        quiet_dialogs.clear()
+        app._ml_plot_correlation_heatmap()
+        assert any("Train a model first" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+
+    # -- the real runs -------------------------------------------------------- #
+
+    def test_correlations_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """The full flow against the REAL library: ridge on the example,
+        then the signed bundle -- the figure lands in the Results card's
+        host, the note names the ranked features and the rows."""
+        self._train_ridge(app)
+        assert self._drain_jobs(app), "train job hung"
+        app._ml_plot_correlations()
+        assert self._drain_jobs(app), "correlations job hung"
+        assert app._ml_host._pg_figure is not None
+        note = app._ml_result_note.cget("text")
+        assert "signed correlations" in note
+        assert "20 numeric feature(s) ranked by |r|" in note  # the example's descr columns
+        assert "52 held-out rows" in note  # 260 rows, the 80/20 split
+        assert quiet_dialogs == []
+
+    def test_correlation_heatmap_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """The heatmap twin: the top-10 |r| columns PLUS the target (the
+        example frame still carries pIC50, numeric and alignable) over
+        the run's held-out rows."""
+        self._train_ridge(app)
+        assert self._drain_jobs(app), "train job hung"
+        app._ml_plot_correlation_heatmap()
+        assert self._drain_jobs(app), "heatmap job hung"
+        assert app._ml_host._pg_figure is not None
+        note = app._ml_result_note.cget("text")
+        assert "correlation heatmap" in note
+        assert "11 column(s)" in note  # top 10 + the target
+        assert "top 10 |r| + pIC50" in note
+        assert quiet_dialogs == []
+
+    def test_decode_bit_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """Caffeine's bit 314 (radius 2, 2048 bits -- the library's own
+        doctest molecule) decodes to its carbonyl environments, echoed
+        as __str__ + one line per hit in the info dialog."""
+        app._ml_decode_bit_run("314", "CN1C=NC2=C1C(=O)N(C(=O)O2)C")
+        assert self._drain_jobs(app), "decode job hung"
+        infos = [a for _name, a in quiet_dialogs if "ECFP bit 314" in str(a)]
+        assert infos, quiet_dialogs
+        text = str(infos[0])
+        assert "c=O" in text  # the hit environments
+        assert "atom 7" in text and "atom 10" in text  # both carbonyl carbons
+        assert "radius 1" in text
+        assert quiet_dialogs[0][0] == "showinfo"
+
+    def test_decode_bit_not_set_is_an_honest_error(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """A bit the molecule does not set is the NORMAL honest path:
+        the standard job error box, its message naming the bit and the
+        molecule (never a crash, never a fake empty record)."""
+        from rdkit import Chem
+        from rdkit.Chem import rdFingerprintGenerator
+
+        mol = Chem.MolFromSmiles("CCO")
+        generator = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
+        set_bits = set(generator.GetFingerprint(mol).GetOnBits())
+        free_bit = next(bit for bit in range(2048) if bit not in set_bits)
+        app._ml_decode_bit_run(str(free_bit), "CCO")
+        assert self._drain_jobs(app), "decode job hung"
+        errors = [a for name, a in quiet_dialogs if name == "showerror"]
+        assert errors, quiet_dialogs
+        assert "Calculation failed" in str(errors[0][0])
+        assert f"bit {free_bit} is not set by" in str(errors[0])
+
+    def test_decode_bit_defaults_guards_and_parameters(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """The dialog's prefill follows the session (the most important
+        ecfp_bit_ column of the last permutation table, the loaded
+        dataset's first molecule); the input guards are dialogs, never
+        jobs; the ECFP family constants are derived from the frame."""
+        import pandas as pd
+
+        # no session at all -> the honest fallbacks
+        assert app._ml_decode_bit_defaults() == ("0", "")
+        # a permutation table seeds the bit (importance-descending)
+        app._ml_perm_frame = pd.DataFrame(
+            {
+                "feature": ["descr_x", "ecfp_bit_17", "ecfp3_bit_3"],
+                "importance_mean": [3.0, 2.0, 1.0],
+                "importance_std": [0.1, 0.1, 0.1],
+            }
+        )
+        # a dataset with a SMILES column seeds the molecule
+        lib = pd.read_csv(TOOLKIT_ROOT / "examples" / "data" / "library_with_descriptors.csv")
+        app._ml_adopt_frame(lib, TOOLKIT_ROOT / "examples" / "data" / "library_with_descriptors.csv")
+        bit, smiles = app._ml_decode_bit_defaults()
+        assert bit == "17"
+        assert smiles == str(lib["SMILES"].iloc[0]).strip()
+        # the input guards: a non-integer bit, an empty SMILES
+        app._ml_decode_bit_run("abc", "CCO")
+        assert any("Input" in str(a) and "bit index" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+        quiet_dialogs.clear()
+        app._ml_decode_bit_run("5", "   ")
+        assert any("No SMILES" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+        # the ECFP family constants: derivable from the run's columns,
+        # ecfp3 -> radius 3, plain descriptors -> the ecfp defaults
+        app._ml_last_run = (
+            None, None, "regression", None, None,
+            pd.DataFrame(columns=["ecfp_bit_7"]), None, "t",
+        )
+        assert app._ml_ecfp_parameters() == (2, 2048)
+        app._ml_last_run = (
+            None, None, "regression", None, None,
+            pd.DataFrame(columns=["ecfp3_bit_7"]), None, "t",
+        )
+        assert app._ml_ecfp_parameters() == (3, 2048)
+        app._ml_last_run = None
+        assert app._ml_ecfp_parameters() == (2, 2048)
+
+    def test_decode_dialog_opens_prefilled(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """The dialog itself builds with both entries prefilled from the
+        session defaults -- the real widgets, not a monkeypatched stub."""
+        app._ml_decode_bit()
+        app.update()
+        tops = [w for w in app.winfo_children() if w.winfo_class() == "Toplevel"]
+        assert tops, "the decode dialog did not open"
+        win = tops[-1]
+        entries = [w for w in win.winfo_children() if w.winfo_class() == "TEntry"]
+        assert len(entries) == 2
+        assert entries[0].get() == "0"  # the bit index default
+        win.destroy()
+        assert quiet_dialogs == []
+
+
+class TestCrossModelImportanceGui:
+    """Surface C: the Leaderboard card's "Cross-model importance…" button
+    -- D2.py's features x models matrix over the fitted models the
+    session actually holds (the last TRAINED model + the OOF stacking
+    winner, rebuilt and refit on its own train split), with the honest
+    guard when the session holds none."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 150.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _train_ridge(app: Any) -> None:
+        app._ml_load_example()
+        app._model_combo.set("ridge")
+        app._ml_refresh_hyperparam_panel()
+        app._ml_train()
+
+    @staticmethod
+    def _seed_stack(app: Any, monkeypatch: Any) -> None:
+        """A real (tiny) OOF stack over the SAME frame and columns as the
+        trained run -- the panel's join is honest, so the winner joins."""
+        import pandas as pd
+        from sklearn.model_selection import train_test_split
+
+        from pharmaml.ml import stack_oof_regressors
+
+        frame = app._ml_frame
+        target = app._target_combo.get()
+        numeric = [
+            column
+            for column in frame.columns
+            if column != target and pd.api.types.is_numeric_dtype(frame[column])
+        ]
+        x_train, x_test, y_train, y_test = train_test_split(
+            frame[numeric], frame[target], test_size=0.2, random_state=42
+        )
+        result = stack_oof_regressors(
+            x_train, y_train, x_test, y_test,
+            base_models=["ridge"], meta_models=["ridge"], n_splits=2, residual=False,
+        )
+        app._stack_last = (result, x_train, y_train, x_test, y_test, target)
+
+    # -- the source pins ------------------------------------------------------ #
+
+    def test_cross_model_source_pins(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert '"Cross-model importance…"' in source
+        assert "def _ml_cross_model_importance" in source
+        assert "self._ml_cross_model_importance" in source
+        assert "_cross_repeats" in source
+        # the session state: the annotated init, the stack render's
+        # assignment, and the dataset-adopt retirement (the 151 split:
+        # the init's ": tuple[...]" annotation breaks a plain match).
+        assert "self._stack_last: tuple[Any, Any, Any, Any, Any, str] | None = None" in source
+        assert "self._stack_last = (result, x_train, y_train, x_test, y_test, target)" in source
+        assert source.count("self._stack_last = None") == 1  # the adopt retirement
+        # the lazy-import convention
+        assert "from pharmaml.ml import cross_model_importances" in source
+        assert "from pharmaml.viz import plot_permutation_heatmap" in source
+        assert "from pharmaml.ml.models import build_stacking" in source
+
+    # -- the guards ----------------------------------------------------------- #
+
+    def test_cross_model_needs_a_model(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """Nothing in the session -> the honest info box about what the
+        session can and cannot hold (compare_models keeps scores only)."""
+        app._ml_cross_model_importance()
+        assert any("No fitted models" in str(a) for a in quiet_dialogs)
+        assert any("cross-validated scores" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+
+    # -- the real runs -------------------------------------------------------- #
+
+    def test_cross_model_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """The single-model panel against the REAL library: the repeats
+        parse guard (a bad entry is a dialog, never a job), then the
+        heatmap lands in the board card's host with the honest note."""
+        self._train_ridge(app)
+        assert self._drain_jobs(app), "train job hung"
+        app._cross_repeats.delete(0, "end")
+        app._cross_repeats.insert(0, "abc")
+        app._ml_cross_model_importance()
+        assert any("Input" in str(a) and "repeats" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+        quiet_dialogs.clear()
+        app._cross_repeats.delete(0, "end")
+        app._cross_repeats.insert(0, "5")
+        app._ml_cross_model_importance()
+        assert self._drain_jobs(app), "cross-model job hung"
+        assert app._board_host._pg_figure is not None
+        note = app._board_status.cget("text")
+        assert "cross-model permutation importance" in note
+        assert "1 model(s)" in note
+        assert "same seed for every model" in note
+        assert quiet_dialogs == []
+
+    def test_cross_model_with_stacking_winner(
+        self, app: Any, monkeypatch: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """A stack run in the session joins the panel: the best blender
+        is REBUILT and refit on the stack's own train split, the note
+        labels it honestly, and the matrix covers TWO models."""
+        self._train_ridge(app)
+        assert self._drain_jobs(app), "train job hung"
+        self._seed_stack(app, monkeypatch)
+        app._ml_cross_model_importance()
+        assert self._drain_jobs(app), "cross-model job hung"
+        note = app._board_status.cget("text")
+        assert "2 model(s)" in note
+        assert "stacking ridge (refit)" in note
+        assert "REBUILT and refit" in note
+        assert app._board_host._pg_figure is not None
+        assert quiet_dialogs == []
+
+
+class TestVarianceFilterGui:
+    """Surface D: the feature factory's "Filter low variance…" button --
+    xxx.ipynb's VarianceThreshold cell as the selection card's honest
+    CUT step, with the EC50 -> pEC50 prep card's adoption pattern (the
+    askyesno offer, then the frame / selection / tree / summary all
+    narrowing to the survivors)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 150.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _seed_features(app: Any) -> None:
+        """A synthetic ecfp-family frame + selection: one flat column
+        (variance 0, dropped at any positive threshold), three moving
+        ones (the ecfp prefixes keep family_of_column honest)."""
+        import numpy as np
+        import pandas as pd
+
+        rng = np.random.default_rng(0)
+        frame = pd.DataFrame(
+            {
+                "ecfp_bit_0": [1.0] * 30,  # flat -> dropped
+                "ecfp_bit_1": [0.0, 1.0] * 15,  # variance ~0.26 -> kept
+                "ecfp_bit_2": rng.normal(size=30),
+                "ecfp_bit_3": rng.normal(size=30) * 5.0,
+            }
+        )
+        from pharmaml.chem.features import FeatureSelection
+
+        app._feat_frame = frame
+        app._feat_selection = FeatureSelection(
+            scores=pd.Series([1.0, 3.0, 2.0, 4.0], index=list(frame.columns)),
+            selected=["ecfp_bit_3", "ecfp_bit_2", "ecfp_bit_1", "ecfp_bit_0"],
+            family_counts={"ecfp": 4},
+            method="variance",
+        )
+
+    # -- the source pins ------------------------------------------------------ #
+
+    def test_variance_filter_source_pins(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert '"Filter low variance…"' in source
+        assert "def _feat_filter_variance" in source
+        assert "self._feat_filter_variance" in source
+        assert '_feat_variance_entry.insert(0, "0.01")' in source
+        assert "_feat_variance_info" in source
+        # the lazy-import convention
+        assert "from pharmaml.chem import filter_low_variance" in source
+        # the adoption pattern: the prep card's askyesno offer, then the
+        # working frame narrows to the survivors
+        assert '"Use the filtered frame?"' in source
+        assert "self._feat_frame = result.frame" in source
+
+    # -- the guards ----------------------------------------------------------- #
+
+    def test_variance_filter_needs_features(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._feat_filter_variance()
+        assert any("Compute & select features first" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+        # a seeded frame with a bad threshold is a dialog, never a job
+        self._seed_features(app)
+        quiet_dialogs.clear()
+        app._feat_variance_entry.delete(0, "end")
+        app._feat_variance_entry.insert(0, "abc")
+        app._feat_filter_variance()
+        assert any("Input" in str(a) and "variance threshold" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+
+    # -- the real runs -------------------------------------------------------- #
+
+    def test_variance_filter_end_to_end_adopts(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """The real library end to end: the flat column is cut, the info
+        line reports the ledger, the askyesno offer is accepted and the
+        working frame / selection / tree / summary all narrow."""
+        self._seed_features(app)
+        answers: list[Any] = []
+        monkeypatch.setattr(
+            playground.messagebox,
+            "askyesno",
+            lambda *a, _answers=answers, **k: _answers.append(a) or True,
+        )
+        app._feat_filter_variance()
+        assert self._drain_jobs(app), "variance filter job hung"
+        assert answers, "the adoption offer never fired"
+        info = app._feat_variance_info.cget("text")
+        assert "kept 3" in info and "dropped 1" in info and "threshold 0.01" in info
+        assert list(app._feat_frame.columns) == ["ecfp_bit_1", "ecfp_bit_2", "ecfp_bit_3"]
+        assert app._feat_selection.selected == ["ecfp_bit_3", "ecfp_bit_2", "ecfp_bit_1"]
+        assert app._feat_selection.family_counts == {"ecfp": 3}
+        assert len(app._feat_tree.get_children()) == 3
+        assert "variance filter adopted" in app._feat_summary.cget("text")
+        assert "ecfp 3" in app._feat_family_label.cget("text")
+        assert quiet_dialogs == []
+
+    def test_variance_filter_decline_and_zero_drop(
+        self, app: Any, playground: Any, monkeypatch: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """Declining the offer keeps the working frame untouched (the
+        ledger still reports); a threshold nothing fails (0.0 -- equal
+        survives, sklearn's semantics) never asks at all."""
+        self._seed_features(app)
+        answers: list[Any] = []
+        monkeypatch.setattr(
+            playground.messagebox,
+            "askyesno",
+            lambda *a, _answers=answers, **k: _answers.append(a) or False,
+        )
+        # threshold 0.0: variance 0 is NOT strictly below 0 -> nothing drops
+        app._feat_variance_entry.delete(0, "end")
+        app._feat_variance_entry.insert(0, "0.0")
+        app._feat_filter_variance()
+        assert self._drain_jobs(app), "variance filter job hung"
+        assert answers == []  # nothing to adopt, no offer
+        assert "dropped 0" in app._feat_variance_info.cget("text")
+        assert len(app._feat_frame.columns) == 4
+        # threshold 0.01 with a declined offer: the ledger reports, the
+        # working frame stays whole
+        app._feat_variance_entry.delete(0, "end")
+        app._feat_variance_entry.insert(0, "0.01")
+        app._feat_filter_variance()
+        assert self._drain_jobs(app), "variance filter job hung"
+        assert len(answers) == 1
+        assert "kept 3" in app._feat_variance_info.cget("text")
+        assert len(app._feat_frame.columns) == 4  # declined: unchanged
+        assert app._feat_selection.selected[0] == "ecfp_bit_3"
         assert quiet_dialogs == []

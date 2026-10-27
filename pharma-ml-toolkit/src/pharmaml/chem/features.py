@@ -202,8 +202,10 @@ __all__ = [
     "TOPOLOGICAL_BITS",
     "FeatureReport",
     "FeatureSelection",
+    "VarianceFilterResult",
     "compute_feature_frame",
     "family_of_column",
+    "filter_low_variance",
     "rank_features",
     "select_top_features",
     "selection_metadata",
@@ -1449,3 +1451,189 @@ def selection_metadata(
         "dropped": [[int(row), str(smi)] for row, smi in report.dropped],
         "total_features": int(report.total_columns),
     }
+
+
+@dataclass(frozen=True, slots=True)
+class VarianceFilterResult:
+    """Result of :func:`filter_low_variance`.
+
+    Attributes
+    ----------
+    frame:
+        The filtered frame — kept columns only, original column order
+        and original rows untouched (a view-by-copy of the input's
+        surviving columns).
+    kept:
+        Kept column names, in frame order.
+    dropped:
+        Cut column name -> the variance that got it cut (every entry
+        is strictly below ``threshold``; the record carries its own
+        evidence, so an audit never has to recompute).
+    threshold:
+        The threshold the filter ran with.
+    """
+
+    frame: pd.DataFrame
+    kept: list[str]
+    dropped: dict[str, float]
+    threshold: float
+
+    @property
+    def n_kept(self) -> int:
+        """Number of columns that survived the filter."""
+        return len(self.kept)
+
+    @property
+    def n_dropped(self) -> int:
+        """Number of columns the filter cut."""
+        return len(self.dropped)
+
+    def as_dict(self) -> dict[str, Any]:
+        """JSON-ready view (the frame itself is not embedded)."""
+        return {
+            "n_kept": self.n_kept,
+            "n_dropped": self.n_dropped,
+            "kept": list(self.kept),
+            "dropped": dict(self.dropped),
+            "threshold": float(self.threshold),
+        }
+
+    def __str__(self) -> str:  # pragma: no cover - presentation only
+        return (
+            f"variance filter (threshold {self.threshold:g}): kept "
+            f"{self.n_kept}, dropped {self.n_dropped}"
+        )
+
+
+def filter_low_variance(
+    frame: pd.DataFrame,
+    *,
+    threshold: float = 0.01,
+) -> VarianceFilterResult:
+    """Cut feature columns whose variance is below ``threshold``.
+
+    The variance-threshold step of the ``xxx.ipynb`` filtering cell
+    (``VarianceThreshold(threshold=0.01)`` there, ``D2.py``'s audit GAP
+    6 here): a column that never moves cannot separate actives from
+    inactives, and a 27k-column frame ships hundreds of them.  The
+    companion of :func:`rank_features` — that function RANKS by
+    variance, this one CUTS by it, with the same variance definition
+    (``frame.fillna(0).var(axis=0)``) so a ranker's scores and this
+    filter's verdicts always agree.
+
+    Parameters
+    ----------
+    frame:
+        Feature matrix (e.g. from :func:`compute_feature_frame`).
+        Non-numeric columns are NOT filtered — they pass through
+        untouched with a warning (a ``SMILES``/target column riding
+        along survives, the ``clean_numeric_frame`` precedent).
+    threshold:
+        Inclusive-exclusive cut: a column is dropped when its variance
+        is STRICTLY below ``threshold`` (a variance exactly equal to
+        the threshold survives, mirroring sklearn's
+        ``VarianceThreshold`` semantics).  Default ``0.01``, the
+        notebook's value.  Must be finite and >= 0.
+
+    Returns
+    -------
+    VarianceFilterResult
+        The kept-column frame plus the dropped-column ledger.
+
+    Raises
+    ------
+    ValueError
+        If ``frame`` is not a DataFrame, has fewer than two rows
+        (variance is undefined for one), or ``threshold`` is negative
+        or non-finite.
+
+    Notes
+    -----
+    Scope honesty: the SAME notebook cell also dropped columns with
+    >30% missing values and Pearson-collinear pairs (r > 0.98) — those
+    are separate concerns and stay out of this function; the missing
+    fraction is a :func:`~pharmaml.ml.preprocessing.clean_numeric_frame`
+    -side decision and collinearity needs the pairwise matrix.  NaN
+    cells are filled with 0 BEFORE the variance is computed (the
+    :func:`rank_features` convention, so the two functions can never
+    disagree about a column).
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> frame = pd.DataFrame({
+    ...     "moves": [1.0, 2.0, 3.0, 4.0],       # var 1.6667
+    ...     "flat": [7.0, 7.0, 7.0, 7.0],        # var 0.0
+    ...     "tiny": [1.0, 1.0, 1.0, 1.005],      # var ~0.000006
+    ... })
+    >>> result = filter_low_variance(frame)
+    >>> result.kept, list(result.dropped)
+    (['moves'], ['flat', 'tiny'])
+    >>> round(result.dropped["flat"], 6)
+    0.0
+    """
+    if not isinstance(frame, pd.DataFrame):
+        raise ValueError(  # noqa: TRY004 — consistent module error currency
+            f"frame must be a pandas.DataFrame, got {type(frame).__name__}"
+        )
+    threshold = float(threshold)
+    if not np.isfinite(threshold) or threshold < 0.0:
+        raise ValueError(
+            f"threshold must be a finite number >= 0, got {threshold!r}"
+        )
+    if len(frame) < 2:
+        raise ValueError(
+            f"variance needs at least 2 rows, got {len(frame)} — a "
+            "single-row frame is constant by construction"
+        )
+
+    numeric_columns = [
+        column
+        for column in frame.columns
+        if pd.api.types.is_numeric_dtype(frame[column])
+    ]
+    non_numeric = [
+        column for column in frame.columns if column not in numeric_columns
+    ]
+    if non_numeric:
+        _LOG.warning(
+            "filter_low_variance: %d non-numeric column(s) pass through "
+            "unfiltered: %s",
+            len(non_numeric),
+            non_numeric[:10],
+        )
+    if not numeric_columns:
+        # Nothing to filter -- the honest result keeps everything
+        # (there is no variance to cut on); the caller sees the same
+        # frame back with an empty dropped ledger.
+        return VarianceFilterResult(
+            frame=frame.copy(), kept=list(frame.columns), dropped={}, threshold=threshold
+        )
+
+    variances = frame.loc[:, numeric_columns].fillna(0).astype(float).var(axis=0)
+    kept_numeric = [
+        column
+        for column in numeric_columns
+        if not (float(variances[column]) < threshold)
+    ]
+    dropped = {
+        column: float(variances[column])
+        for column in numeric_columns
+        if column not in kept_numeric
+    }
+    # A column survives when it is non-numeric (passes through
+    # untouched, the warned-about carrier columns) OR numeric with a
+    # variance at/above the threshold — frame order preserved.
+    kept_set = set(kept_numeric)
+    ordered = [
+        column
+        for column in frame.columns
+        if column in kept_set
+        or not pd.api.types.is_numeric_dtype(frame[column])
+    ]
+    return VarianceFilterResult(
+        frame=frame.loc[:, ordered].copy(),
+        kept=ordered,
+        dropped=dropped,
+        threshold=threshold,
+    )

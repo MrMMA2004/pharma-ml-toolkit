@@ -27,6 +27,7 @@ from pharmaml.ml.evaluation import (
     ClassificationReport,
     PermutationImportance,
     RegressionReport,
+    cross_model_importances,
     evaluate_model,
     permutation_feature_importance,
 )
@@ -2476,3 +2477,224 @@ class TestSelectKBestUnion:
         X_train, X_test, y_train = self._frames()
         with pytest.raises(ValueError, match="column mismatch"):
             select_kbest_union(X_train, y_train, X_test.iloc[:, :6], k=3)
+
+
+class TestTrainSideMetrics:
+    """GAP 7 — RegressionReport's train-side mirror metrics + Pearson r.
+
+    The overfit gap as a number: ``evaluate_model(..., X_train=,
+    y_train=)`` fills ``train_rmse`` / ``train_r2`` /
+    ``train_pearson_r`` / ``r2_gap``; the pair is all-or-nothing and
+    regression-only.
+    """
+
+    def _linear_data(self) -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(42)
+        x = pd.DataFrame(rng.uniform(0.0, 1.0, 60), columns=["a"])
+        y = pd.Series(3.0 * x["a"] + rng.normal(0.0, 0.05, 60))
+        return x, y
+
+    def test_train_metrics_filled(self) -> None:
+        x, y = self._linear_data()
+        trained = train_model("ridge", "regression", x.iloc[:40], y.iloc[:40],
+                              tune=False, cv=2)
+        report = evaluate_model(
+            trained.model, x.iloc[40:], y.iloc[40:], "regression",
+            X_train=x.iloc[:40], y_train=y.iloc[:40],
+        )
+        assert isinstance(report, RegressionReport)
+        assert report.train_rmse is not None and report.train_rmse > 0.0
+        assert report.train_r2 is not None and report.train_r2 > 0.9
+        assert report.train_pearson_r is not None
+        assert abs(report.train_pearson_r - 1.0) < 0.01
+        gap = report.r2_gap
+        assert gap is not None and abs(gap) < 0.1  # a ridge on linear data
+
+    def test_overfit_gap_positive_for_unpruned_tree(self) -> None:
+        # The use case: an unconstrained tree memorises its training
+        # rows (train_r2 == 1.0) and generalises far worse -- the gap
+        # the fields exist to surface as a NUMBER.
+        rng = np.random.default_rng(7)
+        x = pd.DataFrame(rng.uniform(size=(80, 4)),
+                         columns=["a", "b", "c", "d"])
+        y = pd.Series(
+            x["a"] + 0.5 * np.sin(6.0 * x["b"]) + rng.normal(0.0, 0.4, 80)
+        )
+        from sklearn.tree import DecisionTreeRegressor
+
+        tree = DecisionTreeRegressor(random_state=42).fit(x.iloc[:60], y.iloc[:60])
+        report = evaluate_model(
+            tree, x.iloc[60:], y.iloc[60:], "regression",
+            X_train=x.iloc[:60], y_train=y.iloc[:60],
+        )
+        assert isinstance(report, RegressionReport)
+        assert report.train_r2 == 1.0
+        assert report.r2_gap is not None and report.r2_gap > 0.3
+
+    def test_test_only_report_omits_train_side(self) -> None:
+        x, y = self._linear_data()
+        trained = train_model("ridge", "regression", x, y, tune=False, cv=2)
+        report = evaluate_model(trained.model, x, y, "regression")
+        assert isinstance(report, RegressionReport)
+        assert report.train_rmse is None
+        assert report.train_r2 is None
+        assert report.train_pearson_r is None
+        assert report.r2_gap is None
+        assert "train_rmse" not in report.as_dict()
+        assert "r2_gap" not in report.as_dict()
+
+    def test_pearson_r_filled_and_close_to_one(self) -> None:
+        x, y = self._linear_data()
+        trained = train_model("ridge", "regression", x, y, tune=False, cv=2)
+        report = evaluate_model(trained.model, x, y, "regression")
+        assert isinstance(report, RegressionReport)
+        assert report.pearson_r is not None
+        assert abs(report.pearson_r - 1.0) < 0.01
+        assert report.as_dict()["pearson_r"] == report.pearson_r
+
+    def test_pearson_r_none_for_constant_predictions(self) -> None:
+        class ConstantRegressor:
+            """A degenerate fitted estimator: every prediction is 7.0."""
+
+            def predict(self, X: object) -> np.ndarray:
+                return np.full(len(X), 7.0)
+
+        report = evaluate_model(
+            ConstantRegressor(), [[1.0], [2.0], [3.0]], [1.0, 2.0, 3.0],
+            "regression",
+        )
+        assert isinstance(report, RegressionReport)
+        assert report.pearson_r is None  # constant side: undefined
+        assert "pearson_r" not in report.as_dict()
+
+    def test_as_dict_carries_train_side(self) -> None:
+        x, y = self._linear_data()
+        trained = train_model("ridge", "regression", x.iloc[:40], y.iloc[:40],
+                              tune=False, cv=2)
+        report = evaluate_model(
+            trained.model, x.iloc[40:], y.iloc[40:], "regression",
+            X_train=x.iloc[:40], y_train=y.iloc[:40],
+        )
+        assert isinstance(report, RegressionReport)
+        payload = report.as_dict()
+        for key in ("train_rmse", "train_r2", "train_pearson_r", "r2_gap"):
+            assert key in payload
+        assert payload["r2_gap"] == report.train_r2 - report.r2
+
+    def test_str_shows_gap_and_r(self) -> None:
+        x, y = self._linear_data()
+        trained = train_model("ridge", "regression", x.iloc[:40], y.iloc[:40],
+                              tune=False, cv=2)
+        report = evaluate_model(
+            trained.model, x.iloc[40:], y.iloc[40:], "regression",
+            X_train=x.iloc[:40], y_train=y.iloc[:40],
+        )
+        assert isinstance(report, RegressionReport)
+        text = str(report)
+        assert "r=" in text and "train_r2=" in text and "gap=" in text
+
+    def test_half_pair_raises(self) -> None:
+        x, y = self._linear_data()
+        trained = train_model("ridge", "regression", x, y, tune=False, cv=2)
+        with pytest.raises(ModelError, match="must be passed together"):
+            evaluate_model(trained.model, x, y, "regression", X_train=x)
+        with pytest.raises(ModelError, match="must be passed together"):
+            evaluate_model(trained.model, x, y, "regression", y_train=y)
+
+    def test_classification_rejects_train_pair(self) -> None:
+        rng = np.random.default_rng(3)
+        x = pd.DataFrame(rng.uniform(size=(40, 2)), columns=["a", "b"])
+        y = pd.Series((x["a"] > 0.5).astype(int))
+        trained = train_model("logistic_regression", "classification", x, y,
+                              tune=False, cv=2)
+        with pytest.raises(ModelError, match="regression-only"):
+            evaluate_model(
+                trained.model, x, y, "classification", X_train=x, y_train=y
+            )
+
+    def test_train_length_mismatch_raises(self) -> None:
+        x, y = self._linear_data()
+        trained = train_model("ridge", "regression", x, y, tune=False, cv=2)
+        with pytest.raises(ModelError, match="train prediction length"):
+            evaluate_model(
+                trained.model, x, y, "regression",
+                X_train=x.iloc[:30], y_train=y.iloc[:20],
+            )
+
+    def test_train_nan_target_raises(self) -> None:
+        x, y = self._linear_data()
+        trained = train_model("ridge", "regression", x, y, tune=False, cv=2)
+        y_bad = y.copy()
+        y_bad.iloc[0] = np.nan
+        with pytest.raises(ModelError, match="y_train contain"):
+            evaluate_model(
+                trained.model, x, y, "regression", X_train=x, y_train=y_bad
+            )
+
+
+class TestCrossModelImportances:
+    """GAP 3 — the cross-model permutation runner behind the heatmap."""
+
+    def _panel_data(self) -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(42)
+        x = pd.DataFrame(rng.uniform(size=(40, 3)),
+                         columns=["signal", "noise1", "noise2"])
+        y = pd.Series(4.0 * x["signal"] + rng.normal(0.0, 0.1, 40))
+        return x, y
+
+    def test_panel_reports_every_model(self) -> None:
+        from sklearn.linear_model import LinearRegression, Ridge
+
+        x, y = self._panel_data()
+        panel = {
+            "ols": LinearRegression().fit(x, y),
+            "ridge": Ridge(alpha=0.5).fit(x, y),
+        }
+        records = cross_model_importances(panel, x, y)
+        assert sorted(records) == ["ols", "ridge"]
+        for record in records.values():
+            assert isinstance(record, PermutationImportance)
+            assert record.names == ["signal", "noise1", "noise2"]
+            assert record.scoring == "r2"
+            assert record.n_repeats == 5
+
+    def test_same_seed_aligns_models(self) -> None:
+        # The same estimator under two names with the same seed must
+        # agree bit-for-bit: cross-model differences reflect the
+        # MODELS, not the shuffle luck.
+        from sklearn.linear_model import LinearRegression
+
+        x, y = self._panel_data()
+        fitted = LinearRegression().fit(x, y)
+        records = cross_model_importances(
+            {"one": fitted, "two": fitted}, x, y, n_repeats=3
+        )
+        np.testing.assert_array_equal(records["one"].means, records["two"].means)
+        np.testing.assert_array_equal(records["one"].stds, records["two"].stds)
+
+    def test_classification_default_scorer(self) -> None:
+        from sklearn.linear_model import LogisticRegression
+
+        rng = np.random.default_rng(5)
+        x = pd.DataFrame(rng.uniform(size=(30, 2)), columns=["a", "b"])
+        y = pd.Series((x["a"] > 0.5).astype(int))
+        panel = {"lr": LogisticRegression().fit(x, y)}
+        records = cross_model_importances(panel, x, y, task="classification")
+        assert records["lr"].scoring == "accuracy"
+
+    def test_empty_panel_raises(self) -> None:
+        x, y = self._panel_data()
+        with pytest.raises(ModelError, match="models is empty"):
+            cross_model_importances({}, x, y)
+
+    def test_failing_model_is_named(self) -> None:
+        class ExplodingModel:
+            def predict(self, X: object) -> np.ndarray:
+                raise RuntimeError("boom")
+
+        x, y = self._panel_data()
+        from sklearn.linear_model import LinearRegression
+
+        panel = {"good": LinearRegression().fit(x, y), "bad": ExplodingModel()}
+        with pytest.raises(ModelError, match="'bad' failed"):
+            cross_model_importances(panel, x, y)
