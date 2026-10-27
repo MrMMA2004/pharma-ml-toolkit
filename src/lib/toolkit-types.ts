@@ -1072,3 +1072,47 @@ export interface MLLearningCurveResponse {
     signalStd: number;
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* SHAP attribution (ml shap — the desktop GUI's fourth button row,   */
+/* compact web read: mean-|SHAP| over the run's own held-out rows,     */
+/* computed by the toolkit's Python tree twin via the bridge route)    */
+/* ------------------------------------------------------------------ */
+
+/** One ranked feature of POST /api/ml/shap's compact read. */
+export interface ShapRankRow {
+  rank: number;
+  feature: string;
+  /** Mean |SHAP| across the explained held-out rows (magnitude only —
+   *  the signed story is the beeswarm the desktop twin draws). */
+  meanAbs: number;
+}
+
+/** Response of POST /api/ml/shap — the web twin of the desktop GUI's
+ *  SHAP button row (round 37's pharmaml.ml.explain surface) in the
+ *  compact form: the ranking needs no canvas, so the card renders in
+ *  pure TypeScript while only the computation crosses into Python
+ *  (build_model -> fit -> shap_summary over the run's re-derived rows
+ *  and split — the frozen-train-request discipline). */
+export interface MLShapResponse {
+  task: "regression" | "classification";
+  /** The web playground's model id (the run's own). */
+  model: string;
+  /** The Python twin's estimator class name (provenance for the caption). */
+  pythonTwin: string;
+  /** Mean-|SHAP| ranking over the run's held-out rows, descending. */
+  top: ShapRankRow[];
+  /** The explainer's expected model output when exposed (null otherwise). */
+  baseValue: number | null;
+  /** Held-out rows explained. */
+  nSamples: number;
+  nFeatures: number;
+  /** Training rows the twin was fitted on. */
+  nTrain: number;
+  /** Feature names in frame order. */
+  featureNames: string[];
+  shapVersion: string;
+  elapsedSeconds: number;
+  /** Provenance note — the card renders it verbatim under the bars. */
+  splitNote: string;
+}

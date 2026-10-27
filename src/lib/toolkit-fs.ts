@@ -5,6 +5,7 @@
 
 import { spawn } from "child_process";
 import { createReadStream, promises as fs } from "fs";
+import type { FileHandle } from "fs/promises";
 import path from "path";
 import { isTreeDataNode } from "@/lib/data-file";
 import type { TreeNode, TreeStats } from "@/lib/toolkit-types";
@@ -269,25 +270,74 @@ export function releaseZipAbsPath(version: string): string {
   return path.join(RELEASE_ZIP_DIR, `pharma-ml-toolkit-v${version}.zip`);
 }
 
-export interface ReleaseZipInfo {
-  /** Exact byte size — becomes the download's Content-Length. */
-  bytes: number;
-  /** mtime in ms — folded into the ETag so an in-place rebuild revalidates. */
+export interface ReleaseZipHandle {
+  /** The open file handle — the caller streams from it or closes it. */
+  fh: FileHandle;
+  /** Exact byte size OF THE OPEN INODE — becomes the download's
+   *  Content-Length. Because the size is read via fstat of the handle
+   *  the caller streams from, it always describes the exact bytes that
+   *  get sent: the stat-then-open race (a same-version archive replaced
+   *  between the two calls made Content-Length describe a different
+   *  inode than the stream read — probe B, 100x-156) is closed by
+   *  construction. */
+  size: number;
+  /** mtime of the open inode — folded into the ETag so an in-place
+   *  rebuild revalidates. */
   mtimeMs: number;
 }
 
-/** Stat the prebuilt release archive for `version`. Resolves null when the
- *  file is absent, unreadable, or implausibly empty — callers fall back to
- *  the on-the-fly streamer. Serving this file needs zero compression (the
- *  download starts instantly) and yields the exact bytes of the shipped
- *  release (a stable SHA-256 per version, so verified checksums stay
- *  meaningful across downloads). */
-export async function statReleaseZip(version: string): Promise<ReleaseZipInfo | null> {
+/** The End-of-Central-Directory signature every COMPLETE zip carries
+ *  ("PK\x05\x06", 22 bytes + an optional ≤65 535-byte comment). The
+ *  release artifact is verified against it before serving: a partially
+ *  written archive (a future non-atomic writer — the shipped builder
+ *  renames atomically, but the route must not trust that) is refused in
+ *  favour of the on-the-fly fallback instead of streaming truncated
+ *  bytes behind a clean 200 whose Content-Length even "matches" the
+ *  truncation (probe A, 100x-156: 100 KB of the real archive served as
+ *  a 200, unzip failed downstream). */
+const ZIP_EOCD_SIGNATURE = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
+/** The EOCD may sit anywhere in the last 65 557 bytes of the file —
+ *  read that whole window (plus a little slack) when validating. */
+const ZIP_TAIL_WINDOW = 65_600;
+
+/** Open and validate the prebuilt release archive for `version`.
+ *
+ * Resolves null when the file is absent, unreadable, implausibly
+ *  empty, or INCOMPLETE (no zip End-of-Central-Directory in its tail) —
+ * callers fall back to the on-the-fly streamer, which regenerates a
+ *  complete archive over the current tree instead of serving the
+ *  broken artifact. The returned handle is either streamed from (the
+ *  caller passes it as `createReadStream`'s `fd` — the stream then OWNS
+ *  it and closes it on end/error/destroy, verified by the 100x-156
+ *  fd-lifecycle probe covering both the clean-drain and client-abort
+ *  paths) or closed by the caller itself (the 304 / size-stat paths
+ *  where no stream ever takes ownership). */
+export async function openReleaseZip(version: string): Promise<ReleaseZipHandle | null> {
+  let fh: FileHandle;
   try {
-    const st = await fs.stat(releaseZipAbsPath(version));
-    if (!st.isFile() || st.size <= 0) return null;
-    return { bytes: st.size, mtimeMs: st.mtimeMs };
+    fh = await fs.open(releaseZipAbsPath(version), "r");
   } catch {
+    return null;
+  }
+  try {
+    const st = await fh.stat();
+    if (!st.isFile() || st.size <= 0) {
+      await fh.close();
+      return null;
+    }
+    /* Completeness: the EOCD must be present in the tail window. The
+     * read goes through the OPEN handle, so the verdict describes the
+     * exact inode the caller would stream. */
+    const tailLen = Math.min(st.size, ZIP_TAIL_WINDOW);
+    const tail = Buffer.alloc(tailLen);
+    await fh.read(tail, 0, tailLen, st.size - tailLen);
+    if (!tail.includes(ZIP_EOCD_SIGNATURE)) {
+      await fh.close();
+      return null;
+    }
+    return { fh, size: st.size, mtimeMs: st.mtimeMs };
+  } catch {
+    await fh.close().catch(() => undefined);
     return null;
   }
 }

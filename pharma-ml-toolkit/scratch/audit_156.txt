@@ -1,0 +1,83 @@
+ROUND-39 ADVERSARIAL AUDIT (100x-156) — the round-38 download route's release/fallback split
+=====================================================================================
+
+Target (worklog round-38 close-out, candidate a): /api/toolkit/download's new
+release-artifact path (ETag/304/Content-Length, statReleaseZip), /api/toolkit/zip-size's
+release-first stat, and the download-panel client (progress reader, 304-vs-blob path).
+
+Probes: scratch/probe_audit_156_a.py (pre-fix evidence) + probe_audit_156_b.py
+(post-fix verification). Node fd-semantics probes run inline (see B/C below).
+
+VERIFIED FINDINGS
+-----------------
+RED A (partial-file window, probe A): a NON-atomic writer leaving a truncated
+  archive at download/pharma-ml-toolkit-v<ver>.zip got served as a CLEAN 200
+  whose Content-Length (102400) "matched" the truncation — unzip failed
+  downstream. The route guarded only size <= 0; the shipped builder renames
+  atomically, but the route must not trust that. Severity real, trigger
+  narrow (a future cross-filesystem copy, a manual cp, a crashed writer).
+
+AMBER B (stat-then-open race, Node probe): stat() said 4 bytes, the file was
+  atomically replaced, createReadStream then read 8 — the old route's
+  Content-Length/ETag described an inode other than the one streamed whenever
+  a same-version replacement landed in the microsecond window between
+  statReleaseZip() and createReadStream(). By-construction class: Content-
+  Length must come from fstat of the SAME handle the stream reads.
+
+INFO C (fd lifecycle, Node probe): createReadStream(path, { fd: FileHandle })
+  with the default autoClose CLOSES the handle on end/error/destroy —
+  including a client abort (Readable.toWeb reader.cancel()), verified both
+  paths. autoClose:false never fires 'close' on natural end — the fix keeps
+  the default and lets the stream own the handle.
+
+DISPROVEN / VERIFIED-FINE
+-------------------------
+* 304-vs-blob client path: the browser revalidates (Cache-Control: no-cache +
+  strong ETag) and serves the cached body transparently — fetch resolves 200
+  with the cached stream; the panel's reader works off the cached
+  Content-Length. Round-38 E2E verified repeat clicks; re-verified this round
+  (probe B': 304 in single-digit ms, zero body bytes).
+* Fallback progress reader: no Content-Length on the stream path → the button
+  spins "Packaging…" (honest), the <1024-byte blob guard catches corruption.
+* Mid-stream deletion of the release zip: POSIX keeps the open handle's inode
+  alive — an in-flight stream completes with the exact bytes its fstat
+  promised; new opens fall to the fallback. No hang, no truncated 200.
+* zip-size 2-byte jitter observed across probe runs: NOT a counting bug — the
+  10-minute measurement cache (exact:false, "≈") legitimately served a
+  measurement taken before a probe file inside scratch/ (which rides the
+  fallback archive) changed by a few bytes. Direct 3x spawns are
+  byte-deterministic (13200006/13200006/13200006); the node replica of
+  measureZipBytes counts exactly.
+* measureZipBytes' version-blind cache: after a version bump the release zip
+  vanishes and the fallback serves — a ≤10-min-stale measurement (same tree,
+  marked exact:false) is the documented honest behavior.
+* Client abort mid-fallback-stream: child gets EPIPE and exits; stderr logged,
+  no unhandled rejection (the close handler only logs).
+
+FIXES (dispatched and verified, probe_audit_156_b.py all-ok)
+-----------------------------------------------------------
+F1 toolkit-fs.ts: statReleaseZip → openReleaseZip — the archive is OPENED
+   first; size/mtime come from fh.stat() (fstat semantics: the exact inode
+   the caller streams); the handle is handed to createReadStream as fd (the
+   stream owns + closes it — probe C) or closed by the caller (304/size
+   paths). The stat-then-open race is dead by construction.
+F2 toolkit-fs.ts: the EOCD tail check — the last ≤65 600 bytes must contain
+   the zip End-of-Central-Directory signature "PK\x05\x06" (22-byte EOCD +
+   ≤65 535-byte comment window). A truncated artifact is refused (null) and
+   the route falls back to a COMPLETE fresh on-the-fly archive. Probe A'
+   post-fix: source=stream, served a valid 13.2 MB archive, testzip ok.
+F3 download/route.ts: the release path streams [0, size-1] of the open
+   handle; the 304 path closes the handle itself (nothing streams).
+F4 zip-size/route.ts: the same openReleaseZip gate — a broken artifact makes
+   the badge honestly follow the path that would serve (exact:false,
+   source:stream; probe D' both directions).
+
+POST-FIX EVIDENCE (probe_audit_156_b.py, all [ok])
+--------------------------------------------------
+C' intact release serve: 200 source=release cl=12950492 testzip=ok
+   sha256=61ca3e38… (the immutable shipped bytes, unchanged)
+B' 304 revalidation: 304 Not Modified, zero body bytes
+D' zip-size intact: exact:true source:release
+A' truncated refused: source=stream served=13.2 MB testzip=ok
+D' zip-size truncated: exact:false source:stream
+restore: sha256 byte-identical after the probes

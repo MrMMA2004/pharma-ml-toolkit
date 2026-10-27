@@ -98,6 +98,7 @@ import type {
   MLCompareRequest,
   MLCompareResponse,
   MLLearningCurveResponse,
+  MLShapResponse,
   MLTrainResponse,
   MLTrainRequest,
   MLTuneRequest,
@@ -1129,6 +1130,124 @@ function CorrelationCard({
             </p>
           </div>
         ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Tree families the SHAP twin explains (mirrors the route's TREE_TWINS —
+ *  the pharmaml registry's always-available sklearn tree estimators). */
+const SHAP_TREE_MODELS = new Set(["decision_tree", "random_forest", "extra_trees", "gradient_boosting"]);
+
+/** The SHAP web twin (100x-156): the desktop GUI's fourth button row in
+ *  the compact form — mean-|SHAP| bars over the run's own held-out rows,
+ *  computed by the toolkit's Python tree twin via the bridge route. The
+ *  ranking is pure numbers, so the card renders entirely in TypeScript;
+ *  only the computation crosses into Python. Non-tree runs get the
+ *  honest pointer (TreeExplainer explains trees — the model-agnostic
+ *  read is the desktop twin's permutation importance). */
+function ShapCard({
+  model,
+  task,
+  status,
+  result,
+  error,
+  onRun,
+  hasRun,
+}: {
+  model: string;
+  task: "regression" | "classification";
+  status: "idle" | "running" | "done" | "error";
+  result: MLShapResponse | null;
+  error: string | null;
+  onRun: () => void;
+  hasRun: boolean;
+}) {
+  const treeModel = SHAP_TREE_MODELS.has(model);
+  const maxAbs = result && result.top.length > 0 ? Math.max(...result.top.map((r) => r.meanAbs)) : 0;
+  return (
+    <Card className="overflow-hidden py-0 shadow-sm">
+      <CardHeader className="border-b bg-muted/30 py-3">
+        <CardTitle className="text-sm flex items-center gap-1.5">
+          <Sigma className="size-3.5 text-primary" aria-hidden />
+          SHAP feature attribution
+        </CardTitle>
+        <CardDescription className="text-xs">
+          mean |SHAP| over the run&rsquo;s own held-out rows — the desktop GUI&rsquo;s fourth
+          button row, compact web read (the Python twin computes, the card renders)
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pb-4">
+        {treeModel ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={onRun} disabled={status === "running" || !hasRun} className="h-8">
+                {status === "running" ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden /> Explaining…
+                  </>
+                ) : (
+                  <>
+                    <Play className="size-3.5" aria-hidden /> Explain held-out rows
+                  </>
+                )}
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                {status === "done" && result
+                  ? `${result.pythonTwin} · ${result.nSamples} held-out rows · shap ${result.shapVersion}`
+                  : "re-runs this run's rows and split in the toolkit's Python twin"}
+              </span>
+            </div>
+            {error ? (
+              <Alert variant="destructive" className="mt-3">
+                <TriangleAlert className="size-4" aria-hidden />
+                <AlertTitle>Explanation failed</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+            {result && result.top.length > 0 ? (
+              <div className="mt-3 space-y-3">
+                <ul className="space-y-2" aria-label="mean absolute SHAP ranking">
+                  {result.top.map((row) => (
+                    <li key={row.feature} className="space-y-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="truncate font-mono text-xs font-medium" title={row.feature}>
+                          {row.feature}
+                        </span>
+                        <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                          {fmtNum(row.meanAbs, 4)}
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-muted" role="presentation">
+                        <div
+                          className="h-full rounded-full bg-primary/70"
+                          style={{
+                            width: `${maxAbs > 0 ? Math.max((row.meanAbs / maxAbs) * 100, 2) : 0}%`,
+                          }}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  {result.splitNote}
+                  {result.baseValue !== null
+                    ? ` · base value (expected model output) ${fmtNum(result.baseValue, 4)}`
+                    : ""}
+                  {task === "classification"
+                    ? " · log-odds units (a binary classifier's TreeExplainer space)"
+                    : ""}
+                </p>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <p className="rounded-md border border-dashed px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+            SHAP explains tree models — switch to decision_tree, random_forest, extra_trees, or
+            (regression) gradient_boosting for the attribution read. The model-agnostic story is the
+            desktop twin&rsquo;s permutation importance.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -2522,6 +2641,14 @@ export function MlPlayground() {
   const setLcResult = useToolkitStore((s) => s.setLcResult);
   const [lcError, setLcError] = useState<string | null>(null);
   const [lcFolds, setLcFolds] = useState("5");
+  /* SHAP attribution (100x-156): the desktop GUI's fourth button row,
+   * compact web read — the frozen train request is re-sent, the route
+   * re-derives the run's own rows and split, and the toolkit's Python
+   * tree twin explains the held-out rows (mean-|SHAP| ranking, pure-TS
+   * card; only the computation crosses the bridge). */
+  const [shapStatus, setShapStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [shapResult, setShapResult] = useState<MLShapResponse | null>(null);
+  const [shapError, setShapError] = useState<string | null>(null);
   const lastTrainBodyRef = useRef<MLTrainRequest | null>(null);
   const [maxTrials, setMaxTrials] = useState<string>("12");
   const [searcher, setSearcher] = useState<"random" | "hyperband">("random");
@@ -2876,6 +3003,12 @@ export function MlPlayground() {
       const payload = data as MLTrainResponse;
       setResult(payload);
       setStatus("done");
+      /* A new run invalidates the previous SHAP read — the attribution
+       * names THIS run's held-out rows or nothing at all (the round-36
+       * swap-hazard discipline: never a stale result against a new run). */
+      setShapResult(null);
+      setShapError(null);
+      setShapStatus("idle");
       /* Learned GP kernel: park the sliders at the values the LML grid
        *  search picked so the panel shows what actually ran (they stay
        *  disabled while Learn kernel is on — the next auto run re-learns).
@@ -3054,6 +3187,49 @@ export function MlPlayground() {
     } catch (err) {
       setLcError(err instanceof Error ? err.message : "The learning-curve request failed.");
       setLcStatus("error");
+    }
+  }
+
+  /** Explain the LAST trained configuration with SHAP — the web twin of
+   *  the desktop ML card's fourth button row (round 37's SHAP surface),
+   *  compact read: the frozen train request is re-sent, the route
+   *  re-derives the run's own rows and split (the AD/learning-curve
+   *  discipline), and the toolkit's Python tree twin (build_model ->
+   *  fit -> shap_summary) attributes the held-out rows. Only the
+   *  computation crosses into Python; the ranking renders here. */
+  async function runShap() {
+    const last = lastTrainBodyRef.current;
+    if (!last) {
+      setShapError("Train a model first — the attribution explains that run's held-out rows.");
+      setShapStatus("error");
+      return;
+    }
+    setShapStatus("running");
+    setShapError(null);
+    const body: Record<string, unknown> = { ...last, topN: 8 };
+    try {
+      const res = await fetch("/api/ml/shap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        const message =
+          typeof data === "object" && data !== null && "error" in data
+            ? `${String((data as { error: unknown }).error)}${
+                "detail" in data && Array.isArray((data as { detail: unknown }).detail)
+                  ? ` ${((data as { detail: unknown[] }).detail as string[]).join("; ")}`
+                  : ""
+              }`
+            : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      setShapResult(data as MLShapResponse);
+      setShapStatus("done");
+    } catch (err) {
+      setShapError(err instanceof Error ? err.message : "The SHAP request failed.");
+      setShapStatus("error");
     }
   }
 
@@ -5724,6 +5900,21 @@ export function MlPlayground() {
               {result.correlations ? (
                 <CorrelationCard bundle={result.correlations} task={result.task} />
               ) : null}
+
+              {/* SHAP feature attribution (100x-156): the desktop GUI's
+               *  fourth button row, compact web read — the frozen train
+               *  request re-sent, the run's own rows and split
+               *  re-derived, the toolkit's Python tree twin explaining
+               *  the held-out rows (mean-|SHAP| ranking, pure-TS card). */}
+              <ShapCard
+                model={result.model}
+                task={result.task}
+                status={shapStatus}
+                result={shapResult}
+                error={shapError}
+                onRun={runShap}
+                hasRun={!!lastTrainBodyRef.current}
+              />
             </div>
           </>
         ) : null}
