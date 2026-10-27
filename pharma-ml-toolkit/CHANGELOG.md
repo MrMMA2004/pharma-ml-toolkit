@@ -1,3 +1,101 @@
+## [1.2.93] — 2026-10-27
+
+### Added — the Python Data Science Handbook absorbed: the unsupervised chapters land as first-class surfaces (100x-157)
+
+The instruction: *"Check the contents and files in this GitHub link
+completely and one by one and add the missing items to playground.py:
+jakevdp/pythondatasciencehandbook."* The repo was cloned and reviewed
+file by file (264 tracked files; 67 `.ipynb` under `notebooks/` — the
+per-notebook disposition table lives in `docs/COVERAGE.md` and
+`scratch/pdsh_review.md`). The honest headline of that review: every
+one of the toolkit's 30 estimators is SUPERVISED — the handbook's whole
+unsupervised block (05.09 PCA, 05.10 manifold learning, 05.11 k-means,
+05.12 Gaussian mixtures, 05.13 KDE) plus its naive-Bayes chapter (05.05)
+and its 2-D-density plotting sections (04.04/04.05) had no surface at
+all. This round closes exactly that:
+
+* **`ml/unsupervised.py`** — four typed functions and records:
+  `pca_reduce` (explained-variance ladder, loadings table, PC-score
+  DataFrame; `scale=True` default because descriptor scales differ),
+  `kmeans_cluster` (KMeans + MiniBatchKMeans, `n_init=10` pinned,
+  the inertia elbow AND the silhouette sweep — `k=None` picks the best
+  silhouette and reports the whole scan), `gmm_cluster` (all four
+  covariance types, the AIC/BIC component sweep with BIC the default
+  vote, the responsibility matrix so soft membership is a first-class
+  answer), and `kde_fit` (one column, bandwidth by CV log-likelihood
+  over 20 candidates — the handbook's own recipe — with the Silverman
+  fallback below 10 observations, honestly labelled in the record).
+  Every estimator threads `random_state=42`; every guard is the typed
+  `DataValidationError` naming the offending column/field; every
+  record carries `as_frame()` + a `__str__` summary.
+* **`ml/manifold.py`** — `manifold_embedding` behind one call for
+  Isomap / LLE (standard, modified, ltsa) / MDS / SpectralEmbedding /
+  t-SNE: seeded determinism, method-named coordinate columns, honest
+  precondition guards (perplexity < n, n_neighbors < n, the O(n²)
+  ceilings — MDS refuses > 2,500 rows, t-SNE > 6,000 — with the
+  subsampling advice in the message) and the chapter's own warning in
+  the docstring: these are visualisation embeddings, not preprocessing.
+* **`models.py`** — the naive-Bayes family (PDSH 05.05):
+  `gaussian_nb`, `multinomial_nb`, `bernoulli_nb` as classification
+  ModelSpecs, auto-visible in the GUI's model list. The subtle part:
+  `MultinomialNB` demands non-negative inputs, so the new
+  `NO_SCALE_MODELS` set makes `train_model` / `compare_models` /
+  `benchmark_feature_families` build its pipeline WITHOUT the
+  StandardScaler (counts stay counts) — pinned by the test that
+  asserts the scaler is absent for multinomial and present for
+  gaussian.
+* **`viz/ml_plots.py`** — six new figures in the house style:
+  `plot_pca_variance` (bars + cumulative + the 95 % guide + the
+  honest "only X % at k" verdict), `plot_kmeans_diagnostics` (elbow +
+  silhouette panels, chosen k marked, the silhouette translated to
+  words), `plot_gmm_selection` (AIC/BIC curves, the criterion named),
+  `plot_kde_density` (curve + optional hist/rug underlay + the
+  bandwidth's provenance — CV, Silverman or manual), `plot_manifold_embedding`
+  (the digits-figure pattern: discrete labels → class legend, numeric →
+  colour ramp + colorbar), and `plot_hexbin_density` (the honest 2-D
+  density for big scatters, mincnt=1 + counts colorbar).
+* **`playground.py`** — a new **Unsupervised tab** (between Data & ML
+  and Deep Learning): the shared dataset (the ML tab's table, one
+  source of truth — its column tree refreshes on every adoption and
+  retires the previous run, the round-146 stale-state discipline), a
+  ten-method roster with per-method parameters (k/auto, GMM covariance,
+  KDE bandwidth/auto, neighbours, t-SNE perplexity, LLE variant, hexbin
+  cells, mini-batch toggle), the record's own summary, the canonical
+  figure, the 2-D scatter twin (PC scores / embedding coordinates /
+  cluster-painted feature columns, coloured by any column), and the
+  CSV export of every record's table twin. 21,009 → 21,562 lines.
+* **Coverage review** — `docs/COVERAGE.md` gains the per-notebook
+  disposition table (67 rows: 10 COVERED-ALREADY with their existing
+  surfaces named, 7 ADDED-THIS-ROUND, 10 STRETCH with their plausible
+  future surfaces, 40 N-A-HONEST with their reasons — the IPython
+  chapter, NumPy/pandas fundamentals, matplotlib styling panels,
+  seaborn, the link-list chapters).
+
+### Verification
+
+Full suite (the double-fork runner, dev server stopped first — the OOM
+ritual): **3,301 collected = 3,296 passed + 5 skipped / 0 failures**
+(+100 over round 39: 33 unsupervised + 20 manifold + 9 naive-Bayes +
+12 unsupervised-plots + 11 GUI-tab + the new doctests + the re-pinned
+registry/tab-index counts). The first run caught 11 real regressions
+the targeted tests had not: the pdsh clone shipping Jake's own
+`/home/jake/` paths into the tree (leakage guard — the clone moved
+outside the repo, the review doc scrubbed), the registry entry-count
+pins (29/27 → 32/30), and six tab-index pins (the home chips' jump
+targets, the Generative-tab index references, the save-figure-button
+census — the new tab also gained its own "Save figure…" button to
+keep the every-figure-card convention). ruff clean (including a fresh
++X sweep of 118 worktree files the editor had re-corrupted); mypy
+`src/` clean (72 files — the two new modules);
+the toolkit's 8 example notebooks re-executed against 1.2.93 (206 s —
+the ML workflow's registry-tour cell now records multinomial_nb's
+typed count-contract refusal as a row instead of dying); the six
+new GUI figures VLM-reviewed 6/6 PASS; the live tab drive exercised
+all ten methods end-to-end under Xvfb; zip v1.2.93 built and
+served (679 entries, 14.54 MB, testzip clean, leak-scan clean, no
+nested zips); web pins re-synced (E2E via
+agent-browser, zero console errors).
+
 ## [1.2.92] — 2026-10-27
 
 ### Fixed / Added — the ninth engineering review (100x-154): the round-36 web twin audited adversarially, a fake-zero RED closed in BOTH correlation twins, and the LAST unabsorbed D2.py gap (SHAP) shipped

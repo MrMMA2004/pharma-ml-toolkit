@@ -2698,3 +2698,90 @@ class TestCrossModelImportances:
         panel = {"good": LinearRegression().fit(x, y), "bad": ExplodingModel()}
         with pytest.raises(ModelError, match="'bad' failed"):
             cross_model_importances(panel, x, y)
+
+
+# --------------------------------------------------------------------- #
+# naive Bayes (PDSH 05.05, absorbed 100x-157)
+# --------------------------------------------------------------------- #
+class TestNaiveBayes:
+    @staticmethod
+    def _blob_classification() -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(42)
+        frame = pd.DataFrame(rng.normal(size=(200, 4)), columns=[f"f{i}" for i in range(4)])
+        target = pd.Series((frame["f0"] > 0).astype(int), name="target")
+        return frame, target
+
+    @staticmethod
+    def _count_classification() -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(42)
+        counts = pd.DataFrame(rng.poisson(3, size=(200, 4)), columns=[f"c{i}" for i in range(4)])
+        target = pd.Series((counts["c0"] >= 3).astype(int), name="target")
+        return counts, target
+
+    def test_registry_carries_the_three_variants(self) -> None:
+        for name in ("gaussian_nb", "multinomial_nb", "bernoulli_nb"):
+            spec = MODEL_REGISTRY[name]
+            assert spec.task == "classification"
+            assert "PDSH 05.05" in spec.notes
+            assert spec.available  # plain sklearn -- always installed
+        names = {entry["name"] for entry in list_models("classification")}
+        assert {"gaussian_nb", "multinomial_nb", "bernoulli_nb"} <= names
+
+    def test_regression_task_refused(self) -> None:
+        with pytest.raises(ModelError, match="supports 'classification'"):
+            build_model("gaussian_nb", "regression")
+
+    def test_gaussian_nb_trains_through_the_standard_flow(self) -> None:
+        frame, target = self._blob_classification()
+        trained = train_model("gaussian_nb", "classification", frame, target, tune=False)
+        report = evaluate_model(trained.model, frame, target, "classification")
+        assert report.accuracy > 0.9
+
+    def test_multinomial_nb_bypasses_the_scaler(self) -> None:
+        # the NO_SCALE carve-out: counts must reach MultinomialNB as
+        # counts, not standardised values (a StandardScaler would push
+        # half of any count table negative and crash the estimator).
+        counts, target = self._count_classification()
+        trained = train_model("multinomial_nb", "classification", counts, target, tune=False)
+        steps = dict(trained.model.named_steps)
+        assert "scale" not in steps["prep"].named_steps
+        report = evaluate_model(trained.model, counts, target, "classification")
+        assert report.accuracy > 0.6
+
+    def test_scaled_models_keep_their_scaler(self) -> None:
+        frame, target = self._blob_classification()
+        trained = train_model("gaussian_nb", "classification", frame, target, tune=False)
+        assert "scale" in trained.model.named_steps["prep"].named_steps
+
+    def test_bernoulli_nb_trains(self) -> None:
+        frame, target = self._blob_classification()
+        trained = train_model("bernoulli_nb", "classification", frame, target, tune=False)
+        report = evaluate_model(trained.model, frame, target, "classification")
+        assert report.accuracy > 0.8
+
+    def test_tuned_multinomial_nb(self) -> None:
+        counts, target = self._count_classification()
+        trained = train_model(
+            "multinomial_nb", "classification", counts, target, tune=True, cv=3
+        )
+        assert trained.model is not None
+
+    def test_compare_models_leaderboard_includes_the_family(self) -> None:
+        counts, target = self._count_classification()
+        board = compare_models(
+            counts,
+            target,
+            "classification",
+            ["gaussian_nb", "multinomial_nb", "bernoulli_nb"],
+            cv=3,
+        )
+        assert set(board["model"]) == {"gaussian_nb", "multinomial_nb", "bernoulli_nb"}
+        assert board["roc_auc_ovo_mean"].notna().all()
+
+    def test_no_scale_set_exported(self) -> None:
+        from pharmaml.ml.models import NO_SCALE_MODELS
+
+        assert "multinomial_nb" in NO_SCALE_MODELS
+        from pharmaml import ml
+
+        assert ml.NO_SCALE_MODELS is NO_SCALE_MODELS

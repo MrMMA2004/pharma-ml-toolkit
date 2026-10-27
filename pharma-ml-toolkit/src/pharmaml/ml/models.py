@@ -65,6 +65,7 @@ from sklearn.linear_model import (
     RidgeClassifier,
     SGDClassifier,
 )
+from sklearn.naive_bayes import BernoulliNB, GaussianNB, MultinomialNB
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.svm import SVC, SVR
@@ -117,6 +118,16 @@ class ModelSpec:
         """True when the optional dependency (if any) is importable."""
         return self.requires is None or _module_available(self.requires)
 
+
+#: Estimators whose training pipeline must NOT standardise features:
+#: ``MultinomialNB`` demands non-negative inputs (counts), and a
+#: ``StandardScaler`` would push half of any count table negative --
+#: ``train_model`` / ``compare_models`` /
+#: ``benchmark_feature_families`` check this set when they build the
+#: "prep" step, so the registry entry alone is enough to keep such
+#: models trainable through the standard flows (PDSH 05.05's own
+#: caveat, enforced by the toolkit instead of by a raw sklearn crash).
+NO_SCALE_MODELS: frozenset[str] = frozenset({"multinomial_nb"})
 
 #: Default members of the registered ``voting`` / ``stacking`` ensembles
 #: -- the same RF + SVM + KNN trio the rar's own Voting.py and
@@ -512,6 +523,42 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         factory=None,  # per-task dispatch via _TASK_FACTORIES in build_model
         param_grid={"n_neighbors": [3, 5, 7, 11], "weights": ["uniform", "distance"]},
         notes="k-nearest neighbours (upgrades KNN.py)",
+    ),
+    # -- naive Bayes (PDSH 05.05): the probabilistic baselines the
+    # handbook trains first -- fast, closed-form, and embarrassingly
+    # strong on wide sparse tables (exactly what fingerprint blocks
+    # are).  multinomial_nb bypasses the StandardScaler pipeline
+    # (counts must stay non-negative -- see _NO_SCALE_MODELS).
+    "gaussian_nb": ModelSpec(
+        name="gaussian_nb",
+        task="classification",
+        factory=lambda: GaussianNB(),
+        param_grid={"var_smoothing": [1e-9, 1e-8, 1e-7, 1e-6]},
+        notes=(
+            "Gaussian naive Bayes (PDSH 05.05) -- per-class Gaussian "
+            "marginals; the fast probabilistic baseline"
+        ),
+    ),
+    "multinomial_nb": ModelSpec(
+        name="multinomial_nb",
+        task="classification",
+        factory=lambda: MultinomialNB(),
+        param_grid={"alpha": [0.1, 0.5, 1.0, 2.0]},
+        notes=(
+            "multinomial naive Bayes (PDSH 05.05) -- count/non-negative "
+            "features (fingerprint counts, MACCS keys); trained WITHOUT "
+            "feature scaling so counts stay counts"
+        ),
+    ),
+    "bernoulli_nb": ModelSpec(
+        name="bernoulli_nb",
+        task="classification",
+        factory=lambda: BernoulliNB(),
+        param_grid={"alpha": [0.1, 0.5, 1.0, 2.0], "binarize": [0.0, 0.5, 1.0]},
+        notes=(
+            "Bernoulli naive Bayes (PDSH 05.05) -- binary/indicator "
+            "features (presence bits); threshold via binarize"
+        ),
     ),
     "decision_tree": ModelSpec(
         name="decision_tree",

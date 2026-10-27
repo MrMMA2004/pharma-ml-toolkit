@@ -2778,3 +2778,138 @@ class TestPermutationHeatmap:
             pd.Series([0.9, -0.8, 0.1], index=["a", "b", "c"]), top=2
         )
         assert len(fig.axes[0].patches) == 2
+
+
+# --------------------------------------------------------------------- #
+# the unsupervised plotting twins (PDSH 05.09-05.13 + 04.04/04.05,
+# absorbed 100x-157)
+# --------------------------------------------------------------------- #
+class TestUnsupervisedPlots:
+    @staticmethod
+    def _blobs() -> pd.DataFrame:
+        rng = np.random.default_rng(42)
+        return pd.DataFrame(
+            {
+                "x": np.concatenate(
+                    [rng.normal(0, 0.3, 80), rng.normal(8, 0.3, 80), rng.normal(-8, 0.3, 80)]
+                ),
+                "y": np.concatenate(
+                    [rng.normal(0, 0.3, 80), rng.normal(8, 0.3, 80), rng.normal(8, 0.3, 80)]
+                ),
+            }
+        )
+
+    def test_pca_variance_ladder(self) -> None:
+        from pharmaml.ml.unsupervised import pca_reduce
+        from pharmaml.viz import plot_pca_variance
+
+        rng = np.random.default_rng(42)
+        frame = pd.DataFrame(rng.normal(size=(60, 4)), columns=list("abcd"))
+        fig = plot_pca_variance(pca_reduce(frame))
+        assert fig is not None and fig.axes
+        legend_labels = fig.axes[0].get_legend_handles_labels()[1]
+        assert "per component" in legend_labels and "cumulative" in legend_labels
+
+    def test_kmeans_diagnostics_two_panels(self) -> None:
+        from pharmaml.ml.unsupervised import kmeans_cluster
+        from pharmaml.viz import plot_kmeans_diagnostics
+
+        fig = plot_kmeans_diagnostics(kmeans_cluster(self._blobs()))
+        assert len(fig.axes) == 2
+        titles = " ".join(ax.get_title() for ax in fig.axes)
+        assert "elbow" in titles and "silhouette" in titles
+
+    def test_kmeans_manual_k_gets_the_honest_placeholder(self) -> None:
+        from pharmaml.ml.unsupervised import kmeans_cluster
+        from pharmaml.viz import plot_kmeans_diagnostics
+
+        fig = plot_kmeans_diagnostics(kmeans_cluster(self._blobs(), k=3))
+        text = fig.axes[0].texts[0].get_text()
+        assert "fixed manually" in text
+
+    def test_gmm_selection_curves(self) -> None:
+        from pharmaml.ml.unsupervised import gmm_cluster
+        from pharmaml.viz import plot_gmm_selection
+
+        fig = plot_gmm_selection(gmm_cluster(self._blobs()))
+        legend_labels = fig.axes[0].get_legend_handles_labels()[1]
+        assert legend_labels == ["AIC", "BIC"]
+        assert "BIC prefers" in fig.axes[0].get_title()
+
+    def test_kde_density_with_values_underlay(self) -> None:
+        from pharmaml.ml.unsupervised import kde_fit
+        from pharmaml.viz import plot_kde_density
+
+        rng = np.random.default_rng(42)
+        series = pd.Series(rng.normal(size=100), name="pic50")
+        result = kde_fit(series)
+        fig = plot_kde_density(result, values=series)
+        legend_labels = fig.axes[0].get_legend_handles_labels()[1]
+        assert "observed (hist)" in legend_labels and "KDE (gaussian)" in legend_labels
+        assert "bandwidth" in fig.axes[0].get_title()
+
+    def test_manifold_scatter_three_colour_modes(self) -> None:
+        from pharmaml.ml.manifold import manifold_embedding
+        from pharmaml.viz import plot_manifold_embedding
+
+        blobs = self._blobs()
+        record = manifold_embedding(blobs, "isomap", n_neighbors=10)
+        classes = pd.Series(["a"] * 80 + ["b"] * 80 + ["c"] * 80)
+        discrete = plot_manifold_embedding(record, labels=classes)
+        assert discrete.axes[0].get_legend() is not None
+        continuous = plot_manifold_embedding(record, labels=blobs["x"])
+        assert len(continuous.axes) == 2  # main axes + the colour ramp's colorbar
+        plain = plot_manifold_embedding(record)
+        assert plain.axes[0].get_legend() is None
+
+    def test_hexbin_renders_with_colorbar(self) -> None:
+        from pharmaml.viz import plot_hexbin_density
+
+        rng = np.random.default_rng(42)
+        frame = pd.DataFrame(rng.normal(size=(300, 2)), columns=["mw", "logp"])
+        fig = plot_hexbin_density(frame["mw"], frame["logp"])
+        assert fig is not None and fig.axes
+
+    def test_wrong_record_type_refused_typed(self) -> None:
+        from pharmaml.ml.unsupervised import kmeans_cluster
+        from pharmaml.viz import plot_pca_variance
+
+        with pytest.raises(DataValidationError, match="expects a PcaResult"):
+            plot_pca_variance(kmeans_cluster(self._blobs(), k=2))
+
+    def test_hexbin_length_mismatch_refused(self) -> None:
+        from pharmaml.viz import plot_hexbin_density
+
+        rng = np.random.default_rng(42)
+        x = rng.normal(size=50)
+        with pytest.raises(DataValidationError, match="same length"):
+            plot_hexbin_density(x, rng.normal(size=40))
+
+    def test_hexbin_too_few_pairs_refused(self) -> None:
+        from pharmaml.viz import plot_hexbin_density
+
+        with pytest.raises(DataValidationError, match="at least 10 pairs"):
+            plot_hexbin_density(np.arange(5.0), np.arange(5.0))
+
+    def test_manifold_labels_length_refused(self) -> None:
+        from pharmaml.ml.manifold import manifold_embedding
+        from pharmaml.viz import plot_manifold_embedding
+
+        blobs = self._blobs()
+        record = manifold_embedding(blobs, "mds")
+        with pytest.raises(DataValidationError, match="match the embedding rows"):
+            plot_manifold_embedding(record, labels=pd.Series([1, 2, 3]))
+
+    def test_all_six_reexported_from_viz_package(self) -> None:
+        from pharmaml import viz
+
+        for name in (
+            "plot_pca_variance",
+            "plot_kmeans_diagnostics",
+            "plot_gmm_selection",
+            "plot_kde_density",
+            "plot_manifold_embedding",
+            "plot_hexbin_density",
+        ):
+            assert name in viz.__all__, name
+            assert callable(getattr(viz, name))

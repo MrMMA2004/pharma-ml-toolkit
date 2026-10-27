@@ -112,19 +112,28 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `GMM_COVARIANCE_TYPES` | constant |  |
+| `KDE_KERNELS` | constant |  |
+| `MANIFOLD_METHODS` | constant |  |
 | `MODEL_ALIASES` | constant |  |
 | `MODEL_REGISTRY` | constant |  |
+| `NO_SCALE_MODELS` | constant |  |
 | `SHAP_EXTRA` | constant |  |
 | `SHAP_REQUIREMENT` | constant |  |
 | `ApplicabilityDomainResult` | class | Outcome of a full applicability-domain analysis. |
 | `BootstrapUncertainty` | class | Bootstrap-ensemble uncertainty of a fitted estimator. |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
+| `EmbeddingRecord` | class | Typed report of :func:`manifold_embedding`. |
+| `GmmResult` | class | Typed report of :func:`gmm_cluster`. |
 | `HierarchicalSVR` | class | Hierarchical Support Vector Regression (global + per-cluster SVRs). |
 | `HyperParameters` | class | The keras-tuner container of hyperparameter definitions. |
 | `Hyperband` | class | Hyperband successive halving over a resource hyperparameter. |
+| `KMeansResult` | class | Typed report of :func:`kmeans_cluster`. |
+| `KdeResult` | class | Typed report of :func:`kde_fit`. |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
 | `OOFStackingResult` | class | Outcome of one out-of-fold stacking run. |
+| `PcaResult` | class | Typed report of :func:`pca_reduce`. |
 | `PermutationImportance` | class | Permutation feature importances on held-out data. |
 | `QuantileIntervals` | class | Prediction intervals from gradient-boosted quantile regression. |
 | `RandomSearch` | class | Random search over the hypermodel's declared space. |
@@ -149,12 +158,17 @@ after adding new public functions.
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
+| `gmm_cluster` | function | Gaussian mixture model (PDSH 05.12) with the AIC/BIC sweep. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
+| `kde_fit` | function | Kernel density estimation (PDSH 05.13) for ONE numeric column. |
+| `kmeans_cluster` | function | k-means clustering (PDSH 05.11), with the elbow AND the silhouette. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
 | `list_models` | function | List registry entries with availability information. |
 | `load_model` | function | Load a model bundle saved by :func:`save_model`. |
 | `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
+| `manifold_embedding` | function | Project a feature table onto 2-D with a manifold learner (PDSH 05.10). |
+| `pca_reduce` | function | Principal component analysis (PDSH 05.09). |
 | `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
 | `predict_with_uncertainty` | function | Predictive mean and per-row standard deviation of a GP model. |
 | `quantile_prediction_intervals` | function | Central-``1 - alpha`` prediction intervals via quantile regression. |
@@ -353,11 +367,17 @@ after adding new public functions.
 | `plot_dose_accumulation` | function | One-compartment superposition of an intermittent IV regimen. |
 | `plot_energy_distribution` | function | Histogram of per-ligand best binding energies (kcal/mol). |
 | `plot_feature_importance` | function | Top-N feature importances as horizontal bars. |
+| `plot_gmm_selection` | function | AIC/BIC vs component count -- the handbook's own GMM selector. |
 | `plot_gp_uncertainty` | function | Parity scatter with ``± z·σ`` error bars — the GP's honest readout. |
+| `plot_hexbin_density` | function | Hexagonal binning -- the honest 2-D density for big scatter plots. |
+| `plot_kde_density` | function | The KDE curve over its own bandwidth story. |
+| `plot_kmeans_diagnostics` | function | Inertia elbow AND silhouette sweep -- the auditable k choice. |
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
+| `plot_manifold_embedding` | function | Scatter an embedding, coloured by a target (the digits-figure pattern). |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
 | `plot_pareto_front` | function | One scatter per MultiObjective run: dominated points muted, front lit. |
+| `plot_pca_variance` | function | Explained-variance ladder -- the "how many components?" answer. |
 | `plot_permutation_heatmap` | function | Cross-model permutation-importance heatmap (features × models). |
 | `plot_permutation_importance` | function | Top-N permutation importances as signed bars with error bars. |
 | `plot_pr_curves` | function | Precision-Recall curves — binary or one-vs-rest multiclass. |

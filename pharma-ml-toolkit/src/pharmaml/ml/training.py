@@ -59,9 +59,14 @@ from sklearn.metrics import get_scorer_names
 from sklearn.model_selection import GridSearchCV, cross_validate
 from sklearn.pipeline import Pipeline
 
-from pharmaml.exceptions import ModelError
+from pharmaml.exceptions import DataValidationError, ModelError
 from pharmaml.logger import get_logger
-from pharmaml.ml.models import MODEL_REGISTRY, build_model, resolve_model_name
+from pharmaml.ml.models import (
+    MODEL_REGISTRY,
+    NO_SCALE_MODELS,
+    build_model,
+    resolve_model_name,
+)
 from pharmaml.ml.preprocessing import build_preprocessor, has_categorical_columns
 
 _LOG = get_logger(__name__)
@@ -136,6 +141,38 @@ def _select_scorer(pipeline: Pipeline, task: str) -> str:
         )
         return _CLASSIFICATION_FALLBACK_METRIC
     return _PRIMARY_METRIC[task]
+
+
+
+def _guard_non_negative_features(name: str, X_train: pd.DataFrame | np.ndarray) -> None:
+    """Refuse negative features for the count-contract models (typed).
+
+    ``MultinomialNB`` (the handbook's 05.05 caveat) demands
+    non-negative inputs; a raw descriptor table bottoms out below zero
+    and sklearn would crash mid-fit with its own ``ValueError``.  The
+    toolkit's contract instead: fail BEFORE the job starts, naming the
+    model, the offending column and its minimum, and the families that
+    DO take real-valued features (``gaussian_nb`` among them).
+    """
+    try:
+        if isinstance(X_train, pd.DataFrame):
+            numeric = X_train.select_dtypes(include=[np.number])
+            if numeric.empty:
+                return  # the non-numeric refusal below is sklearn's own
+            mins = numeric.min()
+            offender, worst = str(mins.idxmin()), float(mins.min())
+        else:
+            array = np.asarray(X_train, dtype=float)
+            offender, worst = "column 0", float(np.nanmin(array))
+    except (TypeError, ValueError):
+        return  # exotic input: let the estimator's own guards speak
+    if worst < 0:
+        raise DataValidationError(
+            f"train_model: {name!r} needs non-negative features (count tables "
+            f"such as fingerprint counts or MACCS keys) -- {offender!r} bottoms "
+            f"out at {worst:.3g}.  For real-valued descriptors use gaussian_nb "
+            "or any other family."
+        )
 
 
 def train_model(
@@ -241,6 +278,10 @@ def train_model(
         estimator.set_params(**model_params)
     key = resolve_model_name(name)
     spec = MODEL_REGISTRY[key]
+    if key in NO_SCALE_MODELS:
+        # (100x-157) the count contract, enforced up front -- a raw
+        # sklearn crash mid-fit is not an actionable message.
+        _guard_non_negative_features(key, X_train)
 
     encode = has_categorical_columns(X_train)
     if encode:
@@ -249,7 +290,13 @@ def train_model(
             "encoding inside the preprocessing pipeline."
         )
     steps = [
-        ("prep", build_preprocessor(encode_categorical=encode))
+        (
+            "prep",
+            build_preprocessor(
+                encode_categorical=encode,
+                scale=resolve_model_name(name) not in NO_SCALE_MODELS,
+            ),
+        )
     ] if preprocess else []
     step_name = "clf" if task == "classification" else "reg"
     pipeline = Pipeline(steps + [(step_name, estimator)])
@@ -474,7 +521,16 @@ def compare_models(
     # whole board falls back to balanced accuracy (multiclass-safe).
     pipelines: dict[str, Pipeline] = {
         name: Pipeline(
-            [("prep", build_preprocessor(encode_categorical=encode)), ("est", build_model(name, task))]
+            [
+                (
+                    "prep",
+                    build_preprocessor(
+                        encode_categorical=encode,
+                        scale=resolve_model_name(name) not in NO_SCALE_MODELS,
+                    ),
+                ),
+                ("est", build_model(name, task)),
+            ]
         )
         for name in models
     }
@@ -689,7 +745,13 @@ def benchmark_feature_families(
     encode = False  # every feature family emits numeric columns by contract
     pipeline = Pipeline(
         [
-            ("prep", build_preprocessor(encode_categorical=encode)),
+            (
+                "prep",
+                build_preprocessor(
+                    encode_categorical=encode,
+                    scale=resolve_model_name(model) not in NO_SCALE_MODELS,
+                ),
+            ),
             ("est", build_model(model, task)),  # unknown/task-mismatch -> ModelError
         ]
     )

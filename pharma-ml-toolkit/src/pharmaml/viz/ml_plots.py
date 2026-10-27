@@ -2289,3 +2289,450 @@ def plot_applicability_domain(
     ax_b.legend(fontsize=9, loc="best")
     fig.suptitle(title, fontsize=12)
     return fig
+
+
+# -- unsupervised twins (PDSH 05.09-05.13, 100x-157) ------------------ #
+def plot_pca_variance(
+    result: Any,
+    title: str = "PCA explained variance",
+) -> Any:
+    """Explained-variance ladder -- the "how many components?" answer.
+
+    Bars: each component's own share; the stepped line: the running
+    cumulative total; the dashed guide: the 95 % line the handbook
+    recommends before trusting a projection.  The honest annotation:
+    the cumulative share actually retained at the fitted k (not the
+    k the user *wished* for).
+
+    Parameters
+    ----------
+    result:
+        A :class:`~pharmaml.ml.unsupervised.PcaResult` from
+        :func:`~pharmaml.ml.unsupervised.pca_reduce`.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> from pharmaml.ml.unsupervised import pca_reduce
+    >>> rng = np.random.default_rng(42)
+    >>> frame = pd.DataFrame(rng.normal(size=(60, 4)), columns=list("abcd"))
+    >>> fig = plot_pca_variance(pca_reduce(frame))
+    >>> bool(fig.axes)
+    True
+    """
+    try:
+        ratio = [float(value) for value in result.explained_variance_ratio]
+        cumulative = list(np.cumsum(ratio))
+        fitted = int(result.n_components)
+    except (AttributeError, TypeError) as exc:
+        raise DataValidationError(
+            f"plot_pca_variance expects a PcaResult (from pca_reduce), got {type(result).__name__}"
+        ) from exc
+    if not ratio or any(value < 0 or value > 1 for value in ratio):
+        raise DataValidationError("explained_variance_ratio values must lie in [0, 1]")
+
+    positions = np.arange(1, len(ratio) + 1)
+    fig, ax = new_figure(figsize=(8.4, 5.2))
+    ax.bar(positions, ratio, width=0.62, color=PALETTE[0], alpha=0.85,
+           edgecolor="white", linewidth=0.5, label="per component")
+    ax.step(positions, cumulative, where="mid", color=PALETTE[1], lw=2.0,
+            marker="s", markersize=4.5, label="cumulative")
+    ax.axhline(0.95, color=PALETTE[3], linestyle="--", lw=1.4, alpha=0.7)
+    ax.text(0.99, 0.965, "95 % guide", transform=ax.get_yaxis_transform(),
+            ha="right", va="bottom", fontsize=8.5, color=PALETTE[3])
+    verdict = (
+        "enough for a trustworthy projection"
+        if cumulative[-1] >= 0.95
+        else f"only {cumulative[-1]:.0%} at k={fitted} -- add components or accept the loss"
+    )
+    ax.set_xticks(positions)
+    ax.set_xticklabels([f"PC{i}" for i in positions], fontsize=9)
+    ax.set_ylim(0, 1.08)
+    ax.set_ylabel("share of total variance")
+    ax.set_title(f"{title}\nk={fitted} components -- {verdict}", fontsize=11)
+    ax.legend(fontsize=9, loc="center right")
+    return fig
+
+
+def plot_kmeans_diagnostics(
+    result: Any,
+    title: str = "k-means diagnostics",
+) -> Any:
+    """Inertia elbow AND silhouette sweep -- the auditable k choice.
+
+    Two panels: (a) the classic inertia elbow (subjective -- where
+    does the bend sit?), (b) the mean silhouette per k (objective --
+    closer to 1 means better-separated clusters).  The chosen k is
+    marked on both, and the verdict line translates the silhouette
+    into the handbook's own words.
+
+    Parameters
+    ----------
+    result:
+        A :class:`~pharmaml.ml.unsupervised.KMeansResult` from
+        :func:`~pharmaml.ml.unsupervised.kmeans_cluster`.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    try:
+        chosen = int(result.k)
+        scan = result.scan
+        silhouette = result.silhouette
+    except (AttributeError, TypeError) as exc:
+        raise DataValidationError(
+            f"plot_kmeans_diagnostics expects a KMeansResult (from kmeans_cluster), "
+            f"got {type(result).__name__}"
+        ) from exc
+
+    if scan is None or len(scan) == 0:
+        fig, ax = new_figure(figsize=(8.4, 4.6))
+        message = (
+            f"k={chosen} was fixed manually -- rerun with k left on 'auto' "
+            "for the elbow + silhouette sweep this figure needs"
+        )
+        ax.text(0.5, 0.5, message, ha="center", va="center", fontsize=10,
+                transform=ax.transAxes, wrap=True)
+        ax.set_title(f"{title}\n(silhouette at k={chosen}: "
+                     f"{'n/a' if silhouette is None else f'{silhouette:.3f}'})", fontsize=11)
+        return fig
+
+    ks = np.asarray(scan["k"], dtype=float)
+    inertias = np.asarray(scan["inertia"], dtype=float)
+    sils = np.asarray(scan["silhouette"], dtype=float)
+    fig, (ax_a, ax_b) = new_figure(nrows=1, ncols=2, figsize=(10.8, 4.6))
+    ax_a.plot(ks, inertias, marker="o", lw=1.9, color=PALETTE[0])
+    ax_a.axvline(chosen, color=PALETTE[3], linestyle="--", lw=1.4, alpha=0.8)
+    ax_a.set_xlabel("k")
+    ax_a.set_ylabel("inertia (within-cluster SS)")
+    ax_a.set_title(f"(a) elbow -- chosen k={chosen}", fontsize=10)
+
+    mask = np.isfinite(sils)
+    ax_b.plot(ks[mask], sils[mask], marker="s", lw=1.9, color=PALETTE[1])
+    ax_b.axvline(chosen, color=PALETTE[3], linestyle="--", lw=1.4, alpha=0.8)
+    if silhouette is not None:
+        ax_b.scatter([chosen], [float(silhouette)], s=90, color=PALETTE[3],
+                     edgecolor="white", linewidth=1.2, zorder=5)
+    verdict = (
+        "strong, well-separated structure"
+        if (silhouette or 0) > 0.5
+        else "reasonable structure"
+        if (silhouette or 0) > 0.25
+        else "weak / overlapping clusters -- k may not be the right model"
+    )
+    ax_b.set_xlabel("k")
+    ax_b.set_ylabel("mean silhouette")
+    ax_b.set_title(f"(b) silhouette -- {verdict}", fontsize=10)
+    fig.suptitle(title, fontsize=12)
+    return fig
+
+
+def plot_gmm_selection(
+    result: Any,
+    title: str = "Gaussian mixture model selection",
+) -> Any:
+    """AIC/BIC vs component count -- the handbook's own GMM selector.
+
+    Both curves drop, flatten, then rise as components overfit; BIC's
+    heavier complexity penalty usually bottoms at a smaller count than
+    AIC.  The chosen count is marked, and the honest note names which
+    criterion made the call.
+
+    Parameters
+    ----------
+    result:
+        A :class:`~pharmaml.ml.unsupervised.GmmResult` from
+        :func:`~pharmaml.ml.unsupervised.gmm_cluster`.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    try:
+        chosen = int(result.n_components)
+        chosen_by = str(result.chosen_by)
+        scan = result.scan
+    except (AttributeError, TypeError) as exc:
+        raise DataValidationError(
+            f"plot_gmm_selection expects a GmmResult (from gmm_cluster), "
+            f"got {type(result).__name__}"
+        ) from exc
+
+    if scan is None or len(scan) == 0:
+        fig, ax = new_figure(figsize=(8.4, 4.6))
+        ax.text(
+            0.5, 0.5,
+            f"n_components={chosen} was fixed manually -- rerun with it on "
+            "'auto' for the AIC/BIC sweep this figure needs",
+            ha="center", va="center", fontsize=10, transform=ax.transAxes, wrap=True,
+        )
+        ax.set_title(title, fontsize=11)
+        return fig
+
+    counts = np.asarray(scan["n_components"], dtype=float)
+    aic = np.asarray(scan["aic"], dtype=float)
+    bic = np.asarray(scan["bic"], dtype=float)
+    fig, ax = new_figure(figsize=(8.4, 5.2))
+    ax.plot(counts, aic, marker="o", lw=1.9, color=PALETTE[0], label="AIC")
+    ax.plot(counts, bic, marker="s", lw=1.9, color=PALETTE[1], label="BIC")
+    ax.axvline(chosen, color=PALETTE[3], linestyle="--", lw=1.4, alpha=0.8)
+    y_at = float(bic[list(counts).index(chosen)]) if chosen in list(counts) else None
+    if y_at is not None:
+        ax.scatter([chosen], [y_at], s=90, color=PALETTE[3],
+                   edgecolor="white", linewidth=1.2, zorder=5)
+    ax.set_xlabel("n_components")
+    ax.set_ylabel("information criterion (lower is better)")
+    verdict = (
+        f"{chosen_by.upper()} prefers {chosen} component"
+        f"{'s' if chosen != 1 else ''}"
+        if chosen_by in {"aic", "bic"}
+        else f"k={chosen} fixed manually"
+    )
+    ax.set_title(f"{title}\n{verdict}", fontsize=11)
+    ax.legend(fontsize=9, loc="best")
+    return fig
+
+
+def plot_kde_density(
+    result: Any,
+    values: Any = None,
+    title: str = "Kernel density estimate",
+) -> Any:
+    """The KDE curve over its own bandwidth story.
+
+    Filled density curve; when the raw ``values`` are supplied the
+    observing histogram and rug ride underneath (the handbook's own
+    hist+KDE pairing).  The annotation names the bandwidth AND how it
+    was chosen -- ``cv`` (cross-validated log-likelihood), Silverman
+    (small-sample fallback) or manual -- because a KDE figure without
+    its bandwidth is a rumor, not a report.
+
+    Parameters
+    ----------
+    result:
+        A :class:`~pharmaml.ml.unsupervised.KdeResult` from
+        :func:`~pharmaml.ml.unsupervised.kde_fit`.
+    values:
+        Optional raw observations (Series / array) for the histogram
+        and rug.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> from pharmaml.ml.unsupervised import kde_fit
+    >>> rng = np.random.default_rng(42)
+    >>> fig = plot_kde_density(kde_fit(pd.Series(rng.normal(size=80))))
+    >>> bool(fig.axes)
+    True
+    """
+    try:
+        grid = np.asarray(result.grid, dtype=float)
+        density = np.asarray(result.density, dtype=float)
+        bandwidth = float(result.bandwidth)
+        source = str(result.bandwidth_source)
+        column = str(result.column)
+    except (AttributeError, TypeError) as exc:
+        raise DataValidationError(
+            f"plot_kde_density expects a KdeResult (from kde_fit), got {type(result).__name__}"
+        ) from exc
+    if grid.size != density.size or grid.size < 2:
+        raise DataValidationError("KdeResult grid and density must be equal-length (>= 2)")
+
+    fig, ax = new_figure(figsize=(8.4, 5.0))
+    if values is not None:
+        raw = np.asarray(
+            values.iloc[:, 0] if isinstance(values, pd.DataFrame) else values, dtype=float
+        ).ravel()
+        ax.hist(raw, bins=30, density=True, color=PALETTE[2], alpha=0.28,
+                edgecolor="white", linewidth=0.4, label="observed (hist)")
+        ax.plot(raw, np.full(raw.shape, 0.0), "|", color=PALETTE[2], alpha=0.5,
+                markersize=8, label="rug")
+    ax.fill_between(grid, density, color=PALETTE[0], alpha=0.22, linewidth=0)
+    ax.plot(grid, density, lw=2.2, color=PALETTE[0], label=f"KDE ({result.kernel})")
+    ax.set_xlabel(column)
+    ax.set_ylabel("density")
+    how = {"cv": "5-fold CV log-likelihood", "silverman": "Silverman rule (n < 10)",
+           "manual": "manual"}.get(source, source)
+    ax.set_title(f"{title}\ncolumn {column!r} -- bandwidth {bandwidth:.3g} "
+                 f"chosen by {how}", fontsize=11)
+    ax.legend(fontsize=9, loc="best")
+    return fig
+
+
+def plot_manifold_embedding(
+    embedding: Any,
+    labels: Any = None,
+    title: str | None = None,
+) -> Any:
+    """Scatter an embedding, coloured by a target (the digits-figure pattern).
+
+    Discrete / categorical ``labels`` colour per class with the house
+    palette; a numeric target drives a colour ramp + colorbar (the
+    Isomap-coloured-by-class figure the handbook's manifold chapter is
+    famous for).  No labels: a single honest teal point cloud.
+
+    Parameters
+    ----------
+    embedding:
+        An :class:`~pharmaml.ml.manifold.EmbeddingRecord` from
+        :func:`~pharmaml.ml.manifold.manifold_embedding`.
+    labels:
+        Optional per-sample target (Series / array), same row order.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> from pharmaml.ml.manifold import manifold_embedding
+    >>> rng = np.random.default_rng(42)
+    >>> blob = pd.DataFrame(rng.normal(size=(80, 3)))
+    >>> fig = plot_manifold_embedding(manifold_embedding(blob, "mds"))
+    >>> bool(fig.axes)
+    True
+    """
+    try:
+        coords = embedding.coords
+        method = str(embedding.method)
+        n_samples = int(embedding.n_samples)
+    except (AttributeError, TypeError) as exc:
+        raise DataValidationError(
+            f"plot_manifold_embedding expects an EmbeddingRecord (from "
+            f"manifold_embedding), got {type(embedding).__name__}"
+        ) from exc
+    if coords.shape[1] < 2:
+        raise DataValidationError(
+            "the embedding needs at least 2 dimensions to scatter "
+            f"(got {coords.shape[1]})"
+        )
+    x = coords.iloc[:, 0].to_numpy(dtype=float)
+    y = coords.iloc[:, 1].to_numpy(dtype=float)
+    x_name, y_name = str(coords.columns[0]), str(coords.columns[1])
+
+    fig, ax = new_figure(figsize=(7.8, 6.0))
+    if labels is None:
+        ax.scatter(x, y, s=26, alpha=0.75, color=PALETTE[0],
+                   edgecolor="white", linewidth=0.3)
+    else:
+        if hasattr(labels, "to_numpy"):
+            series = labels if isinstance(labels, pd.Series) else pd.Series(labels)
+            if len(series) != n_samples:
+                raise DataValidationError(
+                    f"labels length ({len(series)}) must match the embedding rows ({n_samples})"
+                )
+            target = series.to_numpy()
+        else:
+            target = np.asarray(labels)
+            if target.shape[0] != n_samples:
+                raise DataValidationError(
+                    f"labels length ({target.shape[0]}) must match the embedding rows ({n_samples})"
+                )
+        if pd.api.types.is_numeric_dtype(pd.Series(target)) and len(
+            set(np.asarray(target, dtype=object).tolist())
+        ) > 12:
+            numeric = np.asarray(target, dtype=float)
+            points = ax.scatter(x, y, s=26, alpha=0.8, c=numeric, cmap="viridis",
+                                edgecolor="white", linewidth=0.3)
+            fig.colorbar(points, ax=ax, shrink=0.85, pad=0.02)
+        else:
+            classes = sorted({str(value) for value in np.asarray(target, dtype=object)})
+            lookup = {name: index for index, name in enumerate(classes)}
+            codes = [lookup[str(value)] for value in np.asarray(target, dtype=object)]
+            for index, name in enumerate(classes):
+                mask = [code == index for code in codes]
+                ax.scatter(
+                    np.asarray(x)[mask], np.asarray(y)[mask], s=30, alpha=0.85,
+                    color=PALETTE[index % len(PALETTE)],
+                    edgecolor="white", linewidth=0.3, label=str(name),
+                )
+            ax.legend(fontsize=9, loc="best", title="class", title_fontsize=9)
+    ax.set_xlabel(x_name)
+    ax.set_ylabel(y_name)
+    caption = title or f"{method} embedding ({n_samples} rows)"
+    ax.set_title(caption, fontsize=11)
+    return fig
+
+
+def plot_hexbin_density(
+    x: Any,
+    y: Any,
+    *,
+    gridsize: int = 30,
+    xlabel: str = "x",
+    ylabel: str = "y",
+    title: str = "2-D density (hexbin)",
+) -> Any:
+    """Hexagonal binning -- the honest 2-D density for big scatter plots.
+
+    A scatter of thousands of points becomes an ink blot; hexbin
+    counts per cell and says so with a colorbar.  The house choice
+    over scatter-overplotting for descriptor-pair views (PDSH 04.04 /
+    04.05's ``hexbin`` section, absorbed).
+
+    Parameters
+    ----------
+    x, y:
+        Paired numeric columns (Series / arrays), equal length.
+    gridsize:
+        Hex cells across the x range (30 by default).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        Length mismatch, non-numeric input, or fewer than 10 pairs
+        (below that a plain scatter tells the story better).
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> rng = np.random.default_rng(42)
+    >>> frame = pd.DataFrame(rng.normal(size=(400, 2)), columns=["a", "b"])
+    >>> fig = plot_hexbin_density(frame["a"], frame["b"])
+    >>> bool(fig.axes)
+    True
+    """
+    xs = np.asarray(
+        x.iloc[:, 0].to_numpy(dtype=float) if isinstance(x, pd.DataFrame)
+        else (x.to_numpy(dtype=float) if isinstance(x, pd.Series) else x),
+        dtype=float,
+    ).ravel()
+    ys = np.asarray(
+        y.iloc[:, 0].to_numpy(dtype=float) if isinstance(y, pd.DataFrame)
+        else (y.to_numpy(dtype=float) if isinstance(y, pd.Series) else y),
+        dtype=float,
+    ).ravel()
+    if xs.size != ys.size:
+        raise DataValidationError(
+            f"plot_hexbin_density: x and y must be the same length ({xs.size} vs {ys.size})"
+        )
+    if xs.size < 10:
+        raise DataValidationError(
+            f"plot_hexbin_density needs at least 10 pairs to be meaningful, got {xs.size}"
+        )
+    if not (np.isfinite(xs).all() and np.isfinite(ys).all()):
+        raise DataValidationError("plot_hexbin_density: x/y must be finite (no NaN/±inf)")
+    if gridsize < 4:
+        raise DataValidationError(f"gridsize must be >= 4, got {gridsize}")
+
+    fig, ax = new_figure(figsize=(7.8, 6.0))
+    mesh = ax.hexbin(xs, ys, gridsize=int(gridsize), cmap="viridis", mincnt=1)
+    fig.colorbar(mesh, ax=ax, shrink=0.85, pad=0.02, label="pairs per cell")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(f"{title}\n{xs.size} pairs, {int(gridsize)} cells across", fontsize=11)
+    return fig

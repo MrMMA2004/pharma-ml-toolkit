@@ -5,4 +5,4 @@
  * the download panel both read this, so a version bump only touches
  * this file (plus the toolkit's own carriers).
  */
-export const SHIPPED_TOOLKIT_VERSION = "1.2.92";
+export const SHIPPED_TOOLKIT_VERSION = "1.2.93";

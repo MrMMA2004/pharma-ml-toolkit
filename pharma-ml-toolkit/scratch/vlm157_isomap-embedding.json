@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) Yes, the title \"isomap embedding (420 rows)\" is clearly readable and correctly identifies the analysis.\n2) Yes, the axis labels \"ISOMAP1\" and \"ISOMAP2\" are present and fully legible.\n3) No, there is no overlapping, clipped, or garbled text, and the plot is well-populated with data points.\n4) Yes, it appears to be a complete and honest 2D Isomap embedding scatter plot with data points colored by three target classes (active, inactive, weak).\n5) Overall PASS: The figure is a clear, well-formatted, and complete visualization of the Isomap embedding analysis.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793139062,
+  "id": "20261028061059597fe741593c4c2b",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261028061059597fe741593c4c2b",
+  "usage": {
+    "completion_tokens": 138,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1100,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1238
+  }
+}

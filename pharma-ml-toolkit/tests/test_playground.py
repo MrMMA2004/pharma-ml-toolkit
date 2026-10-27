@@ -1118,6 +1118,7 @@ class TestDockingGuiUnderXvfb:
             "Cell Lines",
             "Docking",
             "Data & ML",
+            "Unsupervised",
             "Deep Learning",
             "Generative",
             "Utilities",
@@ -5936,7 +5937,7 @@ class TestReview123Gui:
     def test_surgery_cards_carry_draw_buttons(self, app: Any) -> None:
         dump = "\n".join(
             str(widget.cget("text"))
-            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[8]))
             if widget.winfo_class() == "TButton"
         )
         assert "Draw mutants" in dump
@@ -6208,7 +6209,7 @@ class TestReview124Gui:
     def test_results_card_carries_draw_top_button(self, app: Any) -> None:
         dump = "\n".join(
             str(widget.cget("text"))
-            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[8]))
             if widget.winfo_class() == "TButton"
         )
         assert "Draw top molecules" in dump
@@ -6526,7 +6527,7 @@ class TestReview125Gui:
     def test_pareto_card_carries_draw_front_button(self, app: Any) -> None:
         dump = "\n".join(
             str(widget.cget("text"))
-            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[8]))
             if widget.winfo_class() == "TButton"
         )
         assert "Draw front" in dump
@@ -6676,7 +6677,7 @@ class TestReview126Gui:
     def test_pareto_card_carries_save_figure_button(self, app: Any) -> None:
         dump = "\n".join(
             str(widget.cget("text"))
-            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[8]))
             if widget.winfo_class() == "TButton"
         )
         assert "Save figure…" in dump
@@ -6788,7 +6789,7 @@ class TestReview127Gui:
     def test_generative_tab_carries_four_save_figure_buttons(self, app: Any) -> None:
         dump = [
             str(widget.cget("text"))
-            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[7]))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[8]))
             if widget.winfo_class() == "TButton"
         ]
         # Results, Pareto front, Ring topology moves, Breed two molecules
@@ -7060,8 +7061,9 @@ class TestReview128Gui:
             (2, 5, "Plot repeated dosing"),  # PK/PD: IV, Emax, NCA, acc, family
             (4, 2, "Plot atom types"),      # Docking: receptor + results
             (5, 3, "Calibration curve"),    # Data & ML: results, board, AD
-            (6, 2, "Train & evaluate"),     # DL: results + history
-            (8, 1, "Plot reconciliation"),  # Utilities: compare
+            (6, 1, "Run analysis"),         # Unsupervised: the Results card (1.2.93)
+            (7, 2, "Train & evaluate"),     # DL: results + history
+            (9, 1, "Plot reconciliation"),  # Utilities: compare
         ]
         total = 0
         for index, count, neighbour in expectations:
@@ -7069,10 +7071,10 @@ class TestReview128Gui:
             assert buttons.count("Save figure…") == count, (index, buttons.count("Save figure…"))
             assert neighbour in buttons, (index, neighbour)
             total += count
-        assert total == 15, total
+        assert total == 16, total
         # plus the four Generative buttons shipped in rounds 126/127 --
         # the pattern now covers every figure card in the app.
-        assert self._tab_buttons(app, 7).count("Save figure…") == 4
+        assert self._tab_buttons(app, 8).count("Save figure…") == 4
 
     # -- the honest guards, one per new card ------------------------------ #
     @pytest.mark.parametrize(
@@ -10699,7 +10701,7 @@ class TestReview142Gui:
             "text:scan_lib",
         ):
             assert key in chemistry, f"{key} missing from the Chemistry tab's ownership"
-        assert "text:corpus" in owners[7]  # Generative
+        assert "text:corpus" in owners[8]  # Generative
         assert "text:smiles" in owners[4]  # Docking
 
     def test_chemistry_reset_restores_maccs_and_scan_boxes(self, app: Any) -> None:
@@ -14202,3 +14204,166 @@ class TestVarianceFilterGui:
         assert len(app._feat_frame.columns) == 4  # declined: unchanged
         assert app._feat_selection.selected[0] == "ecfp_bit_3"
         assert quiet_dialogs == []
+
+
+# --------------------------------------------------------------------- #
+# the Unsupervised tab (PDSH 05.09-05.13 + 04.04/04.05, 100x-157)
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestUnsupervisedTab:
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def _load_classification_example(self, app: Any) -> None:
+        example = TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv"
+        assert example.is_file()
+        app._ml_load_path(example)
+        assert app._ml_frame is not None
+
+    def test_tab_builds_with_the_shared_dataset(self, app: Any) -> None:
+        self._load_classification_example(app)
+        assert "numeric columns available" in app._unsup_info.cget("text")
+        assert app._unsup_columns.get_children()  # populated tree
+        assert app._unsup_selected_columns()  # first column pre-selected
+
+    def test_pca_run_renders_and_exports(self, app: Any) -> None:
+        self._load_classification_example(app)
+        app._unsup_select_all()
+        app._unsup_method.set("PCA (variance ladder)")
+        app._unsup_run()
+        assert self._drain(app)
+        summary = app._unsup_summary.cget("text")
+        assert "PCA(" in summary and "explained variance" in summary
+        assert app._unsup_result is not None
+        assert app._unsup_host.winfo_children()  # the figure landed
+        frame = app._unsup_result["record"].as_frame()
+        assert frame.shape[0] == len(app._ml_frame)
+        assert frame.shape[1] >= 2
+
+    def test_kmeans_auto_run(self, app: Any) -> None:
+        self._load_classification_example(app)
+        app._unsup_select_all()
+        app._unsup_method.set("K-Means (elbow + silhouette)")
+        app._unsup_run()
+        assert self._drain(app)
+        assert "k-means" in app._unsup_summary.cget("text")
+        assert "silhouette" in app._unsup_summary.cget("text")
+
+    def test_manifold_run_and_cluster_scatter(self, app: Any) -> None:
+        self._load_classification_example(app)
+        app._unsup_select_all()
+        app._unsup_method.set("Isomap")
+        app._unsup_run()
+        assert self._drain(app)
+        assert "isomap embedding" in app._unsup_summary.cget("text")
+        # the scatter twin coloured by the target column
+        target = app._target_combo.get()
+        app._unsup_colour.set(target)
+        app._unsup_scatter()
+        app.update()
+        assert app._unsup_host.winfo_children()
+
+    def test_kde_uses_the_first_selected_column(self, app: Any) -> None:
+        self._load_classification_example(app)
+        app._unsup_select_all()
+        app._unsup_method.set("KDE (one column)")
+        app._unsup_run()
+        assert self._drain(app)
+        summary = app._unsup_summary.cget("text")
+        assert "KDE(" in summary and "bandwidth" in summary
+        first = app._unsup_selected_columns()[0]
+        assert f"'{first}'" in summary
+
+    def test_no_selection_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        self._load_classification_example(app)
+        app._unsup_clear_selection()
+        app._unsup_run()
+        app.update()
+        assert quiet_dialogs and quiet_dialogs[0][0] == "showwarning"
+        assert "Select at least one numeric column" in str(quiet_dialogs[0][1])
+        assert not app._busy
+
+    def test_no_dataset_guard(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._unsup_select_all()
+        app._unsup_run()
+        app.update()
+        assert quiet_dialogs and quiet_dialogs[0][0] == "showwarning"
+        assert "Load a CSV" in str(quiet_dialogs[0][1])
+
+    def test_bad_k_guard_names_the_field(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        self._load_classification_example(app)
+        app._unsup_select_all()
+        app._unsup_method.set("K-Means (elbow + silhouette)")
+        app._unsup_k.delete(0, "end")
+        app._unsup_k.insert(0, "bogus")
+        app._unsup_run()
+        app.update()
+        assert quiet_dialogs and "k" in str(quiet_dialogs[0][1]).lower()
+        assert not app._busy
+
+    def test_new_dataset_retires_the_previous_run(self, app: Any) -> None:
+        self._load_classification_example(app)
+        app._unsup_select_all()
+        app._unsup_method.set("PCA (variance ladder)")
+        app._unsup_run()
+        assert self._drain(app)
+        assert app._unsup_result is not None
+        # adopting the SAME table again still refreshes + retires
+        app._ml_adopt_frame(
+            app._ml_frame, TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv"
+        )
+        assert app._unsup_result is None
+        assert app._unsup_summary.cget("text") == "no analysis yet"
+
+    def test_scatter_without_a_run_is_honest(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._unsup_scatter()
+        app.update()
+        assert quiet_dialogs and quiet_dialogs[0][0] == "showinfo"
+        assert "Run an analysis first" in str(quiet_dialogs[0][1])
+
+    def test_method_key_mapping(self, app: Any) -> None:
+        expected = {
+            "PCA (variance ladder)": "pca",
+            "K-Means (elbow + silhouette)": "kmeans",
+            "Gaussian mixture (AIC/BIC)": "gmm",
+            "KDE (one column)": "kde",
+            "Isomap": "isomap",
+            "LLE": "lle",
+            "MDS": "mds",
+            "Spectral embedding": "spectral",
+            "t-SNE": "tsne",
+            "Hexbin density (two columns)": "hexbin",
+        }
+        for label, key in expected.items():
+            app._unsup_method.set(label)
+            assert app._unsup_method_key() == key, label

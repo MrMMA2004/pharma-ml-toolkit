@@ -2849,6 +2849,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_cellline_tab()
         self._build_docking_tab()
         self._build_ml_tab()
+        self._build_unsupervised_tab()
         self._build_dl_tab()
         self._build_generative_tab()
         self._build_utilities_tab()
@@ -5367,6 +5368,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "Cell Lines",
                 "Docking",
                 "Data & ML",
+                "Unsupervised",
                 "Deep Learning",
                 "Generative",
                 "Utilities",
@@ -14408,6 +14410,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._target_combo.set(chosen)
         self._ml_info.configure(text=f"{path.name} — {len(frame):,} rows × {len(columns)} columns")
         self._refresh_model_choices(self._infer_task(chosen, frame))
+        # (100x-157) the Unsupervised tab reads the SAME table -- refresh
+        # its column tree (and retire its stale run) on every adoption.
+        self._unsup_refresh_dataset()
 
     def _infer_task(self, target: str, frame: Any = None) -> str:
         """Classify a target column as a regression or a classification label.
@@ -17470,6 +17475,573 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._board_status.configure(text=note)
 
         self._start_job("cross-model importance", work, render)
+
+    # ------------------------------------------------------------------ #
+    # Unsupervised tab (100x-157) -- the PDSH handbook's unsupervised
+    # chapters (05.09 PCA, 05.10 manifolds, 05.11 k-means, 05.12 GMMs,
+    # 05.13 KDE, plus 04.04/04.05 hexbin) as one card flow over the
+    # Data & ML tab's dataset.
+    # ------------------------------------------------------------------ #
+    _UNSUP_METHODS: tuple[str, ...] = (
+        "PCA (variance ladder)",
+        "K-Means (elbow + silhouette)",
+        "Gaussian mixture (AIC/BIC)",
+        "KDE (one column)",
+        "Isomap",
+        "LLE",
+        "MDS",
+        "Spectral embedding",
+        "t-SNE",
+        "Hexbin density (two columns)",
+    )
+
+    def _build_unsupervised_tab(self) -> None:
+        page = self._new_page("Unsupervised")
+        self._unsup_page = page
+
+        data = make_card(
+            page.grid,
+            "Unsupervised dataset",
+            span=2,
+            row=0,
+            column=0,
+            subtitle=(
+                "The Data & ML tab's loaded table -- one dataset, both tabs. "
+                "Pick the numeric columns to analyse; the colour-by column "
+                "paints the embedding scatters."
+            ),
+        )
+        refresh_btn = self._action_button(
+            data,
+            "Refresh columns",
+            self._unsup_refresh_dataset,
+            tooltip="Re-read the Data & ML tab's current table (also refreshes "
+            "automatically whenever a new dataset lands there).",
+        )
+        refresh_btn.grid(row=0, column=0, sticky="w")
+        self._unsup_info = ttk.Label(data, text="no dataset loaded", style="CardMuted.TLabel")
+        self._unsup_info.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        columns_row = ttk.Frame(data, style="Card.TFrame")
+        columns_row.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self._unsup_columns = ttk.Treeview(
+            columns_row,
+            selectmode="extended",
+            columns=["column"],
+            show="headings",
+            height=7,
+        )
+        self._unsup_columns.heading("column", text="numeric column")
+        self._unsup_columns.column("column", width=240, stretch=True)
+        self._unsup_columns.pack(side="left", fill="y")
+        Tooltip(
+            self._unsup_columns,
+            "The table's numeric columns (Ctrl/click or Shift/click for "
+            "many).  PCA, k-means, GMM and every manifold use ALL selected "
+            "columns in list order; KDE uses the FIRST; hexbin the FIRST "
+            "TWO.",
+        )
+        buttons_col = ttk.Frame(columns_row, style="Card.TFrame")
+        buttons_col.pack(side="left", fill="y", padx=(10, 0))
+        all_btn = self._action_button(
+            buttons_col,
+            "Select all numeric",
+            self._unsup_select_all,
+            tooltip="Every numeric column of the current dataset.",
+        )
+        all_btn.pack(anchor="w")
+        clear_btn = self._action_button(
+            buttons_col,
+            "Clear",
+            self._unsup_clear_selection,
+            tooltip="Deselect everything (the Run button guards on this).",
+        )
+        clear_btn.pack(anchor="w", pady=(6, 0))
+        colour_row = ttk.Frame(data, style="Card.TFrame")
+        colour_row.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(colour_row, text="Colour scatter by:", style="CardMuted.TLabel").pack(side="left")
+        self._unsup_colour = ttk.Combobox(
+            colour_row, state="readonly", width=22, values=["(none)"]
+        )
+        self._unsup_colour.set("(none)")
+        self._unsup_colour.pack(side="left", padx=(8, 0))
+        Tooltip(
+            self._unsup_colour,
+            "Paints the embedding scatters: a numeric column drives a "
+            "colour ramp, a categorical one a class legend.  '(none)' "
+            "leaves the plain point cloud (cluster methods then paint "
+            "their own labels).",
+        )
+
+        method = make_card(
+            page.grid,
+            "Method",
+            row=1,
+            column=0,
+            subtitle=(
+                "The handbook's unsupervised roster, one typed call each -- "
+                "random_state=42 threaded everywhere, scans reported honestly."
+            ),
+        )
+        self._unsup_method = ttk.Combobox(
+            method, state="readonly", width=28, values=list(self._UNSUP_METHODS)
+        )
+        self._unsup_method.set(self._UNSUP_METHODS[0])
+        self._unsup_method.grid(row=0, column=0, columnspan=2, sticky="w")
+        Tooltip(
+            self._unsup_method,
+            "PCA / K-Means / Gaussian mixture / Kernel density from "
+            "pharmaml.ml.unsupervised; Isomap / LLE / MDS / Spectral / t-SNE "
+            "from pharmaml.ml.manifold; hexbin from pharmaml.viz -- the "
+            "Python Data Science Handbook's chapters 05.09-05.13 and "
+            "04.04/04.05.",
+        )
+        param_grid = ttk.Frame(method, style="Card.TFrame")
+        param_grid.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        ttk.Label(param_grid, text="k (clusters / components):", style="CardMuted.TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
+        self._unsup_k = ttk.Entry(param_grid, width=10)
+        self._unsup_k.insert(0, "auto")
+        self._unsup_k.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        Tooltip(
+            self._unsup_k,
+            "K-Means / GMM only.  'auto' scans k=2..10 (k-means, by "
+            "silhouette) or 1..8 components (GMM, by BIC) and reports the "
+            "whole sweep; an integer pins it.",
+        )
+        ttk.Label(param_grid, text="GMM covariance:", style="CardMuted.TLabel").grid(
+            row=1, column=0, sticky="w"
+        )
+        self._unsup_covariance = ttk.Combobox(
+            param_grid, state="readonly", width=10, values=["full", "tied", "diag", "spherical"]
+        )
+        self._unsup_covariance.set("full")
+        self._unsup_covariance.grid(row=1, column=1, sticky="w", padx=(8, 0))
+        ttk.Label(param_grid, text="KDE bandwidth:", style="CardMuted.TLabel").grid(
+            row=2, column=0, sticky="w"
+        )
+        self._unsup_bandwidth = ttk.Entry(param_grid, width=10)
+        self._unsup_bandwidth.insert(0, "auto")
+        self._unsup_bandwidth.grid(row=2, column=1, sticky="w", padx=(8, 0))
+        Tooltip(
+            self._unsup_bandwidth,
+            "KDE only.  'auto' cross-validates the log-likelihood over 20 "
+            "candidates; a number pins the smoothing scale.",
+        )
+        ttk.Label(
+            param_grid, text="Neighbours (isomap/LLE/spectral):", style="CardMuted.TLabel"
+        ).grid(row=3, column=0, sticky="w")
+        self._unsup_neighbours = ttk.Spinbox(param_grid, from_=2, to=100, width=6)
+        self._unsup_neighbours.set(10)
+        self._unsup_neighbours.grid(row=3, column=1, sticky="w", padx=(8, 0))
+        ttk.Label(param_grid, text="t-SNE perplexity:", style="CardMuted.TLabel").grid(
+            row=4, column=0, sticky="w"
+        )
+        self._unsup_perplexity = ttk.Entry(param_grid, width=10)
+        self._unsup_perplexity.insert(0, "30")
+        self._unsup_perplexity.grid(row=4, column=1, sticky="w", padx=(8, 0))
+        ttk.Label(param_grid, text="LLE method:", style="CardMuted.TLabel").grid(
+            row=5, column=0, sticky="w"
+        )
+        self._unsup_lle = ttk.Combobox(
+            param_grid, state="readonly", width=10, values=["standard", "modified", "ltsa"]
+        )
+        self._unsup_lle.set("standard")
+        self._unsup_lle.grid(row=5, column=1, sticky="w", padx=(8, 0))
+        ttk.Label(param_grid, text="Hexbin cells across:", style="CardMuted.TLabel").grid(
+            row=6, column=0, sticky="w"
+        )
+        self._unsup_gridsize = ttk.Spinbox(param_grid, from_=4, to=120, width=6)
+        self._unsup_gridsize.set(30)
+        self._unsup_gridsize.grid(row=6, column=1, sticky="w", padx=(8, 0))
+        self._unsup_minibatch = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            param_grid,
+            text="Mini-batch k-means (large tables)",
+            variable=self._unsup_minibatch,
+            style="Card.TCheckbutton",
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        run_btn = self._action_button(
+            method,
+            "Run analysis",
+            self._unsup_run,
+            primary=True,
+            tooltip="Fits the picked method over the selected columns and "
+            "renders its canonical figure (the button stays disabled "
+            "while the job runs).",
+        )
+        run_btn.grid(row=2, column=0, sticky="w", pady=(10, 0))
+
+        results = make_card(
+            page.grid,
+            "Results",
+            row=1,
+            column=1,
+            subtitle="The typed record's own summary, its figure, and the CSV twin.",
+        )
+        self._unsup_summary = ttk.Label(
+            results, text="no analysis yet", style="CardMuted.TLabel",
+            wraplength=430, justify="left",
+        )
+        grid_append(results, self._unsup_summary, sticky="ew", pady=(0, 4))
+        plot_row = ttk.Frame(results, style="Card.TFrame")
+        grid_append(results, plot_row, sticky="w", pady=(0, 4))
+        plot_btn = self._action_button(
+            plot_row,
+            "Redraw figure",
+            self._unsup_plot,
+            tooltip="Re-render the last run's canonical figure (safe to "
+            "click after theme flips).",
+        )
+        plot_btn.pack(side="left")
+        scatter_btn = self._action_button(
+            plot_row,
+            "Scatter (2-D view)",
+            self._unsup_scatter,
+            tooltip="The 2-D point cloud: embedding methods scatter their "
+            "own coordinates, PCA its PC1/PC2 scores, k-means / GMM the "
+            "first two selected columns -- coloured by the colour-by "
+            "column or the cluster labels.",
+        )
+        scatter_btn.pack(side="left", padx=(10, 0))
+        export_btn = self._action_button(
+            plot_row,
+            "Export CSV…",
+            self._unsup_export,
+            tooltip="The run's table twin: scores / labels + centroids / "
+            "responsibilities / density curve / coordinates.",
+        )
+        export_btn.pack(side="left", padx=(10, 0))
+        save_fig_btn = self._action_button(
+            plot_row,
+            "Save figure…",
+            self._save_unsup_figure,
+            tooltip="Save the figure this card is currently showing -- the "
+            "record's canonical plot or the scatter twin -- as PNG, SVG or "
+            "PDF (unlike Ctrl+S, which saves the last figure drawn "
+            "anywhere).",
+        )
+        save_fig_btn.pack(side="left", padx=(10, 0))
+        self._unsup_host = self._figure_host(results, height=330)
+        self._unsup_result: Any = None
+
+    # -- unsupervised helpers ------------------------------------------ #
+    def _unsup_selected_columns(self) -> list[str]:
+        """The tree's selected column names, in LIST order (not click order)."""
+        tree = self._unsup_columns
+        picked: list[str] = []
+        for index, iid in enumerate(tree.get_children()):
+            if iid in tree.selection():
+                picked.append(str(tree.item(iid, "values")[0]))
+        return picked
+
+    def _unsup_select_all(self) -> None:
+        children = self._unsup_columns.get_children()
+        if children:
+            self._unsup_columns.selection_set(children)
+
+    def _unsup_clear_selection(self) -> None:
+        self._unsup_columns.selection_remove(self._unsup_columns.get_children())
+
+    def _unsup_refresh_dataset(self) -> None:
+        """Re-read the Data & ML tab's table into the column tree.
+
+        Also retires any previous run's record (the round-146 stale-state
+        discipline): a summary naming the OLD dataset's columns must not
+        outlive the table it describes.
+        """
+        frame = getattr(self, "_ml_frame", None)
+        tree = getattr(self, "_unsup_columns", None)
+        if tree is None:  # the tab is not built yet (early adoption)
+            return
+        tree.delete(*tree.get_children())
+        if frame is None:
+            self._unsup_info.configure(text="no dataset loaded")
+            self._unsup_colour["values"] = ["(none)"]
+            self._unsup_colour.set("(none)")
+            self._unsup_result = None
+            self._unsup_summary.configure(text="no analysis yet")
+            return
+        numeric, _dropped = numeric_feature_columns(frame, "")
+        for name in numeric:
+            tree.insert("", "end", values=[name])
+        if numeric:
+            first = tree.get_children()[0]
+            tree.selection_set(first)  # one honest default selection
+        columns = [str(column) for column in frame.columns]
+        self._unsup_colour["values"] = ["(none)"] + columns
+        self._unsup_colour.set("(none)")
+        self._unsup_result = None
+        self._unsup_summary.configure(text="no analysis yet")
+        self._unsup_info.configure(
+            text=f"{len(frame):,} rows · {len(numeric)} numeric columns available"
+        )
+
+    def _unsup_method_key(self) -> str:
+        """Map the combobox label to the dispatch key."""
+        label = self._unsup_method.get().lower()
+        for key in ("pca", "k-means", "gaussian", "kde", "isomap", "lle", "mds", "spectral", "t-sne", "hexbin"):
+            if label.startswith(key):
+                return {
+                    "k-means": "kmeans",
+                    "gaussian": "gmm",
+                    "t-sne": "tsne",
+                }.get(key, key)
+        return "pca"
+
+    def _unsup_run(self) -> None:
+        """Fit the picked method over the selected columns (background job)."""
+        if not self._require_pharmaml():
+            return
+        if not self._require("pandas", "unsupervised analysis") or not self._require(
+            "sklearn", "unsupervised analysis"
+        ):
+            return
+        frame = self._ml_frame
+        if frame is None:
+            messagebox.showwarning(
+                "No dataset", "Load a CSV on the Data & ML tab first (it is shared)."
+            )
+            return
+        selected = self._unsup_selected_columns()
+        if not selected:
+            messagebox.showwarning(
+                "No columns", "Select at least one numeric column in the tree."
+            )
+            return
+        key = self._unsup_method_key()
+        needs = {"kde": 1, "hexbin": 2}.get(key, 1)
+        if len(selected) < needs:
+            messagebox.showwarning(
+                "Not enough columns",
+                f"{self._unsup_method.get()} needs {needs} column"
+                f"{'s' if needs > 1 else ''} -- {len(selected)} selected.",
+            )
+            return
+        # params parsed on the MAIN thread -- the tab's pre-flight
+        # convention (naming the offending field).
+        try:
+            k_raw = self._unsup_k.get().strip().lower()
+            k_value: int | None = None if k_raw in {"auto", ""} else parse_int(
+                self._unsup_k.get(), "k", minimum=1, maximum=1000
+            )
+            bandwidth_raw = self._unsup_bandwidth.get().strip().lower()
+            bandwidth: float | None = None if bandwidth_raw in {"auto", ""} else parse_float(
+                self._unsup_bandwidth.get(), "KDE bandwidth", minimum=1e-6
+            )
+            neighbours = parse_int(
+                str(self._unsup_neighbours.get()), "neighbours", minimum=2, maximum=200
+            )
+            perplexity = parse_float(
+                self._unsup_perplexity.get(), "t-SNE perplexity", minimum=1.0
+            )
+            gridsize = parse_int(
+                str(self._unsup_gridsize.get()), "hexbin cells", minimum=4, maximum=200
+            )
+        except ValueError as exc:
+            messagebox.showwarning("Check the method settings", str(exc))
+            return
+        covariance = self._unsup_covariance.get()
+        lle_method = self._unsup_lle.get()
+        mini_batch = bool(self._unsup_minibatch.get())
+        colour_column = self._unsup_colour.get()
+        # (100x-142) the frame is captured on the MAIN thread: reading
+        # self._ml_frame inside work() races a concurrent dataset swap.
+        captured = frame
+
+        def work() -> Any:
+            from pharmaml.ml.manifold import manifold_embedding
+            from pharmaml.ml.unsupervised import (
+                gmm_cluster,
+                kde_fit,
+                kmeans_cluster,
+                pca_reduce,
+            )
+
+            matrix = captured[selected]
+            if key == "pca":
+                return ("pca", pca_reduce(matrix))
+            if key == "kmeans":
+                return ("kmeans", kmeans_cluster(matrix, k=k_value, mini_batch=mini_batch))
+            if key == "gmm":
+                return (
+                    "gmm",
+                    gmm_cluster(matrix, n_components=k_value, covariance_type=covariance),
+                )
+            if key == "kde":
+                return ("kde", kde_fit(matrix.iloc[:, 0], bandwidth=bandwidth))
+            if key == "hexbin":
+                return ("hexbin", (matrix.iloc[:, 0], matrix.iloc[:, 1]))
+            return (
+                key,
+                manifold_embedding(
+                    matrix,
+                    key,
+                    n_neighbors=neighbours,
+                    perplexity=perplexity,
+                    lle_method=lle_method,
+                ),
+            )
+
+        def render(payload: Any) -> None:
+            run_key, record = payload
+            self._unsup_result = {
+                "key": run_key,
+                "record": record,
+                "columns": selected,
+                "colour": colour_column,
+                "frame": captured,
+            }
+            if run_key == "hexbin":
+                xs, ys = record
+                summary = (
+                    f"hexbin density over {xs.name!r} vs {ys.name!r} "
+                    f"({int(xs.size)} pairs, {gridsize} cells across)"
+                )
+            else:
+                summary = str(record)
+            self._unsup_summary.configure(text=summary)
+            if not self.deps.get("matplotlib"):
+                return
+            try:
+                figure = self._unsup_canonical_figure(run_key, record, captured, colour_column)
+                if figure is not None:
+                    self._render_figure(self._unsup_host, figure)
+            except Exception as exc:  # noqa: BLE001
+                self._show_error("Plot failed", exc)
+
+        self._start_job(f"unsupervised {key} over {len(selected)} columns", work, render)
+
+    def _unsup_canonical_figure(
+        self, key: str, record: Any, frame: Any, colour_column: str
+    ) -> Any:
+        """The method's own figure (the plotting twin of the record)."""
+        from pharmaml.viz import (
+            plot_gmm_selection,
+            plot_hexbin_density,
+            plot_kde_density,
+            plot_kmeans_diagnostics,
+            plot_manifold_embedding,
+            plot_pca_variance,
+        )
+
+        if key == "pca":
+            return plot_pca_variance(record)
+        if key == "kmeans":
+            return plot_kmeans_diagnostics(record)
+        if key == "gmm":
+            return plot_gmm_selection(record)
+        if key == "kde":
+            values = None
+            if frame is not None and record.column in [str(c) for c in frame.columns]:
+                values = frame[record.column]
+            return plot_kde_density(record, values=values)
+        if key == "hexbin":
+            xs, ys = record
+            return plot_hexbin_density(xs, ys, xlabel=str(xs.name), ylabel=str(ys.name))
+        labels = None
+        if colour_column != "(none)" and frame is not None:
+            labels = frame[colour_column]
+        return plot_manifold_embedding(record, labels=labels)
+
+    def _unsup_plot(self) -> None:
+        """Redraw the last run's canonical figure."""
+        result = getattr(self, "_unsup_result", None)
+        if result is None:
+            messagebox.showinfo("Nothing to draw", "Run an analysis first.")
+            return
+        if not self.deps.get("matplotlib"):
+            return
+        try:
+            figure = self._unsup_canonical_figure(
+                result["key"], result["record"], result["frame"], result["colour"]
+            )
+            if figure is not None:
+                self._render_figure(self._unsup_host, figure)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Plot failed", exc)
+
+    def _unsup_scatter(self) -> None:
+        """The 2-D point-cloud twin of the last run."""
+        result = getattr(self, "_unsup_result", None)
+        if result is None:
+            messagebox.showinfo("Nothing to draw", "Run an analysis first.")
+            return
+        if not self.deps.get("matplotlib"):
+            return
+        key = result["key"]
+        record = result["record"]
+        frame = result["frame"]
+        colour = result["colour"]
+        try:
+            from types import SimpleNamespace
+
+            from pharmaml.viz import plot_manifold_embedding
+
+            if key == "pca":
+                embedding = SimpleNamespace(
+                    coords=record.transformed, method="pca", n_samples=record.n_samples
+                )
+            elif key in {"isomap", "lle", "mds", "spectral", "tsne"}:
+                embedding = record
+            elif key in {"kmeans", "gmm"}:
+                columns = result["columns"][:2]
+                if len(columns) < 2:
+                    messagebox.showinfo(
+                        "Not enough columns",
+                        "The cluster scatter needs two analysed columns -- rerun "
+                        "with two or more selected.",
+                    )
+                    return
+                embedding = SimpleNamespace(
+                    coords=frame[columns], method=key, n_samples=record.n_samples
+                )
+            else:
+                messagebox.showinfo(
+                    "No scatter twin",
+                    "KDE's figure IS the density curve; hexbin's IS the "
+                    "2-D view -- use 'Redraw figure'.",
+                )
+                return
+            labels = None
+            if colour != "(none)" and frame is not None:
+                labels = frame[colour]
+            elif key in {"kmeans", "gmm"}:
+                labels = record.labels
+            figure = plot_manifold_embedding(embedding, labels=labels)
+            self._render_figure(self._unsup_host, figure)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Plot failed", exc)
+
+    def _unsup_export(self) -> None:
+        """Save the last run's table twin as CSV."""
+        result = getattr(self, "_unsup_result", None)
+        if result is None:
+            messagebox.showinfo("Nothing to save", "Run an analysis first.")
+            return
+        key, record = result["key"], result["record"]
+        try:
+            if key == "hexbin":
+                xs, ys = record
+                import pandas as pd
+
+                frame = pd.DataFrame({str(xs.name): xs, str(ys.name): ys})
+            else:
+                frame = record.as_frame()
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Export failed", exc)
+            return
+        self._save_frame_dialog(
+            frame, "Save the unsupervised result", "unsupervised_result.csv", "Result"
+        )
+
+    def _save_unsup_figure(self) -> None:
+        """The Results card's per-figure export (the 100x-128 pattern)."""
+        self._save_card_figure(
+            [self._unsup_host],
+            dialog_title="Save the unsupervised figure",
+            empty_hint="Run an analysis first -- the card has no figure yet.",
+        )
 
     # ------------------------------------------------------------------ #
     # Deep Learning tab (100x-61) -- the pharmaml.ml.neural estimators

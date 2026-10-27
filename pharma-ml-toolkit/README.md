@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (**3196 tests**).
+exceptions, input validation, and pytest coverage** (**3296 tests**).
 
 ---
 
@@ -275,7 +275,7 @@ pharma-ml-toolkit/
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
 ├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
-├── tests/                   # 3196 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
+├── tests/                   # 3296 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -879,6 +879,41 @@ zero. The GUI twins ride the ML tab: the Results card's
 leaderboard's **Cross-model importance…**, and the feature factory's
 **Filter low variance…** (threshold entry, kept/dropped ledger, frame
 adoption).
+
+#### Unsupervised analysis (`ml.unsupervised` + `ml.manifold`) — the PDSH handbook's chapters 05.09–05.13
+
+The Python Data Science Handbook's unsupervised block, reviewed
+notebook by notebook and absorbed as typed, seeded, guard-railed
+surfaces (the per-notebook disposition table: `docs/COVERAGE.md`):
+
+```python
+from pharmaml.ml import pca_reduce, kmeans_cluster, gmm_cluster, kde_fit
+from pharmaml.ml import manifold_embedding
+from pharmaml.viz import (plot_pca_variance, plot_kmeans_diagnostics,
+                          plot_gmm_selection, plot_kde_density,
+                          plot_manifold_embedding, plot_hexbin_density)
+
+pca = pca_reduce(descriptors)                     # variance ladder + loadings
+km = kmeans_cluster(descriptors)                  # k=None: silhouette sweep picks k
+gmm = gmm_cluster(descriptors)                    # n=None: BIC sweep picks components
+kde = kde_fit(frame["pIC50"])                     # bandwidth by CV log-likelihood
+emb = manifold_embedding(descriptors, "isomap")   # n_neighbors=10, seeded
+plot_pca_variance(pca)                            # every record has its figure twin
+```
+
+Every call threads `random_state=42`; every bad input (NaN rows,
+non-numeric columns, violated perplexity/neighbourhood rules, the
+O(n²) sample ceilings for MDS/t-SNE) is refused with the typed
+`DataValidationError` naming the problem; every record carries
+`as_frame()` (the CSV twin) and a `__str__` summary. The naive-Bayes
+family from the same handbook (`gaussian_nb` / `multinomial_nb` /
+`bernoulli_nb`) joins `MODEL_REGISTRY` — with `multinomial_nb` trained
+WITHOUT the StandardScaler (counts must stay counts), enforced by the
+`NO_SCALE_MODELS` set. The GUI twin is the new **Unsupervised tab**:
+the Data & ML tab's dataset, a ten-method roster (PCA / K-Means / GMM
+/ KDE / Isomap / LLE / MDS / Spectral / t-SNE / hexbin), per-method
+parameters, the record's own summary, its canonical figure, the 2-D
+scatter twin coloured by any column, and the CSV export.
 
 #### SHAP (`ml.explain`) — the TreeExplainer beeswarm + the top-20 bar
 
