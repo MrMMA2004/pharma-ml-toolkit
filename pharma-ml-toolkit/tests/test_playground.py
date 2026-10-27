@@ -13534,6 +13534,78 @@ class TestInterpretabilityGui:
         assert "top 10 |r| + pIC50" in note
         assert quiet_dialogs == []
 
+    def test_correlation_heatmap_target_survives_a_dataset_swap(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """(100x-153) The round-36 audit's RED finding pinned: after a run
+        on dataset A, adopting a SAME-SHAPED dataset B (same columns, same
+        row count, RangeIndex covering the split's indices) must never
+        re-pair B's y with A's features.  The target column joins from
+        the run's OWN y_test -- the a-y cell reads +1.00 (A's y = 10*a),
+        never B's noise (~0.1)."""
+        from pathlib import Path
+
+        import numpy as np
+        import pandas as pd
+        from sklearn.linear_model import LinearRegression
+
+        from pharmaml.ml.evaluation import RegressionReport
+
+        rng = np.random.default_rng(42)
+        n = 60
+        a = rng.uniform(size=n)
+        frame_a = pd.DataFrame(
+            {
+                "a": a,
+                "b": rng.uniform(size=n),
+                "c": rng.uniform(size=n),
+                "y": 10.0 * a,  # A's target is a's exact copy scaled
+            }
+        )
+        frame_b = pd.DataFrame(
+            {
+                "a": rng.uniform(size=n),
+                "b": rng.uniform(size=n),
+                "c": rng.uniform(size=n),
+                "y": rng.uniform(size=n),  # B's target is pure noise
+            }
+        )
+        x_all = frame_a[["a", "b", "c"]]
+        y_a = frame_a["y"]
+        idx = rng.permutation(n)
+        test_idx, train_idx = idx[:12], idx[12:]
+        model = LinearRegression().fit(x_all.iloc[train_idx], y_a.iloc[train_idx])
+        report = RegressionReport(
+            rmse=0.1, mae=0.1, r2=0.9, max_error=0.2, n_samples=len(test_idx)
+        )
+        trained = type("Trained", (), {})()
+        trained.name = "ridge"
+        app._ml_last_run = (
+            model,
+            report,
+            "regression",
+            x_all.iloc[train_idx],
+            y_a.iloc[train_idx],
+            x_all.iloc[test_idx],
+            y_a.iloc[test_idx],
+            "y",
+        )
+        # the natural adoption path for the swapped dataset (the
+        # loader's shared body -- exactly the Ctrl+O flow)
+        app._ml_adopt_frame(frame_b, Path("dataset_b.csv"))
+        app._ml_plot_correlation_heatmap()
+        assert self._drain_jobs(app), "heatmap job hung"
+        figure = app._ml_host._pg_figure
+        assert figure is not None
+        texts = [t.get_text() for t in figure.axes[0].texts]
+        # row-major 4x4 matrix over columns [a, b, c, y]: row 0's last
+        # cell is the a-y correlation -- A's own +1.00, never B's noise.
+        assert texts[3] == "+1.00", texts[:8]
+        note = app._ml_result_note.cget("text")
+        assert "top 10 |r| + y" in note
+        assert "12 held-out rows" in note
+        assert quiet_dialogs == []
+
     def test_decode_bit_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
         """Caffeine's bit 314 (radius 2, 2048 bits -- the library's own
         doctest molecule) decodes to its carbonyl environments, echoed

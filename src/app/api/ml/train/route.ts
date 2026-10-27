@@ -35,7 +35,8 @@ import {
   type FitDirectives,
   type RegFit,
 } from "@/lib/ml-models";
-import type { CVFold, CsvSourceMeta, MLTrainResponse } from "@/lib/toolkit-types";
+import type { CVFold, CsvSourceMeta, CorrelationBundle, MLTrainResponse, SignedCorrelation } from "@/lib/toolkit-types";
+import { pearsonCorrelation } from "@/lib/ml-math";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -377,6 +378,60 @@ function ensembleSummaryCls(
   return out;
 }
 
+/* ------------------------------------------------------------------ */
+/* The interpretability bundle (100x-153) — the desktop bundle's web   */
+/* twin: signed correlations + the top-N matrix over the run's OWN     */
+/* held-out rows, computed in the SAME request that trained the model, */
+/* so the pairing is inherently swap-proof (the desktop round-36      */
+/* audit's red finding: a re-loaded dataset must never re-pair its    */
+/* target with an old run's features). Undefined correlations (a      */
+/* constant column, fewer than two held-out rows) are dropped, never  */
+/* zeroed.                                                             */
+/* ------------------------------------------------------------------ */
+
+function buildCorrelationBundle(
+  featureNames: string[],
+  columnValue: (featureIndex: number, rowIndex: number) => number,
+  rowIndices: number[],
+  targetValue: (rowIndex: number) => number,
+  targetName: string
+): CorrelationBundle | undefined {
+  if (rowIndices.length < 2) return undefined; // nothing honest to correlate
+  const y = rowIndices.map(targetValue);
+  const defined: (SignedCorrelation & { j: number })[] = [];
+  featureNames.forEach((name, j) => {
+    const r = pearsonCorrelation(rowIndices.map((i) => columnValue(j, i)), y);
+    if (Number.isFinite(r)) defined.push({ name, r, j });
+  });
+  /* |r| descending; Array.prototype.sort is stable (ES2019+), so ties
+   * keep column order — the desktop bundle's first-declared-wins. */
+  defined.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+  const top = defined.slice(0, 7);
+  let matrix: CorrelationBundle["matrix"] = null;
+  if (top.length + 1 >= 2) {
+    const columns = [...top.map((c) => c.name), targetName];
+    const series: number[][] = [
+      ...top.map((c) => rowIndices.map((i) => columnValue(c.j, i))),
+      y,
+    ];
+    const values: (number | null)[][] = series.map((xa, i) =>
+      series.map((xb, j) => {
+        if (i === j) return 1; // the diagonal by construction
+        const r = pearsonCorrelation(xa, xb);
+        return Number.isFinite(r) ? r : null;
+      })
+    );
+    matrix = { columns, values };
+  }
+  return {
+    method: "pearson",
+    target: targetName,
+    nRows: rowIndices.length,
+    correlations: defined.map(({ name, r }) => ({ name, r })),
+    matrix,
+  };
+}
+
 function runRegression(
   req: TrainBody,
   csv?: CsvRegressionData,
@@ -466,6 +521,15 @@ function runRegression(
   const yTrue = test.map((i) => ys[i] ?? 0);
   const yPred = test.map((i) => fit.predict([xs[i] ?? 0]));
   const metrics = regressionMetrics(yTrue, yPred);
+  /* (100x-153) the interpretability bundle over the run's OWN held-out
+   * rows — the desktop bundle's web twin (single-feature here). */
+  const correlations = buildCorrelationBundle(
+    featureNames,
+    (j, i) => (j === 0 ? (xs[i] ?? 0) : 0),
+    test,
+    (i) => ys[i] ?? 0,
+    csv ? csv.target : "y"
+  );
   const hasStd = typeof fit.predictStd === "function";
   const gp = hasStd
     ? gpSummary(fit, yTrue, yPred, (i) => fit.predictStd!([xs[i] ?? 0]))
@@ -520,6 +584,7 @@ function runRegression(
     model: req.model,
     metrics: { r2: metrics.r2, rmse: metrics.rmse, mae: metrics.mae },
     cv,
+    ...(correlations ? { correlations } : {}),
     ...(fit.coefficients ? { coefficients: fit.coefficients } : {}),
     ...(fit.featureImportance ? { featureImportance: fit.featureImportance } : {}),
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),
@@ -594,6 +659,16 @@ function runMultiRegression(
   const yTrue = test.map((i) => csv.y[i] ?? 0);
   const yPred = test.map((i) => fit.predict(csv.X[i] ?? []));
   const metrics = regressionMetrics(yTrue, yPred);
+  /* (100x-153) the interpretability bundle over the run's OWN held-out
+   * rows — the desktop bundle's web twin (the multi-feature path is
+   * where the top-N matrix earns its keep). */
+  const correlations = buildCorrelationBundle(
+    csv.features,
+    (j, i) => csv.X[i]?.[j] ?? 0,
+    test,
+    (i) => csv.y[i] ?? 0,
+    csv.target
+  );
   const hasStd = typeof fit.predictStd === "function";
   const gp = hasStd
     ? gpSummary(fit, yTrue, yPred, (i) => fit.predictStd!(csv.X[i] ?? []))
@@ -645,6 +720,7 @@ function runMultiRegression(
     model: req.model,
     metrics: { r2: metrics.r2, rmse: metrics.rmse, mae: metrics.mae },
     cv,
+    ...(correlations ? { correlations } : {}),
     ...(fit.coefficients ? { coefficients: fit.coefficients } : {}),
     ...(fit.featureImportance ? { featureImportance: fit.featureImportance } : {}),
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),

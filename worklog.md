@@ -6060,3 +6060,19 @@ Stage Summary:
 - Baselines for the next round: v1.2.90 (five carriers) · playground.py 20,870 lines · suite 3154 collected = 3149 passed + 5 skipped / 0 failures · tree 570 files / 184,639 LOC (live census) · docs INDEX 319 symbols · ZIP v1.2.90 (603 entries, leak-scan clean) · ruff clean · mypy src/ clean (69 files) · web tsc(src)/lint clean · dev server healthy via the daemon · cron 476540 fresh.
 - Standing traps refreshed: the 12th venv reset (pip EXECUTABLE gone too — `python -m pip` is the reliable route), the +x corruption after every reset, the torch-worker segfault flake in the full suite (passes standalone — re-run, do not chase), the nested-zip dance (archive EVERY old zip out before the API build, not just the latest), the census pin must be captured at ROUND END (after the zip archival), the resurrected scratch files carry old home paths (scrub after every reset), the subagent context-deadline pattern (TWO subagents died this round — both landed complete green work before dying; verify by running their tests, then complete their worklog protocol yourself), and the CRON exec-limits stall (recreate when run_count stalls at 1).
 - Open for 100x-153+ (honest candidates): (a) the remaining D2.py gaps are SHAP (the standing not-installed note) and nothing else from that audit — the upload is fully absorbed bar SHAP; (b) a fresh audit target is needed for round 36 (the round-35 additions: interpret.py, the heatmap twins, filter_low_variance's edge cases, the GA bioisostere mode's statistics bookkeeping); (c) the look.ipynb follow-ups still open from earlier rounds (the OOF leaderboard export-to-CSV button; a Stacking.py script-upgrade note); (d) the interpreter bundle could gain a WEB twin (the ML Playground tab's interpretability card — the desktop has one, the web does not); (e) SHAP: decide honestly whether to pin an optional-dependency integration or keep the note.
+
+---
+Task ID: 1-a (round 36, 100x-153)
+Agent: audit subagent (completed by the orchestrator after the context-deadline death)
+Task: Adversarial audit of the round-35 additions (v1.2.90): interpret.py, the three new plots, filter_low_variance, the GA bioisostere wiring, evaluation's train side, cross_model_importances, the GUI's third button row.
+
+Work Log:
+- The subagent wrote six probes (scratch/probe_audit_153_{a,c,d,e,f,g2}.py) and died at its context deadline BEFORE running them or recording verdicts (the standing subagent pattern; third round in a row).
+- The orchestrator ran every probe (probe_f's own G1 Recorder lacked fit() and crashed at the library's correct named-ModelError — G1-G4 re-run with the fixed Recorder), read the four code sections under suspicion, and adjudicated each finding.
+- Full verdicts + negative results recorded in scratch/audit_153.txt.
+
+Stage Summary:
+- 1 RED verified: the GUI correlation-heatmap target join is SWAP-DISHONEST (playground.py ~16958) — a same-shaped swapped dataset (RangeIndex covering x_test's indices) silently pairs the new y with the old run's features; the a-y cell read +0.17 (noise) where the run's own y_test gives +1.00; the run tuple already carries the honest y_test, so the session-frame route is fixable with no loss.
+- 3 AMBER verified: filter_low_variance's threshold guard coerces True/'0.01' (features.py:1579); inf-poisoned columns survive the variance filter silently (features.py:1613 — NaN variance kept, no ledger entry, downstream estimators reject inf); signed_feature_correlations accepts complex-dtype columns and silently correlates only the real part (interpret.py:545).
+- ~20 disproven suspicions recorded (the GA draws-total "mismatch" was the auditor's wrong expected-formula — the breeding loop's duplicate-rejection retries are attempt-based accounting exactly as documented; the seed discipline G1, determinism, every typed guard, and the signed-bars twin's honesty all hold).
+- Fixes + regression tests dispatched as Task 1-b.

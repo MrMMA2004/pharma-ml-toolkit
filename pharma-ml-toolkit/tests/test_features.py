@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,24 @@ import pandas as pd
 import pytest
 
 rdkit = pytest.importorskip("rdkit")
+
+
+@contextmanager
+def _pharmaml_logs_visible():
+    """Re-enable propagation on the ``pharmaml`` logger for caplog.
+
+    Same dance as ``test_interpret`` / ``test_ml_pipeline``: pytest's
+    caplog handler lives on the true root logger, so records only reach
+    it while propagation is on (restored on exit).
+    """
+    pharma_root = logging.getLogger("pharmaml")
+    previous = pharma_root.propagate
+    pharma_root.propagate = True
+    try:
+        yield
+    finally:
+        pharma_root.propagate = previous
+
 
 from pharmaml.chem.features import (
     ATOMPAIR_BITS,
@@ -1316,6 +1336,59 @@ class TestFilterLowVariance:
         for bad in (-0.01, float("inf"), float("nan")):
             with pytest.raises(ValueError, match="finite number"):
                 filter_low_variance(frame, threshold=bad)
+
+    def test_non_real_thresholds_raise(self) -> None:
+        # (100x-153) the type guard must fire BEFORE float() coerces:
+        # float(True) is 1.0 and float('0.01') is 0.01, but neither is
+        # an honest threshold -- the house guard family (interpret's
+        # radius/bit, viz's top_n) never lets a non-number through.
+        frame = pd.DataFrame({"moves": [1.0, 2.0, 3.0, 4.0]})
+        for bad in (True, False, "0.01", None, [0.01]):
+            with pytest.raises(ValueError, match="real number"):
+                filter_low_variance(frame, threshold=bad)  # type: ignore[arg-type]
+
+    def test_integer_threshold_accepted(self) -> None:
+        # ints (and numpy ints) ARE real numbers -- no overzealous guard.
+        frame = pd.DataFrame({"wide": [1.0, 9.0], "flat": [5.0, 5.0]})
+        result = filter_low_variance(frame, threshold=1)
+        assert result.kept == ["wide"]
+        assert result.dropped == {"flat": 0.0}
+
+    def test_inf_poisoned_column_is_cut(self, caplog: Any) -> None:
+        # (100x-153) an inf/-inf cell makes the variance undefined; the
+        # filter CUTS the column (never silently passes it downstream
+        # where every estimator rejects inf with a typed error),
+        # ledgers it as NaN (undefined), and warns naming the poison.
+        frame = pd.DataFrame(
+            {
+                "moves": [1.0, 2.0, 3.0, 4.0],
+                "bad": [float("inf"), 1.0, 2.0, 3.0],
+                "flat": [7.0, 7.0, 7.0, 7.0],
+            }
+        )
+        with _pharmaml_logs_visible(), caplog.at_level(
+            logging.WARNING, logger="pharmaml.chem.features"
+        ):
+            result = filter_low_variance(frame)
+        assert result.kept == ["moves"]
+        assert list(result.dropped) == ["bad", "flat"]
+        assert np.isnan(result.dropped["bad"])
+        assert result.dropped["flat"] == 0.0
+        assert "inf/-inf cells" in caplog.text
+        assert "bad" in caplog.text
+        assert list(result.frame.columns) == ["moves"]
+
+    def test_inf_column_agrees_with_ranker_undefined(self) -> None:
+        # rank_features reports the poisoned column as NaN (undefined);
+        # the filter's NaN ledger entry is the SAME verdict -- the twin
+        # functions stay in agreement on the poison case too.
+        frame = pd.DataFrame(
+            {"moves": [1.0, 2.0, 3.0, 4.0], "bad": [float("inf"), 1.0, 2.0, 3.0]}
+        )
+        scores = rank_features(frame, method="variance")
+        result = filter_low_variance(frame)
+        assert np.isnan(float(scores["bad"]))
+        assert np.isnan(result.dropped["bad"])
 
     def test_single_row_raises(self) -> None:
         frame = pd.DataFrame({"moves": [1.0]})

@@ -9,7 +9,9 @@ The shipped TS modules under ``<repo>/src/lib`` mirror library math:
 - ``hyperband-rungs.ts`` (the rung-scatter row fold) vs its own
   pinned contract — the 100x-117 pair;
 - ``ml-ad.ts`` (the AD card's distance domain) vs
-  ``pharmaml.ml.applicability`` — the 100x-118 pair.
+  ``pharmaml.ml.applicability`` — the 100x-118 pair;
+- ``ml-math.ts`` ``pearsonCorrelation`` (the interpretability card's
+  pure core) vs ``scipy.stats.pearsonr`` — the 100x-153 pair.
 
 The paired scratch probes verify them, but until now nothing FAILED the
 pytest suite when they broke.  These guards run BOTH sides of each pair
@@ -55,6 +57,13 @@ needs_ad_parity = pytest.mark.skipif(
     reason="web checkout (<repo>/src/lib/ml-ad.ts) + bun runtime required; "
     "the zip-only tree skips — its probes live outside the shipped tree",
 )
+ML_MATH_TS_PATH = REPO_ROOT / "src" / "lib" / "ml-math.ts"
+needs_corr_parity = pytest.mark.skipif(
+    not ML_MATH_TS_PATH.is_file() or BUN is None,
+    reason="web checkout (<repo>/src/lib/ml-math.ts) + bun runtime "
+    "required; the zip-only tree skips — its probes live outside the "
+    "shipped tree",
+)
 
 
 def _run(command: list[str], cwd: Path) -> str:
@@ -70,6 +79,45 @@ def _run(command: list[str], cwd: Path) -> str:
         f"{command} exited {proc.returncode}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
     )
     return proc.stdout
+
+
+class TestCorrelationParity:
+    """ml-math.ts pearsonCorrelation vs scipy.stats.pearsonr (100x-153).
+
+    The web interpretability twin's pure core (the ML playground's
+    Feature-target correlations card) — the paired probes run BOTH
+    sides: the python twin emits the seeded grid + scipy gold (and
+    asserts its own line-by-line mirror), the TS twin runs the SHIPPED
+    ml-math module against that gold, and the re-run prints the
+    cross-language verdict.  The undefined cases (a length mismatch —
+    where the TS must NOT silently truncate to the common prefix — a
+    constant column, fewer than two points, non-finite inputs) must be
+    NaN on both sides, never a fake 0.
+    """
+
+    @needs_corr_parity
+    def test_python_twin_emits_gold(self) -> None:
+        out = _run(
+            [sys.executable, str(TOOLKIT_ROOT / "scratch" / "verify_corr_parity_153.py")],
+            TOOLKIT_ROOT,
+        )
+        assert "mirror-vs-scipy" in out
+        assert "PY_SIDE_DONE" in out or "CROSS_LANGUAGE_PARITY_OK" in out
+
+    @needs_corr_parity
+    def test_ts_twin_matches_scipy(self) -> None:
+        # order matters: the TS twin reads the gold the py twin wrote.
+        _run(
+            [sys.executable, str(TOOLKIT_ROOT / "scratch" / "verify_corr_parity_153.py")],
+            TOOLKIT_ROOT,
+        )
+        out = _run(["bun", "run", "scratch/verify_corr_parity_153.ts"], REPO_ROOT)
+        assert "TS_PARITY_OK" in out
+        cross = _run(
+            [sys.executable, str(TOOLKIT_ROOT / "scratch" / "verify_corr_parity_153.py")],
+            TOOLKIT_ROOT,
+        )
+        assert "CROSS_LANGUAGE_PARITY_OK" in cross
 
 
 class TestAcquisitionParity:

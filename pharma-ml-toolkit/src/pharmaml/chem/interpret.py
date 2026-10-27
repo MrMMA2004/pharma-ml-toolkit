@@ -479,7 +479,11 @@ def signed_feature_correlations(
     ----------
     frame:
         Feature frame (any shape; non-numeric columns are skipped with
-        a warning naming them, the ``clean_numeric_frame`` precedent).
+        a warning naming them, the ``clean_numeric_frame`` precedent —
+        complex-dtype columns ride the same skip path (100x-153):
+        pandas counts them "numeric", but a correlation that
+        silently discards the imaginary part is the same species of
+        partial truth this function refuses everywhere else).
     target:
         One finite numeric value per frame row.
     method:
@@ -546,6 +550,12 @@ def signed_feature_correlations(
         column
         for column in frame.columns
         if pd.api.types.is_numeric_dtype(frame[column])
+        # (100x-153) complex dtype IS "numeric" to pandas, and the
+        # to_numpy(dtype=float) cast below would silently discard the
+        # imaginary part (an unread ComplexWarning).  Complex columns
+        # ride the non-numeric skip path with the naming warning
+        # instead — never a half-honest correlation.
+        and not pd.api.types.is_complex_dtype(frame[column])
     ]
     skipped = [column for column in frame.columns if column not in numeric_columns]
     if skipped:

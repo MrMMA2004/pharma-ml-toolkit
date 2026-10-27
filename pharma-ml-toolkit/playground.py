@@ -13442,10 +13442,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "feature × feature (+ target) matrix over the top-10 "
             "|r| columns, pure matplotlib (the upload called "
             "seaborn), diverging red→white→teal pinned to the honest "
-            "[-1, 1] range.  The target column joins only while the "
-            "loaded frame still carries it (numeric, rows alignable "
-            "with the run's split) -- otherwise the matrix is "
-            "feature × feature and the note says so.",
+            "[-1, 1] range.  The target column joins from the run's "
+            "own split (swap-proof, 100x-153: a swapped dataset can "
+            "never re-pair its y with the old run's features) -- only "
+            "an unalignable target leaves the matrix feature × "
+            "feature and the note says so.",
         )
         corr_heat_btn.pack(side="left", padx=(10, 0))
         decode_btn = self._action_button(
@@ -16935,11 +16936,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         D2.py's ``Feature_Correlation_Heatmap_with_pEC50`` figure: the
         top-10 ``|r|`` columns of the same ranking the Correlations
         button draws, now as the full matrix in pure matplotlib (the
-        upload called seaborn).  The target column rides along only
-        while the loaded frame still carries it (numeric, and its rows
-        align with the run's split) -- otherwise the matrix is honestly
-        feature × feature and the note says so; the tooltip documents
-        the same limitation.
+        upload called seaborn).  (100x-153) The target column rides
+        from the RUN's own ``y_test`` — aligned with ``x_test`` by
+        construction, so the join is honest and SWAP-PROOF: the
+        round-36 audit proved the old session-frame join silently
+        paired a swapped same-shaped dataset's target with the old
+        run's features (its rows-align guard only caught index
+        NON-coverage, and a same-shaped RangeIndex swap covers
+        everything).  Only a ``y_test`` that cannot align at all
+        leaves the matrix honestly feature × feature and the note
+        says so; the tooltip documents the same limitation.
         """
         run = getattr(self, "_ml_last_run", None)
         if run is None:
@@ -16952,15 +16958,6 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         _trained, _report, _task, _x_train, _y_train, x_test, y_test, target = run
         if not self._require_pharmaml() or not self._require("matplotlib", "the figure"):
             return
-        # (100x-142) the session frame is captured on the MAIN thread:
-        # reading self._ml_frame inside work() raced a concurrent
-        # dataset swap (Ctrl+O during the job).
-        session_frame = self._ml_frame
-        target_available = False
-        if session_frame is not None and target in session_frame.columns:
-            import pandas as pd
-
-            target_available = pd.api.types.is_numeric_dtype(session_frame[target])
 
         def work() -> Any:
             from pharmaml.chem.interpret import signed_feature_correlations
@@ -16968,19 +16965,31 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             correlations = signed_feature_correlations(x_test, y_test, method="pearson")
             top_columns = [str(name) for name in correlations.head(10).index]
-            # the heatmap frame starts as the run's own held-out rows
-            # (every top column lives there by construction); the
-            # target joins only when the session frame holds it AND its
-            # rows still align with the split -- a swapped dataset
-            # makes the join dishonest, so it is skipped, not faked.
+            # (100x-153) the target joins from the RUN's OWN split,
+            # never the session frame: a same-shaped swapped dataset
+            # (RangeIndex covering the split's indices) silently
+            # passed the old rows-align guard and paired the new
+            # dataset's y with the old run's features -- the round-36
+            # audit's red finding.  y_test is aligned with x_test by
+            # construction, so the join is always honest and
+            # swap-proof -- and it no longer races a concurrent
+            # dataset swap either (the 100x-142 concern, retired with
+            # the session-frame consultation itself).
             frame = x_test.copy()
             joined = False
-            if target_available:
-                try:
-                    frame[target] = session_frame.loc[frame.index, target].to_numpy()
-                    joined = True
-                except (KeyError, IndexError, ValueError):
-                    joined = False
+            try:
+                import pandas as pd
+
+                if isinstance(y_test, pd.Series):
+                    frame[target] = y_test.loc[frame.index].to_numpy()
+                else:
+                    import numpy as np
+
+                    values = np.asarray(y_test, dtype=float).reshape(-1)
+                    frame[target] = values[: len(frame)]
+                joined = True
+            except (KeyError, IndexError, ValueError, TypeError):
+                joined = False
             columns = list(top_columns) + ([target] if joined else [])
             figure = plot_correlation_heatmap(
                 frame,
@@ -17004,8 +17013,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 note += f" (top 10 |r| + {target})"
             else:
                 note += (
-                    " (top 10 |r| only — the target column is not in the "
-                    "loaded frame, or its rows no longer align with the split)"
+                    " (top 10 |r| only — the run's own target column could "
+                    "not be aligned with the held-out rows)"
                 )
             self._ml_result_note.configure(text=note)
 

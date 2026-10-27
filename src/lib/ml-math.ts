@@ -67,6 +67,48 @@ export function kFoldSplit(n: number, k: number, rand: () => number): number[][]
   return folds;
 }
 
+/** Pearson correlation of two equal-length arrays (100x-153).
+ *
+ * The pure core of the web interpretability twin (the desktop
+ * bundle's signed_feature_correlations): returns NaN — never a fake
+ * 0 — when the correlation is undefined (a length mismatch — scipy
+ * raises here, the desktop twin raises a typed error; silently
+ * truncating to the common prefix would be a partial truth — fewer
+ * than 2 points, a constant column, or non-finite inputs); callers
+ * DROP such results rather than zeroing them. Parity:
+ * scratch/verify_corr_parity_153 pins this against
+ * scipy.stats.pearsonr on a seeded grid.
+ */
+export function pearsonCorrelation(a: number[], b: number[]): number {
+  if (a.length !== b.length) return Number.NaN; // mismatched: no honest r
+  const n = a.length;
+  if (n < 2) return Number.NaN;
+  let sa = 0;
+  let sb = 0;
+  for (let i = 0; i < n; i++) {
+    const x = a[i] as number;
+    const y = b[i] as number;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return Number.NaN;
+    sa += x;
+    sb += y;
+  }
+  const ma = sa / n;
+  const mb = sb / n;
+  let num = 0;
+  let da = 0;
+  let db = 0;
+  for (let i = 0; i < n; i++) {
+    const xa = (a[i] as number) - ma;
+    const yb = (b[i] as number) - mb;
+    num += xa * yb;
+    da += xa * xa;
+    db += yb * yb;
+  }
+  const den = Math.sqrt(da * db);
+  if (den === 0) return Number.NaN; // a constant column is undefined, not zero
+  return num / den;
+}
+
 /* ------------------------------------------------------------------ */
 /* Linear algebra                                                      */
 /* ------------------------------------------------------------------ */

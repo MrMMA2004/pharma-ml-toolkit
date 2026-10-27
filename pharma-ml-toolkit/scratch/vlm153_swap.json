@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) **PASS** - The image displays a 4x4 correlation matrix with the labels a, c, b, and y.\n2) **PASS** - The cell at the intersection of row 'a' and column 'y' clearly shows a value of +1.00.\n3) **PASS** - The title of the figure is \"Correlation heatmap — top 10 |r| + y\".\n4) **PASS** - The text above the figure explicitly mentions \"over the run's 12 held-out rows\".\n5) **PASS** - All elements of the UI, including the heatmap, text, and buttons, are fully visible without any clipping or overlapping.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793088753,
+  "id": "20261027161230d24fe31e2bb64e0f",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261027161230d24fe31e2bb64e0f",
+  "usage": {
+    "completion_tokens": 140,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1793,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1933
+  }
+}

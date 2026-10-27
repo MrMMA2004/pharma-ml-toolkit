@@ -1467,7 +1467,8 @@ class VarianceFilterResult:
         Kept column names, in frame order.
     dropped:
         Cut column name -> the variance that got it cut (every entry
-        is strictly below ``threshold``; the record carries its own
+        is strictly below ``threshold``, or NaN for an inf-poisoned
+        column whose variance is undefined; the record carries its own
         evidence, so an audit never has to recompute).
     threshold:
         The threshold the filter ran with.
@@ -1533,7 +1534,11 @@ def filter_low_variance(
         is STRICTLY below ``threshold`` (a variance exactly equal to
         the threshold survives, mirroring sklearn's
         ``VarianceThreshold`` semantics).  Default ``0.01``, the
-        notebook's value.  Must be finite and >= 0.
+        notebook's value.  Must be a real number, finite and >= 0
+        (bools and numeric strings are rejected at the door -- the
+        house guard family; ``float(True)`` is ``1.0`` and
+        ``float('0.01')`` is ``0.01``, but neither is an honest
+        threshold, 100x-153).
 
     Returns
     -------
@@ -1544,8 +1549,8 @@ def filter_low_variance(
     ------
     ValueError
         If ``frame`` is not a DataFrame, has fewer than two rows
-        (variance is undefined for one), or ``threshold`` is negative
-        or non-finite.
+        (variance is undefined for one), or ``threshold`` is not a
+        real number, is negative, or is non-finite.
 
     Notes
     -----
@@ -1557,6 +1562,14 @@ def filter_low_variance(
     cells are filled with 0 BEFORE the variance is computed (the
     :func:`rank_features` convention, so the two functions can never
     disagree about a column).
+
+    Undefined variance (100x-153): after the ``fillna(0)`` convention
+    a NaN variance can only arise from inf/-inf cells — a poisoned
+    column every downstream estimator in this toolkit rejects with a
+    typed error.  Such columns are CUT (never silently passed) and
+    ledgered as NaN — the same ``undefined`` verdict
+    :func:`rank_features` already reports for them, so the twin
+    functions stay in agreement.
 
     Examples
     --------
@@ -1571,10 +1584,30 @@ def filter_low_variance(
     (['moves'], ['flat', 'tiny'])
     >>> round(result.dropped["flat"], 6)
     0.0
+    >>> poisoned = pd.DataFrame({
+    ...     "moves": [1.0, 2.0, 3.0, 4.0],
+    ...     "bad": [float("inf"), 1.0, 2.0, 3.0],
+    ... })
+    >>> presult = filter_low_variance(poisoned)
+    >>> presult.kept, list(presult.dropped)
+    (['moves'], ['bad'])
+    >>> import math
+    >>> math.isnan(presult.dropped["bad"])  # undefined, never silently kept
+    True
     """
     if not isinstance(frame, pd.DataFrame):
         raise ValueError(  # noqa: TRY004 — consistent module error currency
             f"frame must be a pandas.DataFrame, got {type(frame).__name__}"
+        )
+    if isinstance(threshold, bool) or not isinstance(
+        threshold, (int, float, np.integer, np.floating)
+    ):
+        # (100x-153) the type guard must fire BEFORE float() coerces:
+        # float(True) is 1.0 and float('0.01') is 0.01, and the house
+        # guard family (interpret's radius/bit, viz's top_n) never lets
+        # a non-number through the door.
+        raise ValueError(  # noqa: TRY004 — consistent module error currency
+            f"threshold must be a real number >= 0, got {threshold!r}"
         )
     threshold = float(threshold)
     if not np.isfinite(threshold) or threshold < 0.0:
@@ -1611,16 +1644,38 @@ def filter_low_variance(
         )
 
     variances = frame.loc[:, numeric_columns].fillna(0).astype(float).var(axis=0)
+    # (100x-153) an UNDEFINED variance (NaN after the fillna(0)
+    # convention — finite NaN cells became 0, so this is inf/-inf
+    # poison) is CUT, never silently passed: every downstream
+    # estimator in the toolkit rejects non-finite inputs with a typed
+    # error, and rank_features already reports the same column as
+    # NaN.  The ledger entry is NaN (undefined), the warning names
+    # the poison.
+    undefined = [
+        column
+        for column in numeric_columns
+        if not np.isfinite(float(variances[column]))
+    ]
+    undefined_set = set(undefined)
+    if undefined:
+        _LOG.warning(
+            "filter_low_variance: %d column(s) carry inf/-inf cells "
+            "(undefined variance) -- cut: %s",
+            len(undefined),
+            undefined[:10],
+        )
     kept_numeric = [
         column
         for column in numeric_columns
-        if not (float(variances[column]) < threshold)
+        if column not in undefined_set
+        and not (float(variances[column]) < threshold)
     ]
-    dropped = {
-        column: float(variances[column])
-        for column in numeric_columns
-        if column not in kept_numeric
-    }
+    dropped: dict[str, float] = {}
+    for column in numeric_columns:
+        if column in undefined_set:
+            dropped[column] = float("nan")
+        elif float(variances[column]) < threshold:
+            dropped[column] = float(variances[column])
     # A column survives when it is non-numeric (passes through
     # untouched, the warned-about carrier columns) OR numeric with a
     # variance at/above the threshold — frame order preserved.

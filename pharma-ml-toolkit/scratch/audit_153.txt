@@ -1,0 +1,138 @@
+AUDIT 153 — round 36 (100x-153) — the round-35 additions (v1.2.90)
+====================================================================
+Method: the audit subagent died at its context deadline after writing six
+probes (probe_audit_153_{a,c,d,e,f,g2}.py) but before running them or
+recording verdicts; the orchestrator ran every probe, read the four code
+sections under suspicion, and adjudicated each finding below. The
+subagent's probe_f crashed at its own G1 site (the Recorder duck class
+lacked fit(); the library correctly raised ModelError naming the model —
+the contract works); G1-G4 were re-run by the orchestrator with the fixed
+Recorder. Every verdict below is backed by a probe run + a code read.
+
+Targets: chem/interpret.py, viz/ml_plots.py (3 new plots),
+chem/features.py filter_low_variance, generative bioisostere + GA wiring,
+ml/evaluation.py train side + cross_model_importances, playground.py's
+third button row.
+
+--------------------------------------------------------------------
+VERIFIED FINDINGS
+--------------------------------------------------------------------
+
+[F1] RED — playground.py ~16958-16983, _ml_plot_correlation_heatmap:
+     the target-column join is SWAP-DISHONEST. The handler joins the
+     target from the SESSION frame (session_frame.loc[frame.index,
+     target]) instead of the run's own y_test. The comment claims "a
+     swapped dataset makes the join dishonest, so it is skipped, not
+     faked" — the guard only catches index NON-coverage. probe g2
+     (natural flow: train on A, adopt same-shaped B with RangeIndex,
+     click the button) proves the pairing: the a-y cell read +0.17
+     (B's noise y against A's features) where the run's own y_test
+     (y = 10*a) gives +1.00. The run tuple ALREADY carries the honest
+     y_test (aligned with x_test by construction) — the session-frame
+     route has no advantage and one silent-dishonesty failure mode.
+     FIX: join the target from the run's own y_test; keep a tolerant
+     fallback only for a non-Series y_test; regression-test the swap.
+
+[F2] AMBER — features.py:1579, filter_low_variance's threshold guard:
+     `threshold = float(threshold)` coerces BEFORE validation, so
+     True -> 1.0 and '0.01' -> 0.01 are ACCEPTED (probe D2). The house
+     guard family rejects bools/strings at the door (interpret.py's
+     radius/bit, viz top_n: "top_n must be a positive integer or None,
+     got '5'"). FIX: reject bool and non-real types before the coercion.
+
+[F3] AMBER — features.py:1613-1618, filter_low_variance keeps
+     inf-poisoned columns SILENTLY: fillna(0).var() of an
+     inf-containing column is NaN, `not (NaN < threshold)` is True ->
+     kept, absent from the dropped ledger, no warning (probe D1:
+     "D1 inf kept by filter: True | ranker score for inf: nan").
+     Every downstream estimator in the toolkit REJECTS non-finite
+     inputs (evaluate_model's typed guard), so the filter is passing
+     garbage it is the right place to catch. The twin (rank_features)
+     already reports the undefined case honestly (NaN). NaN variance
+     after fillna(0) arises ONLY from inf/-inf cells, so cutting
+     NaN-variance columns targets exactly the poison. FIX: cut
+     undefined-variance columns, ledger them as NaN (undefined),
+     warn naming them; document in the docstring.
+
+[F4] AMBER — interpret.py:545-549, signed_feature_correlations accepts
+     complex-dtype columns: pd.api.types.is_numeric_dtype(complex128)
+     is True, and the correlation then silently DROPS the imaginary
+     part (pandas ComplexWarning, probe B4: "complex column accepted
+     silently (unexpected)"). The function's own law is "never invents
+     a zero / never fakes" — correlating only the real part of a
+     complex column is the same species of silent partial truth.
+     FIX: treat complex dtypes as non-numeric (skip + the existing
+     naming warning).
+
+--------------------------------------------------------------------
+NOTES (recorded, not fixed this round — pandas duplicate-label footgun
+family, undefined-behavior territory, no wrong NUMBER produced)
+--------------------------------------------------------------------
+
+[N1] filter_low_variance accepts duplicate column labels (probe D10);
+     the dropped-ledger dict keys would be ambiguous for a duplicated
+     cut label. The GUI pipeline always arrives through clean frames.
+[N2] plot_correlation_heatmap accepts duplicate columns= labels (C2c);
+     plot_permutation_heatmap accepts duplicate feature names inside
+     one record (C3f, later value wins). Same footgun family.
+
+--------------------------------------------------------------------
+DISPROVEN SUSPICIONS (the audit's negative results — 15 recorded)
+--------------------------------------------------------------------
+
+[D-a] decode_morgan_bit: radius-0 drawing (A1 ok), hit order ascending
+      (A3), typed guards for non-str/blank SMILES (A4), bool radius/bit
+      (A5), negative bit (A6) — all correct.
+[D-b] interpret B1-B8: spearman path ok; bool columns correlate
+      legitimately (B2); |r| tie order 'neg'-then-'pos' matches the
+      documented first-declared-wins (B3 — correct, not a bug);
+      nullable Int64 ok (B5); all-inf column dropped with the naming
+      warning (B6); Series AND generator targets both work (B7 — the
+      np.asarray(list(...)) route handles generators by design); empty
+      frame typed (B8).
+[D-c] viz C1-C3j: top>len keeps all (C1b); NaN correlations dropped
+      BEFORE the head cut (C1c — head comes from survivors, correct);
+      heatmap ticks/clim/annotations correct (C2); the "expect 2
+      annotations" suspicion in C2b was the PROBE's miscount — the
+      const-const diagonal is NaN and correctly NOT annotated, 1 is
+      right; permutation heatmap: grey NaN cells (C3b), solo-feature
+      ranking above agreed (C3c), top=None shows all (C3d), empty
+      record typed (C3e), deterministic (C3g), all-zero bound floor
+      (C3h), single model aligned (C3i), top guards reject 0/-3/2.5/'5'
+      (C3j).
+[D-d] GA bioisostere E1: "draws total 37 != expected 30" — DISPROVEN:
+      the breeding loop retries until the population is full
+      (genetic.py:1267 `while len(next_population) <
+      population_size`), and duplicate/invalid children are rejected
+      (line 1375 `child_canonical not in next_population`) and retried;
+      the book's documented contract is ATTEMPT-based ("Each drawn
+      operator earns one reward per attempt", the null-reward
+      convention charges failures). 37 attempts / 30 accepted is
+      honest accounting. Level1 draws (37) and geometry draws (7)
+      consistent with the same attempts.
+[D-e] GA E2-E7: trajectory record 0 is the fair prior and sums to 1;
+      adaptive + uniform determinism hold; benzene's only move is
+      pyridine (E5); unparseable -> None; zero cap typed; methane/ethane
+      single-atom swaps sane (E6); the book's push/snapshot invariants
+      hold (E7).
+[D-f] evaluation F1-F10: train-side metrics and r2_gap exact; absent
+      train side leaves no keys; half-pairs typed (F3); classification
+      train side rejected (F4/F4b); length mismatch typed (F5); NaN/inf
+      y_train typed (F6/F6b); NaN train predictions typed (F7);
+      constant-prediction pearson None carried explicitly (F8);
+      constant-target pearson omitted from dict but train keys stay
+      (F9 — the documented omission gate); hand-built report gap works
+      (F10).
+[D-g] cross_model_importances G1-G4: the same-seed shuffles ARE
+      aligned across models (G1 True, 52 column shuffles — the seed
+      discipline holds); deterministic (G2); a failing model is NAMED
+      in the ModelError (G3); empty panel typed (G4).
+[D-h] _ml_plot_correlations (the signed-bars twin) is HONEST — it uses
+      the run's own x_test/y_test directly, no session-frame
+      consultation. Only the heatmap handler has the swap hazard (F1).
+
+--------------------------------------------------------------------
+SEVERITY TALLY: 1 RED (F1), 3 AMBER (F2, F3, F4), 2 notes, 8 disproven
+suspicion groups (~20 individual probes disproven).
+All four verified findings get fixes + regression tests this round.
+--------------------------------------------------------------------

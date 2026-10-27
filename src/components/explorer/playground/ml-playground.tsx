@@ -91,6 +91,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { DEFAULT_ML_CONFIG, useToolkitStore, type MlRunRecord } from "@/lib/store";
 import type {
+  CorrelationBundle,
   DatasetPreviewResponse,
   MLAdResponse,
   MLCompareEntry,
@@ -980,6 +981,150 @@ function corrStrength(r: number): string {
   if (a >= 0.7) return "strong";
   if (a >= 0.5) return "moderate";
   return "weak";
+}
+
+/** Diverging cell colour for the correlation heatmap (100x-153):
+ * rose → white → teal over r ∈ [-1, 1] — the CHART house palette's
+ * twins of the desktop plot's red→white→teal. */
+function corrCellColor(r: number): string {
+  const teal = [20, 184, 166]; // CHART.teal #14b8a6
+  const rose = [244, 63, 94]; // CHART.rose #f43f5e
+  const white = [255, 255, 255];
+  const t = Math.max(-1, Math.min(1, r));
+  const end = t >= 0 ? teal : rose;
+  const alpha = Math.abs(t);
+  const rgb = white.map((w, i) => Math.round(w + (end[i] ?? w) * alpha));
+  return `rgb(${rgb[0] ?? 255}, ${rgb[1] ?? 255}, ${rgb[2] ?? 255})`;
+}
+
+/** The interpretability card (100x-153) — the desktop bundle's web
+ *  twin: signed feature-target correlation bars plus the compact
+ *  top-N matrix, over the run's OWN held-out rows (computed in the
+ *  same request that trained the model, so the pairing is inherently
+ *  swap-proof). Undefined correlations are dropped, never zeroed. */
+function CorrelationCard({ bundle }: { bundle: CorrelationBundle }) {
+  const bars = bundle.correlations.slice(0, 10);
+  const matrix = bundle.matrix;
+  return (
+    <Card className="overflow-hidden py-0 shadow-sm">
+      <CardHeader className="border-b bg-muted/30 py-3">
+        <CardTitle className="text-sm flex items-center gap-1.5">
+          <Activity className="size-3.5 text-primary" aria-hidden />
+          Feature–target correlations
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Pearson r over the run's own {bundle.nRows} held-out rows — teal pulls {bundle.target} up,
+          rose pulls it down; undefined correlations are dropped, never zeroed
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pb-4">
+        {bars.length > 0 ? (
+          <ul className="space-y-2" aria-label="Signed feature-target correlations">
+            {bars.map((c) => (
+              <li key={c.name} className="space-y-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate font-mono text-xs font-medium" title={c.name}>
+                    {c.name}
+                  </span>
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                    {c.r >= 0 ? "+" : ""}
+                    {fmtNum(c.r, 4)}
+                    <span className="ml-1 text-muted-foreground/70">({corrStrength(c.r)})</span>
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted" role="presentation">
+                  <div
+                    className={`h-full rounded-full ${c.r >= 0 ? "bg-primary/70" : "bg-destructive/70"}`}
+                    style={{ width: `${Math.min(Math.abs(c.r), 1) * 100}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="rounded-md border border-dashed px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+            No correlation was defined on the held-out rows (fewer than two points, or every
+            feature column was constant there).
+          </p>
+        )}
+        {matrix ? (
+          <div className="mt-4 space-y-1.5">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Correlation matrix — top {Math.max(matrix.columns.length - 1, 0)} |r| + {bundle.target}
+            </p>
+            <div className="thin-scrollbar overflow-x-auto">
+              <table className="border-separate border-spacing-px font-mono text-[10px]">
+                <thead>
+                  <tr>
+                    <th className="bg-card" aria-label="row label" />
+                    {matrix.columns.map((col) => (
+                      <th
+                        key={col}
+                        className="max-w-24 truncate bg-card px-1 py-0.5 text-center font-medium text-muted-foreground"
+                        title={col}
+                      >
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrix.values.map((row, i) => (
+                    <tr key={matrix.columns[i] ?? i}>
+                      <th
+                        className="sticky left-0 z-[1] max-w-28 truncate bg-card px-1 py-0.5 text-left font-medium text-muted-foreground"
+                        title={matrix.columns[i] ?? ""}
+                      >
+                        {matrix.columns[i] ?? ""}
+                      </th>
+                      {row.map((v, j) => {
+                        const background = v === null ? "var(--muted)" : corrCellColor(v);
+                        const darkCell = v !== null && Math.abs(v) >= 0.55;
+                        return (
+                          <td
+                            key={`${i}-${j}`}
+                            className="px-1.5 py-1 text-center tabular-nums"
+                            style={{ background }}
+                            title={
+                              v === null
+                                ? "undefined (a constant column on the held-out rows)"
+                                : `r = ${fmtNum(v, 4)} (${corrStrength(v)})`
+                            }
+                          >
+                            {v === null ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : darkCell ? (
+                              <span className="text-white">{fmtNum(v, 2)}</span>
+                            ) : (
+                              fmtNum(v, 2)
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <span className="font-mono text-[10px] text-muted-foreground">−1</span>
+              <div
+                className="h-1.5 flex-1 rounded-full"
+                style={{ background: "linear-gradient(90deg, #f43f5e, #ffffff, #14b8a6)" }}
+                aria-hidden
+              />
+              <span className="font-mono text-[10px] text-muted-foreground">+1</span>
+            </div>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Computed in the same request that trained the model, on the held-out split only — a
+              re-loaded dataset can never re-pair its target with an old run's features (the
+              desktop round-36 audit's swap hazard, designed out here from the start).
+            </p>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
 }
 
 /** Compact "time ago" label for run-history rows (client-side only). */
@@ -5562,6 +5707,11 @@ export function MlPlayground() {
                   </p>
                 </CardContent>
               </Card>
+
+              {/* Feature–target correlations (100x-153): the desktop
+               *  interpretability bundle's web twin — signed bars over
+               *  the run's OWN held-out rows + the top-N matrix. */}
+              {result.correlations ? <CorrelationCard bundle={result.correlations} /> : null}
             </div>
           </>
         ) : null}

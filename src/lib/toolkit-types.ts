@@ -242,6 +242,41 @@ export interface FeatureImportance {
   measure: "variance" | "gini";
 }
 
+/** One signed feature-target correlation (the web twin of the desktop
+ *  interpretability bundle's signed_feature_correlations). */
+export interface SignedCorrelation {
+  /** Raw column name. */
+  name: string;
+  /** Pearson r against the target, sign preserved. */
+  r: number;
+}
+
+/** The interpretability bundle a regression train response carries
+ *  (100x-153): signed feature-target correlations plus the compact
+ *  top-N correlation matrix, BOTH computed over the run's OWN held-out
+ *  split in the same request — inherently swap-proof (a re-loaded
+ *  dataset can never re-pair its target with an old run's features,
+ *  the desktop round-36 audit's red finding). Undefined correlations
+ *  (a constant column, or fewer than two held-out rows) are dropped,
+ *  never zeroed; matrix cells that are undefined serialize as null. */
+export interface CorrelationBundle {
+  /** Always "pearson" (the honest single method this twin ships). */
+  method: "pearson";
+  /** The target column name. */
+  target: string;
+  /** Held-out row count the correlations were computed over. */
+  nRows: number;
+  /** |r| descending, sign preserved; empty when nothing was defined. */
+  correlations: SignedCorrelation[];
+  /** The top-N (≤ 7) features + the target pairwise matrix, or null
+   *  when fewer than two columns were defined. */
+  matrix: {
+    columns: string[];
+    /** Symmetric row-major values; diagonal 1; null where undefined. */
+    values: (number | null)[][];
+  } | null;
+}
+
 export interface MLTrainResponse {
   task: MLTask;
   model: string;
@@ -258,6 +293,10 @@ export interface MLTrainResponse {
   };
   /** Trees & ensembles: normalized impurity-reduction importances. */
   featureImportance?: FeatureImportance;
+  /** Regression only: the interpretability bundle (signed
+   *  feature-target correlations + the top-N matrix over the run's
+   *  own held-out rows — the desktop bundle's web twin, 100x-153). */
+  correlations?: CorrelationBundle;
   /** kNN / MLP / Naive Bayes / SVM: echoed hyperparameters (the honest
    *  "learned parameters" card content for hyperparameter-driven models). */
   modelParams?: Record<string, number>;

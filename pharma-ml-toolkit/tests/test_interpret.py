@@ -321,6 +321,27 @@ class TestSignedFeatureCorrelations:
         assert "Skipping 1 non-numeric column(s)" in caplog.text
         assert "smiles" in caplog.text
 
+    def test_complex_columns_skipped_not_half_correlated(self, caplog) -> None:
+        """(100x-153) pandas counts complex dtype as "numeric", and the
+        dtype=float cast would silently discard the imaginary part (an
+        unread ComplexWarning) -- a half-honest correlation.  Complex
+        columns must ride the non-numeric skip path instead."""
+        y = [1.0, 2.0, 3.0, 4.0]
+        frame = pd.DataFrame(
+            {
+                "a": y,
+                "cplx": np.array([1 + 2j, 3 + 1j, 2 + 2j, 1 + 1j]),
+            }
+        )
+        with _pharmaml_logs_visible(), caplog.at_level(
+            logging.WARNING, logger="pharmaml.chem.interpret"
+        ):
+            corr = signed_feature_correlations(frame, y)
+        assert corr.index.tolist() == ["a"]
+        assert "cplx" not in corr.index
+        assert "Skipping 1 non-numeric column(s)" in caplog.text
+        assert "cplx" in caplog.text
+
     def test_constant_column_dropped_not_zeroed(self, caplog) -> None:
         """The D2.py original appended a fake 0.0 on failure; a constant
         column's undefined correlation must be DROPPED, never zeroed."""

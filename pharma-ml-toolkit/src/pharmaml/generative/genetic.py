@@ -124,6 +124,7 @@ from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
 
 from ._utils import canonical_smiles, require_rdkit, smiles_alphabet
+from .bioisostere import bioisostere_mutate
 from .corpus import DEFAULT_CORPUS
 from .result import GenerationResult
 from .scaffold_hop import (
@@ -132,7 +133,6 @@ from .scaffold_hop import (
     _scaffold_hop_core,
     scaffold_hop_crossover,
 )
-from .bioisostere import bioisostere_mutate
 from .topology import ring_topology_mutate
 
 __all__ = ["GeneticOptimizer", "run_genetic_optimization"]

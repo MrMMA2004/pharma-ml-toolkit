@@ -1,3 +1,64 @@
+## [1.2.91] — 2026-10-27
+
+### Fixed / Added — the eighth engineering review (100x-153): the round-35 additions audited, one red + three ambers closed, the interpretability bundle gained its web twin
+
+The instruction: *"Review the current codebase and implementation,
+troubleshoot potential issues, and continue improving the engineering
+details."* The round audited the round-35 additions (v1.2.90's
+interpret.py, the heatmap twins, `filter_low_variance`, the GA
+bioisostere wiring, the train-side overfit gap, `cross_model_importances`,
+the GUI's third button row) with six adversarial probes — and shipped
+every verified finding's fix plus the standing "web twin" candidate:
+
+* **The GUI correlation heatmap's target join is now SWAP-PROOF**
+  (playground.py, the audit's one RED): the handler previously joined
+  the target column from the *session frame* (`session_frame.loc[...]`)
+  even though the run tuple already carries the honest `y_test` — a
+  same-shaped swapped dataset (RangeIndex covering the split's
+  indices) silently passed the "rows align" guard and **paired the new
+  dataset's y with the old run's features** (the audit's probe read
+  a-y = +0.17, noise, where the run's own target gives +1.00). The
+  join now takes the run's OWN `y_test` (aligned by construction,
+  swap-proof, and no longer racing a concurrent dataset load); a GUI
+  regression test reproduces the exact natural swap flow and pins the
+  +1.00 cell.
+* **`filter_low_variance` cuts inf-poisoned columns** (the audit's
+  second amber): after the `fillna(0)` convention a NaN variance can
+  only arise from inf/-inf cells — a column every downstream estimator
+  rejects with a typed error. Such columns were silently KEPT (no
+  ledger entry, no warning); they are now CUT, ledgered as NaN
+  (undefined — the same verdict `rank_features` already reports, so
+  the twins stay in agreement) and named in a warning.
+* **`filter_low_variance`'s threshold guard rejects non-numbers**
+  (third amber): `float(True)` is `1.0` and `float('0.01')` is `0.01`,
+  and the old `threshold = float(threshold)` coercion accepted both —
+  the guard now fires BEFORE the coercion, the house family
+  (interpret's radius/bit, viz's `top_n`) rule.
+* **`signed_feature_correlations` skips complex-dtype columns** (fourth
+  amber): pandas counts complex128 "numeric" and the dtype-float cast
+  silently discards the imaginary part (an unread ComplexWarning) — a
+  half-honest correlation. Complex columns now ride the non-numeric
+  skip path with the naming warning.
+* **The web interpretability twin** (the standing candidate): the ML
+  playground's results column gained a **Feature–target correlations**
+  card — signed Pearson-r bars (teal pulls the target up, rose pulls
+  it down, undefined dropped never zeroed) plus the compact top-N
+  correlation matrix with a rose→white→teal diverging scale, both
+  computed over the run's OWN held-out split *in the same request
+  that trained the model* — inherently swap-proof (the desktop round's
+  red finding, designed out on the web from the start). The pure core
+  is a new shipped `pearsonCorrelation` in `src/lib/ml-math.ts`,
+  pinned against `scipy.stats.pearsonr` by a paired parity probe
+  (11-case seeded grid, worst |Δr| = 8.3e-17, NaN-agreement on every
+  undefined case including the length-mismatch case where the TS must
+  not silently truncate to the common prefix) — the 100x-153 parity
+  pair, wired into the suite's web-parity guards.
+
+The audit also *disproved* ~20 suspicions (recorded in
+`scratch/audit_153.txt`): the GA's attempt-based operator bookkeeping,
+the permutation-importance seed discipline, every typed guard probed,
+and the signed-bars twin's honesty all held.
+
 ## [1.2.90] — 2026-10-27
 
 ### Added — the seventh engineering review (100x-152): the D2.py interpretability bundle + the overfit gap, four audit gaps closed
