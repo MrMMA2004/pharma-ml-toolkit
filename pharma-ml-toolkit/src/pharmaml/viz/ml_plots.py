@@ -146,6 +146,8 @@ __all__ = [
     "plot_prediction_intervals",
     "plot_residuals",
     "plot_roc_curves",
+    "plot_shap_beeswarm",
+    "plot_shap_importance",
     "plot_signed_correlations",
     "plot_training_history",
 ]
@@ -1398,6 +1400,242 @@ def plot_permutation_importance(
     ax.set_yticks(positions, [names[int(index)] for index in order])
     ax.set_xlabel("importance (Δ score when shuffled)")
     ax.set_title(title)
+    return fig
+
+
+def plot_shap_importance(
+    summary: Any,
+    top_n: int | None = 20,
+    title: str = "SHAP importance (mean |value|)",
+) -> Any:
+    """Top-N mean-|SHAP| horizontal bars -- ``D2.py``'s own top-20 bar.
+
+    The beeswarm's compact sibling: one bar per feature, the mean
+    magnitude of the feature's SHAP values (how hard the feature
+    pushes the model output, either direction), largest first.  Accepts
+    the :class:`~pharmaml.ml.explain.ShapSummary` record (or its
+    ``as_frame`` output with ``feature`` / ``mean_abs_shap`` columns)
+    -- the plotting layer never needs shap installed.
+
+    Parameters
+    ----------
+    summary:
+        A :class:`~pharmaml.ml.explain.ShapSummary` record, or a
+        DataFrame with ``feature`` / ``mean_abs_shap`` columns.
+    top_n:
+        How many features to show (largest mean |SHAP| first);
+        ``None`` shows every feature.  Validated by
+        :func:`_check_top_n`.
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``summary`` carries neither the record attributes nor the
+        DataFrame columns, or ``top_n`` is invalid.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.explain import ShapSummary
+    >>> import numpy as np
+    >>> record = ShapSummary(
+    ...     names=["a", "b"], mean_abs=np.array([1.5, 0.5]),
+    ...     values=np.zeros((4, 2)), feature_values=np.zeros((4, 2)),
+    ...     base_value=None, model_name="GBR", task="regression", n_samples=4)
+    >>> fig = plot_shap_importance(record)
+    >>> ax = fig.axes[0]
+    >>> [tick.get_text() for tick in ax.get_yticklabels()]  # bottom -> top
+    ['b', 'a']
+    >>> ax.get_xlabel()
+    'mean |SHAP value|'
+    """
+    _check_top_n(top_n)
+    if hasattr(summary, "names") and hasattr(summary, "mean_abs"):
+        names = [str(name) for name in summary.names]
+        means = np.asarray(summary.mean_abs, dtype=float)
+    elif isinstance(summary, pd.DataFrame) and {
+        "feature",
+        "mean_abs_shap",
+    }.issubset(summary.columns):
+        names = [str(name) for name in summary["feature"].tolist()]
+        means = summary["mean_abs_shap"].to_numpy(dtype=float)
+    else:
+        raise DataValidationError(
+            "summary must be a ShapSummary record (names/mean_abs) or a "
+            "DataFrame with feature/mean_abs_shap columns, got "
+            f"{type(summary).__name__}"
+        )
+    if len(names) != len(means):
+        raise DataValidationError(
+            f"names carries {len(names)} label(s) for {len(means)} mean(s)"
+        )
+    keep = len(means) if top_n is None else min(int(top_n), len(means))
+    # largest mean first (stable, first-declared-wins ties), reversed
+    # for display so the strongest feature sits at the top.
+    order = np.argsort(-means, kind="stable")[:keep][::-1]
+
+    fig, ax = new_figure(figsize=(8.4, 0.42 * len(order) + 1.7))
+    positions = np.arange(len(order))
+    ax.barh(
+        positions,
+        means[order],
+        color=PALETTE[0],
+        alpha=0.88,
+        height=0.62,
+        edgecolor="white",
+    )
+    for pos, value in zip(positions, means[order]):
+        ax.text(value, pos, f" {value:.4g}", va="center", ha="left", fontsize=9)
+    ax.axvline(0.0, color="#525252", lw=0.8, ls=":")
+    ax.set_yticks(positions, [names[int(index)] for index in order])
+    ax.set_xlabel("mean |SHAP value|")
+    ax.set_title(title)
+    return fig
+
+
+def plot_shap_beeswarm(
+    summary: Any,
+    top_n: int | None = 20,
+    *,
+    jitter: float = 0.16,
+    seed: int = 42,
+    point_size: float = 14.0,
+    title: str = "SHAP beeswarm",
+) -> Any:
+    """The SHAP beeswarm in PURE matplotlib -- ``D2.py``'s GAP-5 figure.
+
+    One row per feature (largest mean |SHAP| at the top), one jittered
+    point per (sample, feature): the x position is the sample's SHAP
+    value (how far the feature pushed THIS prediction from the base),
+    the colour is the feature's own value on that sample (the house
+    amber->teal ramp -- teal = high values, amber = low), exactly the
+    information the original's ``shap.plots.beeswarm`` carried, drawn
+    without a single shap plotting import so the viz layer stays
+    dependency-free.  The jitter is seeded (``seed``, default 42) so
+    two runs of the same summary are byte-identical figures.
+
+    Parameters
+    ----------
+    summary:
+        A :class:`~pharmaml.ml.explain.ShapSummary` record (needs the
+        full ``values`` matrix and ``feature_values`` -- the DataFrame
+        form is refused with the typed error; the bar chart is its
+        sibling).
+    top_n:
+        How many feature rows to show; ``None`` shows every feature.
+    jitter:
+        Vertical scatter width per row (0 collapses to a line).
+    seed:
+        Seed for the row jitter (the house determinism rule).
+    point_size:
+        Marker size.
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``summary`` is not a ShapSummary record, its arrays
+        disagree in shape, or ``top_n``/``jitter`` are invalid.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.explain import ShapSummary
+    >>> import numpy as np
+    >>> values = np.array([[1.0, -0.5], [0.5, 0.25], [-1.0, 0.5]])
+    >>> record = ShapSummary(
+    ...     names=["a", "b"], mean_abs=np.abs(values).mean(axis=0),
+    ...     values=values, feature_values=values,
+    ...     base_value=0.0, model_name="GBR", task="regression", n_samples=3)
+    >>> fig = plot_shap_beeswarm(record)
+    >>> ax = fig.axes[0]
+    >>> [tick.get_text() for tick in ax.get_yticklabels()]  # bottom -> top
+    ['b', 'a']
+    >>> ax.get_xlabel()  # the base value rides the caption when present
+    'SHAP value (impact on model output; base = +0)'
+    """
+    _check_top_n(top_n)
+    if not (hasattr(summary, "values") and hasattr(summary, "feature_values")):
+        raise DataValidationError(
+            "plot_shap_beeswarm needs the ShapSummary RECORD (the full "
+            "values matrix + feature_values) -- the DataFrame form carries "
+            "only the bar chart's means; use plot_shap_importance for that"
+        )
+    names = [str(name) for name in summary.names]
+    values = np.asarray(summary.values, dtype=float)
+    feature_values = np.asarray(summary.feature_values, dtype=float)
+    if values.ndim != 2 or values.shape != feature_values.shape:
+        raise DataValidationError(
+            f"values shape {values.shape} must match feature_values shape "
+            f"{feature_values.shape} (n_samples x n_features)"
+        )
+    if len(names) != values.shape[1]:
+        raise DataValidationError(
+            f"names carries {len(names)} label(s) for {values.shape[1]} column(s)"
+        )
+    if not 0.0 <= jitter <= 1.0:
+        raise DataValidationError(
+            f"jitter must be within [0, 1], got {jitter}"
+        )
+    mean_abs = np.abs(values).mean(axis=0)
+    keep = len(names) if top_n is None else min(int(top_n), len(names))
+    # largest mean |SHAP| first, reversed for display (top of the plot).
+    order = np.argsort(-mean_abs, kind="stable")[:keep][::-1]
+    n_rows = len(order)
+
+    from matplotlib.colors import LinearSegmentedColormap
+
+    fig, ax = new_figure(figsize=(8.6, 0.55 * n_rows + 1.9))
+    rng = np.random.default_rng(seed)
+    cmap = LinearSegmentedColormap.from_list(
+        "pharmaml_feature_value", [PALETTE[1], "#FFFFFF", PALETTE[0]]
+    )
+    scatter_handles = None
+    for row, feature_index in enumerate(order):
+        column = values[:, int(feature_index)]
+        raw = feature_values[:, int(feature_index)]
+        # per-feature value normalisation for the colour ramp: the
+        # min/max of THIS feature (a feature-spanning normalisation
+        # would paint every row the same half-scale grey).
+        span = float(np.max(raw) - np.min(raw))
+        normalized = np.zeros_like(raw) if span == 0.0 else (raw - np.min(raw)) / span
+        y = np.full_like(column, float(row)) + rng.uniform(
+            -jitter, jitter, size=column.shape
+        )
+        handle = ax.scatter(
+            column,
+            y,
+            c=normalized,
+            cmap=cmap,
+            vmin=0.0,
+            vmax=1.0,
+            s=point_size,
+            alpha=0.75,
+            linewidths=0.0,
+        )
+        if scatter_handles is None:
+            scatter_handles = handle
+    ax.axvline(0.0, color="#525252", lw=0.8, ls=":")
+    ax.set_yticks(np.arange(n_rows), [names[int(index)] for index in order])
+    ax.set_ylim(-0.75, n_rows - 0.25)
+    ax.set_xlabel("SHAP value (impact on model output)")
+    ax.set_title(title)
+    if summary.base_value is not None:
+        ax.set_xlabel(
+            f"SHAP value (impact on model output; base = {summary.base_value:+.4g})"
+        )
+    if scatter_handles is not None:
+        colorbar = fig.colorbar(scatter_handles, ax=ax, fraction=0.046, pad=0.04)
+        colorbar.set_label("feature value (row-normalised)")
     return fig
 
 

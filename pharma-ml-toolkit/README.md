@@ -880,6 +880,31 @@ leaderboard's **Cross-model importance…**, and the feature factory's
 **Filter low variance…** (threshold entry, kept/dropped ledger, frame
 adoption).
 
+#### SHAP (`ml.explain`) — the TreeExplainer beeswarm + the top-20 bar
+
+The upload's LAST unabsorbed block (its lines 472-528), shipped as the
+optional-gated surface the round-33 audit predicted:
+
+```python
+from pharmaml.ml import shap_summary
+from pharmaml.viz import plot_shap_beeswarm, plot_shap_importance
+
+summary = shap_summary(fitted_gbr, x_test)   # needs: pip install 'pharmaml[explain]'
+summary.ranking(top_n=3)                     # mean |SHAP| per feature, descending
+plot_shap_beeswarm(summary)                  # every (sample, feature) point,
+                                            # coloured by the feature's own value
+plot_shap_importance(summary)                # the compact top-20 bar
+```
+
+`TreeExplainer` only (LightGBM / XGBoost / CatBoost / sklearn trees —
+the upload's own choice); anything else gets the typed error naming
+the model-agnostic `permutation_feature_importance` sibling instead
+of a slow `KernelExplainer` approximation, and multiclass is refused
+with the same honesty. The beeswarm is PURE matplotlib — only the
+computation needs shap, the drawing never does. The GUI twin is the
+Results card's fourth row (**SHAP beeswarm / SHAP top-20 bar**), drawn
+over the run's own held-out rows.
+
 #### Hierarchical SVR (`hsvr`) — local specialists for heterogeneous data
 
 One global kernel SVR underfits when different regions of chemical space carry

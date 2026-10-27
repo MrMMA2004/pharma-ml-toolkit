@@ -1,3 +1,82 @@
+## [1.2.92] — 2026-10-27
+
+### Fixed / Added — the ninth engineering review (100x-154): the round-36 web twin audited adversarially, a fake-zero RED closed in BOTH correlation twins, and the LAST unabsorbed D2.py gap (SHAP) shipped
+
+The instruction: *"Review the current codebase and implementation,
+troubleshoot potential issues, and continue improving the engineering
+details."* The round audited v1.2.91's web interpretability twin with
+adversarial numerics probes the round-36 parity grid never asked —
+and closed every verified finding in BOTH languages, then shipped the
+upload's final missing block as a first-class optional-gated surface:
+
+* **The fake-zero RED (both twins)**: a CONSTANT 1e300-scale column
+  produced **a fabricated r = 0.0** — the web `pearsonCorrelation`
+  (the mean's ULP-scale rounding error ~1e284 makes the "zero"
+  deviations nonzero, their squares overflow to Infinity,
+  `num/Infinity = 0`) AND the desktop `signed_feature_correlations`
+  (`np.corrcoef`, the identical arithmetic) — while scipy honestly
+  returns NaN. Live in the route: ridge + a 1e300-constant CSV column
+  rendered "big +0.0000 (weak)" — the exact fake zero both twins'
+  docstrings promise never happens. The fix is the **offset-then-scale
+  recipe** in both languages (re-centre on the first element — exact
+  under Sterbenz, so a constant column collapses to exact zeros at
+  ANY scale; re-scale by the max deviation — every product finite at
+  any scale; then the two-pass WITH the scaled-mean subtraction — the
+  centering is not optional, the offset alone leaves the
+  `n(x̄−x₀)(ȳ−y₀)` cross term).
+* **The lost-signal REDs (both twins)**: extreme-scale VARYING columns
+  (1e300 overflow / 1e-300 underflow) were silently DROPPED (NaN
+  masquerading as "undefined", with the misleading "constant" log
+  wording) where scipy reports a defined r. The recipe keeps them —
+  and matches scipy bit-for-bit (`huge_magnitude` / `tiny_values` at
+  2.8e-17 in the new parity pair).
+* **The honest tolerance story**: `huge_offset` (a 1e15-offset column
+  whose jitter is an exact linear function of the target's — analytic
+  r = 1.0) has an irreducible float64 input-quantization floor (the
+  input itself is quantized at construction, ULP(1e15) = 0.125 vs
+  jitter ~1): the parity contract widens to 5e-3 vs scipy and pins
+  |recipe − 1.0| ≤ 2e-3 — the recipe is STRICTLY closer to truth than
+  scipy itself (0.9990 vs 0.9968). `near_constant` is scipy's own
+  `NearConstantInputWarning` territory (~1e-7 of a 1e-12 jitter); the
+  recipe is exact and is pinned against the ANALYTIC truth at 1e-12.
+* **NEW parity pair** `scratch/verify_corr_parity_154.py` + `.ts`
+  (14-case adversarial grid: extreme scales, huge offsets,
+  near-constant, exact cancellation, n=100 000, the mirrored zero,
+  the constant-column fake-zero pins, mismatch/one-point/NaN) wired
+  into the suite as `TestCorrelationParityAdversarial` — both sides
+  run the SHIPPED code, worst |dr| 2.78e-17.
+* **Classification runs get the correlation bundle** (the parity gap):
+  the desktop twin serves them (no task guard — a 0/1 label is a
+  numeric target, the point-biserial r); the web route now builds the
+  bundle over the run's OWN held-out rows in the SAME request that
+  trained the model, and the card notes the point-biserial read.
+  Live-verified: the moons bundle (x2 −0.76 / x1 +0.54).
+* **The GUI heatmap join's ndarray fallback requires exact length**
+  (the last amber): the old `values[: len(frame)]` silently truncated
+  a LONGER `y_test` — a partial pairing in the one fallback path where
+  misalignment is real. Pinned end-to-end via the library's typed
+  length guard (defense in depth: the ranking refuses the mismatch
+  first, the join refuses any non-exact length).
+* **SHAP — the LAST unabsorbed D2.py gap (its lines 472-528) — shipped
+  as `pharmaml.ml.explain`** (the round-33 audit's standing note
+  finally paid): `shap_summary` (TreeExplainer over a fitted tree
+  model; LightGBM / XGBoost / CatBoost / sklearn trees) returns the
+  typed `ShapSummary` record (names, mean |SHAP|, the full values
+  matrix, the feature values the beeswarm colours by, the base value);
+  `plot_shap_importance` (the upload's own top-20 bar) and
+  `plot_shap_beeswarm` (**pure matplotlib** — jittered (sample,
+  feature) points coloured by the feature's own value on the house
+  amber→teal ramp, seeded jitter, the base-value caption — the plotting
+  layer never needs shap installed). Optional-gated exactly as
+  predicted: `pharmaml[explain]` (`shap>=0.45,<0.60`, runtime-verified
+  on the numpy 1.26.4 stack); the `DependencyError` carries the exact
+  pip command, non-tree estimators get the typed error naming the
+  `permutation_feature_importance` sibling (never a silent
+  KernelExplainer fallback), multiclass is refused with the same
+  honesty. The Results card gained the fourth row (SHAP beeswarm /
+  SHAP top-20 bar) over the run's OWN held-out rows — the D2.py
+  upload is now FULLY absorbed, every block a first-class surface.
+
 ## [1.2.91] — 2026-10-27
 
 ### Fixed / Added — the eighth engineering review (100x-153): the round-35 additions audited, one red + three ambers closed, the interpretability bundle gained its web twin

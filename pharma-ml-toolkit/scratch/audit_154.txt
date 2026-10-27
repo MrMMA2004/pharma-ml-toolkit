@@ -1,0 +1,106 @@
+AUDIT 154 (round 37, 100x-154) — the round-36 additions audited adversarially
+===============================================================================
+Targets: the web interpretability twin (pearsonCorrelation TS core,
+buildCorrelationBundle route, CorrelationCard rendering), the parity
+grid's breadth, and the GUI swap-proof join's ndarray fallback.
+Probes: scratch/probe_audit_154_a.py (adversarial numerics, both
+sides), probe_audit_154_b.py (live route), probe_audit_154_c.py (the
+GUI join fallback).  Every finding below is probe-verified; the
+disproven suspicions are recorded with their reasons.
+
+VERIFIED FINDINGS
+-----------------
+RED A3 (BOTH twins) — extreme-scale CONSTANT columns produce a FAKE
+  r = 0.0.  Web: pearsonCorrelation(const 1e300, y) -> 0 (the mean's
+  ULP-scale rounding error ~1e284 makes the deviations nonzero, da
+  overflows to Infinity, den = Infinity, num/Infinity = 0); the
+  docstring promises "NaN -- never a fake 0 -- ... a constant column".
+  Desktop: signed_feature_correlations' pearson path (np.corrcoef) has
+  the identical arithmetic -> the constant 1e300 column came back
+  r = +0.0 while scipy honestly returns NaN + ConstantInputWarning.
+  LIVE in the route: ridge + a 1e300-constant CSV column -> the card
+  renders "big +0.0000 (weak)" (probe_b, huge_scale_csv).  The 1e-300
+  constant twin happens to NaN by underflow luck (den underflows to
+  exact 0 on the naive path) -- the same fake-zero is one scale away.
+  Fix: the offset-then-scale recipe in both languages (a - a[0] is
+  EXACT for a constant column at any scale -> the constant guard
+  fires deterministically).
+
+RED A1/A2 (BOTH twins) — extreme-scale VARYING columns are silently
+  DROPPED where scipy reports a defined r.  1e300-varying: the
+  deviation products overflow -> NaN (web: feature missing from the
+  card; desktop: np.corrcoef NaN -> dropped_undefined, with the
+  misleading "constant" wording).  1e-300-varying: da underflows to 0
+  -> NaN -> dropped.  scipy: defined (-0.0427 / -0.158 in the probe
+  runs).  Lost signal, silently.  Fix: the same recipe (scale by
+  max|a - a[0]| before the two-pass -- r is scale-invariant).
+
+AMBER B1 (web) — classification runs get NO correlation bundle.  The
+  desktop twin serves them (no task guard: a 0/1 label is a numeric
+  target -- point-biserial r); the web route builds the bundle only
+  in the two regression paths.  Probed live: synthetic moons and the
+  2-feature CSV both return no `correlations` field -> no card.  Fix:
+  runClassification builds the bundle over its own held-out rows.
+
+AMBER C1 (GUI) — the heatmap join's ndarray fallback slices to fit:
+  values[: len(frame)] with a LONGER y_test silently TRUNCATES
+  (probe_c: 25 values -> 10 rows, joined=True) -- a partial pairing
+  in the one fallback path where misalignment is real.  The SHORTER
+  case raises honestly (not joined).  Defensive-only code (y_test is
+  a Series aligned by construction) but the fallback exists precisely
+  for weird shapes.  Fix: require exact length; else not-joined.
+
+NOTE N1 — huge offsets (1e15): no float64 implementation recovers the
+  truth (the input itself is quantized at construction: ULP(1e15) =
+  0.125 vs jitter ~1).  Probed: truth 1.0, scipy 0.9968, the naive TS
+  0.9987, the offset-then-scale recipe 0.9990 (closest).  The parity
+  contract needs an honest widened tolerance for this case class +
+  the recipe's edge documented; both twins must use the SAME recipe so
+  the twins agree with each other.
+
+NOTE N2 — corrStrength(0.0) reads "weak"; "negligible" would be more
+  honest at exactly zero.  Cosmetic; declined this round.
+
+DISPROVEN (with reasons)
+------------------------
+* The `?? 0` fallbacks in the route's columnValue/targetValue lambdas
+  are unreachable (rowIndices come from shuffledSplit(n) -- always
+  < n; the CSV parse guarantees the row arrays).
+* Duplicate React keys in CorrelationCard (key={c.name}) -- feature
+  names are unique by CSV-header construction; the synthetic path has
+  one feature.
+* Matrix truncation dishonesty -- verified honest: 8 features -> top-7
+  + target = 8 matrix columns (probe_b).
+* The <2-rows guard unreachable via the API (schema: samples >= 100,
+  testSize <= 0.5 -> >= 50 held-out rows) -- dead-but-harmless
+  defensive code, kept.
+* The stable-sort tie order (ES2019 stable sort; ties keep column
+  order -- matches the desktop's first-declared-wins).
+* The desktop spearman path's honesty (scipy spearmanr NaN for
+  constants -> dropped, ConstantInputWarning suppressed deliberately).
+* The swap-proof Series join (non-covering index -> KeyError -> not
+  joined, honest; probe_c case 2).
+* big_n summation drift (1.9e-14 at n=100_000 -- within the 1e-12
+  contract).
+* The CorrelationCard empty-state (the honest "No correlation was
+  defined" note renders when every feature drops).
+* JSON NaN serialization (NaN is dropped before serialization -- the
+  route only pushes finite r).
+
+FIXES DISPATCHED (Task 1-b)
+---------------------------
+F1  ml-math.ts pearsonCorrelation: the offset-then-scale recipe (a[0]
+    offset, max-deviation scale, then the two-pass), guards unchanged
+    (mismatch/<2/non-finite/constant -> NaN, now exact at any scale).
+F2  interpret.py: the pearson path drops np.corrcoef for the same
+    recipe (a module-level _robust_pearson); the drop-note wording
+    gains the extreme-scale honesty.
+F3  route.ts runClassification: the bundle over the run's own held-out
+    rows (point-biserial), target = the label column.
+F4  playground.py: the ndarray fallback requires exact length.
+F5  Regression pins: the adversarial grid (probe A's 8 cases + the
+    constant extreme-scale fake-zero cases) as a NEW parity pair
+    (scratch/verify_corr_parity_154.py + .ts) wired into
+    tests/test_web_parity.py; test_interpret.py pins the desktop
+    fake-zero + dropped-varying cases; the live route re-probed at
+    close-out (the classification card + the fixed huge-scale card).

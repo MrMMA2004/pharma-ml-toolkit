@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) PASS - The chart displays three horizontal bars for \"strong\", \"weak\", and \"noise\" with the correct order and numeric annotations.\n2) PASS - The x-axis label is \"mean |SHAP value|\" (partially obscured but present) and the title includes \"SHAP importance\".\n3) PASS - Both \"SHAP beeswarm\" and \"SHAP top-20 bar\" buttons are clearly visible in the button row.\n4) PASS - The note line explicitly mentions \"top-20 bar\", \"held-out row(s)\", and \"base value\".\n5) PASS - All text elements are legible, properly spaced, and free from overlapping or clipping.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793093980,
+  "id": "202610271739362276f952f76c4a38",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610271739362276f952f76c4a38",
+  "usage": {
+    "completion_tokens": 138,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1840,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1978
+  }
+}

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pharmaml"
-version = "1.2.91"
+version = "1.2.92"
 description = "A production-ready toolkit for QSAR machine learning, pharmaceutical calculations (PK/PD/dosage), and molecular-docking workflows."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -53,6 +53,15 @@ boosting = [
     "xgboost>=2.0",
     "lightgbm>=4.0",
     "catboost>=1.2",
+]
+explain = [
+    # (100x-154) the SHAP surface (ml/explain.py) -- runtime-verified
+    # pair: shap 0.54.1 runs on the toolkit's numpy 1.26.4 stack (the
+    # 0.54 metadata asks numpy>=2 -- a pip resolver warning, not a
+    # runtime break; the toolkit pins numpy 1.x for mordred).  Only
+    # the COMPUTATION needs shap -- the plotting layer is pure
+    # matplotlib.
+    "shap>=0.45,<0.60",
 ]
 deep = [
     "torch>=2.0",

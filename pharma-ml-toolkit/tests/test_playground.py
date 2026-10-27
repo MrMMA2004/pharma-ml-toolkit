@@ -13606,6 +13606,57 @@ class TestInterpretabilityGui:
         assert "12 held-out rows" in note
         assert quiet_dialogs == []
 
+    def test_correlation_heatmap_mismatched_ndarray_target_not_joined(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """(100x-154) The audit's C1 finding pinned: the heatmap join's
+        ndarray fallback used to slice values[: len(frame)], silently
+        pairing a LONGER y_test's prefix with the frame's rows -- a
+        partial truth in the one fallback path where misalignment is
+        real.  The handler's honest outcome is now pinned end to end:
+        the correlation ranking's own typed length guard fires FIRST
+        (a mismatched y_test can never reach the join), and the join
+        fallback itself additionally refuses any non-exact length --
+        defense in depth, never a silent truncation anywhere."""
+        import numpy as np
+        import pandas as pd
+        from sklearn.linear_model import LinearRegression
+
+        from pharmaml.ml.evaluation import RegressionReport
+
+        rng = np.random.default_rng(7)
+        n = 40
+        frame = pd.DataFrame(
+            {"a": rng.uniform(size=n), "b": rng.uniform(size=n), "y": rng.uniform(size=n)}
+        )
+        x_all = frame[["a", "b"]]
+        idx = rng.permutation(n)
+        test_idx, train_idx = idx[:10], idx[10:]
+        model = LinearRegression().fit(x_all.iloc[train_idx], frame["y"].iloc[train_idx])
+        report = RegressionReport(
+            rmse=0.1, mae=0.1, r2=0.5, max_error=0.3, n_samples=len(test_idx)
+        )
+        trained = type("Trained", (), {})()
+        trained.name = "ridge"
+        # y_test as a raw ndarray, 25 values for 10 held-out rows --
+        # the typed length guard must refuse (the old code's join
+        # fallback would have silently truncated had it been reached).
+        app._ml_last_run = (
+            model,
+            report,
+            "regression",
+            x_all.iloc[train_idx],
+            frame["y"].iloc[train_idx].to_numpy(),
+            x_all.iloc[test_idx],
+            rng.uniform(size=25),  # longer than x_test on purpose
+            "y",
+        )
+        app._ml_plot_correlation_heatmap()
+        assert self._drain_jobs(app), "heatmap job hung"
+        errors = [a for _n, a in quiet_dialogs if "row(s) but target carries" in str(a)]
+        assert errors, quiet_dialogs  # the typed mismatch, never a silent pairing
+        assert "25 value(s)" in str(errors[0]) and "10 row(s)" in str(errors[0])
+
     def test_decode_bit_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
         """Caffeine's bit 314 (radius 2, 2048 bits -- the library's own
         doctest molecule) decodes to its carbonyl environments, echoed
@@ -13701,6 +13752,151 @@ class TestInterpretabilityGui:
         assert entries[0].get() == "0"  # the bit index default
         win.destroy()
         assert quiet_dialogs == []
+
+    def test_shap_beeswarm_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """(100x-154) D2.py's GAP-5 figure as a Results-card button: a
+        tree model trained on the session frame, the beeswarm drawn
+        over the run's OWN held-out rows, the note carrying the top-3
+        mean-|SHAP| leaders and the base value."""
+        import numpy as np
+        import pandas as pd
+        from sklearn.ensemble import GradientBoostingRegressor
+
+        from pharmaml.ml.evaluation import RegressionReport
+
+        rng = np.random.default_rng(42)
+        n = 80
+        frame = pd.DataFrame(
+            {"strong": rng.normal(size=n), "weak": rng.normal(size=n)}
+        )
+        # y driven by 'strong' so the swarm has a clear leader
+        frame["y"] = 3.0 * frame["strong"] + 0.2 * frame["weak"]
+        x_all = frame[["strong", "weak"]]
+        idx = rng.permutation(n)
+        test_idx, train_idx = idx[:16], idx[16:]
+        model = GradientBoostingRegressor(random_state=42).fit(
+            x_all.iloc[train_idx], frame["y"].iloc[train_idx]
+        )
+        report = RegressionReport(
+            rmse=0.1, mae=0.1, r2=0.9, max_error=0.3, n_samples=len(test_idx)
+        )
+        app._ml_last_run = (
+            model,
+            report,
+            "regression",
+            x_all.iloc[train_idx],
+            frame["y"].iloc[train_idx],
+            x_all.iloc[test_idx],
+            frame["y"].iloc[test_idx],
+            "y",
+        )
+        app._ml_plot_shap_beeswarm()
+        assert self._drain_jobs(app), "SHAP job hung"
+        figure = app._ml_host._pg_figure
+        assert figure is not None
+        labels = [tick.get_text() for tick in figure.axes[0].get_yticklabels()]
+        assert labels[0] == "weak"  # bottom -> top, strongest on top
+        assert labels[1] == "strong"
+        note = app._ml_result_note.cget("text")
+        assert "SHAP beeswarm" in note and "16 held-out row(s)" in note
+        assert "strong" in note and "base value" in note
+        assert quiet_dialogs == []
+
+    def test_shap_bar_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """The top-20 bar button: same record, the compact sibling's
+        figure + note."""
+        import numpy as np
+        import pandas as pd
+        from sklearn.ensemble import GradientBoostingRegressor
+
+        from pharmaml.ml.evaluation import RegressionReport
+
+        rng = np.random.default_rng(42)
+        n = 60
+        frame = pd.DataFrame(
+            {"a": rng.normal(size=n), "b": rng.normal(size=n)}
+        )
+        frame["y"] = 2.0 * frame["a"]
+        x_all = frame[["a", "b"]]
+        idx = rng.permutation(n)
+        test_idx, train_idx = idx[:12], idx[12:]
+        model = GradientBoostingRegressor(random_state=42).fit(
+            x_all.iloc[train_idx], frame["y"].iloc[train_idx]
+        )
+        report = RegressionReport(
+            rmse=0.1, mae=0.1, r2=0.9, max_error=0.3, n_samples=len(test_idx)
+        )
+        app._ml_last_run = (
+            model,
+            report,
+            "regression",
+            x_all.iloc[train_idx],
+            frame["y"].iloc[train_idx],
+            x_all.iloc[test_idx],
+            frame["y"].iloc[test_idx],
+            "y",
+        )
+        app._ml_plot_shap_importance()
+        assert self._drain_jobs(app), "SHAP job hung"
+        figure = app._ml_host._pg_figure
+        assert figure is not None
+        assert figure.axes[0].get_xlabel() == "mean |SHAP value|"
+        note = app._ml_result_note.cget("text")
+        assert "top-20 bar" in note and "12 held-out row(s)" in note
+        assert quiet_dialogs == []
+
+    def test_shap_buttons_guard_no_trained_model(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """No run in the session -> the honest info dialog, no job."""
+        app._ml_last_run = None
+        app._ml_plot_shap_beeswarm()
+        assert any("No trained model" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+        quiet_dialogs.clear()
+        app._ml_plot_shap_importance()
+        assert any("No trained model" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+
+    def test_shap_non_tree_model_names_the_permutation_sibling(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        """A non-tree estimator surfaces the typed ModelError dialog
+        naming the permutation-importance sibling -- never a silent
+        fallback or a crash."""
+        import numpy as np
+        import pandas as pd
+        from sklearn.linear_model import LinearRegression
+
+        from pharmaml.ml.evaluation import RegressionReport
+
+        rng = np.random.default_rng(42)
+        n = 40
+        frame = pd.DataFrame({"a": rng.normal(size=n), "b": rng.normal(size=n)})
+        y = frame["a"] * 2.0
+        idx = rng.permutation(n)
+        test_idx, train_idx = idx[:8], idx[8:]
+        model = LinearRegression().fit(frame.iloc[train_idx], y.iloc[train_idx])
+        report = RegressionReport(
+            rmse=0.1, mae=0.1, r2=0.9, max_error=0.3, n_samples=len(test_idx)
+        )
+        app._ml_last_run = (
+            model,
+            report,
+            "regression",
+            frame.iloc[train_idx],
+            y.iloc[train_idx],
+            frame.iloc[test_idx],
+            y.iloc[test_idx],
+            "y",
+        )
+        app._ml_plot_shap_beeswarm()
+        assert self._drain_jobs(app), "SHAP job hung"
+        errors = [
+            a for _n, a in quiet_dialogs if "permutation_feature_importance" in str(a)
+        ]
+        assert errors, quiet_dialogs
+        assert "TreeExplainer" in str(errors[0])
 
 
 class TestCrossModelImportanceGui:

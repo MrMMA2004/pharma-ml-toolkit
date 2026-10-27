@@ -356,6 +356,70 @@ class TestSignedFeatureCorrelations:
         assert "Dropping 1 column(s)" in caplog.text
         assert "flat" in caplog.text
 
+    def test_constant_extreme_scale_column_dropped_never_fake_zero(
+        self, caplog
+    ) -> None:
+        """(100x-154) the audit's RED: the naive np.corrcoef path
+        reported a FAKE r = 0.0 for a constant 1e300-scale column (the
+        mean's ULP-scale rounding error makes the "zero" deviations
+        ~1e284; their squares overflow to inf; 0/inf = 0 -- while
+        scipy honestly returns NaN).  The offset-then-scale recipe's
+        first-element re-centring is exact, so the column collapses to
+        exact zeros at ANY scale and drops honestly."""
+        y = [float(i) for i in range(38)]
+        frame = pd.DataFrame(
+            {
+                "big": [1e300] * 38,
+                "tiny": [1e-300] * 38,
+                "plain": [5.0] * 38,
+                "ok": y,
+            }
+        )
+        with _pharmaml_logs_visible(), caplog.at_level(
+            logging.WARNING, logger="pharmaml.chem.interpret"
+        ):
+            corr = signed_feature_correlations(frame, y)
+        assert "big" not in corr.index  # the fake-zero regression
+        assert "tiny" not in corr.index
+        assert "plain" not in corr.index
+        assert float(corr["ok"]) == pytest.approx(1.0)
+        assert "Dropping 3 column(s)" in caplog.text
+        assert "extreme scales" in caplog.text  # the honest wording
+
+    def test_extreme_scale_varying_columns_kept_matching_scipy(self) -> None:
+        """(100x-154) the audit's A1/A2: 1e300-scale and 1e-300-scale
+        VARYING columns were silently DROPPED by the naive path's
+        internal overflow/underflow (NaN masquerading as "undefined")
+        where scipy reports a defined r.  The recipe keeps them, and
+        the values match scipy."""
+        from scipy.stats import pearsonr
+
+        rng = np.random.default_rng(154)
+        y = np.linspace(-1.0, 1.0, 64)
+        huge = 1e300 * (1.0 + 0.5 * rng.random(64))
+        tiny = 1e-300 * (1.0 + rng.random(64))
+        frame = pd.DataFrame({"huge": huge, "tiny": tiny})
+        corr = signed_feature_correlations(frame, y)
+        assert set(corr.index) == {"huge", "tiny"}  # neither dropped
+        for column in ("huge", "tiny"):
+            expected = float(pearsonr(frame[column].to_numpy(), y).statistic)
+            assert float(corr[column]) == pytest.approx(expected, abs=1e-12)
+
+    def test_huge_offset_stays_close_to_analytic_truth(self) -> None:
+        """(100x-154) a 1e15-offset column whose jitter is an exact
+        linear function of the target's jitter (analytic r = 1.0): no
+        float64 path recovers the truth exactly (the input itself is
+        quantized at construction, ULP(1e15) = 0.125 vs jitter ~1),
+        but the recipe must stay within 2e-3 of the truth -- the
+        naive path's mean-rounding error is what pushed BOTH the old
+        desktop value and scipy itself further out."""
+        rng = np.random.default_rng(154)
+        small = rng.normal(0.0, 1.0, 64)
+        frame = pd.DataFrame({"off": 1e15 + small})
+        target = 1e15 + 2.0 * small + 3.0
+        corr = signed_feature_correlations(frame, target)
+        assert float(corr["off"]) == pytest.approx(1.0, abs=2e-3)
+
     def test_nan_cells_are_handled_pairwise(self) -> None:
         y = [1.0, 2.0, 3.0, 4.0, 5.0]
         frame = pd.DataFrame({"gap": [10.0, 20.0, 30.0, float("nan"), 50.0]})

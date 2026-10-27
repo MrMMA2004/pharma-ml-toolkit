@@ -448,6 +448,47 @@ def decode_morgan_bit(
     )
 
 
+def _robust_pearson(x: np.ndarray, y: np.ndarray) -> float:
+    """Pearson r via the offset-then-scale recipe (100x-154).
+
+    The web twin (``src/lib/ml-math.ts`` ``pearsonCorrelation``) uses
+    the SAME recipe, so the two twins agree everywhere either of them
+    is honest.  ``NaN`` -- never a fake 0 -- for a constant column:
+    re-centring on the first element is exact for same-magnitude
+    values (Sterbenz), so a constant column collapses to exact zeros
+    at ANY scale.  Re-scaling by the max deviation keeps every
+    product finite: the naive ``numpy.corrcoef`` two-pass this
+    replaced lost defined correlations at extreme scales (1e300-scale
+    deviation products overflow to inf, 1e-300-scale squares
+    underflow to 0) and reported a FAKE ``r = 0`` for a 1e300-scale
+    constant column (the mean's ULP-scale rounding error makes the
+    "zero" deviations ~1e284; their squares overflow to inf; 0/inf =
+    0 -- while scipy honestly returns NaN).
+    """
+    if x.size < 2 or x.size != y.size:
+        return float("nan")
+    if not np.isfinite(x).all() or not np.isfinite(y).all():
+        return float("nan")
+    aa = x - x[0]
+    bb = y - y[0]
+    max_a = float(np.abs(aa).max())
+    max_b = float(np.abs(bb).max())
+    if max_a == 0.0 or max_b == 0.0:
+        return float("nan")  # constant: undefined, never zero
+    # scale, THEN subtract the scaled mean: the offset alone leaves
+    # the n*(mean_a - a0)*(mean_b - b0) cross term in the covariance --
+    # the centering is not optional, and at this scale it is exact.
+    xa = aa / max_a
+    yb = bb / max_b
+    xa = xa - xa.mean()
+    yb = yb - yb.mean()
+    num = float((xa * yb).sum())
+    den = float(np.sqrt(float((xa * xa).sum()) * float((yb * yb).sum())))
+    if den == 0.0:
+        return float("nan")
+    return num / den
+
+
 def signed_feature_correlations(
     frame: pd.DataFrame,
     target: Sequence[float],
@@ -468,12 +509,15 @@ def signed_feature_correlations(
     :func:`pharmaml.viz.ml_plots.plot_signed_correlations` directly.
 
     Undefined correlations are dropped, never zeroed: a constant
-    column (zero variance — scipy's ``ConstantInputWarning`` case) or
-    a column with fewer than two pairwise-complete rows yields NaN and
-    is removed from the result, with the drop logged.  NaN cells
-    inside a column are handled pairwise (a missing value removes its
-    row from that column's correlation only, the ``pandas.corr``
-    convention).
+    column (zero variance — scipy's ``ConstantInputWarning`` case, at
+    ANY scale: the recipe's first-element re-centring is exact, so a
+    1e300-scale constant column collapses to exact zeros and drops
+    honestly where the naive two-pass reported a fake ``r = 0``), a
+    column numerically undefined at extreme scales, or a column with
+    fewer than two pairwise-complete rows yields NaN and is removed
+    from the result, with the drop logged.  NaN cells inside a column
+    are handled pairwise (a missing value removes its row from that
+    column's correlation only, the ``pandas.corr`` convention).
 
     Parameters
     ----------
@@ -487,7 +531,8 @@ def signed_feature_correlations(
     target:
         One finite numeric value per frame row.
     method:
-        ``"pearson"`` (linear, ``numpy.corrcoef``) or ``"spearman"``
+        ``"pearson"`` (linear, the offset-then-scale :func:`_robust_pearson`
+        recipe the web twin shares) or ``"spearman"``
         (rank, ``scipy.stats.spearmanr`` — monotone relationships
         score ±1 however curved).
 
@@ -601,8 +646,7 @@ def signed_feature_correlations(
             if pairs_x.size < 2:
                 dropped_undefined.append(column)
                 continue
-            with np.errstate(invalid="ignore", divide="ignore"):
-                correlation = float(np.corrcoef(pairs_x, pairs_y)[0, 1])
+            correlation = _robust_pearson(pairs_x, pairs_y)
             if np.isnan(correlation):
                 dropped_undefined.append(column)
                 continue
@@ -612,7 +656,8 @@ def signed_feature_correlations(
     if dropped_undefined:
         _LOG.warning(
             "Dropping %d column(s) with an undefined correlation "
-            "(constant or fewer than 2 pairwise-complete rows): %s",
+            "(constant, numerically undefined at extreme scales, or "
+            "fewer than 2 pairwise-complete rows): %s",
             len(dropped_undefined),
             dropped_undefined[:10],
         )

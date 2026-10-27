@@ -34,6 +34,13 @@ tqdm==4.67.1
 # lightgbm==4.5.0
 # catboost==1.2.8
 
+# SHAP explanations (ml/explain.py — the TreeExplainer beeswarm + the
+# top-20 bar; only the COMPUTATION needs shap, the plotting layer is
+# pure matplotlib). Runtime-verified on the numpy 1.26.4 stack: the
+# 0.54 metadata asks numpy>=2 — a pip resolver warning, not a runtime
+# break (the toolkit pins numpy 1.x for mordred):
+# shap==0.54.1
+
 # Deep learning (torch 'dnn' / 'dnn_residual' estimators + generative
 # RNN/RL). CPU wheel — install with:
 #   pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu

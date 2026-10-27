@@ -114,6 +114,8 @@ after adding new public functions.
 |---|---|---|
 | `MODEL_ALIASES` | constant |  |
 | `MODEL_REGISTRY` | constant |  |
+| `SHAP_EXTRA` | constant |  |
+| `SHAP_REQUIREMENT` | constant |  |
 | `ApplicabilityDomainResult` | class | Outcome of a full applicability-domain analysis. |
 | `BootstrapUncertainty` | class | Bootstrap-ensemble uncertainty of a fitted estimator. |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
@@ -128,6 +130,7 @@ after adding new public functions.
 | `RandomSearch` | class | Random search over the hypermodel's declared space. |
 | `ResidualMLPClassifier` | class | Residual (skip-connection) deep-network classifier (PyTorch). |
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
+| `ShapSummary` | class | SHAP values of a fitted tree model over a feature frame. |
 | `TrialResult` | class | One evaluated trial. |
 | `TunerResults` | class | The outcome of one :meth:`RandomSearch.search` / Hyperband run. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
@@ -159,6 +162,7 @@ after adding new public functions.
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
 | `select_kbest_union` | function | Select the UNION of per-method top-k columns (upgrades look.ipynb). |
+| `shap_summary` | function | SHAP values of a fitted tree model over ``X``. |
 | `split_features_target` | function | Separate features from the target column. |
 | `stack_oof_regressors` | function | Stack registry regressors out-of-fold and rank the blenders. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
@@ -363,6 +367,8 @@ after adding new public functions.
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |
 | `plot_rl_introspection` | function | One figure per RL run: the score story + the prior-drift diagnostics. |
 | `plot_roc_curves` | function | Receiver-operating curves — binary or one-vs-rest multiclass. |
+| `plot_shap_beeswarm` | function | The SHAP beeswarm in PURE matplotlib -- ``D2.py``'s GAP-5 figure. |
+| `plot_shap_importance` | function | Top-N mean-|SHAP| horizontal bars -- ``D2.py``'s own top-20 bar. |
 | `plot_signed_correlations` | function | Top-N signed feature-target correlations as a horizontal bar chart. |
 | `plot_similarity_heatmap` | function | Heat-map of a pairwise similarity matrix. |
 | `plot_table_comparison` | function | Overlap breakdown of a ligand-table :class:`TableComparison`. |

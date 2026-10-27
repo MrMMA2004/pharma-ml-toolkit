@@ -74,29 +74,52 @@ def _grid() -> list[dict[str, object]]:
 
 
 def _mirror_ts(a: list[float], b: list[float]) -> float:
-    """The shipped TS formula, line-by-line in Python (the mirror)."""
+    """The shipped TS formula, line-by-line in Python (the mirror).
+
+    (100x-154) the shipped formula is the offset-then-scale recipe --
+    re-centre on the first element (exact for same-magnitude values,
+    so a constant column collapses to exact zeros at ANY scale),
+    re-scale by the max deviation, subtract the SCALED mean (the
+    centering is not optional: the offset alone leaves the
+    n*(mean_a - a0)*(mean_b - b0) cross term), then the two-pass.
+    The naive two-pass this replaced lost defined correlations at
+    extreme scales and reported a fake r = 0 for constant 1e300-scale
+    columns -- the 100x-154 adversarial pair pins those; this
+    well-conditioned grid pins the everyday numerics.
+    """
     if len(a) != len(b):
         return float("nan")  # mismatched: no honest r (scipy raises here)
     n = len(a)
     if n < 2:
         return float("nan")
-    sa = 0.0
-    sb = 0.0
     for i in range(n):
-        x = a[i]
-        y = b[i]
-        if not (math.isfinite(x) and math.isfinite(y)):
+        if not (math.isfinite(a[i]) and math.isfinite(b[i])):
             return float("nan")
-        sa += x
-        sb += y
-    ma = sa / n
-    mb = sb / n
+    oa = a[0]
+    ob = b[0]
+    max_a = 0.0
+    max_b = 0.0
+    aa = [0.0] * n
+    bb = [0.0] * n
+    for i in range(n):
+        aa[i] = a[i] - oa
+        bb[i] = b[i] - ob
+        if abs(aa[i]) > max_a:
+            max_a = abs(aa[i])
+        if abs(bb[i]) > max_b:
+            max_b = abs(bb[i])
+    if max_a == 0.0 or max_b == 0.0:
+        return float("nan")  # constant: undefined, never zero
+    scaled_a = [v / max_a for v in aa]
+    scaled_b = [v / max_b for v in bb]
+    ma = sum(scaled_a) / n
+    mb = sum(scaled_b) / n
     num = 0.0
     da = 0.0
     db = 0.0
     for i in range(n):
-        xa = a[i] - ma
-        yb = b[i] - mb
+        xa = scaled_a[i] - ma
+        yb = scaled_b[i] - mb
         num += xa * yb
         da += xa * xa
         db += yb * yb

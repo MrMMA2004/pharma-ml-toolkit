@@ -1002,7 +1002,13 @@ function corrCellColor(r: number): string {
  *  top-N matrix, over the run's OWN held-out rows (computed in the
  *  same request that trained the model, so the pairing is inherently
  *  swap-proof). Undefined correlations are dropped, never zeroed. */
-function CorrelationCard({ bundle }: { bundle: CorrelationBundle }) {
+function CorrelationCard({
+  bundle,
+  task,
+}: {
+  bundle: CorrelationBundle;
+  task: "regression" | "classification";
+}) {
   const bars = bundle.correlations.slice(0, 10);
   const matrix = bundle.matrix;
   return (
@@ -1015,6 +1021,7 @@ function CorrelationCard({ bundle }: { bundle: CorrelationBundle }) {
         <CardDescription className="text-xs">
           Pearson r over the run's own {bundle.nRows} held-out rows — teal pulls {bundle.target} up,
           rose pulls it down; undefined correlations are dropped, never zeroed
+          {task === "classification" ? " (the point-biserial r against the 0/1 label)" : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="pb-4">
@@ -5708,10 +5715,15 @@ export function MlPlayground() {
                 </CardContent>
               </Card>
 
-              {/* Feature–target correlations (100x-153): the desktop
-               *  interpretability bundle's web twin — signed bars over
-               *  the run's OWN held-out rows + the top-N matrix. */}
-              {result.correlations ? <CorrelationCard bundle={result.correlations} /> : null}
+              {/* Feature–target correlations (100x-153, classification
+               *  too since 100x-154): the desktop interpretability
+               *  bundle's web twin — signed bars over the run's OWN
+               *  held-out rows + the top-N matrix; classification runs
+               *  correlate against the 0/1 label (point-biserial r,
+               *  the desktop twin's own no-task-guard read). */}
+              {result.correlations ? (
+                <CorrelationCard bundle={result.correlations} task={result.task} />
+              ) : null}
             </div>
           </>
         ) : null}

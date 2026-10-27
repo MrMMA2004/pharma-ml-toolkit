@@ -866,6 +866,21 @@ function runClassification(
     for (const p of boundary) p.proba = fit.predictProba(p.x, p.y);
   }
 
+  /* (100x-154) the interpretability bundle for classification too —
+   * the desktop twin serves these runs (no task guard there: a 0/1
+   * label is a numeric target and the feature–label Pearson r is the
+   * point-biserial correlation, the standard "which feature separates
+   * the classes" read).  Same swap-proof construction as the
+   * regression paths: the run's OWN held-out rows, in the same
+   * request that trained the model. */
+  const correlations = buildCorrelationBundle(
+    featureNames,
+    (j, i) => (j === 0 ? (pts[i]?.x ?? 0) : (pts[i]?.y ?? 0)),
+    test,
+    (i) => pts[i]?.label ?? 0,
+    csv ? csv.target : "label"
+  );
+
   // k-fold CV (accuracy per fold).
   const cv = runCv(n, req.cv, effSeed, "Accuracy", (fold, trainIdx, slot) => {
     const foldFit = fitClassificationModel(
@@ -901,6 +916,7 @@ function runClassification(
     ...(fit.modelParams ? { modelParams: fit.modelParams } : {}),
     ...(gpCls ? { gpCls } : {}),
     ...(ensemble ? { ensemble } : {}),
+    ...(correlations ? { correlations } : {}),
     series: {
       test: test.map((i) => ({
         x: pts[i]?.x ?? 0,

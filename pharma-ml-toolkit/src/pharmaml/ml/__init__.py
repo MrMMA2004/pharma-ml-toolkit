@@ -17,6 +17,7 @@ from pharmaml.ml.evaluation import (
     permutation_feature_importance,
     predict_with_uncertainty,
 )
+from pharmaml.ml.explain import SHAP_EXTRA, SHAP_REQUIREMENT, ShapSummary, shap_summary
 from pharmaml.ml.hierarchical import HierarchicalSVR
 from pharmaml.ml.models import (
     MODEL_ALIASES,
@@ -67,6 +68,8 @@ from pharmaml.ml.tuner import (
 __all__ = [
     "MODEL_ALIASES",
     "MODEL_REGISTRY",
+    "SHAP_EXTRA",
+    "SHAP_REQUIREMENT",
     "ApplicabilityDomainResult",
     "BootstrapUncertainty",
     "DeepMLPClassifier",
@@ -81,6 +84,7 @@ __all__ = [
     "RandomSearch",
     "ResidualMLPClassifier",
     "ResidualMLPRegressor",
+    "ShapSummary",
     "TrialResult",
     "TunerResults",
     "applicability_domain",
@@ -112,6 +116,7 @@ __all__ = [
     "resource_bounds",
     "save_model",
     "select_kbest_union",
+    "shap_summary",
     "split_features_target",
     "stack_oof_regressors",
     "train_model",

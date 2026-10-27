@@ -120,6 +120,53 @@ class TestCorrelationParity:
         assert "CROSS_LANGUAGE_PARITY_OK" in cross
 
 
+class TestCorrelationParityAdversarial:
+    """ml-math.ts pearsonCorrelation vs scipy on the ADVERSARIAL
+    numerics grid (100x-154).
+
+    The round-37 audit found the naive two-pass the round-36 version
+    shipped breaks exactly where the 100x-153 grid was silent: it
+    LOST defined correlations at extreme scales (1e300 overflow /
+    1e-300 underflow -> NaN -> the feature silently dropped) and
+    reported a FAKE r = 0 for a constant 1e300-scale column (the
+    mean's ULP-scale rounding error makes the "zero" deviations
+    ~1e284; their squares overflow to Infinity; num/Infinity = 0 —
+    the exact fake zero the docstring promises never happens).  The
+    fix — the offset-then-scale recipe — is pinned here on both
+    sides: the fake-zero cases (const_huge / const_tiny / const_plain)
+    must be NaN on BOTH sides, and the recovered extreme-scale cases
+    (huge_magnitude / tiny_values) must match scipy.  The huge-offset
+    and near-constant cases carry honest widened tolerances (the
+    input itself is quantized at construction; scipy's own
+    NearConstantInputWarning inaccuracy) PLUS analytic-truth pins the
+    recipe must hold even where scipy drifts.
+    """
+
+    @needs_corr_parity
+    def test_python_twin_emits_gold(self) -> None:
+        out = _run(
+            [sys.executable, str(TOOLKIT_ROOT / "scratch" / "verify_corr_parity_154.py")],
+            TOOLKIT_ROOT,
+        )
+        assert "mirror-vs-scipy" in out
+        assert "PY_SIDE_DONE" in out or "CROSS_LANGUAGE_PARITY_OK" in out
+
+    @needs_corr_parity
+    def test_ts_twin_matches_scipy_and_truth(self) -> None:
+        # order matters: the TS twin reads the gold the py twin wrote.
+        _run(
+            [sys.executable, str(TOOLKIT_ROOT / "scratch" / "verify_corr_parity_154.py")],
+            TOOLKIT_ROOT,
+        )
+        out = _run(["bun", "run", "scratch/verify_corr_parity_154.ts"], REPO_ROOT)
+        assert "TS_SIDE_DONE" in out
+        cross = _run(
+            [sys.executable, str(TOOLKIT_ROOT / "scratch" / "verify_corr_parity_154.py")],
+            TOOLKIT_ROOT,
+        )
+        assert "CROSS_LANGUAGE_PARITY_OK" in cross
+
+
 class TestAcquisitionParity:
     """bayes-acquisition.ts vs scipy.stats.norm (the 100x-114 pair)."""
 

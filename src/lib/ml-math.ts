@@ -67,7 +67,7 @@ export function kFoldSplit(n: number, k: number, rand: () => number): number[][]
   return folds;
 }
 
-/** Pearson correlation of two equal-length arrays (100x-153).
+/** Pearson correlation of two equal-length arrays (100x-153, hardened 100x-154).
  *
  * The pure core of the web interpretability twin (the desktop
  * bundle's signed_feature_correlations): returns NaN — never a fake
@@ -76,36 +76,83 @@ export function kFoldSplit(n: number, k: number, rand: () => number): number[][]
  * truncating to the common prefix would be a partial truth — fewer
  * than 2 points, a constant column, or non-finite inputs); callers
  * DROP such results rather than zeroing them. Parity:
- * scratch/verify_corr_parity_153 pins this against
- * scipy.stats.pearsonr on a seeded grid.
+ * scratch/verify_corr_parity_153 + the 100x-154 adversarial pair
+ * (verify_corr_parity_154) pin this against scipy.stats.pearsonr.
+ *
+ * (100x-154) The two-pass runs on OFFSET-THEN-SCALED copies: the
+ * inputs are re-centred on their first element (a - a[0] is exact
+ * under Sterbenz for same-magnitude values, so a constant column
+ * collapses to EXACT zeros at any scale) and divided by the max
+ * deviation (r is invariant under positive affine rescaling, and
+ * every product stays finite at any input scale). The naive two-pass
+ * the round-36 version shipped lost defined correlations at extreme
+ * scales (1e300-scale deviation products overflow to Infinity → NaN;
+ * 1e-300-scale squares underflow to 0 → NaN — both features silently
+ * dropped where scipy reports them) and — worse — reported a FAKE
+ * r = 0 for a 1e300-scale constant column (the mean's ULP-scale
+ * rounding error makes the "zero" deviations ~1e284, their squares
+ * overflow to Infinity, num/Infinity = 0 — the exact fake zero this
+ * docstring promises never happens). The recipe matches scipy
+ * bit-for-bit on the well-conditioned and extreme-scale grids, and
+ * stays closer to the analytic truth than scipy itself on
+ * huge-offset inputs (no float64 path recovers those exactly — the
+ * input is already quantized at construction; the parity contract
+ * widens its tolerance honestly for that case class). The desktop
+ * twin's _robust_pearson uses the SAME recipe, so the two twins
+ * agree with each other everywhere either of them is honest.
  */
 export function pearsonCorrelation(a: number[], b: number[]): number {
   if (a.length !== b.length) return Number.NaN; // mismatched: no honest r
   const n = a.length;
   if (n < 2) return Number.NaN;
-  let sa = 0;
-  let sb = 0;
   for (let i = 0; i < n; i++) {
     const x = a[i] as number;
     const y = b[i] as number;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return Number.NaN;
-    sa += x;
-    sb += y;
   }
-  const ma = sa / n;
-  const mb = sb / n;
+  /* Re-centre on the first element: a - a[0] is exact for
+   * same-magnitude values (Sterbenz), so a constant column produces
+   * EXACT zeros and the scale guard below fires deterministically —
+   * no ULP-scale residue can smuggle a fake r through. */
+  const oa = a[0] as number;
+  const ob = b[0] as number;
+  let maxA = 0;
+  let maxB = 0;
+  const aa: number[] = new Array(n);
+  const bb: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const va = Math.abs((aa[i] = (a[i] as number) - oa));
+    const vb = Math.abs((bb[i] = (b[i] as number) - ob));
+    if (va > maxA) maxA = va;
+    if (vb > maxB) maxB = vb;
+  }
+  if (maxA === 0 || maxB === 0) return Number.NaN; // constant: undefined, never 0
+  /* Scale (r is invariant under positive affine rescaling), THEN
+   * subtract the scaled mean — at this scale every value keeps its
+   * full mantissa, so the mean is accurate and the centering exact:
+   * Σ(x−x̄)(y−ȳ) ≠ Σ(x−x₀)(y−y₀) (the offset alone leaves the
+   * n(x̄−x₀)(ȳ−y₀) cross term), the mean subtraction is NOT
+   * optional. */
+  let ma = 0;
+  let mb = 0;
+  for (let i = 0; i < n; i++) {
+    ma += (aa[i] as number) / maxA;
+    mb += (bb[i] as number) / maxB;
+  }
+  ma /= n;
+  mb /= n;
   let num = 0;
   let da = 0;
   let db = 0;
   for (let i = 0; i < n; i++) {
-    const xa = (a[i] as number) - ma;
-    const yb = (b[i] as number) - mb;
+    const xa = (aa[i] as number) / maxA - ma;
+    const yb = (bb[i] as number) / maxB - mb;
     num += xa * yb;
     da += xa * xa;
     db += yb * yb;
   }
   const den = Math.sqrt(da * db);
-  if (den === 0) return Number.NaN; // a constant column is undefined, not zero
+  if (den === 0) return Number.NaN;
   return num / den;
 }
 

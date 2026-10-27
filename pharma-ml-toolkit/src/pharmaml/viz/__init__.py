@@ -104,6 +104,8 @@ from pharmaml.viz.ml_plots import (
     plot_prediction_intervals,
     plot_residuals,
     plot_roc_curves,
+    plot_shap_beeswarm,
+    plot_shap_importance,
     plot_signed_correlations,
     plot_training_history,
 )
@@ -169,6 +171,8 @@ __all__ = [
     "plot_residuals",
     "plot_rl_introspection",
     "plot_roc_curves",
+    "plot_shap_beeswarm",
+    "plot_shap_importance",
     "plot_signed_correlations",
     "plot_similarity_heatmap",
     "plot_table_comparison",

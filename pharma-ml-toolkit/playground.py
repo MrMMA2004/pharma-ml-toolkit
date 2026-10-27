@@ -13464,6 +13464,42 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "bits).",
         )
         decode_btn.pack(side="left", padx=(10, 0))
+        # (100x-154) D2.py's GAP 5 -- the LAST unabsorbed block of the
+        # upload (its TreeExplainer beeswarm + top-20 bar): one row,
+        # one button per figure, the same run-tuple discipline as the
+        # row above (the run's OWN held-out features, never the
+        # session frame).
+        ml_result_buttons4 = ttk.Frame(results, style="Card.TFrame")
+        grid_append(results, ml_result_buttons4, sticky="w", pady=(6, 0))
+        shap_swarm_btn = self._action_button(
+            ml_result_buttons4,
+            "SHAP beeswarm",
+            self._ml_plot_shap_beeswarm,
+            tooltip="shap_summary + plot_shap_beeswarm -- D2.py's "
+            "TreeExplainer beeswarm (the upload's own figure): every "
+            "(sample, feature) point of the last run's held-out split "
+            "as a jittered dot -- the x position is how far the "
+            "feature pushed THAT prediction from the base value, the "
+            "colour is the feature's own value (amber low, teal "
+            "high).  Pure-matplotlib drawing (only the computation "
+            "needs shap -- pip install 'pharmaml[explain]').  Tree "
+            "models only (LightGBM/XGBoost/CatBoost/sklearn trees); "
+            "anything else gets the honest error naming the "
+            "permutation-importance sibling.",
+        )
+        shap_swarm_btn.pack(side="left")
+        shap_bar_btn = self._action_button(
+            ml_result_buttons4,
+            "SHAP top-20 bar",
+            self._ml_plot_shap_importance,
+            tooltip="plot_shap_importance -- the beeswarm's compact "
+            "sibling and D2.py's own top-20 bar: one bar per feature, "
+            "the mean |SHAP value| over the run's held-out rows (how "
+            "hard the feature pushes the model output, either "
+            "direction), largest first.  Same tree-models-only gate, "
+            "same record -- the numbers behind the swarm.",
+        )
+        shap_bar_btn.pack(side="left", padx=(10, 0))
         self._ml_metrics = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, self._ml_metrics, sticky="ew")
         ttk.Label(
@@ -16986,7 +17022,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     import numpy as np
 
                     values = np.asarray(y_test, dtype=float).reshape(-1)
-                    frame[target] = values[: len(frame)]
+                    # (100x-154) exact length only: the round-36 version
+                    # sliced values[: len(frame)], silently pairing a
+                    # LONGER y_test's prefix with the frame's rows -- a
+                    # partial truth in the one fallback path where
+                    # misalignment is real.  A mismatched length now
+                    # leaves the matrix honestly feature x feature and
+                    # the note says so (the shorter case always raised
+                    # into this branch; now both do).
+                    if len(values) != len(frame):
+                        raise ValueError(
+                            f"y_test carries {len(values)} value(s) for "
+                            f"{len(frame)} held-out row(s)"
+                        )
+                    frame[target] = values
                 joined = True
             except (KeyError, IndexError, ValueError, TypeError):
                 joined = False
@@ -17019,6 +17068,88 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._ml_result_note.configure(text=note)
 
         self._start_job("correlation heatmap", work, render)
+
+    def _ml_plot_shap_beeswarm(self) -> None:
+        """The SHAP beeswarm of the last run (100x-154).
+
+        ``D2.py``'s GAP-5 figure (its lines 472-528, the LAST
+        unabsorbed block of the upload): the ``TreeExplainer`` beeswarm
+        over the run's OWN held-out feature rows -- every (sample,
+        feature) point jittered onto its feature's row, coloured by the
+        feature's own value.  The computation needs the optional
+        ``shap`` package (the typed :class:`DependencyError` carries
+        the exact ``pip install 'pharmaml[explain]'`` command); the
+        drawing is pure matplotlib.  Tree models only -- anything else
+        surfaces the typed error that names the
+        ``permutation_feature_importance`` sibling.
+        """
+        self._ml_run_shap(swarm=True)
+
+    def _ml_plot_shap_importance(self) -> None:
+        """The top-20 mean-|SHAP| bar of the last run (100x-154).
+
+        ``D2.py``'s own top-20 bar: one bar per feature, the mean
+        magnitude of the feature's SHAP values over the run's held-out
+        rows -- the numbers behind the beeswarm, same record, same
+        gate.
+        """
+        self._ml_run_shap(swarm=False)
+
+    def _ml_run_shap(self, swarm: bool) -> None:
+        """The shared body of both SHAP buttons (100x-154)."""
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo(
+                "No trained model",
+                "Train a model first -- the SHAP figures explain the "
+                "last run's fitted model over its held-out rows.",
+            )
+            return
+        trained, _report, _task, _x_train, _y_train, x_test, _y_test, target = run
+        if not self._require_pharmaml() or not self._require("matplotlib", "the figure"):
+            return
+
+        def work() -> Any:
+            from pharmaml.ml import shap_summary
+            from pharmaml.viz import plot_shap_beeswarm, plot_shap_importance
+
+            summary = shap_summary(trained, x_test)
+            figure = (
+                plot_shap_beeswarm(
+                    summary,
+                    title=(
+                        f"SHAP beeswarm — {summary.model_name} "
+                        f"(held-out rows, target {target})"
+                    ),
+                )
+                if swarm
+                else plot_shap_importance(
+                    summary,
+                    title=(
+                        f"SHAP importance — {summary.model_name} "
+                        f"(held-out rows, target {target})"
+                    ),
+                )
+            )
+            return summary, figure
+
+        def render(payload: tuple[Any, Any]) -> None:
+            summary, figure = payload
+            self._render_figure(self._ml_host, figure)
+            top = summary.ranking(top_n=3)
+            leaders = ", ".join(f"{name} {value:.3f}" for name, value in top)
+            kind = "beeswarm" if swarm else "top-20 bar"
+            note = (
+                f"SHAP {kind} replaces the previous figure — Train & "
+                "evaluate brings it back · "
+                f"{summary.n_samples} held-out row(s) · {len(summary.names)} "
+                f"feature(s) · top: {leaders}"
+            )
+            if summary.base_value is not None:
+                note += f" · base value {summary.base_value:+.4g}"
+            self._ml_result_note.configure(text=note)
+
+        self._start_job("SHAP summary", work, render)
 
     def _ml_decode_bit(self) -> None:
         """Ask for a bit index + SMILES, then decode (100x-152).
