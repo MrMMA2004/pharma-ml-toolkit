@@ -77,6 +77,20 @@ upload's final missing block as a first-class optional-gated surface:
   SHAP top-20 bar) over the run's OWN held-out rows — the D2.py
   upload is now FULLY absorbed, every block a first-class surface.
 
+**Verification:** suite **3201 collected = 3196 passed + 5 skipped /
+0 failures** (the notebook freshness guard fired on the first run —
+the eight notebooks still printed 1.2.91 — and passed after the
+standard re-execution against the bumped tree, 200 s); ruff clean;
+mypy src/ clean (70 files — `ml/explain.py` the new module); web
+tsc(src) zero errors; the two SHAP screenshots VLM-reviewed 5/5 and
+5/5 (scratch/vlm154_shap_*.json); notebooks + no-output twins
+re-executed AFTER the bump; the dying session's half-finished
+`data-file-preview.tsx` duplicate (uncompilable, imported nowhere)
+folded into the shipped viewer — its three genuinely-new ideas (the
+row-index column, the empty-cell em-dash, cell max-width truncation
+for long values like SMILES) now live in `data-file-view.tsx` and the
+dead file is gone.
+
 ## [1.2.91] — 2026-10-27
 
 ### Fixed / Added — the eighth engineering review (100x-153): the round-35 additions audited, one red + three ambers closed, the interpretability bundle gained its web twin

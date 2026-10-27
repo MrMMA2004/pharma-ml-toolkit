@@ -184,13 +184,23 @@ function CsvTableView({ data }: { data: CsvPreviewResponse }) {
             </caption>
             <thead>
               <tr>
+                {/* Row-index column (the 100x-154 fold: the preview
+                 * twin's one genuinely-new idea — a stable reference
+                 * for "row N of the file" while scrolling). */}
+                <th
+                  scope="col"
+                  aria-label="Row index"
+                  className="sticky top-0 z-10 w-10 whitespace-nowrap border-b bg-muted px-2.5 py-2 text-right font-mono text-[11px] font-normal tabular-nums text-muted-foreground/70"
+                >
+                  #
+                </th>
                 {data.columns.map((column, i) => (
                   <th
                     key={`${column}-${i}`}
                     scope="col"
                     title={column}
                     className={
-                      "sticky top-0 z-10 whitespace-nowrap border-b bg-muted px-2.5 py-2 font-mono text-[11px] font-semibold uppercase tracking-wide text-foreground/80 " +
+                      "sticky top-0 z-10 max-w-[24ch] truncate whitespace-nowrap border-b bg-muted px-2.5 py-2 font-mono text-[11px] font-semibold uppercase tracking-wide text-foreground/80 " +
                       (numericColumns[i] ? "text-right" : "text-left")
                     }
                   >
@@ -205,6 +215,9 @@ function CsvTableView({ data }: { data: CsvPreviewResponse }) {
                   key={r}
                   className="odd:bg-muted/50 transition-colors hover:bg-primary/10"
                 >
+                  <td className="whitespace-nowrap border-b border-border/60 px-2.5 py-1.5 text-right font-mono text-[11px] tabular-nums text-muted-foreground/60">
+                    {r + 1}
+                  </td>
                   {data.columns.map((_, c) => {
                     const value = row[c] ?? "";
                     return (
@@ -212,11 +225,20 @@ function CsvTableView({ data }: { data: CsvPreviewResponse }) {
                         key={c}
                         title={value}
                         className={
-                          "whitespace-nowrap border-b border-border/60 px-2.5 py-1.5 font-mono text-muted-foreground " +
+                          "max-w-[28ch] truncate whitespace-nowrap border-b border-border/60 px-2.5 py-1.5 font-mono text-muted-foreground " +
                           (numericColumns[c] ? "text-right tabular-nums" : "text-left")
                         }
                       >
-                        {value}
+                        {value === "" ? (
+                          <span
+                            className="text-muted-foreground/40"
+                            aria-label="empty cell"
+                          >
+                            —
+                          </span>
+                        ) : (
+                          value
+                        )}
                       </td>
                     );
                   })}

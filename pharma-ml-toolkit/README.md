@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (**3157 tests**).
+exceptions, input validation, and pytest coverage** (**3196 tests**).
 
 ---
 
@@ -275,7 +275,7 @@ pharma-ml-toolkit/
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
 ├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
-├── tests/                   # 3157 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
+├── tests/                   # 3196 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
