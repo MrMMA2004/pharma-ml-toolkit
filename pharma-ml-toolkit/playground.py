@@ -191,6 +191,15 @@ Design notes
   (two named palettes drive every shade); the choice is part of the
   saved session.  Embedded figures keep the toolkit's white
   published-figure background on purpose -- plot legibility first.
+* DearPyGui affordances (100x-158): every embedded TkAgg figure now
+  carries a styled matplotlib navigation toolbar (home / pan / zoom /
+  save + the live coordinate readout -- dpg's interactive plots are the
+  reference) and a dashed crosshair under the cursor (dpg's
+  cross-highlight), every table gains zebra stripes + a hover row
+  highlight + clickable numeric-aware sortable headings (dpg's table
+  chrome), and ``View ▸ Font size`` (9-12 pt) rescales the whole UI
+  hierarchy (dpg's global font scale).  ``View ▸ Figure toolbars``
+  toggles the toolbars; both preferences ride the session file.
 * Embedded figures reuse the toolkit's own plotting helpers, so the
   playground looks exactly like the package's published figures.
 * A quiet keyboard-shortcut hint row sits above the status bar,
@@ -545,6 +554,7 @@ from collections.abc import Callable, Iterable, Iterator
 from functools import partial
 from pathlib import Path
 from typing import Any
+from weakref import WeakKeyDictionary
 
 try:
     import tkinter as tk
@@ -632,6 +642,12 @@ _LIGHT_PALETTE: dict[str, str] = {
     "BUTTON_FACE": "#ffffff",
     "BUTTON_DISABLED": "#9fbcb4",
     "BUTTON_DISABLED_INK": "#e8f0ee",
+    # (100x-158) DearPyGui table parity: the zebra stripe behind even
+    # rows (mvThemeCol_TableRowBgAlt) and the row-highlight a hover
+    # paints (mvThemeCol_TableRowBgHovered) -- ACCENT_SOFT reads right
+    # in both palettes, so the stripe key is the only new mix needed.
+    "STRIPE": "#f2f6f1",
+    "HOVER": "#dceee8",
 }
 _DARK_PALETTE: dict[str, str] = {
     "BG": "#151a18",
@@ -650,6 +666,8 @@ _DARK_PALETTE: dict[str, str] = {
     "BUTTON_FACE": "#2b3531",
     "BUTTON_DISABLED": "#3a4642",
     "BUTTON_DISABLED_INK": "#8d9b95",
+    "STRIPE": "#242c29",
+    "HOVER": "#2c4139",
 }
 _PALETTES: dict[str, dict[str, str]] = {"light": _LIGHT_PALETTE, "dark": _DARK_PALETTE}
 
@@ -672,6 +690,8 @@ STATUS = _LIGHT_PALETTE["STATUS"]
 BUTTON_FACE = _LIGHT_PALETTE["BUTTON_FACE"]
 BUTTON_DISABLED = _LIGHT_PALETTE["BUTTON_DISABLED"]
 BUTTON_DISABLED_INK = _LIGHT_PALETTE["BUTTON_DISABLED_INK"]
+STRIPE = _LIGHT_PALETTE["STRIPE"]
+HOVER = _LIGHT_PALETTE["HOVER"]
 
 
 def apply_theme(name: str) -> str:
@@ -690,6 +710,7 @@ def apply_theme(name: str) -> str:
     global _ACTIVE_THEME, BG, CARD, BORDER, INK, MUTED, ACCENT, ACCENT_DARK
     global ACCENT_SOFT, GOOD, BAD, TAB, HEADING, STATUS
     global BUTTON_FACE, BUTTON_DISABLED, BUTTON_DISABLED_INK
+    global STRIPE, HOVER
     _ACTIVE_THEME = name if name in _PALETTES else "light"
     palette = _PALETTES[_ACTIVE_THEME]
     BG = palette["BG"]
@@ -708,6 +729,8 @@ def apply_theme(name: str) -> str:
     BUTTON_FACE = palette["BUTTON_FACE"]
     BUTTON_DISABLED = palette["BUTTON_DISABLED"]
     BUTTON_DISABLED_INK = palette["BUTTON_DISABLED_INK"]
+    STRIPE = palette["STRIPE"]
+    HOVER = palette["HOVER"]
     return _ACTIVE_THEME
 
 
@@ -1970,6 +1993,255 @@ class Tooltip:
             self._tip = None
 
 
+# -- (100x-158) DearPyGui-style table chrome -------------------------------- #
+#
+# DearPyGui's tables ship three affordances the toolkit's ``ttk.Treeview``
+# tables lacked: alternating row backgrounds (``mvThemeCol_TableRowBgAlt``),
+# a row highlight under the cursor (``mvThemeCol_TableRowBgHovered``) and
+# clickable sortable column headings.  ``attach_table_chrome`` bolts all
+# three onto any Treeview in one idempotent call; the app-wide walk
+# (:meth:`PlaygroundApp._apply_table_chrome`) attaches it to every tree
+# the tabs build, and the 150 ms poll (:func:`sweep_table_chrome`)
+# re-stripes a tree whenever its row COUNT changes -- so all ~59 existing
+# populate paths gain the stripes without a single edit, including trees
+# dialogs create on demand (they attach at creation).
+_CHROME_TREES: list[Any] = []
+
+#: zebra tag pair -- odd rows keep the card colour, even rows get STRIPE.
+_CHROME_TAGS: tuple[str, str] = ("chromeodd", "chromeeven")
+_CHROME_ALL = frozenset((*_CHROME_TAGS, "chromehover"))
+
+#: hover row + cached row counts/columns, keyed by the tree (weak -- a
+#: destroyed dialog's tree drops out of the map without a sweep).
+_CHROME_HOVER: WeakKeyDictionary[Any, str] = WeakKeyDictionary()
+_CHROME_COUNTS: WeakKeyDictionary[Any, int] = WeakKeyDictionary()
+_CHROME_COLUMNS: WeakKeyDictionary[Any, tuple[str, ...]] = WeakKeyDictionary()
+
+
+def _maybe_float(text: str) -> float | None:
+    """Parse a numeric cell, tolerating the house thousands separators."""
+    try:
+        return float(text.replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _tree_cell_text(tree: Any, iid: str, column: str) -> str:
+    """One cell's text -- ``#0`` is the item's own label column."""
+    if column == "#0":
+        return str(tree.item(iid, "text") or "")
+    with contextlib.suppress(tk.TclError):
+        return str(tree.set(iid, column) or "")
+    return ""
+
+
+def _strip_sort_arrow(text: str) -> str:
+    """Drop a trailing sort arrow (and stray spaces) from a heading."""
+    stripped = text.rstrip()
+    for arrow in (" ↑", " ↓"):
+        if stripped.endswith(arrow):
+            return stripped[: -len(arrow)].rstrip()
+    return stripped
+
+
+def retag_tree_zebra(tree: Any) -> None:
+    """Re-stripe a tree's top-level rows for their CURRENT positions.
+
+    Any tags a row already carries (none of the house populate paths use
+    any, but a future one might) survive; only the chrome's own tags are
+    replaced.  Children below the top level keep the default row colour
+    -- hierarchical trees (the biology matrix) stay quiet.
+    """
+    for index, iid in enumerate(tree.get_children("")):
+        keep = [str(tag) for tag in tree.item(iid, "tags") if str(tag) not in _CHROME_ALL]
+        tree.item(iid, tags=(*keep, _CHROME_TAGS[index % 2]))
+
+
+def _sort_tree_column(tree: Any, column: str) -> None:
+    """Heading-click sort: numeric-aware, direction toggling, arrow shown.
+
+    The direction memory lives in the heading's own text (``name ↑`` /
+    ``name ↓``): the first click sorts ascending, the next toggles, and
+    sorting one column clears every other column's arrow.  Numbers are
+    detected only when every non-blank cell parses -- one stray word
+    keeps the whole column lexicographic, never a half-numeric mess.
+    Blank cells always sort last.  Selection survives: ``move`` keeps
+    item identity, only the order changes.
+    """
+    items = list(tree.get_children(""))
+    if not items:
+        return
+    heading_text = str(tree.heading(column, "text") or "")
+    descending = "↑" in heading_text
+
+    def cell(iid: str) -> str:
+        return _tree_cell_text(tree, iid, column).strip().replace(",", "")
+
+    non_blank = [text for text in (cell(iid) for iid in items) if text]
+    numeric = bool(non_blank) and all(_maybe_float(text) is not None for text in non_blank)
+    if numeric:
+
+        def key(iid: str) -> tuple[bool, float]:
+            text = cell(iid)
+            number = _maybe_float(text)
+            return (text == "", float("-inf") if number is None else number)
+
+    else:
+
+        def key(iid: str) -> tuple[bool, str, str]:
+            text = cell(iid)
+            return (text == "", text.lower(), text)
+
+    for index, iid in enumerate(sorted(items, key=key, reverse=descending)):
+        tree.move(iid, "", index)
+    # every OTHER column loses its arrow; this one gains the fresh one
+    with contextlib.suppress(tk.TclError):
+        columns = [str(name) for name in (tree.cget("columns") or ())]
+        if "tree" in str(tree.cget("show")):
+            columns.insert(0, "#0")
+        for other in columns:
+            other_text = str(tree.heading(other, "text") or "")
+            if other != column and ("↑" in other_text or "↓" in other_text):
+                tree.heading(other, text=_strip_sort_arrow(other_text))
+        tree.heading(column, text=_strip_sort_arrow(heading_text) + (" ↓" if descending else " ↑"))
+    _clear_tree_hover(tree)
+    retag_tree_zebra(tree)
+
+
+def _hover_tree_row(tree: Any, event: Any) -> None:
+    """``<Motion>``: highlight the row under the cursor (dpg's hover).
+
+    The hover tag REPLACES the row's tags while it is hovered (tag
+    precedence between zebra and hover is unspecified in Tk, so the
+    chrome never stacks them) and the stripe is restored on leave.
+    """
+    iid = str(tree.identify_row(event.y))
+    if iid == _CHROME_HOVER.get(tree, ""):
+        return
+    _clear_tree_hover(tree)
+    if iid:
+        _CHROME_HOVER[tree] = iid
+        keep = [str(tag) for tag in tree.item(iid, "tags") if str(tag) not in _CHROME_ALL]
+        tree.item(iid, tags=(*keep, "chromehover"))
+
+
+def _clear_tree_hover(tree: Any) -> None:
+    """Drop the hover highlight, restoring the row's zebra stripe."""
+    iid = _CHROME_HOVER.pop(tree, "")
+    if not iid:
+        return
+    with contextlib.suppress(tk.TclError):
+        if tree.exists(iid):
+            keep = [str(tag) for tag in tree.item(iid, "tags") if str(tag) not in _CHROME_ALL]
+            stripe = _CHROME_TAGS[tree.index(iid) % 2]
+            tree.item(iid, tags=(*keep, stripe))
+
+
+def refresh_table_chrome() -> None:
+    """Theme flip: retint the stripe/hover tags of every live tree."""
+    for tree in _CHROME_TREES:
+        with contextlib.suppress(tk.TclError):
+            if not tree.winfo_exists():
+                continue
+            tree.tag_configure(_CHROME_TAGS[0], background=CARD)
+            tree.tag_configure(_CHROME_TAGS[1], background=STRIPE)
+            tree.tag_configure("chromehover", background=HOVER)
+
+
+def sweep_table_chrome() -> None:
+    """Re-stripe registered trees whose rows/columns changed; prune the dead.
+
+    Called from the app's 150 ms progress poll: a count change is the
+    cheapest reliable signal that any of the ~59 populate paths just
+    rewrote a tree, so the stripes track every refresh without those
+    sites knowing the chrome exists.  A COLUMN change (the converter
+    trees re-column themselves per run) re-binds the sort commands too.
+    """
+    alive: list[Any] = []
+    for tree in _CHROME_TREES:
+        if not _tree_alive(tree):
+            continue
+        try:
+            count = len(tree.get_children(""))
+            columns = _tree_columns(tree)
+        except tk.TclError:  # destroyed mid-walk
+            continue
+        alive.append(tree)
+        if _CHROME_COLUMNS.get(tree) != columns:
+            _CHROME_COLUMNS[tree] = columns
+            with contextlib.suppress(tk.TclError):
+                _bind_tree_sort(tree)
+        if _CHROME_COUNTS.get(tree) != count:
+            _CHROME_COUNTS[tree] = count
+            with contextlib.suppress(tk.TclError):
+                retag_tree_zebra(tree)
+    _CHROME_TREES[:] = alive
+
+
+def _tree_alive(tree: Any) -> bool:
+    """A registered tree still answers (destroyed ones prune out)."""
+    try:
+        return bool(tree.winfo_exists())
+    except tk.TclError:
+        return False
+
+
+def _tree_columns(tree: Any) -> tuple[str, ...]:
+    """The tree's visible sortable columns (``#0`` first for trees)."""
+    show = str(tree.cget("show"))
+    columns = [str(name) for name in (tree.cget("columns") or ())]
+    if "headings" in show:
+        if "tree" in show:
+            columns.insert(0, "#0")
+        return tuple(columns)
+    return ()
+
+
+def _bind_tree_sort(tree: Any) -> None:
+    """(Re)bind the heading-click sort commands for the current columns."""
+    for column in _tree_columns(tree):
+        with contextlib.suppress(tk.TclError):
+            tree.heading(column, command=lambda col=column: _sort_tree_column(tree, col))
+
+
+def _toolbar_prune(pairs: list[tuple[Any, Any]]) -> list[tuple[Any, Any]]:
+    """Drop toolbar registrations whose widget already died."""
+    alive: list[tuple[Any, Any]] = []
+    for host, toolbar in pairs:
+        try:
+            if toolbar.winfo_exists():
+                alive.append((host, toolbar))
+        except tk.TclError:  # destroyed mid-walk
+            pass
+    return alive
+
+
+def attach_table_chrome(tree: Any, *, sortable: bool = True) -> None:
+    """Zebra stripes + hover highlight + sortable headings for ``tree``.
+
+    Idempotent (re-attaching rebinds and re-stripes, never duplicates the
+    registration).  The stripe/hover colours are read from the ACTIVE
+    palette, so a theme flip re-runs :func:`refresh_table_chrome` to
+    retint every registered tree.
+    """
+    # prune destroyed registrations first (the 150 ms poll sweeps too,
+    # but a test suite building many short-lived apps floods the list
+    # between polls -- strong refs would otherwise leak every window)
+    _CHROME_TREES[:] = [t for t in _CHROME_TREES if _tree_alive(t)]
+    if tree not in _CHROME_TREES:
+        _CHROME_TREES.append(tree)
+    tree.tag_configure(_CHROME_TAGS[0], background=CARD)
+    tree.tag_configure(_CHROME_TAGS[1], background=STRIPE)
+    tree.tag_configure("chromehover", background=HOVER)
+    if sortable:
+        _bind_tree_sort(tree)
+    tree.bind("<Motion>", lambda event, t=tree: _hover_tree_row(t, event), add="+")
+    tree.bind("<Leave>", lambda _event, t=tree: _clear_tree_hover(t), add="+")
+    retag_tree_zebra(tree)
+    _CHROME_COUNTS[tree] = len(tree.get_children(""))
+    _CHROME_COLUMNS[tree] = _tree_columns(tree)
+
+
 class ScrollFrame(ttk.Frame):  # type: ignore[misc] # ttk is None headless
     """A vertically scrollable tab page with mouse-wheel support.
 
@@ -2438,6 +2710,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._theme = self._session["theme"] if self._session else "light"
         self._theme_var: Any = None  # built by _build_menu (View menu)
         self._menu_tints: list[Any] = []  # menus to recolour on theme flip
+        # -- (100x-158) DearPyGui affordance state --------------------- #
+        # the live figure toolbars (host, toolbar) pairs -- visibility
+        # toggle + theme retint + destroy-pruning all walk this list
+        self._live_toolbars: list[tuple[Any, Any]] = []
+        # the UI font size in points (View > Font size); 10 is the size
+        # the window was designed around -- _build_style derives every
+        # bold/large variant from this base
+        self._ui_font_size = 10
         apply_theme(self._resolve_auto_theme() if self._theme == "auto" else self._theme)
 
         self.title("PharmaML Playground")
@@ -2453,6 +2733,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_statusbar()
         self._build_hintbar()
         self._build_tabs()
+        # (100x-158) DearPyGui's table affordances (zebra stripes, hover
+        # highlight, sortable headings) on every tree the tabs built.
+        self._apply_table_chrome()
         # Per-tab reset support (100x-54): snapshot the freshly built
         # (default) inputs and which tab owns which input BEFORE the
         # session restore overwrites either of them.
@@ -2501,20 +2784,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             style.theme_use("clam")
         except tk.TclError:  # pragma: no cover - exotic Tk builds
             pass
+        # (100x-158) every bold/large variant derives from the live UI
+        # font size (View > Font size), so the whole hierarchy grows
+        # together instead of just the unstyled widgets.
+        base = self._ui_font_size
         style.configure(".", background=BG, foreground=INK)
         style.configure("TFrame", background=BG)
         style.configure("Tab.TFrame", background=BG)
         style.configure("Card.TFrame", background=CARD)
         style.configure(
-            "CardTitle.TLabel", background=CARD, foreground=INK, font=("TkDefaultFont", 11, "bold")
+            "CardTitle.TLabel", background=CARD, foreground=INK, font=("TkDefaultFont", base + 1, "bold")
         )
         style.configure(
-            "CardMuted.TLabel", background=CARD, foreground=MUTED, font=("TkDefaultFont", 9)
+            "CardMuted.TLabel", background=CARD, foreground=MUTED, font=("TkDefaultFont", base - 1)
         )
         style.configure("Field.TLabel", background=CARD, foreground=INK)
         style.configure("Result.TLabel", background=CARD, foreground=ACCENT_DARK)
         style.configure(
-            "Title.TLabel", background=CARD, foreground=INK, font=("TkDefaultFont", 15, "bold")
+            "Title.TLabel", background=CARD, foreground=INK, font=("TkDefaultFont", base + 5, "bold")
         )
         style.configure(
             "Primary.TButton",
@@ -2524,7 +2811,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             focusthickness=1,
             focuscolor="#ffffff",
             padding=(16, 7),
-            font=("TkDefaultFont", 10, "bold"),
+            font=("TkDefaultFont", base, "bold"),
         )
         style.map(
             "Primary.TButton",
@@ -2549,7 +2836,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             focusthickness=1,
             focuscolor=MUTED,
             padding=(8, 2),
-            font=("TkDefaultFont", 9),
+            font=("TkDefaultFont", base - 1),
         )
         style.map(
             "Ghost.TButton",
@@ -2570,7 +2857,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             focusthickness=1,
             focuscolor=ACCENT,
             padding=(12, 4),
-            font=("TkDefaultFont", 9, "bold"),
+            font=("TkDefaultFont", base - 1, "bold"),
         )
         style.map(
             "Chip.TButton",
@@ -2585,7 +2872,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             background=TAB,
             foreground=MUTED,
             padding=(16, 8),
-            font=("TkDefaultFont", 10, "bold"),
+            font=("TkDefaultFont", base, "bold"),
         )
         style.map(
             "TNotebook.Tab", background=[("selected", CARD)], foreground=[("selected", ACCENT)]
@@ -2605,7 +2892,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "Treeview.Heading",
             background=HEADING,
             foreground=INK,
-            font=("TkDefaultFont", 9, "bold"),
+            font=("TkDefaultFont", base - 1, "bold"),
             relief="flat",
         )
         style.configure(
@@ -2639,7 +2926,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         style.configure("TProgressbar", background=ACCENT, troughcolor=TAB)
         style.configure("Status.TFrame", background=STATUS)
         style.configure(
-            "Status.TLabel", background=STATUS, foreground=MUTED, font=("TkDefaultFont", 9)
+            "Status.TLabel", background=STATUS, foreground=MUTED, font=("TkDefaultFont", base - 1)
         )
         # clam's state maps and trough colours ship full of light defaults
         # (readonly combobox fields, focus borders, pressed buttons,
@@ -2759,6 +3046,30 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         view_menu.add_checkbutton(
             label="Shortcut hints", variable=self._hints_var, command=self._apply_hint_visibility
         )
+        # (100x-158) the DearPyGui affordance preferences: the interactive
+        # figure toolbars (pan / zoom / save on every embedded figure --
+        # dpg plots are interactive out of the box) and the UI font size
+        # (dpg's global font scale, as a discrete 9-12 pt menu).  Both
+        # ride plain tk.Variables, so the session machinery persists them
+        # exactly like the hint row above.
+        self._toolbars_var = tk.BooleanVar(value=True)
+        view_menu.add_checkbutton(
+            label="Figure toolbars",
+            variable=self._toolbars_var,
+            command=self._apply_toolbar_visibility,
+        )
+        view_menu.add_separator()
+        self._font_var = tk.IntVar(value=10)
+        font_menu = tk.Menu(view_menu, tearoff=0)
+        for size in (9, 10, 11, 12):
+            font_menu.add_radiobutton(
+                label=f"{size} pt",
+                value=size,
+                variable=self._font_var,
+                command=self._apply_font_size,
+            )
+        view_menu.add_cascade(label="Font size", menu=font_menu)
+        self._menu_tints.append(font_menu)
         bar.add_cascade(label="View", menu=view_menu)
 
         help_menu = tk.Menu(bar, tearoff=0)
@@ -3074,6 +3385,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         tree.heading("tab", text="tab")
         tree.column("card", width=360)
         tree.column("tab", width=130)
+        # (100x-158) the finder's tree is created per-dialog, so the
+        # post-build chrome walk cannot reach it -- attach here.
+        attach_table_chrome(tree)
         tree.pack(fill="both", expand=True, padx=14, pady=(0, 4))
         ttk.Label(
             win, text="Enter jump · double-click jump · Esc close", style="CardMuted.TLabel"
@@ -3330,6 +3644,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 text += f" · {note}"
             with contextlib.suppress(tk.TclError):
                 self._job_label.configure(text=text)
+        # (100x-158) the DearPyGui affordance upkeep rides the same 150 ms
+        # poll: prune destroyed figure toolbars, re-stripe any tree whose
+        # row count changed (every populate path, unedited), all cheap.
+        self._live_toolbars[:] = _toolbar_prune(self._live_toolbars)
+        sweep_table_chrome()
         self.after(150, self._poll_progress)
 
     def _poll_jobs(self) -> None:
@@ -3450,10 +3769,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         canvas_cls = self._figure_canvas_class()
         if canvas_cls is not None:
             canvas = canvas_cls(figure, master=host)
+            # (100x-158) the DearPyGui interactive-plot parity: the
+            # navigation toolbar (pan / zoom / save + coordinate readout)
+            # and the dashed crosshair guides under the cursor.  Both
+            # degrade silently on exotic Tk builds.
+            self._attach_figure_toolbar(host, canvas)
             canvas.draw()
             widget = canvas.get_tk_widget()
             widget.configure(background=CARD, highlightthickness=0)
             widget.pack(fill="both", expand=True)
+            self._attach_crosshair(canvas)
             self._figure_seq += 1
             host._pg_figure_seq = self._figure_seq
             host._pg_figure = figure
@@ -3643,6 +3968,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_style()
         self._tint_menus()
         self._retint_plain_widgets(previous)
+        # (100x-158) the table chrome's stripe/hover tags + every live
+        # figure toolbar follow the palette flip too
+        refresh_table_chrome()
+        for _host, toolbar in self._live_toolbars:
+            with contextlib.suppress(tk.TclError):
+                if toolbar.winfo_exists():
+                    self._style_figure_toolbar(toolbar)
 
     def _tint_menus(self) -> None:
         """Recolour the menu bar for the active palette."""
@@ -3682,6 +4014,27 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     elif klass == "Text":
                         if str(child.cget("background")) == previous["CARD"]:
                             child.configure(background=CARD, foreground=INK)
+                    elif klass == "Button":
+                        # (100x-158) the figure toolbars' plain tk buttons --
+                        # matched by exact previous-palette colours so no
+                        # other button in the window is ever touched.
+                        if str(child.cget("background")) == previous["CARD"]:
+                            child.configure(background=CARD)
+                        if str(child.cget("activebackground")) == previous["ACCENT_SOFT"]:
+                            child.configure(activebackground=ACCENT_SOFT)
+                    elif klass == "Checkbutton":
+                        # the mpl 3.10 toolbars' axis/grid toggles
+                        if str(child.cget("background")) == previous["CARD"]:
+                            child.configure(
+                                background=CARD,
+                                activebackground=CARD,
+                            )
+                    elif klass == "Label":
+                        # the toolbars' coordinate-readout labels AND the PNG
+                        # figure fallback labels (a latent dark-theme straggler
+                        # before this branch existed)
+                        if str(child.cget("background")) == previous["CARD"]:
+                            child.configure(background=CARD)
                 except tk.TclError:  # pragma: no cover - exotic widgets
                     pass
                 walk(child)
@@ -4193,6 +4546,194 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         for child in widget.winfo_children():
             yield from self._walk_widgets(child)
 
+    # -- (100x-158) DearPyGui affordances ----------------------------- #
+    def _apply_table_chrome(self) -> None:
+        """Attach zebra/hover/sort chrome to every tree the tabs built.
+
+        One post-build walk covers all 29 statically created Treeviews;
+        trees dialogs create later attach at their own creation sites
+        (the card finder, the report picklists).
+        """
+        with contextlib.suppress(tk.TclError):
+            for widget in self._walk_widgets(self):
+                if isinstance(widget, ttk.Treeview):
+                    attach_table_chrome(widget)
+
+    def _style_figure_toolbar(self, toolbar: Any) -> None:
+        """Recolour a matplotlib navigation toolbar to the active palette.
+
+        The Tk toolbar mixes plain ``tk`` buttons, frames, checkbuttons
+        (the mpl 3.10 axis/grid toggles) and the coordinate-readout
+        labels -- every child class gets the card treatment.
+        """
+        with contextlib.suppress(tk.TclError):
+            toolbar.configure(background=CARD, highlightthickness=0, borderwidth=0)
+            for child in toolbar.winfo_children():
+                with contextlib.suppress(tk.TclError):
+                    klass = child.winfo_class()
+                    if klass in ("Frame", "Labelframe"):
+                        child.configure(background=CARD, highlightthickness=0, borderwidth=0)
+                    elif klass == "Button":
+                        child.configure(
+                            background=CARD,
+                            foreground=INK,
+                            activebackground=ACCENT_SOFT,
+                            activeforeground=INK,
+                            highlightthickness=0,
+                            borderwidth=0,
+                        )
+                    elif klass == "Checkbutton":
+                        child.configure(
+                            background=CARD,
+                            foreground=INK,
+                            activebackground=CARD,
+                            activeforeground=INK,
+                            highlightthickness=0,
+                            borderwidth=0,
+                        )
+                    elif klass == "Label":
+                        child.configure(background=CARD, foreground=MUTED)
+
+    def _attach_figure_toolbar(self, host: Any, canvas: Any) -> Any:
+        """The interactive-plot parity: a navigation toolbar under a figure.
+
+        DearPyGui plots pan, zoom and box-select out of the box; the
+        playground's embedded figures were static renders.  This bolts
+        matplotlib's ``NavigationToolbar2Tk`` (home / pan / zoom / save +
+        the live coordinate readout in its own message label) onto every
+        TkAgg embed, styled to the palette.  Returns ``None`` (and the
+        figure stays static-but-functional) when the preference is off
+        or the toolbar cannot build on the host's Tk.
+        """
+        preference = getattr(self, "_toolbars_var", None)
+        if preference is not None and not preference.get():
+            return None
+        try:
+            from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+        except ImportError:  # pragma: no cover - TkAgg itself failed to load
+            return None
+        try:
+            toolbar = NavigationToolbar2Tk(canvas, host, pack_toolbar=False)
+        except Exception:  # noqa: BLE001 - exotic Tk builds keep the static figure
+            return None
+        with contextlib.suppress(Exception):  # update() is belt-only
+            toolbar.update()
+        # a re-render into the SAME host destroys the previous toolbar with
+        # the host's children -- drop its stale registration (and any other
+        # dead pair) so the list always mirrors the live windows
+        self._live_toolbars[:] = [
+            (live_host, live_toolbar)
+            for live_host, live_toolbar in _toolbar_prune(self._live_toolbars)
+            if live_host is not host
+        ]
+        self._style_figure_toolbar(toolbar)
+        toolbar.pack(side="bottom", fill="x")
+        self._live_toolbars.append((host, toolbar))
+        return toolbar
+
+    def _apply_toolbar_visibility(self) -> None:
+        """View ▸ Figure toolbars: show/hide every live toolbar at once."""
+        for _host, toolbar in self._live_toolbars:
+            with contextlib.suppress(tk.TclError):
+                if not toolbar.winfo_exists():
+                    continue
+                if self._toolbars_var.get():
+                    toolbar.pack(side="bottom", fill="x")
+                else:
+                    toolbar.pack_forget()
+
+    def _attach_crosshair(self, canvas: Any) -> None:
+        """The cross-highlight parity: a dashed crosshair under the cursor.
+
+        DearPyGui's ``is_cross_highlight`` draws a tracking cross with the
+        coordinates read out live.  The toolbar already provides the
+        readout (its message label); this adds the two dashed guides,
+        drawn via ``add_artist`` so they NEVER join the axes' data limits
+        (an ``add_line`` crosshair would autoscale the panel on the next
+        draw -- the classic drift bug).  Hidden on leave; full redraw via
+        ``draw_idle`` coalesces rapid motion into one repaint.
+        """
+        try:
+            from matplotlib.lines import Line2D
+        except ImportError:  # pragma: no cover - no matplotlib, no canvas
+            return
+
+        def pair_for(ax: Any) -> tuple[Any, Any]:
+            existing = getattr(ax, "_pg_crosshair", None)
+            if existing is not None:
+                return existing
+            vertical = Line2D(
+                [], [], linestyle=(0, (4, 3)), linewidth=0.8, alpha=0.9, clip_on=True
+            )
+            horizontal = Line2D(
+                [], [], linestyle=(0, (4, 3)), linewidth=0.8, alpha=0.9, clip_on=True
+            )
+            vertical.set_visible(False)
+            horizontal.set_visible(False)
+            ax.add_artist(vertical)
+            ax.add_artist(horizontal)
+            ax._pg_crosshair = (vertical, horizontal)
+            return vertical, horizontal
+
+        def hide() -> None:
+            changed = False
+            for ax in canvas.figure.axes:
+                pair = getattr(ax, "_pg_crosshair", None)
+                if pair is not None and pair[0].get_visible():
+                    pair[0].set_visible(False)
+                    pair[1].set_visible(False)
+                    changed = True
+            if changed:
+                canvas.draw_idle()
+
+        def on_motion(event: Any) -> None:
+            ax = getattr(event, "inaxes", None)
+            if ax is None:
+                hide()
+                return
+            hide()
+            vertical, horizontal = pair_for(ax)
+            x0, x1 = ax.get_xlim()
+            y0, y1 = ax.get_ylim()
+            vertical.set_data([event.xdata, event.xdata], [y0, y1])
+            horizontal.set_data([x0, x1], [event.ydata, event.ydata])
+            vertical.set_color(MUTED)
+            horizontal.set_color(MUTED)
+            vertical.set_clip_box(ax.bbox)
+            horizontal.set_clip_box(ax.bbox)
+            vertical.set_visible(True)
+            horizontal.set_visible(True)
+            canvas.draw_idle()
+
+        canvas.mpl_connect("motion_notify_event", on_motion)
+        canvas.mpl_connect("figure_leave_event", lambda _event: hide())
+
+    def _apply_font_size(self) -> None:
+        """View ▸ Font size: rescale every named font at once.
+
+        DearPyGui has a global font scale; tkinter has named fonts, which
+        is nearly the same lever: ``TkDefaultFont`` / ``TkTextFont`` /
+        ``TkMenuFont`` reconfigure live, every unstyled widget follows,
+        and ``_build_style`` re-derives the bold/large variants from
+        ``self._ui_font_size`` so the whole hierarchy grows together.
+        Embedded matplotlib figures keep their own sizes (they are export
+        artifacts, sized for paper).
+        """
+        try:
+            size = int(self._font_var.get())
+        except (tk.TclError, ValueError, AttributeError):
+            return
+        if size == self._ui_font_size:
+            return
+        self._ui_font_size = size
+        for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont"):
+            with contextlib.suppress(tk.TclError):
+                tkfont.nametofont(name).configure(size=size)
+        with contextlib.suppress(tk.TclError):
+            self._mono.configure(size=size)
+            self._mono_result.configure(size=size + 2)
+        self._build_style()
+
     def _tab_input_names(self) -> dict[int, set[str]]:
         """Map each notebook tab to the session-input names it owns.
 
@@ -4278,6 +4819,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # the hint row's visibility rides a tk.Variable, so a restored
         # session may have flipped it -- re-apply after the variables.
         self._apply_hint_visibility()
+        # (100x-158) the UI font size rides one too (View > Font size) --
+        # re-derive the named fonts + style hierarchy after the restore.
+        with contextlib.suppress(Exception):  # never block a restore
+            self._apply_font_size()
         text_widgets = self._session_text_widgets()
         for key, content in session["texts"].items():
             if key == "finder":

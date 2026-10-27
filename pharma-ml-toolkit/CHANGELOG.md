@@ -1,3 +1,66 @@
+## [1.2.94] — 2026-10-28
+
+### Added — the DearPyGui affordance review: the playground's GUI gains the UX vocabulary DearPyGui users take for granted (100x-158)
+
+The instruction: *"Improve the playground.py GUI:
+hoffstadt/DearPyGui."* The repo was cloned (`--depth 1 --filter=blob:none`,
+266 tracked files) and reviewed against the playground's tkinter reality
+— the honest premise being that a GPU-rendered immediate-mode framework
+is not a rewrite target for a 21k-line battle-tested UI, but its *UX
+vocabulary* is exactly what the GUI was missing. The feature-by-feature
+disposition table (18 rows: 5 added, 7 covered-already, 3 stretch,
+3 n-a-honest) lives in `docs/COVERAGE.md`'s Round-41 section. What
+landed:
+
+* **Interactive figures (the headline)** — every embedded TkAgg figure
+  now carries a styled matplotlib navigation toolbar (home / pan /
+  zoom / save, plus the live coordinate readout in its own message
+  label — DearPyGui plots pan and zoom out of the box; the playground's
+  figures were static renders) and a dashed crosshair under the cursor
+  (dpg's cross-highlight), drawn via `add_artist` so the guides never
+  join the axes' data limits — an `add_line` crosshair autoscale-drifts
+  the panel, the classic bug this avoids. `View ▸ Figure toolbars`
+  toggles them all; the preference rides the session file.
+* **The enabling change: matplotlib 3.9.2 → 3.10.9** — 3.9's `_tkagg`
+  could not talk to Tcl 9 (the "Failed to load Tcl_SetVar" failure), so
+  every Tcl 9 stack (uv pythons, newer Linux distros) silently fell
+  back to static PNG figures. 3.10's Tcl 9 support gives those users
+  live canvases — the toolbar's enabling prerequisite — with the PNG
+  fallback still guarding genuinely exotic Tk builds.
+* **Table chrome (dpg's `TableRowBgAlt` / `TableRowBgHovered` +
+  sortable columns)** — `attach_table_chrome` bolts zebra stripes, a
+  hover row highlight and clickable numeric-aware sortable headings
+  onto all 29 Treeviews: numbers sort as numbers (thousands separators
+  tolerated), one stray word keeps a column lexicographic (never a
+  half-numeric mess), blank cells always sort last, the direction
+  toggles per column with ↑/↓ arrows and cross-column clearing, and
+  selection survives. A 150 ms poll re-stripes any tree whose row count
+  changed — all ~59 populate paths gain the stripes without a single
+  edit — and a column change (the converter trees re-column themselves
+  per run) re-binds the sort commands.
+* **The UI font scale (dpg's `set_global_font_scale`)** — `View ▸ Font
+  size` (9–12 pt) rescales the named Tk fonts live and `_build_style`
+  re-derives every bold/large variant from the base, so the whole
+  hierarchy grows together; session-persisted via `_font_var`.
+* **Theme-flip completeness** — the stripe/hover tags retint with the
+  palette, and the retint walker gained Button/Checkbutton/Label
+  branches so the figure toolbars (and the PNG fallback labels — a
+  latent dark-theme straggler before this) follow light/dark flips.
+* **Two new palette keys** (`STRIPE`, `HOVER`) drive the zebra and
+  hover shades in both themes.
+
+### Tests
+
+16 new GUI tests (`TestDearPyGuiAffordances`: zebra alternation, the
+sweep's re-stripe + dead-tree pruning, numeric/thousands-separated/
+case-insensitive/blank-last sorting, arrow toggling + cross-column
+clearing, hover highlight + stripe restore, theme retint of stripes
+and toolbar, toolbar attach/style/toggle/rerender-replace, crosshair
+tracking + the no-axis-drift pin, the font scale round-trip, session
+persistence of both preferences) and the seven figure-landing pins
+updated to the toolbar-aware contract (a figure host now holds the
+canvas plus the optional toolbar frame).
+
 ## [1.2.93] — 2026-10-27
 
 ### Added — the Python Data Science Handbook absorbed: the unsupervised chapters land as first-class surfaces (100x-157)

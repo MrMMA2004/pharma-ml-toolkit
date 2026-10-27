@@ -4646,7 +4646,7 @@ class TestApplicabilityDomainGui:
         assert len(app._ad_tree.get_children()) == n_query
         status = app._ad_status.cget("text")
         assert "distance threshold" in status and "reliable" in status
-        assert len(app._ad_host.winfo_children()) == 1  # figure embedded
+        assert app._ad_host.winfo_children()  # figure embedded (canvas/label + optional toolbar)
         # the name column carries the library's SMILES strings
         first = str(app._ad_tree.item(app._ad_tree.get_children()[0])["values"][0])
         assert any(ch in first for ch in "CNc#(")
@@ -4780,7 +4780,7 @@ class TestCompletenessReviewGui:
         # no dose given: Vd/CL stay absent
         assert "Vd" not in text
         # the profile figure embedded
-        assert len(app._nca_host.winfo_children()) == 1
+        assert app._nca_host.winfo_children()  # figure landed (100x-158: toolbar may ride along)
         assert quiet_dialogs == []
 
     def test_nca_card_with_dose_reports_vd_and_clearance(
@@ -4831,7 +4831,7 @@ class TestCompletenessReviewGui:
         assert len(rows) == 6, rows
         values = app._fam_tree.item(rows[0], "values")
         assert values[0] == "0.5000" and values[1] == "9.93", values
-        assert len(app._fam_host.winfo_children()) == 1
+        assert app._fam_host.winfo_children()  # figure landed (100x-158: toolbar may ride along)
         app._pd_target_ec50()
         assert "EC50 = 1.9977" in app._fam_result.cget("text")
         assert quiet_dialogs == []
@@ -4941,7 +4941,7 @@ class TestReview120Gui:
         assert self._drain(app), "feature factory job hung"
         app._feat_plot_distributions()
         assert self._drain(app), "distribution job hung"
-        assert len(app._feat_host.winfo_children()) == 1
+        assert app._feat_host.winfo_children()  # figure landed (100x-158: toolbar may ride along)
         assert quiet_dialogs == []
 
     # -- ML results: plot_learning_curve ------------------------------ #
@@ -4959,7 +4959,7 @@ class TestReview120Gui:
         app._curve_cv.insert(0, "4")
         app._ml_plot_learning_curve()
         assert self._drain(app), "learning-curve job hung"
-        assert len(app._ml_host.winfo_children()) == 1
+        assert app._ml_host.winfo_children()  # figure landed (100x-158: toolbar may ride along)
         assert "learning curve" in app._ml_result_note.cget("text")
         assert quiet_dialogs == []
 
@@ -4997,7 +4997,7 @@ class TestReview120Gui:
         assert app._util_cmp_last is not None
         app._util_cmp_plot()
         assert self._drain(app), "reconciliation figure job hung"
-        assert len(app._util_cmp_host.winfo_children()) == 1
+        assert app._util_cmp_host.winfo_children()  # figure landed (100x-158: toolbar may ride along)
         assert quiet_dialogs == []
 
     # -- docking: parse_vina_config ----------------------------------- #
@@ -5339,7 +5339,7 @@ class TestReview121Gui:
         app._dl_cv_entry.insert(0, "2")
         app._dl_plot_learning_curve()
         assert self._drain(app), "DL learning-curve job hung"
-        assert len(app._dl_curve_host.winfo_children()) == 1
+        assert app._dl_curve_host.winfo_children()  # figure landed (100x-158: toolbar may ride along)
         assert quiet_dialogs == []
 
     def test_dl_learning_curve_bad_folds_is_named(self, app: Any, quiet_dialogs: list[Any]) -> None:
@@ -11972,7 +11972,7 @@ class TestReview145Gui:
         assert self._drain_jobs(app), "train job hung"
         app._ml_plot_permutation()
         assert self._drain_jobs(app), "permutation job hung"
-        assert len(app._ml_host.winfo_children()) == 1
+        assert app._ml_host.winfo_children()  # figure landed (100x-158: toolbar may ride along)
         assert "permutation importance" in app._ml_result_note.cget("text")
         assert quiet_dialogs == []
 
@@ -14367,3 +14367,249 @@ class TestUnsupervisedTab:
         for label, key in expected.items():
             app._unsup_method.set(label)
             assert app._unsup_method_key() == key, label
+
+
+# --------------------------------------------------------------------- #
+# (100x-158) the DearPyGui affordances -- interactive figure toolbars +
+# crosshair, table chrome (zebra / hover / sort), the UI font scale
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestDearPyGuiAffordances:
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def tree(self, app: Any, playground: Any) -> Any:
+        """A small headings tree packed into the live app window."""
+        t = playground.ttk.Treeview(app, columns=("v", "name"), show="headings", height=8)
+        t.heading("v", text="v")
+        t.heading("name", text="name")
+        t.pack(fill="both", expand=True)
+        app.update()
+        playground.attach_table_chrome(t)
+        return t
+
+    @staticmethod
+    def _cells(t: Any, column: str = "v") -> list[str]:
+        return [str(t.item(iid, "values")[0 if column == "v" else 1]) for iid in t.get_children("")]
+
+    # -- table chrome -------------------------------------------------- #
+    def test_every_built_tree_is_registered(self, app: Any, playground: Any) -> None:
+        walked = [
+            w for w in app._walk_widgets(app) if isinstance(w, playground.ttk.Treeview)
+        ]
+        assert walked, "no Treeviews built?"
+        registered = list(playground._CHROME_TREES)
+        for widget in walked:
+            assert widget in registered
+
+    def test_zebra_stripes_alternate(self, tree: Any, playground: Any) -> None:
+        for value in ("9", "10", "2"):
+            tree.insert("", "end", values=(value, f"row {value}"))
+        playground.retag_tree_zebra(tree)
+        tags = [tuple(tree.item(iid, "tags")) for iid in tree.get_children("")]
+        assert tags == [(playground._CHROME_TAGS[0],), (playground._CHROME_TAGS[1],), (playground._CHROME_TAGS[0],)]
+
+    def test_sweep_restripes_after_population(self, tree: Any, playground: Any) -> None:
+        for value in ("1", "2"):
+            tree.insert("", "end", values=(value, "x"))
+        playground.sweep_table_chrome()  # count changed -> striped
+        tags = [tuple(tree.item(iid, "tags")) for iid in tree.get_children("")]
+        assert playground._CHROME_TAGS[0] in tags[0]
+        assert playground._CHROME_TAGS[1] in tags[1]
+
+    def test_sweep_prunes_destroyed_trees(self, tree: Any, playground: Any) -> None:
+        assert tree in playground._CHROME_TREES
+        tree.destroy()
+        playground.sweep_table_chrome()
+        assert tree not in playground._CHROME_TREES
+
+    def test_sort_is_numeric_aware_with_arrow_toggle(self, tree: Any, playground: Any) -> None:
+        for value in ("9", "10", "2"):
+            tree.insert("", "end", values=(value, "x"))
+        playground._sort_tree_column(tree, "v")
+        assert self._cells(tree) == ["2", "9", "10"]  # NOT "10" < "2" < "9"
+        assert tree.heading("v", "text") == "v ↑"
+        playground._sort_tree_column(tree, "v")
+        assert self._cells(tree) == ["10", "9", "2"]
+        assert tree.heading("v", "text") == "v ↓"
+
+    def test_sort_clears_the_other_columns_arrow(self, tree: Any, playground: Any) -> None:
+        for value, name in (("9", "b"), ("10", "a")):
+            tree.insert("", "end", values=(value, name))
+        playground._sort_tree_column(tree, "v")
+        assert "↑" in str(tree.heading("v", "text"))
+        playground._sort_tree_column(tree, "name")
+        assert str(tree.heading("v", "text")) == "v"  # arrow dropped
+        assert "↑" in str(tree.heading("name", "text"))
+        assert self._cells(tree, "name") == ["a", "b"]
+
+    def test_text_sort_is_case_insensitive_and_blanks_last(
+        self, tree: Any, playground: Any
+    ) -> None:
+        for name in ("b", "A", "", "c"):
+            tree.insert("", "end", values=("1", name))
+        playground._sort_tree_column(tree, "name")
+        assert self._cells(tree, "name") == ["A", "b", "c", ""]
+
+    def test_thousands_separated_numbers_sort_numerically(
+        self, tree: Any, playground: Any
+    ) -> None:
+        for value in ("1,234", "999", "2,000"):
+            tree.insert("", "end", values=(value, "x"))
+        playground._sort_tree_column(tree, "v")
+        assert self._cells(tree) == ["999", "1,234", "2,000"]
+
+    def test_hover_highlights_then_restores_the_stripe(
+        self, tree: Any, playground: Any, app: Any
+    ) -> None:
+        for value in ("1", "2", "3"):
+            tree.insert("", "end", values=(value, "x"))
+        playground.sweep_table_chrome()
+        app.update_idletasks()
+        app.update()
+        rows = list(tree.get_children(""))
+        box = tree.bbox(rows[0])
+        assert box, "tree not mapped for bbox"
+
+        class FakeMotion:  # a <Motion> event carries .y in widget coords
+            def __init__(self, y: int) -> None:
+                self.y = y
+
+        playground._hover_tree_row(tree, FakeMotion(box[1] + box[3] // 2))
+        assert "chromehover" in tuple(tree.item(rows[0], "tags"))
+        playground._hover_tree_row(tree, FakeMotion(box[1] - 40))  # off the rows
+        assert "chromehover" not in tuple(tree.item(rows[0], "tags"))
+        assert playground._CHROME_TAGS[0] in tuple(tree.item(rows[0], "tags"))
+
+    def test_theme_flip_recolors_the_stripes(self, tree: Any, playground: Any, app: Any) -> None:
+        for value in ("1", "2"):
+            tree.insert("", "end", values=(value, "x"))
+        playground.sweep_table_chrome()
+        app._set_theme("dark")
+        tag = tree.tag_configure(playground._CHROME_TAGS[1])
+        assert str(tag["background"]) == playground._DARK_PALETTE["STRIPE"]
+        app._set_theme("light")
+        tag = tree.tag_configure(playground._CHROME_TAGS[1])
+        assert str(tag["background"]) == playground._LIGHT_PALETTE["STRIPE"]
+
+    # -- the interactive figure toolbar + crosshair --------------------- #
+    def _rendered(self, app: Any, playground: Any) -> tuple[Any, Any, Any]:
+        from matplotlib.figure import Figure
+
+        fig = Figure(figsize=(4, 3))
+        ax = fig.add_subplot(111)
+        ax.plot([1, 2, 3], [1, 4, 9])
+        host = playground.tk.Frame(app, background=playground.CARD, height=330)
+        host.pack(fill="both", expand=True)
+        app._render_figure(host, fig)
+        app.update()
+        return host, fig, ax
+
+    def test_toolbar_attaches_styled_and_toggles(self, app: Any, playground: Any) -> None:
+        if app._figure_canvas_class() is None:
+            pytest.skip("TkAgg unavailable on this Tk build")
+        _host, _fig, _ax = self._rendered(app, playground)
+        assert len(app._live_toolbars) == 1
+        toolbar = app._live_toolbars[0][1]
+        # packed at the host's bottom edge, on the card colour
+        assert toolbar.winfo_manager() == "pack"
+        assert str(toolbar.cget("background")) == playground.CARD
+        buttons = [c for c in toolbar.winfo_children() if c.winfo_class() == "Button"]
+        assert buttons, "toolbar buttons not built"
+        assert str(buttons[0].cget("background")) == playground.CARD
+        # the preference hides / shows every live toolbar
+        app._toolbars_var.set(False)
+        app._apply_toolbar_visibility()
+        app.update()
+        assert toolbar.winfo_manager() == ""
+        app._toolbars_var.set(True)
+        app._apply_toolbar_visibility()
+        app.update()
+        assert toolbar.winfo_manager() == "pack"
+
+    def test_rerender_replaces_the_toolbar_without_leak(
+        self, app: Any, playground: Any
+    ) -> None:
+        if app._figure_canvas_class() is None:
+            pytest.skip("TkAgg unavailable on this Tk build")
+        from matplotlib.figure import Figure
+
+        host, _fig, _ax = self._rendered(app, playground)
+        fig2 = Figure(figsize=(4, 3))
+        fig2.add_subplot(111).plot([3, 2, 1], [9, 4, 1])
+        app._render_figure(host, fig2)  # a SECOND figure into the SAME host
+        app.update()
+        assert len(app._live_toolbars) == 1
+        assert app._last_figure is fig2
+        frames = [c for c in host.winfo_children() if c.winfo_class() == "Frame"]
+        canvases = [c for c in host.winfo_children() if c.winfo_class() == "Canvas"]
+        assert len(frames) == 1 and len(canvases) == 1
+
+    def test_crosshair_tracks_and_hides_without_axis_drift(
+        self, app: Any, playground: Any
+    ) -> None:
+        if app._figure_canvas_class() is None:
+            pytest.skip("TkAgg unavailable on this Tk build")
+        from matplotlib.backend_bases import MouseEvent
+
+        _host, fig, ax = self._rendered(app, playground)
+        before = ax.get_xlim(), ax.get_ylim()
+        px, py = ax.transData.transform((2.0, 4.0))
+        fig.canvas.callbacks.process(
+            "motion_notify_event", MouseEvent("motion_notify_event", fig.canvas, px, py)
+        )
+        pair = ax._pg_crosshair
+        assert pair[0].get_visible() and pair[1].get_visible()
+        v_x, v_y = pair[0].get_data()
+        assert list(v_x) == [2.0, 2.0]
+        assert list(v_y) == list(ax.get_ylim())
+        # add_artist guides never join the data limits
+        assert (ax.get_xlim(), ax.get_ylim()) == before
+        fig.canvas.callbacks.process(
+            "motion_notify_event", MouseEvent("motion_notify_event", fig.canvas, 2, 2)
+        )
+        assert not pair[0].get_visible() and not pair[1].get_visible()
+
+    def test_theme_flip_recolors_the_toolbar(self, app: Any, playground: Any) -> None:
+        if app._figure_canvas_class() is None:
+            pytest.skip("TkAgg unavailable on this Tk build")
+        _host, _fig, _ax = self._rendered(app, playground)
+        toolbar = app._live_toolbars[0][1]
+        button = next(c for c in toolbar.winfo_children() if c.winfo_class() == "Button")
+        app._set_theme("dark")
+        assert str(toolbar.cget("background")) == playground._DARK_PALETTE["CARD"]
+        assert str(button.cget("background")) == playground._DARK_PALETTE["CARD"]
+        app._set_theme("light")
+        assert str(toolbar.cget("background")) == playground._LIGHT_PALETTE["CARD"]
+
+    # -- the UI font scale ----------------------------------------------- #
+    def test_font_size_menu_rescales_the_named_fonts(
+        self, app: Any, playground: Any
+    ) -> None:
+        import tkinter.font as tkfont
+
+        default = int(tkfont.nametofont("TkDefaultFont").cget("size"))
+        app._font_var.set(default + 1)
+        app._apply_font_size()
+        assert int(tkfont.nametofont("TkDefaultFont").cget("size")) == default + 1
+        assert int(app._mono.cget("size")) == default + 1
+        assert int(app._mono_result.cget("size")) == default + 3
+        # the derived style variants follow the base
+        app._font_var.set(default)
+        app._apply_font_size()
+        assert int(tkfont.nametofont("TkDefaultFont").cget("size")) == default
+
+    def test_font_preference_rides_the_session(self, app: Any) -> None:
+        session = app._collect_session()
+        assert "_toolbars_var" in session["variables"]
+        assert "_font_var" in session["variables"]
+        assert session["variables"]["_toolbars_var"] is True
+        assert session["variables"]["_font_var"] == 10

@@ -210,6 +210,15 @@ Engineering notes:
 * **Light and dark** — `View ▸ Follow system / Light / Dark` recolours the
   whole window from two named palettes; the choice travels with the session
   and embedded figures keep the published white plot background.
+* **Interactive figures (the DearPyGui affordances, 100x-158)** — every
+  embedded figure carries a styled navigation toolbar (home / pan / zoom /
+  save + the live coordinate readout) and a dashed crosshair under the
+  cursor; every table gains zebra stripes, a hover row highlight and
+  clickable numeric-aware sortable headings; `View ▸ Font size` (9–12 pt)
+  rescales the whole UI hierarchy. `View ▸ Figure toolbars` toggles the
+  toolbars; both preferences ride the session file. The enabling change:
+  matplotlib 3.10, whose Tcl 9 support gives live TkAgg canvases on stacks
+  where 3.9 silently fell back to static PNG figures.
 * **Keyboard-first** — every global accelerator is bound and pinned by
   tests: Ctrl+O open · Ctrl+S save figure · Ctrl+Shift+S save session ·
   Ctrl+Shift+R reset this tab · Ctrl+Q quit. A quiet **shortcut hint row**

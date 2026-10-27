@@ -1561,3 +1561,59 @@ the `figures/` directories carry no additional teachable items.
 | The six figures | `plot_pca_variance`, `plot_kmeans_diagnostics`, `plot_gmm_selection`, `plot_kde_density`, `plot_manifold_embedding`, `plot_hexbin_density`; 12 tests (tests/test_viz.py::TestUnsupervisedPlots) + 3 new doctests. |
 | The Unsupervised tab | playground.py `_build_unsupervised_tab` (21,009 → 21,562 lines): shared dataset + column tree, ten methods, per-method params, the record's summary, canonical figure, 2-D scatter twin, CSV export; 11 GUI tests (tests/test_playground.py::TestUnsupervisedTab). |
 | The artifacts | download/pg157-unsup-{pca-variance,isomap-embedding,kmeans-diagnostics,gmm-selection,kde-density,hexbin}.png — VLM-reviewed 6/6 PASS. |
+
+## The DearPyGui review (round 41, 100x-158) — improving playground.py's GUI
+
+Repository: <https://github.com/hoffstadt/DearPyGui> (MIT). Reviewed from a
+`--depth 1 --filter=blob:none` clone (266 tracked files: `src/` 109 — the C++
+core, `thirdparty/` 65 — Dear ImGui + ImPlot + imnodes + the UTF/font stack,
+`docs/` 44 — the Sphinx sources, `dearpygui/` 10 — the Python wrapper +
+`_dearpygui.pyi` API stubs + `demo.py`, `.github/` 14, `scripts/` 6, `sandbox/`
+4, `assets/` 3, `testing/` 2). The feature review below is grounded in the
+README's feature list, the `docs/source/documentation/*.rst` topics and the
+`_dearpygui.pyi` API surface (`add_tooltip`, `add_table`, `add_plot` with
+`box_select`/`no_inputs`/`crosshairs`/query flags, `set_global_font_scale`,
+`add_collapsing_header`, `add_node_editor`, `add_theme` + `add_theme_color` +
+`add_theme_style`, `add_status_bar`, `add_loading_indicator`, `add_file_dialog`,
+`add_progress_bar`, the filter-set and init-file docs).
+
+The review's premise: DearPyGui is a **GPU-rendered, immediate-mode-under-the-
+hood framework** — the toolkit's GUI is a tkinter app and stays one (a rewrite
+would discard 21k lines of battle-tested UI for zero pharma-ML capability).
+What the review mines instead is DearPyGui's *UX vocabulary* — the affordances
+its users take for granted — and asks which ones tkinter can deliver honestly.
+
+### Feature-by-feature disposition
+
+| DearPyGui feature (source) | Disposition | Where it landed |
+| --- | --- | --- |
+| Interactive plots — pan, zoom, box-select, query rects, live coordinate readout (`docs/plots.rst`: Pan/Zoom/Zoom Region/Zoom Extents + Querying) | **ADDED-THIS-ROUND** | Every embedded TkAgg figure now carries a styled `NavigationToolbar2Tk` (home/pan/zoom/save + the readout label); the matplotlib 3.10 bump is what makes this possible on Tcl 9 stacks (3.9's `_tkagg` could not talk to Tcl 9 — those users got static PNG figures). |
+| `crosshairs` / cross-highlight under the cursor (plot flag, `_dearpygui.pyi`) | **ADDED-THIS-ROUND** | `_attach_crosshair`: two dashed guides via `add_artist` (never `add_line` — that joins the data limits and autoscale-drifts the panel), hidden on leave, colour-follows-theme. |
+| Tables — row stripes, hover row highlight (`mvThemeCol_TableRowBgAlt` / `TableRowBgHovered`) | **ADDED-THIS-ROUND** | `attach_table_chrome` on all 29 Treeviews: zebra stripes + hover highlight; the 150 ms poll re-stripes on row-count change so all ~59 populate paths gain the stripes unedited. |
+| Sortable table columns (dpg table demo behaviour) | **ADDED-THIS-ROUND** | Heading-click sort, numeric-aware (thousands separators tolerated, mixed columns stay lexicographic), direction toggling with ↑/↓ arrows, other columns' arrows cleared. |
+| `set_global_font_scale` (`_dearpygui.pyi`) | **ADDED-THIS-ROUND** | `View ▸ Font size` (9–12 pt): the named Tk fonts reconfigure live and `_build_style` re-derives every bold/large variant from the base. |
+| `add_tooltip` per item (`docs/tooltips.rst`) | COVERED-ALREADY | The `Tooltip` class (75 attachment sites since earlier rounds). |
+| Themes — `add_theme` + color/style components, light/dark | COVERED-ALREADY | The two named palettes + `apply_theme` + the live recolour walk (View ▸ Follow system / Light / Dark). |
+| `add_status_bar`, `add_progress_bar`, async jobs | COVERED-ALREADY | The status bar + indeterminate/determinate progress + the thread/queue job machinery. |
+| `add_file_dialog` | COVERED-ALREADY | tkinter file dialogs (the session's pick-path memory). |
+| `add_loading_indicator` | COVERED-ALREADY(≈) | The status-bar progress bar serves the same role; a modal spinner would *block* the Tk loop — the honest Tk translation of "busy" is the non-blocking bar. |
+| `add_collapsing_header` | STRETCH | A `CollapsibleCard` wrapper is feasible (header toggles the body) but the tabs' card flow is scroll-designed; retrofit deferred until a tab is actually too tall. |
+| Dockspace / `primary_window` docking | N-A-HONEST | tkinter has `PanedWindow` but the toolkit's card-per-scroll-page layout is the opposite paradigm; a dock rewrite would discard the scroll UX without adding analysis capability. |
+| Node editor (`add_node_editor`, imnodes) | N-A-HONEST | No pipeline-graph surface in a pharma-ML toolkit whose workflows are forms over typed library calls. |
+| GPU rendering, 1M-point 60 fps plots | N-A-HONEST | The plots are matplotlib publication figures (paper exports); interactivity is a lens on them, not a rendering engine swap. |
+| Filter sets (`docs/filter-set.rst`) | COVERED-ALREADY(≈) | The descriptor/family search rows + the Ctrl+F card finder. |
+| Init files (`.ini` window persistence) | COVERED-ALREADY | The session file (geometry + inputs + preferences). |
+| Built-in demo / developer tools (theme inspector, metrics, debugger) | STRETCH | The dependency report + `--self-test` cover the introspection role; a live theme inspector has no user demand. |
+
+**Disposition tallies (18 rows):** ADDED-THIS-ROUND **5** · COVERED-ALREADY(≈)
+**7** · STRETCH **3** · N-A-HONEST **3**.
+
+### Round-41 verification rows
+
+| What | Where it landed |
+| --- | --- |
+| Figure toolbars + crosshair | playground.py `_attach_figure_toolbar` / `_attach_crosshair` / `_style_figure_toolbar` / `_apply_toolbar_visibility` (View ▸ Figure toolbars, session-persisted); theme-flip retint via the retint walker's new Button/Checkbutton/Label branches. |
+| Table chrome | playground.py `attach_table_chrome` / `sweep_table_chrome` / `refresh_table_chrome` / `_sort_tree_column` / `retag_tree_zebra` + the `STRIPE`/`HOVER` palette keys; the card-finder dialog's per-dialog tree attaches at creation. |
+| Font scale | `View ▸ Font size` + `_apply_font_size` + `_build_style`'s derived sizes; session-persisted via `_font_var`. |
+| The matplotlib 3.10 bump | `requirements.txt` verified-stack note (3.9.2 → 3.10.9: Tcl 9 stacks get live TkAgg canvases instead of PNG fallbacks — the toolbar's enabling change). |
+| Tests | tests/test_playground.py::TestDearPyGuiAffordances (16 tests: zebra, sweep + prune, numeric/thousands/case/blank sorting, arrow toggling + cross-column clearing, hover + stripe restore, theme retint, toolbar attach/style/toggle/replace, crosshair + no-drift, font scale, session persistence) + the seven figure-landing pins updated to the toolbar-aware contract. |
