@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Palette (GA) #849b95",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793187230,
+  "id": "20261028193349a1abee20d8c049f2",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261028193349a1abee20d8c049f2",
+  "usage": {
+    "completion_tokens": 10,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 870,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 880
+  }
+}

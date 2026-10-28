@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the provided image, here is the list of the visible card title row and the symbol inside its small right-end button:\n\n*   **IV bolus concentration profile**: **DOWN-pointing small triangle (▾)** (The card body is expanded, showing the input fields and buttons below the title).",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793187178,
+  "id": "20261028193254dcf68c15f29645b1",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261028193254dcf68c15f29645b1",
+  "usage": {
+    "completion_tokens": 63,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 5942,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 6005
+  }
+}

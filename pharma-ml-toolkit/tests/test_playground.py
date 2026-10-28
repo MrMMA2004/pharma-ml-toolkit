@@ -14613,3 +14613,236 @@ class TestDearPyGuiAffordances:
         assert "_font_var" in session["variables"]
         assert session["variables"]["_toolbars_var"] is True
         assert session["variables"]["_font_var"] == 10
+
+
+# --------------------------------------------------------------------- #
+# (100x-159) the second DearPyGui pass -- collapsible cards +
+# the GUI metrics / palette inspector dialog
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestDearPyGuiRoundTwo:
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    # -- the CollapsibleCard retrofit ------------------------------------ #
+    def test_fifteen_reference_cards_registered_and_expanded(
+        self, app: Any, playground: Any
+    ) -> None:
+        expected = {
+            "home-dependency-status",
+            "home-what-lives-where",
+            "pk-half-life",
+            "pk-iv-bolus",
+            "pk-oral",
+            "pk-crcl",
+            "pk-loading",
+            "pk-bsa",
+            "pk-pediatric",
+            "pk-emax",
+            "pk-nca",
+            "pk-infusion",
+            "pk-tdm",
+            "pk-pd-explorer",
+            "pk-units",
+        }
+        assert set(playground._COLLAPSE_CARDS) == expected
+        assert playground.collapsed_card_keys() == []  # launch look = expanded
+        for key, entry in playground._COLLAPSE_CARDS.items():
+            assert entry["expanded"] is True, key
+            assert entry["content"].winfo_manager() == "pack", key
+
+    def test_toggle_folds_body_and_flips_the_chevron(self, app: Any, playground: Any) -> None:
+        playground._toggle_collapsible_card("pk-tdm")
+        app.update()
+        entry = playground._COLLAPSE_CARDS["pk-tdm"]
+        assert entry["expanded"] is False
+        assert entry["content"].winfo_manager() == ""  # the body is hidden
+        assert entry["button"].cget("text") == "\u25b8"
+        assert playground.collapsed_card_keys() == ["pk-tdm"]
+        # the folded card's INPUTS keep their values (only the body hides)
+        assert app._tdm_dose.get() == "250"
+        playground._toggle_collapsible_card("pk-tdm")
+        app.update()
+        assert entry["expanded"] is True
+        assert entry["content"].winfo_manager() == "pack"
+        assert entry["button"].cget("text") == "\u25be"
+        assert playground.collapsed_card_keys() == []
+
+    def test_unknown_key_is_a_quiet_noop(self, app: Any, playground: Any) -> None:
+        playground._toggle_collapsible_card("no-such-card")  # never raises
+        playground._set_card_expanded("no-such-card", False)
+        assert playground.collapsed_card_keys() == []
+
+    def test_finder_jump_unfolds_the_target(self, app: Any, playground: Any) -> None:
+        playground._set_card_expanded("home-what-lives-where", False)
+        app.update()
+        app._jump_to_card(0, "What lives where")
+        app.update()
+        assert playground._COLLAPSE_CARDS["home-what-lives-where"]["expanded"] is True
+
+    def test_session_roundtrip_persists_the_fold(self, app: Any, playground: Any) -> None:
+        playground._set_card_expanded("pk-nca", False)
+        playground._set_card_expanded("home-dependency-status", False)
+        app.update()
+        payload = app._collect_session()
+        assert json.loads(payload["texts"]["collapsed_cards"]) == [
+            "home-dependency-status",
+            "pk-nca",
+        ]
+        # a fresh restore replants exactly those folds
+        playground._set_card_expanded("pk-nca", True)
+        app._session = playground.load_session(payload)
+        app._restore_session()
+        app.update()
+        assert playground._COLLAPSE_CARDS["pk-nca"]["expanded"] is False
+        assert playground._COLLAPSE_CARDS["home-dependency-status"]["expanded"] is False
+        assert playground._COLLAPSE_CARDS["pk-oral"]["expanded"] is True
+
+    def test_restore_ignores_corrupt_and_unknown_keys(
+        self, app: Any, playground: Any
+    ) -> None:
+        payload = playground.dump_session(
+            theme="light",
+            geometry="1200x800+10+10",
+            tab=0,
+            variables={},
+            families={},
+            texts={},
+        )
+        payload["texts"]["collapsed_cards"] = "not json at all"
+        app._session = playground.load_session(payload)
+        app._restore_session()
+        app.update()
+        assert playground.collapsed_card_keys() == []  # corrupt -> everything open
+        payload["texts"]["collapsed_cards"] = json.dumps(["ghost-card", "pk-oral"])
+        app._session = playground.load_session(payload)
+        app._restore_session()
+        app.update()
+        assert playground.collapsed_card_keys() == ["pk-oral"]  # unknown key skipped
+
+    def test_per_tab_reset_unfolds_only_that_tab(self, app: Any, playground: Any) -> None:
+        pk_index = next(
+            i for i in range(app._book.index("end")) if "PK" in app._book.tab(i, "text")
+        )
+        playground._set_card_expanded("pk-oral", False)
+        playground._set_card_expanded("home-dependency-status", False)
+        app.update()
+        app._reset_tab(pk_index)
+        app.update()
+        assert playground._COLLAPSE_CARDS["pk-oral"]["expanded"] is True
+        assert playground._COLLAPSE_CARDS["home-dependency-status"]["expanded"] is False
+        assert "unfolded" in app._job_label.cget("text")
+
+    # -- the GUI metrics / palette inspector ----------------------------- #
+    def test_metrics_dialog_opens_with_census_and_prefs(self, app: Any, playground: Any) -> None:
+        assert app._metrics_dialog is None
+        app._show_gui_metrics()
+        app.update()
+        assert app._metrics_dialog is not None
+        assert bool(app._metrics_dialog.winfo_exists())
+        assert app._metrics_dialog.title() == "GUI metrics"
+        snapshot = app._metrics_text.get("1.0", "end")
+        for needle in (
+            "CARDS      ",
+            "TREES      ",
+            "TOOLBARS   ",
+            "JOBS       ",
+            "PREFS      ",
+            "SESSION    ",
+            "WIDGET CENSUS (by Tk class)",
+        ):
+            assert needle in snapshot, needle
+        # the census's card count is the LIVE card count, not a hardcoded pin
+        assert f"{len(app._live_cards())} live" in snapshot
+        assert "idle" in snapshot  # no job is running in a test window
+        assert f"font {app._font_var.get()} pt" in snapshot
+
+    def test_metrics_census_matches_the_live_tree(self, app: Any, playground: Any) -> None:
+        app._show_gui_metrics()
+        app.update()
+        snapshot = app._metrics_text.get("1.0", "end")
+        walked_trees = sum(
+            1 for w in app._walk_widgets(app) if w.winfo_class() == "Treeview"
+        )
+        assert f"TREES      {walked_trees} Treeviews" in snapshot
+        counts_line = next(
+            line for line in snapshot.splitlines() if line.startswith("Treeview")
+        )
+        assert int(counts_line.split()[-1]) == walked_trees
+
+    def test_palette_inspector_shows_every_active_key(self, app: Any, playground: Any) -> None:
+        app._show_gui_metrics()
+        app.update()
+        palette = playground._PALETTES[playground._ACTIVE_THEME]
+        chips = [
+            c
+            for c in app._metrics_palette.winfo_children()
+            if c.winfo_class() == "Frame"
+        ]
+        assert len(chips) == len(palette)
+        assert {str(chip.cget("background")) for chip in chips} == set(palette.values())
+        title = app._metrics_palette_title.cget("text")
+        assert playground._ACTIVE_THEME in str(title)
+        assert str(len(palette)) in str(title)
+
+    def test_palette_inspector_follows_theme_flips(self, app: Any, playground: Any) -> None:
+        app._show_gui_metrics()
+        app.update()
+        win = app._metrics_dialog
+        app._set_theme("dark")
+        app.update()
+        dark = playground._PALETTES["dark"]
+        chips = [
+            c
+            for c in app._metrics_palette.winfo_children()
+            if c.winfo_class() == "Frame"
+        ]
+        assert {str(chip.cget("background")) for chip in chips} == set(dark.values())
+        assert "dark" in str(app._metrics_palette_title.cget("text"))
+        # the Toplevel branch of the retint walker follows the flip too
+        assert str(win.cget("background")) == playground.BG
+        app._set_theme("light")
+        app.update()
+        light = playground._PALETTES["light"]
+        chips = [
+            c
+            for c in app._metrics_palette.winfo_children()
+            if c.winfo_class() == "Frame"
+        ]
+        assert {str(chip.cget("background")) for chip in chips} == set(light.values())
+
+    def test_metrics_dialog_reopen_lifts_and_destroy_prunes(
+        self, app: Any, playground: Any
+    ) -> None:
+        app._show_gui_metrics()
+        win = app._metrics_dialog
+        app._show_gui_metrics()  # second open lifts, never stacks
+        assert app._metrics_dialog is win
+        lifted = [w for w in app.winfo_children() if w.winfo_class() == "Toplevel"]
+        assert len(lifted) == 1
+        win.destroy()
+        app._refresh_metrics_dialog()
+        assert app._metrics_dialog is None
+        assert app._metrics_palette is None
+        app._set_theme("dark")  # a stale ref can never raise
+        app._set_theme("light")
+        app.update()
+
+    # -- the round-41 menu fix ------------------------------------------- #
+    def test_font_cascade_keeps_its_theme_tint(self, app: Any, playground: Any) -> None:
+        # (100x-159) the round-41 build re-assigned _menu_tints AFTER the
+        # font cascade's append -- the submenu lost its tint on every flip.
+        # The fix rides the list itself: [bar, file, view, FONT, help].
+        assert len(app._menu_tints) == 5
+        font_menu = app._menu_tints[3]
+        app._set_theme("dark")
+        assert str(font_menu.cget("background")) == playground.HEADING
+        app._set_theme("light")
+        assert str(font_menu.cget("background")) == playground.CARD

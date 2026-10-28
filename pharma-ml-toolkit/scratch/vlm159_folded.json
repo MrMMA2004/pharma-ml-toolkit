@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "(1) PASS: Yes, there are 2 cards (\"Oral absorption PK\" and \"Cockcroft-Gault creatinine clearance\") that display only their header rows with no body content.\n(2) PASS: The folded cards correctly show a right-pointing '▸' chevron button on the right side of their titles.\n(3) FAIL: The unfolded cards do not show a '▾' chevron; they instead show a small square icon/button on the right of the header, which does not match the expected down-chevron state.\n(4) PASS: There are no rendering defects; all widgets are properly aligned with no overlapping or cut-off text.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793187154,
+  "id": "202610281932314686c8b35fc14455",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610281932314686c8b35fc14455",
+  "usage": {
+    "completion_tokens": 138,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 2876,
+    "prompt_tokens_details": {
+      "cached_tokens": 3
+    },
+    "total_tokens": 3014
+  }
+}

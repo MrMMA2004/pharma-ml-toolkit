@@ -1,3 +1,57 @@
+## [1.2.95] — 2026-10-28
+
+### Added — the second DearPyGui pass: the stretch rows close, and the round-41 close-out debt is paid (100x-159)
+
+The instruction *"Improve the playground.py GUI: DearPyGui"* arrived
+again the round after the first pass — and rightly so: the round-41
+session had died mid-close-out (a UUID-message commit, no worklog
+entry, and a red suite: the CHANGELOG's `~jake/`-form leakage, eight
+notebooks still printing 1.2.93, and the matplotlib extra with no
+pinned block). That debt is paid here, and the disposition table's two
+STRETCH rows are closed (docs/COVERAGE.md's Round-42 section, with the
+round-41 tally line honestly reconciled):
+
+* **Collapsible cards (`add_collapsing_header` parity)** —
+  `make_card(collapsible=True, key=...)` gains a ▾/▸ chevron that
+  folds the card to its heading (the inputs keep their values; only
+  the body hides). Retrofitted onto the two static Home reference
+  cards and all thirteen PK-tab calculators — the tallest tab, so the
+  calculators you are not using fold away. The fold state rides the
+  session (`collapsed_cards`, the tolerant JSON-in-a-text trick: a
+  corrupt value leaves everything open, unknown keys skip quietly), a
+  Ctrl+F finder jump to a folded card unfolds it first (scrolling to
+  a hidden body would be a lie), and the per-tab reset restores the
+  launch look — unfolded — for ITS tab only, with the job label
+  saying how many cards unfolded.
+* **View ▸ GUI metrics… (the developer-tools row)** — the live
+  widget census by Tk class (one `_walk_widgets` walk), the card /
+  tree / toolbar / job totals, the active preferences and the session
+  file's last-saved state, as an honestly-labelled snapshot at open;
+  beneath it the **palette inspector** — one colour chip + hex value
+  for every key of the active palette (all 18), re-tinted LIVE on
+  theme flips. Re-opening lifts the existing dialog instead of
+  stacking a second one; destroyed dialogs prune their references.
+* **Two fixes found on the way** — the round-41 menu build re-assigned
+  `_menu_tints` AFTER appending the font cascade (the font submenu
+  silently lost its tint on every theme flip), and the retint walker
+  had no `Toplevel` branch (the metrics and finder dialogs kept the
+  old window background across flips).
+* **The round-41 close-out debt** — CHANGELOG's `~jake/`-form leak
+  scrubbed to the tilde form; the matplotlib pin moved to its own
+  comment line so the requirements-vs-extras guard sees it; all eight
+  notebooks re-executed against 1.2.95; the suite re-run green.
+
+### Tests
+
+14 new GUI tests (`TestDearPyGuiRoundTwo`: the 15-card registry, fold /
+unfold with chevron flip and hidden-body pin, quiet noops on unknown
+keys, the finder's unfold-on-jump, the session round-trip + the
+corrupt/unknown restore cases, the per-tab reset's unfold scope, the
+metrics dialog's census/preferences/palette contracts, the
+census-vs-walk parity check, the live theme-flip retint of the palette
+chips AND the Toplevel background, reopen-lift / destroy-prune, and
+the font-cascade tint pin).
+
 ## [1.2.94] — 2026-10-28
 
 ### Added — the DearPyGui affordance review: the playground's GUI gains the UX vocabulary DearPyGui users take for granted (100x-158)
@@ -142,7 +196,7 @@ ritual): **3,301 collected = 3,296 passed + 5 skipped / 0 failures**
 12 unsupervised-plots + 11 GUI-tab + the new doctests + the re-pinned
 registry/tab-index counts). The first run caught 11 real regressions
 the targeted tests had not: the pdsh clone shipping Jake's own
-`/home/jake/` paths into the tree (leakage guard — the clone moved
+`~jake/` paths into the tree (leakage guard — the clone moved
 outside the repo, the review doc scrubbed), the registry entry-count
 pins (29/27 → 32/30), and six tab-index pins (the home chips' jump
 targets, the Generative-tab index references, the save-figure-button

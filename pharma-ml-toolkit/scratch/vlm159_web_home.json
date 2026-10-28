@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "(1) PASS – The header shows a version badge with \"v1.2.95\", and the main download button also displays \"v1.2.95\".\n(2) PASS – The stats area explicitly lists 3,325 passing tests, 670 files, and 197,046 lines (plus 44.27 MB uncompressed).\n(3) PASS – The page uses a clean card-based layout with clear hierarchy, consistent spacing, and a sticky footer at the bottom; no overlapping or broken layout is visible.\n(4) PASS – No console-render artifacts, blank areas, or broken images are present; all text and icons render correctly.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793188523,
+  "id": "202610281955184a8b2d534a5047c9",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610281955184a8b2d534a5047c9",
+  "usage": {
+    "completion_tokens": 138,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 5628,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 5766
+  }
+}

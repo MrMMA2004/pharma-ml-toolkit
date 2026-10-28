@@ -2307,6 +2307,47 @@ class ScrollFrame(ttk.Frame):  # type: ignore[misc] # ttk is None headless
 _CARD_INDEX: list[tuple[str, str, Any]] = []
 
 
+#: (100x-159) DearPyGui ``add_collapsing_header`` parity: the registry of
+#: collapsible cards -- stable key -> bookkeeping (title / shell /
+#: content / chevron button / expanded flag).  The session's
+#: ``collapsed_cards`` text key persists which cards sit folded, so a
+#: fold survives restarts exactly like any other input; the per-tab
+#: reset unfolds its own cards (launch defaults = expanded).
+_COLLAPSE_CARDS: dict[str, dict[str, Any]] = {}
+
+
+def _set_card_expanded(key: str, expanded: bool) -> None:
+    """Fold/unfold one registered card (never raises on a dead shell)."""
+    entry = _COLLAPSE_CARDS.get(key)
+    if entry is None:
+        return
+    try:
+        if expanded:
+            entry["content"].pack(fill="both", expand=True)
+        else:
+            entry["content"].pack_forget()
+        entry["button"].configure(text="\u25be" if expanded else "\u25b8")
+        entry["expanded"] = bool(expanded)
+    except tk.TclError:  # pragma: no cover - destroyed mid-toggle
+        return
+
+
+def _toggle_collapsible_card(key: str) -> None:
+    """The chevron button's command -- flip one card's fold state."""
+    entry = _COLLAPSE_CARDS.get(key)
+    if entry is not None:
+        _set_card_expanded(key, not bool(entry.get("expanded", True)))
+
+
+def collapsed_card_keys() -> list[str]:
+    """Which registered cards currently sit folded (sorted, stable)."""
+    return sorted(
+        key
+        for key, entry in _COLLAPSE_CARDS.items()
+        if not bool(entry.get("expanded", True))
+    )
+
+
 def make_card(
     parent: Any,
     title: str,
@@ -2315,6 +2356,8 @@ def make_card(
     row: int = 0,
     column: int = 0,
     span: int = 1,
+    collapsible: bool = False,
+    key: str = "",
 ) -> Any:
     """Create a white card with a heading on a tab's card grid.
 
@@ -2328,6 +2371,15 @@ def make_card(
 
     Every shell is also appended to :data:`_CARD_INDEX` (title,
     subtitle, shell) -- the Ctrl+F card finder's directory (100x-120).
+
+    (100x-159) ``collapsible=True`` adds the DearPyGui
+    ``add_collapsing_header`` affordance: a \u25be/\u25b8 chevron on
+    the header's right folds the card to its heading (inputs and
+    all -- they keep their values, only the body hides).  ``key`` is
+    the stable registry/session key (the title stands in when
+    omitted); a finder jump to a folded card unfolds it first, the
+    per-tab reset restores the launch look, and the fold state
+    persists with the session (``collapsed_cards`` text key).
     """
     shell = tk.Frame(parent, background=CARD, highlightbackground=BORDER, highlightthickness=1)
     _CARD_INDEX.append((title, subtitle, shell))
@@ -2346,6 +2398,29 @@ def make_card(
     content = ttk.Frame(shell, style="Card.TFrame", padding=(14, 8, 14, 12))
     content.pack(fill="both", expand=True)
     content.columnconfigure(1, weight=1)
+    if collapsible:
+        card_key = key or title
+        chevron = ttk.Button(
+            title_row,
+            text="\u25be",
+            style="Ghost.TButton",
+            width=3,
+            command=lambda bound=card_key: _toggle_collapsible_card(bound),
+        )
+        chevron.pack(side="right", anchor="ne")
+        Tooltip(
+            chevron,
+            "Collapse this card to its heading (or expand it back) -- "
+            "the inputs keep their values, and the fold state is saved "
+            "with the session.",
+        )
+        _COLLAPSE_CARDS[card_key] = {
+            "title": title,
+            "shell": shell,
+            "content": content,
+            "button": chevron,
+            "expanded": True,
+        }
     return content
 
 
@@ -2718,6 +2793,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # the window was designed around -- _build_style derives every
         # bold/large variant from this base
         self._ui_font_size = 10
+        # (100x-159) the GUI-metrics dialog's live handles -- None
+        # when closed; _refresh_metrics_dialog prunes stale refs.
+        self._metrics_dialog: Any = None
+        self._metrics_palette: Any = None
+        self._metrics_text: Any = None
         apply_theme(self._resolve_auto_theme() if self._theme == "auto" else self._theme)
 
         self.title("PharmaML Playground")
@@ -3070,6 +3150,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
         view_menu.add_cascade(label="Font size", menu=font_menu)
         self._menu_tints.append(font_menu)
+        view_menu.add_separator()
+        # (100x-159) DearPyGui's developer tools, translated honestly:
+        # the metrics window's census + the tool inspector's palette.
+        view_menu.add_command(
+            label="GUI metrics\u2026",
+            command=self._show_gui_metrics,
+        )
         bar.add_cascade(label="View", menu=view_menu)
 
         help_menu = tk.Menu(bar, tearoff=0)
@@ -3077,7 +3164,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         help_menu.add_command(label="Dependency report", command=self._show_dependency_report)
         bar.add_cascade(label="Help", menu=help_menu)
         self.configure(menu=bar)
-        self._menu_tints = [bar, file_menu, view_menu, help_menu]
+        # (100x-159) the font cascade rides the tint list too -- the
+        # round-41 build appended it ABOVE this reassignment, so the
+        # font submenu silently lost its tint on every theme flip.
+        self._menu_tints = [bar, file_menu, view_menu, font_menu, help_menu]
         self._tint_menus()
         self.bind_all("<Control-o>", lambda _e: self._menu_open_csv())
         self.bind_all("<Control-s>", lambda _e: self._menu_save_figure())
@@ -3448,6 +3538,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 != tab_index
             ):
                 continue
+            # (100x-159) a jump to a folded card unfolds it first --
+            # scrolling to a hidden body would be a lie.
+            for collapse_key, entry in _COLLAPSE_CARDS.items():
+                if entry["shell"] is shell and not bool(entry.get("expanded", True)):
+                    _set_card_expanded(collapse_key, True)
+                    self.update_idletasks()
             page = self._book.nametowidget(self._book.tabs()[tab_index])
             canvas = getattr(page, "_canvas", None)
             if canvas is not None:
@@ -3975,6 +4071,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             with contextlib.suppress(tk.TclError):
                 if toolbar.winfo_exists():
                     self._style_figure_toolbar(toolbar)
+        # (100x-159) the metrics dialog's palette block follows the flip
+        self._refresh_metrics_dialog()
 
     def _tint_menus(self) -> None:
         """Recolour the menu bar for the active palette."""
@@ -4035,11 +4133,205 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         # before this branch existed)
                         if str(child.cget("background")) == previous["CARD"]:
                             child.configure(background=CARD)
+                    elif klass == "Toplevel":
+                        # (100x-159) the metrics dialog (and the card finder):
+                        # their window background follows the flip too
+                        if str(child.cget("background")) == previous["BG"]:
+                            child.configure(background=BG)
                 except tk.TclError:  # pragma: no cover - exotic widgets
                     pass
                 walk(child)
 
         walk(self)
+
+    # -- (100x-159) GUI metrics + palette inspector ------------------- #
+    def _gui_metrics_snapshot(self) -> str:
+        """The census/preferences text block the metrics dialog shows.
+
+        Pure read-side: the widget census walks the live tree once
+        (``_walk_widgets`` -- the same walk the chrome sweep uses), the
+        card/tree/toolbar/job totals come from the registries that
+        already exist, and the preferences line reads the four
+        View-menu variables.  A SNAPSHOT, honestly labelled: live
+        counters would burn CPU for nobody's benefit; the palette block
+        below the text is the part that follows theme flips live.
+        """
+        cards = self._live_cards()
+        live_keys: set[str] = set()
+        folded: list[str] = []
+        for card_key, entry in _COLLAPSE_CARDS.items():
+            with contextlib.suppress(tk.TclError):
+                if not bool(entry["shell"].winfo_exists()):
+                    continue
+            live_keys.add(card_key)
+            if not bool(entry.get("expanded", True)):
+                folded.append(card_key)
+        trees = 0
+        tree_rows = 0
+        counts: dict[str, int] = {}
+        for widget in self._walk_widgets(self):
+            klass = widget.winfo_class()
+            counts[klass] = counts.get(klass, 0) + 1
+            if klass == "Treeview":
+                trees += 1
+                with contextlib.suppress(tk.TclError):
+                    tree_rows += len(widget.get_children(""))
+        try:
+            queued = self._jobs.qsize()
+        except NotImplementedError:  # pragma: no cover - exotic queues
+            queued = 0
+        session_file = session_path()
+        if not self._persist_session:
+            session_line = "session persistence off (--no-session)"
+        elif session_file.exists():
+            stamp = time.strftime(
+                "%Y-%m-%d %H:%M", time.localtime(session_file.stat().st_mtime)
+            )
+            session_line = f"{session_file} \u00b7 last saved {stamp}"
+        else:
+            session_line = f"{session_file} \u00b7 not saved yet"
+        lines = [
+            f"CARDS      {len(cards)} live \u00b7 {len(live_keys)} collapsible \u00b7 {len(folded)} folded",
+            f"TREES      {trees} Treeviews \u00b7 {tree_rows:,} rows",
+            f"TOOLBARS   {len(self._live_toolbars)} live figure toolbars",
+            f"JOBS       {'busy' if self._busy else 'idle'} \u00b7 queue \u2248 {queued} pending",
+            (
+                "PREFS      "
+                f"theme {self._theme} (resolved {_ACTIVE_THEME}) \u00b7 "
+                f"font {self._font_var.get()} pt \u00b7 "
+                f"toolbars {'on' if self._toolbars_var.get() else 'off'} \u00b7 "
+                f"shortcut hints {'on' if self._hints_var.get() else 'off'}"
+            ),
+            f"SESSION    {session_line}",
+            "",
+            "WIDGET CENSUS (by Tk class)",
+        ]
+        for klass, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+            lines.append(f"{klass:<12} {count:>7,}")
+        return "\n".join(lines)
+
+    def _show_gui_metrics(self) -> None:
+        """View \u25b8 GUI metrics -- the census + the palette inspector.
+
+        (100x-159) DearPyGui's developer tools (the metrics window, the
+        theme inspector) translated honestly: the census is a snapshot
+        at open, while the PALETTE block under it follows theme flips
+        live -- every key of the active palette as a colour chip with
+        its hex value, so "which colour is HOVER?" is one glance, not a
+        source dive.  Re-opening lifts the existing dialog instead of
+        stacking a second one.
+        """
+        if tk is None:  # pragma: no cover - headless import
+            return
+        existing = self._metrics_dialog
+        if existing is not None:
+            with contextlib.suppress(tk.TclError):
+                if bool(existing.winfo_exists()):
+                    existing.lift()
+                    return
+        win = tk.Toplevel(self)
+        win.title("GUI metrics")
+        win.configure(background=BG)
+        win.transient(self)
+        try:
+            win.geometry(f"+{self.winfo_rootx() + 120}+{self.winfo_rooty() + 90}")
+        except tk.TclError:  # pragma: no cover - unmapped parent
+            pass
+        ttk.Label(
+            win,
+            text="Widget census + preferences (a snapshot at open) -- "
+            "the palette below follows theme flips live.",
+            style="CardMuted.TLabel",
+            wraplength=520,
+            justify="left",
+        ).pack(anchor="w", padx=14, pady=(12, 4))
+        text = tk.Text(
+            win,
+            height=22,
+            width=72,
+            background=CARD,
+            foreground=INK,
+            relief="solid",
+            borderwidth=1,
+            highlightthickness=0,
+            padx=8,
+            pady=6,
+            font=("TkFixedFont", 10),
+            wrap="none",
+        )
+        text.insert("1.0", self._gui_metrics_snapshot())
+        text.configure(state="disabled")
+        text.pack(fill="x", padx=14, pady=(0, 8))
+        Tooltip(
+            text,
+            "The widget census by Tk class, the card / tree / toolbar / "
+            "job totals and the active preferences -- a snapshot from "
+            "the moment the dialog opened.",
+        )
+        self._metrics_text = text
+        self._metrics_palette_title = ttk.Label(
+            win,
+            text=f"Palette \u2014 {_ACTIVE_THEME} "
+            f"({len(_PALETTES[_ACTIVE_THEME])} keys)",
+            style="CardTitle.TLabel",
+        )
+        self._metrics_palette_title.pack(anchor="w", padx=14, pady=(0, 4))
+        self._metrics_palette = ttk.Frame(win, style="Card.TFrame")
+        self._metrics_palette.pack(fill="x", padx=14, pady=(0, 8))
+        self._populate_metrics_palette()
+        close = ttk.Button(win, text="Close", style="Ghost.TButton", command=win.destroy)
+        close.pack(anchor="e", padx=14, pady=(0, 12))
+        Tooltip(close, "Close the metrics dialog (View \u25b8 GUI metrics re-opens it).")
+        self._metrics_dialog = win
+
+    def _populate_metrics_palette(self) -> None:
+        """(Re)build the palette chip grid -- one row per palette key."""
+        holder = self._metrics_palette
+        if holder is None:
+            return
+        with contextlib.suppress(tk.TclError):
+            for child in holder.winfo_children():
+                child.destroy()
+        for row, (pal_key, value) in enumerate(sorted(_PALETTES[_ACTIVE_THEME].items())):
+            chip = tk.Frame(
+                holder,
+                width=18,
+                height=12,
+                background=value,
+                highlightbackground=BORDER,
+                highlightthickness=1,
+            )
+            chip.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=1)
+            chip.pack_propagate(False)
+            ttk.Label(holder, text=pal_key, style="Field.TLabel").grid(
+                row=row, column=1, sticky="w"
+            )
+            ttk.Label(holder, text=value, style="CardMuted.TLabel").grid(
+                row=row, column=2, sticky="w", padx=(10, 0)
+            )
+        holder.columnconfigure(2, weight=1)
+
+    def _refresh_metrics_dialog(self) -> None:
+        """Theme flips re-tint an open metrics dialog's palette block."""
+        win = self._metrics_dialog
+        if win is None:
+            return
+        try:
+            alive = bool(win.winfo_exists())
+        except tk.TclError:  # pragma: no cover - destroyed mid-flip
+            alive = False
+        if not alive:
+            self._metrics_dialog = None
+            self._metrics_palette = None
+            self._metrics_text = None
+            self._metrics_palette_title = None
+            return
+        self._populate_metrics_palette()
+        with contextlib.suppress(tk.TclError):
+            self._metrics_palette_title.configure(
+                text=f"Palette \u2014 {_ACTIVE_THEME} "
+                f"({len(_PALETTES[_ACTIVE_THEME])} keys)"
+            )
 
     def _collect_session(self) -> dict[str, Any]:
         """Snapshot every input on every tab into a session payload."""
@@ -4083,6 +4375,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     and isinstance(labels, list)
                 }
             ),
+            # 100x-159: which collapsible cards sit folded -- the same
+            # JSON-in-a-text trick, one sorted list of stable card keys
+            # (the restore path parses tolerantly; a foreign value just
+            # leaves every card open, never a half-folded window).
+            "collapsed_cards": json.dumps(collapsed_card_keys()),
         }
         try:
             tab = self._book.index(self._book.select())
@@ -4491,8 +4788,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._ml_params_var.set("{}")
             with contextlib.suppress(Exception):  # best effort
                 self._ml_refresh_hyperparam_panel()
+        # (100x-159) launch defaults mean EXPANDED cards too -- every
+        # folded collapsible card on THIS tab unfolds with the reset
+        # (other tabs keep their folds -- the per-tab rule).
+        pages = [self._book.nametowidget(tab) for tab in self._book.tabs()]
+        unfolded = 0
+        for card_key, entry in _COLLAPSE_CARDS.items():
+            shell = entry["shell"]
+            with contextlib.suppress(tk.TclError):
+                if (
+                    not bool(entry.get("expanded", True))
+                    and bool(shell.winfo_exists())
+                    and self._card_tab_index(shell, pages) == index
+                ):
+                    _set_card_expanded(card_key, True)
+                    unfolded += 1
+        extra = f" · {unfolded} card(s) unfolded" if unfolded else ""
         self._job_label.configure(
-            text=f"{label.lower()} tab reset · {applied} inputs back to defaults"
+            text=f"{label.lower()} tab reset · {applied} inputs back to defaults{extra}"
         )
 
     def _copy_tab_inputs(self, index: int) -> None:
@@ -4862,6 +5175,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         and isinstance(labels, list)
                         and all(isinstance(label, str) for label in labels)
                     }
+                continue
+            if key == "collapsed_cards":
+                # 100x-159: the collapsible cards' fold state -- a JSON
+                # list of stable card keys parsed with the SAME
+                # tolerance (a corrupt value leaves everything open);
+                # unknown keys (renamed cards, older sessions) skip
+                # quietly, exactly like every other tolerant restore.
+                try:
+                    stored_cards = json.loads(content)
+                except (TypeError, ValueError):
+                    stored_cards = []
+                if isinstance(stored_cards, list):
+                    for card_key in stored_cards:
+                        if isinstance(card_key, str) and card_key in _COLLAPSE_CARDS:
+                            _set_card_expanded(card_key, False)
                 continue
             widget = text_widgets.get(key)
             if widget is not None:
@@ -5931,6 +6259,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         status = make_card(
             page.grid,
             "Dependency status",
+            collapsible=True,
+            key="home-dependency-status",
             span=2,
             row=1,
             column=0,
@@ -5990,7 +6320,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 pady=(8, 0),
             )
 
-        guide = make_card(page.grid, "What lives where", span=2, row=2, column=0)
+        guide = make_card(page.grid, "What lives where", span=2, row=2, column=0, collapsible=True, key="home-what-lives-where")
         entries = [
             (
                 "Chemistry",
@@ -8176,6 +8506,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         half = make_card(
             page.grid,
             "Half-life ↔ elimination",
+            collapsible=True,
+            key="pk-half-life",
             row=0,
             column=0,
             subtitle="k(e) = ln2 / t½  ·  accumulation over a dosing interval.",
@@ -8209,6 +8541,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ivp = make_card(
             page.grid,
             "IV bolus concentration profile",
+            collapsible=True,
+            key="pk-iv-bolus",
             row=0,
             column=1,
             subtitle="C(t) = C0·e^(−k(e)·t) with half-life reference lines.",
@@ -8246,6 +8580,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         oral = make_card(
             page.grid,
             "Oral absorption PK",
+            collapsible=True,
+            key="pk-oral",
             row=1,
             column=0,
             subtitle="One-compartment first-order absorption.",
@@ -8281,6 +8617,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         crcl = make_card(
             page.grid,
             "Cockcroft–Gault creatinine clearance",
+            collapsible=True,
+            key="pk-crcl",
             row=1,
             column=1,
             subtitle="Plus the renal dose adjustment for a normal regimen.",
@@ -8313,7 +8651,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._cg_result.grid(row=button.grid_info()["row"], column=1, sticky="w", padx=(10, 0))
         bind_enter(self._cg_dose, button)
 
-        doses = make_card(page.grid, "Loading & maintenance dosing", row=2, column=0)
+        doses = make_card(page.grid, "Loading & maintenance dosing", row=2, column=0, collapsible=True, key="pk-loading")
         self._md_cl = ttk.Entry(doses, width=14)
         self._md_cl.insert(0, "5")
         form_row(doses, "clearance CL (L/h)", self._md_cl)
@@ -8348,6 +8686,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         bsa = make_card(
             page.grid,
             "BSA & weight-based dosing",
+            collapsible=True,
+            key="pk-bsa",
             row=2,
             column=1,
             subtitle="Mosteller BSA; optional maximum doses cap the result.",
@@ -8382,6 +8722,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         peds = make_card(
             page.grid,
             "Pediatric dose rules",
+            collapsible=True,
+            key="pk-pediatric",
             row=3,
             column=0,
             subtitle="Young's rule (age) and Clark's rule (weight in lb).",
@@ -8411,6 +8753,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         emax = make_card(
             page.grid,
             "Emax pharmacodynamics",
+            collapsible=True,
+            key="pk-emax",
             row=3,
             column=1,
             subtitle="E = E0 + Emax·C/(EC50 + C) — table plus the full curve.",
@@ -8450,6 +8794,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         nca = make_card(
             page.grid,
             "Non-compartmental analysis (NCA)",
+            collapsible=True,
+            key="pk-nca",
             row=4,
             column=0,
             span=2,
@@ -8517,6 +8863,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         infusion = make_card(
             page.grid,
             "IV infusion & distribution",
+            collapsible=True,
+            key="pk-infusion",
             row=5,
             column=0,
             subtitle="The infusion rate that holds a target Css "
@@ -8583,6 +8931,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         tdm = make_card(
             page.grid,
             "TDM trough adjustment",
+            collapsible=True,
+            key="pk-tdm",
             row=5,
             column=1,
             subtitle="Dose individualisation from one measured trough: the "
@@ -8617,6 +8967,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         family = make_card(
             page.grid,
             "PD model explorer",
+            collapsible=True,
+            key="pk-pd-explorer",
             row=6,
             column=0,
             span=2,
@@ -8714,6 +9066,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         units_card = make_card(
             page.grid,
             "Unit converter",
+            collapsible=True,
+            key="pk-units",
             row=7,
             column=0,
             subtitle="Dimension-aware pharmaceutical unit conversion "

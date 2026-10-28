@@ -1617,3 +1617,36 @@ its users take for granted — and asks which ones tkinter can deliver honestly.
 | Font scale | `View ▸ Font size` + `_apply_font_size` + `_build_style`'s derived sizes; session-persisted via `_font_var`. |
 | The matplotlib 3.10 bump | `requirements.txt` verified-stack note (3.9.2 → 3.10.9: Tcl 9 stacks get live TkAgg canvases instead of PNG fallbacks — the toolbar's enabling change). |
 | Tests | tests/test_playground.py::TestDearPyGuiAffordances (16 tests: zebra, sweep + prune, numeric/thousands/case/blank sorting, arrow toggling + cross-column clearing, hover + stripe restore, theme retint, toolbar attach/style/toggle/replace, crosshair + no-drift, font scale, session persistence) + the seven figure-landing pins updated to the toolbar-aware contract. |
+
+## The DearPyGui review, second pass (round 42, 100x-159) — closing the stretch rows
+
+The instruction arrived again (*"Improve the playground.py GUI:
+DearPyGui"*) the round after the first pass shipped — and the interim
+state demanded it: the round-41 session had died mid-close-out (a
+UUID-message commit, no worklog entry, the notebook re-execution and
+three green-suite fixes never ran; see the round-42 worklog post-mortem).
+This round closed that debt AND the disposition table's two STRETCH
+rows, translated honestly to tkinter:
+
+| DearPyGui feature (source) | Round-41 disposition | Round-42 disposition | Where it landed |
+| --- | --- | --- | --- |
+| `add_collapsing_header` | STRETCH ("deferred until a tab is actually too tall") | **ADDED-THIS-ROUND** | `make_card(collapsible=True, key=...)`: a ▾/▸ chevron on the header folds the card to its heading (inputs keep their values, only the body hides). Retrofitted onto the two static Home reference cards (Dependency status, What lives where) + all thirteen PK-tab calculators — the tallest tab, fold the calculators you are not using. The fold persists with the session (`collapsed_cards` text key, the tolerant JSON trick), a finder jump unfolds the target first, and the per-tab reset restores the launch look (other tabs keep their folds). |
+| Built-in demo / developer tools (metrics, theme inspector) | STRETCH ("no user demand") | **ADDED-THIS-ROUND** | View ▸ **GUI metrics…**: the live widget census by Tk class (the `_walk_widgets` walk), the card / tree / toolbar / job totals, the active preferences and the session file's state — a snapshot at open, honestly labelled — over the **palette inspector**: one colour chip + hex value per palette key (all 18), re-tinted live on theme flips (`_refresh_metrics_dialog`). |
+| Keyboard accelerators & key handlers (`add_item_handler` + key bindings, `docs/keybinds`) | *(the row the dying session's tallies promised but its table never carried)* | **COVERED-ALREADY** | The full accelerator layer predates the review: Ctrl+O/S/Shift+S/Shift+R/F/Q, Ctrl+PgDn/PgUp tab cycling, the Ctrl+F card finder, the hint row that advertises them all (`shortcut_hints_text`) — pinned by `TestShortcutHints` since 100x-65/119/120. |
+| Dockspace / node editor / GPU rendering | N-A-HONEST | N-A-HONEST (unchanged) | A tkinter card-per-scroll-page app is the opposite paradigm; the reasoning of round 41 stands. |
+
+**Round-41 tally reconciliation:** the shipped Round-41 table carried 17
+rows (5 ADDED · 7 COVERED · 2 STRETCH · 3 N-A) while its tally line
+claimed 18 rows / 3 STRETCH — the dying session never reconciled the
+two. With the keyboard row now documented above (COVERED-ALREADY), the
+review's real disposition is 18 rows: 5 ADDED · 8 COVERED · 2 STRETCH ·
+3 N-A — and the two stretch rows are closed by this round.
+
+### Round-42 verification rows
+
+| What | Where it landed |
+| --- | --- |
+| Collapsible cards | playground.py `_COLLAPSE_CARDS` / `_set_card_expanded` / `_toggle_collapsible_card` / `collapsed_card_keys` + the fifteen retrofitted call sites; session key `collapsed_cards`; finder unfold in `_jump_to_card`; per-tab unfold in `_reset_tab`. |
+| GUI metrics + palette inspector | playground.py `_gui_metrics_snapshot` / `_show_gui_metrics` / `_populate_metrics_palette` / `_refresh_metrics_dialog` (View ▸ GUI metrics…); the retint walker's new `Toplevel` branch follows flips too. |
+| The round-41 menu fix | `_menu_tints` was re-assigned AFTER the font cascade's append — the font submenu silently lost its theme tint on every flip; the list now carries it. |
+| Tests | tests/test_playground.py::TestDearPyGuiRoundTwo (14 tests: the registry, fold/unfold + chevron, quiet noops, finder unfold, session round-trip + corrupt/unknown restore, per-tab reset unfold, dialog census/prefs, census-vs-walk parity, palette chips, theme-flip live retint, reopen-lift/destroy-prune, the font-cascade tint pin). |
