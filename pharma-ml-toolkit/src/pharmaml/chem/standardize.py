@@ -79,6 +79,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from pharmaml.exceptions import DataValidationError, DependencyError
 from pharmaml.logger import get_logger
@@ -87,9 +88,13 @@ from pharmaml.utils.io import ensure_directory
 _LOG = get_logger(__name__)
 
 __all__ = [
+    "NEUTRALIZE_PATTERNS",
+    "REINVENT_DEFAULT_ELEMENTS",
     "UNSUPPORTED_METALS",
     "PdbLigandReport",
     "canonicalize_tautomer",
+    "reinvent_standardize_mol",
+    "reinvent_standardize_smiles",
     "require_rdkit_standardize",
     "smiles_to_pdb",
 ]
@@ -382,3 +387,250 @@ def smiles_to_pdb(
     )
     _LOG.info("%s", report.status())
     return report
+
+
+# ---------------------------------------------------------------------------
+# The REINVENT4 standardization chain (round 100x-164)
+# ---------------------------------------------------------------------------
+
+#: REINVENT4's neutralisation SMARTS (``reinvent/chemistry/standardization/
+#: filter_registry.py::NEUTRALIZE_PATTERNS``) -- every pattern is a charged
+#: form replaced by its neutral counterpart (``ReplaceSubstructs``), applied
+#: repeatedly until the molecule stops changing:
+#: imidazoles, amines, carboxylates/alkoxides, thiolates, sulfonamides,
+#: enamines, tetrazolates, sulfoxides and amide anions.
+NEUTRALIZE_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("[n+;H]", "n"),
+    ("[N+;!H0]", "N"),
+    ("[$([O-]);!$([O-][#7])]", "O"),
+    ("[S-;X1]", "S"),
+    ("[$([N-;X2]S(=O)=O)]", "N"),
+    ("[$([N-;X2][C,N]=C)]", "N"),
+    ("[n-]", "[nH]"),
+    ("[$([S-]=O)]", "S"),
+    ("[$([N-]C=O)]", "N"),
+)
+
+#: The classical Reinvent prior vocabulary's elements (C N O F S Cl Br) --
+#: ``valid_size``'s element filter in REINVENT4's default chain.
+REINVENT_DEFAULT_ELEMENTS: frozenset[int] = frozenset({6, 7, 8, 9, 16, 17, 35})
+
+#: REINVENT4's unwanted substructures (``_unwanted_patterns``): rejected
+#: outright rather than transformed.
+_UNWANTED_PATTERNS: tuple[str, ...] = ("[C-]#[N+]", "[OH+]", "[SH]")
+
+#: Cap on the neutralisation loop (REINVENT4 loops until the SMILES stops
+#: changing; the cap guards pathological oscillation).
+_MAX_NEUTRALIZE_PASSES = 10
+
+
+def reinvent_standardize_mol(
+    mol: Any,
+    *,
+    min_heavy_atoms: int = 2,
+    max_heavy_atoms: int = 70,
+    allowed_elements: frozenset[int] | set[int] | None = None,
+    neutralize: bool = True,
+) -> Any | None:
+    """The REINVENT4 ``default`` standardization chain, on an RDKit Mol.
+
+    Ported step by step from ``reinvent/chemistry/standardization/
+    filter_registry.py::standardize`` (the chain REINVENT4 applies to
+    transfer-learning input and library files):
+
+    1. **largest fragment** (most heavy atoms -- salts become their
+       parent ion);
+    2. **RemoveHs**;
+    3. **salt removal** -- RDKit's built-in ``SaltRemover`` (the default
+       salt/solvent SMARTS list, ``dontRemoveEverything=True``);
+    4. **neutralisation** -- the nine :data:`NEUTRALIZE_PATTERNS`
+       replacements looped to a fixpoint;
+    5. **general cleanup** -- ``Chem Cleanup`` + sanitise + RemoveHs;
+    6. **unwanted patterns** -- ``[C-]#[N+]``, ``[OH+]``, ``[SH]`` are
+       *rejected*, not cleaned;
+    7. **valid size** -- heavy atoms strictly between ``min_heavy_atoms``
+       and ``max_heavy_atoms`` (REINVENT4's 2..70) and every element in
+       ``allowed_elements`` (the prior vocabulary C N O F S S Cl Br).
+
+    Parameters
+    ----------
+    mol:
+        A sanitised (or at least parseable) RDKit ``Mol``.
+    min_heavy_atoms, max_heavy_atoms:
+        The heavy-atom window (exclusive bounds, REINVENT4's defaults).
+    allowed_elements:
+        Allowed atomic numbers; ``None`` keeps :data:`REINVENT_DEFAULT_ELEMENTS`.
+    neutralize:
+        Toggle the charged-form neutralisation pass (step 4).
+
+    Returns
+    -------
+    The standardised ``Mol``, or ``None`` when the molecule is rejected
+    (every rejection reason is logged as a warning -- the toolkit's
+    no-silent-drop rule).
+
+    Example
+    -------
+    >>> from rdkit import Chem
+    >>> from pharmaml.chem.standardize import reinvent_standardize_mol
+    >>> mol = reinvent_standardize_mol(Chem.MolFromSmiles("CC(=O)[O-].[Na+]"))
+    >>> Chem.MolToSmiles(mol)                 # the salt is gone, acid intact
+    'CC(=O)O'
+    >>> reinvent_standardize_mol(Chem.MolFromSmiles("C")) is None  # too small
+    True
+    """
+    if mol is None:
+        return None
+    from rdkit import Chem
+    from rdkit.Chem.SaltRemover import SaltRemover
+
+    allowed = (
+        REINVENT_DEFAULT_ELEMENTS
+        if allowed_elements is None
+        else frozenset(allowed_elements)
+    )
+
+    # 1. largest fragment by heavy-atom count (unsanitised frags on
+    # purpose -- some charged inputs only survive the pick; sanitise
+    # the winner immediately so the later steps see a healthy Mol)
+    try:
+        fragments = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=True)
+    except Exception:  # noqa: BLE001 - charged hosts fail sanitised splits
+        fragments = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False)
+    if fragments:
+        mol = max(fragments, key=lambda m: m.GetNumHeavyAtoms())
+        try:
+            Chem.SanitizeMol(mol)
+        except Exception as exc:  # noqa: BLE001 - the cleanup step reports it
+            _LOG.debug("fragment sanitisation deferred to cleanup: %s", exc)
+
+    # 2. strip explicit hydrogens
+    try:
+        mol = Chem.RemoveHs(mol)
+    except Exception as exc:  # noqa: BLE001 - unsanitisable input falls through
+        _LOG.debug("RemoveHs deferred to cleanup: %s", exc)
+
+    # 3. salt removal (RDKit's built-in list)
+    try:
+        mol = SaltRemover().StripMol(mol, dontRemoveEverything=True)
+    except Exception:  # noqa: BLE001 - hostile valences must not kill a batch
+        _LOG.warning("salt removal failed on %r -- chain continues",
+                     Chem.MolToSmiles(mol))
+
+    # 4. neutralisation to a fixpoint (the replacement mols parse with
+    # aromatic-atom warnings outside rings -- silenced like every other
+    # RDKit parse in the package)
+    if neutralize:
+        from rdkit.rdBase import DisableLog, EnableLog
+
+        DisableLog("rdApp.error")
+        DisableLog("rdApp.warning")
+        try:
+            for smarts, replacement in NEUTRALIZE_PATTERNS:
+                query = Chem.MolFromSmarts(smarts)
+                repl = Chem.MolFromSmiles(replacement)
+                if query is None or repl is None:  # pragma: no cover - static table
+                    continue
+                for _ in range(_MAX_NEUTRALIZE_PASSES):
+                    if not mol.HasSubstructMatch(query):
+                        break
+                    replaced = Chem.ReplaceSubstructs(mol, query, repl)
+                    if not replaced:
+                        break
+                    candidate = replaced[0]
+                    if Chem.MolToSmiles(candidate) == Chem.MolToSmiles(mol):
+                        break
+                    mol = candidate
+        finally:
+            EnableLog("rdApp.error")
+            EnableLog("rdApp.warning")
+
+    # 5. general cleanup (Cleanup mutates IN PLACE in modern RDKit --
+    # the REINVENT4 chain predates that API change)
+    try:
+        Chem.Cleanup(mol)
+        Chem.SanitizeMol(mol)
+        mol = Chem.RemoveHs(mol)
+    except Exception as exc:  # noqa: BLE001 - the actionable message follows
+        _LOG.warning("molecule failed general cleanup: %s", exc)
+        return None
+
+    # 6. unwanted patterns reject outright
+    for smarts in _UNWANTED_PATTERNS:
+        query = Chem.MolFromSmarts(smarts)
+        if query is not None and mol.HasSubstructMatch(query):
+            _LOG.warning(
+                "molecule rejected: unwanted pattern %s (REINVENT4's "
+                "unwanted-pairs list)",
+                smarts,
+            )
+            return None
+
+    # 7. valid size + elements
+    n_heavy = mol.GetNumHeavyAtoms()
+    if not min_heavy_atoms < n_heavy < max_heavy_atoms:
+        _LOG.warning(
+            "molecule rejected: %d heavy atoms outside the (%d, %d) window",
+            n_heavy,
+            min_heavy_atoms,
+            max_heavy_atoms,
+        )
+        return None
+    bad_elements = sorted(
+        {atom.GetSymbol() for atom in mol.GetAtoms()
+         if atom.GetAtomicNum() not in allowed}
+    )
+    if bad_elements:
+        _LOG.warning(
+            "molecule rejected: element(s) %s outside the allowed vocabulary",
+            bad_elements,
+        )
+        return None
+    return mol
+
+
+def reinvent_standardize_smiles(
+    smiles: str,
+    **kwargs: Any,
+) -> str | None:
+    """:func:`reinvent_standardize_mol` from (and back to) a SMILES.
+
+    The REINVENT4 ``file_reader``/transfer-learning front door: every
+    library line standardised through one call, invalid entries dropped
+    **with a warning** (never silently).  Returns the canonical SMILES
+    of the standardised molecule, or ``None``.
+
+    Example
+    -------
+    >>> from pharmaml.chem.standardize import reinvent_standardize_smiles
+    >>> reinvent_standardize_smiles("CC(=O)[O-].[Na+]")
+    'CC(=O)O'
+    >>> reinvent_standardize_smiles("[nH]1ccnc1")   # neutralised imidazole
+    'c1c[nH]cn1'
+    >>> reinvent_standardize_smiles("not-a-smiles") is None
+    True
+    """
+    if not isinstance(smiles, str) or not smiles.strip():
+        _LOG.warning("dropping blank SMILES %r", smiles)
+        return None
+    Chem = require_rdkit_standardize()
+    from rdkit.rdBase import DisableLog, EnableLog
+
+    DisableLog("rdApp.error")
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+    except Exception:  # noqa: BLE001 - hostile strings return None anyway
+        mol = None
+    finally:
+        EnableLog("rdApp.error")
+    if mol is None:
+        _LOG.warning("dropping unparseable SMILES %r", smiles)
+        return None
+    standard = reinvent_standardize_mol(mol, **kwargs)
+    if standard is None:
+        return None
+    try:
+        return Chem.MolToSmiles(standard)
+    except Exception:  # noqa: BLE001 - unsanitisable output drops with a warning
+        _LOG.warning("standardised molecule could not be canonicalised")
+        return None

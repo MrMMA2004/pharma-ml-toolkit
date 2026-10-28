@@ -1,3 +1,160 @@
+## [1.2.98] — 2026-10-29
+
+### Added — REINVENT4 and DiffDock absorbed: the score-transform DSL + pose analysis (100x-164)
+
+The instruction: *"Check the contents and files in this GitHub links
+completely and one by one and add the missing items to playground.py:
+github.com/MolecularAI/REINVENT4, github.com/gcorso/DiffDock."*
+Both repositories cloned and reviewed file by file — REINVENT4 4.8.x
+(AstraZeneca's de novo design framework; the plugin-based scoring
+system, the RL diversity memories, the standardization chain) and
+DiffDock main / DiffDock-L layout (the diffusion dockers; the vendored
+spyrmsd, the Kabsch/QCP geometry, the torsion machinery, evaluate.py,
+the MOAD pocket rules).  The diffusion models themselves (torch + e3nn
++ ESMFold + trained checkpoints) cannot land in an RDKit/numpy toolkit
+and did not — everything *around* them that a docking campaign needs
+did.  What landed:
+
+* **`generative/scoring_transforms.py` — REINVENT4's scoring DSL.**
+  The eight transforms with their exact formulas
+  (`reinvent/scoring/transforms/`): `SigmoidTransform` /
+  `ReverseSigmoidTransform` (the base-10 *numerically stable* sigmoid,
+  REINVENT4's `k' = 10k/(high-low)` rescaling and the `high == low`
+  hard-step degenerate branch), `DoubleSigmoidTransform` (the band
+  pass with `coef_div`/`coef_si`/`coef_se`), the three steps
+  (`RightStep`, `LeftStep`, `Step`), `ExponentialDecayTransform` (the
+  rectified `exp(-kx)`, `k > 0` enforced) and `ValueMappingTransform`
+  (categories to floats, unmapped keys to NaN with a warning).  The
+  registry is keyed exactly like REINVENT4's `get_transform` lookup
+  (lowercase class name, separators stripped on lookup —
+  `make_transform("double-sigmoid")` resolves).  The **NaN-aware
+  weighted aggregators** (`weighted_arithmetic_mean` /
+  `weighted_geometric_mean`, `aggregators/means.py`: a NaN component
+  drops out of the numerator *and* the denominator; the geometric
+  clamp at 1e-8).  The **transformable components**:
+  `RawComponentObjective` + the `RAW_COMPONENTS` registry (REINVENT4's
+  `comp_physchem.py` set: MW, SlogP, TPSA, QED, HBD/HBA, rotatable
+  bonds, ring counts, heavy/hetero atoms, Csp3, largest ring, graph
+  length, atom stereo centres), `GroupCountObjective`
+  (`comp_group_count.py`).  The **filter/penalty objectives**:
+  `CustomAlertsObjective` (`comp_custom_alerts.py`: 1.0 clean / 0.0
+  when any blocklist SMARTS hits — inside the toolkit's geometric-mean
+  `MultiObjective` a hit vetoes the molecule, exactly REINVENT4's
+  AND-into-the-mask semantics) and `MatchingSubstructureObjective`
+  (`comp_matching_substructure.py`: `0.5·(1+match)` — the penalty
+  product REINVENT4 multiplies in after aggregation).  What did not
+  land, on the house rule: the `comp_*` namespace-package plugin
+  discovery, every component that shells out to external CLIs or
+  licensed SDKs (SynthSense, RingPrecedence, ROCS/OpenEye, ChemProp,
+  Qptuna, Maize, DockStream, Icolos, REST), the pydantic TOML schema,
+  and the Ertl SA score (a pickled feature-count model the toolkit
+  refuses to vendor).
+* **`generative/diversity.py` — REINVENT4's diversity filters.**  The
+  `BucketCounter` with REINVENT4's own `count > max_size` fullness
+  off-by-one (pinned deliberately), the five filters
+  (`identical_murcko_scaffold`, `identical_topological_scaffold` —
+  `MakeScaffoldGeneric` buckets, `scaffold_similarity` — atom-pair
+  **Dice** ≥ minsimilarity collapses near-duplicate scaffolds into
+  shared buckets, `penalize_same_smiles` — the repeat multiplier,
+  `no_filter` — the memory that never touches a score), and the five
+  bucket penalty functions from `intrinsic_penalty/penalties/`
+  (step / linear / sigmoid / tanh / erf, exact closed forms).  The
+  `score_scaffolds` flow reproduced exactly: the duplicate rule fires
+  before the bucket logic; `minscore` gates memory entry; the bucket
+  count feeds the penalty at every memorisation so `step` is the
+  classic zero-when-full bit-exactly and the soft functions decay
+  smoothly.  **`DiversityFilteredObjective`** is the toolkit
+  integration: a stateful wrapper around *any* `ScoringObjective`
+  — GA / RL / MCTS score through their objective unchanged, which is
+  exactly where REINVENT4 hooks its filters — with `scaffold_stats()`
+  for the run reports, `reset_stats()` vs `reset_filter()` (mid-run
+  amnesia would forget what the run already saw), and the
+  batch-at-a-time `score_many` matching REINVENT4's own granularity.
+  The atom-pair fingerprints ride the modern
+  `rdFingerprintGenerator.GetAtomPairGenerator` (the toolkit's
+  standing precedent — same fingerprint family, bit-vector form, no
+  per-call deprecation warning).
+* **`chem/standardize.py` — REINVENT4's default standardization
+  chain.**  `NEUTRALIZE_PATTERNS` (the nine charged-form SMARTS pairs
+  from `filter_registry.py`: imidazoles, amines, carboxylates,
+  thiolates, sulfonamides, enamines, tetrazolates, sulfoxides, amide
+  anions), `REINVENT_DEFAULT_ELEMENTS` (the prior vocabulary C N O F S
+  Cl Br), and `reinvent_standardize_mol` / `reinvent_standardize_smiles`
+  running the full chain step by step: largest fragment → RemoveHs →
+  RDKit salt removal → neutralisation to a fixpoint → general cleanup
+  → the unwanted-pattern rejections (`[C-]#[N+]`, `[OH+]`, `[SH]`) →
+  the (2, 70) heavy-atom window and the element vocabulary.  Every
+  rejection is logged (the no-silent-drop rule); `Chem.Cleanup`'s
+  modern in-place mutation is handled (the REINVENT4 chain predates
+  that API change).
+* **`docking/pose_rmsd.py` — DiffDock's pose mathematics.**  The
+  **Kabsch superposition** (`utils/geometry.py::
+  rigid_transform_Kabsch_3D_torch` as numpy SVD with the reflection
+  fix) as `kabsch_transform`/`kabsch_rmsd`; the **QCP RMSD**
+  (Theobald's quaternion characteristic polynomial, `spyrmsd/qcp.py`
+  verbatim: the 4×4 key matrix, the Newton quartic root with the
+  eigenvalue fallback); the **Hungarian RMSD** (`spyrmsd/hungarian.py`:
+  per-element linear assignment); and the headline —
+  **`symmetry_corrected_rmsd`**, the spyrmsd `symmrmsd` metric
+  DiffDock's own evaluation uses: every automorphism of the molecular
+  graph (RDKit `GetSubstructMatches(mol, mol, uniquify=False)` —
+  element *and bond-order* aware, stricter than spyrmsd's plain VF2,
+  so phenyl flips and carboxylate O-swaps are the same pose), the
+  minimum RMSD over the permutations, the winning permutation on
+  request, and the `AutomorphismCache` pose-list economy (enumerate
+  once, reuse per pose — spyrmsd's `cache=True`; capped at 200
+  permutations where spyrmsd relies on DiffDock's external 10-second
+  SIGALRM).  The **torsion machinery** (`utils/torsion.py`):
+  `torsion_bonds` by DiffDock's own graph-disconnect rule (a bond whose
+  removal splits the graph with a >1-atom smaller side — terminal
+  bonds never rotate), `rotatable_masks`, `dihedrals`,
+  `perturb_torsions` (the exact `modify_conformer_torsion_angles`
+  rotation about the bond axis) and `randomize_pose` — the
+  `randomize_position` diffusion initial state (uniform torsions in
+  [-π, π], a uniform random rotation, the centroid relocated; seeded).
+  The **evaluate.py metrics** — `pose_evaluation_report`: mean /
+  median / p25 / p75 RMSD, the classic <2 Å / <5 Å success fractions,
+  centroid distances, best-of-N, the self-clash fraction (min
+  intra-ligand distance < 0.4 Å) and greedy `pose_clusters` (the
+  confidence model's ranking job approximated by cluster size).  The
+  **pocket extraction** — `extract_pocket` (the MOAD `chain_cutoff`
+  rule: residues within the cutoff of any ligand atom, whole chains or
+  residues only) and `crop_beyond` (the 20 Å residue-level crop).
+* **Playground GUI** — the Chemistry tab's row 8: the **score
+  transform lab (REINVENT4)** card (component combobox over the
+  registry, transform combobox over all eight, the window/steepness
+  entries, per-molecule raw → transformed score table + mean/best
+  summary) and the **custom alerts & standardization (REINVENT4)**
+  card (the editable SMARTS blocklist with the verdict table, the
+  standardization chain with cleaned/unchanged/rejected statuses; both
+  molecule boxes ride the session-persistence / reset / copy-inputs
+  mechanisms).  The Generative tab: the **diversity filter** block
+  (filter combobox over all five, bucket size, minscore, the bucket
+  penalty curve) and the corpus card's **custom-alerts blocklist** —
+  wired into every optimiser (alerts veto through the geometric mean;
+  the filter wraps the objective so the GA / RL / MCTS unchanged), with
+  the scaffold-memory statistics appended to the run report
+  (`_format_diversity_stats`).  The Docking tab's row 8: the **pose
+  RMSD & analysis (DiffDock)** card (reference + poses files, the
+  per-pose symmetry-corrected RMSD / centroid / clash table, the full
+  evaluate.py text report with the torsion/dihedral echo, and the
+  randomize_position demo) and the **pocket extraction (DiffDock)**
+  card (protein + ligand pose files, the residue cutoff with
+  whole-chain mode, the residue table with per-residue closest
+  contacts, the pocket report, the lysozyme example button generating
+  a NAG demonstration pose, and the save-pocket-PDB export).
+* **Tests** — 90 transform/filter objective cases
+  (`test_scoring_transforms.py`), 38 diversity cases
+  (`test_diversity.py`, including the GA end-to-end integration proof),
+  48 pose-mathematics cases (`test_pose_rmsd.py`), 15 standardization
+  cases (appended to `test_chem_standardize.py`); 43 new doctests
+  across the four surfaces.  The round's E2E probe
+  (`scratch/probe_round164.py`) exercises every new card headlessly:
+  the transform table, the alerts verdicts, the standardization
+  statuses, a GA run whose stats text carries the dressings block, the
+  pose table + report, the randomize demo, the lysozyme pocket with
+  save, and the session map's four new keys.
+
 ## [1.2.97] — 2026-10-29
 
 ### Added — SELFIES and ChemTSv2 absorbed: the robust molecular string + tree-search generation (100x-162/163)

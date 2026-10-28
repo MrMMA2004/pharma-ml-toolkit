@@ -98,6 +98,18 @@ from __future__ import annotations
 
 from .bioisostere import bioisostere_moves, bioisostere_mutate
 from .corpus import DEFAULT_CORPUS
+from .diversity import (
+    DIVERSITY_FILTERS,
+    SCAFFOLD_PENALTY_FUNCTIONS,
+    DiversityFilter,
+    DiversityFilteredObjective,
+    IdenticalMurckoScaffoldFilter,
+    IdenticalTopologicalScaffoldFilter,
+    NoFilter,
+    PenalizeSameSmilesFilter,
+    ScaffoldSimilarityFilter,
+    make_diversity_filter,
+)
 from .genetic import GeneticOptimizer, run_genetic_optimization
 from .mcts import MctsOptimizer, run_mcts_optimization
 from .pareto import ParetoFront, pareto_front
@@ -116,20 +128,48 @@ from .scoring import (
     SubstructureObjective,
     TpsaBandObjective,
 )
+from .scoring_transforms import (
+    RAW_COMPONENTS,
+    TRANSFORM_REGISTRY,
+    CustomAlertsObjective,
+    GroupCountObjective,
+    MatchingSubstructureObjective,
+    RawComponentObjective,
+    ScoreTransform,
+    make_transform,
+    weighted_arithmetic_mean,
+    weighted_geometric_mean,
+)
 from .topology import ring_topology_moves, ring_topology_mutate
 
 __all__ = [
     "DEFAULT_CORPUS",
+    "DIVERSITY_FILTERS",
+    "RAW_COMPONENTS",
+    "SCAFFOLD_PENALTY_FUNCTIONS",
+    "TRANSFORM_REGISTRY",
+    "CustomAlertsObjective",
+    "DiversityFilter",
+    "DiversityFilteredObjective",
     "GenerationResult",
     "GeneticOptimizer",
+    "GroupCountObjective",
+    "IdenticalMurckoScaffoldFilter",
+    "IdenticalTopologicalScaffoldFilter",
     "LogPBandObjective",
+    "MatchingSubstructureObjective",
     "MctsOptimizer",
     "MolecularWeightBandObjective",
     "MultiObjective",
+    "NoFilter",
     "NoveltyObjective",
     "ParetoFront",
+    "PenalizeSameSmilesFilter",
     "QedObjective",
+    "RawComponentObjective",
     "ReinventOptimizer",
+    "ScaffoldSimilarityFilter",
+    "ScoreTransform",
     "ScoringObjective",
     "SimilarityObjective",
     "SmilesRnn",
@@ -137,6 +177,8 @@ __all__ = [
     "TpsaBandObjective",
     "bioisostere_moves",
     "bioisostere_mutate",
+    "make_diversity_filter",
+    "make_transform",
     "pareto_front",
     "ring_topology_moves",
     "ring_topology_mutate",
@@ -144,4 +186,6 @@ __all__ = [
     "run_mcts_optimization",
     "run_rl_optimization",
     "scaffold_hop_crossover",
+    "weighted_arithmetic_mean",
+    "weighted_geometric_mean",
 ]

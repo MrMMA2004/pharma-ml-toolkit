@@ -89,9 +89,13 @@ from pharmaml.chem.similarity import (
     top_matches,
 )
 from pharmaml.chem.standardize import (
+    NEUTRALIZE_PATTERNS,
+    REINVENT_DEFAULT_ELEMENTS,
     UNSUPPORTED_METALS,
     PdbLigandReport,
     canonicalize_tautomer,
+    reinvent_standardize_mol,
+    reinvent_standardize_smiles,
     smiles_to_pdb,
 )
 from pharmaml.chem.tables import (
@@ -119,8 +123,10 @@ __all__ = [
     "MACCS_BITS",
     "MORGAN_BITS",
     "MORGAN_RADIUS",
+    "NEUTRALIZE_PATTERNS",
     "PATTERN_BITS",
     "RDKIT_FP_BITS",
+    "REINVENT_DEFAULT_ELEMENTS",
     "RISM_DESCRIPTORS",
     "RISM_DESCRIPTOR_COUNT",
     "TOPOLOGICAL_BITS",
@@ -161,6 +167,8 @@ __all__ = [
     "prepare_pic50_dataset",
     "random_selfies_molecules",
     "rank_features",
+    "reinvent_standardize_mol",
+    "reinvent_standardize_smiles",
     "sdf_to_table",
     "select_top_features",
     "selection_metadata",

@@ -1496,6 +1496,120 @@ selfies_to_smiles("[C][#C]")                 # 'C#C' — restored, nothing leake
 * Requires `pip install "pharmaml[selfies]"`; the audit / robustness / feature
   halves additionally need RDKit. The package is imported lazily everywhere.
 
+### REINVENT4's scoring DSL & diversity filters (from 0 to 100)
+
+REINVENT4 (`MolecularAI/REINVENT4`, Apache-2.0) is AstraZeneca's de novo design
+framework: a plugin scoring system over transforms, scaffold-memory diversity
+filters and a standardization chain. The toolkit absorbed the programming model
+in typed library surfaces (everything runs on RDKit + numpy — no torch, no
+plugin discovery, no external CLIs):
+
+```python
+from pharmaml.generative import (
+    GeneticOptimizer, make_transform, RawComponentObjective,
+    CustomAlertsObjective, DiversityFilteredObjective, MultiObjective,
+    QedObjective, weighted_arithmetic_mean, weighted_geometric_mean,
+)
+from pharmaml.generative.scoring_transforms import DoubleSigmoidTransform
+
+# 1) The eight transforms with REINVENT4's exact formulas: sigmoid /
+#    reverse sigmoid (the numerically stable base-10 form, the k
+#    rescaling 10k/(high-low)), double sigmoid (the band pass), the
+#    three steps, the rectified exponential decay, the value mapping.
+#    make_transform("double-sigmoid", low=150, high=450, k=100) resolves
+#    exactly like REINVENT4's get_transform name normalisation.
+mw = RawComponentObjective("molecular_weight",
+                           DoubleSigmoidTransform(low=150, high=450, k=100.0))
+mw.score("CC(=O)Oc1ccccc1C(=O)O")      # aspirin (180 Da): inside the band
+
+# 2) The filter/penalty semantics: CustomAlerts vetoes blocklist hits
+#    (0.0 -> the geometric mean zeroes the molecule); MatchingSubstructure
+#    carries REINVENT4's 0.5*(1+match) penalty product.
+alerts = CustomAlertsObjective(["[N+](=O)[O-]", "C(F)(F)F"])
+
+# 3) The NaN-aware weighted aggregators (a NaN component drops out of
+#    numerator AND denominator — REINVENT4's means.py semantics).
+weighted_arithmetic_mean([([0.2, 0.8], 1.0), ([0.6, 0.4], 3.0)])
+
+# 4) The diversity filters: wrap ANY objective — the GA / RL / MCTS score
+#    through it unchanged, and the scaffold memory accumulates across the
+#    run exactly like REINVENT4's RL memories (bucket counter, minscore
+#    gate, the five penalty curves step/linear/sigmoid/tanh/erf).
+objective = DiversityFilteredObjective(
+    MultiObjective([QedObjective(), alerts]),
+    "identical_murcko_scaffold", bucket_size=25, minscore=0.4)
+result = GeneticOptimizer(objective, population_size=24, seed=42).optimize()
+objective.scaffold_stats()   # scaffolds, full buckets, zeroed scores, ...
+```
+
+* The playground's Chemistry tab carries the **score transform lab (REINVENT4)**
+  card (component + transform + window over any pasted list) and the **custom
+  alerts & standardization (REINVENT4)** card (the blocklist verdict table and
+  the default standardization chain: largest fragment, salt removal, the nine
+  neutralisation SMARTS, the (2, 70) heavy-atom / prior-vocabulary window).
+* The Generative tab gained the **diversity filter** block and the
+  **custom-alerts blocklist** — wired into every optimiser with the
+  scaffold-memory statistics in the run report.
+* Honest scope: the components that shell out to external CLIs or licensed SDKs
+  (SynthSense, ROCS/OpenEye, ChemProp, Qptuna, Maize, DockStream) and the Ertl
+  SA score (a vendored pickle) did not land.
+
+### DiffDock's pose analysis (from 0 to 100)
+
+DiffDock (`gcorso/DiffDock`, MIT) is the diffusion-based docker; the diffusion
+models themselves (torch + e3nn + ESMFold + trained checkpoints) cannot land in
+an RDKit/numpy toolkit — every piece of pose mathematics *around* them did:
+
+```python
+import numpy as np
+from pharmaml.docking.pose_rmsd import (
+    kabsch_rmsd, qcp_rmsd, hungarian_rmsd,
+    symmetry_corrected_rmsd, best_pose_rmsd, rmsd_wrapper,
+    torsion_bonds, rotatable_masks, dihedrals, perturb_torsions,
+    randomize_pose, pose_evaluation_report, pose_clusters,
+    extract_pocket, crop_beyond,
+)
+from rdkit import Chem
+
+# 1) The alignment mathematics: Kabsch (DiffDock's rigid_transform_Kabsch_3D),
+#    QCP (Theobald's quaternion characteristic polynomial, spyrmsd/qcp.py),
+#    Hungarian (the ordering-free per-element assignment).
+kabsch_rmsd(square, square @ rotation.T)      # 0.0 — rotations align away
+
+# 2) The symmetry-corrected RMSD — the metric DiffDock's own evaluation uses
+#    (spyrmsd's symmrmsd): every automorphism of the molecular graph, the
+#    minimum RMSD over the permutations, cached across a pose list.
+ethane = Chem.MolFromSmiles("CC")
+a = np.array([[0.0, 0, 0], [1.54, 0, 0]])
+b = np.array([[1.54, 0, 0], [0.0, 0, 0]])     # the two carbons swapped
+symmetry_corrected_rmsd(ethane, a, b)          # 0.0 — the SAME molecule
+
+# 3) The torsion machinery: DiffDock's own graph-disconnect rotatable-bond
+#    rule, the masks, the dihedrals, torsion perturbation and
+#    randomize_pose (the diffusion initial state: random torsions + a
+#    random rotation, seeded).
+torsion_bonds(Chem.MolFromSmiles("CCCC"))     # [(1, 2)] — terminals never rotate
+
+# 4) The evaluate.py metrics on a reference vs N poses: mean/median/
+#    percentiles, the <2 A / <5 A success fractions, centroid distances,
+#    best-of-N, the self-clash fraction and greedy pose clusters.
+report = pose_evaluation_report(mol, reference, poses)
+report.rmsd_below_2_fraction, report.summary()
+
+# 5) The pocket rules: MOAD's chain_cutoff residue selection (whole chains
+#    or pocket residues only) and DiffDock's 20 A crop_beyond.
+pocket = extract_pocket(protein_pdb_text, ligand_coords, residue_cutoff=10.0)
+pocket.residues, pocket.pdb_text, pocket.summary()
+```
+
+* The playground's Docking tab carries the GUI twins: the **pose RMSD & analysis
+  (DiffDock)** card (per-pose symmetry-corrected RMSD / centroid / clash table,
+  the full evaluation report, the randomize_position demo) and the **pocket
+  extraction (DiffDock)** card (residue table with per-residue closest contacts,
+  the lysozyme example, the save-pocket-PDB export).
+* Honest scope: no diffusion model, no confidence model, no ESM embeddings —
+  the campaign docking stays AutoDock4/Vina, now with DiffDock-grade pose QA.
+
 ### Cell line data analysis (from 0 to 100)
 
 A complete workflow for **cell line pharmacology** — GDSC/CCLE-style drug-response

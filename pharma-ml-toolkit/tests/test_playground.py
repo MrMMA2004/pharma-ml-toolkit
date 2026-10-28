@@ -10681,8 +10681,11 @@ class TestReview142Gui:
 
     def test_session_text_widgets_map_covers_all_eight_keys(self, app: Any) -> None:
         widgets = app._session_text_widgets()
-        # 100x-162: the SELFIES audit box joined the map (the Chemistry
-        # tab's sixth persisted text box)
+        # 100x-162: the SELFIES audit box joined the map; 100x-164: the
+        # REINVENT4 round added the transform-lab molecule list, the
+        # alerts card's SMARTS + molecule boxes and the Generative
+        # alerts blocklist (the Chemistry tab's eighth/eleventh persisted
+        # text boxes and the Generative tab's second)
         assert set(widgets) == {
             "pasted",
             "corpus",
@@ -10692,6 +10695,10 @@ class TestReview142Gui:
             "selfies_audit",
             "scan_refs",
             "scan_lib",
+            "transform_mol",
+            "alert_smarts",
+            "alert_mol",
+            "gen_alerts",
         }
         assert all(widget is not None for widget in widgets.values())
 
@@ -10700,7 +10707,8 @@ class TestReview142Gui:
         # text:maccs / text:scan_refs / text:scan_lib never entered the
         # ownership map -- and Reset/Copy silently skipped them.  The
         # probe: Chemistry owns six of the eight, Generative the
-        # corpus, Docking the SMILES array.
+        # corpus, Docking the SMILES array.  (100x-164: the REINVENT4
+        # boxes joined both tabs' ownership.)
         owners = app._tab_input_names()
         chemistry = owners[1]
         for key in (
@@ -10710,9 +10718,13 @@ class TestReview142Gui:
             "text:selfies_audit",
             "text:scan_refs",
             "text:scan_lib",
+            "text:transform_mol",
+            "text:alert_smarts",
+            "text:alert_mol",
         ):
             assert key in chemistry, f"{key} missing from the Chemistry tab's ownership"
         assert "text:corpus" in owners[8]  # Generative
+        assert "text:gen_alerts" in owners[8]  # Generative (100x-164)
         assert "text:smiles" in owners[4]  # Docking
 
     def test_chemistry_reset_restores_maccs_and_scan_boxes(self, app: Any) -> None:
@@ -15177,3 +15189,225 @@ class TestShapOptunaAbsorptionGui:
         assert all(t.duration is not None for t in results.trials)
         assert any(t.fold_scores for t in results.trials)
         assert quiet_dialogs == []
+
+
+class TestReinvent4DiffDockAbsorptionGui:
+    """(100x-164) The MolecularAI/REINVENT4 + gcorso/DiffDock absorption
+    round's GUI: the Chemistry row-8 cards (the score-transform lab and
+    the custom-alerts/standardization card), the Generative tab's
+    diversity-filter + alerts wiring, and the Docking row-8 cards (the
+    pose-RMSD evaluation and the pocket extraction)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 180.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- the score-transform lab ------------------------------------------ #
+
+    def test_transform_lab_scores_the_default_list(self, app: Any) -> None:
+        app._transform_component.set("molecular weight (Da)")
+        app._transform_kind.set("step window")
+        app._transform_low.delete(0, "end"); app._transform_low.insert(0, "150")
+        app._transform_high.delete(0, "end"); app._transform_high.insert(0, "450")
+        app._transform_lab_run()
+        assert self._drain_jobs(app), "transform lab hung"
+        rows = app._transform_tree.get_children()
+        assert len(rows) == 3  # the card's default molecule list
+        values = [app._transform_tree.item(row, "values") for row in rows]
+        # every default molecule sits inside the drug-like window
+        assert all(float(str(v[2])) == 1.0 for v in values)
+        summary = app._transform_summary.cget("text")
+        assert "molecular weight" in summary and "mean score" in summary
+
+    def test_transform_lab_rejects_bad_window(self, app: Any, quiet_dialogs: Any) -> None:
+        app._transform_low.delete(0, "end"); app._transform_low.insert(0, "500")
+        app._transform_high.delete(0, "end"); app._transform_high.insert(0, "100")
+        app._transform_lab_run()
+        assert not app._busy  # refused before the worker started
+        assert quiet_dialogs and "exceeds" in str(quiet_dialogs[0][1])
+
+    # -- the custom alerts / standardization card -------------------------- #
+
+    def test_alerts_check_marks_hits(self, app: Any) -> None:
+        app._alert_smarts_text.delete("1.0", "end")
+        app._alert_smarts_text.insert("1.0", "c1ccccc1")   # benzene alert
+        app._alert_mol_text.delete("1.0", "end")
+        app._alert_mol_text.insert("1.0", "CCO\nCC(=O)Oc1ccccc1C(=O)O")
+        app._alerts_check_run()
+        assert self._drain_jobs(app), "alerts check hung"
+        values = [
+            app._alerts_tree.item(row, "values")
+            for row in app._alerts_tree.get_children()
+        ]
+        verdicts = {str(v[0]): str(v[2]) for v in values}
+        assert verdicts["CCO"] == "clean"
+        assert verdicts["CC(=O)Oc1ccccc1C(=O)O"] == "blocked"
+        assert "1 blocked" in app._alerts_summary.cget("text")
+
+    def test_standardize_chain_statuses(self, app: Any) -> None:
+        app._alert_mol_text.delete("1.0", "end")
+        app._alert_mol_text.insert("1.0", "CC(=O)[O-].[Na+]\nCCO\nC")
+        app._reinvent_standardize_run()
+        assert self._drain_jobs(app), "standardization hung"
+        values = [
+            app._alerts_tree.item(row, "values")
+            for row in app._alerts_tree.get_children()
+        ]
+        statuses = {str(v[0]): str(v[2]) for v in values}
+        assert statuses["CC(=O)[O-].[Na+]"] == "cleaned"
+        assert statuses["CCO"] == "unchanged"
+        assert statuses["C"] == "rejected"  # the (2, 70) heavy-atom window
+
+    # -- the Generative wiring ---------------------------------------------- #
+
+    def test_diversity_controls_exist(self, app: Any) -> None:
+        assert app._diversity_combo.get() == "none"
+        assert app._diversity_bucket.get() == "25"
+        assert app._diversity_minscore.get() == "0.4"
+        assert app._diversity_penalty.get() == "step"
+        assert app._gen_alerts_text.get("1.0", "end").strip() == ""
+
+    def test_ga_run_with_diversity_and_alerts(self, app: Any) -> None:
+        app._objective_combo.set("QED drug-likeness")
+        app._method_combo.set("genetic algorithm")
+        app._pop_size.set("8")
+        app._generations.set("3")
+        app._diversity_combo.set("penalize same SMILES")
+        app._diversity_bucket.set("2")
+        app._gen_alerts_text.delete("1.0", "end")
+        app._gen_alerts_text.insert("1.0", "[N+](=O)[O-]")
+        app._run_evolution()
+        assert self._drain_jobs(app, timeout=300.0), "GA run hung"
+        stats = app._ga_stats_text.get("1.0", "end")
+        assert "REINVENT4 dressings" in stats
+        assert "custom alerts" in stats and "1 pattern" in stats
+        assert "penalised scores" in stats
+        # clean up for any test that follows
+        app._diversity_combo.set("none")
+        app._gen_alerts_text.delete("1.0", "end")
+
+    def test_format_diversity_stats_block(self, playground: Any) -> None:
+        text = playground._format_diversity_stats(
+            {
+                "filter": "PenalizeSameSmilesFilter",
+                "n_scaffolds": 0,
+                "n_full_buckets": 0,
+                "n_memorized_smiles": 12,
+                "n_zeroed": 1,
+                "n_penalized": 4,
+            },
+            ["[N+](=O)[O-]"],
+        )
+        assert "PenalizeSameSmiles" in text  # the Filter suffix dropped
+        assert "memorised SMILES" in text and "12" in text
+        assert "1 pattern(s): [N+](=O)[O-]" in text
+
+    # -- the pose RMSD / pocket cards --------------------------------------- #
+
+    def test_pose_evaluation_table_and_report(self, app: Any, tmp_path: Any) -> None:
+        import numpy as np
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+        from rdkit.Geometry import Point3D
+
+        aspirin = Chem.AddHs(Chem.MolFromSmiles("CC(=O)Oc1ccccc1C(=O)O"))
+        params = AllChem.ETKDG()
+        params.randomSeed = 42  # type: ignore[assignment]
+        AllChem.EmbedMultipleConfs(aspirin, numConfs=3, params=params)
+        conformers = [
+            aspirin.GetConformer(i) for i in range(aspirin.GetNumConformers())
+        ]
+        reference = tmp_path / "reference.sdf"
+        poses = tmp_path / "poses.sdf"
+        reference.write_text(
+            Chem.MolToMolBlock(aspirin, confId=conformers[0].GetId())
+        )
+        chunks = []
+        for index, conf in enumerate(conformers[1:], start=1):
+            shifted = Chem.Mol(aspirin)
+            shifted.RemoveAllConformers()
+            shifted.AddConformer(conf, assignId=True)
+            positions = np.asarray(conf.GetPositions()) + float(index) * 0.5
+            writer_conf = shifted.GetConformer()
+            for atom_index in range(shifted.GetNumAtoms()):
+                writer_conf.SetAtomPosition(
+                    atom_index, Point3D(*positions[atom_index].tolist())
+                )
+            chunks.append(Chem.MolToMolBlock(shifted) + "$$$$\n")
+        poses.write_text("".join(chunks))
+        app._pose_reference_entry.delete(0, "end")
+        app._pose_reference_entry.insert(0, str(reference))
+        app._pose_poses_entry.delete(0, "end")
+        app._pose_poses_entry.insert(0, str(poses))
+        app._pose_evaluate_run()
+        assert self._drain_jobs(app, timeout=180.0), "pose evaluation hung"
+        rows = app._pose_tree.get_children()
+        assert len(rows) == 2
+        report = app._pose_report_text.get("1.0", "end")
+        assert "RMSD < 2 A" in report and "pose clusters" in report
+        assert "rotatable bond(s)" in report
+
+    def test_pose_evaluation_requires_both_files(self, app: Any, quiet_dialogs: Any) -> None:
+        app._pose_reference_entry.delete(0, "end")
+        app._pose_poses_entry.delete(0, "end")
+        app._pose_evaluate_run()
+        assert quiet_dialogs and "Both" in str(quiet_dialogs[0][1])
+
+    def test_pocket_extraction_on_a_mini_protein(self, app: Any, tmp_path: Any) -> None:
+        protein = tmp_path / "mini.pdb"
+        protein.write_text(
+            "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00"
+            "           N  \n"
+            "ATOM      2  CA  GLY A   2       3.000   0.000   0.000  1.00  0.00"
+            "           C  \n"
+            "ATOM      3  N   VAL B   1      50.000   0.000   0.000  1.00  0.00"
+            "           N  \n"
+        )
+        ligand = tmp_path / "ligand.pdb"
+        ligand.write_text(
+            "HETATM    1  C   LIG A   1       1.000   0.000   0.000  1.00  0.00"
+            "           C  \n"
+        )
+        app._pocket_protein_entry.delete(0, "end")
+        app._pocket_protein_entry.insert(0, str(protein))
+        app._pocket_ligand_entry.delete(0, "end")
+        app._pocket_ligand_entry.insert(0, str(ligand))
+        app._pocket_cutoff.delete(0, "end")
+        app._pocket_cutoff.insert(0, "5.0")
+        app._pocket_whole_chains.set(False)
+        app._pocket_extract_run()
+        assert self._drain_jobs(app), "pocket extraction hung"
+        rows = app._pocket_tree.get_children()
+        assert len(rows) == 2  # the two near residues, VAL dropped
+        summary = app._pocket_summary.cget("text")
+        assert "2 residue(s) in the pocket" in summary
+        assert "closest ligand atom" in app._pocket_report_text.get("1.0", "end")

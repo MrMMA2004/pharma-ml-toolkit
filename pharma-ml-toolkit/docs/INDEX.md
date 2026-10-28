@@ -54,8 +54,10 @@ after adding new public functions.
 | `MACCS_BITS` | constant |  |
 | `MORGAN_BITS` | constant |  |
 | `MORGAN_RADIUS` | constant |  |
+| `NEUTRALIZE_PATTERNS` | constant |  |
 | `PATTERN_BITS` | constant |  |
 | `RDKIT_FP_BITS` | constant |  |
+| `REINVENT_DEFAULT_ELEMENTS` | constant |  |
 | `RISM_DESCRIPTORS` | constant |  |
 | `RISM_DESCRIPTOR_COUNT` | constant |  |
 | `TOPOLOGICAL_BITS` | constant |  |
@@ -96,6 +98,8 @@ after adding new public functions.
 | `prepare_pic50_dataset` | function | Turn a raw SMILES + EC50 table into a modelling-ready pEC50 set. |
 | `random_selfies_molecules` | function | Sample ``n`` molecules uniformly from the robust SELFIES alphabet. |
 | `rank_features` | function | Rank feature columns by importance, descending. |
+| `reinvent_standardize_mol` | function | The REINVENT4 ``default`` standardization chain, on an RDKit Mol. |
+| `reinvent_standardize_smiles` | function | :func:`reinvent_standardize_mol` from (and back to) a SMILES. |
 | `sdf_to_table` | function | Read an SD file back into a table (SMILES, tags and titles). |
 | `select_top_features` | function | Select the top-K features with the rar's two-layer strategy. |
 | `selection_metadata` | function | Build the JSON-ready metadata dict for a feature-selection run. |
@@ -216,16 +220,32 @@ after adding new public functions.
 | Symbol | Kind | Summary |
 |---|---|---|
 | `DEFAULT_CORPUS` | constant |  |
+| `DIVERSITY_FILTERS` | constant |  |
+| `RAW_COMPONENTS` | constant |  |
+| `SCAFFOLD_PENALTY_FUNCTIONS` | constant |  |
+| `TRANSFORM_REGISTRY` | constant |  |
+| `CustomAlertsObjective` | class | REINVENT4's ``CustomAlerts`` blocklist filter. |
+| `DiversityFilter` | class | Base class: the scaffold memory every concrete filter shares. |
+| `DiversityFilteredObjective` | class | Any objective through a REINVENT4 diversity filter. |
 | `GenerationResult` | class | Ranked molecules from one generative optimisation run. |
 | `GeneticOptimizer` | class | Tournament-selection genetic algorithm over canonical SMILES. |
+| `GroupCountObjective` | class | REINVENT4's ``GroupCount`` component (``comp_group_count.py``). |
+| `IdenticalMurckoScaffoldFilter` | class | Penalise repeated Murcko scaffolds (``identical_murcko_scaffold``). |
+| `IdenticalTopologicalScaffoldFilter` | class | The generic-scaffold variant (``identical_topological_scaffold``). |
 | `LogPBandObjective` | class | Gaussian band on Crippen LogP (wild octanol/water behaviour excluded). |
+| `MatchingSubstructureObjective` | class | REINVENT4's ``MatchingSubstructure`` penalty (``0.5 * (1 + match)``). |
 | `MctsOptimizer` | class | ChemTSv2-style MCTS over SMILES prefixes, guided by a language model. |
 | `MolecularWeightBandObjective` | class | Gaussian band on average molecular weight (Da).  See |
 | `MultiObjective` | class | Weighted geometric mean of several objectives, with veto semantics. |
+| `NoFilter` | class | The omitted-``[diversity_filter]`` behaviour: score untouched. |
 | `NoveltyObjective` | class | Structural novelty against a reference corpus. |
 | `ParetoFront` | class | The non-dominated set of one generation run (audit-ready). |
+| `PenalizeSameSmilesFilter` | class | Multiply every *repeat* SMILES (``penalize_same_smiles``). |
 | `QedObjective` | class | RDKit QED (quantitative estimate of drug-likeness). |
+| `RawComponentObjective` | class | A REINVENT4 component: raw descriptor value pushed through a transform. |
 | `ReinventOptimizer` | class | Policy-gradient fine-tuning of a SMILES RNN prior. |
+| `ScaffoldSimilarityFilter` | class | Bucket by *similar* scaffolds (``scaffold_similarity``). |
+| `ScoreTransform` | class | Base class of the REINVENT4 transform DSL. |
 | `ScoringObjective` | class | Base class for generation objectives: ``score(smiles) -> [0, 1]``. |
 | `SimilarityObjective` | class | Tanimoto similarity (Morgan fingerprints) to one seed molecule. |
 | `SmilesRnn` | class | Character-level GRU SMILES generator (CPU-only, torch optional). |
@@ -233,6 +253,8 @@ after adding new public functions.
 | `TpsaBandObjective` | class | Gaussian band on topological polar surface area (Å²).  See |
 | `bioisostere_moves` | function | Every distinct single-atom bioisostere mutant of ``smiles`` (sorted). |
 | `bioisostere_mutate` | function | Draw one single-atom bioisostere mutant of ``smiles`` (or ``None``). |
+| `make_diversity_filter` | function | Build a diversity filter by its REINVENT4 TOML ``type`` key. |
+| `make_transform` | function | Build a transform by registry name (REINVENT4's ``get_transform``). |
 | `pareto_front` | function | Extract the non-dominated molecules (Pareto front) of a run. |
 | `ring_topology_moves` | function | Every distinct one-step ring-size mutant of ``smiles`` (sorted). |
 | `ring_topology_mutate` | function | Draw one ring-size mutant of ``smiles`` with ``rng`` (or ``None``). |
@@ -240,6 +262,8 @@ after adding new public functions.
 | `run_mcts_optimization` | function | One-call MCTS convenience (mirrors ``run_genetic_optimization``). |
 | `run_rl_optimization` | function | One-call RL optimisation (trains a prior from the corpus if needed). |
 | `scaffold_hop_crossover` | function | BREED-style crossover: homologous cuts, hybrid child. |
+| `weighted_arithmetic_mean` | function | REINVENT4's weighted arithmetic mean (``custom_sum`` alias). |
+| `weighted_geometric_mean` | function | REINVENT4's weighted geometric mean (``custom_product`` alias). |
 
 ## `pharmaml.biology`
 
@@ -318,14 +342,19 @@ after adding new public functions.
 | `DEFAULT_MGL_PYTHON` | constant |  |
 | `DEFAULT_PREPARE_LIGAND4` | constant |  |
 | `UNSUPPORTED_LIGAND_ATOMS` | constant |  |
+| `AutomorphismCache` | class | spyrmsd's pose-list economy: enumerate the automorphisms once. |
 | `GridBox` | class | Docking search box geometry. |
 | `GridParameters` | class | Parsed AutoDock4 grid parameter file (GPF) content. |
 | `LigandLibrary` | class | A validated ligand library loaded from a table file. |
 | `LigandPreparationReport` | class | Audit of one :func:`prepare_ligand_library` batch. |
+| `PocketReport` | class | The outcome of :func:`extract_pocket` / :func:`crop_beyond`. |
+| `PoseEvaluationReport` | class | DiffDock's ``evaluate.py`` per-complex metrics, one pose set. |
 | `ProteinReport` | class | Audit of one :func:`prepare_protein` run. |
 | `TorsionCheck` | class | Torsion-consistency audit of one prepared ligand PDBQT. |
 | `VinaBatchProgress` | class | Pre-flight resume census for :func:`run_vina_batch`. |
 | `batch_run_directories` | function | Dock every prepared ligand sub-directory in parallel. |
+| `best_pose_rmsd` | function | DiffDock's evaluation loop: one reference vs *many* poses. |
+| `centroid_distance` | function | Euclidean distance between the two geometries' centroids. |
 | `check_docking_completion` | function | Audit a docking tree for missing/failed runs (upgrades checker.py). |
 | `check_torsion_consistency` | function | Compare TORSDOF, active REMARKs and BRANCH counts of a PDBQT. |
 | `cleanup_tree` | function | Delete every file not on the allowlist, bottom-up. |
@@ -334,24 +363,40 @@ after adding new public functions.
 | `consensus_breakdown` | function | Explain a consensus ranking: per-column units plus the score. |
 | `consensus_rescore` | function | Combine several docking evidence columns into a 0–1 consensus. |
 | `convert_pdb_folder_to_pdbqt` | function | Batch-convert a folder of PDB files to PDBQT via MGLTools. |
+| `crop_beyond` | function | DiffDock's ``utils/utils.py::crop_beyond``: the residue-level crop. |
 | `delete_named_files` | function | Delete every file named ``filename`` anywhere under ``directory``. |
+| `dihedrals` | function | The torsion angles (radians) around :func:`torsion_bonds`. |
 | `distribute_files` | function | Copy each file into every immediate sub-directory of ``target_dir``. |
 | `distribute_receptor` | function | Copy a prepared receptor into every ligand folder of a campaign. |
 | `dock_smiles_array` | function | Dock every SMILES of an array against one receptor, simultaneously. |
 | `extract_pdbqt_atom_types` | function | Collect sorted unique AutoDock atom types from a PDBQT ligand. |
+| `extract_pocket` | function | The MOAD pocket selection: residues near the ligand. |
 | `generate_ligand_structures` | function | Generate 3D ligand structures (PDB + MOL2) from a SMILES library. |
+| `hungarian_rmsd` | function | The Hungarian-assignment RMSD (``spyrmsd/hungarian.py``). |
+| `kabsch_rmsd` | function | The RMSD after the optimal Kabsch superposition. |
+| `kabsch_transform` | function | The Kabsch rigid transformation superposing A onto B. |
 | `ligand_efficiency` | function | Ligand efficiency ``LE = |ΔG| / N_heavy`` (kcal/mol per atom). |
 | `ligand_efficiency_series` | function | Vectorised ligand-efficiency column for a docking summary table. |
 | `list_file_names` | function | List the stems of all files with ``extension`` in a directory. |
 | `load_ligand_csv` | function | Load a ligand library from CSV/TSV (or Excel). |
+| `min_intra_distance` | function | The minimum pairwise atom distance (the self-clash metric). |
 | `parse_dlg_cluster_table` | function | Parse the ``CLUSTERING HISTOGRAM`` table of an AutoDock4 DLG. |
 | `parse_dlg_summary` | function | Summarise one DLG: best cluster, most populated cluster, extremes. |
 | `parse_vina_config` | function | Parse an AutoDock Vina config file into a ``key -> value`` dict. |
 | `parse_vina_output` | function | Parse the mode table of a Vina output (stdout log or PDBQT REMARKs). |
+| `perturb_torsions` | function | Apply torsion updates to a geometry (``modify_conformer_torsion_angles``). |
+| `plain_rmsd` | function | The plain, no-superposition RMSD (``spyrmsd.rmsd``). |
+| `pose_clusters` | function | Greedy RMSD clustering of poses (the confidence approximation). |
+| `pose_evaluation_report` | function | The full DiffDock evaluation on one reference vs N poses. |
+| `pose_rmsd_matrix` | function | The pairwise in-place (or Kabsch) RMSD matrix of a pose set. |
 | `prepare_ligand_library` | function | Prepare every ligand of a CSV library into a campaign tree. |
 | `prepare_protein` | function | Import a protein and prepare a docking-ready receptor PDBQT. |
+| `qcp_rmsd` | function | The QCP RMSD (Theobald 2005, ``spyrmsd/qcp.py`` verbatim). |
+| `randomize_pose` | function | DiffDock's ``randomize_position``: the diffusion initial state. |
 | `read_gpf` | function | Parse an AutoDock4 grid parameter file (GPF) into a dict. |
 | `reindex_by_number` | function | Reindex a frame onto the full ligand-number range. |
+| `rmsd_wrapper` | function | spyrmsd's ``rmsdwrapper``: one reference vs a list of molecules. |
+| `rotatable_masks` | function | The bonds and their rotation masks (``get_transformation_mask``). |
 | `run_autodock4` | function | Run autogrid4 + autodock4 for one ligand directory. |
 | `run_vina` | function | Run a single AutoDock Vina docking. |
 | `run_vina_batch` | function | Dock every ``.pdbqt`` under a directory with one Vina config. |
@@ -360,6 +405,8 @@ after adding new public functions.
 | `scan_torsion_consistency` | function | Audit every ``.pdbqt`` under a tree for torsion consistency. |
 | `scan_vina_directory` | function | Summarise every Vina ``.log`` under a results tree. |
 | `smiles_to_pdbqt` | function | Convert one SMILES to a 3D PDBQT ligand (Meeko + RDKit). |
+| `symmetry_corrected_rmsd` | function | The symmetry-corrected RMSD (spyrmsd's ``symmrmsd``). |
+| `torsion_bonds` | function | DiffDock's rotatable bonds (``get_transformation_mask`` rule). |
 | `vina_batch_progress` | function | Count what a resumed Vina batch would skip and what it would dock. |
 | `write_config_batch` | function | Write the ``r.gpf`` + ``r.dpf`` pair into every ligand folder. |
 | `write_dpf` | function | Write an AutoDock4 docking parameter file (DPF) for one ligand. |

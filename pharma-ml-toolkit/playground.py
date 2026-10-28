@@ -30,7 +30,17 @@ A tabbed graphical interface opens with every calculation domain of the
   funnel with alphabet statistics, the corruption experiment -- k
   random SELFIES symbols vs k random SMILES characters, the validity
   curves figure telling the story -- and the random-SELFIES generator
-  whose every sample is a valid molecule by construction).
+  whose every sample is a valid molecule by construction).  Row 8
+  carries (100x-164) the REINVENT4 absorption: the score-transform lab
+  (any raw physicochemical component -- molecular weight, SlogP, TPSA,
+  QED, ... -- pushed through any of REINVENT4's eight transforms:
+  sigmoid / reverse sigmoid / double sigmoid / the three steps /
+  exponential decay, per-molecule raw → transformed score table) and
+  the custom-alerts & standardization card (a SMARTS blocklist with
+  the verdict table, and REINVENT4's default standardization chain:
+  largest fragment, salt removal, the nine neutralisation SMARTS, the
+  unwanted-pattern rejections, the (2, 70) heavy-atom / prior-
+  vocabulary window).
 * **PK / PD**       -- half-life <-> k(e), accumulation, IV bolus decay
   and Emax curves (plotted), oral Cmax/tmax, Cockcroft-Gault creatinine
   clearance with renal dose adjustment, loading/maintenance dosing,
@@ -60,7 +70,17 @@ A tabbed graphical interface opens with every calculation domain of the
   single Vina runs -- and dock a whole pasted SMILES ARRAY in one
   call: every SMILES prepared into its own campaign folder, the Vina
   or AutoDock4 engine run SIMULTANEOUSLY across a worker pool, and
-  the best affinities ranked into the results table.
+  the best affinities ranked into the results table.  Row 8 carries
+  (100x-164) the DiffDock absorption: the pose RMSD & analysis card
+  (a reference pose vs an SDF / multi-conformer pose list through
+  spyrmsd's symmetry-corrected RMSD -- the automorphism-aware metric
+  DiffDock's own evaluation uses -- with Kabsch/QCP alignment, the
+  <2 Å / <5 Å success fractions, best-of-N, the self-clash check,
+  greedy pose clusters, and the randomize_position diffusion initial
+  state demo) and the pocket extraction card (MOAD's chain-level
+  pocket rule: the residues within a cutoff of any ligand atom,
+  whole-chain or residue-only, the per-residue closest contacts, the
+  lysozyme example, and the pocket PDB export).
 * **Data & ML**     -- open any CSV (or one of the bundled example
   datasets), pick a target column, train a registry model with the
   toolkit's own preprocessing pipeline, inspect the metrics and the
@@ -108,7 +128,12 @@ A tabbed graphical interface opens with every calculation domain of the
   ChemTSv2 model) on a SMILES corpus with any bundled objective (QED,
   LogP window, ..., or the three reference-driven ones: Tanimoto
   similarity to a reference molecule, structural novelty against the
-  corpus, a hard SMARTS substructure constraint); the MCTS optimiser
+  corpus, a hard SMARTS substructure constraint) -- (100x-164) with
+  REINVENT4's run dressings on every optimiser: a custom-alerts
+  SMARTS blocklist (matching molecules vetoed through the geometric
+  mean) and the diversity filter (the scaffold memory: bucket size,
+  minscore gate, the five bucket penalty curves, the run report
+  carrying the scaffold statistics); the MCTS optimiser
   exposes the search knobs (UCB1/PUCT tree policy, the exploration
   constant, ChemTSv2's cumulative-probability expansion threshold,
   rollouts per child, prior epochs) and renders the three-panel
@@ -584,6 +609,7 @@ import queue
 import re
 import shutil
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -1084,6 +1110,64 @@ _OBJECTIVE_REFERENCE_KINDS = {
     "Similarity to reference SMILES": "reference",
     "Contains substructure (SMARTS)": "SMARTS",
 }
+
+#: (100x-164) the score-transform lab's component combobox: label ->
+#: ``RAW_COMPONENTS`` key (the REINVENT4 physchem plugin components the
+#: GUI exposes; the registry itself holds more).
+_TRANSFORM_COMPONENTS: tuple[tuple[str, str], ...] = (
+    ("molecular weight (Da)", "molecular_weight"),
+    ("Crippen SlogP", "logp"),
+    ("TPSA", "tpsa"),
+    ("QED drug-likeness", "qed"),
+    ("H-bond acceptors", "h_bond_acceptors"),
+    ("H-bond donors", "h_bond_donors"),
+    ("rotatable bonds", "rotatable_bonds"),
+    ("rings", "num_rings"),
+    ("aromatic rings", "aromatic_rings"),
+    ("heavy atoms", "heavy_atoms"),
+    ("hetero atoms", "heteroatoms"),
+    ("Csp3 fraction", "csp3_fraction"),
+    ("largest ring size", "largest_ring"),
+    ("graph length", "graph_length"),
+)
+_TRANSFORM_COMPONENT_LABELS: tuple[str, ...] = tuple(
+    label for label, _ in _TRANSFORM_COMPONENTS
+)
+
+#: (100x-164) the transform combobox: label -> (registry name, the
+#: constructor parameters the lab's three entries feed).  REINVENT4's
+#: own transform set, one row each.
+_TRANSFORM_SPECS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "sigmoid": ("sigmoid", ("low", "high", "k")),
+    "reverse sigmoid": ("reversesigmoid", ("low", "high", "k")),
+    "double sigmoid (band)": ("doublesigmoid", ("low", "high", "k")),
+    "right step (floor)": ("rightstep", ("high",)),
+    "left step (ceiling)": ("leftstep", ("low",)),
+    "step window": ("step", ("low", "high")),
+    "exponential decay": ("exponentialdecay", ("k",)),
+}
+_TRANSFORM_LABELS: tuple[str, ...] = tuple(_TRANSFORM_SPECS)
+
+#: (100x-164) the custom-alerts card's starter blocklist: the SMARTS
+#: families REINVENT4's own example configs screen out (nitro groups,
+#: trifluoromethyl, acyl halides) -- editable like every other box.
+_DEFAULT_ALERT_SMARTS: tuple[str, ...] = (
+    "[N+](=O)[O-]",
+    "C(F)(F)F",
+    "C(=O)Cl",
+)
+
+#: (100x-164) the Generative tab's diversity-filter combobox: label ->
+#: ``DIVERSITY_FILTERS`` key (REINVENT4's ``[diversity_filter] type``
+#: values).
+_DIVERSITY_KINDS: dict[str, str] = {
+    "none": "no_filter",
+    "identical Murcko scaffold": "identical_murcko_scaffold",
+    "identical topological scaffold": "identical_topological_scaffold",
+    "scaffold similarity": "scaffold_similarity",
+    "penalize same SMILES": "penalize_same_smiles",
+}
+_DIVERSITY_LABELS: tuple[str, ...] = tuple(_DIVERSITY_KINDS)
 
 #: Resolved once on first figure render: the TkAgg canvas class, or None when
 #: the ``_tkagg`` acceleration cannot load on this Python build (e.g. a Tcl 9
@@ -1762,6 +1846,154 @@ def format_number(value: float, digits: int = 4) -> str:
     if value != 0 and (magnitude >= 1e5 or magnitude < 1e-3):
         return f"{value:.3e}"
     return f"{value:,.{digits}f}"
+
+
+# --------------------------------------------------------------------------- #
+# pose / pocket file helpers (100x-164, the DiffDock round)
+# --------------------------------------------------------------------------- #
+
+
+def _read_single_molecule(path: str | Path) -> Any:
+    """Read ONE molecule (with conformer) from SDF / PDB / MOL2."""
+    from rdkit import Chem
+
+    path = Path(path)
+    suffix = path.suffix.lower()
+    if suffix in {".sdf", ".sd"}:
+        supplier = Chem.SDMolSupplier(str(path), removeHs=False)
+        for mol in supplier:
+            if mol is not None:
+                return mol
+        raise ValueError(f"{path.name} holds no readable molecule")
+    if suffix == ".mol2":
+        mol = Chem.MolFromMol2File(str(path), removeHs=False, sanitize=False)
+    else:
+        mol = Chem.MolFromPDBFile(str(path), removeHs=False, sanitize=False)
+    if mol is None:
+        raise ValueError(f"{path.name} is not a readable structure file")
+    try:
+        Chem.SanitizeMol(mol)
+    except Exception:  # noqa: BLE001, S110 - PDB valences are best-effort
+        pass
+    return mol
+
+
+def _read_pose_files(
+    reference_path: str | Path, poses_path: str | Path
+) -> tuple[Any, list[Any]]:
+    """Read a reference geometry and a pose list from structure files.
+
+    The poses file may hold several molecules (an SDF pose list) or one
+    molecule with several conformers (a docking-output SDF / a
+    multi-conformer embed) -- both become ``(N, 3)`` arrays.  The
+    reference is the first molecule's first conformer.
+    """
+    import numpy as np
+    from rdkit import Chem
+
+    reference_mol = _read_single_molecule(reference_path)
+    if reference_mol.GetNumConformers() == 0:
+        from rdkit.Chem import AllChem
+
+        if AllChem.EmbedMolecule(reference_mol, randomSeed=42) != 0:
+            raise ValueError(
+                "the reference molecule has no conformer and could not be embedded"
+            )
+    reference = np.asarray(
+        reference_mol.GetConformer().GetPositions(), dtype=float
+    )
+
+    poses_path = Path(poses_path)
+    if poses_path.suffix.lower() in {".sdf", ".sd"}:
+        mols = [m for m in Chem.SDMolSupplier(str(poses_path), removeHs=False) if m is not None]
+        if not mols:
+            raise ValueError(f"{poses_path.name} holds no readable molecules")
+        if len(mols) == 1 and mols[0].GetNumConformers() > 1:
+            poses = [
+                np.asarray(conf.GetPositions(), dtype=float)
+                for conf in mols[0].GetConformers()
+            ]
+        else:
+            poses = []
+            for mol in mols:
+                if mol.GetNumConformers() == 0:
+                    continue
+                poses.append(np.asarray(mol.GetConformer().GetPositions(), dtype=float))
+    else:
+        pose_mol = _read_single_molecule(poses_path)
+        if pose_mol.GetNumConformers() == 0:
+            from rdkit.Chem import AllChem
+
+            AllChem.EmbedMolecule(pose_mol, randomSeed=42)
+        poses = [
+            np.asarray(conf.GetPositions(), dtype=float)
+            for conf in pose_mol.GetConformers()
+        ]
+    if not poses:
+        raise ValueError(f"{poses_path.name} holds no poses")
+    sizes = {len(reference)} | {len(pose) for pose in poses}
+    if len(sizes) > 1:
+        raise ValueError(
+            "the reference and the poses disagree in atom count "
+            f"({sorted(sizes)}) -- the pose files must describe the same molecule"
+        )
+    return reference, poses
+
+
+def _write_pocket_example_ligand(protein_path: Path) -> Path:
+    """Generate the pocket example's demonstration ligand pose.
+
+    An ETKDG conformer of N-acetylglucosamine (lysozyme's natural
+    substrate) translated to the protein's atom centroid -- a
+    demonstration pose in the protein's frame, written to the system
+    temp directory.
+    """
+    import numpy as np
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+
+    mol = Chem.MolFromSmiles("CC(=O)NC1C(O)C(O)C(CO)OC1O")  # NAG
+    if mol is None:  # pragma: no cover - static literal
+        raise ValueError("the NAG SMILES failed to parse")
+    mol = Chem.AddHs(mol)
+    params = AllChem.ETKDG()
+    params.randomSeed = 42  # type: ignore[assignment]
+    if AllChem.EmbedMolecule(mol, params) != 0:
+        raise ValueError("ETKDG embedding failed for the example ligand")
+    conformer = mol.GetConformer()
+    ligand_centre = np.asarray(conformer.GetPositions(), dtype=float).mean(axis=0)
+
+    protein_centre = np.zeros(3)
+    n_atoms = 0
+    for line in Path(protein_path).read_text(
+        encoding="utf-8", errors="replace"
+    ).splitlines():
+        if line.startswith("ATOM"):
+            try:
+                protein_centre += np.array(
+                    [float(line[30:38]), float(line[38:46]), float(line[46:54])]
+                )
+                n_atoms += 1
+            except ValueError:
+                continue
+    if n_atoms:
+        protein_centre /= n_atoms
+    offset = protein_centre - ligand_centre
+    from rdkit.Geometry import Point3D
+
+    for index in range(mol.GetNumAtoms()):
+        position = conformer.GetAtomPosition(index)
+        conformer.SetAtomPosition(
+            index,
+            Point3D(
+                float(position.x + offset[0]),
+                float(position.y + offset[1]),
+                float(position.z + offset[2]),
+            ),
+        )
+    target = Path(tempfile.gettempdir()) / "pharmaml_pocket_example_nag.pdb"
+    target.write_text(Chem.MolToPDBBlock(mol), encoding="utf-8")
+    return target
 
 
 def build_objective(
@@ -4767,7 +4999,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._reset_tab(index)
 
     def _session_text_widgets(self) -> dict[str, Any]:
-        """The seven persisted text boxes as ONE shared map.
+        """The persisted text boxes as ONE shared map.
 
         (100x-142) The four text maps had drifted apart: the restore path
         knew all seven keys, the reset map carried five, the copy map a
@@ -4775,6 +5007,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         Chemistry tab's MACCS box and both similarity-scan boxes escaped
         "Reset to defaults" and "Copy inputs as JSON" while riding the
         session file all along.  One map, four consumers, no drift.
+
+        (100x-164) three more keys joined with the REINVENT4 round: the
+        transform lab's molecule list and the alerts card's SMARTS and
+        molecule boxes.
         """
         return {
             "pasted": self._feat_pasted_text,
@@ -4785,6 +5021,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "selfies_audit": getattr(self, "_selfies_audit_text", None),
             "scan_refs": getattr(self, "_scan_ref_text", None),
             "scan_lib": getattr(self, "_scan_lib_text", None),
+            "transform_mol": getattr(self, "_transform_mol_text", None),
+            "alert_smarts": getattr(self, "_alert_smarts_text", None),
+            "alert_mol": getattr(self, "_alert_mol_text", None),
+            "gen_alerts": getattr(self, "_gen_alerts_text", None),
         }
 
     def _reset_tab(self, index: int) -> None:
@@ -7433,6 +7673,180 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         grid_append(selfies_audit, self._selfies_audit_result, pady=(4, 0))
         self._selfies_host = self._figure_host(selfies_audit, height=280)
 
+        # -- Score transform lab (100x-164, REINVENT4) ------------------ #
+        # the REINVENT4 scoring DSL in one card: pick a raw component
+        # (molecular weight, SlogP, QED, ...), pick one of the eight
+        # transforms (sigmoid / double sigmoid / steps / decay), and
+        # every pasted molecule gets its raw value mapped to a [0, 1]
+        # desirability score -- the exact component+transform+weight
+        # grammar REINVENT4's TOML config drives
+        transform_card = make_card(
+            page.grid,
+            "Score transform lab (REINVENT4)",
+            row=8,
+            column=0,
+            subtitle="A raw physicochemical component pushed through one of "
+            "REINVENT4's eight score transforms — the desirability "
+            "grammar behind its scoring functions.",
+        )
+        self._transform_component = ttk.Combobox(
+            transform_card,
+            state="readonly",
+            width=26,
+            values=_TRANSFORM_COMPONENT_LABELS,
+        )
+        self._transform_component.set(_TRANSFORM_COMPONENT_LABELS[0])
+        form_row(transform_card, "component", self._transform_component)
+        self._transform_kind = ttk.Combobox(
+            transform_card,
+            state="readonly",
+            width=26,
+            values=_TRANSFORM_LABELS,
+        )
+        self._transform_kind.set(_TRANSFORM_LABELS[0])
+        form_row(transform_card, "transform", self._transform_kind)
+        self._transform_low = ttk.Entry(transform_card, width=12)
+        self._transform_low.insert(0, "150")
+        form_row(transform_card, "window low", self._transform_low)
+        self._transform_high = ttk.Entry(transform_card, width=12)
+        self._transform_high.insert(0, "450")
+        form_row(transform_card, "window high", self._transform_high)
+        self._transform_k = ttk.Entry(transform_card, width=12)
+        self._transform_k.insert(0, "5.0")
+        Tooltip(
+            self._transform_k,
+            "The transform steepness (REINVENT4's k).  Unused "
+            "parameters are ignored per transform: steps read only "
+            "their bound(s), the decay only k.",
+        )
+        form_row(transform_card, "k (steepness)", self._transform_k)
+        self._transform_mol_text = _grid_text(transform_card, height=4, mono=self._mono)
+        self._transform_mol_text.insert("1.0", "\n".join(_FEAT_DEFAULT_SMILES))
+        grid_append(transform_card, self._transform_mol_text, sticky="ew")
+        transform_btn = self._action_button(
+            transform_card,
+            "Score the list",
+            self._transform_lab_run,
+            primary=True,
+            tooltip="Every molecule's raw component value and its "
+            "transformed desirability score, in one table.",
+        )
+        transform_btn.grid(
+            row=transform_card.grid_size()[1], column=0, columnspan=2,
+            sticky="w", pady=(6, 0),
+        )
+        self._transform_summary = ttk.Label(
+            transform_card,
+            text="no transform run yet — the scored table appears here",
+            style="CardMuted.TLabel",
+            wraplength=340,
+            justify="left",
+        )
+        grid_append(transform_card, self._transform_summary, pady=(4, 0))
+        transform_tree_frame = ttk.Frame(transform_card, style="Card.TFrame")
+        grid_append(
+            transform_card, transform_tree_frame, sticky="nsew", pady=(6, 0), weight=True
+        )
+        self._transform_tree = ttk.Treeview(
+            transform_tree_frame,
+            columns=("smiles", "raw", "score"),
+            show="headings",
+            height=8,
+        )
+        for column, width in (
+            ("smiles", 210),
+            ("raw", 90),
+            ("score", 90),
+        ):
+            self._transform_tree.heading(column, text=column)
+            self._transform_tree.column(column, width=width, minwidth=56, stretch=(column == "smiles"))
+        transform_bar = ttk.Scrollbar(
+            transform_tree_frame, orient="vertical", command=self._transform_tree.yview
+        )
+        self._transform_tree.configure(yscrollcommand=transform_bar.set)
+        self._transform_tree.pack(side="left", fill="both", expand=True)
+        transform_bar.pack(side="right", fill="y")
+
+        # -- Custom alerts & standardization (100x-164, REINVENT4) ------ #
+        # the blocklist filter (comp_custom_alerts: 1.0 clean / 0.0 when
+        # any SMARTS hits) and the default standardization chain
+        # (largest fragment -> salt removal -> the nine neutralisation
+        # SMARTS -> cleanup -> size/element window)
+        alerts_card = make_card(
+            page.grid,
+            "Custom alerts & standardization (REINVENT4)",
+            row=8,
+            column=1,
+            subtitle="A SMARTS blocklist that vetoes matching molecules, and the "
+            "REINVENT4 default standardization chain (salts out, charges "
+            "neutralised, vocabulary enforced).",
+        )
+        alerts_smiles_label = ttk.Label(
+            alerts_card,
+            text="alert SMARTS (one per line)",
+            style="Field.TLabel",
+        )
+        grid_append(alerts_card, alerts_smiles_label)
+        self._alert_smarts_text = _grid_text(alerts_card, height=4, mono=self._mono)
+        self._alert_smarts_text.insert("1.0", "\n".join(_DEFAULT_ALERT_SMARTS))
+        grid_append(alerts_card, self._alert_smarts_text, sticky="ew")
+        self._alert_mol_text = _grid_text(alerts_card, height=4, mono=self._mono)
+        self._alert_mol_text.insert("1.0", "\n".join(_FEAT_DEFAULT_SMILES))
+        grid_append(alerts_card, self._alert_mol_text, sticky="ew")
+        alerts_buttons = ttk.Frame(alerts_card, style="Card.TFrame")
+        grid_append(alerts_card, alerts_buttons, sticky="w", pady=(6, 0))
+        alerts_btn = self._action_button(
+            alerts_buttons,
+            "Check alerts",
+            self._alerts_check_run,
+            primary=True,
+            tooltip="1.0 when no alert matches, 0.0 when any does -- inside "
+            "a geometric-mean combination a hit vetoes the molecule "
+            "outright.",
+        )
+        alerts_btn.pack(side="left")
+        standardize_btn = self._action_button(
+            alerts_buttons,
+            "Standardize",
+            self._reinvent_standardize_run,
+            tooltip="Largest fragment, salt removal, the nine neutralisation "
+            "SMARTS to a fixpoint, general cleanup, the unwanted-pattern "
+            "rejections and the (2, 70) heavy-atom / prior-vocabulary "
+            "window.",
+        )
+        standardize_btn.pack(side="left", padx=(10, 0))
+        self._alerts_summary = ttk.Label(
+            alerts_card,
+            text="no alerts run yet — the verdict table appears here",
+            style="CardMuted.TLabel",
+            wraplength=340,
+            justify="left",
+        )
+        grid_append(alerts_card, self._alerts_summary, pady=(4, 0))
+        alerts_tree_frame = ttk.Frame(alerts_card, style="Card.TFrame")
+        grid_append(
+            alerts_card, alerts_tree_frame, sticky="nsew", pady=(6, 0), weight=True
+        )
+        self._alerts_tree = ttk.Treeview(
+            alerts_tree_frame,
+            columns=("smiles", "detail", "verdict"),
+            show="headings",
+            height=8,
+        )
+        for column, width in (
+            ("smiles", 180),
+            ("detail", 130),
+            ("verdict", 110),
+        ):
+            self._alerts_tree.heading(column, text=column)
+            self._alerts_tree.column(column, width=width, minwidth=56, stretch=(column == "smiles"))
+        alerts_bar = ttk.Scrollbar(
+            alerts_tree_frame, orient="vertical", command=self._alerts_tree.yview
+        )
+        self._alerts_tree.configure(yscrollcommand=alerts_bar.set)
+        self._alerts_tree.pack(side="left", fill="both", expand=True)
+        alerts_bar.pack(side="right", fill="y")
+
     def _rism_run(self) -> None:
         """Compute the RISM-KH solvation descriptors for the pasted array."""
         if (
@@ -8187,6 +8601,208 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         self._start_job("SELFIES random molecules", work, render)
+
+    # -- Score transform lab / alerts / standardization (100x-164) ------ #
+
+    def _transform_lab_run(self) -> None:
+        """REINVENT4 transform lab: component + transform over the list."""
+        if (
+            not self._require_pharmaml()
+            or not self._require("rdkit", "the transform lab")
+            or not self._require("numpy", "the transform lab")
+        ):
+            return
+        smiles = parse_smiles_lines(self._transform_mol_text.get("1.0", "end"))
+        if not smiles:
+            messagebox.showwarning(
+                "Empty list", "Paste at least one SMILES (one per line)."
+            )
+            return
+        component_label = self._transform_component.get()
+        component = dict(_TRANSFORM_COMPONENTS).get(component_label, "molecular_weight")
+        transform_label = self._transform_kind.get()
+        registry_name, parameters = _TRANSFORM_SPECS.get(
+            transform_label, ("sigmoid", ("low", "high", "k"))
+        )
+        try:
+            values = {
+                "low": parse_float(self._transform_low.get(), "window low"),
+                "high": parse_float(self._transform_high.get(), "window high"),
+                "k": parse_float(self._transform_k.get(), "k (steepness)"),
+            }
+            if values["low"] > values["high"]:
+                raise ValueError("window low exceeds window high")
+            if "k" in parameters and values["k"] <= 0:
+                raise ValueError("k (steepness) must be positive")
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.generative.scoring_transforms import (
+                RawComponentObjective,
+                make_transform,
+            )
+
+            transform = make_transform(
+                registry_name,
+                **{name: values[name] for name in parameters},
+            )
+            objective = RawComponentObjective(component, transform)
+            rows = []
+            for molecule in smiles:
+                raw = objective.raw_value(molecule)
+                rows.append(
+                    (
+                        molecule,
+                        "—" if math.isnan(raw) else f"{raw:.3f}",
+                        f"{objective.score(molecule):.4f}",
+                    )
+                )
+            return rows
+
+        def render(rows: Any) -> None:
+            tree = self._transform_tree
+            tree.delete(*tree.get_children())
+            for smiles_row, raw, score in rows:
+                tree.insert(
+                    "",
+                    "end",
+                    values=(_cell_text(smiles_row, limit=60), raw, score),
+                )
+            scores = [float(row[2]) for row in rows]
+            self._transform_summary.configure(
+                text=(
+                    f"{component_label} through {transform_label} — "
+                    f"{len(rows)} molecule(s), mean score "
+                    f"{sum(scores) / len(scores):.3f}, best {max(scores):.3f}"
+                ),
+                style="Field.TLabel",
+            )
+
+        self._start_job("score-transform lab", work, render)
+
+    def _alerts_check_run(self) -> None:
+        """REINVENT4 custom alerts: the blocklist over the molecule list."""
+        if not self._require_pharmaml() or not self._require("rdkit", "the alerts check"):
+            return
+        smarts = parse_smiles_lines(self._alert_smarts_text.get("1.0", "end"))
+        smiles = parse_smiles_lines(self._alert_mol_text.get("1.0", "end"))
+        if not smarts:
+            messagebox.showwarning(
+                "Empty blocklist", "Paste at least one alert SMARTS (one per line)."
+            )
+            return
+        if not smiles:
+            messagebox.showwarning(
+                "Empty list", "Paste at least one SMILES (one per line)."
+            )
+            return
+
+        def work() -> Any:
+            from rdkit import Chem
+
+            queries = []
+            for pattern in smarts:
+                query = Chem.MolFromSmarts(pattern)
+                if query is None:
+                    raise ValueError(f"{pattern!r} is not a parseable SMARTS")
+                queries.append((pattern, query))
+            rows = []
+            for molecule in smiles:
+                mol = Chem.MolFromSmiles(molecule)
+                hits = [pattern for pattern, query in queries
+                        if mol is not None and mol.HasSubstructMatch(query)]
+                rows.append(
+                    (
+                        molecule,
+                        ", ".join(hits) if hits else "—",
+                        "blocked" if hits else ("clean" if mol else "invalid"),
+                    )
+                )
+            return rows
+
+        def render(rows: Any) -> None:
+            tree = self._alerts_tree
+            tree.delete(*tree.get_children())
+            for column, text in (
+                ("detail", "hit pattern(s)"),
+                ("verdict", "verdict"),
+            ):
+                tree.heading(column, text=text)
+            for molecule, hits, verdict in rows:
+                tree.insert(
+                    "",
+                    "end",
+                    values=(_cell_text(molecule, limit=60), hits, verdict),
+                )
+            blocked = sum(1 for row in rows if row[2] == "blocked")
+            self._alerts_summary.configure(
+                text=(
+                    f"{len(rows)} molecule(s) · {blocked} blocked by the "
+                    f"{len(smarts)}-pattern blocklist · {len(rows) - blocked} clean"
+                ),
+                style="Field.TLabel",
+            )
+
+        self._start_job("custom alerts check", work, render)
+
+    def _reinvent_standardize_run(self) -> None:
+        """The REINVENT4 default standardization chain over the list."""
+        if not self._require_pharmaml() or not self._require("rdkit", "standardization"):
+            return
+        smiles = parse_smiles_lines(self._alert_mol_text.get("1.0", "end"))
+        if not smiles:
+            messagebox.showwarning(
+                "Empty list", "Paste at least one SMILES (one per line)."
+            )
+            return
+
+        def work() -> Any:
+            from pharmaml.chem.standardize import reinvent_standardize_smiles
+
+            rows = []
+            for molecule in smiles:
+                standardized = reinvent_standardize_smiles(molecule)
+                if standardized is None:
+                    status = "rejected"
+                elif standardized == molecule:
+                    status = "unchanged"
+                else:
+                    status = "cleaned"
+                rows.append((molecule, standardized or "—", status))
+            return rows
+
+        def render(rows: Any) -> None:
+            tree = self._alerts_tree
+            tree.delete(*tree.get_children())
+            for column, text in (
+                ("detail", "standardized"),
+                ("verdict", "status"),
+            ):
+                tree.heading(column, text=text)
+            for molecule, standardized, status in rows:
+                tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        _cell_text(molecule, limit=60),
+                        _cell_text(standardized, limit=40),
+                        status,
+                    ),
+                )
+            cleaned = sum(1 for row in rows if row[2] == "cleaned")
+            rejected = sum(1 for row in rows if row[2] == "rejected")
+            self._alerts_summary.configure(
+                text=(
+                    f"{len(rows)} molecule(s) · {cleaned} cleaned · "
+                    f"{len(rows) - cleaned - rejected} unchanged · "
+                    f"{rejected} rejected"
+                ),
+                style="Field.TLabel",
+            )
+
+        self._start_job("REINVENT4 standardization", work, render)
 
     def _convert_affinity(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "conversion"):
@@ -12082,6 +12698,214 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         mgl_save_btn.grid(row=mgl.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(6, 0))
         self._dock_mgl_frame: Any = None
 
+        # -- Pose RMSD & analysis (100x-164, DiffDock) ------------------- #
+        # the spyrmsd symmetry-corrected RMSD (the metric DiffDock's own
+        # evaluation uses), the Kabsch/QCP alignment maths, the torsion
+        # machinery and the evaluate.py metrics -- on a reference pose
+        # vs a pose list (SDF / multi-conformer)
+        pose_card = make_card(
+            page.grid,
+            "Pose RMSD & analysis (DiffDock)",
+            row=8,
+            column=0,
+            subtitle="A reference pose vs a pose list (SDF or multi-conformer "
+            "file): symmetry-corrected RMSD, Kabsch/QCP alignment, the "
+            "<2 Å / <5 Å success fractions, pose clustering and the "
+            "self-clash check.",
+        )
+        self._pose_reference_entry = ttk.Entry(pose_card, width=34)
+        self._pose_reference_entry.insert(0, "")
+        form_row(pose_card, "reference file", self._pose_reference_entry)
+        pose_ref_browse = self._action_button(
+            pose_card, "Browse reference…", self._pose_open_reference
+        )
+        pose_ref_browse.grid(
+            row=pose_card.grid_size()[1], column=0, sticky="w", pady=(2, 0)
+        )
+        self._pose_poses_entry = ttk.Entry(pose_card, width=34)
+        self._pose_poses_entry.insert(0, "")
+        form_row(pose_card, "poses file", self._pose_poses_entry)
+        pose_poses_browse = self._action_button(
+            pose_card, "Browse poses…", self._pose_open_poses
+        )
+        pose_poses_browse.grid(
+            row=pose_card.grid_size()[1], column=0, sticky="w", pady=(2, 0)
+        )
+        pose_buttons = ttk.Frame(pose_card, style="Card.TFrame")
+        grid_append(pose_card, pose_buttons, sticky="w", pady=(6, 0))
+        pose_eval_btn = self._action_button(
+            pose_buttons,
+            "Evaluate poses",
+            self._pose_evaluate_run,
+            primary=True,
+            tooltip="Symmetry-corrected RMSD per pose (automorphism-aware, "
+            "spyrmsd's algorithm), centroid distances, the <2 A / <5 A "
+            "fractions, best-of-N, the clash fraction and greedy pose "
+            "clustering -- DiffDock's evaluate.py metrics.",
+        )
+        pose_eval_btn.pack(side="left")
+        pose_random_btn = self._action_button(
+            pose_buttons,
+            "Randomize pose",
+            self._pose_randomize_run,
+            tooltip="DiffDock's randomize_position initial state on the "
+            "reference molecule: uniform random torsions, a random "
+            "rotation, re-centred -- the diffusion starting point, "
+            "seeded 42.",
+        )
+        pose_random_btn.pack(side="left", padx=(10, 0))
+        self._pose_summary = ttk.Label(
+            pose_card,
+            text="no pose evaluation yet — the per-pose table appears here",
+            style="CardMuted.TLabel",
+            wraplength=340,
+            justify="left",
+        )
+        grid_append(pose_card, self._pose_summary, pady=(4, 0))
+        pose_tree_frame = ttk.Frame(pose_card, style="Card.TFrame")
+        grid_append(pose_card, pose_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._pose_tree = ttk.Treeview(
+            pose_tree_frame,
+            columns=("pose", "rmsd", "centroid", "clash"),
+            show="headings",
+            height=7,
+        )
+        for column, width in (
+            ("pose", 70),
+            ("rmsd", 80),
+            ("centroid", 80),
+            ("clash", 80),
+        ):
+            self._pose_tree.heading(column, text=column)
+            self._pose_tree.column(column, width=width, minwidth=56)
+        pose_bar = ttk.Scrollbar(
+            pose_tree_frame, orient="vertical", command=self._pose_tree.yview
+        )
+        self._pose_tree.configure(yscrollcommand=pose_bar.set)
+        self._pose_tree.pack(side="left", fill="both", expand=True)
+        pose_bar.pack(side="right", fill="y")
+        self._pose_report_text = _grid_text(pose_card, height=9, mono=self._mono)
+        self._pose_report_text.insert(
+            "1.0", "the DiffDock evaluation report appears here"
+        )
+        grid_append(pose_card, self._pose_report_text, sticky="ew", pady=(4, 0))
+
+        # -- Pocket extraction (100x-164, DiffDock) ---------------------- #
+        # the MOAD pocket selection: residues within a cutoff of the
+        # ligand, whole-chain mode, the 20 A crop_beyond variant
+        pocket_card = make_card(
+            page.grid,
+            "Pocket extraction (DiffDock)",
+            row=8,
+            column=1,
+            subtitle="Protein PDB + a reference ligand pose: the residues within "
+            "a cutoff of any ligand atom (MOAD's chain-level pocket rule), "
+            "ready for receptor preparation or a grid box.",
+        )
+        self._pocket_protein_entry = ttk.Entry(pocket_card, width=34)
+        self._pocket_protein_entry.insert(0, "")
+        form_row(pocket_card, "protein PDB", self._pocket_protein_entry)
+        pocket_protein_browse = self._action_button(
+            pocket_card, "Browse protein…", self._pocket_open_protein
+        )
+        pocket_protein_browse.grid(
+            row=pocket_card.grid_size()[1], column=0, sticky="w", pady=(2, 0)
+        )
+        pocket_example_btn = self._action_button(
+            pocket_card,
+            "Load lysozyme example",
+            self._pocket_load_example,
+            tooltip="The bundled hen egg-white lysozyme "
+            "(examples/data/lysozyme_1aki.pdb) plus its bundled ligand "
+            "pose -- a real pocket in two clicks.",
+        )
+        pocket_example_btn.grid(
+            row=pocket_card.grid_size()[1] - 1, column=1, sticky="w", pady=(2, 0)
+        )
+        self._pocket_ligand_entry = ttk.Entry(pocket_card, width=34)
+        self._pocket_ligand_entry.insert(0, "")
+        form_row(pocket_card, "ligand pose file", self._pocket_ligand_entry)
+        pocket_ligand_browse = self._action_button(
+            pocket_card, "Browse ligand…", self._pocket_open_ligand
+        )
+        pocket_ligand_browse.grid(
+            row=pocket_card.grid_size()[1], column=0, sticky="w", pady=(2, 0)
+        )
+        self._pocket_cutoff = ttk.Entry(pocket_card, width=12)
+        self._pocket_cutoff.insert(0, "10.0")
+        Tooltip(
+            self._pocket_cutoff,
+            "The residue-level cutoff in Angstrom (MOAD's chain_cutoff "
+            "default 10): a residue is in the pocket when any of its "
+            "atoms lies this close to any ligand atom.",
+        )
+        form_row(pocket_card, "residue cutoff (Å)", self._pocket_cutoff)
+        self._pocket_whole_chains = tk.BooleanVar(value=True)
+        pocket_chain_check = ttk.Checkbutton(
+            pocket_card,
+            text="keep whole chains (MOAD convention)",
+            variable=self._pocket_whole_chains,
+        )
+        form_row(pocket_card, "chains", pocket_chain_check)
+        pocket_buttons = ttk.Frame(pocket_card, style="Card.TFrame")
+        grid_append(pocket_card, pocket_buttons, sticky="w", pady=(6, 0))
+        pocket_btn = self._action_button(
+            pocket_buttons,
+            "Extract pocket",
+            self._pocket_extract_run,
+            primary=True,
+            tooltip="The pocket residues (chain, sequence, insertion code), "
+            "the pocket PDB text and the closest ligand contact.",
+        )
+        pocket_btn.pack(side="left")
+        pocket_save_btn = self._action_button(
+            pocket_buttons,
+            "Save pocket PDB…",
+            self._pocket_save_run,
+            tooltip="Write the extracted pocket's ATOM records to a PDB file "
+            "(feeds the receptor preparation pipeline or a grid-box "
+            "reference).",
+        )
+        pocket_save_btn.pack(side="left", padx=(10, 0))
+        self._pocket_summary = ttk.Label(
+            pocket_card,
+            text="no pocket yet — the residue table appears here",
+            style="CardMuted.TLabel",
+            wraplength=340,
+            justify="left",
+        )
+        grid_append(pocket_card, self._pocket_summary, pady=(4, 0))
+        pocket_tree_frame = ttk.Frame(pocket_card, style="Card.TFrame")
+        grid_append(
+            pocket_card, pocket_tree_frame, sticky="nsew", pady=(6, 0), weight=True
+        )
+        self._pocket_tree = ttk.Treeview(
+            pocket_tree_frame,
+            columns=("chain", "residue", "insertion", "distance"),
+            show="headings",
+            height=7,
+        )
+        for column, width in (
+            ("chain", 70),
+            ("residue", 90),
+            ("insertion", 80),
+            ("distance", 90),
+        ):
+            self._pocket_tree.heading(column, text=column)
+            self._pocket_tree.column(column, width=width, minwidth=56)
+        pocket_bar = ttk.Scrollbar(
+            pocket_tree_frame, orient="vertical", command=self._pocket_tree.yview
+        )
+        self._pocket_tree.configure(yscrollcommand=pocket_bar.set)
+        self._pocket_tree.pack(side="left", fill="both", expand=True)
+        pocket_bar.pack(side="right", fill="y")
+        self._pocket_report_text = _grid_text(pocket_card, height=8, mono=self._mono)
+        self._pocket_report_text.insert(
+            "1.0", "the pocket report appears here"
+        )
+        grid_append(pocket_card, self._pocket_report_text, sticky="ew", pady=(4, 0))
+        self._pocket_last: Any = None
+
     # -- ligand library card ------------------------------------------- #
     def _dock_open_csv(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "library loading"):
@@ -13798,6 +14622,338 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "mgl_conversion.csv",
             "Conversion report",
         )
+
+    # -- pose RMSD & pocket extraction handlers (100x-164, DiffDock) ---- #
+
+    def _pose_open_reference(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open the reference pose",
+            filetypes=[("Structure files", "*.sdf *.pdb *.mol2"), ("All files", "*.*")],
+        )
+        if path:
+            self._pose_reference_entry.delete(0, "end")
+            self._pose_reference_entry.insert(0, str(path))
+
+    def _pose_open_poses(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open the pose list",
+            filetypes=[("Structure files", "*.sdf *.pdb *.mol2"), ("All files", "*.*")],
+        )
+        if path:
+            self._pose_poses_entry.delete(0, "end")
+            self._pose_poses_entry.insert(0, str(path))
+
+    def _pose_evaluate_run(self) -> None:
+        """DiffDock pose evaluation: symmetry-corrected RMSD per pose."""
+        if (
+            not self._require_pharmaml()
+            or not self._require("rdkit", "pose evaluation")
+            or not self._require("numpy", "pose evaluation")
+        ):
+            return
+        reference_path = self._pose_reference_entry.get().strip()
+        poses_path = self._pose_poses_entry.get().strip()
+        if not reference_path or not poses_path:
+            messagebox.showwarning(
+                "Missing files",
+                "Both the reference pose file and the poses file are needed.",
+            )
+            return
+        if not Path(reference_path).is_file() or not Path(poses_path).is_file():
+            messagebox.showwarning("Missing files", "One of the paths is not a file.")
+            return
+
+        def work() -> Any:
+            from pharmaml.docking.pose_rmsd import (
+                best_pose_rmsd,
+                centroid_distance,
+                dihedrals,
+                min_intra_distance,
+                pose_evaluation_report,
+                torsion_bonds,
+            )
+
+            reference, poses = _read_pose_files(reference_path, poses_path)
+            reference_mol = _read_single_molecule(reference_path)
+            report = pose_evaluation_report(reference_mol, reference, poses)
+            rmsds = best_pose_rmsd(reference_mol, reference, poses)
+            rows = []
+            for index, (pose, rmsd) in enumerate(zip(poses, rmsds), start=1):
+                rows.append(
+                    (
+                        index,
+                        rmsd,
+                        centroid_distance(reference, pose),
+                        min_intra_distance(pose),
+                    )
+                )
+            return report, rows, torsion_bonds(reference_mol), dihedrals(reference_mol)
+
+        def render(payload: Any) -> None:
+            report, rows, bonds, angles = payload
+            tree = self._pose_tree
+            tree.delete(*tree.get_children())
+            for index, rmsd, centroid, clash in rows:
+                tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        f"pose {index}",
+                        f"{rmsd:.3f} Å",
+                        f"{centroid:.3f} Å",
+                        f"{clash:.3f} Å",
+                    ),
+                )
+            self._pose_summary.configure(
+                text=(
+                    f"{report.n_poses} pose(s) vs the reference — "
+                    f"{report.rmsd_below_2_fraction:.0%} under 2 Å, "
+                    f"{report.rmsd_below_5_fraction:.0%} under 5 Å, best "
+                    f"{report.best_rmsd:.3f} Å"
+                ),
+                style="Field.TLabel",
+            )
+            text = report.summary()
+            text += (
+                f"\nreference torsions  : {len(bonds)} rotatable bond(s) "
+                f"(DiffDock's graph-disconnect rule)"
+            )
+            if len(angles):
+                text += "\nreference dihedrals : " + ", ".join(
+                    f"{angle:+.2f} rad" for angle in angles[:6]
+                ) + (" …" if len(angles) > 6 else "")
+            self._pose_report_text.delete("1.0", "end")
+            self._pose_report_text.insert("1.0", text)
+
+        self._start_job("DiffDock pose evaluation", work, render)
+
+    def _pose_randomize_run(self) -> None:
+        """DiffDock's randomize_position on the reference molecule."""
+        if (
+            not self._require_pharmaml()
+            or not self._require("rdkit", "pose randomization")
+            or not self._require("numpy", "pose randomization")
+        ):
+            return
+        reference_path = self._pose_reference_entry.get().strip()
+        if not reference_path or not Path(reference_path).is_file():
+            messagebox.showwarning(
+                "Missing file", "The reference pose file is needed."
+            )
+            return
+
+        def work() -> Any:
+            from pharmaml.docking.pose_rmsd import (
+                min_intra_distance,
+                plain_rmsd,
+                randomize_pose,
+                torsion_bonds,
+            )
+
+            reference, _poses = _read_pose_files(reference_path, reference_path)
+            mol = _read_single_molecule(reference_path)
+            randomized = randomize_pose(mol, seed=42, center=reference.mean(axis=0))
+            return (
+                len(torsion_bonds(mol)),
+                plain_rmsd(reference, randomized),
+                min_intra_distance(randomized),
+            )
+
+        def render(payload: Any) -> None:
+            n_torsions, rmsd, clash = payload
+            self._pose_summary.configure(
+                text=(
+                    f"randomize_position (seed 42) — {n_torsions} torsion(s) "
+                    f"randomised, RMSD vs the reference {rmsd:.3f} Å, min "
+                    f"intra-ligand distance {clash:.3f} Å"
+                ),
+                style="Field.TLabel",
+            )
+            self._pose_report_text.delete("1.0", "end")
+            self._pose_report_text.insert(
+                "1.0",
+                "DiffDock's randomize_position: the diffusion initial state.\n"
+                "  uniform random torsions in [-π, π] on every rotatable bond\n"
+                "  a uniformly random rigid rotation\n"
+                "  the centroid translated to the reference's centre\n"
+                f"  geometry change        {rmsd:.3f} Å RMSD\n"
+                f"  min intra distance     {clash:.3f} Å "
+                f"({'clash!' if clash < 0.4 else 'no clash'})\n",
+            )
+
+        self._start_job("DiffDock pose randomization", work, render)
+
+    def _pocket_open_protein(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open the protein structure",
+            filetypes=[("Structure files", "*.pdb *.cif"), ("All files", "*.*")],
+        )
+        if path:
+            self._pocket_protein_entry.delete(0, "end")
+            self._pocket_protein_entry.insert(0, str(path))
+
+    def _pocket_open_ligand(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open the ligand pose",
+            filetypes=[("Structure files", "*.sdf *.pdb *.mol2"), ("All files", "*.*")],
+        )
+        if path:
+            self._pocket_ligand_entry.delete(0, "end")
+            self._pocket_ligand_entry.insert(0, str(path))
+
+    def _pocket_load_example(self) -> None:
+        """Lysozyme + a generated NAG pose at the protein centre."""
+        if (
+            not self._require_pharmaml()
+            or not self._require("rdkit", "the pocket example")
+        ):
+            return
+        protein_path = EXAMPLES_DIR / "lysozyme_1aki.pdb"
+        if not protein_path.is_file():
+            messagebox.showwarning(
+                "Missing example", "examples/data/lysozyme_1aki.pdb was not found."
+            )
+            return
+        try:
+            ligand_path = _write_pocket_example_ligand(protein_path)
+        except Exception as exc:  # noqa: BLE001 - RDKit embedding can fail
+            self._show_error("Could not generate the example ligand", exc)
+            return
+        self._pocket_protein_entry.delete(0, "end")
+        self._pocket_protein_entry.insert(0, str(protein_path))
+        self._pocket_ligand_entry.delete(0, "end")
+        self._pocket_ligand_entry.insert(0, str(ligand_path))
+        self._pocket_summary.configure(
+            text=(
+                "lysozyme loaded — the ligand is a generated NAG conformer "
+                "placed at the protein's centre (a demonstration pose; dock "
+                "first for real pockets)"
+            ),
+            style="Field.TLabel",
+        )
+
+    def _pocket_extract_run(self) -> None:
+        """DiffDock/MOAD pocket extraction from the two structures."""
+        if (
+            not self._require_pharmaml()
+            or not self._require("rdkit", "pocket extraction")
+            or not self._require("numpy", "pocket extraction")
+        ):
+            return
+        protein_path = self._pocket_protein_entry.get().strip()
+        ligand_path = self._pocket_ligand_entry.get().strip()
+        if not protein_path or not ligand_path:
+            messagebox.showwarning(
+                "Missing files", "Both the protein PDB and the ligand pose are needed."
+            )
+            return
+        if not Path(protein_path).is_file() or not Path(ligand_path).is_file():
+            messagebox.showwarning("Missing files", "One of the paths is not a file.")
+            return
+        try:
+            cutoff = parse_float(self._pocket_cutoff.get(), "residue cutoff (Å)")
+            if cutoff <= 0:
+                raise ValueError("residue cutoff must be positive")
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        whole_chains = bool(self._pocket_whole_chains.get())
+
+        def work() -> Any:
+            import numpy as np
+
+            from pharmaml.docking.pose_rmsd import extract_pocket
+
+            protein_text = Path(protein_path).read_text(encoding="utf-8", errors="replace")
+            ligand = _read_single_molecule(ligand_path)
+            if ligand.GetNumConformers() == 0:
+                from rdkit.Chem import AllChem
+
+                AllChem.EmbedMolecule(ligand, randomSeed=42)
+            ligand_coords = np.asarray(
+                ligand.GetConformer().GetPositions(), dtype=float
+            )
+            report = extract_pocket(
+                protein_text,
+                ligand_coords,
+                residue_cutoff=cutoff,
+                keep_whole_chains=whole_chains,
+            )
+            # per-residue closest ligand distance for the table
+            lines = [
+                line
+                for line in protein_text.splitlines()
+                if line.startswith(("ATOM", "HETATM"))
+            ]
+            distances: dict[tuple[str, str, str], float] = {}
+            keys: list[tuple[str, str, str]] = []
+            for line in lines:
+                key = (
+                    (line[21] if len(line) > 21 else " "),
+                    line[22:26].strip() if len(line) > 25 else "",
+                    line[26].strip() if len(line) > 26 else "",
+                )
+                try:
+                    coords = np.array(
+                        [float(line[30:38]), float(line[38:46]), float(line[46:54])]
+                    )
+                except ValueError:
+                    continue
+                distance = float(
+                    np.min(np.linalg.norm(ligand_coords - coords, axis=1))
+                )
+                if key not in distances:
+                    distances[key] = distance
+                    keys.append(key)
+                distances[key] = min(distances[key], distance)
+            residues = [
+                (key, distances.get(key, float("inf"))) for key in report.residues
+            ]
+            return report, residues
+
+        def render(payload: Any) -> None:
+            report, residues = payload
+            self._pocket_last = report
+            tree = self._pocket_tree
+            tree.delete(*tree.get_children())
+            for (chain, resseq, icode), distance in residues:
+                tree.insert(
+                    "",
+                    "end",
+                    values=(chain or "?", resseq, icode or "—", f"{distance:.2f} Å"),
+                )
+            self._pocket_summary.configure(
+                text=(
+                    f"{len(report.residues)} residue(s) in the pocket · "
+                    f"{report.n_atoms} atoms · chains "
+                    f"{', '.join(report.chains) or '(none)'} · closest contact "
+                    f"{report.min_ligand_distance:.2f} Å"
+                ),
+                style="Field.TLabel",
+            )
+            self._pocket_report_text.delete("1.0", "end")
+            self._pocket_report_text.insert("1.0", report.summary())
+
+        self._start_job("DiffDock pocket extraction", work, render)
+
+    def _pocket_save_run(self) -> None:
+        report = getattr(self, "_pocket_last", None)
+        if report is None:
+            messagebox.showinfo("Nothing to save", "Extract a pocket first.")
+            return
+        target = filedialog.asksaveasfilename(
+            title="Save the pocket PDB",
+            defaultextension=".pdb",
+            filetypes=[("Protein Data Bank", "*.pdb"), ("All files", "*.*")],
+        )
+        if not target:
+            return
+        try:
+            Path(target).write_text(report.pdb_text, encoding="utf-8")
+        except OSError as exc:
+            self._show_error("Could not save the pocket", exc)
+            return
+        self._job_label.configure(text=f"pocket saved · {target}")
 
     def _dock_run(self) -> None:
         if not self._require_pharmaml():
@@ -20585,6 +21741,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             variable=self._seed_mode_var,
         )
         grid_append(corpus, seed_check, pady=(4, 0))
+        # (100x-164) the REINVENT4 custom-alerts blocklist: every matching
+        # molecule is vetoed (score 0) during the run -- empty means no
+        # alerts (the card rides the session/reset/copy mechanisms like
+        # every other persisted box)
+        alerts_label = ttk.Label(
+            corpus,
+            text="custom alerts — SMARTS blocklist, one per line (empty = none)",
+            style="CardMuted.TLabel",
+            wraplength=300,
+            justify="left",
+        )
+        grid_append(corpus, alerts_label, pady=(8, 0))
+        self._gen_alerts_text = _grid_text(corpus, height=3, mono=self._mono)
+        grid_append(corpus, self._gen_alerts_text, sticky="ew")
 
         controls = make_card(page.grid, "Objective & evolution", row=0, column=1)
         self._objective_combo = ttk.Combobox(
@@ -20748,6 +21918,57 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         mcts_frame.grid_remove()
         self._mcts_frame = mcts_frame
         self._ga_frame = ga_frame
+        # (100x-164) the REINVENT4 diversity filter: the scaffold memory
+        # that keeps a run from filling its leaderboard with one lucky
+        # scaffold's children.  Wrapping the objective is ALL it takes --
+        # the GA / RL / MCTS score through it unchanged -- and the run
+        # report gains the scaffold-memory statistics.
+        self._diversity_combo = ttk.Combobox(
+            controls, state="readonly", width=26, values=_DIVERSITY_LABELS
+        )
+        self._diversity_combo.set("none")
+        Tooltip(
+            self._diversity_combo,
+            "REINVENT4's [diversity_filter]: repeated scaffolds fill "
+            "buckets (size below); a full bucket's molecule scores 0 "
+            "(or decays, per the bucket penalty).  'scaffold similarity' "
+            "collapses near-duplicate scaffolds into shared buckets "
+            "(atom-pair Dice).",
+        )
+        form_row(controls, "diversity filter", self._diversity_combo)
+        self._diversity_bucket = ttk.Spinbox(
+            controls, from_=1, to=200, increment=1, width=10
+        )
+        self._diversity_bucket.set("25")
+        Tooltip(
+            self._diversity_bucket,
+            "Scaffold bucket size (REINVENT4's default 25): how many "
+            "memorised molecules one scaffold may hold before its "
+            "children are penalised.",
+        )
+        form_row(controls, "bucket size", self._diversity_bucket)
+        self._diversity_minscore = ttk.Entry(controls, width=12)
+        self._diversity_minscore.insert(0, "0.4")
+        Tooltip(
+            self._diversity_minscore,
+            "REINVENT4's minscore: only molecules scoring at least this "
+            "enter the scaffold memory (their default 0.4).",
+        )
+        form_row(controls, "min score", self._diversity_minscore)
+        self._diversity_penalty = ttk.Combobox(
+            controls,
+            state="readonly",
+            width=12,
+            values=("step", "linear", "sigmoid", "tanh", "erf"),
+        )
+        self._diversity_penalty.set("step")
+        Tooltip(
+            self._diversity_penalty,
+            "The bucket penalty curve: 'step' is REINVENT4's classic "
+            "zero-when-full; the other four are its intrinsic-penalty "
+            "functions, decaying smoothly with the bucket count.",
+        )
+        form_row(controls, "bucket penalty", self._diversity_penalty)
         self._ga_seed = ttk.Entry(controls, width=12)
         self._ga_seed.insert(0, "42")
         form_row(controls, "random seed", self._ga_seed)
@@ -21399,6 +22620,31 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # the novelty objective's reference pool: the card's own corpus
         # (None hands the library its built-in 244-molecule default)
         novelty_corpus: Any = list(lines) if lines else None
+        # (100x-164) the REINVENT4 run dressings, read BEFORE the worker
+        # starts (Tk widgets are main-thread only): the custom-alerts
+        # blocklist and the diversity filter
+        alert_patterns = parse_smiles_lines(
+            self._gen_alerts_text.get("1.0", "end")
+        )
+        diversity_kind = _DIVERSITY_KINDS.get(
+            self._diversity_combo.get(), "no_filter"
+        )
+        try:
+            diversity_bucket = parse_int(
+                self._diversity_bucket.get(), "bucket size", minimum=1
+            )
+            diversity_minscore = parse_float(
+                self._diversity_minscore.get(), "min score"
+            )
+            if not 0 <= diversity_minscore <= 1:
+                raise ValueError("min score must be in [0, 1]")
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        diversity_penalty = self._diversity_penalty.get()
+        # the wrapper the worker fills in -- render() reads its scaffold
+        # statistics (set from the worker thread, joined before render)
+        diversity_wrapper: dict[str, Any] = {}
         if method == "reinforcement learning (RL)" or method == "monte carlo tree search (MCTS)":
             want_plot = bool(self.deps.get("matplotlib"))
         else:
@@ -21406,6 +22652,31 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         def work() -> Any:
             objective = build_objective(kind, lo, hi, reference=reference, corpus=novelty_corpus)
+            # (100x-164) the REINVENT4 dressings: alerts veto molecules
+            # (a geometric-mean member at 0.0 vetoes the product), the
+            # diversity filter wraps the WHOLE thing so every optimiser's
+            # scoring passes through the scaffold memory
+            if alert_patterns:
+                from pharmaml.generative import MultiObjective
+                from pharmaml.generative.scoring_transforms import (
+                    CustomAlertsObjective,
+                )
+
+                objective = MultiObjective(
+                    [objective, CustomAlertsObjective(alert_patterns)]
+                )
+            if diversity_kind != "no_filter" or alert_patterns:
+                from pharmaml.generative import DiversityFilteredObjective
+
+                wrapped = DiversityFilteredObjective(
+                    objective,
+                    diversity_kind,
+                    bucket_size=diversity_bucket,
+                    minscore=diversity_minscore,
+                    penalty_function=diversity_penalty,
+                )
+                diversity_wrapper["objective"] = wrapped
+                objective = wrapped
             if method == "reinforcement learning (RL)":
                 from pharmaml.generative import DEFAULT_CORPUS, ReinventOptimizer
 
@@ -21518,6 +22789,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 stats = _format_mcts_stats(result.metadata)
             else:
                 stats = _format_operator_stats(result.metadata)
+            # (100x-164) the REINVENT4 dressings report: the scaffold
+            # memory the run built up (and the alerts that vetoed)
+            wrapper = diversity_wrapper.get("objective")
+            if wrapper is not None:
+                stats += "\n\n" + _format_diversity_stats(
+                    wrapper.scaffold_stats(), alert_patterns
+                )
             self._ga_stats_text.delete("1.0", "end")
             self._ga_stats_text.insert("1.0", stats)
             if want_plot:
@@ -23387,6 +24665,34 @@ def _format_mcts_stats(metadata: dict[str, Any]) -> str:
     prefix = metadata.get("prefix")
     if prefix:
         lines.append(f"  extension prefix     {prefix!r}")
+    return "\n".join(lines)
+
+
+def _format_diversity_stats(stats: dict[str, Any], alert_patterns: list[str]) -> str:
+    """Render a diversity-filter run's scaffold memory as a text block.
+
+    (100x-164) The REINVENT4 ``[diversity_filter]`` report: which filter
+    ran, how many scaffolds and memorised SMILES it accumulated, how
+    many buckets overflowed, how many scores were zeroed or penalised --
+    plus the custom-alerts blocklist when one was active.
+    """
+
+    lines = ["REINVENT4 dressings — scaffold memory & alerts"]
+    name = str(stats.get("filter", ""))
+    # drop the toolkit's Filter suffix for the display name
+    lines.append(f"  filter              {name.removesuffix('Filter')}")
+    lines.append(f"  {'scaffolds':<18} {stats.get('n_scaffolds', 0):>12}")
+    lines.append(f"  {'full buckets':<18} {stats.get('n_full_buckets', 0):>12}")
+    lines.append(
+        f"  {'memorised SMILES':<18} {stats.get('n_memorized_smiles', 0):>12}"
+    )
+    lines.append(f"  {'zeroed scores':<18} {stats.get('n_zeroed', 0):>12}")
+    lines.append(f"  {'penalised scores':<18} {stats.get('n_penalized', 0):>12}")
+    if alert_patterns:
+        lines.append(
+            f"  custom alerts       {len(alert_patterns)} pattern(s): "
+            + ", ".join(alert_patterns)
+        )
     return "\n".join(lines)
 
 

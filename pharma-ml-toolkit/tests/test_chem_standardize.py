@@ -16,11 +16,16 @@ from pathlib import Path
 import pytest
 
 rdkit = pytest.importorskip("rdkit")
+from rdkit import Chem
 
 from pharmaml.chem.standardize import (
+    NEUTRALIZE_PATTERNS,
+    REINVENT_DEFAULT_ELEMENTS,
     UNSUPPORTED_METALS,
     PdbLigandReport,
     canonicalize_tautomer,
+    reinvent_standardize_mol,
+    reinvent_standardize_smiles,
     smiles_to_pdb,
 )
 from pharmaml.exceptions import DataValidationError, DependencyError
@@ -175,3 +180,74 @@ class TestNumConfsValidation:
         with pytest.raises(DataValidationError):
             smiles_to_pdb("CCO", tmp_path / "never.pdb", num_confs=0)
         assert not (tmp_path / "never.pdb").exists()
+
+
+class TestReinventStandardize:
+    """The REINVENT4 ``default`` chain (round 100x-164).
+
+    Largest fragment -> RemoveHs -> salt removal -> the nine
+    neutralisation SMARTS -> cleanup -> unwanted patterns -> the
+    size/element window -- each step pinned against its REINVENT4
+    semantics.
+    """
+
+    def test_salt_becomes_its_parent_acid(self) -> None:
+        assert reinvent_standardize_smiles("CC(=O)[O-].[Na+]") == "CC(=O)O"
+
+    def test_largest_fragment_wins(self) -> None:
+        assert reinvent_standardize_smiles("CCO.CCCCCCCO") == "CCCCCCCO"
+
+    def test_carboxylate_neutralises(self) -> None:
+        assert reinvent_standardize_smiles("CC(=O)[O-]") == "CC(=O)O"
+
+    def test_ammonium_neutralises(self) -> None:
+        assert reinvent_standardize_smiles("CCCC[NH3+]") == "CCCCN"
+
+    def test_unparseable_drops_with_warning(self) -> None:
+        assert reinvent_standardize_smiles("not-a-smiles") is None
+
+    def test_blank_drops(self) -> None:
+        assert reinvent_standardize_smiles("   ") is None
+
+    def test_too_small_rejected(self) -> None:
+        assert reinvent_standardize_mol(Chem.MolFromSmiles("C")) is None
+
+    def test_too_big_rejected(self) -> None:
+        big = "C" * 71  # 71 heavy atoms: outside the (2, 70) window
+        assert reinvent_standardize_mol(Chem.MolFromSmiles(big)) is None
+
+    def test_out_of_vocabulary_element_rejected(self) -> None:
+        # iodine is outside the classical Reinvent prior vocabulary
+        assert reinvent_standardize_smiles("CI") is None
+
+    def test_unwanted_pattern_rejected(self) -> None:
+        # [SH] is on REINVENT4's unwanted-pairs list
+        assert reinvent_standardize_mol(Chem.MolFromSmiles("C[SH]")) is None
+
+    def test_custom_element_window(self) -> None:
+        iodine_ok = reinvent_standardize_mol(
+            Chem.MolFromSmiles("CI"),
+            allowed_elements={6, 53},
+            min_heavy_atoms=0,
+            max_heavy_atoms=100,
+        )
+        assert iodine_ok is not None
+
+    def test_neutralize_toggle(self) -> None:
+        skipped = reinvent_standardize_mol(
+            Chem.MolFromSmiles("CCCC[NH3+]"), neutralize=False
+        )
+        assert skipped is not None
+        assert "+" in Chem.MolToSmiles(skipped)
+
+    def test_the_nine_neutralize_patterns(self) -> None:
+        assert len(NEUTRALIZE_PATTERNS) == 9
+        assert all(
+            len(pair) == 2 for pair in NEUTRALIZE_PATTERNS
+        )
+
+    def test_default_elements_are_the_prior_vocabulary(self) -> None:
+        assert REINVENT_DEFAULT_ELEMENTS == frozenset({6, 7, 8, 9, 16, 17, 35})
+
+    def test_none_mol_returns_none(self) -> None:
+        assert reinvent_standardize_mol(None) is None
