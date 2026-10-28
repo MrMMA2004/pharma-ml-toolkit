@@ -135,10 +135,15 @@ __all__ = [
     "plot_confusion_matrix",
     "plot_correlation_heatmap",
     "plot_cv_scores",
+    "plot_edf",
     "plot_feature_importance",
     "plot_gp_uncertainty",
+    "plot_intermediate_values",
     "plot_learning_curve",
     "plot_model_comparison",
+    "plot_optimization_history",
+    "plot_parallel_coordinate",
+    "plot_param_importances",
     "plot_permutation_heatmap",
     "plot_permutation_importance",
     "plot_pr_curves",
@@ -147,8 +152,15 @@ __all__ = [
     "plot_residuals",
     "plot_roc_curves",
     "plot_shap_beeswarm",
+    "plot_shap_dependence",
+    "plot_shap_force",
+    "plot_shap_group_difference",
+    "plot_shap_heatmap",
     "plot_shap_importance",
+    "plot_shap_waterfall",
     "plot_signed_correlations",
+    "plot_slice",
+    "plot_timeline",
     "plot_training_history",
 ]
 
@@ -1639,6 +1651,793 @@ def plot_shap_beeswarm(
     return fig
 
 
+# ---------------------------------------------------------------------------
+# The round-43 SHAP gallery (100x-160): the five remaining signature
+# figures of the shap repo's plot gallery, drawn in the same
+# pure-matplotlib dialect as the two above -- the viz layer never
+# imports shap, only the computation (ml/explain.py) does.
+# ---------------------------------------------------------------------------
+
+
+def _unwrap_shap_record(summary: Any) -> tuple[list[str], np.ndarray, np.ndarray]:
+    """The ShapSummary-record contract shared by the SHAP figures.
+
+    Returns ``(names, values, feature_values)`` after the same shape
+    checks :func:`plot_shap_beeswarm` runs; the ``as_frame`` DataFrame
+    form is refused with the pointer to the bar chart (its means-only
+    sibling), the message the beeswarm established.
+    """
+    if not (
+        hasattr(summary, "names")
+        and hasattr(summary, "values")
+        and hasattr(summary, "feature_values")
+    ):
+        raise DataValidationError(
+            "this figure needs the ShapSummary RECORD (the full values "
+            "matrix + feature_values) -- the DataFrame form carries only "
+            "the bar chart's means; use plot_shap_importance for that"
+        )
+    names = [str(name) for name in summary.names]
+    values = np.asarray(summary.values, dtype=float)
+    feature_values = np.asarray(summary.feature_values, dtype=float)
+    if values.ndim != 2 or values.shape != feature_values.shape:
+        raise DataValidationError(
+            f"values shape {values.shape} must match feature_values shape "
+            f"{feature_values.shape} (n_samples x n_features)"
+        )
+    if len(names) != values.shape[1]:
+        raise DataValidationError(
+            f"names carries {len(names)} label(s) for {values.shape[1]} column(s)"
+        )
+    return names, values, feature_values
+
+
+def _sample_index(sample: Any, n_samples: int) -> int:
+    """Typed guard for the local-explanation row index (waterfall/force)."""
+    if isinstance(sample, bool) or not isinstance(sample, (int, np.integer)):
+        raise DataValidationError(
+            f"sample must be an integer row index, got {sample!r}"
+        )
+    index = int(sample)
+    if not 0 <= index < n_samples:
+        raise DataValidationError(
+            f"sample index {index} is out of range for {n_samples} row(s) -- "
+            f"valid range 0..{n_samples - 1}"
+        )
+    return index
+
+
+def plot_shap_waterfall(
+    summary: Any,
+    sample: int = 0,
+    *,
+    max_display: int = 10,
+    title: str = "SHAP waterfall",
+) -> Any:
+    """The LOCAL explanation: the base-value -> prediction walk (100x-160).
+
+    ``shap.plots.waterfall``'s signature figure in the house dialect:
+    ONE row of the summary, its SHAP contributions drawn as a
+    cumulative horizontal-bar walk from the explainer's expected
+    output (``summary.base_value``) to the row's prediction
+    (``base + sum(values)``) -- POSITIVE bars in the palette's teal
+    (``PALETTE[0]``), NEGATIVE ones in its amber (``PALETTE[1]``),
+    largest |value| first, thin dashed connectors tying each bar's end
+    to the next bar's start, and dashed vertical lines marking both
+    ends.  Features beyond ``max_display`` collapse into one summed
+    "Σ remaining N features" bar, exactly the upstream collapse.
+
+    Parameters
+    ----------
+    summary:
+        A :class:`~pharmaml.ml.explain.ShapSummary` record WITH a
+        ``base_value`` (the walk's starting point) -- a summary that
+        carries none is refused with the typed error.
+    sample:
+        The row to explain (0-based index into the values matrix).
+    max_display:
+        How many feature bars to draw before the summed remainder;
+        validated by :func:`_check_top_n`.
+    title:
+        Chart title (the explained row index rides it).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``summary`` is not a ShapSummary record, carries no
+        ``base_value``, ``sample`` is out of range, or ``max_display``
+        is invalid.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.explain import ShapSummary
+    >>> import numpy as np
+    >>> values = np.array([[1.25, -0.5, 0.25], [0.1, 0.2, -0.1]])
+    >>> record = ShapSummary(
+    ...     names=["a", "b", "c"], mean_abs=np.abs(values).mean(axis=0),
+    ...     values=values, feature_values=np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+    ...     base_value=0.25, model_name="GBR", task="regression", n_samples=2)
+    >>> fig = plot_shap_waterfall(record)
+    >>> ax = fig.axes[0]
+    >>> [tick.get_text() for tick in ax.get_yticklabels()]  # bottom -> top
+    ['c = 3.00', 'b = 2.00', 'a = 1.00']
+    >>> ends = {round(float(line.get_xdata()[0]), 6) for line in ax.lines
+    ...         if len(line.get_xdata()) == 2}
+    >>> 0.25 in ends and 1.25 in ends   # the base and the prediction f(x)
+    True
+    """
+    _check_top_n(max_display)
+    names, values, feature_values = _unwrap_shap_record(summary)
+    base_value = getattr(summary, "base_value", None)
+    if base_value is None:
+        raise DataValidationError(
+            "plot_shap_waterfall needs summary.base_value -- the waterfall "
+            "walks from the explainer's expected output; this summary "
+            "carries none"
+        )
+    base = float(base_value)
+    index = _sample_index(sample, values.shape[0])
+    row = values[index]
+    data_row = feature_values[index]
+
+    order = np.argsort(-np.abs(row), kind="stable")
+    keep = min(int(max_display), len(row))
+    # y tick labels carry the sample's own feature value (shap's
+    # show_data convention): "a = 1.24".
+    labels = [f"{names[int(i)]} = {data_row[int(i)]:.2f}" for i in order[:keep]]
+    amounts = [float(row[int(i)]) for i in order[:keep]]
+    remainder_count = len(row) - keep
+    if remainder_count > 0:
+        labels.append(
+            f"Σ remaining {remainder_count} feature"
+            f"{'' if remainder_count == 1 else 's'}"
+        )
+        amounts.append(float(row[order[keep:]].sum()))
+
+    fig, ax = new_figure(figsize=(8.6, 0.55 * len(labels) + 2.0))
+    # largest |value| first in the item list, so its bar gets the TOP
+    # row (positions reversed for display -- the house convention).
+    positions = np.arange(len(labels))[::-1]
+    cumulative = base
+    ends: list[tuple[float, float]] = []
+    for position, amount in zip(positions, amounts):
+        color = PALETTE[0] if amount >= 0 else PALETTE[1]
+        left = cumulative if amount >= 0 else cumulative + amount
+        ax.barh(
+            position,
+            abs(amount),
+            left=left,
+            height=0.62,
+            color=color,
+            alpha=0.9,
+            edgecolor="white",
+        )
+        ax.text(
+            left + abs(amount) if amount >= 0 else left,
+            position,
+            f" {amount:+.2f}",
+            va="center",
+            ha="left" if amount >= 0 else "right",
+            fontsize=9,
+        )
+        ends.append((cumulative + amount, float(position)))
+        cumulative += amount
+    # thin dashed connectors between consecutive bar ends
+    for step in range(len(ends) - 1):
+        x_end, y_cur = ends[step]
+        y_next = ends[step + 1][1]
+        ax.plot(
+            [x_end, x_end], [y_next + 0.31, y_cur - 0.31],
+            ls="--", lw=0.7, color="#9CA3AF", zorder=1,
+        )
+    prediction = base + float(row.sum())
+    ax.axvline(base, color="#525252", lw=1.0, ls="--", zorder=2)
+    ax.axvline(prediction, color="#525252", lw=1.0, ls="--", zorder=2)
+    ax.set_yticks(np.arange(len(labels)), labels[::-1])
+    lo = min(base, min(x for x, _ in ends))
+    hi = max(base, prediction, max(x for x, _ in ends))
+    span = (hi - lo) or 1.0
+    ax.set_xlim(lo - 0.07 * span, hi + 0.07 * span)
+    ax.set_xlabel("SHAP contribution (model output units)")
+    ax.set_title(f"{title} — sample {index} of {values.shape[0]}")
+    return fig
+
+
+def _equal_width_bins(column: np.ndarray, bins: int) -> np.ndarray:
+    """Equal-width bin indices, clamped into ``[0, bins - 1]``."""
+    lo = float(np.min(column))
+    hi = float(np.max(column))
+    if hi <= lo:
+        return np.zeros(len(column), dtype=int)
+    indices = ((column - lo) / (hi - lo) * bins).astype(int)
+    return np.clip(indices, 0, bins - 1)
+
+
+def _binned_r2(x: np.ndarray, color: np.ndarray, y: np.ndarray, bins: int = 10) -> float:
+    """``R^2`` of the 2-D binned cell-mean prediction of ``y``.
+
+    Both columns discretised into ``bins`` equal-width bins, the cell
+    means of ``y`` looked up per observation, and the residual sum of
+    squares scored against the total -- the shared engine of the
+    auto-interaction pick below.
+    """
+    x_bins = _equal_width_bins(x, bins)
+    c_bins = _equal_width_bins(color, bins)
+    sums = np.zeros((bins, bins))
+    counts = np.zeros((bins, bins))
+    np.add.at(sums, (x_bins, c_bins), y)
+    np.add.at(counts, (x_bins, c_bins), 1.0)
+    predicted = np.where(counts > 0, sums / np.maximum(counts, 1.0), y.mean())
+    total = float(np.sum((y - y.mean()) ** 2))
+    if total <= 0.0:
+        return 0.0
+    sse_2d = float(np.sum((y - predicted[x_bins, c_bins]) ** 2))
+    return 1.0 - sse_2d / total
+
+
+def _auto_interaction(
+    names: list[str],
+    feature_index: int,
+    values: np.ndarray,
+    feature_values: np.ndarray,
+) -> str | None:
+    """Pick the strongest interacting feature, or ``None``.
+
+    shap's ``approximate_interactions`` heuristic (its ``utils/legacy``
+    module), honestly documented as such: for every candidate
+    ``k != feature`` BOTH the x column and the candidate are
+    discretised into 10 equal-width bins, the 2-D cell-mean prediction
+    of y scores ``R^2 = 1 - SSE_2d / SSE_total``, and the best
+    candidate wins (ties resolve first-declared).  A CONSTANT
+    candidate column scores 0 (no spread, no explanatory power); when
+    every candidate is degenerate the answer is ``None`` -- no honest
+    colour exists.
+    """
+    x = feature_values[:, feature_index]
+    y = values[:, feature_index]
+    total = float(np.sum((y - y.mean()) ** 2))
+    if total <= 0.0:
+        return None
+    best_name: str | None = None
+    best_score = 0.0
+    for candidate in range(len(names)):
+        if candidate == feature_index:
+            continue
+        column = feature_values[:, candidate]
+        if float(np.max(column) - np.min(column)) == 0.0:
+            continue  # a constant candidate scores 0 by definition
+        score = _binned_r2(x, column, y)
+        if score > best_score:  # strict: first-declared wins ties
+            best_name, best_score = names[candidate], score
+    return best_name
+
+
+def plot_shap_dependence(
+    summary: Any,
+    feature: str,
+    *,
+    color_by: str | None = None,
+    jitter: float = 0.0,
+    point_size: float = 22.0,
+    title: str = "SHAP dependence",
+) -> Any:
+    """One feature's value vs its SHAP value, coloured by its partner (100x-160).
+
+    ``shap.plots.scatter``'s dependence figure: the x axis is the
+    feature's own value, the y axis its SHAP value, and the COLOUR is
+    the interacting feature's value on the same row (the house
+    amber->teal ramp + colorbar, the beeswarm's construction).  The
+    colour source is either explicit (``color_by="b"``) or AUTO-PICKED
+    by shap's ``approximate_interactions`` heuristic when left as
+    ``None`` -- the strongest binned 2-D ``R^2`` candidate (see
+    :func:`_auto_interaction`); ``color_by="none"`` (or an all-degenerate
+    candidate set) falls back to a plain single-colour scatter.
+
+    Parameters
+    ----------
+    summary:
+        A :class:`~pharmaml.ml.explain.ShapSummary` record (the full
+        values matrix + feature_values).
+    feature:
+        The feature to plot; must be one of ``summary.names``.
+    color_by:
+        The interacting feature to colour by; ``None`` auto-picks,
+        ``"none"`` refuses colour.  Must differ from ``feature`` and
+        exist in ``summary.names``.
+    jitter:
+        Seeded uniform x-jitter as a fraction of the x range (the
+        beeswarm's determinism rule, ``default_rng(42)``); ``0``
+        plots the raw values.
+    point_size:
+        Marker size.
+    title:
+        Chart title (the honest "no interacting colour found" note
+        rides it when the auto-pick finds nothing).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``summary`` is not a ShapSummary record, ``feature`` /
+        ``color_by`` name an unknown feature or the same feature, or
+        ``jitter`` sits outside ``[0, 1]``.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.explain import ShapSummary
+    >>> import numpy as np
+    >>> a = np.arange(8.0)
+    >>> b = np.tile([0.0, 1.0], 4)
+    >>> shap_a = b.copy()               # a's SHAP value tracks b: the interaction
+    >>> values = np.column_stack([shap_a, np.zeros(8)])
+    >>> record = ShapSummary(
+    ...     names=["a", "b"], mean_abs=np.abs(values).mean(axis=0),
+    ...     values=values, feature_values=np.column_stack([a, b]),
+    ...     base_value=None, model_name="GBR", task="regression", n_samples=8)
+    >>> fig = plot_shap_dependence(record, "a")
+    >>> ax = fig.axes[0]
+    >>> (ax.get_xlabel(), ax.get_ylabel())
+    ('a', 'SHAP value')
+    >>> fig.axes[1].get_ylabel()        # the colorbar names the auto-picked colour
+    'b value'
+    """
+    names, values, feature_values = _unwrap_shap_record(summary)
+    if feature not in names:
+        raise DataValidationError(
+            f"feature {feature!r} is not one of the summary's features {names}"
+        )
+    color_name: str | None = None
+    if isinstance(color_by, str) and color_by != "none":
+        if color_by == feature:
+            raise DataValidationError(
+                f"color_by {color_by!r} must differ from feature {feature!r} "
+                "-- a feature cannot colour its own dependence plot"
+            )
+        if color_by not in names:
+            raise DataValidationError(
+                f"color_by {color_by!r} is not one of the summary's "
+                f"features {names}"
+            )
+        color_name = color_by
+    if not 0.0 <= jitter <= 1.0:
+        raise DataValidationError(f"jitter must be within [0, 1], got {jitter}")
+
+    feature_index = names.index(feature)
+    x = feature_values[:, feature_index]
+    y = values[:, feature_index]
+    auto_attempted = color_by is None
+    if color_name is None and auto_attempted:
+        color_name = _auto_interaction(names, feature_index, values, feature_values)
+
+    rng = np.random.default_rng(42)
+    x_span = float(np.max(x) - np.min(x))
+    x_plot = x + rng.uniform(-jitter, jitter, size=x.shape) * (
+        x_span if x_span > 0.0 else 1.0
+    )
+
+    from matplotlib.colors import LinearSegmentedColormap
+
+    fig, ax = new_figure(figsize=(7.8, 5.6))
+    if color_name is not None:
+        color_index = names.index(color_name)
+        color_column = feature_values[:, color_index]
+        c_span = float(np.max(color_column) - np.min(color_column))
+        normalized = (
+            np.zeros_like(color_column)
+            if c_span == 0.0
+            else (color_column - np.min(color_column)) / c_span
+        )
+        cmap = LinearSegmentedColormap.from_list(
+            "pharmaml_feature_value", [PALETTE[1], "#FFFFFF", PALETTE[0]]
+        )
+        handle = ax.scatter(
+            x_plot,
+            y,
+            c=normalized,
+            cmap=cmap,
+            vmin=0.0,
+            vmax=1.0,
+            s=point_size,
+            alpha=0.8,
+            linewidths=0.0,
+        )
+        colorbar = fig.colorbar(handle, ax=ax, fraction=0.046, pad=0.04)
+        colorbar.set_label(f"{color_name} value")
+    else:
+        ax.scatter(
+            x_plot, y, color=PALETTE[0], s=point_size, alpha=0.8, linewidths=0.0
+        )
+        if auto_attempted:
+            title = f"{title} (no interacting colour found)"
+    ax.axhline(0.0, color="#525252", lw=0.8, ls=":")
+    ax.set_xlabel(feature)
+    ax.set_ylabel("SHAP value")
+    ax.set_title(title)
+    return fig
+
+
+def plot_shap_heatmap(
+    summary: Any,
+    *,
+    max_display: int = 10,
+    title: str = "SHAP heatmap",
+) -> Any:
+    """The instances x features SHAP matrix, clustered (100x-160).
+
+    ``shap.plots.heatmap``'s figure: rows are INSTANCES ordered by
+    hierarchical clustering (complete linkage over the |SHAP| rows,
+    ``scipy.cluster.hierarchy`` -- already a core dependency), columns
+    are the top ``max_display`` features by mean |SHAP| (strongest
+    first), cells carry the SIGNED SHAP values on the module's
+    diverging red->white->teal ramp (zero-centred, the
+    ``plot_permutation_heatmap`` construction), and a thin top bar
+    panel shows the mean |SHAP| of every displayed feature -- the
+    house multi-panel pattern with ``height_ratios`` ``[1, 7]``.
+
+    The honest scope: with fewer than two instances the clustering
+    cannot run (linkage needs >= 2 rows) and the input order is kept.
+
+    Parameters
+    ----------
+    summary:
+        A :class:`~pharmaml.ml.explain.ShapSummary` record (the full
+        values matrix).
+    max_display:
+        How many feature columns to show; validated by
+        :func:`_check_top_n`.
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``summary`` is not a ShapSummary record or ``max_display``
+        is invalid.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.explain import ShapSummary
+    >>> import numpy as np
+    >>> values = np.array([
+    ...     [ 2.0,  0.1, -0.1],
+    ...     [ 1.8,  0.0,  0.0],
+    ...     [-2.0, -0.1,  0.1],
+    ...     [-1.8,  0.0,  0.0]])
+    >>> record = ShapSummary(
+    ...     names=["a", "b", "c"], mean_abs=np.abs(values).mean(axis=0),
+    ...     values=values, feature_values=values,
+    ...     base_value=None, model_name="GBR", task="regression", n_samples=4)
+    >>> fig = plot_shap_heatmap(record)
+    >>> heat = fig.axes[1]            # axes[0] is the importance bar
+    >>> [tick.get_text() for tick in heat.get_xticklabels()]  # strongest first
+    ['a', 'b', 'c']
+    >>> len(fig.axes) >= 2            # the importance bar + the heatmap (+ cbar)
+    True
+    """
+    _check_top_n(max_display)
+    names, values, _feature_values = _unwrap_shap_record(summary)
+    mean_abs = np.abs(values).mean(axis=0)
+    keep = min(int(max_display), len(names))
+    feature_order = np.argsort(-mean_abs, kind="stable")[:keep]
+
+    n_samples = int(values.shape[0])
+    abs_rows = np.abs(values[:, feature_order])
+    instance_order = np.arange(n_samples)
+    if n_samples >= 2:
+        from scipy.cluster.hierarchy import leaves_list, linkage
+
+        try:
+            instance_order = np.asarray(
+                leaves_list(linkage(abs_rows, method="complete")), dtype=int
+            )
+        except ValueError:  # degenerate distances -> keep the input order
+            instance_order = np.arange(n_samples)
+    matrix = values[np.ix_(instance_order, feature_order)]
+
+    from matplotlib.colors import LinearSegmentedColormap
+
+    fig, (ax_bar, ax_heat) = new_figure(
+        2,
+        1,
+        figsize=(max(6.4, 2.2 + 1.05 * keep), max(3.6, 1.1 + 0.34 * n_samples)),
+        gridspec_kw={"height_ratios": [1, 7], "hspace": 0.08},
+    )
+    ax_bar.bar(
+        np.arange(keep),
+        mean_abs[feature_order],
+        color=PALETTE[0],
+        alpha=0.88,
+        width=0.62,
+        edgecolor="white",
+    )
+    ax_bar.set_xlim(-0.5, keep - 0.5)
+    ax_bar.set_ylabel("mean |SHAP|", fontsize=9)
+    ax_bar.set_xticks(np.arange(keep))
+    ax_bar.tick_params(labelbottom=False)
+    ax_bar.set_title(title)
+
+    cmap = LinearSegmentedColormap.from_list(
+        "pharmaml_signed", [PALETTE[3], "#FFFFFF", PALETTE[0]]
+    )
+    bound = max(float(np.max(np.abs(matrix))), 1e-12)
+    image = ax_heat.imshow(matrix, cmap=cmap, vmin=-bound, vmax=bound, aspect="auto")
+    fig.colorbar(image, ax=ax_heat, fraction=0.046, pad=0.04, label="SHAP value")
+    ax_heat.set_xticks(np.arange(keep), [names[int(i)] for i in feature_order],
+                       fontsize=9)
+    ax_heat.set_yticks(
+        np.arange(n_samples), [str(int(i)) for i in instance_order], fontsize=8
+    )
+    ax_heat.set_xlabel("feature (strongest first)")
+    ax_heat.set_ylabel("instance (clustered)")
+    ax_heat.grid(False)
+    return fig
+
+
+def plot_shap_force(
+    summary: Any,
+    sample: int = 0,
+    *,
+    max_display: int = 10,
+    title: str = "SHAP force",
+) -> Any:
+    """The additive force plot, static matplotlib twin (100x-160).
+
+    ``shap.plots.force``'s LOCAL explanation on ONE row: the signed
+    contributions as stacked segments -- POSITIVES stacked rightward
+    from the base value (teal, ``PALETTE[0]``), NEGATIVES leftward
+    (amber, ``PALETTE[1]``), largest |value| first, the tail beyond
+    ``max_display`` summed into one "Σ remaining" segment.  The base
+    value and the prediction ``f(x) = base + sum(values)`` are
+    annotated at their positions; a horizontal centre line carries the
+    row.  The JS interactive layout (hover, re-stacking, the
+    additive-force animation) is honestly out of scope for a desktop
+    app -- this is the static twin.
+
+    Parameters
+    ----------
+    summary:
+        A :class:`~pharmaml.ml.explain.ShapSummary` record WITH a
+        ``base_value`` -- a summary that carries none is refused with
+        the typed error.
+    sample:
+        The row to explain (0-based index into the values matrix).
+    max_display:
+        How many feature segments to draw before the summed remainder;
+        validated by :func:`_check_top_n`.
+    title:
+        Chart title (the explained row index rides it).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``summary`` is not a ShapSummary record, carries no
+        ``base_value``, ``sample`` is out of range, or ``max_display``
+        is invalid.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.explain import ShapSummary
+    >>> import numpy as np
+    >>> values = np.array([[1.25, 0.75, 0.25]])
+    >>> record = ShapSummary(
+    ...     names=["a", "b", "c"], mean_abs=np.abs(values).mean(axis=0),
+    ...     values=values, feature_values=np.array([[1.0, 2.0, 3.0]]),
+    ...     base_value=0.5, model_name="GBR", task="regression", n_samples=1)
+    >>> fig = plot_shap_force(record)
+    >>> ax = fig.axes[0]
+    >>> [annotation.get_text() for annotation in ax.texts]
+    ['base = +0.5', 'f(x) = +2.75']
+    >>> ax.get_xlabel()
+    'model output'
+    """
+    _check_top_n(max_display)
+    _names, values, _feature_values = _unwrap_shap_record(summary)
+    base_value = getattr(summary, "base_value", None)
+    if base_value is None:
+        raise DataValidationError(
+            "plot_shap_force needs summary.base_value -- the force plot "
+            "stacks from the explainer's expected output; this summary "
+            "carries none"
+        )
+    base = float(base_value)
+    index = _sample_index(sample, values.shape[0])
+    row = values[index]
+
+    order = np.argsort(-np.abs(row), kind="stable")
+    keep = min(int(max_display), len(row))
+    amounts = [float(row[int(i)]) for i in order[:keep]]
+    remainder_count = len(row) - keep
+    if remainder_count > 0:
+        amounts.append(float(row[order[keep:]].sum()))
+    prediction = base + float(row.sum())
+
+    fig, ax = new_figure(figsize=(9.2, 2.6))
+    positive_edge = base
+    negative_edge = prediction
+    for amount in amounts:
+        if amount >= 0:
+            ax.barh(
+                0.0, amount, left=positive_edge, height=0.5,
+                color=PALETTE[0], alpha=0.9, edgecolor="white",
+            )
+            positive_edge += amount
+        else:
+            ax.barh(
+                0.0, -amount, left=negative_edge + amount, height=0.5,
+                color=PALETTE[1], alpha=0.9, edgecolor="white",
+            )
+            negative_edge += amount
+    ax.axhline(0.0, color="#525252", lw=0.9)
+    ax.axvline(prediction, color="#525252", lw=0.9, ls="--", zorder=2)
+    ax.annotate(
+        f"base = {base:+.4g}",
+        xy=(base, 0.27), xytext=(base, 0.62),
+        ha="center", va="center", fontsize=9,
+        arrowprops={"arrowstyle": "-", "lw": 0.7, "color": "#9CA3AF"},
+    )
+    ax.annotate(
+        f"f(x) = {prediction:+.4g}",
+        xy=(prediction, 0.27), xytext=(prediction, 0.62),
+        ha="center", va="center", fontsize=9,
+        arrowprops={"arrowstyle": "-", "lw": 0.7, "color": "#9CA3AF"},
+    )
+    ax.set_yticks([])
+    lo = min(base, negative_edge)
+    hi = max(base, positive_edge, prediction)
+    span = (hi - lo) or 1.0
+    ax.set_xlim(lo - 0.08 * span, hi + 0.08 * span)
+    ax.set_ylim(-0.8, 0.95)
+    ax.set_xlabel("model output")
+    ax.set_title(f"{title} — sample {index} of {values.shape[0]}")
+    return fig
+
+
+def plot_shap_group_difference(
+    difference: Any,
+    *,
+    top_n: int = 10,
+    title: str = "SHAP group difference",
+) -> Any:
+    """Cohort mean-SHAP difference bars with bootstrap whiskers (100x-160).
+
+    ``shap.plots.group_difference``'s figure: per feature, the cohort's
+    mean SHAP minus the rest's -- horizontal bars sorted by
+    |difference| (largest at the top), POSITIVE in teal / NEGATIVE in
+    amber, whiskers spanning the record's bootstrap ``low`` to
+    ``high``, a vertical zero line, and the cohort label with its
+    ``n_group``/``n_rest`` counts riding the title.  Accepts the
+    :class:`~pharmaml.ml.explain.GroupDifference` record OR its
+    ``as_frame`` DataFrame (``feature`` / ``difference`` / ``low`` /
+    ``high`` columns) -- the same dual-form contract as
+    :func:`plot_shap_importance`.
+
+    Parameters
+    ----------
+    difference:
+        A :class:`~pharmaml.ml.explain.GroupDifference` record, or a
+        DataFrame with ``feature`` / ``difference`` / ``low`` /
+        ``high`` columns.
+    top_n:
+        How many features to show (largest |difference| first);
+        validated by :func:`_check_top_n`.
+    title:
+        Chart title (the label + cohort counts ride it).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``difference`` carries neither the record attributes nor
+        the DataFrame columns, or ``top_n`` is invalid.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.explain import GroupDifference
+    >>> import numpy as np
+    >>> record = GroupDifference(
+    ...     names=["a", "b"], differences=np.array([0.8, -0.3]),
+    ...     low=np.array([0.5, -0.6]), high=np.array([1.1, 0.0]),
+    ...     n_group=6, n_rest=4, label="cohort")
+    >>> fig = plot_shap_group_difference(record)
+    >>> ax = fig.axes[0]
+    >>> [tick.get_text() for tick in ax.get_yticklabels()]  # bottom -> top
+    ['b', 'a']
+    >>> ax.get_xlabel()
+    'mean SHAP difference (group - rest)'
+    """
+    _check_top_n(top_n)
+    label: str | None = None
+    n_group = 0
+    n_rest = 0
+    if hasattr(difference, "names") and hasattr(difference, "differences"):
+        names = [str(name) for name in difference.names]
+        diffs = np.asarray(difference.differences, dtype=float)
+        low = np.asarray(difference.low, dtype=float)
+        high = np.asarray(difference.high, dtype=float)
+        label = str(getattr(difference, "label", "group"))
+        n_group = int(getattr(difference, "n_group", 0))
+        n_rest = int(getattr(difference, "n_rest", 0))
+    elif isinstance(difference, pd.DataFrame) and {
+        "feature",
+        "difference",
+        "low",
+        "high",
+    }.issubset(difference.columns):
+        names = [str(name) for name in difference["feature"].tolist()]
+        diffs = difference["difference"].to_numpy(dtype=float)
+        low = difference["low"].to_numpy(dtype=float)
+        high = difference["high"].to_numpy(dtype=float)
+    else:
+        raise DataValidationError(
+            "difference must be a GroupDifference record (names/differences/"
+            "low/high) or a DataFrame with feature/difference/low/high "
+            f"columns, got {type(difference).__name__}"
+        )
+    if not (len(names) == len(diffs) == len(low) == len(high)):
+        raise DataValidationError(
+            f"names carries {len(names)} label(s) for {len(diffs)} "
+            f"difference(s) with {len(low)} low and {len(high)} high bound(s)"
+        )
+    if diffs.size == 0:
+        raise DataValidationError(
+            "the group difference is empty -- pass the GroupDifference "
+            "record a group_difference() call returns"
+        )
+    keep = len(diffs) if top_n is None else min(int(top_n), len(diffs))
+    order = np.argsort(-np.abs(diffs), kind="stable")[:keep][::-1]
+
+    fig, ax = new_figure(figsize=(8.6, 0.5 * len(order) + 1.9))
+    positions = np.arange(len(order))
+    colors = [PALETTE[0] if diffs[int(i)] >= 0 else PALETTE[1] for i in order]
+    ax.barh(
+        positions,
+        diffs[order],
+        color=colors,
+        alpha=0.88,
+        height=0.58,
+        edgecolor="white",
+    )
+    # bootstrap whiskers from low to high, capped at the point estimate
+    lower = np.maximum(diffs[order] - low[order], 0.0)
+    upper = np.maximum(high[order] - diffs[order], 0.0)
+    ax.errorbar(
+        diffs[order],
+        positions,
+        xerr=np.vstack([lower, upper]),
+        fmt="none",
+        ecolor="#374151",
+        elinewidth=1.1,
+        capsize=3,
+        zorder=3,
+    )
+    ax.axvline(0.0, color="#525252", lw=0.8, ls=":")
+    ax.set_yticks(positions, [names[int(i)] for i in order])
+    ax.set_xlabel("mean SHAP difference (group - rest)")
+    if label is not None:
+        ax.set_title(f"{title} — {label} (n={n_group}) vs rest (n={n_rest})")
+    else:
+        ax.set_title(title)
+    return fig
+
+
 def plot_permutation_heatmap(
     importances: Mapping[str, Any],
     *,
@@ -2735,4 +3534,703 @@ def plot_hexbin_density(
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.set_title(f"{title}\n{xs.size} pairs, {int(gridsize)} cells across", fontsize=11)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Optuna study figures (100x-160) — the seven single-objective visualizations
+# of the optuna/optuna repo's ``visualization/matplotlib`` gallery, absorbed
+# in the house dialect over the tuner's own records (TunerResults /
+# TrialResult / HyperparameterImportance -- duck-typed, so the plotting layer
+# never imports the tuner).
+# ---------------------------------------------------------------------------
+def _unwrap_trials(results: Any) -> tuple[list[Any], str]:
+    """``(trials, objective label)`` from a TunerResults or a bare list.
+
+    The duck-typed front door every study figure shares: a
+    ``TunerResults`` (anything exposing ``.trials`` and ``.objective``)
+    or a plain sequence of trial records (each carrying ``trial_id``,
+    ``hyperparameters``, ``score`` and ``resolved_state``).  Anything
+    else is the typed refusal.
+    """
+    trials: Any = None
+    objective = "objective"
+    if hasattr(results, "trials") and hasattr(results, "objective"):
+        trials = list(results.trials)
+        objective = str(results.objective)
+    elif isinstance(results, Sequence) and not isinstance(results, (str, bytes)):
+        trials = list(results)
+    else:
+        raise DataValidationError(
+            "the study figures accept a TunerResults record or a list of "
+            "TrialResult records, got "
+            + type(results).__name__
+        )
+    if not trials:
+        raise DataValidationError(
+            "the study carries no trials -- run a search first "
+            "(RandomSearch / TPESearch / Hyperband .search(X, y))"
+        )
+    for trial in trials:
+        if not (hasattr(trial, "trial_id") and hasattr(trial, "score")):
+            raise DataValidationError(
+                "every trials entry must be a TrialResult record "
+                "(trial_id / hyperparameters / score / resolved_state), got "
+                + type(trial).__name__
+            )
+    return trials, objective
+
+
+def _completed_trials(trials: list[Any]) -> list[Any]:
+    """The resolved-'complete' trials with finite scores, in trial order."""
+    return [
+        t
+        for t in trials
+        if getattr(t, "resolved_state", "complete") == "complete"
+        and bool(np.isfinite(float(t.score)))
+    ]
+
+
+def plot_optimization_history(
+    results: Any,
+    *,
+    title: str = "Optimization history",
+) -> Any:
+    """The objective per trial + the best-so-far step line (100x-160).
+
+    ``optuna.visualization.matplotlib.plot_optimization_history``'s
+    figure: one dot per COMPLETED trial (x = trial number, y = its
+    cross-validated objective), the best-so-far step line tying every
+    running improvement together, and -- the house's honest addition
+    over the upstream -- every PRUNED trial as an open amber marker at
+    its last reported intermediate (the running fold mean the pruner
+    acted on), so the pruner's own work is visible instead of hidden.
+
+    Parameters
+    ----------
+    results:
+        A :class:`~pharmaml.ml.tuner.TunerResults` record or a list of
+        :class:`~pharmaml.ml.tuner.TrialResult` records.
+    title:
+        Chart title (the objective label rides the y axis).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``results`` is neither form, carries no trials, or no trial
+        resolved 'complete' with a finite score.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.tuner import TrialResult
+    >>> trials = [TrialResult(1, {"units": 8}, 0.5, 0.01),
+    ...           TrialResult(2, {"units": 16}, 0.8, 0.01),
+    ...           TrialResult(3, {"units": 32}, float("nan"), float("nan"),
+    ...                       state="pruned", fold_scores=(0.1, 0.2))]
+    >>> fig = plot_optimization_history(trials)
+    >>> ax = fig.axes[0]
+    >>> ax.get_xlabel(), ax.get_ylabel()
+    ('trial', 'objective')
+    >>> len(ax.collections) >= 2          # completed + pruned markers
+    True
+    >>> len(ax.lines) >= 1                # the best-so-far step line
+    True
+    """
+    trials, objective = _unwrap_trials(results)
+    completed = _completed_trials(trials)
+    if not completed:
+        raise DataValidationError(
+            "plot_optimization_history needs at least one completed trial "
+            "with a finite score -- every trial failed or was pruned"
+        )
+    fig, ax = new_figure(figsize=(8.4, 5.2))
+    ids = np.array([float(t.trial_id) for t in completed])
+    scores = np.array([float(t.score) for t in completed])
+    ax.scatter(ids, scores, s=34, color=PALETTE[0], alpha=0.85, zorder=3,
+               label="completed trial")
+    best = np.maximum.accumulate(scores)
+    ax.step(ids, best, where="post", color=PALETTE[2], lw=1.6, zorder=2,
+            label="best so far")
+    pruned = [t for t in trials if getattr(t, "resolved_state", "") == "pruned"]
+    if pruned:
+        pruned_ids, pruned_values = [], []
+        for trial in pruned:
+            folds = trial.fold_scores
+            if folds:
+                pruned_ids.append(float(trial.trial_id))
+                pruned_values.append(float(np.asarray(folds, dtype=float)[-1]))
+        if pruned_ids:
+            ax.scatter(pruned_ids, pruned_values, s=30, facecolors="none",
+                       edgecolors=PALETTE[1], lw=1.4, zorder=3,
+                       label="pruned (last intermediate)")
+    ax.set_xlabel("trial")
+    ax.set_ylabel(objective)
+    ax.set_title(title, fontsize=11)
+    ax.legend(loc="best", fontsize=9)
+    return fig
+
+
+def plot_slice(
+    results: Any,
+    *,
+    params: Sequence[str] | None = None,
+    title: str = "Slice plot",
+) -> Any:
+    """One param-vs-objective panel per hyperparameter (100x-160).
+
+    ``optuna.visualization.matplotlib.plot_slice``'s figure: the
+    objective (y) against each hyperparameter's value (x), one subplot
+    per param, completed trials only (a pruned or failed trial owns no
+    full-budget score to place).  Numeric params keep their numeric
+    axis; categorical / boolean params get category-index positions
+    with their values as tick labels.  ``params=None`` shows every
+    hyperparameter the trials declare (the first completed trial's
+    declaration order).
+
+    Parameters
+    ----------
+    results:
+        A :class:`~pharmaml.ml.tuner.TunerResults` record or a list of
+        :class:`~pharmaml.ml.tuner.TrialResult` records.
+    params:
+        The hyperparameter names to show; ``None`` shows all.  An
+        unknown name is the typed refusal.
+    title:
+        Chart title (the objective label rides the y axes).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``results`` is neither form, no trial resolved 'complete',
+        or ``params`` names a hyperparameter no completed trial
+        declares.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.tuner import TrialResult
+    >>> trials = [TrialResult(1, {"units": 8, "alpha": 0.1}, 0.5, 0.01),
+    ...           TrialResult(2, {"units": 16, "alpha": 0.2}, 0.8, 0.01)]
+    >>> fig = plot_slice(trials)
+    >>> len(fig.axes)                     # one panel per param
+    2
+    >>> fig.axes[0].get_xlabel()
+    'units'
+    """
+    trials, objective = _unwrap_trials(results)
+    completed = _completed_trials(trials)
+    if not completed:
+        raise DataValidationError(
+            "plot_slice needs at least one completed trial with a finite "
+            "score -- every trial failed or was pruned"
+        )
+    declared = list(dict.fromkeys(
+        key for trial in completed for key in trial.hyperparameters
+    ))
+    chosen = declared if params is None else [str(p) for p in params]
+    if not chosen:
+        raise DataValidationError(
+            "params must name at least one hyperparameter the trials declare"
+        )
+    unknown = [name for name in chosen if name not in declared]
+    if unknown:
+        raise DataValidationError(
+            f"params names hyperparameter(s) no completed trial declares: "
+            f"{', '.join(unknown)} -- declared: {', '.join(declared)}"
+        )
+    scores = np.array([float(t.score) for t in completed])
+    n_cols = 2 if len(chosen) > 1 else 1
+    n_rows = (len(chosen) + n_cols - 1) // n_cols
+    fig, axes = new_figure(
+        nrows=n_rows, ncols=n_cols, figsize=(4.4 * n_cols, 3.4 * n_rows + 0.8)
+    )
+    axes_array = np.atleast_1d(axes).ravel()
+    for ax, name in zip(axes_array, chosen):
+        raw = [trial.hyperparameters[name] for trial in completed]
+        numeric = all(
+            isinstance(value, (int, float, np.integer, np.floating))
+            and not isinstance(value, bool)
+            for value in raw
+        )
+        if numeric:
+            xs = np.array([float(value) for value in raw])
+            ax.scatter(xs, scores, s=30, color=PALETTE[0], alpha=0.85)
+            ax.set_xlabel(name)
+        else:
+            categories = list(dict.fromkeys(str(value) for value in raw))
+            positions = {category: float(i) for i, category in enumerate(categories)}
+            xs = np.array([positions[str(value)] for value in raw])
+            ax.scatter(xs, scores, s=30, color=PALETTE[0], alpha=0.85)
+            ax.set_xticks(list(positions.values()),
+                          list(positions.keys()), fontsize=8)
+            ax.set_xlabel(name)
+        ax.set_ylabel(objective)
+        ax.tick_params(labelsize=8)
+    for ax in axes_array[len(chosen):]:
+        ax.set_visible(False)
+    fig.suptitle(title, fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    return fig
+
+
+def plot_parallel_coordinate(
+    results: Any,
+    *,
+    params: Sequence[str] | None = None,
+    title: str = "Parallel coordinates",
+) -> Any:
+    """One polyline per trial across the params + objective (100x-160).
+
+    ``optuna.visualization.matplotlib.plot_parallel_coordinate``'s
+    figure: every completed trial as a polyline whose first axes are
+    the hyperparameters (each min-max normalised to [0, 1], tick
+    labels carrying the real values) and whose LAST axis is the
+    objective itself; the line colour is the trial's score through the
+    house amber->teal ramp, so good and bad configurations separate
+    at a glance.  Categorical / boolean params use category indices.
+
+    Parameters
+    ----------
+    results:
+        A :class:`~pharmaml.ml.tuner.TunerResults` record or a list of
+        :class:`~pharmaml.ml.tuner.TrialResult` records.
+    params:
+        The hyperparameter names to show; ``None`` shows all.
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``results`` is neither form, or fewer than TWO trials
+        resolved 'complete' with finite scores (a single line has no
+        comparative story -- the honest refusal).
+
+    Examples
+    --------
+    >>> from pharmaml.ml.tuner import TrialResult
+    >>> trials = [TrialResult(1, {"units": 8}, 0.5, 0.01),
+    ...           TrialResult(2, {"units": 16}, 0.8, 0.01),
+    ...           TrialResult(3, {"units": 32}, 0.65, 0.01)]
+    >>> fig = plot_parallel_coordinate(trials)
+    >>> ax = fig.axes[0]
+    >>> ax.get_xticklabels()[0].get_text().split("=")[0]
+    'units'
+    """
+    trials, objective = _unwrap_trials(results)
+    completed = _completed_trials(trials)
+    if len(completed) < 2:
+        raise DataValidationError(
+            f"plot_parallel_coordinate needs at least two completed trials "
+            f"with finite scores to compare, got {len(completed)}"
+        )
+    declared = list(dict.fromkeys(
+        key for trial in completed for key in trial.hyperparameters
+    ))
+    chosen = declared if params is None else [str(p) for p in params]
+    if not chosen:
+        raise DataValidationError(
+            "params must name at least one hyperparameter the trials declare"
+        )
+    unknown = [name for name in chosen if name not in declared]
+    if unknown:
+        raise DataValidationError(
+            f"params names hyperparameter(s) no completed trial declares: "
+            f"{', '.join(unknown)} -- declared: {', '.join(declared)}"
+        )
+    scores = np.array([float(t.score) for t in completed])
+    columns: list[tuple[str, np.ndarray, list[str] | None, float, float]] = []
+    for name in chosen:
+        raw = [trial.hyperparameters[name] for trial in completed]
+        numeric = all(
+            isinstance(value, (int, float, np.integer, np.floating))
+            and not isinstance(value, bool)
+            for value in raw
+        )
+        if numeric:
+            values = np.array([float(value) for value in raw])
+            columns.append((name, values, None, float(values.min()), float(values.max())))
+        else:
+            category_list = list(dict.fromkeys(str(value) for value in raw))
+            positions = {category: float(i) for i, category in enumerate(category_list)}
+            values = np.array([positions[str(value)] for value in raw])
+            columns.append((name, values, category_list, 0.0, float(len(category_list) - 1)))
+    lo, hi = float(scores.min()), float(scores.max())
+
+    def normalized(values: np.ndarray, low: float, high: float) -> np.ndarray:
+        span = high - low
+        if span <= 0.0:
+            return np.full(values.shape, 0.5)
+        return (values - low) / span
+
+    fig, ax = new_figure(figsize=(8.8, 5.4))
+    xs = np.arange(len(columns) + 1)
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+    cmap = LinearSegmentedColormap.from_list(
+        "pharmaml_score", [PALETTE[1], "#FFFFFF", PALETTE[0]]
+    )
+    colour_values = normalized(scores, lo, hi)
+    for row_index, trial in enumerate(completed):
+        ys = [normalized(column[1], column[3], column[4])[row_index] for column in columns]
+        ys.append(colour_values[row_index])
+        ax.plot(xs, ys, lw=1.3, alpha=0.75, color=cmap(colour_values[row_index]))
+    # the range (or the categories) of every param rides BELOW its axis --
+    # the normalised positions alone would be unreadable.
+    for position, (name, _values, categories, low, high) in enumerate(columns):
+        footer = (
+            f"{name}: " + " | ".join(categories)
+            if categories is not None
+            else f"{name}: {low:g} … {high:g}"
+        )
+        ax.text(position, -0.09, footer, ha="center", va="top", fontsize=8,
+                transform=ax.get_xaxis_transform())
+    ax.set_xticks(xs)
+    ax.set_xticklabels([column[0] for column in columns] + [objective], fontsize=9)
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_xlim(-0.25, len(xs) - 0.75)
+    ax.set_ylabel("normalised value")
+    ax.set_title(title, fontsize=11)
+    sm = ScalarMappable(cmap=cmap, norm=Normalize(vmin=lo, vmax=hi))
+    fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04).set_label(objective)
+    return fig
+
+
+def plot_param_importances(
+    importances: Any,
+    *,
+    top_n: int | None = None,
+    title: str = "Hyperparameter importances",
+) -> Any:
+    """The MDI hyperparameter-importance bars (100x-160).
+
+    ``optuna.visualization.matplotlib.plot_param_importances``'s
+    figure: one horizontal bar per hyperparameter, the random forest's
+    normalised mean-decrease-in-impurity attribution, largest at the
+    top, the value labelled at the bar's end.  Accepts the
+    :class:`~pharmaml.ml.tuner.HyperparameterImportance` record OR its
+    ``as_frame`` DataFrame (``parameter`` / ``importance`` columns) --
+    the same dual-form contract as :func:`plot_feature_importance`.
+
+    Parameters
+    ----------
+    importances:
+        A :class:`~pharmaml.ml.tuner.HyperparameterImportance` record,
+        or a DataFrame with ``parameter`` / ``importance`` columns.
+    top_n:
+        How many params to show (largest first); ``None`` shows all.
+    title:
+        Chart title (the method rides it).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``importances`` carries neither the record attributes nor
+        the DataFrame columns.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.tuner import HyperparameterImportance
+    >>> record = HyperparameterImportance(
+    ...     names=("lr", "depth"), importances=(0.8, 0.2), n_trials=6,
+    ...     objective="r2")
+    >>> fig = plot_param_importances(record)
+    >>> [tick.get_text() for tick in fig.axes[0].get_yticklabels()]
+    ['depth', 'lr']
+    """
+    _check_top_n(top_n)
+    if hasattr(importances, "names") and hasattr(importances, "importances"):
+        names = [str(name) for name in importances.names]
+        values = np.asarray(importances.importances, dtype=float)
+        method = str(getattr(importances, "method", "mdi"))
+    elif isinstance(importances, pd.DataFrame) and {
+        "parameter", "importance"
+    }.issubset(importances.columns):
+        names = [str(name) for name in importances["parameter"].tolist()]
+        values = importances["importance"].to_numpy(dtype=float)
+        method = "importance"
+    else:
+        raise DataValidationError(
+            "importances must be a HyperparameterImportance record "
+            "(names/importances) or a DataFrame with parameter/importance "
+            f"columns, got {type(importances).__name__}"
+        )
+    if len(names) != len(values):
+        raise DataValidationError(
+            f"names carries {len(names)} label(s) for {len(values)} importance(s)"
+        )
+    keep = len(values) if top_n is None else min(int(top_n), len(values))
+    order = np.argsort(-values, kind="stable")[:keep][::-1]
+
+    fig, ax = new_figure(figsize=(8.4, 0.5 * len(order) + 1.8))
+    positions = np.arange(len(order))
+    ax.barh(positions, values[order], color=PALETTE[0], alpha=0.88,
+            height=0.62, edgecolor="white")
+    for pos, value in zip(positions, values[order]):
+        ax.text(value, pos, f" {value:.4g}", va="center", ha="left", fontsize=9)
+    ax.set_yticks(positions, [names[int(index)] for index in order])
+    ax.set_xlabel(f"importance ({method})")
+    ax.set_title(title, fontsize=11)
+    return fig
+
+
+def plot_edf(
+    results: Any,
+    *,
+    title: str = "Objective EDF",
+) -> Any:
+    """The empirical CDF of the completed trials' scores (100x-160).
+
+    ``optuna.visualization.matplotlib.plot_edf``'s figure: the
+    empirical distribution function of the objective over the
+    completed trials -- x = the objective value, y = the fraction of
+    trials at or below it, drawn as the step curve with the quartile
+    markers (Q1 / median / Q3) annotated.  The figure the "how spread
+    are my trials, where does the good tail start" question asks.
+
+    Parameters
+    ----------
+    results:
+        A :class:`~pharmaml.ml.tuner.TunerResults` record or a list of
+        :class:`~pharmaml.ml.tuner.TrialResult` records.
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``results`` is neither form or no trial resolved 'complete'
+        with a finite score.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.tuner import TrialResult
+    >>> trials = [TrialResult(i, {"units": 8 * i}, float(i) / 4.0, 0.01)
+    ...           for i in range(1, 6)]
+    >>> fig = plot_edf(trials)
+    >>> ax = fig.axes[0]
+    >>> ax.get_xlabel(), ax.get_ylabel()
+    ('objective', 'fraction of trials ≤ value')
+    """
+    trials, objective = _unwrap_trials(results)
+    completed = _completed_trials(trials)
+    if not completed:
+        raise DataValidationError(
+            "plot_edf needs at least one completed trial with a finite "
+            "score -- every trial failed or was pruned"
+        )
+    scores = np.sort(np.array([float(t.score) for t in completed]))
+    fraction = np.arange(1, scores.size + 1) / scores.size
+
+    fig, ax = new_figure(figsize=(7.6, 5.2))
+    ax.step(scores, fraction, where="post", color=PALETTE[0], lw=1.8)
+    ax.scatter(scores, fraction, s=26, color=PALETTE[0], alpha=0.85, zorder=3)
+    for quantile, label in ((25, "Q1"), (50, "median"), (75, "Q3")):
+        value = float(np.percentile(scores, quantile))
+        level = float(np.mean(scores <= value))
+        ax.axvline(value, color=PALETTE[2], lw=0.8, ls=":", alpha=0.8)
+        ax.annotate(
+            f"{label} = {value:.4g}", xy=(value, level), xytext=(6, 0),
+            textcoords="offset points", fontsize=8, va="center",
+            color=PALETTE[2],
+        )
+    ax.set_xlabel(objective)
+    ax.set_ylabel("fraction of trials ≤ value")
+    ax.set_ylim(0.0, 1.05)
+    ax.set_title(f"{title} — {scores.size} completed trial(s)", fontsize=11)
+    return fig
+
+
+def plot_timeline(
+    results: Any,
+    *,
+    title: str = "Trial timeline",
+) -> Any:
+    """Per-trial duration bars coloured by state (100x-160).
+
+    ``optuna.visualization.matplotlib.plot_timeline``'s figure,
+    honestly translated: the upstream plots wall-clock start->end
+    stamps of possibly-parallel trials; the toolkit's searches are
+    strictly sequential, so the honest twin is a stacked-duration
+    Gantt -- trial i's bar starts where trial i-1's ended, the bar's
+    WIDTH is the trial's recorded ``duration`` seconds, and the colour
+    is the resolved state (complete = teal, pruned = amber, fail =
+    red).  Trials without a recorded duration are excluded and named
+    in the title's suffix line.
+
+    Parameters
+    ----------
+    results:
+        A :class:`~pharmaml.ml.tuner.TunerResults` record or a list of
+        :class:`~pharmaml.ml.tuner.TrialResult` records.
+    title:
+        Chart title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``results`` is neither form, or no trial carries a recorded
+        duration (the cross_val_score fast path records none -- run a
+        search with a pruner to get durations).
+
+    Examples
+    --------
+    >>> from pharmaml.ml.tuner import TrialResult
+    >>> trials = [TrialResult(1, {"units": 8}, 0.5, 0.01, duration=1.5),
+    ...           TrialResult(2, {"units": 16}, float("nan"), float("nan"),
+    ...                       state="pruned", duration=0.5)]
+    >>> fig = plot_timeline(trials)
+    >>> ax = fig.axes[0]
+    >>> ax.get_xlabel()
+    'cumulative seconds'
+    """
+    trials, _objective = _unwrap_trials(results)
+    timed = [t for t in trials if getattr(t, "duration", None) is not None]
+    if not timed:
+        raise DataValidationError(
+            "plot_timeline needs trials with a recorded duration -- none of "
+            f"the {len(trials)} trial(s) carry one (the cross_val_score fast "
+            "path records none; a pruner-wired search does)"
+        )
+    excluded = len(trials) - len(timed)
+    state_colours = {"complete": PALETTE[0], "pruned": PALETTE[1], "fail": PALETTE[3]}
+    state_labels = {"complete": "complete", "pruned": "pruned", "fail": "fail"}
+
+    fig, ax = new_figure(figsize=(8.6, 0.42 * len(timed) + 1.8))
+    positions = np.arange(len(timed))[::-1]
+    cursor = 0.0
+    present: dict[str, str] = {}
+    for position, trial in zip(positions, timed):
+        duration = float(trial.duration or 0.0)
+        state = getattr(trial, "resolved_state", "complete")
+        colour = state_colours.get(state, PALETTE[2])
+        present.setdefault(state, state_labels.get(state, state))
+        ax.barh(position, duration, left=cursor, height=0.6, color=colour,
+                alpha=0.88, edgecolor="white")
+        ax.text(cursor + duration, position, f" {duration:.2f}s", va="center",
+                ha="left", fontsize=8, color=PALETTE[2])
+        cursor += duration
+    ax.set_yticks(positions, [f"trial {t.trial_id}" for t in timed])
+    ax.set_xlabel("cumulative seconds")
+    suffix = f" — {excluded} without a recorded duration excluded" if excluded else ""
+    ax.set_title(title + suffix, fontsize=11)
+    if present:
+        from matplotlib.patches import Patch as plt_Patch
+
+        handles = [
+            plt_Patch(color=state_colours[state], label=label)
+            for state, label in present.items()
+        ]
+        ax.legend(handles=handles, loc="lower right", fontsize=8)
+    return fig
+
+
+def plot_intermediate_values(
+    results: Any,
+    *,
+    title: str = "Intermediate values",
+) -> Any:
+    """The per-trial running fold-mean curves (100x-160).
+
+    ``optuna.visualization.matplotlib.plot_intermediate_values``'s
+    figure: one curve per trial that reported intermediates -- for the
+    toolkit that is every pruner-wired trial, whose reported values
+    are the RUNNING mean of the fold scores after each fold (exactly
+    what :class:`~pharmaml.ml.tuner.PercentilePruner` acted on).
+    Completed trials draw as solid teal lines with circle markers;
+    pruned trials as dashed amber lines ending at their prune fold;
+    the x axis is the 1-based fold index.
+
+    Parameters
+    ----------
+    results:
+        A :class:`~pharmaml.ml.tuner.TunerResults` record or a list of
+        :class:`~pharmaml.ml.tuner.TrialResult` records.
+    title:
+        Chart title (the objective label rides the y axis).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``results`` is neither form, or no trial carries
+        ``fold_scores`` (the cross_val_score fast path records none --
+        run a search with a pruner to get intermediates).
+
+    Examples
+    --------
+    >>> from pharmaml.ml.tuner import TrialResult
+    >>> trials = [TrialResult(1, {"units": 8}, 0.5, 0.01,
+    ...                       fold_scores=(0.4, 0.5, 0.6)),
+    ...           TrialResult(2, {"units": 16}, float("nan"), float("nan"),
+    ...                       state="pruned", fold_scores=(0.1, 0.2))]
+    >>> fig = plot_intermediate_values(trials)
+    >>> ax = fig.axes[0]
+    >>> ax.get_xlabel()
+    'fold (running mean)'
+    """
+    trials, objective = _unwrap_trials(results)
+    reporting = [
+        t for t in trials
+        if getattr(t, "fold_scores", None) is not None and len(t.fold_scores) > 0
+    ]
+    if not reporting:
+        raise DataValidationError(
+            "plot_intermediate_values needs trials with fold_scores -- none "
+            f"of the {len(trials)} trial(s) carry them (the cross_val_score "
+            "fast path records none; a pruner-wired search does)"
+        )
+    fig, ax = new_figure(figsize=(8.4, 5.2))
+    present: set[str] = set()
+    for trial in reporting:
+        folds = np.asarray(trial.fold_scores, dtype=float)
+        running = np.cumsum(folds) / np.arange(1, folds.size + 1)
+        steps = np.arange(1, folds.size + 1)
+        state = getattr(trial, "resolved_state", "complete")
+        present.add(state)
+        if state == "pruned":
+            ax.plot(steps, running, ls="--", color=PALETTE[1], lw=1.5,
+                    marker="o", ms=4, alpha=0.9,
+                    label=f"trial {trial.trial_id} (pruned)")
+        else:
+            ax.plot(steps, running, ls="-", color=PALETTE[0], lw=1.5,
+                    marker="o", ms=4, alpha=0.9,
+                    label=f"trial {trial.trial_id}")
+    ax.set_xlabel("fold (running mean)")
+    ax.set_ylabel(objective)
+    ax.set_title(title, fontsize=11)
+    if len(present) > 1 or len(reporting) <= 8:
+        ax.legend(fontsize=8, loc="best")
+    else:
+        from matplotlib.lines import Line2D as plt_Line2D
+
+        ax.legend([plt_Line2D([], [], color=PALETTE[0], marker="o", ms=4)],
+                  ["completed trial"], fontsize=8, loc="best")
     return fig

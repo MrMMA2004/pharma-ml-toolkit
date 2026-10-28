@@ -558,12 +558,13 @@ from weakref import WeakKeyDictionary
 
 try:
     import tkinter as tk
-    from tkinter import filedialog, messagebox, ttk
+    from tkinter import filedialog, messagebox, simpledialog, ttk
     from tkinter import font as tkfont
 except ImportError:  # pragma: no cover -- a Python built without tkinter
     tk = None  # type: ignore[assignment]
     filedialog = None  # type: ignore[assignment]
     messagebox = None  # type: ignore[assignment]
+    simpledialog = None  # type: ignore[assignment]
     ttk = None  # type: ignore[assignment]
     tkfont = None  # type: ignore[assignment]
 
@@ -1881,9 +1882,21 @@ _ENSEMBLE_MEMBER_LABELS: tuple[tuple[str, str], ...] = (
 #: members (RF + SVM + KNN), matching the registry ensembles' defaults.
 _ENSEMBLE_DEFAULT_MEMBERS: tuple[str, ...] = ("random_forest", "svm", "knn")
 
-#: Searcher tokens for the Tune card -- the same two the CLI's
-#: ``ml tune --searcher`` accepts (random | hyperband).
-_TUNE_SEARCHERS: tuple[str, ...] = ("random", "hyperband")
+#: Searcher tokens for the Tune card -- the CLI's ``ml tune
+#: --searcher`` registry (random | tpe | hyperband).  (100x-160) tpe is
+#: the Optuna absorption: TPESearch, the Tree-structured Parzen Estimator
+#: search (below/above Parzen mixtures, gamma = min(ceil(0.1n), 25),
+#: n_startup_trials random bootstrap, n_ei_candidates = 24).
+_TUNE_SEARCHERS: tuple[str, ...] = ("random", "tpe", "hyperband")
+
+#: (100x-160) Pruner tokens for the Tune card -- off (every trial runs
+#: every fold, the pre-160 behaviour) or median (Optuna's MedianPruner:
+#: after each fold the running mean is reported and a trial below the
+#: median of the completed trials' values at the same fold is cut short
+#: -- state "pruned", partial fold scores kept).  Hyperband keeps its
+#: own halving (the pruner is ignored there, exactly the honest note the
+#: card carries).
+_TUNE_PRUNERS: tuple[str, ...] = ("off", "median")
 
 #: The resource slot each Hyperband-able family halves over -- the
 #: CLI's own rule (``max_iter`` for the sklearn ann, ``epochs`` for
@@ -14081,7 +14094,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         Tooltip(
             self._tune_searcher_combo,
             "random = RandomSearch, every trial at the full budget "
-            "(the trials spinbox decides how many); hyperband = "
+            "(the trials spinbox decides how many); tpe = TPESearch, "
+            "Optuna's Tree-structured Parzen Estimator -- the best "
+            "gamma(n)=min(⌈0.1n⌉, 25) trials seed one KDE mixture and "
+            "the rest another, candidates drawn from the good mixture "
+            "and kept where they most separate the two (the first 10 "
+            "trials are uniform bootstrap); hyperband = "
             "successive halving over the family's resource slot -- "
             "brackets start many configs at a small budget and keep "
             "only the top 1/η per rung, so the trials spinbox is "
@@ -14113,6 +14131,29 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._tune_cv = ttk.Spinbox(tuner, from_=2, to=5, increment=1, width=10)
         self._tune_cv.set("3")
         form_row(tuner, "cv folds", self._tune_cv)
+        # (100x-160) the Optuna pruner choice: off = every trial runs
+        # every fold (the pre-160 behaviour); median = the
+        # PercentilePruner(50) fold loop -- after each fold the running
+        # mean is reported, and a trial below the median of the
+        # completed trials at the same fold is cut short (state
+        # "pruned", partial fold scores kept -- the Intermediates
+        # figure below draws exactly them).
+        self._tune_pruner_combo = ttk.Combobox(
+            tuner, state="readonly", width=26, values=_TUNE_PRUNERS
+        )
+        self._tune_pruner_combo.set("off")
+        Tooltip(
+            self._tune_pruner_combo,
+            "off = every trial runs every fold (the classic behaviour). "
+            "median = Optuna's MedianPruner, wired into the fold loop: "
+            "after each fold the trial's running mean score is reported "
+            "and a trial sitting below the median of the completed "
+            "trials' values at the SAME fold is cut short -- its state "
+            "becomes 'pruned', the partial fold scores are kept (the "
+            "Intermediates figure draws them), and the search moves on. "
+            "Hyperband ignores this -- its rungs do their own halving.",
+        )
+        form_row(tuner, "pruner", self._tune_pruner_combo)
         tune_buttons = ttk.Frame(tuner, style="Card.TFrame")
         grid_append(tuner, tune_buttons, sticky="w", pady=(8, 0))
         search_btn = self._action_button(
@@ -14154,6 +14195,89 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             justify="left",
         )
         grid_append(tuner, self._tune_summary, sticky="w", pady=(6, 0))
+        # (100x-160) the STUDY FIGURES -- optuna.visualization's
+        # single-objective gallery, one row of buttons over the LAST
+        # search's records (pure matplotlib; the figure lands in the
+        # Results card's host below, exactly like the SHAP figures).
+        tune_study_buttons = ttk.Frame(tuner, style="Card.TFrame")
+        grid_append(tuner, tune_study_buttons, sticky="w", pady=(6, 0))
+        study_history_btn = self._action_button(
+            tune_study_buttons,
+            "Optimization history",
+            self._tune_plot_history,
+            tooltip="plot_optimization_history -- one dot per completed "
+            "trial (its mean CV score) plus the best-so-far step line; "
+            "pruned trials ride along as open amber markers at their "
+            "last reported fold mean, so the pruner's own work is "
+            "visible.  Optuna's signature study figure, mouse edition.",
+        )
+        study_history_btn.pack(side="left")
+        study_slice_btn = self._action_button(
+            tune_study_buttons,
+            "Slice plots",
+            self._tune_plot_slice,
+            tooltip="plot_slice -- the objective against each "
+            "hyperparameter's value, one panel per param, completed "
+            "trials only (pruned/failed trials own no full-budget "
+            "score to place).  Where does each knob actually pay?",
+        )
+        study_slice_btn.pack(side="left", padx=(10, 0))
+        study_parallel_btn = self._action_button(
+            tune_study_buttons,
+            "Parallel coords",
+            self._tune_plot_parallel,
+            tooltip="plot_parallel_coordinate -- one polyline per "
+            "completed trial across the hyperparameter axes (each "
+            "normalised) ending on the objective axis; line colour = "
+            "the trial's score on the amber→teal ramp, so good and "
+            "bad configurations separate at a glance.",
+        )
+        study_parallel_btn.pack(side="left", padx=(10, 0))
+        study_importances_btn = self._action_button(
+            tune_study_buttons,
+            "Param importances",
+            self._tune_plot_importances,
+            tooltip="param_importances + plot_param_importances -- the "
+            "random forest's mean-decrease-in-impurity attribution of "
+            "the objective to each hyperparameter (one-hot columns "
+            "collapse back onto their param; Optuna's own MDI "
+            "evaluator recipe).  Which knob was the search really "
+            "about?",
+        )
+        study_importances_btn.pack(side="left", padx=(10, 0))
+        tune_study_buttons2 = ttk.Frame(tuner, style="Card.TFrame")
+        grid_append(tuner, tune_study_buttons2, sticky="w", pady=(6, 0))
+        study_edf_btn = self._action_button(
+            tune_study_buttons2,
+            "EDF",
+            self._tune_plot_edf,
+            tooltip="plot_edf -- the empirical CDF of the completed "
+            "trials' scores with the Q1/median/Q3 markers: how spread "
+            "are the trials, where does the good tail start.",
+        )
+        study_edf_btn.pack(side="left")
+        study_timeline_btn = self._action_button(
+            tune_study_buttons2,
+            "Timeline",
+            self._tune_plot_timeline,
+            tooltip="plot_timeline -- one duration bar per trial, "
+            "stacked in run order (the searches are sequential), "
+            "coloured by state: complete teal, pruned amber, fail red. "
+            "The honest translation of Optuna's wall-clock timeline "
+            "for a single-threaded search.",
+        )
+        study_timeline_btn.pack(side="left", padx=(10, 0))
+        study_intermediates_btn = self._action_button(
+            tune_study_buttons2,
+            "Intermediates",
+            self._tune_plot_intermediates,
+            tooltip="plot_intermediate_values -- the per-trial running "
+            "fold-mean curves the pruner acted on (solid teal = "
+            "completed, dashed amber = pruned, ending at the fold that "
+            "cut them).  Needs a pruner-wired search (pruner = median); "
+            "the classic fast path records no intermediates.",
+        )
+        study_intermediates_btn.pack(side="left", padx=(10, 0))
 
         results = make_card(page.grid, "Results", span=2, row=5, column=0)
         ml_result_buttons = ttk.Frame(results, style="Card.TFrame")
@@ -14401,6 +14525,79 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "same record -- the numbers behind the swarm.",
         )
         shap_bar_btn.pack(side="left", padx=(10, 0))
+        # (100x-160) the shap/shap repository absorption -- five more
+        # figures of the repo's own plot gallery over the SAME run
+        # tuple discipline (the run's OWN held-out features and target,
+        # never the session frame): the local explanation pair
+        # (waterfall + force), the dependence scatter, the heatmap, and
+        # the cohort group difference.  Two rows, one button per figure.
+        ml_result_buttons5 = ttk.Frame(results, style="Card.TFrame")
+        grid_append(results, ml_result_buttons5, sticky="w", pady=(6, 0))
+        shap_waterfall_btn = self._action_button(
+            ml_result_buttons5,
+            "SHAP waterfall…",
+            self._ml_plot_shap_waterfall,
+            tooltip="plot_shap_waterfall -- the LOCAL explanation of one "
+            "held-out row: the walk from the explainer's expected "
+            "output (the base value) to that row's prediction, each "
+            "feature's contribution a signed bar (teal pushes up, "
+            "amber pushes down), largest first, the tail collapsed "
+            "into one summed bar.  Asks which row to explain (0-based "
+            "into the run's held-out split).  shap.plots.waterfall's "
+            "signature figure, pure-matplotlib drawing.",
+        )
+        shap_waterfall_btn.pack(side="left")
+        shap_force_btn = self._action_button(
+            ml_result_buttons5,
+            "SHAP force…",
+            self._ml_plot_shap_force,
+            tooltip="plot_shap_force -- the LOCAL explanation's compact "
+            "twin: one stacked bar of the row's signed contributions "
+            "(positives stacked right from the base value, negatives "
+            "left), the base and the prediction annotated at the ends. "
+            "The honest static translation of shap's JS force layout "
+            "for a desktop app.  Asks which held-out row.",
+        )
+        shap_force_btn.pack(side="left", padx=(10, 0))
+        shap_dependence_btn = self._action_button(
+            ml_result_buttons5,
+            "SHAP dependence…",
+            self._ml_plot_shap_dependence,
+            tooltip="plot_shap_dependence -- the value-vs-SHAP scatter of "
+            "one feature, coloured by the strongest INTERACTING "
+            "feature (auto-picked by the binned-R² heuristic, shap's "
+            "own approximate_interactions recipe; the colour feature's "
+            "name rides the colorbar).  Asks which feature; defaults to "
+            "the top mean-|SHAP| column of the run.",
+        )
+        shap_dependence_btn.pack(side="left", padx=(10, 0))
+        shap_heatmap_btn = self._action_button(
+            ml_result_buttons5,
+            "SHAP heatmap",
+            self._ml_plot_shap_heatmap,
+            tooltip="plot_shap_heatmap -- the held-out instances × top "
+            "features SHAP matrix (diverging red→white→teal, centred "
+            "at zero), rows ordered by supervised clustering over the "
+            "|SHAP| rows (complete linkage) so similar explanations "
+            "stack together, a thin top bar carrying the mean |SHAP| "
+            "per feature.  shap.plots.heatmap's figure.",
+        )
+        shap_heatmap_btn.pack(side="left", padx=(10, 0))
+        ml_result_buttons6 = ttk.Frame(results, style="Card.TFrame")
+        grid_append(results, ml_result_buttons6, sticky="w", pady=(6, 0))
+        shap_group_btn = self._action_button(
+            ml_result_buttons6,
+            "SHAP group difference…",
+            self._ml_plot_shap_group_difference,
+            tooltip="group_difference + plot_shap_group_difference -- the "
+            "cohort decomposition shap.plots.group_difference draws: "
+            "the mean SHAP of the high-target cohort minus the "
+            "low-target cohort (the run's held-out rows split at their "
+            "own target median), per feature, with 5-95% bootstrap "
+            "whiskers (200 resamples).  WHY does the high-potency "
+            "cohort score differently -- which features carry the gap.",
+        )
+        shap_group_btn.pack(side="left")
         self._ml_metrics = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, self._ml_metrics, sticky="ew")
         ttk.Label(
@@ -16760,6 +16957,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if estimator == "dnn" and not self._require("torch", "the dnn search"):
             return
         searcher = self._tune_searcher_combo.get()
+        # (100x-160) the pruner choice rides the full-budget searchers
+        # (random / tpe); the guard below keeps hyperband honest.
+        pruner_choice = self._tune_pruner_combo.get()
+        if pruner_choice not in _TUNE_PRUNERS:  # pragma: no cover - readonly combo
+            pruner_choice = "off"
         resource = _TUNE_RESOURCES.get(estimator)
         if searcher == "hyperband" and resource is None:
             messagebox.showwarning(
@@ -16794,7 +16996,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.ml.tuner import (
                 Hyperband,
                 HyperParameters,
+                MedianPruner,
                 RandomSearch,
+                TPESearch,
                 make_cv_splitter,
                 resource_bounds,
             )
@@ -16802,10 +17006,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             def on_trial(info: dict[str, Any]) -> None:
                 # the status bar's heartbeat (100x-106): trial/total
                 # drive the determinate bar + ETA, best-so-far rides
-                # along as the note.
+                # along as the note.  (100x-160) a pruned trial says so
+                # in the same note discipline.
                 note = ""
                 if info.get("best_score") is not None:
                     note = f"best {info['best_score']:.3f}"
+                if info.get("state") == "pruned":
+                    note = (note + " · " if note else "") + "trial pruned"
                 if info.get("error") is not None:
                     note = (note + " · " if note else "") + "trial failed"
                 notify(info["trial"], info.get("total"), note)
@@ -16818,6 +17025,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 frame[numeric], y, random_state=42
             )
             ladder: tuple[int, int] | None = None
+            # (100x-160) the pruner rides the full-budget searchers only
+            # -- Hyperband's rungs do their own halving.
+            pruner = (
+                MedianPruner()
+                if pruner_choice == "median" and searcher != "hyperband"
+                else None
+            )
             if searcher == "hyperband":
                 # the ladder IS the family's declared resource grid --
                 # r_min its smallest value, R its largest (the full
@@ -16836,6 +17050,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     seed=42,
                     on_trial=on_trial,
                 )
+            elif searcher == "tpe":
+                # (100x-160) Optuna's TPESampler absorbed: the
+                # below/above Parzen mixtures over the informative
+                # trials, the first n_startup_trials uniform.
+                tuner = TPESearch(
+                    hypermodel,
+                    objective=objective,
+                    max_trials=max_trials,
+                    cv=cv,
+                    task=task,
+                    seed=42,
+                    on_trial=on_trial,
+                    pruner=pruner,
+                )
             else:
                 tuner = RandomSearch(
                     hypermodel,
@@ -16845,6 +17073,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     task=task,
                     seed=42,
                     on_trial=on_trial,
+                    pruner=pruner,
                 )
             results = tuner.search(x_train, y_train)
             # the baseline: the hypermodel's defaults under the tuner's
@@ -16883,11 +17112,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 + tune_config_text(results.best_params)
             )
             ranked = sorted(
-                (t for t in results.trials if not t.failed),
+                (t for t in results.trials if not t.failed and not t.pruned),
                 key=lambda t: t.score,
                 reverse=True,
             )
             failed = [t for t in results.trials if t.failed]
+            # (100x-160) pruned trials: cut short by the pruner, their
+            # partial fold scores kept -- shown AFTER the ranking with
+            # their last reported intermediate as the honest partial
+            # score (marked "·"), the full row riding the export frame.
+            pruned = [t for t in results.trials if t.pruned]
             # The board's Save-table twin exports this frame (100x-151
             # audit, Finding 1): the trial ranking the tree shows is the
             # FOURTH filler the button's texts promise.  The frame
@@ -16922,6 +17156,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 row["score"] = trial.score
                 row["score_std"] = trial.score_std
                 board_rows.append(row)
+            for trial in pruned:
+                row = {
+                    "rank": None,
+                    "trial": trial.trial_id,
+                    "configuration": tune_config_text(trial.hyperparameters),
+                }
+                if ladder is not None:
+                    row["resource"] = trial.resource
+                row["score"] = (
+                    float(trial.fold_scores[-1])
+                    if trial.fold_scores
+                    else float("nan")
+                )
+                row["score_std"] = trial.score_std
+                board_rows.append(row)
             self._board_frame = pd.DataFrame(board_rows, columns=board_columns)
             self._board_tree.delete(*self._board_tree.get_children())
             if ladder is None:
@@ -16945,15 +17194,42 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 cells.append(f"{trial.score_std:.4f}")
                 return cells
 
+            def pruned_row_values(trial: Any) -> list[str]:
+                cells = ["pruned", str(trial.trial_id),
+                         _cell_text(tune_config_text(trial.hyperparameters), limit=52)]
+                if ladder is not None:
+                    cells.append("" if trial.resource is None else f"{trial.resource:g}")
+                # the honest partial score: the last running fold mean
+                # the pruner acted on, marked so it never reads as a
+                # full CV score.
+                partial = (
+                    f"{float(trial.fold_scores[-1]):.4f}·"
+                    if trial.fold_scores
+                    else "—"
+                )
+                cells.append(partial)
+                cells.append("—")
+                return cells
+
             for rank, trial in enumerate(ranked, start=1):
                 self._board_tree.insert("", "end", values=row_values(rank, trial))
             for trial in failed:
                 self._board_tree.insert("", "end", values=row_values("—", trial))
+            for trial in pruned:
+                self._board_tree.insert("", "end", values=pruned_row_values(trial))
+            pruned_note = (
+                f", {len(pruned)} pruned (last fold mean ·)" if pruned else ""
+            )
             if ladder is None:
+                searcher_label = (
+                    "TPESearch (Optuna's Parzen sampler)" if searcher == "tpe"
+                    else "RandomSearch"
+                )
                 self._board_status.configure(
-                    text=f"RandomSearch over {estimator} ({task}) — "
+                    text=f"{searcher_label} over {estimator} ({task}) — "
                     f"{len(results.trials)} trial(s), objective {objective}; "
                     f"ranked by mean CV score, failed trials last"
+                    f"{pruned_note}"
                 )
             else:
                 r_min, r_max = ladder
@@ -18054,6 +18330,357 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._ml_result_note.configure(text=note)
 
         self._start_job("SHAP summary", work, render)
+
+    # ------------------------------------------------------------------
+    # (100x-160) The shap/shap repository absorption -- five more
+    # figures over the last run's held-out split: the local pair
+    # (waterfall + force), the dependence scatter, the heatmap, and the
+    # cohort group difference.  The shared machinery mirrors
+    # _ml_run_shap's (the run-tuple discipline, the worker-thread
+    # computation, the figure landing in the Results card's host).
+    # ------------------------------------------------------------------
+    def _ml_plot_shap_waterfall(self) -> None:
+        """The LOCAL explanation walk of one held-out row (100x-160).
+
+        ``plot_shap_waterfall`` behind an asking surface: the dialog
+        takes the 0-based row index into the run's held-out split
+        (defaulting to 0), the walk itself draws base value → that
+        row's prediction, signed bars largest-first.
+        """
+        row = self._ask_shap_row("waterfall")
+        if row is None:
+            return
+        self._ml_run_shap_figure("waterfall", row=row)
+
+    def _ml_plot_shap_force(self) -> None:
+        """The static additive force bar of one held-out row (100x-160).
+
+        ``plot_shap_force`` behind the same asking surface: the compact
+        twin of the waterfall (one stacked bar, both ends annotated).
+        """
+        row = self._ask_shap_row("force")
+        if row is None:
+            return
+        self._ml_run_shap_figure("force", row=row)
+
+    def _ml_plot_shap_dependence(self) -> None:
+        """The value-vs-SHAP scatter of one feature (100x-160).
+
+        ``plot_shap_dependence`` behind an asking surface: the dialog
+        takes the feature name (defaulting to the top mean-|SHAP|
+        feature -- the summary is computed on the worker thread first,
+        so the default comes from the run's own record).
+        """
+        feature = self._ask_shap_feature()
+        if feature is None:
+            return
+        self._ml_run_shap_figure("dependence", feature=feature)
+
+    def _ml_plot_shap_heatmap(self) -> None:
+        """The instances × features SHAP heatmap (100x-160).
+
+        ``plot_shap_heatmap`` needs no asking: the whole held-out split
+        rides the figure, rows clustered over |SHAP|.
+        """
+        self._ml_run_shap_figure("heatmap")
+
+    def _ml_plot_shap_group_difference(self) -> None:
+        """The cohort mean-SHAP difference (100x-160).
+
+        ``group_difference`` + ``plot_shap_group_difference``: the run's
+        held-out rows split at their OWN target median (the honest
+        automatic cohorts -- high-target vs low-target), the per-feature
+        mean difference with 5-95% bootstrap whiskers.
+        """
+        self._ml_run_shap_figure("group")
+
+    def _ask_shap_row(self, kind: str) -> int | None:
+        """Ask which held-out row to explain (0-based, default 0)."""
+        if simpledialog is None:  # pragma: no cover - headless import
+            return None
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo(
+                "No trained model",
+                "Train a model first -- the SHAP figures explain the "
+                "last run's fitted model over its held-out rows.",
+            )
+            return None
+        _trained, _report, _task, _x_train, _y_train, x_test, _y_test, _target = run
+        n_rows = len(x_test)
+        try:
+            value = parse_int(
+                simpledialog.askstring(
+                    f"SHAP {kind}",
+                    f"Which held-out row should the {kind} explain?\n\n"
+                    f"0-based index into the run's held-out split "
+                    f"(0 … {n_rows - 1}):",
+                    initialvalue="0",
+                    parent=self,
+                ),
+                "row",
+                minimum=0,
+                maximum=max(n_rows - 1, 0),
+            )
+        except (ValueError, TypeError):
+            return None  # cancelled or blank -- quiet, not an error
+        return value
+
+    def _ask_shap_feature(self) -> str | None:
+        """Ask which feature the dependence scatter should show."""
+        if simpledialog is None:  # pragma: no cover - headless import
+            return None
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo(
+                "No trained model",
+                "Train a model first -- the SHAP figures explain the "
+                "last run's fitted model over its held-out rows.",
+            )
+            return None
+        _trained, _report, _task, _x_train, _y_train, x_test, _y_test, _target = run
+        columns = (
+            [str(column) for column in x_test.columns]
+            if hasattr(x_test, "columns")
+            else [f"x{i}" for i in range(x_test.shape[1])]
+        )
+        text = simpledialog.askstring(
+            "SHAP dependence",
+            "Which feature's value-vs-SHAP scatter?\n\n"
+            "(the run's held-out columns; the colour defaults to the "
+            "strongest interacting feature):",
+            initialvalue=columns[0],
+            parent=self,
+        )
+        if text is None or not text.strip():
+            return None
+        name = text.strip()
+        if name not in columns:
+            messagebox.showwarning(
+                "Unknown feature",
+                f"{name!r} is not one of the run's held-out columns "
+                f"({len(columns)} available).",
+            )
+            return None
+        return name
+
+    def _ml_run_shap_figure(
+        self,
+        kind: str,
+        row: int | None = None,
+        feature: str | None = None,
+    ) -> None:
+        """The shared body of the five 100x-160 SHAP buttons.
+
+        One worker-thread pass computes the ``ShapSummary`` (the
+        optional-gated ``shap`` computation) and draws the requested
+        figure; the render lands it in the Results card's host with the
+        house note discipline.
+        """
+        run = getattr(self, "_ml_last_run", None)
+        if run is None:
+            messagebox.showinfo(
+                "No trained model",
+                "Train a model first -- the SHAP figures explain the "
+                "last run's fitted model over its held-out rows.",
+            )
+            return
+        trained, _report, _task, _x_train, _y_train, x_test, y_test, target = run
+        if not self._require_pharmaml() or not self._require("matplotlib", "the figure"):
+            return
+
+        def work() -> Any:
+            import numpy as np
+
+            from pharmaml.ml import group_difference, shap_summary
+            from pharmaml.viz import (
+                plot_shap_dependence,
+                plot_shap_force,
+                plot_shap_group_difference,
+                plot_shap_heatmap,
+                plot_shap_waterfall,
+            )
+
+            summary = shap_summary(trained, x_test)
+            suffix = f" — {summary.model_name} (held-out rows, target {target})"
+            if kind == "waterfall":
+                return summary, plot_shap_waterfall(
+                    summary, row or 0, title="SHAP waterfall" + suffix
+                )
+            if kind == "force":
+                return summary, plot_shap_force(
+                    summary, row or 0, title="SHAP force" + suffix
+                )
+            if kind == "dependence":
+                return summary, plot_shap_dependence(
+                    summary, feature or summary.names[0],
+                    title="SHAP dependence" + suffix,
+                )
+            if kind == "heatmap":
+                return summary, plot_shap_heatmap(
+                    summary, title="SHAP heatmap" + suffix
+                )
+            # the group difference: the automatic cohorts -- the run's
+            # own held-out target split at its median.
+            target_values = np.asarray(y_test, dtype=float).ravel()
+            median = float(np.median(target_values))
+            mask = target_values > median
+            difference = group_difference(
+                summary, mask, label=f"target > {median:.4g}"
+            )
+            return summary, plot_shap_group_difference(
+                difference,
+                title=(
+                    f"SHAP group difference — {summary.model_name} "
+                    f"(held-out rows above vs below the {target} median "
+                    f"{median:.4g})"
+                ),
+            )
+
+        def render(payload: tuple[Any, Any]) -> None:
+            summary, figure = payload
+            self._render_figure(self._ml_host, figure)
+            top = summary.ranking(top_n=3)
+            leaders = ", ".join(f"{name} {value:.3f}" for name, value in top)
+            note = (
+                f"SHAP {kind} replaces the previous figure — Train & "
+                "evaluate brings it back · "
+                f"{summary.n_samples} held-out row(s) · {len(summary.names)} "
+                f"feature(s) · top: {leaders}"
+            )
+            if kind in {"waterfall", "force"} and row is not None:
+                note += f" · row {row}"
+            if kind == "dependence" and feature is not None:
+                note += f" · feature {feature}"
+            self._ml_result_note.configure(text=note)
+
+        self._start_job(f"SHAP {kind}", work, render)
+
+    # ------------------------------------------------------------------
+    # (100x-160) The optuna/optuna repository absorption -- the seven
+    # study figures over the last search's records.  All render into
+    # the Results card's figure host, exactly like the SHAP figures.
+    # ------------------------------------------------------------------
+    def _tune_study_figure(self, name: str, builder: Any) -> None:
+        """The shared body of the seven study-figure buttons (100x-160).
+
+        ``builder(results)`` returns the figure on the worker thread;
+        the render lands it in the Results host with the house note.
+        """
+        if self._tune_last is None:
+            messagebox.showinfo(
+                "No search yet",
+                "Run a hyperparameter search first -- the study figures "
+                "draw the last search's trials.",
+            )
+            return
+        results, estimator, task, target = self._tune_last
+        if not self._require_pharmaml() or not self._require("matplotlib", "the figure"):
+            return
+
+        def work() -> Any:
+            return builder(results)
+
+        def render(figure: Any) -> None:
+            self._render_figure(self._ml_host, figure)
+            completed = sum(
+                1 for t in results.trials
+                if getattr(t, "resolved_state", "complete") == "complete"
+            )
+            pruned = sum(
+                1 for t in results.trials
+                if getattr(t, "resolved_state", "") == "pruned"
+            )
+            self._ml_result_note.configure(
+                text=(
+                    f"{name} over the last {estimator} search ({task}, target "
+                    f"{target}) replaces the previous figure — run another "
+                    f"search to refresh · {completed} completed · "
+                    f"{pruned} pruned trial(s)"
+                )
+            )
+
+        self._start_job(f"study figure: {name}", work, render)
+
+    def _tune_plot_history(self) -> None:
+        """plot_optimization_history over the last search (100x-160)."""
+
+        def builder(results: Any) -> Any:
+            from pharmaml.viz import plot_optimization_history
+
+            return plot_optimization_history(
+                results, title="Optimization history — best-so-far walk"
+            )
+
+        self._tune_study_figure("Optimization history", builder)
+
+    def _tune_plot_slice(self) -> None:
+        """plot_slice over the last search (100x-160)."""
+
+        def builder(results: Any) -> Any:
+            from pharmaml.viz import plot_slice
+
+            return plot_slice(results, title="Slice — objective per hyperparameter")
+
+        self._tune_study_figure("Slice plots", builder)
+
+    def _tune_plot_parallel(self) -> None:
+        """plot_parallel_coordinate over the last search (100x-160)."""
+
+        def builder(results: Any) -> Any:
+            from pharmaml.viz import plot_parallel_coordinate
+
+            return plot_parallel_coordinate(
+                results, title="Parallel coordinates — trials through the space"
+            )
+
+        self._tune_study_figure("Parallel coordinates", builder)
+
+    def _tune_plot_importances(self) -> None:
+        """param_importances + plot_param_importances (100x-160)."""
+
+        def builder(results: Any) -> Any:
+            from pharmaml.ml.tuner import param_importances
+            from pharmaml.viz import plot_param_importances
+
+            record = param_importances(results)
+            return plot_param_importances(
+                record, title="Hyperparameter importances (random forest MDI)"
+            )
+
+        self._tune_study_figure("Param importances", builder)
+
+    def _tune_plot_edf(self) -> None:
+        """plot_edf over the last search (100x-160)."""
+
+        def builder(results: Any) -> Any:
+            from pharmaml.viz import plot_edf
+
+            return plot_edf(results, title="Objective EDF — where the good tail starts")
+
+        self._tune_study_figure("EDF", builder)
+
+    def _tune_plot_timeline(self) -> None:
+        """plot_timeline over the last search (100x-160)."""
+
+        def builder(results: Any) -> Any:
+            from pharmaml.viz import plot_timeline
+
+            return plot_timeline(results, title="Trial timeline — durations by state")
+
+        self._tune_study_figure("Timeline", builder)
+
+    def _tune_plot_intermediates(self) -> None:
+        """plot_intermediate_values over the last search (100x-160)."""
+
+        def builder(results: Any) -> Any:
+            from pharmaml.viz import plot_intermediate_values
+
+            return plot_intermediate_values(
+                results, title="Intermediate values — running fold means"
+            )
+
+        self._tune_study_figure("Intermediates", builder)
 
     def _ml_decode_bit(self) -> None:
         """Ask for a bit index + SMILES, then decode (100x-152).

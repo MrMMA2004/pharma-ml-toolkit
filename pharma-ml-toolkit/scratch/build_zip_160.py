@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""(100x-159) The round-end archive builder — v1.2.95.
+"""(100x-160) The round-end archive builder — v1.2.96.
 
 The standing recipe, codified: archive-out EVERY historical release zip
 FIRST (the download/ folder must never hold more than the archive being
@@ -54,7 +54,7 @@ def iter_files():
             path = Path(dirpath) / name
             if path.suffix.lower() in EXCLUDE_SUFFIXES:
                 continue
-            if name == "build_zip_159.py" and "scratch" in dirpath:
+            if name == "build_zip_160.py" and "scratch" in dirpath:
                 pass  # this script ships too (the standing pattern)
             yield path
 

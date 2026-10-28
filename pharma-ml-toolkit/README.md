@@ -6,7 +6,7 @@ domains into one coherent package:
 | Domain | What it does |
 |---|---|
 | **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
-| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families** + **hierarchical SVR**), cross-validated training (binary **and multiclass**), evaluation, persistence, keras-tuner-style hyperparameter search (`RandomSearch` / `Hyperband` over `HyperParameters` spaces, with the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines and `resource_bounds` sizing Hyperband ladders from the family's own declared grid) |
+| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families** + **hierarchical SVR**), cross-validated training (binary **and multiclass**), evaluation, persistence, hyperparameter search (`RandomSearch` / **`TPESearch`** (Optuna's Parzen sampler) / `Hyperband` over `HyperParameters` spaces — with **`PercentilePruner`/`MedianPruner` fold-loop pruning**, Optuna-style trial states + durations + intermediates, **`param_importances`** (the MDI forest) — plus the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines and `resource_bounds` sizing Hyperband ladders from the family's own declared grid) |
 | **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
 | **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management |
@@ -14,7 +14,7 @@ domains into one coherent package:
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (**3325 tests**).
+exceptions, input validation, and pytest coverage** (**3472 tests**).
 
 ---
 
@@ -293,7 +293,7 @@ pharma-ml-toolkit/
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
 ├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
-├── tests/                   # 3325 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
+├── tests/                   # 3472 pytest cases across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -933,20 +933,45 @@ the Data & ML tab's dataset, a ten-method roster (PCA / K-Means / GMM
 parameters, the record's own summary, its canonical figure, the 2-D
 scatter twin coloured by any column, and the CSV export.
 
-#### SHAP (`ml.explain`) — the TreeExplainer beeswarm + the top-20 bar
+#### SHAP (`ml.explain`) — the TreeExplainer surface, five figures deep
 
 The upload's LAST unabsorbed block (its lines 472-528), shipped as the
-optional-gated surface the round-33 audit predicted:
+optional-gated surface the round-33 audit predicted — then extended by
+the round-43 shap/shap repository review with the plot gallery's
+remaining signature figures (all pure matplotlib; only the computation
+needs shap):
 
 ```python
-from pharmaml.ml import shap_summary
-from pharmaml.viz import plot_shap_beeswarm, plot_shap_importance
+from pharmaml.ml import group_difference, shap_interactions, shap_summary
+from pharmaml.viz import (plot_shap_beeswarm, plot_shap_dependence,
+                          plot_shap_force, plot_shap_group_difference,
+                          plot_shap_heatmap, plot_shap_importance,
+                          plot_shap_waterfall)
 
 summary = shap_summary(fitted_gbr, x_test)   # needs: pip install 'pharmaml[explain]'
 summary.ranking(top_n=3)                     # mean |SHAP| per feature, descending
 plot_shap_beeswarm(summary)                  # every (sample, feature) point,
                                             # coloured by the feature's own value
 plot_shap_importance(summary)                # the compact top-20 bar
+plot_shap_waterfall(summary, sample=0)       # the LOCAL explanation: the
+                                            # base value -> prediction walk
+plot_shap_force(summary, sample=0)           # the static additive bar twin
+plot_shap_dependence(summary, "MolWt")       # value vs SHAP, coloured by the
+                                            # strongest INTERACTING feature
+plot_shap_heatmap(summary)                   # instances x features, rows
+                                            # clustered over |SHAP|
+
+# the cohort decomposition -- WHY does one cohort score differently?
+import numpy as np
+mask = np.asarray(y_test) > np.median(y_test)   # high- vs low-target rows
+difference = group_difference(summary, mask, label="high target")
+difference.ranking(top_n=3)                     # per-feature mean SHAP gap,
+                                                # 5-95% bootstrap bounds
+plot_shap_group_difference(difference)          # the bars + whiskers figure
+
+# the exact pairwise interaction cube (same optional gate):
+interactions = shap_interactions(fitted_gbr, x_test)
+interactions.ranking(top_n=3)   # (feature_a, feature_b, mean |interaction|)
 ```
 
 `TreeExplainer` only (LightGBM / XGBoost / CatBoost / sklearn trees —
@@ -954,9 +979,10 @@ the upload's own choice); anything else gets the typed error naming
 the model-agnostic `permutation_feature_importance` sibling instead
 of a slow `KernelExplainer` approximation, and multiclass is refused
 with the same honesty. The beeswarm is PURE matplotlib — only the
-computation needs shap, the drawing never does. The GUI twin is the
-Results card's fourth row (**SHAP beeswarm / SHAP top-20 bar**), drawn
-over the run's own held-out rows.
+computation needs shap, the drawing never does. The GUI twins are the
+Results card's four SHAP rows (**beeswarm / top-20 bar / waterfall… /
+force… / dependence… / heatmap / group difference…**), drawn over the
+run's own held-out rows.
 
 #### Hierarchical SVR (`hsvr`) — local specialists for heterogeneous data
 
@@ -981,12 +1007,23 @@ hsvr = HierarchicalSVR(n_clusters=3, alpha=0.8, radius_factor=2.0,
                        random_state=42).fit(X_train, y_train)
 ```
 
-#### Keras-tuner-style hyperparameter search (`ml.tuner`)
+#### Hyperparameter search (`ml.tuner`) — Keras Tuner's model, Optuna's samplers and pruners
 
 The `HyperParameters` / `RandomSearch` / `Hyperband` programming model from
 [Keras Tuner](https://keras.io/keras_tuner/), re-implemented over ANY
 scikit-learn-compatible estimator — no TensorFlow requirement (the toolkit's deep
-nets are PyTorch, the legacy ANN is sklearn's MLP). The hypermodel declares its
+nets are PyTorch, the legacy ANN is sklearn's MLP) — then extended by the
+round-43 optuna/optuna repository review with **`TPESearch`** (the Tree-structured
+Parzen Estimator sampler: below/above KDE mixtures, gamma = min(ceil(0.1n), 25),
+`n_startup_trials` uniform bootstrap, `n_ei_candidates` acquisition),
+**`PercentilePruner`/`MedianPruner`** (the fold-loop pruner: after each CV fold
+the running mean is reported; a trial below the percentile of the completed
+trials' same-fold values is cut short — state `pruned`, partial `fold_scores`
+kept), Optuna-style trial **states + durations + intermediates**, log-scale
+`hp.Float(..., log=True)`, **`param_importances`** (the MDI random-forest
+attribution) and the seven **study figures** (`plot_optimization_history`,
+`plot_slice`, `plot_parallel_coordinate`, `plot_param_importances`, `plot_edf`,
+`plot_timeline`, `plot_intermediate_values`). The hypermodel declares its
 space by calling `hp.Int(...)`/`hp.Float(...)`/`hp.Choice(...)`/`hp.Boolean(...)`
 inside the builder; the tuner samples, cross-validates and refits the winner:
 
@@ -999,6 +1036,25 @@ results = RandomSearch(build_ann_regressor, objective="r2",
 results.best_params, results.best_score, results.best_estimator
 print(results.summary())            # the leaderboard
 results.trials_frame().to_csv("trials.csv", index=False)
+
+# Optuna's TPE sampler -- same contract, Parzen-guided sampling:
+from pharmaml.ml import TPESearch
+results = TPESearch(build_ann_regressor, objective="r2",
+                    max_trials=12, cv=3, seed=42).search(X, y)
+
+# with the median pruner cutting hopeless trials after each fold:
+from pharmaml.ml import MedianPruner
+results = RandomSearch(build_ann_regressor, objective="r2", max_trials=12,
+                       cv=3, seed=42, pruner=MedianPruner()).search(X, y)
+pruned = [t for t in results.trials if t.pruned]   # partial fold scores kept
+
+# which hyperparameter actually mattered?  the MDI forest:
+from pharmaml.ml import param_importances
+param_importances(results).ranking(top_n=3)   # normalized importances
+
+# the study figures (any TunerResults, pure matplotlib):
+from pharmaml.viz import plot_optimization_history, plot_slice
+plot_optimization_history(results)   # dots + best-so-far + pruned markers
 
 # Successive halving over the resource hyperparameter (epochs for the deep nets,
 # max_iter for the sklearn ANN; batchnorm is itself searchable):
@@ -1023,16 +1079,22 @@ baseline = cross_val_score(build_ann_regressor(HyperParameters()), X, y,
 Ready-made hypermodels: `build_ann_regressor` / `build_ann_classifier` (sklearn
 MLP), `build_deep_regressor` / `build_deep_classifier` (PyTorch, with
 `batchnorm` a `hp.Boolean` slot) and `build_hsvr`. The CLI twin is
-`pharmaml ml tune` (random or hyperband, leaderboard + trials table +
-`--save-best` bundle) and the desktop playground's **Hyperparameter
-search** card runs the same search in either flavour — RandomSearch, or
+`pharmaml ml tune` (random, **tpe** or hyperband, leaderboard + trials
+table + `--save-best` bundle) and the desktop playground's
+**Hyperparameter search** card runs the same search in all three
+flavours — RandomSearch, **TPESearch (Optuna's Parzen sampler)**, or
 Hyperband with the rung ladder sized from the family's own declared grid
 via `resource_bounds` (a resource column in the leaderboard, the honest
 budget line: “budget 3998 of a naive 6000 max_iter (33% saved)”) — with
-the defaults baseline, an apply-best bridge into the Deep Learning tab
-(the winner's rung resource rides along) and a trials CSV export (mouse
-edition). Failed trials are recorded, not fatal; sampling is seeded, so
-the same seed + data always reproduce the same search.
+the **median pruner choice** (pruned trials get their own leaderboard
+rows, the partial fold score marked so it never reads as a full CV
+score), the defaults baseline, an apply-best bridge into the Deep
+Learning tab (the winner's rung resource rides along), a trials CSV
+export (mouse edition) and the **seven study figures** over the last
+search (optimization history / slice / parallel coordinates / param
+importances / EDF / timeline / intermediates). Failed and pruned trials
+are recorded, not fatal; sampling is seeded, so the same seed + data
+always reproduce the same search.
 
 #### 3D-RISM-KH solvation descriptors (`chem.rism`)
 

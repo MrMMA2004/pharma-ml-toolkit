@@ -253,9 +253,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "regression only)",
     )
     tune.add_argument(
-        "--searcher", choices=["random", "hyperband"], default="random",
-        help="search strategy: uniform random sampling or successive-halving "
-        "Hyperband over the resource hyperparameter",
+        "--searcher", choices=["random", "hyperband", "tpe"], default="random",
+        help="search strategy: uniform random sampling, successive-halving "
+        "Hyperband over the resource hyperparameter, or tpe = Optuna-style "
+        "Tree-structured Parzen Estimator",
     )
     tune.add_argument(
         "--max-trials", type=int, default=10,
@@ -1349,7 +1350,7 @@ def _cmd_ml_tune(args: argparse.Namespace) -> int:
     ``ml check``-compatible bundle (``--save-best``).
     """
     from pharmaml.ml.persistence import save_model
-    from pharmaml.ml.tuner import Hyperband, RandomSearch
+    from pharmaml.ml.tuner import Hyperband, RandomSearch, TPESearch
 
     dataset = _load_cli_dataset(args)
     tune_task = dataset.task
@@ -1385,6 +1386,17 @@ def _cmd_ml_tune(args: argparse.Namespace) -> int:
 
     if args.searcher == "random":
         tuner: Any = RandomSearch(
+            hypermodel,
+            objective=objective,
+            max_trials=args.max_trials,
+            cv=args.cv,
+            task=tune_task,
+            seed=args.seed,
+        )
+    elif args.searcher == "tpe":
+        # No pruner on the CLI this round — the playground GUI owns
+        # the pruner choice (Task 6 wires it into the Tune card).
+        tuner = TPESearch(
             hypermodel,
             objective=objective,
             max_trials=args.max_trials,

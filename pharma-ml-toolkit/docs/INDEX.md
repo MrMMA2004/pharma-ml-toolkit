@@ -126,20 +126,26 @@ after adding new public functions.
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
 | `EmbeddingRecord` | class | Typed report of :func:`manifold_embedding`. |
 | `GmmResult` | class | Typed report of :func:`gmm_cluster`. |
+| `GroupDifference` | class | Cohort mean-SHAP differences with a bootstrap interval (100x-160). |
 | `HierarchicalSVR` | class | Hierarchical Support Vector Regression (global + per-cluster SVRs). |
 | `HyperParameters` | class | The keras-tuner container of hyperparameter definitions. |
 | `Hyperband` | class | Hyperband successive halving over a resource hyperparameter. |
+| `HyperparameterImportance` | class | Per-hyperparameter importances of a finished search. |
 | `KMeansResult` | class | Typed report of :func:`kmeans_cluster`. |
 | `KdeResult` | class | Typed report of :func:`kde_fit`. |
+| `MedianPruner` | function | The median pruner: ``PercentilePruner(50)``. |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
 | `OOFStackingResult` | class | Outcome of one out-of-fold stacking run. |
 | `PcaResult` | class | Typed report of :func:`pca_reduce`. |
+| `PercentilePruner` | class | Prune trials whose running CV mean falls below a percentile. |
 | `PermutationImportance` | class | Permutation feature importances on held-out data. |
 | `QuantileIntervals` | class | Prediction intervals from gradient-boosted quantile regression. |
 | `RandomSearch` | class | Random search over the hypermodel's declared space. |
 | `ResidualMLPClassifier` | class | Residual (skip-connection) deep-network classifier (PyTorch). |
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
+| `ShapInteractions` | class | Pairwise SHAP interaction values of a fitted tree model (100x-160). |
 | `ShapSummary` | class | SHAP values of a fitted tree model over a feature frame. |
+| `TPESearch` | class | Tree-structured Parzen Estimator search — Optuna's flagship sampler. |
 | `TrialResult` | class | One evaluated trial. |
 | `TunerResults` | class | The outcome of one :meth:`RandomSearch.search` / Hyperband run. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
@@ -159,6 +165,7 @@ after adding new public functions.
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
 | `gmm_cluster` | function | Gaussian mixture model (PDSH 05.12) with the AIC/BIC sweep. |
+| `group_difference` | function | Cohort difference of a SHAP summary, with a bootstrap interval. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `kde_fit` | function | Kernel density estimation (PDSH 05.13) for ONE numeric column. |
 | `kmeans_cluster` | function | k-means clustering (PDSH 05.11), with the elbow AND the silhouette. |
@@ -168,6 +175,7 @@ after adding new public functions.
 | `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
 | `manifold_embedding` | function | Project a feature table onto 2-D with a manifold learner (PDSH 05.10). |
+| `param_importances` | function | Random-forest (MDI) hyperparameter importances of a finished search. |
 | `pca_reduce` | function | Principal component analysis (PDSH 05.09). |
 | `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
 | `predict_with_uncertainty` | function | Predictive mean and per-row standard deviation of a GP model. |
@@ -176,6 +184,7 @@ after adding new public functions.
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
 | `select_kbest_union` | function | Select the UNION of per-method top-k columns (upgrades look.ipynb). |
+| `shap_interactions` | function | Pairwise SHAP interaction values of a fitted tree model over ``X``. |
 | `shap_summary` | function | SHAP values of a fitted tree model over ``X``. |
 | `split_features_target` | function | Separate features from the target column. |
 | `stack_oof_regressors` | function | Stack registry regressors out-of-fold and rank the blenders. |
@@ -365,17 +374,22 @@ after adding new public functions.
 | `plot_cv_scores` | function | Per-fold CV scores as bars with the mean line and ±std band. |
 | `plot_descriptor_distributions` | function | Histogram grid over the numeric columns of a table. |
 | `plot_dose_accumulation` | function | One-compartment superposition of an intermittent IV regimen. |
+| `plot_edf` | function | The empirical CDF of the completed trials' scores (100x-160). |
 | `plot_energy_distribution` | function | Histogram of per-ligand best binding energies (kcal/mol). |
 | `plot_feature_importance` | function | Top-N feature importances as horizontal bars. |
 | `plot_gmm_selection` | function | AIC/BIC vs component count -- the handbook's own GMM selector. |
 | `plot_gp_uncertainty` | function | Parity scatter with ``± z·σ`` error bars — the GP's honest readout. |
 | `plot_hexbin_density` | function | Hexagonal binning -- the honest 2-D density for big scatter plots. |
+| `plot_intermediate_values` | function | The per-trial running fold-mean curves (100x-160). |
 | `plot_kde_density` | function | The KDE curve over its own bandwidth story. |
 | `plot_kmeans_diagnostics` | function | Inertia elbow AND silhouette sweep -- the auditable k choice. |
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
 | `plot_manifold_embedding` | function | Scatter an embedding, coloured by a target (the digits-figure pattern). |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
+| `plot_optimization_history` | function | The objective per trial + the best-so-far step line (100x-160). |
+| `plot_parallel_coordinate` | function | One polyline per trial across the params + objective (100x-160). |
+| `plot_param_importances` | function | The MDI hyperparameter-importance bars (100x-160). |
 | `plot_pareto_front` | function | One scatter per MultiObjective run: dominated points muted, front lit. |
 | `plot_pca_variance` | function | Explained-variance ladder -- the "how many components?" answer. |
 | `plot_permutation_heatmap` | function | Cross-model permutation-importance heatmap (features × models). |
@@ -388,10 +402,17 @@ after adding new public functions.
 | `plot_rl_introspection` | function | One figure per RL run: the score story + the prior-drift diagnostics. |
 | `plot_roc_curves` | function | Receiver-operating curves — binary or one-vs-rest multiclass. |
 | `plot_shap_beeswarm` | function | The SHAP beeswarm in PURE matplotlib -- ``D2.py``'s GAP-5 figure. |
+| `plot_shap_dependence` | function | One feature's value vs its SHAP value, coloured by its partner (100x-160). |
+| `plot_shap_force` | function | The additive force plot, static matplotlib twin (100x-160). |
+| `plot_shap_group_difference` | function | Cohort mean-SHAP difference bars with bootstrap whiskers (100x-160). |
+| `plot_shap_heatmap` | function | The instances x features SHAP matrix, clustered (100x-160). |
 | `plot_shap_importance` | function | Top-N mean-|SHAP| horizontal bars -- ``D2.py``'s own top-20 bar. |
+| `plot_shap_waterfall` | function | The LOCAL explanation: the base-value -> prediction walk (100x-160). |
 | `plot_signed_correlations` | function | Top-N signed feature-target correlations as a horizontal bar chart. |
 | `plot_similarity_heatmap` | function | Heat-map of a pairwise similarity matrix. |
+| `plot_slice` | function | One param-vs-objective panel per hyperparameter (100x-160). |
 | `plot_table_comparison` | function | Overlap breakdown of a ligand-table :class:`TableComparison`. |
+| `plot_timeline` | function | Per-trial duration bars coloured by state (100x-160). |
 | `plot_top_ligands` | function | Horizontal bars of the strongest-binding ligands. |
 | `plot_training_history` | function | Epoch-by-epoch loss curves with the early-stopping verdict. |
 | `require_matplotlib` | function | Import matplotlib lazily and pick the right backend. |

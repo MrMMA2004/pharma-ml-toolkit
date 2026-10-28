@@ -2913,3 +2913,68 @@ class TestUnsupervisedPlots:
         ):
             assert name in viz.__all__, name
             assert callable(getattr(viz, name))
+
+
+class TestBackendGuard:
+    """(100x-160) ``require_matplotlib``'s notebook detection.
+
+    The old guard — ``"IPython" not in sys.modules`` — was fooled by any
+    library that merely IMPORTS IPython (``import shap`` pulls it in), so
+    a desktop process that had explained a tree model silently skipped
+    the headless Agg pin, pyplot resolved a GUI backend under $DISPLAY,
+    and worker-thread figures became off-main-thread Tk window
+    creations (the intermittent ``Illegal instruction`` the round's new
+    SHAP surfaces exposed).  The fix: only a RUNNING shell
+    (``IPython.get_ipython()`` returning a shell) keeps the inline
+    backend."""
+
+    def test_bare_ipython_import_still_forces_agg(self, monkeypatch: Any) -> None:
+        import types
+
+        from pharmaml.viz import _compat
+
+        fake = types.ModuleType("IPython")
+        fake.get_ipython = lambda: None  # imported, no shell running
+        monkeypatch.setitem(sys.modules, "IPython", fake)
+        try:
+            # a non-GUI backend that is NOT Agg -- proves the flip; the
+            # GUI backends are refused headless when pyplot is already
+            # imported, so svg is the honest stand-in either way.
+            matplotlib.use("svg", force=True)
+            _compat.require_matplotlib()
+            assert matplotlib.get_backend() == "Agg"
+        finally:
+            matplotlib.use("Agg", force=True)
+
+    def test_running_shell_keeps_the_inline_backend(self, monkeypatch: Any) -> None:
+        import types
+        from unittest import mock
+
+        from pharmaml.viz import _compat
+
+        # matplotlib's own IPython integration is deep (pyplot's
+        # install_repl_displayhook registers a post_execute event on the
+        # shell, reads the module's version_info, and may call
+        # ip.enable_gui on GUI backend switches) -- a MagicMock shell
+        # absorbs every one of those, where a hand-rolled object dies
+        # attribute by attribute.
+        shell = mock.MagicMock(name="running_ipython_shell")
+        fake = types.ModuleType("IPython")
+        fake.get_ipython = lambda: shell  # a shell IS running
+        fake.version_info = (9, 0, 0)
+        monkeypatch.setitem(sys.modules, "IPython", fake)
+        try:
+            matplotlib.use("svg", force=True)  # the inline resolution
+            _compat.require_matplotlib()
+            # not hijacked -- the notebook's inline backend stays
+            assert matplotlib.get_backend() == "svg"
+        finally:
+            monkeypatch.setitem(sys.modules, "IPython", types.ModuleType("IPython"))
+            matplotlib.use("Agg", force=True)
+
+    def test_the_running_shell_probe_in_this_process(self) -> None:
+        # this plain pytest process has no running shell, whatever the
+        # import graph pulled in (the shap stack imports IPython).
+        from pharmaml.viz._compat import _ipython_shell_running
+
+        assert _ipython_shell_running() is False

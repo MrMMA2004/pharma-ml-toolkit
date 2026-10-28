@@ -1650,3 +1650,75 @@ review's real disposition is 18 rows: 5 ADDED · 8 COVERED · 2 STRETCH ·
 | GUI metrics + palette inspector | playground.py `_gui_metrics_snapshot` / `_show_gui_metrics` / `_populate_metrics_palette` / `_refresh_metrics_dialog` (View ▸ GUI metrics…); the retint walker's new `Toplevel` branch follows flips too. |
 | The round-41 menu fix | `_menu_tints` was re-assigned AFTER the font cascade's append — the font submenu silently lost its theme tint on every flip; the list now carries it. |
 | Tests | tests/test_playground.py::TestDearPyGuiRoundTwo (14 tests: the registry, fold/unfold + chevron, quiet noops, finder unfold, session round-trip + corrupt/unknown restore, per-tab reset unfold, dialog census/prefs, census-vs-walk parity, palette chips, theme-flip live retint, reopen-lift/destroy-prune, the font-cascade tint pin). |
+
+## The SHAP + Optuna review (round 43, 100x-160) — two repos, one absorption
+
+The instruction: *"Check the contents and files in this GitHub links
+completely and one by one and add the missing items to playground.py:
+github.com/shap/shap, github.com/optuna/optuna."*  Both repos cloned
+(`--depth 1 --filter=blob:none`) and reviewed file by file — SHAP: 615
+tracked files (95 Python modules, the C++ TreeSHAP core, ten demo
+datasets); Optuna: 484 tracked files (220 Python modules across
+samplers / pruners / importance / visualization / storages).  The
+per-area inventory and the full disposition tables live in
+`scratch/shap_optuna_review.md` (the pdsh_review.md pattern); the
+baseline at review time was v1.2.95, which already shipped the
+TreeExplainer surface (100x-154) and the Keras-Tuner programming model
+(100x-89/90).  The honest premise, stated once: **neither package
+becomes a runtime dependency** — the absorption re-implements the
+programming models in typed library surfaces, keeps every figure pure
+matplotlib, and optional-gates only the one thing that truly needs the
+third-party package (the `shap` computation itself, behind the
+`[explain]` extra, exactly as 100x-154 established).
+
+### SHAP (shap/shap) — the disposition
+
+| SHAP capability (source) | Disposition | Where it landed |
+| --- | --- | --- |
+| `TreeExplainer.shap_values` | COVERED-ALREADY (100x-154) | `ml/explain.py::shap_summary` → the typed `ShapSummary` record. |
+| `shap.plots.beeswarm` / `_bar` | COVERED-ALREADY (100x-154) | `viz/ml_plots.py::plot_shap_beeswarm` / `plot_shap_importance`. |
+| `shap.plots.waterfall` — the local base→prediction walk | **ADDED-THIS-ROUND** | `viz/ml_plots.py::plot_shap_waterfall(summary, sample)`: signed cumulative bars (teal up / amber down), dashed end-lines at the base value and the prediction, the tail collapsed into one summed bar; the GUI asks which held-out row. |
+| `shap.plots.scatter` (dependence, auto interaction colour) | **ADDED-THIS-ROUND** | `viz/ml_plots.py::plot_shap_dependence(summary, feature)`: value-vs-SHAP scatter coloured by the strongest interacting feature (the binned-R² heuristic — the upstream's own `approximate_interactions` recipe, honestly documented). |
+| `shap.plots.heatmap` | **ADDED-THIS-ROUND** | `viz/ml_plots.py::plot_shap_heatmap(summary)`: instances × top features, diverging red→white→teal, rows ordered by complete-linkage clustering over \|SHAP\| (scipy — a core dep), the thin mean-\|SHAP\| bar on top. |
+| `shap.plots.force` (the matplotlib static twin) | **ADDED-THIS-ROUND** | `viz/ml_plots.py::plot_shap_force(summary, sample)`: one stacked bar of the row's signed contributions, base and prediction annotated — the honest static translation for a desktop app (the JS layout is N-A). |
+| `shap.plots.group_difference` (cohort decomposition + bootstrap CI) | **ADDED-THIS-ROUND** | `ml/explain.py::group_difference(summary, mask)` (pure numpy: per-feature cohort mean difference + 200-resample 5–95% bootstrap bounds, the upstream's own recipe) + `viz/ml_plots.py::plot_shap_group_difference`. The GUI splits the run's held-out rows at their own target median — the "why does the high-potency cohort score differently" figure. |
+| `TreeExplainer.shap_interaction_values` (the exact pairwise cube) | **ADDED-THIS-ROUND** | `ml/explain.py::shap_interactions(model, X)` → the typed `ShapInteractions` record (diagonal = main effects, symmetric off-diagonal = pairwise; `as_frame`/`ranking`/`__str__`). Same optional gate, same refusals as `shap_summary`. |
+| `PermutationExplainer` / `permutation_feature_importance` | COVERED-ALREADY(≈) | The shipped model-agnostic sibling (typed, seeded) answers the non-tree question — the standing honest answer since 100x-154. |
+| `_violin` / `_embedding` / `_style` | COVERED-ALREADY(≈) | The beeswarm carries the violin's information without KDE-over-2-points lies; `ml/manifold.py` + colour-by covers embeddings; the house PALETTE is the style system. |
+| `KernelExplainer` / `ExactExplainer` / `_linear` / `_additive` / `_sampling` | N-A-HONEST | The slow approximation is deliberately refused with the typed error naming the sibling; exact enumeration is exponential; linear/GAM attribution is answered exactly by the coefficient surfaces. |
+| `_deep/` / `_gradient` / `image` / `text` maskers & plots | N-A-HONEST | Tabular QSAR toolkit — no NLP/vision/deep-explainer surface. |
+| `model_output=` transforms / `links.py` (logit) / `cohorts(n)` auto-tree / `_decision` / `_monitoring` / `_partial_dependence` / `_partition`+`_coalition` / `ActionOptimizer` / benchmark framework / GPUTreeExplainer / datasets | STRETCH | Each row's reason in `scratch/shap_optuna_review.md` §1 — the four highest-value stretches (logit links, decision plots, PD+ICE, the counterfactual ActionOptimizer) are the recorded candidates for a later round. |
+
+**SHAP tally:** 12 ADDED (5 figures + 2 records + 2 computations +
+interactions + the auto-interaction heuristic + hclust ordering) · 6
+COVERED(≈) · 13 N-A-HONEST · 9 STRETCH.
+
+### Optuna (optuna/optuna) — the disposition
+
+| Optuna capability (source) | Disposition | Where it landed |
+| --- | --- | --- |
+| `TPESampler` — the flagship sampler | **ADDED-THIS-ROUND** | `ml/tuner.py::TPESearch`: same `search(X, y)` contract as RandomSearch; per param, Parzen (KDE) mixtures over the below (best `γ(n)=min(⌈0.1n⌉, 25)` trials) and above sets — neighbour-gap bandwidths, magic clip, one prior kernel at the domain centre — `n_ei_candidates=24` candidates drawn from the below mixture, argmax of `log pdf_below − log pdf_above`; `n_startup_trials=10` uniform bootstrap; deterministic per seed. Honest deviations (independent per-param, pruned excluded from mixtures, clipped-normal truncation) documented in the class docstring. |
+| `MedianPruner` / `PercentilePruner` (report + should_prune) | **ADDED-THIS-ROUND** | `ml/tuner.py::PercentilePruner` + the `MedianPruner` shortcut, wired into the tuners' fold loop: after each fold the running mean is REPORTED, and a trial below the percentile of the completed trials' same-fold values is cut short — `state="pruned"`, partial `fold_scores` kept. |
+| `trial._state` (COMPLETE/PRUNED/FAIL) + `trials_dataframe` | **ADDED-THIS-ROUND** | `TrialResult.state` / `resolved_state` / `pruned` (the legacy `failed` semantics preserved by derivation) + `fold_scores` + `duration`; `TunerResults.trials_frame()` carries state/duration/n_folds; `summary()` counts the pruned line. |
+| `suggest_float(log=True)` | **ADDED-THIS-ROUND** | `HyperParameters.Float(..., log=True)` — log-domain sampling (Optuna's own recommendation for learning rates), the step+log and non-positive-bound refusals. |
+| `get_param_importances` (MDI evaluator) | **ADDED-THIS-ROUND** | `ml/tuner.py::param_importances(results)` — Optuna's own one-paragraph recipe: RandomForestRegressor over the one-hot-encoded params → objective, `feature_importances_` summed back per param (`np.add.at`), normalized; the typed `HyperparameterImportance` record. |
+| `plot_optimization_history` | **ADDED-THIS-ROUND** | `viz/ml_plots.py::plot_optimization_history`: completed dots + the best-so-far step line + pruned trials as open amber markers at their last intermediate (the honest addition over the upstream). |
+| `plot_slice` / `plot_parallel_coordinate` | **ADDED-THIS-ROUND** | `viz/ml_plots.py::plot_slice` (one panel per param, categorical tick labels) / `plot_parallel_coordinate` (per-trial polylines, score-coloured on the house ramp, the param ranges under the axes). |
+| `plot_param_importances` | **ADDED-THIS-ROUND** | `viz/ml_plots.py::plot_param_importances` — the MDI bars, record or DataFrame form. |
+| `plot_edf` / `plot_timeline` / `plot_intermediate_values` | **ADDED-THIS-ROUND** | `viz/ml_plots.py::plot_edf` (ECDF + Q1/median/Q3) / `plot_timeline` (the honest stacked-duration Gantt for a sequential search, coloured by state) / `plot_intermediate_values` (the pruner's running fold-mean curves, pruned dashed). |
+| `RandomSampler` / Hyperband / grid search | COVERED-ALREADY | `RandomSearch` (100x-90), `Hyperband` (100x-90), the registries' `param_grids`. |
+| `plot_contour` / `plot_rank` / PedAnova / fANOVA / `plot_pareto_front`+hypervolume (multi-objective) / ask/tell / `enqueue_trial` / terminator / storages (RDB/journal/gRPC) / integrations (mlflow, wandb, LightGBM callbacks…) / NSGA-II/III / CMA-ES / GP / QMC samplers | N-A-HONEST or STRETCH | Single-objective, single-process, sklearn-native toolkit — each row's reason in `scratch/shap_optuna_review.md` §2 (contour/rank = STRETCH: sparse trial clouds; the multi-objective family = N-A without `directions`). |
+
+**Optuna tally:** 11 ADDED · 3 COVERED · 5 STRETCH · 10 N-A-HONEST.
+
+### Round-43 verification rows
+
+| What | Where it landed |
+| --- | --- |
+| SHAP computations | `ml/explain.py`: `ShapInteractions` + `shap_interactions` (the optional-gated cube) + `GroupDifference` + `group_difference` (pure numpy, seeded bootstrap); `ml/__init__.py` exports. |
+| SHAP figures | `viz/ml_plots.py`: `plot_shap_waterfall` / `plot_shap_dependence` (with `_auto_interaction`) / `plot_shap_heatmap` / `plot_shap_force` / `plot_shap_group_difference`; `viz/__init__.py` exports. |
+| Optuna tuner | `ml/tuner.py`: `TPESearch` + the `_parzen_*`/`_tpe_*` machinery, `PercentilePruner`/`MedianPruner` + `_evaluate_trial_folds` (the report/should-prune fold loop), `TrialResult` states/intermediates/duration, `HyperparameterImportance` + `param_importances`, `Float(log=True)`; `ml/__init__.py` + CLI `--searcher tpe`. |
+| Optuna figures | `viz/ml_plots.py`: the seven study figures over `_unwrap_trials` (TunerResults or bare list, duck-typed); `viz/__init__.py` exports. |
+| The GUI | playground.py: the five SHAP buttons (two rows — waterfall/force/dependence/heatmap + group difference, with the `_ask_shap_row`/`_ask_shap_feature` dialogs), the Tune card's `tpe` searcher + pruner combo + the two study-figure button rows (history/slice/parallel/importances + EDF/timeline/intermediates), the pruned-trial leaderboard rows (partial score marked `·`), the `on_trial` pruned note. |
+| **The crash the round found on the way** | `viz/_compat.py::_ipython_shell_running` — the old `"IPython" not in sys.modules` notebook guard was fooled by `import shap` (which pulls IPython in), so a shap-using process silently skipped the headless Agg pin; pyplot resolved TkAgg under `$DISPLAY` and every WORKER-THREAD figure became an off-main-thread Tk window creation — the intermittent `Illegal instruction` the new surfaces exposed (the old beeswarm tests only survived full-suite runs because an earlier test had forced Agg directly). The fix: only a RUNNING shell (`IPython.get_ipython()` non-None) keeps the inline backend. Pinned by `test_viz.py::TestBackendGuard`. |
+| Tests | tests/test_explain.py (+~370: `TestShapInteractions`, `TestGroupDifference`, `TestShapPlotsRoundTwo`) · tests/test_tuner.py (+~600: `TestLogFloat`, `TestTPESearch`, `TestPruners`, `TestPrunedSearch`, `TestTrialStates`, `TestParamImportances`, `TestOptunaStudyPlots`) · tests/test_playground.py::`TestShapOptunaAbsorptionGui` (12: the token/button census, the five figures end-to-end with the ask-dialog fixture, the guards, the seven study figures, a real TPE+median search) · tests/test_viz.py::`TestBackendGuard` (3). |

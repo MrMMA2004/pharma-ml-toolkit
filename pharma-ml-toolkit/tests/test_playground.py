@@ -14846,3 +14846,316 @@ class TestDearPyGuiRoundTwo:
         assert str(font_menu.cget("background")) == playground.HEADING
         app._set_theme("light")
         assert str(font_menu.cget("background")) == playground.CARD
+
+
+class TestShapOptunaAbsorptionGui:
+    """(100x-160) The shap/shap + optuna/optuna absorption round's GUI:
+    the five new SHAP figure buttons (waterfall / force / dependence /
+    heatmap / group difference) over the run-tuple discipline, the
+    Tune card's TPE searcher + pruner choice, and the seven study
+    figures over the last search's records."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @pytest.fixture()
+    def ask_string(self, playground: Any, monkeypatch: Any) -> dict[str, list[str]]:
+        """Neutralise the modal simpledialog.askstring: canned answers
+        queued under 'answers', prompts recorded under 'prompts' (a
+        blocking modal would hang Xvfb)."""
+        state: dict[str, list[str]] = {"answers": [], "prompts": []}
+
+        def fake_askstring(title: str, prompt: str, **kwargs: Any) -> str:
+            state["prompts"].append(prompt)
+            return state["answers"].pop(0) if state["answers"] else None
+
+        monkeypatch.setattr(playground.simpledialog, "askstring", fake_askstring)
+        return state
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _planted_run(app: Any) -> None:
+        """A tree-model run tuple over a learnable two-feature frame
+        (the same discipline as the 100x-154 tests, smaller)."""
+        import numpy as np
+        import pandas as pd
+        from sklearn.ensemble import GradientBoostingRegressor
+
+        from pharmaml.ml.evaluation import RegressionReport
+
+        rng = np.random.default_rng(42)
+        n = 60
+        frame = pd.DataFrame(
+            {"strong": rng.normal(size=n), "weak": rng.normal(size=n)}
+        )
+        frame["y"] = 3.0 * frame["strong"] + 0.2 * frame["weak"]
+        x_all = frame[["strong", "weak"]]
+        idx = rng.permutation(n)
+        test_idx, train_idx = idx[:12], idx[12:]
+        model = GradientBoostingRegressor(random_state=42).fit(
+            x_all.iloc[train_idx], frame["y"].iloc[train_idx]
+        )
+        report = RegressionReport(
+            rmse=0.1, mae=0.1, r2=0.9, max_error=0.3, n_samples=len(test_idx)
+        )
+        app._ml_last_run = (
+            model,
+            report,
+            "regression",
+            x_all.iloc[train_idx],
+            frame["y"].iloc[train_idx],
+            x_all.iloc[test_idx],
+            frame["y"].iloc[test_idx],
+            "y",
+        )
+
+    @staticmethod
+    def _planted_study(app: Any) -> Any:
+        """A crafted 6-trial TunerResults (4 complete, 1 pruned with
+        fold scores, 1 fail with a duration) planted as _tune_last."""
+        from pharmaml.ml.tuner import TrialResult, TunerResults
+
+        trials = [
+            TrialResult(1, {"units": 8, "alpha": 0.10}, 0.50, 0.02,
+                        fold_scores=(0.4, 0.5, 0.6), duration=1.5),
+            TrialResult(2, {"units": 16, "alpha": 0.05}, 0.80, 0.02,
+                        fold_scores=(0.7, 0.8, 0.9), duration=2.0),
+            TrialResult(3, {"units": 32, "alpha": 0.20}, 0.65, 0.02,
+                        fold_scores=(0.6, 0.6, 0.75), duration=1.8),
+            TrialResult(4, {"units": 64, "alpha": 0.05}, 0.72, 0.02,
+                        fold_scores=(0.7, 0.7, 0.76), duration=1.6),
+            TrialResult(5, {"units": 128, "alpha": 0.30}, float("nan"),
+                        float("nan"), state="pruned",
+                        fold_scores=(0.1, 0.2), duration=0.5),
+            TrialResult(6, {"units": 4, "alpha": 0.40}, float("nan"),
+                        float("nan"), error="ValueError: bad", duration=0.2),
+        ]
+        results = TunerResults(trials, "r2")
+        app._tune_last = (results, "ann", "regression", "y")
+        return results
+
+    # -- the card chrome ---------------------------------------------------- #
+    def test_the_searcher_and_pruner_tokens(self, app: Any) -> None:
+        assert list(app._tune_searcher_combo["values"]) == ["random", "tpe", "hyperband"]
+        assert list(app._tune_pruner_combo["values"]) == ["off", "median"]
+        assert app._tune_pruner_combo.get() == "off"
+
+    def test_the_button_census(self, app: Any) -> None:
+        """The five SHAP + seven study buttons live on their cards."""
+        texts: list[str] = []
+
+        def walk(widget: Any) -> None:
+            for child in widget.winfo_children():
+                if child.winfo_class() == "TButton":
+                    texts.append(child.cget("text"))
+                walk(child)
+
+        walk(app)
+        for label in (
+            "SHAP waterfall…",
+            "SHAP force…",
+            "SHAP dependence…",
+            "SHAP heatmap",
+            "SHAP group difference…",
+            "Optimization history",
+            "Slice plots",
+            "Parallel coords",
+            "Param importances",
+            "EDF",
+            "Timeline",
+            "Intermediates",
+        ):
+            assert label in texts, f"missing button {label!r}"
+
+    # -- the SHAP figures end to end ---------------------------------------- #
+    def test_waterfall_end_to_end(
+        self, app: Any, quiet_dialogs: list[Any], ask_string: dict[str, list[str]]
+    ) -> None:
+        ask_string["answers"].append("0")  # the canned row answer
+        self._planted_run(app)
+        app._ml_plot_shap_waterfall()
+        assert self._drain_jobs(app), "waterfall job hung"
+        figure = app._ml_host._pg_figure
+        assert figure is not None
+        labels = [tick.get_text() for tick in figure.axes[0].get_yticklabels()]
+        assert labels, "the waterfall drew no feature rows"
+        assert any("=" in label for label in labels)  # the show_data convention
+        note = app._ml_result_note.cget("text")
+        assert "SHAP waterfall" in note and "row 0" in note
+        assert "12 held-out row(s)" in note
+        assert quiet_dialogs == []
+
+    def test_force_end_to_end(
+        self, app: Any, quiet_dialogs: list[Any], ask_string: dict[str, list[str]]
+    ) -> None:
+        ask_string["answers"].append("3")
+        self._planted_run(app)
+        app._ml_plot_shap_force()
+        assert self._drain_jobs(app), "force job hung"
+        figure = app._ml_host._pg_figure
+        assert figure is not None
+        assert figure.axes[0].get_xlabel() == "model output"
+        note = app._ml_result_note.cget("text")
+        assert "SHAP force" in note and "row 3" in note
+        assert quiet_dialogs == []
+
+    def test_dependence_end_to_end(
+        self, app: Any, quiet_dialogs: list[Any], ask_string: dict[str, list[str]]
+    ) -> None:
+        ask_string["answers"].append("strong")
+        self._planted_run(app)
+        app._ml_plot_shap_dependence()
+        assert self._drain_jobs(app), "dependence job hung"
+        figure = app._ml_host._pg_figure
+        assert figure is not None
+        ax = figure.axes[0]
+        assert ax.get_xlabel() == "strong"
+        assert ax.get_ylabel() == "SHAP value"
+        note = app._ml_result_note.cget("text")
+        assert "SHAP dependence" in note and "feature strong" in note
+        assert quiet_dialogs == []
+
+    def test_heatmap_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        self._planted_run(app)
+        app._ml_plot_shap_heatmap()
+        assert self._drain_jobs(app), "heatmap job hung"
+        figure = app._ml_host._pg_figure
+        assert figure is not None
+        # the matrix axis + the thin mean-|SHAP| bar axis
+        assert len(figure.axes) >= 2
+        note = app._ml_result_note.cget("text")
+        assert "SHAP heatmap" in note
+        assert quiet_dialogs == []
+
+    def test_group_difference_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        self._planted_run(app)
+        app._ml_plot_shap_group_difference()
+        assert self._drain_jobs(app), "group difference job hung"
+        figure = app._ml_host._pg_figure
+        assert figure is not None
+        ax = figure.axes[0]
+        ticks = {tick.get_text() for tick in ax.get_yticklabels()}
+        assert ticks == {"strong", "weak"}
+        assert ax.get_xlabel().startswith("mean SHAP difference")
+        note = app._ml_result_note.cget("text")
+        assert "SHAP group" in note
+        assert quiet_dialogs == []
+
+    def test_shap_figure_guards(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        """No run in the session -> the honest info dialog, no job."""
+        app._ml_last_run = None
+        for method in (
+            app._ml_plot_shap_waterfall,
+            app._ml_plot_shap_force,
+            app._ml_plot_shap_dependence,
+            app._ml_plot_shap_heatmap,
+            app._ml_plot_shap_group_difference,
+        ):
+            quiet_dialogs.clear()
+            method()
+            assert any("No trained model" in str(a) for a in quiet_dialogs)
+            assert not app._busy
+
+    def test_dependence_unknown_feature(
+        self, app: Any, quiet_dialogs: list[Any], ask_string: dict[str, list[str]]
+    ) -> None:
+        ask_string["answers"].append("not_a_column")
+        self._planted_run(app)
+        app._ml_plot_shap_dependence()
+        assert any("Unknown feature" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+
+    # -- the study figures end to end ---------------------------------------- #
+    def test_study_figures_end_to_end(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        self._planted_study(app)
+        buttons = (
+            ("Optimization history", app._tune_plot_history),
+            ("Slice plots", app._tune_plot_slice),
+            ("Parallel coordinates", app._tune_plot_parallel),
+            ("Param importances", app._tune_plot_importances),
+            ("EDF", app._tune_plot_edf),
+            ("Timeline", app._tune_plot_timeline),
+            ("Intermediates", app._tune_plot_intermediates),
+        )
+        for name, method in buttons:
+            method()
+            assert self._drain_jobs(app), f"{name} job hung"
+            figure = app._ml_host._pg_figure
+            assert figure is not None and figure.axes, f"{name} drew no figure"
+            note = app._ml_result_note.cget("text")
+            assert name in note and "4 completed" in note and "1 pruned" in note
+        assert quiet_dialogs == []
+
+    def test_study_figure_guards(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._tune_last = None
+        app._tune_plot_history()
+        assert any("No search yet" in str(a) for a in quiet_dialogs)
+        assert not app._busy
+
+    # -- the TPE search end to end -------------------------------------------- #
+    def test_tpe_search_end_to_end(self, playground: Any, app: Any,
+                                   quiet_dialogs: list[Any]) -> None:
+        """The TPE searcher through the real card: a small search over
+        the ann hypermodel fills the leaderboard, the status names
+        TPESearch, and the pruner=median choice lands pruned states."""
+        import numpy as np
+        import pandas as pd
+
+        rng = np.random.default_rng(42)
+        n = 60
+        frame = pd.DataFrame(
+            {"a": rng.uniform(0, 1, n), "b": rng.uniform(0, 1, n)}
+        )
+        frame["y"] = 3.0 * frame["a"] + 1.0
+        app._ml_frame = frame
+        app._ml_path = None
+        app._target_combo.set("y")
+        app._task_combo.set("regression")
+        app._tune_estimator_combo.set("ann")
+        app._tune_searcher_combo.set("tpe")
+        app._tune_pruner_combo.set("median")
+        app._tune_trials.set("5")
+        app._tune_cv.set("2")
+        app._ml_tune()
+        assert self._drain_jobs(app, timeout=300.0), "tpe search hung"
+        status = app._board_status.cget("text")
+        assert "TPESearch" in status and "ann" in status
+        summary = app._tune_summary.cget("text")
+        assert summary.startswith("best ")
+        assert app._tune_last is not None
+        results = app._tune_last[0]
+        assert results.objective == "r2"
+        # every trial recorded a duration and the pruner-wired fold loop
+        # ran (fold scores present on completed trials).
+        assert all(t.duration is not None for t in results.trials)
+        assert any(t.fold_scores for t in results.trials)
+        assert quiet_dialogs == []

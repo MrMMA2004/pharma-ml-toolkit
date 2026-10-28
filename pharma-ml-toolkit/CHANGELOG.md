@@ -1,3 +1,113 @@
+## [1.2.96] — 2026-10-28
+
+### Added — SHAP and Optuna absorbed: the two repo reviews land as first-class tuner and explanation surfaces (100x-160)
+
+The instruction: *"Check the contents and files in this GitHub links
+completely and one by one and add the missing items to playground.py:
+github.com/shap/shap, github.com/optuna/optuna."*  Both repositories
+cloned and reviewed file by file — SHAP (615 tracked files, 95 Python
+modules) and Optuna (484 tracked files, 220 Python modules) — the
+per-area inventory and disposition tables live in
+`scratch/shap_optuna_review.md` and `docs/COVERAGE.md`'s Round-43
+section.  The honest premise: **neither package becomes a runtime
+dependency** — the programming models are re-implemented as typed
+library surfaces, every figure stays pure matplotlib, and only the
+SHAP computation itself remains optional-gated behind `[explain]`
+(exactly the 100x-154 contract).  What landed:
+
+* **The five missing SHAP figures** (`viz/ml_plots.py`) —
+  `plot_shap_waterfall` (the LOCAL explanation: the base-value →
+  prediction walk, signed cumulative bars, the tail collapsed into one
+  summed bar), `plot_shap_dependence` (value-vs-SHAP scatter coloured
+  by the strongest INTERACTING feature — the upstream's own
+  `approximate_interactions` binned-R² heuristic, honestly documented),
+  `plot_shap_heatmap` (instances × top features, complete-linkage row
+  clustering over |SHAP|, the thin mean-|SHAP| bar), `plot_shap_force`
+  (the static additive bar — the honest desktop translation of the JS
+  layout), and `plot_shap_group_difference` (cohort bars with
+  5–95 % bootstrap whiskers).
+* **Two new SHAP computations** (`ml/explain.py`) —
+  `shap_interactions` (the repo's `shap_interaction_values` cube:
+  diagonal = main effects, symmetric off-diagonal = pairwise
+  interactions, same optional gate and refusals as `shap_summary`) and
+  `group_difference` (the cohort decomposition: per-feature mean-SHAP
+  difference between two masks + 200-resample 5–95 % bootstrap bounds,
+  pure numpy — the "why does the high-potency cohort score differently"
+  answer).
+* **`TPESearch`** (`ml/tuner.py`) — Optuna's flagship sampler under the
+  house `search(X, y)` contract: per parameter, Parzen (KDE) mixtures
+  over the below (best `γ(n)=min(⌈0.1n⌉,25)` trials) and above sets —
+  neighbour-gap bandwidths, the magic clip, one prior kernel at the
+  domain centre — `n_ei_candidates=24` drawn from the below mixture,
+  argmax of `log pdf_below − log pdf_above`, `n_startup_trials=10`
+  uniform bootstrap, deterministic per seed.  The honest deviations
+  (independent per-param sampling, pruned trials excluded from the
+  mixtures, clipped-normal truncation) are documented in the class
+  docstring.
+* **The pruners** — `PercentilePruner` + the `MedianPruner` shortcut,
+  wired into the tuners' fold loop: after each CV fold the running
+  mean is *reported* (Optuna's `report(step)`), and a trial below the
+  percentile of the completed trials' same-fold values is cut short —
+  `state="pruned"`, partial `fold_scores` kept.  `TrialResult` gains
+  Optuna's trial states (complete / pruned / fail, the legacy `failed`
+  semantics preserved by derivation), the intermediates and the
+  duration; `trials_frame()` carries state / duration / n_folds;
+  `summary()` counts the pruned line.
+* **`param_importances`** — Optuna's own MDI recipe: a
+  RandomForestRegressor over the one-hot-encoded hyperparameters →
+  objective, `feature_importances_` summed back per param, normalized;
+  the typed `HyperparameterImportance` record.  Plus
+  `HyperParameters.Float(..., log=True)` (log-domain sampling, Optuna's
+  own recommendation for learning rates) and the CLI's
+  `ml tune --searcher tpe`.
+* **The seven Optuna study figures** (`viz/ml_plots.py`) —
+  `plot_optimization_history` (completed dots + the best-so-far step
+  line + pruned trials as open amber markers at their last
+  intermediate — the honest addition over the upstream),
+  `plot_slice`, `plot_parallel_coordinate` (score-coloured polylines
+  on the house ramp), `plot_param_importances`, `plot_edf` (the ECDF
+  with Q1/median/Q3), `plot_timeline` (the stacked-duration Gantt for
+  a sequential search, coloured by state) and
+  `plot_intermediate_values` (the pruner's running fold-mean curves).
+* **The GUI** (playground.py) — five new SHAP buttons across two rows
+  (waterfall / force / dependence ask their row or feature through
+  dialogs; heatmap and group difference direct — the group difference
+  splits the run's held-out rows at their own target median), the Tune
+  card's `tpe` searcher token + the pruner choice + two rows of study
+  figure buttons, pruned leaderboard rows (the partial score marked
+  `·` so it never reads as a full CV score), and the `on_trial` pruned
+  note in the status heartbeat.
+
+### Fixed — the crash the round found on the way
+
+`viz/_compat.py::require_matplotlib`'s notebook guard —
+`"IPython" not in sys.modules` — was fooled by any library that
+merely IMPORTS IPython (and `import shap` pulls it in): a desktop
+process that had just explained a tree model silently skipped the
+headless Agg pin, pyplot resolved a GUI backend under `$DISPLAY`, and
+every figure the GUI's **worker threads** drew became an
+off-main-thread Tk window creation — the intermittent `Illegal
+instruction` crash the round's new surfaces exposed (the old beeswarm
+tests only survived full-suite runs because an earlier test had forced
+Agg directly).  The fix (`_ipython_shell_running`): only a RUNNING
+shell — `IPython.get_ipython()` returning a shell — keeps the inline
+backend; a bare import forces Agg like any other plain process.
+
+### Tests
+
++~1000 across five files: `test_explain.py` (interactions record +
+guards via a stubbed explainer, group difference exact/CI/determinism/
+guards, the five figures' contracts), `test_tuner.py` (log-float,
+TPE determinism + startup pin, the pruner decision table, pruned
+search states, trial-state derivation, MDI importances, the seven
+study figures + guards), `test_playground.py`::
+`TestShapOptunaAbsorptionGui` (12: the token/button census, the five
+figures end-to-end with the ask-dialog fixture, the guards, the seven
+study figures, a real TPE+median search through the card),
+`test_viz.py`::`TestBackendGuard` (the notebook-detection regression),
+and the docs INDEX drift guard (345 → 366 symbols).
+
+
 ## [1.2.95] — 2026-10-28
 
 ### Added — the second DearPyGui pass: the stretch rows close, and the round-41 close-out debt is paid (100x-159)

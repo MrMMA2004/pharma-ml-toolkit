@@ -69,21 +69,52 @@ def _reproducible_kwargs(fmt: str) -> dict[str, Any]:
     return {}
 
 
+def _ipython_shell_running() -> bool:
+    """True only when an IPython shell is actually RUNNING.
+
+    The notebook detection upgrade (100x-160): the old guard —
+    ``"IPython" not in sys.modules`` — was fooled by any library that
+    merely IMPORTS IPython.  ``import shap`` does exactly that (its
+    plotting stack pulls IPython in), so a desktop GUI that had just
+    explained a tree model silently skipped the headless ``Agg`` pin,
+    pyplot resolved a GUI backend under ``$DISPLAY``, and every figure
+    the GUI's worker threads drew became an off-main-thread Tk window
+    creation — the intermittent ``Illegal instruction`` crash the
+    round's new SHAP surfaces exposed (the old beeswarm tests only
+    survived full-suite runs because an earlier test had forced Agg
+    directly).  The honest test is the classic one: IPython's own
+    ``get_ipython()`` returns the running interactive shell or ``None``
+    — a bare import without a shell is NOT a notebook.
+    """
+    import sys
+
+    module = sys.modules.get("IPython")
+    if module is None:
+        return False
+    try:
+        get_ipython = module.get_ipython
+    except AttributeError:  # pragma: no cover - a stub without the API
+        return False
+    return get_ipython() is not None
+
+
 def require_matplotlib():
     """Import matplotlib lazily and pick the right backend.
 
-    In a plain Python process (scripts, CI, servers) the headless
-    ``Agg`` backend is forced — no window, no ``$DISPLAY`` needed.  Inside
-    Jupyter/IPython the *existing inline backend is kept* so figures
-    produced by this package render directly in notebook cells.
+    In a plain Python process (scripts, CI, servers — including any
+    process that merely imported IPython without a running shell, see
+    :func:`_ipython_shell_running`) the headless ``Agg`` backend is
+    forced — no window, no ``$DISPLAY`` needed, and figure creation
+    becomes thread-safe (``Agg`` managers touch no GUI toolkit).  Inside
+    a RUNNING Jupyter/IPython session the *existing inline backend is
+    kept* so figures produced by this package render directly in
+    notebook cells.
 
     Raises
     ------
     DependencyError
         If matplotlib is not installed, with the exact extra to install.
     """
-    import sys
-
     try:
         import matplotlib
     except ImportError as exc:  # pragma: no cover - depends on env
@@ -94,7 +125,7 @@ def require_matplotlib():
         ) from exc
     # Headless-safe: never open a GUI window, never require $DISPLAY —
     # but don't hijack the inline backend of a running notebook.
-    if "IPython" not in sys.modules:
+    if not _ipython_shell_running():
         matplotlib.use("Agg", force=True)
     return matplotlib
 
