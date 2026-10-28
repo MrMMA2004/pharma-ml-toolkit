@@ -10,7 +10,12 @@ stopped there; this module turns them into figures:
   optional cell annotations;
 * :func:`plot_table_comparison` — the overlap breakdown of a
   :class:`~pharmaml.chem.tables.TableComparison` (the figure twin of
-  the Explorer's "Ligand Sets" playground tab).
+  the Explorer's "Ligand Sets" playground tab);
+* :func:`plot_selfies_robustness` — the SELFIES-vs-SMILES validity
+  curves of a :func:`pharmaml.chem.selfies_robustness_experiment`
+  run (the robustness property as one picture: random corruption of
+  SELFIES symbols stays ~100% parseable while character corruption
+  of SMILES collapses).
 
 Examples
 --------
@@ -84,6 +89,7 @@ from pharmaml.viz._compat import PALETTE, new_figure
 
 __all__ = [
     "plot_descriptor_distributions",
+    "plot_selfies_robustness",
     "plot_similarity_heatmap",
     "plot_table_comparison",
 ]
@@ -401,4 +407,112 @@ def plot_table_comparison(
                       fontsize=9, color="#1F2937")
     ax_count.set_xlabel("number of unique ligand names", fontsize=9)
     ax_count.tick_params(labelsize=8)
+    return fig
+
+
+def plot_selfies_robustness(
+    report: Any,
+    title: str = "SELFIES vs SMILES — validity under corruption",
+) -> Any:
+    """The robustness experiment's two validity curves, one figure.
+
+    :func:`pharmaml.chem.selfies_robustness_experiment` measures how
+    often a corrupted string still parses as a molecule; this figure
+    draws the answer -- the SELFIES curve (random *symbol* corruption,
+    flat at ~100%: the grammar clamps every mutation to a legal
+    structure) against the SMILES curve (random *character* corruption,
+    collapsing as k grows).  Levels sit on a categorical x-axis (the
+    probed mutation counts), validity on a 0-100% y-axis.
+
+    Parameters
+    ----------
+    report:
+        A :class:`~pharmaml.chem.selfies_codec.SelfiesRobustnessReport`
+        (duck-typed: anything exposing ``mutations``,
+        ``selfies_validity`` and ``smiles_validity`` works).
+    title:
+        Figure title (left-anchored; retrieve with
+        ``fig.axes[0].get_title(loc="left")``).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If the report carries no mutation levels, or its validity lists
+        do not align with them.
+
+    Example
+    -------
+    >>> from pharmaml.chem.selfies_codec import selfies_robustness_experiment
+    >>> from pharmaml.viz import close_figure
+    >>> from pharmaml.viz.chem_plots import plot_selfies_robustness
+    >>> report = selfies_robustness_experiment(
+    ...     ["c1ccccc1", "CCO"], mutations=(1, 4), trials=4, seed=42)
+    >>> fig = plot_selfies_robustness(report)
+    >>> (len(fig.axes), fig.axes[0].get_title(loc="left"))
+    (1, 'SELFIES vs SMILES — validity under corruption — 2 molecules × 4 trials per level')
+    >>> [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+    ['SELFIES (symbol corruption)', 'SMILES (character corruption)']
+    >>> fig.axes[0].get_xlabel()
+    'random corruptions per string (k)'
+    >>> close_figure(fig)
+    >>> from types import SimpleNamespace
+    >>> plot_selfies_robustness(SimpleNamespace(
+    ...     mutations=[], selfies_validity=[], smiles_validity=[]))
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: report carries no mutation levels — pass the SelfiesRobustnessReport of a selfies_robustness_experiment() run
+    """
+    mutations = list(getattr(report, "mutations", []) or [])
+    selfies_validity = list(getattr(report, "selfies_validity", []) or [])
+    smiles_validity = list(getattr(report, "smiles_validity", []) or [])
+    if not mutations:
+        raise DataValidationError(
+            "report carries no mutation levels — pass the "
+            "SelfiesRobustnessReport of a selfies_robustness_experiment() run"
+        )
+    if len(selfies_validity) != len(mutations) or len(smiles_validity) != len(
+        mutations
+    ):
+        raise DataValidationError(
+            f"validity lists ({len(selfies_validity)} / {len(smiles_validity)}) "
+            f"do not align with the {len(mutations)} mutation levels"
+        )
+    n_molecules = getattr(report, "n_molecules", None)
+    n_trials = getattr(report, "n_trials", None)
+
+    fig, raw_axes = new_figure(figsize=(7.2, 4.8))
+    axes = np.atleast_1d(raw_axes)
+    ax = axes[0]
+    positions = np.arange(len(mutations))
+    ax.plot(
+        positions,
+        [100.0 * value for value in selfies_validity],
+        color=PALETTE[0],
+        marker="o",
+        linewidth=1.8,
+        label="SELFIES (symbol corruption)",
+    )
+    ax.plot(
+        positions,
+        [100.0 * value for value in smiles_validity],
+        color=PALETTE[3],
+        marker="s",
+        linestyle="--",
+        linewidth=1.6,
+        label="SMILES (character corruption)",
+    )
+    ax.set_xticks(positions)
+    ax.set_xticklabels([str(level) for level in mutations])
+    ax.set_xlabel("random corruptions per string (k)", fontsize=9)
+    ax.set_ylabel("strings still parsing as molecules (%)", fontsize=9)
+    ax.set_ylim(-4.0, 104.0)
+    subtitle = title
+    if n_molecules is not None and n_trials is not None:
+        subtitle += f" — {n_molecules} molecules × {n_trials} trials per level"
+    ax.set_title(subtitle, fontsize=11, loc="left", pad=10)
+    ax.legend(fontsize=8, frameon=False)
     return fig

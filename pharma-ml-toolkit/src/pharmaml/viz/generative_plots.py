@@ -492,3 +492,155 @@ def plot_rl_introspection(
     ax_entropy.set_ylabel("mean step entropy", fontsize=9)
     ax_entropy.set_xlabel("iteration", fontsize=9)
     return fig
+
+
+def plot_mcts_introspection(
+    result: Any,
+    title: str = "MCTS introspection — the search spending its budget",
+) -> Any:
+    """One figure per MCTS run: score story, search growth, dedup economy.
+
+    Stacks three panels sharing the cycle x-axis:
+
+    1. the reward story -- best-so-far score (the monotone frontier of
+       the dedup cache) vs the mean rollout reward of each cycle (the
+       raw explorer's meter: cycles that dip sampled prefixes the policy
+       liked but the objective did not);
+    2. the search growth -- tree nodes vs unique molecules found (the
+       widening gap between them is the search revisiting: expansion
+       without discovery);
+    3. the dedup economy -- cumulative cache hits (ChemTSv2's
+       ``generated_dict`` at work: molecules scored once, no matter how
+       often the tree walks back to them).
+
+    Parameters
+    ----------
+    result:
+        A :class:`~pharmaml.generative.GenerationResult` from
+        :class:`~pharmaml.generative.MctsOptimizer` (duck-typed like the
+        sibling plot functions).
+    title:
+        Figure title (left-anchored; retrieve with
+        ``fig.axes[0].get_title(loc="left")``).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``result`` carries no history, or its rows lack the MCTS
+        search fields (a GA / RL history does not record them -- the
+        message says so).
+
+    Example
+    -------
+    >>> from pharmaml.generative import GenerationResult
+    >>> from pharmaml.viz import close_figure
+    >>> from pharmaml.viz.generative_plots import plot_mcts_introspection
+    >>> mcts = GenerationResult(
+    ...     smiles=["CCO"], scores=[0.7],
+    ...     history=[
+    ...         {"cycle": 0, "best_score": 0.4, "mean_score": 0.2,
+    ...          "n_unique": 3, "n_nodes": 12, "cache_hits": 0},
+    ...         {"cycle": 1, "best_score": 0.6, "mean_score": 0.3,
+    ...          "n_unique": 5, "n_nodes": 20, "cache_hits": 4},
+    ...     ],
+    ...     metadata={"method": "mcts", "tree_policy": "uct", "c_val": 1.0})
+    >>> fig = plot_mcts_introspection(mcts)
+    >>> (len(fig.axes), fig.axes[0].get_title(loc="left"))
+    (3, 'MCTS introspection — the search spending its budget')
+    >>> [t.get_text() for t in fig.axes[1].get_legend().get_texts()]
+    ['tree nodes', 'unique molecules']
+    >>> fig.axes[2].get_xlabel()
+    'cycle'
+    >>> close_figure(fig)
+    >>> plot_mcts_introspection(GenerationResult(smiles=["CCO"], scores=[0.5]))
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: result carries no history -- pass the GenerationResult of an MctsOptimizer run
+    """
+    history = getattr(result, "history", []) or []
+    if not history:
+        raise DataValidationError(
+            "result carries no history -- pass the GenerationResult of an "
+            "MctsOptimizer run"
+        )
+    missing = [
+        key for key in ("cycle", "n_unique", "n_nodes", "cache_hits")
+        if key not in history[0]
+    ]
+    if missing:
+        raise DataValidationError(
+            f"history rows carry no {missing!r} search fields — only "
+            "MctsOptimizer results record them"
+        )
+
+    cycles = [entry["cycle"] for entry in history]
+    metadata = getattr(result, "metadata", None) or {}
+    tree_policy = metadata.get("tree_policy")
+    c_val = metadata.get("c_val")
+
+    fig, raw_axes = new_figure(
+        nrows=3,
+        ncols=1,
+        figsize=(8.4, 6.6),
+        sharex=True,
+        gridspec_kw={"hspace": 0.42},
+    )
+    axes = list(np.atleast_1d(raw_axes))
+
+    # -- panel 1: the reward story ---------------------------------------
+    ax_score = axes[0]
+    ax_score.plot(
+        cycles,
+        [entry["best_score"] for entry in history],
+        color=PALETTE[0],
+        marker="o",
+        label="best so far",
+    )
+    ax_score.plot(
+        cycles,
+        [entry["mean_score"] for entry in history],
+        color=PALETTE[1],
+        marker=".",
+        label="mean rollout reward",
+    )
+    ax_score.set_ylim(-0.02, 1.02)
+    ax_score.set_title(title, fontsize=11, loc="left", pad=10)
+    ax_score.legend(fontsize=8, frameon=False)
+
+    # -- panel 2: the search growth (expansion vs discovery) -------------
+    ax_growth = axes[1]
+    ax_growth.plot(
+        cycles,
+        [entry["n_nodes"] for entry in history],
+        color=PALETTE[3],
+        marker="o",
+        label="tree nodes",
+    )
+    ax_growth.plot(
+        cycles,
+        [entry["n_unique"] for entry in history],
+        color=PALETTE[2],
+        marker=".",
+        label="unique molecules",
+    )
+    ylabel = "search size"
+    if tree_policy is not None and c_val is not None:
+        ylabel += f" ({tree_policy}, c={c_val})"
+    ax_growth.set_ylabel(ylabel, fontsize=9)
+    ax_growth.legend(fontsize=8, frameon=False)
+
+    # -- panel 3: the dedup economy ---------------------------------------
+    ax_cache = axes[2]
+    ax_cache.plot(
+        cycles,
+        [entry["cache_hits"] for entry in history],
+        color=PALETTE[4],
+        marker="o",
+    )
+    ax_cache.set_ylabel("cumulative cache hits", fontsize=9)
+    ax_cache.set_xlabel("cycle", fontsize=9)
+    return fig

@@ -23,7 +23,14 @@ A tabbed graphical interface opens with every calculation domain of the
   plus (100x-119) the canonical-tautomer & 3D-structure card
   (canonicalize_tautomer + a multi-conformer 3D PDB writer with its
   ETKDG/UFF report), the 167-key MACCS fingerprint card, and the
-  similarity scan's labelled heat-map figure.
+  similarity scan's labelled heat-map figure -- and (100x-162) the
+  SELFIES cards: the codec card (SMILES <-> SELFIES both directions,
+  the symbol/token view of the robust molecular string, Krenn et al.
+  2020) and the audit & robustness card (the round-trip fidelity
+  funnel with alphabet statistics, the corruption experiment -- k
+  random SELFIES symbols vs k random SMILES characters, the validity
+  curves figure telling the story -- and the random-SELFIES generator
+  whose every sample is a valid molecule by construction).
 * **PK / PD**       -- half-life <-> k(e), accumulation, IV bolus decay
   and Emax curves (plotted), oral Cmax/tmax, Cockcroft-Gault creatinine
   clearance with renal dose adjustment, loading/maintenance dosing,
@@ -96,11 +103,20 @@ A tabbed graphical interface opens with every calculation domain of the
   any new CSV against the last trained network before predicting (the
   ``ml check`` story, deep edition: every difference named, the
   training target dropped automatically).
-* **Generative**    -- run the genetic algorithm OR the reinforcement
-  learning optimiser on a SMILES corpus with any bundled objective (QED,
+* **Generative**    -- run the genetic algorithm, the reinforcement
+  learning optimiser, or the Monte Carlo tree search (100x-163, the
+  ChemTSv2 model) on a SMILES corpus with any bundled objective (QED,
   LogP window, ..., or the three reference-driven ones: Tanimoto
   similarity to a reference molecule, structural novelty against the
-  corpus, a hard SMARTS substructure constraint); adaptive GA runs
+  corpus, a hard SMARTS substructure constraint); the MCTS optimiser
+  exposes the search knobs (UCB1/PUCT tree policy, the exploration
+  constant, ChemTSv2's cumulative-probability expansion threshold,
+  rollouts per child, prior epochs) and renders the three-panel
+  search introspection (``plot_mcts_introspection``: the reward
+  story, the tree-growth-vs-discovery view, the dedup-cache economy)
+  plus a first→last statistics table; seeded MCTS runs root the tree
+  at the first seed molecule (ChemTSv2's ``--input_smiles``
+  extension mode); adaptive GA runs
   render the operator-mix learning curve (``plot_operator_trajectory``),
   RL runs render the four-panel prior-drift introspection
   (``plot_rl_introspection``: score trajectory, agent-vs-prior
@@ -527,6 +543,27 @@ Design notes
   102-175), and the Leaderboard gained the family BENCHMARK
   (``benchmark_feature_families`` -- the notebook's 16-fingerprint
   ``test_fp`` loop as one button over the 2D families).
+
+  (100x-162/163) The SELFIES + ChemTSv2 absorption round: two more
+  repositories cloned and reviewed file by file
+  (``the-matter-lab/selfies`` v2.2.0, 100 % robust molecular strings;
+  ``molecule-generator-collection/ChemTSv2`` v2.2.0, RNN + MCTS
+  generation).  The library grew ``chem/selfies_codec.py`` (the
+  codec, the dataset round-trip audit, the corruption experiment,
+  vocabulary helpers, the label/one-hot feature matrix, the random
+  generator, STONED-style mutants, the save-and-restore constraint
+  context manager -- optional-gated behind ``[selfies]``, a
+  pure-Python package with zero transitive dependencies) and
+  ``generative/mcts.py`` (the ChemTSv2 programming model: UCB1/PUCT
+  tree policies over SMILES prefixes, the cumulative-probability
+  expansion, rollouts with the dedup cache, the deterministic-cycle
+  budget, the extension mode -- the policy injectable so the search
+  logic runs without torch); the RNN prior gained
+  ``next_token_distribution`` (the policy surface the search
+  consumes); the Chemistry tab grew the two SELFIES cards and the
+  Generative tab gained the MCTS optimiser with its introspection
+  figure (``plot_mcts_introspection``) and the robustness figure
+  (``plot_selfies_robustness``).
 
 Command line helpers (useful for scripting and CI)::
 
@@ -1021,6 +1058,9 @@ _DEPENDENCIES: tuple[tuple[str, str, str, str], ...] = (
     ("matplotlib", "matplotlib", "embedded figures (parity, profiles, curves)", "matplotlib"),
     ("rdkit", "RDKit", "chemistry: descriptors, fingerprints, QED, the GA", "rdkit"),
     ("torch", "PyTorch", "deep-learning estimators + the RL optimiser", "torch"),
+    # (100x-162) the SELFIES surface (chem/selfies_codec.py) -- pure-Python
+    # package, zero transitive dependencies
+    ("selfies", "SELFIES", "the robust molecular string codec + MCTS-era featurisation", "selfies"),
 )
 
 _OBJECTIVE_KINDS = (
@@ -4364,6 +4404,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "smiles": self._dock_smiles_text.get("1.0", "end-1c"),
             "rism": self._rism_text.get("1.0", "end-1c"),
             "maccs": self._maccs_text.get("1.0", "end-1c"),
+            "selfies_audit": self._selfies_audit_text.get("1.0", "end-1c"),
             "scan_refs": self._scan_ref_text.get("1.0", "end-1c"),
             "scan_lib": self._scan_lib_text.get("1.0", "end-1c"),
             # 100x-121: the Ctrl+F card finder's last query -- a plain
@@ -4741,6 +4782,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "smiles": getattr(self, "_dock_smiles_text", None),
             "rism": getattr(self, "_rism_text", None),
             "maccs": getattr(self, "_maccs_text", None),
+            "selfies_audit": getattr(self, "_selfies_audit_text", None),
             "scan_refs": getattr(self, "_scan_ref_text", None),
             "scan_lib": getattr(self, "_scan_lib_text", None),
         }
@@ -7277,6 +7319,120 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         self._maccs_result.pack(side="left", padx=(10, 0))
 
+        # -- SELFIES codec (100x-162) ------------------------------------- #
+        # the robust molecular string: any SELFIES symbol string decodes
+        # to a valid molecule, so the codec card shows both directions
+        # plus the symbol-level view (the tokenizer output)
+        selfies_card = make_card(
+            page.grid,
+            "SELFIES codec",
+            row=7,
+            column=0,
+            subtitle="The robust molecular string — SMILES ↔ SELFIES, "
+            "both directions, symbol by symbol (Krenn et al. 2020).",
+        )
+        self._selfies_mode = ttk.Combobox(
+            selfies_card,
+            state="readonly",
+            width=22,
+            values=("SMILES → SELFIES", "SELFIES → SMILES"),
+        )
+        self._selfies_mode.set("SMILES → SELFIES")
+        form_row(selfies_card, "direction", self._selfies_mode)
+        self._selfies_entry = ttk.Entry(selfies_card, width=30)
+        self._selfies_entry.insert(0, "CC(=O)Oc1ccccc1C(=O)O")  # aspirin
+        form_row(selfies_card, "input", self._selfies_entry)
+        selfies_button = self._action_button(
+            selfies_card,
+            "Convert",
+            self._selfies_convert,
+            tooltip="One molecule, typed in either representation; the "
+            "output plus its symbol count and token list appear "
+            "below.",
+        )
+        selfies_button.grid(
+            row=selfies_card.grid_size()[1], column=0, sticky="w", pady=(6, 0)
+        )
+        self._selfies_result = ttk.Label(
+            selfies_card,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=340,
+            justify="left",
+        )
+        self._selfies_result.grid(
+            row=selfies_button.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        bind_enter(self._selfies_entry, selfies_button)
+        selfies_copy_btn = self._action_button(
+            selfies_card, "Copy", lambda: self._copy(self._selfies_result.cget("text"))
+        )
+        selfies_copy_btn.grid(row=selfies_card.grid_size()[1], column=0, sticky="w")
+        self._selfies_tokens = ttk.Label(
+            selfies_card,
+            text="",
+            style="CardMuted.TLabel",
+            wraplength=340,
+            justify="left",
+        )
+        grid_append(selfies_card, self._selfies_tokens, pady=(6, 0))
+
+        # -- SELFIES audit & robustness (100x-162) ----------------------- #
+        # the dataset surfaces: round-trip fidelity audit, the paper's
+        # Figure-3 corruption experiment (SELFIES vs SMILES validity)
+        # and the random-SELFIES generator (valid by construction)
+        selfies_audit = make_card(
+            page.grid,
+            "SELFIES audit & robustness",
+            row=7,
+            column=1,
+            subtitle="Paste a molecule list (empty = the bundled 244-molecule "
+            "corpus): round-trip fidelity, corruption survival vs SMILES, "
+            "and the random-SELFIES generator.",
+        )
+        self._selfies_audit_text = _grid_text(selfies_audit, height=5, mono=self._mono)
+        self._selfies_audit_text.insert("1.0", "\n".join(_FEAT_DEFAULT_SMILES))
+        grid_append(selfies_audit, self._selfies_audit_text, sticky="ew")
+        selfies_audit_buttons = ttk.Frame(selfies_audit, style="Card.TFrame")
+        grid_append(selfies_audit, selfies_audit_buttons, sticky="w", pady=(6, 0))
+        audit_btn = self._action_button(
+            selfies_audit_buttons,
+            "Round-trip audit",
+            self._selfies_audit_run,
+            tooltip="Encode → decode → canonical-SMILES equality over the "
+            "list (the SELFIES repo's own dataset QA methodology), "
+            "with the alphabet statistics.",
+        )
+        audit_btn.pack(side="left")
+        robust_btn = self._action_button(
+            selfies_audit_buttons,
+            "Robustness experiment",
+            self._selfies_robustness_run,
+            tooltip="The paper's Figure 3 on your molecules: k random "
+            "corruptions per string, SELFIES symbols vs SMILES "
+            "characters -- the validity curves tell the story.",
+        )
+        robust_btn.pack(side="left", padx=(10, 0))
+        random_btn = self._action_button(
+            selfies_audit_buttons,
+            "Random molecules",
+            self._selfies_random_run,
+            tooltip="Sample uniform random SELFIES strings from the robust "
+            "alphabet and decode them -- every sample is a valid "
+            "molecule by construction.",
+        )
+        random_btn.pack(side="left", padx=(10, 0))
+        self._selfies_audit_result = ttk.Label(
+            selfies_audit,
+            text="no audit yet — the funnel appears here",
+            style="CardMuted.TLabel",
+            wraplength=340,
+            justify="left",
+        )
+        grid_append(selfies_audit, self._selfies_audit_result, pady=(4, 0))
+        self._selfies_host = self._figure_host(selfies_audit, height=280)
+
     def _rism_run(self) -> None:
         """Compute the RISM-KH solvation descriptors for the pasted array."""
         if (
@@ -7907,6 +8063,130 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 )
 
         self._start_job("MACCS keys", work, render)
+
+    # -- SELFIES cards (100x-162) -------------------------------------- #
+    def _selfies_convert(self) -> None:
+        """SELFIES codec card: one molecule, both directions."""
+        if not self._require_pharmaml() or not self._require("selfies", "the SELFIES codec"):
+            return
+        text = self._selfies_entry.get().strip()
+        if not text:
+            messagebox.showwarning("Empty input", "Type a SMILES or SELFIES string first.")
+            return
+        decode = self._selfies_mode.get().startswith("SELFIES")
+
+        def work() -> Any:
+            from pharmaml.chem.selfies_codec import (
+                selfies_len,
+                selfies_to_smiles,
+                selfies_tokens,
+                smiles_to_selfies,
+            )
+
+            if decode:
+                smiles = selfies_to_smiles(text)
+                return smiles, selfies_len(text), selfies_tokens(text), "input"
+            encoded = smiles_to_selfies(text)
+            return encoded, selfies_len(encoded), selfies_tokens(encoded), "output"
+
+        def render(payload: Any) -> None:
+            output, n_symbols, tokens, which = payload
+            self._selfies_result.configure(text=output)
+            if tokens:
+                preview = " ".join(tokens[:12])
+                more = f" … +{len(tokens) - 12} more" if len(tokens) > 12 else ""
+                self._selfies_tokens.configure(
+                    text=f"{n_symbols} symbols ({which}): {preview}{more}"
+                )
+            else:
+                self._selfies_tokens.configure(text="")
+
+        self._start_job("SELFIES convert", work, render)
+
+    def _selfies_audit_run(self) -> None:
+        """SELFIES audit card: round-trip fidelity over the pasted list."""
+        if (
+            not self._require_pharmaml()
+            or not self._require("selfies", "the SELFIES audit")
+            or not self._require("rdkit", "the SELFIES audit")
+        ):
+            return
+        lines = parse_smiles_lines(self._selfies_audit_text.get("1.0", "end"))
+
+        def work() -> Any:
+            from pharmaml.chem.selfies_codec import selfies_roundtrip_report
+
+            pool = lines
+            if not pool:
+                from pharmaml.generative import DEFAULT_CORPUS
+
+                pool = list(DEFAULT_CORPUS)
+            return selfies_roundtrip_report(pool)
+
+        def render(report: Any) -> None:
+            self._selfies_audit_result.configure(
+                text=report.summary(), style="Field.TLabel"
+            )
+
+        self._start_job("SELFIES round-trip audit", work, render)
+
+    def _selfies_robustness_run(self) -> None:
+        """SELFIES audit card: the corruption experiment (Figure 3)."""
+        if (
+            not self._require_pharmaml()
+            or not self._require("selfies", "the robustness experiment")
+            or not self._require("rdkit", "the robustness experiment")
+        ):
+            return
+        lines = parse_smiles_lines(self._selfies_audit_text.get("1.0", "end"))
+
+        def work() -> Any:
+            from pharmaml.chem.selfies_codec import selfies_robustness_experiment
+
+            pool = lines
+            if not pool:
+                from pharmaml.generative import DEFAULT_CORPUS
+
+                pool = list(DEFAULT_CORPUS)
+            return selfies_robustness_experiment(
+                pool, mutations=(1, 2, 4, 8), trials=8, sample_limit=32, seed=42
+            )
+
+        def render(report: Any) -> None:
+            self._selfies_audit_result.configure(
+                text=report.summary(), style="Field.TLabel"
+            )
+            if self.deps.get("matplotlib"):
+                try:
+                    from pharmaml.viz import plot_selfies_robustness
+
+                    self._render_figure(self._selfies_host, plot_selfies_robustness(report))
+                except Exception as exc:  # noqa: BLE001
+                    self._show_error("Robustness plot failed", exc)
+
+        self._start_job("SELFIES robustness experiment", work, render)
+
+    def _selfies_random_run(self) -> None:
+        """SELFIES audit card: the random-SELFIES generator."""
+        if not self._require_pharmaml() or not self._require("selfies", "the SELFIES generator"):
+            return
+
+        def work() -> Any:
+            from pharmaml.chem.selfies_codec import random_selfies_molecules
+
+            return random_selfies_molecules(6, 12, seed=42)
+
+        def render(molecules: Any) -> None:
+            per = "  ·  ".join(str(molecule) for molecule in molecules)
+            self._selfies_audit_result.configure(
+                text=(
+                    "6 random SELFIES molecules (12 symbols, seed 42) — "
+                    f"every one valid by construction:\n{per}"
+                ),
+                style="Field.TLabel",
+            )
+
+        self._start_job("SELFIES random molecules", work, render)
 
     def _convert_affinity(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "conversion"):
@@ -20346,13 +20626,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=controls.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(2, 4)
         )
         self._objective_hint()
-        # the optimiser itself: the GA (structure-space search) or the RL
-        # policy-gradient fine-tuning of an on-the-fly SMILES RNN prior
+        # the optimiser itself: the GA (structure-space search), the RL
+        # policy-gradient fine-tuning of an on-the-fly SMILES RNN prior,
+        # or the ChemTSv2-style MCTS over SMILES prefixes
         self._method_combo = ttk.Combobox(
             controls,
             state="readonly",
             width=26,
-            values=("genetic algorithm", "reinforcement learning (RL)"),
+            values=(
+                "genetic algorithm",
+                "reinforcement learning (RL)",
+                "monte carlo tree search (MCTS)",
+            ),
         )
         self._method_combo.set("genetic algorithm")
         self._method_combo.bind("<<ComboboxSelected>>", self._on_method_change)
@@ -20408,6 +20693,60 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(rl_frame, "anchor weight", self._rl_anchor)
         rl_frame.grid_remove()  # the GA rows are the default
         self._rl_frame = rl_frame
+        # (100x-163) MCTS-specific rows: the ChemTSv2 search knobs --
+        # c (the UCB1 exploration constant), the tree policy (UCT, the
+        # v2 default, or PUCT, v1's prior-weighted variant), the
+        # cumulative-probability expansion threshold and the rollout
+        # count; swapped in exactly like the GA/RL frames above.
+        mcts_frame = ttk.Frame(controls, style="Card.TFrame")
+        grid_append(controls, mcts_frame, sticky="ew")
+        mcts_frame.columnconfigure(1, weight=1)
+        self._mcts_iterations = ttk.Spinbox(mcts_frame, from_=2, to=60, increment=2, width=10)
+        self._mcts_iterations.set("12")
+        form_row(mcts_frame, "cycles", self._mcts_iterations)
+        self._mcts_simulations = ttk.Spinbox(mcts_frame, from_=1, to=8, increment=1, width=10)
+        self._mcts_simulations.set("2")
+        Tooltip(
+            self._mcts_simulations,
+            "Rollouts per expanded child per cycle (ChemTSv2's "
+            "simulation_num) -- 2 keeps CPU runs snappy, 3 is the "
+            "library default.",
+        )
+        form_row(mcts_frame, "simulations", self._mcts_simulations)
+        self._mcts_cval = ttk.Entry(mcts_frame, width=12)
+        self._mcts_cval.insert(0, "1.0")
+        Tooltip(
+            self._mcts_cval,
+            "The UCB1 exploration constant (ChemTSv2's c_val): 1.0 "
+            "explores, 0.1 exploits.",
+        )
+        form_row(mcts_frame, "c (exploration)", self._mcts_cval)
+        self._mcts_policy_combo = ttk.Combobox(
+            mcts_frame, state="readonly", width=18, values=("uct", "puct")
+        )
+        self._mcts_policy_combo.set("uct")
+        form_row(mcts_frame, "tree policy", self._mcts_policy_combo)
+        self._mcts_expansion = ttk.Entry(mcts_frame, width=12)
+        self._mcts_expansion.insert(0, "0.995")
+        Tooltip(
+            self._mcts_expansion,
+            "ChemTSv2's cumulative-probability expansion: children are "
+            "the prior's top characters until their probabilities sum "
+            "this high (never fewer than two) -- an adaptive branching "
+            "factor.",
+        )
+        form_row(mcts_frame, "expansion", self._mcts_expansion)
+        self._mcts_prior_epochs = ttk.Spinbox(mcts_frame, from_=1, to=16, increment=1, width=10)
+        self._mcts_prior_epochs.set("8")
+        Tooltip(
+            self._mcts_prior_epochs,
+            "Epochs for the on-the-fly SMILES prior (the MCTS policy) -- "
+            "8 is the library default; fewer than ~6 undertrains it and "
+            "the search spends its budget on invalid rollouts.",
+        )
+        form_row(mcts_frame, "prior epochs", self._mcts_prior_epochs)
+        mcts_frame.grid_remove()
+        self._mcts_frame = mcts_frame
         self._ga_frame = ga_frame
         self._ga_seed = ttk.Entry(controls, width=12)
         self._ga_seed.insert(0, "42")
@@ -20962,18 +21301,33 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._start_job("litter structure grid", work, render)
 
     def _on_method_change(self, _event: Any = None) -> None:
-        """Swap the GA / RL parameter blocks (grid_remove collapses the row)."""
-        if self._method_combo.get() == "reinforcement learning (RL)":
-            self._ga_frame.grid_remove()
-            self._rl_frame.grid()
-        else:
-            self._rl_frame.grid_remove()
-            self._ga_frame.grid()
+        """Swap the GA / RL / MCTS parameter blocks (grid_remove collapses the row)."""
+        method = self._method_combo.get()
+        shown = {
+            "genetic algorithm": self._ga_frame,
+            "reinforcement learning (RL)": self._rl_frame,
+            "monte carlo tree search (MCTS)": self._mcts_frame,
+        }.get(method)
+        for frame in (self._ga_frame, self._rl_frame, self._mcts_frame):
+            if frame is shown:
+                frame.grid()
+            else:
+                frame.grid_remove()
 
     def _run_evolution(self) -> None:
         method = self._method_combo.get()
         if method == "reinforcement learning (RL)":
             if not self._require_pharmaml() or not self._require("torch", "the RL optimiser"):
+                return
+        elif method == "monte carlo tree search (MCTS)":
+            # (100x-163) the MCTS needs torch for the RNN policy AND rdkit
+            # for the objective's scoring -- both gates up front so the
+            # worker thread never dies mid-run
+            if (
+                not self._require_pharmaml()
+                or not self._require("torch", "the MCTS optimiser")
+                or not self._require("rdkit", "the MCTS objective")
+            ):
                 return
         elif not self._require_pharmaml() or not self._require("rdkit", "the GA"):
             return
@@ -21007,8 +21361,30 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     raise ValueError("anchor weight cannot be negative")
                 population = generations = 0
                 mutation = crossover = operator_selection = ""
+            elif method == "monte carlo tree search (MCTS)":
+                iterations = parse_int(self._mcts_iterations.get(), "cycles", minimum=1)
+                prior_epochs = parse_int(
+                    self._mcts_prior_epochs.get(), "prior epochs", minimum=1
+                )
+                simulations = parse_int(
+                    self._mcts_simulations.get(), "simulations", minimum=1
+                )
+                c_val = parse_float(self._mcts_cval.get(), "c (exploration)", minimum=0)
+                tree_policy = self._mcts_policy_combo.get()
+                expansion = parse_float(
+                    self._mcts_expansion.get(), "expansion threshold"
+                )
+                if not 0 < expansion <= 1:
+                    raise ValueError("expansion threshold must be in (0, 1]")
+                batch_size = 0
+                anchor_weight = 0.0
+                population = generations = 0
+                mutation = crossover = operator_selection = ""
             else:
                 iterations = batch_size = prior_epochs = 0
+                simulations = 0
+                c_val = 0.0
+                tree_policy = expansion = ""
                 anchor_weight = 0.0
                 population = parse_int(self._pop_size.get(), "population", minimum=4)
                 generations = parse_int(self._generations.get(), "generations", minimum=1)
@@ -21023,7 +21399,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # the novelty objective's reference pool: the card's own corpus
         # (None hands the library its built-in 244-molecule default)
         novelty_corpus: Any = list(lines) if lines else None
-        if method == "reinforcement learning (RL)":
+        if method == "reinforcement learning (RL)" or method == "monte carlo tree search (MCTS)":
             want_plot = bool(self.deps.get("matplotlib"))
         else:
             want_plot = operator_selection == "adaptive" and self.deps.get("matplotlib")
@@ -21050,6 +21426,34 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     anchor_weight=anchor_weight,
                     seed=seed,
                 )
+            elif method == "monte carlo tree search (MCTS)":
+                from pharmaml.generative import DEFAULT_CORPUS, MctsOptimizer
+
+                # (100x-163) the MCTS corpus semantics mirror the RL prior's;
+                # seeded mode ALSO roots the tree at the first seed molecule
+                # (ChemTSv2's --input_smiles extension mode: grow only that
+                # prefix's continuations)
+                if not lines:
+                    corpus_arg = None
+                    prefix = ""
+                elif seed_mode:
+                    corpus_arg = list(dict.fromkeys([*lines, *DEFAULT_CORPUS]))
+                    prefix = lines[0]
+                else:
+                    corpus_arg = lines
+                    prefix = ""
+                optimizer = MctsOptimizer(
+                    objective,
+                    corpus=corpus_arg,
+                    iterations=iterations,
+                    simulation_num=simulations,
+                    c_val=c_val,
+                    tree_policy=tree_policy,
+                    expansion_threshold=expansion,
+                    prior_epochs=prior_epochs,
+                    seed=seed,
+                )
+                return optimizer.optimize(prefix=prefix)
             else:
                 from pharmaml.generative import GeneticOptimizer
 
@@ -21080,6 +21484,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
             if method == "reinforcement learning (RL)":
                 mode = f"RL · {mode}"
+            elif method == "monte carlo tree search (MCTS)":
+                # seeded MCTS runs grow from the first seed molecule --
+                # the extension mode worth naming in the summary
+                if seed_mode and lines:
+                    mode = f"MCTS from {lines[0]} · {mode}"
+                else:
+                    mode = f"MCTS · {mode}"
             self._ga_summary.configure(
                 text=(
                     f"best {result.best_score:.3f} — {result.best}   "
@@ -21103,6 +21514,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 )
             if method == "reinforcement learning (RL)":
                 stats = _format_rl_history(result)
+            elif method == "monte carlo tree search (MCTS)":
+                stats = _format_mcts_stats(result.metadata)
             else:
                 stats = _format_operator_stats(result.metadata)
             self._ga_stats_text.delete("1.0", "end")
@@ -21113,6 +21526,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         from pharmaml.viz import plot_rl_introspection
 
                         figure = plot_rl_introspection(result)
+                    elif method == "monte carlo tree search (MCTS)":
+                        from pharmaml.viz import plot_mcts_introspection
+
+                        figure = plot_mcts_introspection(result)
                     else:
                         from pharmaml.viz import plot_operator_trajectory
 
@@ -21125,20 +21542,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 for child in self._ga_host.winfo_children():
                     child.destroy()
             self._render_pareto(result)
-            if method == "reinforcement learning (RL)" and not result.smiles:
+            if (
+                method in ("reinforcement learning (RL)", "monte carlo tree search (MCTS)")
+                and not result.smiles
+            ):
                 # an undertrained prior samples mostly invalid strings:
                 # the honest advisory instead of an empty leaderboard
                 messagebox.showinfo(
                     "No valid molecules yet",
-                    "The RL run finished but sampled no valid SMILES -- the "
+                    "The run finished but sampled no valid SMILES -- the "
                     "prior is still undertrained.\n\n"
                     "Raise 'prior epochs' (8+ is the CLI default), keep "
-                    "iterations at 10+, and re-run: the anchor needs a "
-                    "prior that already writes chemistry.",
+                    "iterations/cycles at 10+, and re-run: both the RL "
+                    "anchor and the MCTS search need a prior that "
+                    "already writes chemistry.",
                 )
 
         if method == "reinforcement learning (RL)":
             label = f"RL optimising {iterations} iterations (anchor {anchor_weight:g})"
+        elif method == "monte carlo tree search (MCTS)":
+            label = f"MCTS searching {iterations} cycles ({tree_policy})"
         else:
             label = f"evolving {generations} generations ({operator_selection})"
         self._start_job(label, work, render)
@@ -22923,6 +23346,47 @@ def _format_rl_history(result: Any) -> str:
     lines.append(_fmt("entropy"))
     lines.append(_fmt("agent_logprob"))
     lines.append(_fmt("prior_logprob"))
+    return "\n".join(lines)
+
+
+def _format_mcts_stats(metadata: dict[str, Any]) -> str:
+    """Render an MCTS run's ``metadata`` as a compact search-statistics block.
+
+    The text twin of :func:`pharmaml.viz.plot_mcts_introspection` -- the
+    numbers the figure plots (nodes, unique molecules, cache hits), plus
+    the configuration echo, in text form.
+    """
+
+    def _fmt(key: str, pattern: str = "{}") -> str:
+        value = metadata.get(key)
+        if value is None:
+            return f"  {key:<18} (missing)"
+        try:
+            rendered = pattern.format(value)
+        except (TypeError, ValueError):
+            rendered = str(value)
+        return f"  {key:<18} {rendered:>12}"
+
+    lines = ["MCTS run — search statistics (ChemTSv2 model)"]
+    policy = metadata.get("tree_policy")
+    c_val = metadata.get("c_val")
+    if policy is not None and c_val is not None:
+        lines.append(f"  {'tree policy':<18} {policy} (c={c_val:g})".rstrip())
+    lines.append(_fmt("expansion_threshold", "{:.3f}"))
+    lines.append(_fmt("simulation_num"))
+    lines.append(_fmt("iterations"))
+    lines.append(_fmt("n_nodes"))
+    lines.append(_fmt("n_rollouts"))
+    lines.append(_fmt("n_unique"))
+    lines.append(
+        _fmt("n_cache_hits") + "   (molecules scored once, however often "
+        "the tree revisits)"
+    )
+    lines.append(_fmt("max_depth"))
+    lines.append(_fmt("elapsed_s", "{:.1f} s"))
+    prefix = metadata.get("prefix")
+    if prefix:
+        lines.append(f"  extension prefix     {prefix!r}")
     return "\n".join(lines)
 
 

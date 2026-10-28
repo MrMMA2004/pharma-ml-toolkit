@@ -43,7 +43,14 @@ runs in seconds on a laptop CPU:
    (REINVENT-style reinforcement learning: a character-level GRU prior
    trained on the corpus, fine-tuned by REINFORCE with a running
    baseline, entropy bonus, prior anchor and experience replay -- the
-   "with some sample molecules" mode works by seeding the prior's corpus);
+   "with some sample molecules" mode works by seeding the prior's corpus)
+   and/or :class:`~pharmaml.generative.MctsOptimizer`
+   (the ChemTSv2 programming model: Monte Carlo tree search over SMILES
+   prefixes where the *moves* are characters, the *policy* is the RNN's
+   next-character distribution and the *reward* is your objective -- UCB1
+   or PUCT tree policy, ChemTSv2's cumulative-probability expansion, a
+   seeded-run dedup cache and an extension mode that roots the search at
+   a chosen partial SMILES);
 4. **Inspect** -- every run returns a
    :class:`~pharmaml.generative.GenerationResult` (ranked deduplicated
    canonical SMILES, per-objective breakdown, per-iteration history,
@@ -59,7 +66,10 @@ runs in seconds on a laptop CPU:
    exploration entropy, and both mean sequence log-probabilities --
    iteration 0's drift is exactly ``0.0`` because the agent starts as a
    bit-exact copy of the frozen prior), rendered by
-   :func:`pharmaml.viz.plot_rl_introspection`.
+   :func:`pharmaml.viz.plot_rl_introspection`; an MCTS run's ``history``
+   records the per-cycle search statistics (best/mean rollout reward,
+   unique molecules, nodes, cache hits), rendered by
+   :func:`pharmaml.viz.plot_mcts_introspection`.
 
 Example
 -------
@@ -89,6 +99,7 @@ from __future__ import annotations
 from .bioisostere import bioisostere_moves, bioisostere_mutate
 from .corpus import DEFAULT_CORPUS
 from .genetic import GeneticOptimizer, run_genetic_optimization
+from .mcts import MctsOptimizer, run_mcts_optimization
 from .pareto import ParetoFront, pareto_front
 from .result import GenerationResult
 from .rl import ReinventOptimizer, run_rl_optimization
@@ -112,6 +123,7 @@ __all__ = [
     "GenerationResult",
     "GeneticOptimizer",
     "LogPBandObjective",
+    "MctsOptimizer",
     "MolecularWeightBandObjective",
     "MultiObjective",
     "NoveltyObjective",
@@ -129,6 +141,7 @@ __all__ = [
     "ring_topology_moves",
     "ring_topology_mutate",
     "run_genetic_optimization",
+    "run_mcts_optimization",
     "run_rl_optimization",
     "scaffold_hop_crossover",
 ]

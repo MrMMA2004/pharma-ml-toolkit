@@ -67,11 +67,15 @@ after adding new public functions.
 | `MorganBitInfo` | class | Decode record for one Morgan fingerprint bit on one molecule. |
 | `PdbLigandReport` | class | Audit record for one :func:`smiles_to_pdb` conversion. |
 | `SdfWriteReport` | class | Audit of one :func:`table_to_sdf` conversion. |
+| `SelfiesBatchConversion` | class | Result of :func:`batch_smiles_to_selfies` -- per-row, never row-destructive. |
+| `SelfiesRobustnessReport` | class | Validity under random corruption: SELFIES symbols vs SMILES characters. |
+| `SelfiesRoundtripReport` | class | Round-trip fidelity audit of a SMILES column, the repo's own QA pattern. |
 | `TableComparison` | class | Set reconciliation of one ligand column across two tables. |
 | `VarianceFilterResult` | class | Result of :func:`filter_low_variance`. |
 | `add_ic50_column` | function | Append an IC50 column converted from a pIC50 column. |
 | `add_pic50_column` | function | Append a pIC50 column to a table of measurements. |
 | `annotate_with_smiles` | function | Annotate ligand-name columns with SMILES from a reference table. |
+| `batch_smiles_to_selfies` | function | Encode a whole SMILES column, logging per-row failures. |
 | `canonicalize_tautomer` | function | Return the canonical-tautomer SMILES of ``smiles``. |
 | `compare_tables` | function | Compare one ligand-name column across two tables. |
 | `compute_3d_descriptors` | function | Compute RDKit 3D shape descriptors for a list of SMILES. |
@@ -90,14 +94,28 @@ after adding new public functions.
 | `merge_tables` | function | Row-wise merge of several tables, ignoring the index. |
 | `pic50_to_ic50` | function | Convert a pIC50 value back to an IC50 concentration. |
 | `prepare_pic50_dataset` | function | Turn a raw SMILES + EC50 table into a modelling-ready pEC50 set. |
+| `random_selfies_molecules` | function | Sample ``n`` molecules uniformly from the robust SELFIES alphabet. |
 | `rank_features` | function | Rank feature columns by importance, descending. |
 | `sdf_to_table` | function | Read an SD file back into a table (SMILES, tags and titles). |
 | `select_top_features` | function | Select the top-K features with the rar's two-layer strategy. |
 | `selection_metadata` | function | Build the JSON-ready metadata dict for a feature-selection run. |
+| `selfies_alphabet` | function | Sorted set of SELFIES symbols appearing in an iterable of strings. |
+| `selfies_available` | function | Report whether the optional ``selfies`` package is importable. |
+| `selfies_feature_matrix` | function | Featurise a SMILES column as a SELFIES label / one-hot matrix. |
+| `selfies_len` | function | Number of SELFIES symbols in a string (no full parse). |
+| `selfies_mutants` | function | Enumerate a molecule's SELFIES-symbol point mutants (STONED-style). |
+| `selfies_robustness_experiment` | function | Reproduce the SELFIES paper's Figure 3 on your own molecules. |
+| `selfies_roundtrip_report` | function | Audit a SMILES column: encode → decode → canonical-SMILES equality. |
+| `selfies_symbol_frequencies` | function | Symbol → occurrence count over an iterable of SELFIES strings. |
+| `selfies_to_smiles` | function | Translate one SELFIES string back to SMILES. |
+| `selfies_tokens` | function | Split one SELFIES string into its symbols (the tokenizer). |
+| `semantic_constraint_presets` | function | The constraint presets the package ships. |
+| `semantic_constraints` | function | Temporarily set the global SELFIES semantic constraints. |
 | `signed_feature_correlations` | function | Signed correlation of every numeric column with ``target``. |
 | `similarity_scan` | function | Scan reference ligands against a target library (Tanimoto >= threshold). |
 | `smi_to_csv` | function | Stream a ``.smi`` file to CSV one line at a time. |
 | `smiles_to_pdb` | function | Generate an optimised 3D PDB ligand from a SMILES string. |
+| `smiles_to_selfies` | function | Translate one SMILES string to its SELFIES encoding. |
 | `split_table_into_chunks` | function | Stream a large CSV into fixed-size part files. |
 | `table_to_sdf` | function | Write a SMILES table to an SD file with 3D structures. |
 | `table_to_smi` | function | Write a SMILES table to a ``.smi`` list file. |
@@ -201,6 +219,7 @@ after adding new public functions.
 | `GenerationResult` | class | Ranked molecules from one generative optimisation run. |
 | `GeneticOptimizer` | class | Tournament-selection genetic algorithm over canonical SMILES. |
 | `LogPBandObjective` | class | Gaussian band on Crippen LogP (wild octanol/water behaviour excluded). |
+| `MctsOptimizer` | class | ChemTSv2-style MCTS over SMILES prefixes, guided by a language model. |
 | `MolecularWeightBandObjective` | class | Gaussian band on average molecular weight (Da).  See |
 | `MultiObjective` | class | Weighted geometric mean of several objectives, with veto semantics. |
 | `NoveltyObjective` | class | Structural novelty against a reference corpus. |
@@ -218,6 +237,7 @@ after adding new public functions.
 | `ring_topology_moves` | function | Every distinct one-step ring-size mutant of ``smiles`` (sorted). |
 | `ring_topology_mutate` | function | Draw one ring-size mutant of ``smiles`` with ``rng`` (or ``None``). |
 | `run_genetic_optimization` | function | One-call genetic optimisation (thin :class:`GeneticOptimizer` wrapper). |
+| `run_mcts_optimization` | function | One-call MCTS convenience (mirrors ``run_genetic_optimization``). |
 | `run_rl_optimization` | function | One-call RL optimisation (trains a prior from the corpus if needed). |
 | `scaffold_hop_crossover` | function | BREED-style crossover: homologous cuts, hybrid child. |
 
@@ -385,6 +405,7 @@ after adding new public functions.
 | `plot_kmeans_diagnostics` | function | Inertia elbow AND silhouette sweep -- the auditable k choice. |
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
 | `plot_manifold_embedding` | function | Scatter an embedding, coloured by a target (the digits-figure pattern). |
+| `plot_mcts_introspection` | function | One figure per MCTS run: score story, search growth, dedup economy. |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
 | `plot_optimization_history` | function | The objective per trial + the best-so-far step line (100x-160). |
@@ -401,6 +422,7 @@ after adding new public functions.
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |
 | `plot_rl_introspection` | function | One figure per RL run: the score story + the prior-drift diagnostics. |
 | `plot_roc_curves` | function | Receiver-operating curves — binary or one-vs-rest multiclass. |
+| `plot_selfies_robustness` | function | The robustness experiment's two validity curves, one figure. |
 | `plot_shap_beeswarm` | function | The SHAP beeswarm in PURE matplotlib -- ``D2.py``'s GAP-5 figure. |
 | `plot_shap_dependence` | function | One feature's value vs its SHAP value, coloured by its partner (100x-160). |
 | `plot_shap_force` | function | The additive force plot, static matplotlib twin (100x-160). |

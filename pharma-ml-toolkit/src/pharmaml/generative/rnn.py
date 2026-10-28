@@ -431,6 +431,106 @@ class SmilesRnn:
                     break
         return ["".join(tokens) for tokens in buffers]
 
+    def next_token_distribution(
+        self, prefix: str, *, temperature: float = 1.0
+    ) -> list[tuple[str, float]]:
+        """Next-character distribution over the vocabulary given a prefix.
+
+        The policy surface the MCTS optimiser
+        (:class:`~pharmaml.generative.MctsOptimizer`, the ChemTSv2
+        programming model) consumes: one teacher-forced pass over the
+        start symbol plus ``prefix``, read the last position's softmax,
+        drop the never-emitted tokens (``<pad>`` / ``<unk>`` /
+        ``<start>``), renormalise, and return ``(character, probability)``
+        pairs sorted by probability descending.  ``<end>`` IS included --
+        terminating the molecule is one of the policy's moves.
+
+        Parameters
+        ----------
+        prefix:
+            The partial SMILES generated so far (``""`` = the root
+            distribution before any character).
+        temperature:
+            Softmax temperature (``> 0``); the default ``1.0`` returns
+            the raw model probabilities -- exactly what a search
+            algorithm over the policy needs.
+
+        Returns
+        -------
+        list[tuple[str, float]]
+            ``(character, probability)`` pairs, probability descending;
+            zero-probability characters are omitted.  Empty when the
+            renormalised distribution degenerates (all mass on banned
+            tokens -- an undertrained model edge case).
+
+        Raises
+        ------
+        DataValidationError
+            If the model is untrained or ``temperature`` is not a
+            positive finite number.
+        DependencyError
+            If torch is not installed.
+
+        Example
+        -------
+        >>> from pharmaml.generative import SmilesRnn, DEFAULT_CORPUS
+        >>> prior = SmilesRnn(hidden_dim=48, seed=42)
+        >>> losses = prior.train_prior(DEFAULT_CORPUS, epochs=1)
+        >>> 0.0 < losses[0] < 10.0            # one epoch's teacher-forcing loss
+        True
+        >>> distribution = prior.next_token_distribution("")
+        >>> distribution[0][0] in "CNc"          # carbon/nitrogen/aromatic first
+        True
+        >>> abs(sum(prob for _, prob in distribution) - 1.0) < 1e-5
+        True
+        >>> "<end>" in [token for token, _ in distribution]
+        True
+        """
+        if self._model is None:
+            raise DataValidationError(
+                "the prior is untrained -- call train_prior() before "
+                "next_token_distribution()"
+            )
+        if not isinstance(prefix, str):
+            raise DataValidationError(
+                f"prefix must be a str, got {prefix!r}"
+            )
+        if (
+            not isinstance(temperature, (int, float))
+            or not math.isfinite(temperature)
+            or temperature <= 0
+        ):
+            raise DataValidationError(
+                f"temperature must be a positive finite number, got {temperature!r}"
+            )
+        torch = _require_torch()
+        from torch.nn import functional as F
+
+        mapping = self._token_map()
+        vocab = self._vocab
+        if vocab is None:  # unreachable after _token_map(); narrows the type
+            raise DataValidationError("no vocabulary yet -- call train_prior first")
+        banned = {PAD, UNK, START}
+        ids = [mapping[START]] + [mapping.get(ch, mapping[UNK]) for ch in prefix]
+        with torch.no_grad():
+            x = torch.tensor([ids], dtype=torch.long)
+            logits, _ = self._model(x)
+            step = logits[0, -1, :].float() / float(temperature)
+            probs = F.softmax(step, dim=-1).tolist()
+        allowed = [
+            (vocab[i], float(probs[i]))
+            for i in range(len(vocab))
+            if vocab[i] not in banned
+        ]
+        total = sum(prob for _, prob in allowed)
+        if not math.isfinite(total) or total <= 0.0:
+            return []
+        pairs = [
+            (token, prob / total) for token, prob in allowed if prob / total > 0.0
+        ]
+        pairs.sort(key=lambda item: (-item[1], item[0]))
+        return pairs
+
     # -- package-private helpers (used by rl.py) --------------------------
     def _padded_batch(
         self, torch: Any, sequences: list[list[int]]

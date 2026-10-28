@@ -10,11 +10,11 @@ domains into one coherent package:
 | **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
 | **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management |
-| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, the eight-family **feature factory** (`compute_feature_frame` → 10,000+ columns per molecule, `rank_features`, `select_top_features` two-layer top-K selection; the 8th family is the **3D-RISM-KH solvation descriptor** set `compute_rism_descriptors`), SMI/CSV/SDF format conversion, tautomer standardization + 3D ligand generation (SMILES→PDB), ligand-table reconciliation & merging |
+| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, the eight-family **feature factory** (`compute_feature_frame` → 10,000+ columns per molecule, `rank_features`, `select_top_features` two-layer top-K selection; the 8th family is the **3D-RISM-KH solvation descriptor** set `compute_rism_descriptors`), SMI/CSV/SDF format conversion, tautomer standardization + 3D ligand generation (SMILES→PDB), ligand-table reconciliation & merging, **the SELFIES surface** (`chem/selfies_codec.py`: the robust molecular string codec, the round-trip fidelity audit, the corruption experiment — SELFIES vs SMILES validity — the vocabulary helpers, the label/one-hot feature matrix, the random-SELFIES generator, STONED-style symbol mutants and the save-and-restore constraint context manager) |
 
 This package is the upgraded, re-engineered version of a flat collection of research scripts:
 every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (**3472 tests**).
+exceptions, input validation, and pytest coverage** (**3531 tests**).
 
 ---
 
@@ -1190,7 +1190,7 @@ print(report.roc_auc)     # one-vs-rest multiclass AUC
 Can the toolkit **invent** molecules, not just analyse them? Yes — the `generative`
 subpackage ships the whole story on a laptop CPU: a bundled curated corpus
 (`DEFAULT_CORPUS`, 244 canonical drug-like SMILES — aspirin, paracetamol, ibuprofen,
-caffeine, … plus a heterocycle/functional-group tour), an objective library, and two
+caffeine, … plus a heterocycle/functional-group tour), an objective library, and three
 complementary optimisers. A runnable narrative lives in
 `examples/run_generative_design.py` (~15 s end to end, the GA running
 denovo / seeded / structural), and the fully
@@ -1201,6 +1201,7 @@ every stage with committed outputs (see *Quickstart* above).
 from pharmaml.generative import (
     DEFAULT_CORPUS, QedObjective, LogPBandObjective, SimilarityObjective,
     NoveltyObjective, MultiObjective, GeneticOptimizer, ReinventOptimizer, SmilesRnn,
+    MctsOptimizer,
 )
 
 # 1) Define what a "good" molecule means: drug-like + LogP window + aspirin-ish.
@@ -1234,6 +1235,14 @@ hopped = GeneticOptimizer(
 prior = SmilesRnn(hidden_dim=96, seed=42)
 prior.train_prior(DEFAULT_CORPUS, epochs=8)               # < 1 s
 rl = ReinventOptimizer(objective, prior=prior, iterations=15, seed=42).optimize()
+
+# 3b) Monte Carlo tree search (the ChemTSv2 model, Ishida et al. 2023): the
+#     moves are SMILES characters, the policy is the RNN's next-character
+#     distribution, the reward is the objective -- the search spends its
+#     budget where policy and reward disagree. Extension mode grows only a
+#     chosen prefix's continuations (ChemTSv2's --input_smiles).
+mcts = MctsOptimizer(QedObjective(), iterations=16, seed=42).optimize()
+grown = MctsOptimizer(QedObjective(), seed=42).optimize(prefix="CC(=O)O")
 
 de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, breakdown
 ```
@@ -1390,7 +1399,25 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
 * **Method trade-offs, honestly:** the GA explores wider (hundreds of unique molecules
   per run, no extra dependency, seeded *and* de novo modes) while RL fine-tunes a learned
   prior and needs fewer evaluations to focus on high-scoring neighbourhoods — but costs a
-  torch install and yields fewer unique hits at this scale. Run both, compare leaderboards.
+  torch install and yields fewer unique hits at this scale. MCTS sits between them: it
+  searches *through* the same learned prior without fine-tuning it (tree search over the
+  prior's own distribution), spends its budget adaptively (UCB1/PUCT exploration vs the
+  cumulative-probability expansion) and ships the extension mode (`optimize(prefix=...)`)
+  the other two lack — but it also needs torch for the default policy and yields fewer
+  unique molecules per run than the GA. Run all three, compare leaderboards.
+* **MCTS mechanics (100x-163, the ChemTSv2 absorption):** UCB1 exactly as ChemTSv2 v2
+  computes it (`Q/N + c_val·√(2·ln N_parent / N)`) or ChemTS v1's PUCT
+  (`Q/N + puct_c·prior·√N_parent/(1+N)`, `tree_policy="puct"`); the
+  cumulative-probability expansion (children = the policy's top characters until their
+  probabilities sum to `expansion_threshold`, default 0.995, never fewer than two);
+  `simulation_num` rollouts per expanded child per cycle; unparseable rollouts score 0.0
+  (the toolkit's [0,1] convention — ChemTSv2's −1 penalty mapped onto it); a dedup
+  cache scores every distinct canonical molecule once; `iterations` cycles is a
+  deterministic budget (seeded runs are byte-reproducible). The per-cycle search
+  statistics (reward story, tree growth, cache economy) render via
+  `plot_mcts_introspection(result)` (from `pharmaml.viz`). A custom policy can be
+  injected (`MctsOptimizer(objective, policy=callable)`) — any prefix → distribution
+  mapping works, no torch needed.
 * CLI twins: `pharmaml generative run --method ga|rl --recipe qed|logp|druglike|similar|novel`
   (with `--seeds examples/data/seed_molecules.csv` for the "with some sample molecules"
   mode; `--scaffold` switches the GA to scaffold-preserving mutations,
@@ -1407,6 +1434,67 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   `pharmaml generative corpus`.
 * Requires `pip install "pharmaml[chem]"`; the RNN/RL half additionally needs
   `pip install "pharmaml[deep]"` (PyTorch is imported lazily — the package works without it).
+
+### SELFIES: the robust molecular string (from 0 to 100)
+
+SMILES has one structural flaw a generative pipeline keeps paying for: an arbitrary
+string of SMILES characters is *usually not a molecule*. SELFIES (SELF-referencIng
+Embedded Strings, Krenn et al. 2020; `the-matter-lab/selfies`, Apache-2.0 — an optional
+`pip install 'pharmaml[selfies]'`, pure-Python with zero transitive dependencies)
+fixes that by construction: its grammar clamps every bond, branch and ring to the
+remaining bonding capacity, so **any sequence of SELFIES symbols decodes to a valid
+molecule**. The `chem.selfies_codec` module is the toolkit's typed surface over it:
+
+```python
+from pharmaml.chem.selfies_codec import (
+    smiles_to_selfies, selfies_to_smiles, batch_smiles_to_selfies,
+    selfies_roundtrip_report, selfies_robustness_experiment,
+    selfies_alphabet, selfies_feature_matrix,
+    random_selfies_molecules, selfies_mutants, semantic_constraints,
+)
+
+# 1) Codec: both directions, symbol by symbol.
+selfies = smiles_to_selfies("CC(=O)Oc1ccccc1C(=O)O")     # aspirin, 19 symbols
+smiles_to_selfies("CCO"), selfies_to_smiles("[C][C][O]")  # ('[C][C][O]', 'CCO')
+
+# 2) Audit a whole dataset: the SELFIES repo's own QA methodology —
+#    encode → decode → RDKit canonical-SMILES equality, row-preserving.
+report = selfies_roundtrip_report(["CCO", "CCN", "c1ccccc1"])
+report.fidelity, report.alphabet_size, report.summary()
+
+# 3) The corruption experiment (the paper's Figure 3, on your molecules):
+#    k random SELFIES *symbols* vs k random SMILES *characters* — the
+#    SELFIES curve stays at ~100% valid while the SMILES curve collapses.
+experiment = selfies_robustness_experiment(
+    ["c1ccccc1", "CC(=O)Oc1ccccc1C(=O)O"], mutations=(1, 2, 4, 8), seed=42)
+experiment.selfies_validity, experiment.smiles_validity   # ([1.0, ...], [0.6, ...])
+plot_selfies_robustness(experiment)                      # from pharmaml.viz
+
+# 4) Vocabulary + ML features: the label / one-hot encodings of the
+#    SELFIES VAE literature, straight into scikit-learn shape.
+matrix, vocab = selfies_feature_matrix(["CCO", "CCN", "CCS"])        # (3, 3) labels
+hot, _ = selfies_feature_matrix(["CCO", "CCN"], encoding="one_hot")  # (2, 3*V)
+
+# 5) Generation with validity guaranteed: uniform random SELFIES strings
+#    (every sample valid by construction) and STONED-style symbol mutants.
+random_selfies_molecules(6, 12, seed=42)     # 6 valid molecules, 12 symbols each
+selfies_mutants("CCO", n=8, seed=42)         # the symbol-level neighbourhood
+
+# 6) Semantic constraints are PROCESS-GLOBAL in the package — the context
+#    manager puts the previous table back, even on exceptions.
+with semantic_constraints({"C": 1, "O": 1, "N": 1, "?": 1}):
+    selfies_to_smiles("[C][#C]")             # 'CC' — the triple bond clamped
+selfies_to_smiles("[C][#C]")                 # 'C#C' — restored, nothing leaked
+```
+
+* The playground's Chemistry tab carries the GUI twins: a **SELFIES codec** card
+  (both directions + the symbol/token view) and a **SELFIES audit & robustness**
+  card (round-trip funnel, the corruption-experiment figure, the random generator).
+* Honest scope: the decoder writes aromatic rings in kekulé form (`C1=CC=CC=C1`) —
+  chemically identical, and canonical-equal under RDKit, which is exactly the
+  round-trip audit's criterion.
+* Requires `pip install "pharmaml[selfies]"`; the audit / robustness / feature
+  halves additionally need RDKit. The package is imported lazily everywhere.
 
 ### Cell line data analysis (from 0 to 100)
 

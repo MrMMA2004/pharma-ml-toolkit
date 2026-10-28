@@ -150,7 +150,12 @@ class TestCellLineSurface:
 
     def test_dependency_table_covers_the_heavy_packages(self, playground: Any) -> None:
         modules = {entry[0] for entry in playground._DEPENDENCIES}
-        assert modules == {"numpy", "pandas", "sklearn", "scipy", "matplotlib", "rdkit", "torch"}
+        # 100x-162: selfies joined the heavy-packages table (the SELFIES
+        # codec / audit surfaces -- pure-Python package, zero transitive
+        # dependencies)
+        assert modules == {
+            "numpy", "pandas", "sklearn", "scipy", "matplotlib", "rdkit", "torch", "selfies"
+        }
 
 
 # --------------------------------------------------------------------- #
@@ -174,6 +179,7 @@ class TestDockingTab:
 class TestPureHelpers:
     def test_probe_dependencies_returns_booleans_for_every_module(self, playground: Any) -> None:
         status = playground.probe_dependencies()
+        # 100x-162: selfies joined the probed heavy packages
         assert set(status) == {
             "numpy",
             "pandas",
@@ -182,6 +188,7 @@ class TestPureHelpers:
             "matplotlib",
             "rdkit",
             "torch",
+            "selfies",
         }
         assert all(isinstance(value, bool) for value in status.values())
 
@@ -10672,24 +10679,27 @@ class TestReview142Gui:
 
     # -- the audit fixes: the text-map drift ------------------------------- #
 
-    def test_session_text_widgets_map_covers_all_seven_keys(self, app: Any) -> None:
+    def test_session_text_widgets_map_covers_all_eight_keys(self, app: Any) -> None:
         widgets = app._session_text_widgets()
+        # 100x-162: the SELFIES audit box joined the map (the Chemistry
+        # tab's sixth persisted text box)
         assert set(widgets) == {
             "pasted",
             "corpus",
             "smiles",
             "rism",
             "maccs",
+            "selfies_audit",
             "scan_refs",
             "scan_lib",
         }
         assert all(widget is not None for widget in widgets.values())
 
-    def test_ownership_walk_covers_all_seven_text_boxes(self, app: Any) -> None:
+    def test_ownership_walk_covers_all_persisted_text_boxes(self, app: Any) -> None:
         # the bug (audit 100x-142 §3): text_by_id carried only 4 keys, so
         # text:maccs / text:scan_refs / text:scan_lib never entered the
         # ownership map -- and Reset/Copy silently skipped them.  The
-        # probe: Chemistry owns five of the seven, Generative the
+        # probe: Chemistry owns six of the eight, Generative the
         # corpus, Docking the SMILES array.
         owners = app._tab_input_names()
         chemistry = owners[1]
@@ -10697,6 +10707,7 @@ class TestReview142Gui:
             "text:pasted",
             "text:rism",
             "text:maccs",
+            "text:selfies_audit",
             "text:scan_refs",
             "text:scan_lib",
         ):
@@ -10705,21 +10716,28 @@ class TestReview142Gui:
         assert "text:smiles" in owners[4]  # Docking
 
     def test_chemistry_reset_restores_maccs_and_scan_boxes(self, app: Any) -> None:
-        # the live confession: scribble over the three boxes the drift
+        # the live confession: scribble over the boxes the drift
         # forgot, reset the Chemistry tab, and they must return to their
         # LAUNCH DEFAULTS (the shipped example content, not empty).
         defaults = {
             "maccs": app._maccs_text.get("1.0", "end-1c"),
             "scan_refs": app._scan_ref_text.get("1.0", "end-1c"),
             "scan_lib": app._scan_lib_text.get("1.0", "end-1c"),
+            "selfies_audit": app._selfies_audit_text.get("1.0", "end-1c"),
         }
-        for box in (app._maccs_text, app._scan_ref_text, app._scan_lib_text):
+        for box in (
+            app._maccs_text,
+            app._scan_ref_text,
+            app._scan_lib_text,
+            app._selfies_audit_text,
+        ):
             box.delete("1.0", "end")
             box.insert("1.0", "JUNK")
         app._reset_tab(1)
         assert app._maccs_text.get("1.0", "end-1c") == defaults["maccs"]
         assert app._scan_ref_text.get("1.0", "end-1c") == defaults["scan_refs"]
         assert app._scan_lib_text.get("1.0", "end-1c") == defaults["scan_lib"]
+        assert app._selfies_audit_text.get("1.0", "end-1c") == defaults["selfies_audit"]
         assert "reset" in str(app._job_label.cget("text"))
 
     def test_chemistry_copy_inputs_carries_the_scan_boxes(self, app: Any) -> None:

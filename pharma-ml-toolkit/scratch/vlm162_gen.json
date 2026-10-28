@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the provided screenshots of the **Generative** tab, here is the description of the **Objective & evolution** card and the **Results** card:\n\n### **Objective & Evolution Card**\n\n*   **Optimiser Combobox Value:** The selected value is **`monte carlo tree search (MCTS)`**.\n*   **Visible Parameter Rows (MCTS-specific):** Because MCTS is selected, the following specific parameter rows are visible:\n    *   **cycles:** Set to `12` in the first image and `6` in the second image.\n    *   **simulations:** Set to `2`.\n    *   **c (exploration):** Set to `1.0`.\n    *   **random seed:** Set to `42`.\n    *   **tree policy:** A dropdown menu set to `uct`.\n    *   **expansion:** Set to `0.995`.\n    *   **prior epochs:** Set to `8` in the first image and `4` in the second image.\n\n### **Results Card Content**\n\nThe content of this card changes between the two screenshots:\n\n*   **Screenshot 1 (Before/Idle State):**\n    *   **Summary Line:** Displays the text: `no run yet — pick an objective and press Run evolution`\n    *   **Leaderboard Table:** Not visible/empty.\n    *   **Statistics Text Block:** Not present.\n\n*   **Screenshot 2 (After Running Evolution):**\n    *   **Summary Line:** Reads: `best 0.483 @ Clc1ccccc1 (6 unique molecules, MCTS · built-in corpus · 4.6 s)`\n    *   **Leaderboard Table:** A table is visible with columns for **rank**, **smiles**, and **score**. It lists the top 3 results:\n        1.  Rank 1: `Clc1ccccc1` with a score of `0.4834`\n        2.  Rank 2: `FC1=CC2=CC2=CN=C1` with a score of `0.4626`\n        3.  Rank 3: `OF` with a score of `0.3962`\n    *   **Statistics Text Block:** No separate text block is visible below the table in this view.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793207327,
+  "id": "2026102901083687a4ca8bf77b48c3",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102901083687a4ca8bf77b48c3",
+  "usage": {
+    "completion_tokens": 486,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 5529,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 6015
+  }
+}

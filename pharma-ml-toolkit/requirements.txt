@@ -44,6 +44,12 @@ tqdm==4.67.1
 # mordred):
 # shap==0.54.1
 
+# SELFIES robust molecular strings (chem/selfies_codec.py — the codec /
+# round-trip audit / robustness experiment / vocabulary / constraint
+# surfaces over Krenn et al. 2020, the-matter-lab/selfies; the package is
+# pure-Python stdlib with zero transitive dependencies):
+# selfies==2.1.1
+
 # Deep learning (torch 'dnn' / 'dnn_residual' estimators + generative
 # RNN/RL). CPU wheel — install with:
 #   pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu

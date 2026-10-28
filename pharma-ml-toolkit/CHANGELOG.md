@@ -1,3 +1,140 @@
+## [1.2.97] — 2026-10-29
+
+### Added — SELFIES and ChemTSv2 absorbed: the robust molecular string + tree-search generation (100x-162/163)
+
+The instruction: *"Check the contents and files in this GitHub links
+completely and one by one and add the missing items to playground.py:
+github.com/the-matter-lab/selfies, github.com/molecule-generator-collection/ChemTSv2."*
+Both repositories cloned and reviewed file by file — SELFIES v2.2.0
+(the 100%-robust molecular string grammar, pure-Python, Apache-2.0) and
+ChemTSv2 v2.2.0 (the RNN+MCTS de novo generator, MIT; a TensorFlow stack
+the toolkit deliberately does not take — the *programming model* is what
+lands).  The house rule from the SHAP/Optuna round holds: re-implement
+in typed library surfaces, optional-gate only what truly needs the
+third-party package.  What landed:
+
+* **`chem/selfies_codec.py` — the SELFIES surface** (optional-gated
+  behind the new `[selfies]` extra; the package itself is pure-Python
+  stdlib with zero transitive dependencies):
+  `smiles_to_selfies` / `selfies_to_smiles` (single molecules, typed
+  errors preserving the package's `EncoderError`/`DecoderError` text),
+  `selfies_len` / `selfies_tokens` (the symbol-level view),
+  `batch_smiles_to_selfies` (a whole column, per-row error log — failed
+  rows become `None` plus an error record, never dropped rows, so the
+  output stays index-aligned for DataFrame assembly),
+  `selfies_roundtrip_report` (the repo's own dataset QA methodology:
+  encode → decode → RDKit canonical-SMILES equality, the full funnel
+  unparseable/unencodable/undecodable/mismatch, alphabet and length
+  statistics), `selfies_robustness_experiment` (the paper's Figure 3 on
+  your own molecules: k random SELFIES *symbols* vs k random SMILES
+  *characters*, the validity fractions per level, the tidy
+  `as_frame()`), `selfies_alphabet` /
+  `selfies_symbol_frequencies` (dataset vocabularies),
+  `selfies_feature_matrix` (the label `(n, L)` and flattened one-hot
+  `(n, L·V)` encodings of the SELFIES VAE literature, straight into
+  scikit-learn shape, `[nop]` padding), `random_selfies_molecules`
+  (uniform samples from the semantic robust alphabet — every sample a
+  valid molecule by construction), `selfies_mutants` (the STONED-style
+  symbol-point-mutation neighbourhood, deduplicated, parent excluded),
+  and `semantic_constraints` (the save-and-restore context manager over
+  the package's **process-global** constraint table — the bare
+  `set_semantic_constraints` call would silently change every later
+  decode in the process; the context manager puts the previous table
+  back even on exceptions).
+* **`generative/mcts.py` — the ChemTSv2 programming model, ported to
+  the toolkit's stack** (pure Python, no TensorFlow, no C++, no MPI):
+  `MctsOptimizer` treats de novo generation as a one-player game — the
+  *moves* are SMILES characters, the *policy* is
+  `SmilesRnn.next_token_distribution` (the new public method on the
+  existing char-level GRU prior: one teacher-forced pass over the
+  prefix, the last position's softmax, banned tokens dropped,
+  renormalised, `<end>` included as an ordinary move), the *reward* is
+  any `ScoringObjective`.  Mechanism by mechanism: UCB1 exactly as
+  ChemTSv2 v2 computes it (`Q/N + c_val·√(2·ln N_parent/N)`, ties
+  broken randomly) **or** ChemTS v1's PUCT
+  (`Q/N + puct_c·prior·√N_parent/(1+N)` — selectable via
+  `tree_policy="puct"`, because the injectable policy surface makes the
+  difference measurable); the cumulative-probability expansion (children
+  = the policy's top characters until their probabilities sum to
+  `expansion_threshold`, default 0.995, never fewer than two — the
+  adaptive branching factor that replaced v1's fixed top-k);
+  `simulation_num` rollouts per expanded child per cycle; unparseable
+  rollouts score 0.0 (the toolkit's [0,1] convention — ChemTSv2's −1
+  penalty mapped onto it); the **dedup cache** (their `generated_dict`:
+  every distinct canonical molecule scored exactly once, cache hits
+  counted in the metadata); the deterministic-cycle budget (`iterations`
+  search cycles — byte-reproducible seeded runs, unlike their
+  wall-clock `hours`); the **extension mode** (`optimize(prefix=...)`,
+  their `--input_smiles`: root the tree at a chosen partial SMILES);
+  one `history` record per cycle.  The policy is **injectable**
+  (`MctsOptimizer(objective, policy=callable)`) — any prefix →
+  distribution mapping works, which is exactly what the tests exploit
+  (the search logic runs without torch).  `run_mcts_optimization`
+  mirrors the GA/RL one-call conveniences.
+* **Two figures** — `plot_mcts_introspection` (`viz/generative_plots.py`:
+  the reward story (best-so-far vs mean rollout reward), the search
+  growth (tree nodes vs unique molecules — the widening gap IS the
+  search revisiting), and the dedup economy (cumulative cache hits),
+  sharing the cycle x-axis) and `plot_selfies_robustness`
+  (`viz/chem_plots.py`: the two validity curves, SELFIES flat at ~100%
+  vs SMILES collapsing, per-level categorical x-axis, 0–100% y-axis,
+  the experiment size in the subtitle).
+* **Playground GUI** — the Chemistry tab's row 7: the **SELFIES codec**
+  card (direction combobox, one molecule, the output plus its symbol
+  count and token preview, copy button) and the **SELFIES audit &
+  robustness** card (pasted molecule list, round-trip audit, the
+  corruption experiment with its embedded figure, the random generator;
+  the box rides the session-persistence / reset / copy-inputs
+  mechanisms as the Chemistry tab's sixth persisted text box).  The
+  Generative tab's optimiser combobox gained **monte carlo tree search
+  (MCTS)** — the third method with its own parameter block (cycles,
+  simulations, c (exploration), tree policy, expansion threshold, prior
+  epochs; swapped grid_remove-style exactly like the GA/RL frames), a
+  guarded run branch (torch for the policy, rdkit for the objective),
+  seeded runs rooting the tree at the first seed molecule (the
+  extension mode, named in the summary), the search-statistics text
+  block (`_format_mcts_stats`), the introspection figure, and the
+  undertrained-prior advisory shared with RL.  The dependency table
+  (`--probe`, the Home status card) carries `selfies`.
+* **Packaging** — the new `[selfies]` extra
+  (`selfies>=2.1,<3`), a commented `selfies==2.1.1` line in
+  requirements.txt's optional block, and the dependency-probe row.
+
+### Changed
+
+* `generative/__init__.py`'s narrative documents the third optimiser and
+  the MCTS history fields; `chem/__init__.py` re-exports the eighteen
+  SELFIES symbols; `viz/__init__.py` re-exports the two figures;
+  `docs/INDEX.md` regenerated (11 modules, 388 symbols).
+* README: the package table's `pharmaml.chem` row names the SELFIES
+  surface; the generative section tells the three-optimiser story with
+  the MCTS code block and the honest method trade-offs; a new
+  *"SELFIES: the robust molecular string (from 0 to 100)"* section walks
+  the six surfaces.
+
+### Tests
+
+* `tests/test_selfies_codec.py` (23 tests): the codec round trip and
+  typed refusals, batch row alignment, exact vocabulary values, the
+  random generator and mutants (validity, determinism, dedup), the
+  audit funnel on good and poisoned lists, the corruption experiment's
+  headline property (SELFIES strictly above SMILES at k≥2), the feature
+  matrix shapes / vocabulary order / refusals, the constraint context
+  manager (clamp, restore-on-clean-exit, restore-on-exception), and the
+  missing-package guard (import-blocker monkeypatch — the exact
+  `pip install 'pharmaml[selfies]'` command).
+* `tests/test_mcts.py` (12 tests): constructor refusals; the search
+  end-to-end on a stub policy (ranked unique molecules, per-cycle
+  history, search-statistics metadata); same-seed determinism; the end
+  token never entering a SMILES; the expansion rule internals
+  (min-two-children, threshold cut, renormalisation of sloppy custom
+  policies); the extension mode and its refusals; the PUCT variant; the
+  breakdown path; the degenerate empty-policy case; the convenience
+  wrapper; and the torch-gated real-RNN-policy run.
+* `tests/test_playground.py` updated for the new dependency-table row
+  and the eighth persisted text box (the SELFIES audit box rides the
+  reset-to-defaults confession test too).
+
 ## [1.2.96] — 2026-10-28
 
 ### Added — SHAP and Optuna absorbed: the two repo reviews land as first-class tuner and explanation surfaces (100x-160)

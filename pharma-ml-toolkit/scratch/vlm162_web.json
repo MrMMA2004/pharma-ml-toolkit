@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the screenshot provided:\n\n*   **Version Number:** **v1.2.97** (shown in the top-left header and on the download button).\n*   **Download Button Label:** **\"Download ZIP\"**.\n*   **Layout Assessment:** Yes, the layout looks very **clean**. It features a modern, minimalist design with a clear visual hierarchy, ample white space, and well-organized information cards at the bottom.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793212239,
+  "id": "2026102902303770430118c5a44ce2",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102902303770430118c5a44ce2",
+  "usage": {
+    "completion_tokens": 91,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 917,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1008
+  }
+}

@@ -72,6 +72,7 @@ from pharmaml.viz._compat import (
 )
 from pharmaml.viz.chem_plots import (
     plot_descriptor_distributions,
+    plot_selfies_robustness,
     plot_similarity_heatmap,
     plot_table_comparison,
 )
@@ -82,6 +83,7 @@ from pharmaml.viz.docking_plots import (
     plot_top_ligands,
 )
 from pharmaml.viz.generative_plots import (
+    plot_mcts_introspection,
     plot_operator_trajectory,
     plot_pareto_front,
     plot_rl_introspection,
@@ -183,6 +185,7 @@ __all__ = [
     "plot_kmeans_diagnostics",
     "plot_learning_curve",
     "plot_manifold_embedding",
+    "plot_mcts_introspection",
     "plot_model_comparison",
     "plot_operator_trajectory",
     "plot_optimization_history",
@@ -199,6 +202,7 @@ __all__ = [
     "plot_residuals",
     "plot_rl_introspection",
     "plot_roc_curves",
+    "plot_selfies_robustness",
     "plot_shap_beeswarm",
     "plot_shap_dependence",
     "plot_shap_force",
