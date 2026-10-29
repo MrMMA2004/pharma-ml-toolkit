@@ -134,19 +134,36 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `DEFAULT_ALPHA` | constant |  |
+| `DISTRIBUTIONS` | constant |  |
 | `GMM_COVARIANCE_TYPES` | constant |  |
 | `KDE_KERNELS` | constant |  |
 | `MANIFOLD_METHODS` | constant |  |
 | `MODEL_ALIASES` | constant |  |
 | `MODEL_REGISTRY` | constant |  |
 | `NO_SCALE_MODELS` | constant |  |
+| `SCRATCH_ACTIVATIONS` | constant |  |
+| `SCRATCH_TASKS` | constant |  |
+| `SEQUENCE_MODELS` | constant |  |
 | `SHAP_EXTRA` | constant |  |
 | `SHAP_REQUIREMENT` | constant |  |
+| `SYNTHETIC_KINDS` | constant |  |
 | `ApplicabilityDomainResult` | class | Outcome of a full applicability-domain analysis. |
+| `AttentionReport` | class | One sequence's pass through the attention machinery. |
+| `BaselineResult` | class | The commonsense baseline's scorecard (the chapter's first table). |
+| `BatchGenerator` | class | Chollet's ``BatchGenerator`` -- sequential, ``num_batches`` counted. |
 | `BootstrapUncertainty` | class | Bootstrap-ensemble uncertainty of a fitted estimator. |
+| `BroadcastReport` | class | NumPy's broadcasting verdict for two shapes. |
+| `CapacityPoint` | class | One (width, train loss, validation loss) sample of the sweep. |
+| `CapacitySweepResult` | class | Chapter 5's "reducing the network's size" figure, as data. |
+| `CiResult` | class | One confidence interval: the estimate and its bounds. |
+| `ComparisonReport` | class | ``compare_groups``: the whole statistics lecture, one record. |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
+| `DescriptiveStats` | class | The descriptive lecture's full blackboard for one sample. |
+| `DistributionSample` | class | Seeded draws plus the population moments to compare against. |
 | `EmbeddingRecord` | class | Typed report of :func:`manifold_embedding`. |
+| `ForecastResult` | class | Everything the sequence card reports, after one run. |
 | `GmmResult` | class | Typed report of :func:`gmm_cluster`. |
 | `GroupDifference` | class | Cohort mean-SHAP differences with a bootstrap interval (100x-160). |
 | `HierarchicalSVR` | class | Hierarchical Support Vector Regression (global + per-cluster SVRs). |
@@ -155,24 +172,38 @@ after adding new public functions.
 | `HyperparameterImportance` | class | Per-hyperparameter importances of a finished search. |
 | `KMeansResult` | class | Typed report of :func:`kmeans_cluster`. |
 | `KdeResult` | class | Typed report of :func:`kde_fit`. |
+| `LinearGDResult` | class | Outcome of the from-scratch linear regression. |
 | `MedianPruner` | function | The median pruner: ``PercentilePruner(50)``. |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
+| `NaiveDense` | class | Chollet's ``NaiveDense`` (chapter 2), plain NumPy. |
+| `NaiveSequential` | class | Chollet's ``NaiveSequential``: a stack called like a function. |
+| `NormalityResult` | class | Shapiro-Wilk and D'Agostino-Pearson on one sample. |
 | `OOFStackingResult` | class | Outcome of one out-of-fold stacking run. |
 | `PcaResult` | class | Typed report of :func:`pca_reduce`. |
 | `PercentilePruner` | class | Prune trials whose running CV mean falls below a percentile. |
 | `PermutationImportance` | class | Permutation feature importances on held-out data. |
+| `PositionalReport` | class | The positional encoding as an auditable object. |
+| `PrimerReport` | class | The full chapter 2 walkthrough for one dataset table. |
 | `QuantileIntervals` | class | Prediction intervals from gradient-boosted quantile regression. |
 | `RandomSearch` | class | Random search over the hypermodel's declared space. |
+| `RecurrentForecaster` | class | A from-scratch recurrent regressor over fixed-length windows. |
 | `ResidualMLPClassifier` | class | Residual (skip-connection) deep-network classifier (PyTorch). |
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
+| `ScratchHistory` | class | Everything the scratch training loop observed, per epoch. |
+| `SequenceHistory` | class | Per-epoch training telemetry for one recurrent fit. |
 | `ShapInteractions` | class | Pairwise SHAP interaction values of a fitted tree model (100x-160). |
 | `ShapSummary` | class | SHAP values of a fitted tree model over a feature frame. |
 | `TPESearch` | class | Tree-structured Parzen Estimator search — Optuna's flagship sampler. |
+| `TensorSummary` | class | Chapter 2's "key attributes" list for one array. |
+| `SignificanceResult` | class | One test's verdict: statistic, p-value, decision, effect size. |
 | `TrialResult` | class | One evaluated trial. |
 | `TunerResults` | class | The outcome of one :meth:`RandomSearch.search` / Hyperband run. |
+| `WindowDataset` | class | A windowed timeseries: the chapter's dataset object, NumPy edition. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
 | `benchmark_feature_families` | function | Cross-validated leaderboard ACROSS feature families, one model fixed. |
+| `bootstrap_interval` | function | The percentile bootstrap CI for any statistic (default: the mean). |
 | `bootstrap_uncertainty` | function | Bootstrap-ensemble prediction uncertainty (the upload's step 6). |
+| `broadcast_report` | function | Chapter 2's broadcasting rules, computed on shapes alone. |
 | `build_ann_classifier` | function | sklearn MLP classifier hypermodel (the legacy ANN upgrade). |
 | `build_ann_regressor` | function | sklearn MLP regressor hypermodel (the legacy ANN upgrade). |
 | `build_deep_classifier` | function | Deep MLP classifier hypermodel (PyTorch, ``batchnorm`` searchable). |
@@ -182,35 +213,58 @@ after adding new public functions.
 | `build_preprocessor` | function | Build the (impute -> scale) preprocessing pipeline. |
 | `build_stacking` | function | Build a stacking ensemble (upgrades Stacking.py / Stacking reg.py). |
 | `build_voting` | function | Build a voting ensemble (upgrades Voting.py / Voting reg.py). |
+| `capacity_sweep` | function | Train the same data through growing hidden widths (chapter 5). |
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
+| `commonsense_baseline` | function | Predict "the last observed value" (``evaluate_naive_method``). |
+| `compare_groups` | function | The course's decision flow, end to end, every branch reported. |
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
+| `describe_series` | function | One sample's descriptive statistics (scipy's moment machinery). |
+| `describe_tensor` | function | Audit one array with chapter 2's "key attributes" vocabulary. |
+| `dot_product_attention` | function | Scaled dot-product attention: ``softmax(QKᵀ/√dₖ)·V``. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
+| `fit_scratch` | function | Chapter 2's full training loop, mouse-free edition. |
+| `forecast_timeseries` | function | The chapter's end-to-end workflow on one series. |
 | `gmm_cluster` | function | Gaussian mixture model (PDSH 05.12) with the AIC/BIC sweep. |
 | `group_difference` | function | Cohort difference of a SHAP summary, with a bootstrap interval. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `kde_fit` | function | Kernel density estimation (PDSH 05.13) for ONE numeric column. |
 | `kmeans_cluster` | function | k-means clustering (PDSH 05.11), with the elbow AND the silhouette. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
+| `linear_regression_gd` | function | Batch gradient descent on the squared error (DSBC's centrepiece). |
 | `list_models` | function | List registry entries with availability information. |
 | `load_model` | function | Load a model bundle saved by :func:`save_model`. |
 | `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
 | `manifold_embedding` | function | Project a feature table onto 2-D with a manifold learner (PDSH 05.10). |
+| `mann_whitney_test` | function | The rank-based test for the non-normal cases. |
+| `mean_confidence_interval` | function | The t-based CI for the mean: ``mean ± t·s/√n``. |
+| `multi_head_attention` | function | Multi-head self-attention over one sequence, seeded projections. |
+| `normality_report` | function | Both normality tests (the course's gate before choosing a test). |
+| `one_sample_ttest` | function | Is this sample's mean different from ``mu0``? |
+| `paired_ttest` | function | Did the paired differences move away from zero? |
 | `param_importances` | function | Random-forest (MDI) hyperparameter importances of a finished search. |
 | `pca_reduce` | function | Principal component analysis (PDSH 05.09). |
 | `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
+| `predict_scratch` | function | Predict with a trained scratch model (standardisation reapplied). |
 | `predict_with_uncertainty` | function | Predictive mean and per-row standard deviation of a GP model. |
 | `quantile_prediction_intervals` | function | Central-``1 - alpha`` prediction intervals via quantile regression. |
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
+| `sample_distribution` | function | Draw ``n`` seeded samples from one of the course's distributions. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
 | `select_kbest_union` | function | Select the UNION of per-method top-k columns (upgrades look.ipynb). |
+| `self_attention_report` | function | Run one sequence through multi-head self-attention and read it. |
 | `shap_interactions` | function | Pairwise SHAP interaction values of a fitted tree model over ``X``. |
 | `shap_summary` | function | SHAP values of a fitted tree model over ``X``. |
+| `sinusoidal_positions` | function | The classic fixed positional encoding, ``(seq_len, dim)``. |
+| `sliding_windows` | function | Cut a series (or channel matrix) into overlapping windows. |
 | `split_features_target` | function | Separate features from the target column. |
 | `stack_oof_regressors` | function | Stack registry regressors out-of-fold and rank the blenders. |
+| `synthetic_series` | function | Seeded synthetic series: the no-data fallback for the whole card. |
+| `tensor_primer_report` | function | Walk a table through chapter 2's tensor vocabulary. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
+| `two_sample_ttest` | function | Two independent samples: Welch's t (default) or Student's t. |
 | `validate_bundle_input` | function | Audit a new dataset against a saved model bundle before inference. |
 
 ## `pharmaml.generative`

@@ -336,6 +336,7 @@ class SmilesRnn:
         temperature: float = 1.0,
         seed: int | None = None,
         max_length: int = 120,
+        top_k: int | None = None,
     ) -> list[str]:
         """Draw ``n`` SMILES strings from the trained model.
 
@@ -352,6 +353,17 @@ class SmilesRnn:
             seeded at construction.
         max_length:
             Hard character cap per molecule.
+        top_k:
+            Chapter 16 of Chollet's notebooks (``deep-learning-with-
+            python-notebooks``, the sampling-strategies section): keep
+            only the ``k`` highest (temperature-scaled) logits and sample
+            over those, zeroing the rest -- the trick that removes the
+            long tail of structurally hopeless tokens while keeping
+            the randomness temperature controls.  ``None`` (the
+            historical behaviour) samples the full vocabulary;
+            ``1`` is greedy argmax decoding (Chollet's ``greedy``
+            sampler); values above the vocabulary size are clamped to
+            it.
 
         Returns
         -------
@@ -365,7 +377,8 @@ class SmilesRnn:
             If the model is untrained, ``n``/``max_length`` are out of
             range, ``temperature`` is not a positive finite number (NaN
             passes ``<= 0`` comparisons and crashes torch's multinomial;
-            +inf degrades the softmax to noise), or ``seed`` is outside
+            +inf degrades the softmax to noise), ``top_k`` is not a
+            positive int, or ``seed`` is outside
             ``[-2**63, 2**64 - 1]`` (the torch-encodable interval).
         DependencyError
             If torch is not installed.
@@ -388,6 +401,8 @@ class SmilesRnn:
             )
         if seed is not None:
             _validate_torch_seed(seed, "seed")
+        if top_k is not None and (not isinstance(top_k, int) or isinstance(top_k, bool) or top_k < 1):
+            raise DataValidationError(f"top_k must be a positive int or None, got {top_k!r}")
         torch = _require_torch()
         from torch.nn import functional as F
 
@@ -414,10 +429,35 @@ class SmilesRnn:
             for _ in range(max_length):
                 logits, state = self._model(current, state)
                 step = logits[:, -1, :].float() / float(temperature)
-                probs = F.softmax(step, dim=-1)
-                probs[:, banned] = 0.0
-                probs = probs / probs.sum(dim=-1, keepdim=True)
-                nxt = torch.multinomial(probs, 1, generator=generator)
+                if top_k is not None:
+                    # Chollet's top-k: keep the k best logits, sample
+                    # over those only (k=1 collapses to greedy argmax)
+                    k = min(int(top_k), step.shape[-1])
+                    top_values, top_indices = torch.topk(step, k, dim=-1)
+                    top_probs = F.softmax(top_values, dim=-1)
+                    banned_top = torch.isin(
+                        top_indices,
+                        torch.tensor(list(banned), dtype=torch.long, device=top_indices.device),
+                    )
+                    top_probs = top_probs.masked_fill(banned_top, 0.0)
+                    totals = top_probs.sum(dim=-1, keepdim=True)
+                    if bool(torch.any(totals <= 0)):
+                        # every top-k slot landed on a banned token -- fall
+                        # back to the full-vocabulary draw rather than emit
+                        # <pad>/<unk>/<start> as a "molecule"
+                        probs = F.softmax(step, dim=-1)
+                        probs[:, banned] = 0.0
+                        probs = probs / probs.sum(dim=-1, keepdim=True)
+                        nxt = torch.multinomial(probs, 1, generator=generator)
+                    else:
+                        top_probs = top_probs / totals
+                        choice = torch.multinomial(top_probs, 1, generator=generator)
+                        nxt = torch.gather(top_indices, 1, choice)
+                else:
+                    probs = F.softmax(step, dim=-1)
+                    probs[:, banned] = 0.0
+                    probs = probs / probs.sum(dim=-1, keepdim=True)
+                    nxt = torch.multinomial(probs, 1, generator=generator)
                 for row in range(n):
                     if finished[row]:
                         continue
@@ -432,7 +472,7 @@ class SmilesRnn:
         return ["".join(tokens) for tokens in buffers]
 
     def next_token_distribution(
-        self, prefix: str, *, temperature: float = 1.0
+        self, prefix: str, *, temperature: float = 1.0, top_k: int | None = None
     ) -> list[tuple[str, float]]:
         """Next-character distribution over the vocabulary given a prefix.
 
@@ -454,6 +494,12 @@ class SmilesRnn:
             Softmax temperature (``> 0``); the default ``1.0`` returns
             the raw model probabilities -- exactly what a search
             algorithm over the policy needs.
+        top_k:
+            Keep only the ``k`` most probable allowed tokens and
+            renormalise over them -- Chollet chapter 16's sampling
+            strategy applied to the *policy* view (a pruned MCTS
+            branching factor).  ``None`` returns the full support;
+            values above the support size are clamped.
 
         Returns
         -------
@@ -466,8 +512,8 @@ class SmilesRnn:
         Raises
         ------
         DataValidationError
-            If the model is untrained or ``temperature`` is not a
-            positive finite number.
+            If the model is untrained, ``temperature`` is not a
+            positive finite number, or ``top_k`` is not a positive int.
         DependencyError
             If torch is not installed.
 
@@ -503,6 +549,8 @@ class SmilesRnn:
             raise DataValidationError(
                 f"temperature must be a positive finite number, got {temperature!r}"
             )
+        if top_k is not None and (not isinstance(top_k, int) or isinstance(top_k, bool) or top_k < 1):
+            raise DataValidationError(f"top_k must be a positive int or None, got {top_k!r}")
         torch = _require_torch()
         from torch.nn import functional as F
 
@@ -529,6 +577,12 @@ class SmilesRnn:
             (token, prob / total) for token, prob in allowed if prob / total > 0.0
         ]
         pairs.sort(key=lambda item: (-item[1], item[0]))
+        if top_k is not None:
+            kept = pairs[: int(top_k)]
+            kept_total = sum(prob for _, prob in kept)
+            if kept_total <= 0.0:
+                return []
+            pairs = [(token, prob / kept_total) for token, prob in kept]
         return pairs
 
     # -- package-private helpers (used by rl.py) --------------------------

@@ -1,3 +1,172 @@
+## [1.2.99] — 2026-10-29
+
+### Added — Chollet's notebooks + the Data-Science-For-Beginners statistics block: the Foundations tab (100x-165)
+
+The instruction: *"Check the contents and files in this GitHub links
+completely and one by one and add the missing items to playground.py:
+github.com/fchollet/deep-learning-with-python-notebooks,
+github.com/SENATOROVAI/Data-Science-For-Beginners-from-scratch-course."*
+Both repositories cloned and reviewed file by file — Chollet's
+notebook set at commit `fbf7f1b` (17 current-edition chapter notebooks
+plus the first/second-edition folders) and the DSBC repository at
+`36d1351` (the curriculum outline, the `docs/git` tutorials — the only
+shipped teaching content — and the tooling: pre-commit, jupytext
+pairing, the DIRECTORY generator; the `math/`, `statistics/`,
+`machine_learning/` folders the README promises are aspirational and
+empty, which the round notes honestly rather than papering over).
+What landed:
+
+* **`ml/tensors.py` — chapter 2 and chapter 5 in plain NumPy.**  The
+  tensor vocabulary as an audit (`describe_tensor` /
+  `tensor_primer_report`: rank, shape, dtype, size, per-tensor
+  statistics, the batch arithmetic with the ragged tail counted);
+  the broadcasting rules as pure shape arithmetic (`broadcast_report`:
+  which axes stretch, the incompatible verdict carried as data, not
+  an exception — the lesson is which pairs fail); the chapter's own
+  from-scratch trio — `NaiveDense` (Chollet's uniform-W/zero-b init,
+  seeded, plus the hand-derived `dW = xᵀ·δ`, `db = Σδ`, `dx = δ·Wᵀ`
+  backward the book's GradientTape hides), `NaiveSequential`
+  (including the fused sigmoid+BCE head path
+  `backward_fused_head` — the numerically stable `δ = (p−y)/B` form)
+  and `BatchGenerator` (the book's exact class + seeded shuffle);
+  `fit_scratch`/`predict_scratch` — the full training loop with
+  per-feature standardisation riding on the returned history; the
+  DSBC track's `linear_regression_gd` (batch gradient descent on
+  standardised features, coefficients translated back to the raw
+  space, the lstsq cross-check logged); and chapter 5's headline
+  experiment, `capacity_sweep` — the same data through growing hidden
+  widths (0 = the linear baseline), train against validation loss,
+  the "where does overfitting start?" curve with a verdict line that
+  reads its shape.
+* **`ml/sequences.py` — chapter 13, the one whole ML domain the
+  toolkit had no surface for.**  `sliding_windows` (the
+  `timeseries_dataset_from_array` alignment, window/target index
+  arithmetic spelled out), `commonsense_baseline` (the
+  `evaluate_naive_method` cell: "tomorrow = today", the number every
+  model must beat), and `RecurrentForecaster` — the recurrent layer
+  FROM SCRATCH: the Elman tanh cell and the full four-gate LSTM
+  (`c_t = f⊙c_{t-1} + i⊙g`, `h_t = o⊙tanh(c_t)`), trained by exact
+  backpropagation through time over the whole window (verified
+  against a finite-difference gradient check to 8 decimal places),
+  with the chapter's three own recipes riding along: **recurrent
+  dropout** (the variational one-mask-per-sequence form the book's
+  `recurrent_dropout` uses), **stacking** (gradients flow between
+  layers through the full timestep sequence — no last-state
+  shortcut), and **bidirectionality** (with the book's caveat
+  verbatim: it helps density estimation, not forecasting).  Training
+  clips the global gradient norm (the chapter's exploding-gradient
+  recipe — without it BPTT diverges on the first random walk it
+  meets) and initialises the LSTM forget-gate bias at +1
+  (Jozefowicz et al.'s finding — a forget gate at σ(0)=0.5 halves
+  the cell every step and short windows never learn to keep
+  anything).  `forecast_timeseries` runs the end-to-end workflow:
+  standardise on the train segment only (the no-leakage rule),
+  chronological split, the baseline AND the model scored on the same
+  held-out future, everything the comparison plot needs handed back.
+* **`ml/attention.py` — chapter 15's mathematics, the part that
+  needs no autodiff engine.**  `sinusoidal_positions` (the classic
+  fixed encoding the chapter cites next to its learned
+  PositionalEmbedding — the honest difference is stated),
+  `dot_product_attention` (the scaled `softmax(QKᵀ/√dₖ)V` with
+  optional causal/padding masks, max-subtraction stabilisation),
+  `multi_head_attention` (the head-split/concat machinery over
+  seeded Gaussian projections, `key_dim = hidden // heads` exactly),
+  and `self_attention_report` — push a matrix through the forward
+  pass and READ it: per-head weight grids, each head's entropy (a
+  head attending uniformly carries no information), each position's
+  focus.  The trainable Transformer itself stays out (honest note:
+  that is precisely the part that needs the engines the toolkit
+  refuses to vendor).
+* **`ml/stats.py` — the DSBC statistics block, the curriculum the
+  repo promises and never ships.**  `describe_series` (the
+  descriptives lecture: n, mean, std, SEM, five-number summary, IQR,
+  skew, kurtosis), `mean_confidence_interval` (the t-based
+  `mean ± t·s/√n`) and `bootstrap_interval` (the percentile
+  bootstrap, seeded), the hypothesis-testing lecture —
+  `one_sample_ttest`, `paired_ttest`, `two_sample_ttest` (Student and
+  Welch) and `mann_whitney_test`, each returning a
+  `SignificanceResult` (statistic, p, df, the decision at α, an
+  effect size: Cohen's d, d-on-differences, or the rank-biserial r),
+  `normality_report` (Shapiro-Wilk AND D'Agostino-Pearson, the gate
+  before choosing a test), `sample_distribution` (the probability
+  lecture's sampler: normal/uniform/binomial/Poisson/exponential with
+  the theoretical moments attached), and `compare_groups` — the whole
+  course flow in one call: descriptives → normality → the right test
+  → both intervals → effect size → the verdict, with the branch it
+  took reported so nothing is a black box.
+* **`generative/rnn.py` — chapter 16's sampling strategies.**
+  `SmilesRnn.sample()` and `next_token_distribution()` grew `top_k`:
+  keep the k highest temperature-scaled logits and sample over those
+  (Chollet's own `top_k` cell), `1` = greedy argmax (verified: greedy
+  decoding produces the textbook repetitive "CCCC…" chains — the
+  pathology the chapter shows temperature and top-k exist to fix),
+  the banned-token guard survives the top-k path (every slot landing
+  on `<pad>`/`<unk>`/`<start>` falls back to the full draw rather
+  than emitting a control token as a "molecule"), and the policy view
+  clamps and renormalises for the MCTS branching factor.
+* **The Foundations tab (playground, 11 tabs now).**  Eight cards,
+  one per lecture: the shared **Dataset** card (any CSV the toolkit
+  can sniff, or the bundled QSAR examples, or the seeded synthetic
+  fallback so the tab never dead-ends with nothing loaded); the
+  **Tensor primer** (the chapter 2 audit table + the
+  tensor-product/reshape/batch verdicts); the **Broadcasting check**
+  (two shape entries, the stretch verdict, the incompatible verdict);
+  the **From-scratch trainer** (chapter 2's network or the DSBC
+  gradient-descent line, live loss curves, both task heads); the
+  **Capacity sweep** (chapter 5's figure: train vs validation loss
+  across widths, the verdict line); **Sequence forecasting**
+  (synthetic sine/AR(2)/walk or a CSV column, LSTM or Elman, the
+  bidirectional checkbox carrying the book's own caveat, the actual
+  vs model vs commonsense-baseline comparison on the held-out
+  future); the **Attention lab** (per-head heatmap grid plus the
+  sinusoidal positional encoding strip, entropies in the titles); the
+  DSBC **Statistics & hypothesis testing** card (two CSV columns or
+  the synthetic demo, the full compare-groups report in the card);
+  and the **Distribution sampler** (the five distributions with the
+  theoretical density drawn against the sample).  All five figure
+  cards carry the round-128 "Save figure…" affordance (the house
+  convention — the census test now counts 21 across the app).
+* **The Utilities tab's Git quick reference** — the DSBC repo's
+  `docs/git` tutorials (git_command + intro_to_git, its only shipped
+  teaching content) as a collapsible card: the command cheat sheet
+  grouped the way the course groups it, with the file-state model
+  (untracked → staged → committed) the intro chapter teaches.
+* **Tests updated where they pin the surfaces this round moved**
+  (the house convention for every added tab): the tab-order list
+  (Foundations between Deep Learning and Generative), the five
+  Generative-tab index references (8 → 9), the save-figure census
+  (Foundations owns 5; total 21), the collapsible-card registry
+  (utilities-git-reference joins), and the ownership-walk indices.
+  The environment survived its 10th venv reset mid-round (the
+  scratch/venv_repair_9.sh recipe, plus shap/optuna which the recipe
+  predates); the exec-bit drift on tracked files was normalised back
+  to git's modes.
+
+What did not land, on the house rule: chapters 8-12 and 17 (the whole
+image domain — convnets, segmentation, detection, VAE/GAN/diffusion
+image generation) and the trainable Transformer/LLM material of
+chapters 15-16 (the autodiff engines); chapters 4, 7 and 18 were
+already covered by the Data & ML tab, the estimators' early stopping
+and `ml/tuner`; the DSBC repo's other tracks (Python fundamentals,
+pandas wrangling, EDA cleaning) were already covered by the loaders
+and `ml/tensors`' linear GD, and its pre-commit/jupytext tooling is
+repository hygiene, not data science.
+
+* **Verification**: ruff zero findings (whole tree); mypy zero
+  findings (81 files); the four new modules' doctests pass (including
+  the AR(2)-beats-baseline forecast contract); the rnn top-k doctests
+  pass under torch; 47/48 test files pass individually (selfies
+  skips on the absent optional package, as designed) and the
+  playground suite passes class-by-class (the full single-process run
+  OOMs this box's ceiling with the whole dependency stack resident —
+  the batch pattern the junit archive has always used); the
+  headless-Xvfb end-to-end probe exercises every Foundations card
+  (39 checks: both trainer kinds, the sweep, the forecast on
+  synthetic AND CSV columns, the attention grids, both statistics
+  modes, all five distributions, the Git card) and screenshots were
+  VLM-reviewed for clipping/overlap — the attention closure bug and
+  the pack-inside-grid bug it caught were fixed before close.
+
 ## [1.2.98] — 2026-10-29
 
 ### Added — REINVENT4 and DiffDock absorbed: the score-transform DSL + pose analysis (100x-164)

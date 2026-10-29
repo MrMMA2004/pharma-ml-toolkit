@@ -2057,6 +2057,67 @@ _DL_ARCHITECTURES: tuple[str, ...] = (
 #: (the test suite pins the two together, so they cannot drift).
 _DL_ACTIVATIONS: tuple[str, ...] = ("relu", "tanh", "gelu", "sigmoid")
 
+#: (100x-165) the Utilities tab's Git cheat sheet -- the
+#: Data-Science-For-Beginners repository's ``docs/git/git_command`` and
+#: ``docs/git/intro_to_git`` tutorials (the repo's only shipped teaching
+#: content besides the curriculum outline), grouped exactly the way the
+#: course groups them, with the file-state model its intro chapter
+#: teaches alongside every command.
+_GIT_QUICK_REFERENCE = """\
+Git -- the version-control lecture (Data Science For Beginners, docs/git)
+=========================================================================
+
+THE FILE-STATE MODEL (intro_to_git)
+  untracked --git add--> staged --git commit--> committed
+  committed --(you edit the file)--> modified --git add--> staged
+  staged --git restore --staged--> untracked/modified (index only)
+  git status            -> which files sit in which state right now
+
+BASIC COMMANDS
+  git init                        create a new repository here
+  git clone <url>                 copy an existing repository
+  git add <file>                  start tracking one file
+  git add .                       stage every change in the tree
+  git commit -m "message"         record the staged snapshot
+  git commit -am "message"        stage tracked files + commit in one
+  git status                      the state of every file
+  git --version                   sanity-check the installation
+
+VIEWING CHANGES
+  git diff                        unstaged changes, all files
+  git diff <file.py>              unstaged changes, one file
+  git difftool                    the same, in a GUI viewer
+
+THE JOURNAL
+  git log                         the full commit history
+  git log --oneline               one line per commit
+  git log -n 3                    the last three commits
+  git show <hash>:<file.txt>      a file's content at one commit
+
+UNDOING CHANGES
+  git restore <file.txt>          discard unstaged edits
+  git restore --staged <file>     unstage (keeps the edits)
+  git checkout .                  discard ALL unstaged changes
+  git revert -n HEAD~3..HEAD      undo the last three commits
+  git checkout <hash> -- <file>   restore a file to an old version
+
+WORKING WITH FILES
+  git rm <file.txt>               delete + stage the deletion
+  git mv <old.txt> <new.txt>      rename + stage the rename
+
+WORKING WITH GITHUB
+  git remote add origin <url>     link the local repo to the remote
+  git push -u origin master       the first push (sets upstream)
+  git push                        subsequent pushes
+  git clone <url>                 download a remote repository
+
+HELP
+  git help <command>              the manual page for one command
+  git <command> --help            the same, alternate spelling
+  git ls-files --other --ignored --exclude-standard
+                                  every ignored file, listed
+"""
+
 #: The keyboard-shortcut hint row (100x-65): one quiet line above the
 #: status bar listing every global accelerator.  The seven entries mirror
 #: the ``bind_all`` sequences in ``_build_menu`` (the test suite pins the
@@ -3537,6 +3598,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._build_ml_tab()
         self._build_unsupervised_tab()
         self._build_dl_tab()
+        self._build_foundations_tab()
         self._build_generative_tab()
         self._build_utilities_tab()
         # keyboard tab cycling (100x-119): Ctrl+PgDn / Ctrl+PgUp walk the
@@ -6538,6 +6600,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "Data & ML",
                 "Unsupervised",
                 "Deep Learning",
+                "Foundations",
                 "Generative",
                 "Utilities",
             )
@@ -23335,6 +23398,1253 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
 
     # ------------------------------------------------------------------ #
+    # Foundations tab -- Chollet's "Deep Learning with Python" notebooks
+    # + the SENATOROVAI Data-Science-For-Beginners statistics block,
+    # absorbed file by file (100x-165)
+    # ------------------------------------------------------------------ #
+    def _build_foundations_tab(self) -> None:
+        """The course the toolkit's models stand on, mouse edition.
+
+        Two repositories were reviewed file by file for this tab:
+        ``fchollet/deep-learning-with-python-notebooks`` (chapters 2, 5,
+        13 and 15 -- the tensor vocabulary, the from-scratch training
+        loop, the capacity experiment, timeseries forecasting with
+        recurrent cells, and the attention mathematics) and
+        ``SENATOROVAI/Data-Science-For-Beginners-from-scratch-course``
+        (the statistics block -- descriptives, hypothesis testing,
+        confidence intervals, distributions -- plus the gradient-descent
+        linear regression its ML track centres on).  Six cards, one per
+        lecture; every card runs on a loaded CSV or a seeded synthetic
+        fallback, so the tab never dead-ends with nothing loaded.
+        """
+        page = self._new_page("Foundations")
+        self._found_frame: Any = None
+        self._found_path: Path | None = None
+        self._found_label = "no dataset loaded"
+
+        # -- card 0: the shared dataset ---------------------------------- #
+        data = make_card(
+            page.grid,
+            "Dataset",
+            span=2,
+            row=0,
+            column=0,
+            subtitle="Any CSV the toolkit's read_table can sniff, or a "
+            "bundled example. Every card below reads this frame -- or "
+            "falls back to a seeded synthetic dataset, so the tab "
+            "works with zero clicks.",
+        )
+        open_btn = self._action_button(data, "Open CSV…", self._found_open_csv)
+        open_btn.grid(row=0, column=0, sticky="w")
+        example_files = [
+            name
+            for name in (
+                "qsar_classification.csv",
+                "qsar_regression.csv",
+                "qsar_multiclass.csv",
+            )
+            if (EXAMPLES_DIR / name).is_file()
+        ]
+        self._found_example_combo = ttk.Combobox(
+            data, state="readonly", width=26, values=example_files
+        )
+        if example_files:
+            self._found_example_combo.set(example_files[0])
+        self._found_example_combo.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        load_btn = self._action_button(data, "Load example", self._found_load_example)
+        load_btn.grid(row=0, column=2, sticky="w", padx=(12, 0))
+        self._found_target_combo = ttk.Combobox(data, state="readonly", width=26)
+        form_row(data, "target column", self._found_target_combo)
+        self._found_info = ttk.Label(data, text="no dataset loaded", style="CardMuted.TLabel")
+        self._found_info.grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        preview = ttk.Frame(data, style="Card.TFrame")
+        grid_append(data, preview, sticky="nsew", weight=True)
+        self._found_preview_tree = ttk.Treeview(preview, show="headings", height=6)
+        bar_y = ttk.Scrollbar(preview, orient="vertical", command=self._found_preview_tree.yview)
+        self._found_preview_tree.configure(yscrollcommand=bar_y.set)
+        self._found_preview_tree.pack(side="left", fill="both", expand=True)
+        bar_y.pack(side="right", fill="y")
+
+        # -- card 1: the tensor primer (chapter 2) ----------------------- #
+        primer = make_card(
+            page.grid,
+            "Tensor primer",
+            row=1,
+            column=0,
+            subtitle="Chapter 2's data representations as an audit: every "
+            "numeric column one rank-1 tensor, the numeric block the "
+            "rank-2 feature matrix, with the batch arithmetic and the "
+            "tensor-product / reshape verdicts the chapter teaches.",
+        )
+        self._found_batch_spin = ttk.Spinbox(primer, from_=1, to=512, increment=8, width=10)
+        self._found_batch_spin.set("32")
+        form_row(primer, "batch size", self._found_batch_spin)
+        primer_btn = self._action_button(
+            primer, "Describe the dataset", self._found_run_primer, primary=True
+        )
+        grid_append(primer, primer_btn, pady=(6, 0))
+        primer_table = ttk.Frame(primer, style="Card.TFrame")
+        grid_append(primer, primer_table, sticky="nsew", pady=(6, 0), weight=True)
+        self._found_primer_tree = ttk.Treeview(
+            primer_table, show="headings", height=7
+        )
+        primer_bar = ttk.Scrollbar(
+            primer_table, orient="vertical", command=self._found_primer_tree.yview
+        )
+        self._found_primer_tree.configure(yscrollcommand=primer_bar.set)
+        self._found_primer_tree.pack(side="left", fill="both", expand=True)
+        primer_bar.pack(side="right", fill="y")
+        self._found_primer_note = ttk.Label(
+            primer, text="run the primer to see the walkthrough", style="CardMuted.TLabel",
+            wraplength=420, justify="left",
+        )
+        grid_append(primer, self._found_primer_note, pady=(6, 0))
+
+        # -- card 2: broadcasting check (chapter 2) ---------------------- #
+        cast = make_card(
+            page.grid,
+            "Broadcasting check",
+            row=1,
+            column=1,
+            subtitle="Chapter 2's broadcasting rules on two shapes: which "
+            "axes stretch, what the result shape is, and the verdict "
+            "when NumPy would refuse. Pure shape math -- no data needed.",
+        )
+        self._found_shape_a = ttk.Entry(cast, width=16)
+        self._found_shape_a.insert(0, "(80, 4)")
+        form_row(cast, "shape A", self._found_shape_a)
+        self._found_shape_b = ttk.Entry(cast, width=16)
+        self._found_shape_b.insert(0, "(4,)")
+        form_row(cast, "shape B", self._found_shape_b)
+        cast_btn = self._action_button(cast, "Check broadcasting", self._found_run_broadcast)
+        cast_btn.grid(row=2, column=0, sticky="w", pady=(6, 0))
+        bind_enter(self._found_shape_b, cast_btn)
+        self._found_broadcast_note = ttk.Label(
+            cast,
+            text="e.g. (80, 4) with (4,) — the vector rides every row",
+            style="CardMuted.TLabel",
+            wraplength=420,
+            justify="left",
+        )
+        grid_append(cast, self._found_broadcast_note, pady=(8, 0))
+
+        # -- card 3: the from-scratch trainer (ch. 2 + DSBC GD) --------- #
+        scratch = make_card(
+            page.grid,
+            "From-scratch trainer",
+            row=2,
+            column=0,
+            subtitle="Chapter 2's NaiveDense / NaiveSequential / "
+            "BatchGenerator trio with the hand-derived backward pass, "
+            "or the Data-Science-For-Beginners gradient-descent linear "
+            "regression. Everything in plain NumPy -- the moving parts "
+            "the Deep Learning tab's estimators keep hidden.",
+        )
+        self._found_kind_combo = ttk.Combobox(
+            scratch, state="readonly", width=26, values=("scratch network", "linear GD")
+        )
+        self._found_kind_combo.set("scratch network")
+        form_row(scratch, "kind", self._found_kind_combo)
+        self._found_hidden_entry = ttk.Entry(scratch, width=16)
+        self._found_hidden_entry.insert(0, "16")
+        Tooltip(
+            self._found_hidden_entry,
+            "Hidden width of the single hidden layer (scratch network "
+            "only); the linear GD kind reads no width.",
+        )
+        form_row(scratch, "hidden width", self._found_hidden_entry)
+        self._found_act_combo = ttk.Combobox(
+            scratch, state="readonly", width=16, values=("relu", "tanh", "sigmoid")
+        )
+        self._found_act_combo.set("relu")
+        form_row(scratch, "activation", self._found_act_combo)
+        self._found_scratch_epochs = ttk.Spinbox(
+            scratch, from_=5, to=2000, increment=5, width=10
+        )
+        self._found_scratch_epochs.set("60")
+        form_row(scratch, "epochs", self._found_scratch_epochs)
+        self._found_scratch_batch = ttk.Spinbox(
+            scratch, from_=1, to=512, increment=8, width=10
+        )
+        self._found_scratch_batch.set("32")
+        form_row(scratch, "batch size", self._found_scratch_batch)
+        self._found_scratch_lr = ttk.Entry(scratch, width=12)
+        self._found_scratch_lr.insert(0, "0.05")
+        form_row(scratch, "learning rate", self._found_scratch_lr)
+        scratch_row = ttk.Frame(scratch, style="Card.TFrame")
+        grid_append(scratch, scratch_row, pady=(6, 0))
+        self._action_button(
+            scratch_row, "Train from scratch", self._found_run_scratch, primary=True
+        ).pack(side="left")
+        self._action_button(
+            scratch_row,
+            "Save figure…",
+            self._save_found_scratch_figure,
+            tooltip="Save the loss curve this card is currently showing "
+            "(PNG / SVG / PDF, the menu path's own filetypes).",
+        ).pack(side="left", padx=(10, 0))
+        self._found_scratch_host = self._figure_host(scratch, height=250)
+        self._found_scratch_note = ttk.Label(
+            scratch, text="train to draw the loss curve", style="CardMuted.TLabel",
+            wraplength=420, justify="left",
+        )
+        grid_append(scratch, self._found_scratch_note, pady=(4, 0))
+
+        # -- card 4: the capacity sweep (chapter 5) ---------------------- #
+        sweep = make_card(
+            page.grid,
+            "Capacity sweep",
+            row=2,
+            column=1,
+            subtitle="Chapter 5's headline experiment: the same data "
+            "through growing hidden widths, train loss against "
+            "validation loss — the 'where does overfitting start?' "
+            "curve. Width 0 is the linear baseline the chapter "
+            "starts from.",
+        )
+        self._found_widths_entry = ttk.Entry(sweep, width=20)
+        self._found_widths_entry.insert(0, "0, 4, 8, 16, 32, 64")
+        form_row(sweep, "hidden widths", self._found_widths_entry)
+        self._found_sweep_epochs = ttk.Spinbox(sweep, from_=10, to=500, increment=10, width=10)
+        self._found_sweep_epochs.set("60")
+        form_row(sweep, "epochs each", self._found_sweep_epochs)
+        sweep_row = ttk.Frame(sweep, style="Card.TFrame")
+        grid_append(sweep, sweep_row, pady=(6, 0))
+        self._action_button(
+            sweep_row, "Sweep capacities", self._found_run_sweep
+        ).pack(side="left")
+        self._action_button(
+            sweep_row,
+            "Save figure…",
+            self._save_found_sweep_figure,
+            tooltip="Save the capacity curve this card is currently showing.",
+        ).pack(side="left", padx=(10, 0))
+        self._found_sweep_host = self._figure_host(sweep, height=250)
+        self._found_sweep_note = ttk.Label(
+            sweep, text="sweep to draw the capacity curve", style="CardMuted.TLabel",
+            wraplength=420, justify="left",
+        )
+        grid_append(sweep, self._found_sweep_note, pady=(4, 0))
+
+        # -- card 5: sequence forecasting (chapter 13) -------------------- #
+        seq = make_card(
+            page.grid,
+            "Sequence forecasting",
+            row=3,
+            column=0,
+            subtitle="Chapter 13's workflow: sliding windows, the "
+            "commonsense baseline every model must beat, and a "
+            "from-scratch LSTM or Elman cell trained by exact "
+            "backpropagation through time — evaluated strictly on the "
+            "future windows.",
+        )
+        self._found_series_source = ttk.Combobox(
+            seq,
+            state="readonly",
+            width=26,
+            values=(
+                "synthetic — seasonal sine",
+                "synthetic — AR(2) process",
+                "synthetic — random walk",
+                "CSV column",
+            ),
+        )
+        self._found_series_source.set("synthetic — seasonal sine")
+        form_row(seq, "series", self._found_series_source)
+        self._found_series_combo = ttk.Combobox(seq, state="readonly", width=26)
+        Tooltip(
+            self._found_series_combo,
+            "Numeric column of the loaded dataset (CSV column mode).",
+        )
+        form_row(seq, "column", self._found_series_combo)
+        self._found_seq_model = ttk.Combobox(
+            seq, state="readonly", width=16, values=("lstm", "elman")
+        )
+        self._found_seq_model.set("lstm")
+        form_row(seq, "cell", self._found_seq_model)
+        self._found_seq_window = ttk.Spinbox(seq, from_=4, to=200, increment=4, width=10)
+        self._found_seq_window.set("24")
+        form_row(seq, "window", self._found_seq_window)
+        self._found_seq_hidden = ttk.Spinbox(seq, from_=2, to=128, increment=2, width=10)
+        self._found_seq_hidden.set("16")
+        form_row(seq, "hidden", self._found_seq_hidden)
+        self._found_seq_epochs = ttk.Spinbox(seq, from_=5, to=500, increment=5, width=10)
+        self._found_seq_epochs.set("60")
+        form_row(seq, "epochs", self._found_seq_epochs)
+        self._found_seq_lr = ttk.Entry(seq, width=12)
+        self._found_seq_lr.insert(0, "0.03")
+        form_row(seq, "learning rate", self._found_seq_lr)
+        self._found_seq_dropout = ttk.Spinbox(seq, from_=0.0, to=0.7, increment=0.1, width=10)
+        self._found_seq_dropout.set("0.0")
+        Tooltip(
+            self._found_seq_dropout,
+            "Variational recurrent dropout (one mask per sequence, "
+            "chapter 13's overfitting recipe).",
+        )
+        form_row(seq, "recurrent dropout", self._found_seq_dropout)
+        self._found_seq_bidir = tk.BooleanVar(value=False)
+        bidir_check = ttk.Checkbutton(
+            seq,
+            text="bidirectional (the chapter's caveat: helps density "
+            "estimation, not forecasting — offered for the experiment)",
+            variable=self._found_seq_bidir,
+        )
+        grid_append(seq, bidir_check, pady=(2, 0))
+        seq_row = ttk.Frame(seq, style="Card.TFrame")
+        grid_append(seq, seq_row, pady=(6, 0))
+        self._action_button(
+            seq_row, "Forecast", self._found_run_sequence, primary=True
+        ).pack(side="left")
+        self._action_button(
+            seq_row,
+            "Save figure…",
+            self._save_found_seq_figure,
+            tooltip="Save the forecast comparison this card is currently showing.",
+        ).pack(side="left", padx=(10, 0))
+        self._found_seq_host = self._figure_host(seq, height=280)
+        self._found_seq_note = ttk.Label(
+            seq, text="forecast to draw the held-out comparison", style="CardMuted.TLabel",
+            wraplength=420, justify="left",
+        )
+        grid_append(seq, self._found_seq_note, pady=(4, 0))
+
+        # -- card 6: the attention lab (chapter 15) ----------------------- #
+        attn = make_card(
+            page.grid,
+            "Attention lab",
+            row=3,
+            column=1,
+            subtitle="Chapter 15's mathematics on a numeric matrix: "
+            "sinusoidal positional encoding plus multi-head scaled "
+            "dot-product self-attention, every head's grid drawn — the "
+            "forward pass of the Transformer, seen.",
+        )
+        self._found_attn_tokens = ttk.Spinbox(attn, from_=4, to=64, increment=2, width=10)
+        self._found_attn_tokens.set("12")
+        form_row(attn, "tokens (rows)", self._found_attn_tokens)
+        self._found_attn_heads = ttk.Spinbox(attn, from_=1, to=8, increment=1, width=10)
+        self._found_attn_heads.set("4")
+        form_row(attn, "heads", self._found_attn_heads)
+        self._found_attn_causal = tk.BooleanVar(value=True)
+        causal_check = ttk.Checkbutton(
+            attn,
+            text="causal mask (the decoder's triangle — future tokens blocked)",
+            variable=self._found_attn_causal,
+        )
+        grid_append(attn, causal_check, pady=(2, 0))
+        attn_row = ttk.Frame(attn, style="Card.TFrame")
+        grid_append(attn, attn_row, pady=(6, 0))
+        self._action_button(
+            attn_row, "Show attention", self._found_run_attention
+        ).pack(side="left")
+        self._action_button(
+            attn_row,
+            "Save figure…",
+            self._save_found_attn_figure,
+            tooltip="Save the attention grids this card is currently showing.",
+        ).pack(side="left", padx=(10, 0))
+        self._found_attn_host = self._figure_host(attn, height=280)
+        self._found_attn_note = ttk.Label(
+            attn, text="draw to see the attention grids", style="CardMuted.TLabel",
+            wraplength=420, justify="left",
+        )
+        grid_append(attn, self._found_attn_note, pady=(4, 0))
+
+        # -- card 7: statistics & hypothesis testing (DSBC) ---------------- #
+        stats_card = make_card(
+            page.grid,
+            "Statistics & hypothesis testing",
+            row=4,
+            column=0,
+            subtitle="The Data-Science-For-Beginners statistics block: "
+            "descriptives, normality, the right test (Welch or "
+            "Mann-Whitney), both confidence intervals and the effect "
+            "size — with the branch it took reported, never hidden.",
+        )
+        self._found_stat_mode = ttk.Combobox(
+            stats_card,
+            state="readonly",
+            width=26,
+            values=("CSV columns", "synthetic demo (two groups)"),
+        )
+        self._found_stat_mode.set("synthetic demo (two groups)")
+        form_row(stats_card, "groups", self._found_stat_mode)
+        self._found_stat_a = ttk.Combobox(stats_card, state="readonly", width=24)
+        form_row(stats_card, "column A", self._found_stat_a)
+        self._found_stat_b = ttk.Combobox(stats_card, state="readonly", width=24)
+        form_row(stats_card, "column B", self._found_stat_b)
+        self._found_stat_alpha = ttk.Entry(stats_card, width=12)
+        self._found_stat_alpha.insert(0, "0.05")
+        form_row(stats_card, "α (significance)", self._found_stat_alpha)
+        self._found_stat_level = ttk.Entry(stats_card, width=12)
+        self._found_stat_level.insert(0, "0.95")
+        form_row(stats_card, "CI level", self._found_stat_level)
+        stats_btn = self._action_button(
+            stats_card, "Compare groups", self._found_run_stats, primary=True
+        )
+        grid_append(stats_card, stats_btn, pady=(6, 0))
+        self._found_stats_text = _grid_text(stats_card, height=13, mono=self._mono)
+        grid_append(stats_card, self._found_stats_text, sticky="nsew", pady=(6, 0), weight=True)
+
+        # -- card 8: the distribution sampler (DSBC) ----------------------- #
+        dist_card = make_card(
+            page.grid,
+            "Distribution sampler",
+            row=4,
+            column=1,
+            subtitle="The probability lecture's sampler: seeded draws "
+            "from the course's five distributions with the theoretical "
+            "moments drawn against the sample — 'what does n=200 "
+            "actually look like?'",
+        )
+        self._found_dist_kind = ttk.Combobox(
+            dist_card, state="readonly", width=20, values=(
+                "normal", "uniform", "binomial", "poisson", "exponential",
+            )
+        )
+        self._found_dist_kind.set("normal")
+        form_row(dist_card, "distribution", self._found_dist_kind)
+        self._found_dist_n = ttk.Spinbox(dist_card, from_=10, to=100000, increment=50, width=10)
+        self._found_dist_n.set("500")
+        form_row(dist_card, "sample size", self._found_dist_n)
+        self._found_dist_loc = ttk.Entry(dist_card, width=12)
+        self._found_dist_loc.insert(0, "0")
+        Tooltip(
+            self._found_dist_loc,
+            "normal: μ · uniform: lower bound · (exponential ignores this)",
+        )
+        form_row(dist_card, "loc / μ", self._found_dist_loc)
+        self._found_dist_scale = ttk.Entry(dist_card, width=12)
+        self._found_dist_scale.insert(0, "1")
+        Tooltip(
+            self._found_dist_scale,
+            "normal: σ · uniform: width · exponential: scale (1/λ)",
+        )
+        form_row(dist_card, "scale / σ", self._found_dist_scale)
+        self._found_dist_p = ttk.Entry(dist_card, width=12)
+        self._found_dist_p.insert(0, "0.3")
+        Tooltip(self._found_dist_p, "binomial: success probability p")
+        form_row(dist_card, "p (binomial)", self._found_dist_p)
+        self._found_dist_trials = ttk.Entry(dist_card, width=12)
+        self._found_dist_trials.insert(0, "10")
+        Tooltip(self._found_dist_trials, "binomial: number of trials")
+        form_row(dist_card, "trials (binomial)", self._found_dist_trials)
+        self._found_dist_lam = ttk.Entry(dist_card, width=12)
+        self._found_dist_lam.insert(0, "3")
+        Tooltip(self._found_dist_lam, "poisson: rate λ")
+        form_row(dist_card, "λ (poisson)", self._found_dist_lam)
+        dist_row = ttk.Frame(dist_card, style="Card.TFrame")
+        grid_append(dist_card, dist_row, pady=(6, 0))
+        self._action_button(
+            dist_row, "Draw sample", self._found_run_dist
+        ).pack(side="left")
+        self._action_button(
+            dist_row,
+            "Save figure…",
+            self._save_found_dist_figure,
+            tooltip="Save the histogram this card is currently showing.",
+        ).pack(side="left", padx=(10, 0))
+        self._found_dist_host = self._figure_host(dist_card, height=230)
+        self._found_dist_note = ttk.Label(
+            dist_card, text="draw to see the histogram", style="CardMuted.TLabel",
+            wraplength=420, justify="left",
+        )
+        grid_append(dist_card, self._found_dist_note, pady=(4, 0))
+
+    # -- Foundations: dataset plumbing ------------------------------------ #
+
+    def _found_open_csv(self) -> None:
+        """File-dialog CSV load (job-based, the DL tab's own flow)."""
+        if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
+            return
+        path = filedialog.askopenfilename(
+            title="Open a dataset",
+            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+
+        def work(report: Any) -> Any:
+            from pharmaml.utils.io import read_table_with_progress
+
+            return read_table_with_progress(Path(path), report)
+
+        def render(frame: Any) -> None:
+            if frame.empty:
+                messagebox.showwarning("Empty dataset", f"{Path(path).name} has no rows.")
+                return
+            self._found_load_frame(frame, Path(path).name)
+            self._found_path = Path(path)
+
+        self._start_job(f"loading {Path(path).name}", work, render)
+
+    def _found_load_example(self) -> None:
+        """Load one of the bundled QSAR examples (sync, shipped + tiny)."""
+        if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
+            return
+        name = self._found_example_combo.get()
+        path = EXAMPLES_DIR / name
+        if not path.is_file():
+            messagebox.showwarning("Missing example", f"{name} was not found.")
+            return
+        try:
+            from pharmaml.utils.io import read_table
+
+            frame = read_table(path)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not read the dataset", exc)
+            return
+        if frame.empty:
+            messagebox.showwarning("Empty dataset", f"{name} has no rows.")
+            return
+        self._found_load_frame(frame, name)
+        self._found_path = path
+
+    def _found_load_frame(self, frame: Any, label: str) -> None:
+        """Adopt a frame: preview, target/stat/series combos, info line."""
+        self._found_frame = frame
+        self._found_path = None
+        self._found_label = label
+        columns = [str(column) for column in frame.columns]
+        numeric = [
+            column
+            for column in columns
+            if frame[column].dtype.kind in "biufc"
+        ]
+        self._found_preview_tree.delete(*self._found_preview_tree.get_children())
+        self._found_preview_tree["columns"] = columns
+        for column in columns:
+            self._found_preview_tree.heading(column, text=column)
+            self._found_preview_tree.column(column, width=96, minwidth=64, stretch=True)
+        for _, row in frame.head(8).iterrows():
+            self._found_preview_tree.insert(
+                "", "end", values=[_cell_text(value) for value in row.tolist()]
+            )
+        self._found_target_combo["values"] = columns
+        self._found_target_combo.set(default_target_column(frame) or columns[-1])
+        self._found_stat_a["values"] = numeric
+        self._found_stat_b["values"] = numeric
+        if len(numeric) >= 2:
+            self._found_stat_a.set(numeric[0])
+            self._found_stat_b.set(numeric[1])
+        elif numeric:
+            self._found_stat_a.set(numeric[0])
+            self._found_stat_b.set(numeric[0])
+        self._found_series_combo["values"] = numeric
+        if numeric:
+            self._found_series_combo.set(numeric[0])
+        self._found_info.configure(
+            text=f"{label} — {len(frame):,} rows × {len(columns)} columns "
+            f"({len(numeric)} numeric)"
+        )
+
+    def _found_synthetic_frame(self) -> Any:
+        """The seeded two-blob fallback (classification-shaped, pandas)."""
+        import numpy as np
+        import pandas as pd
+
+        rng = np.random.default_rng(42)
+        n_each = 80
+        x1 = np.concatenate(
+            [rng.normal(0.0, 0.8, n_each), rng.normal(2.5, 0.8, n_each)]
+        )
+        x2 = np.concatenate(
+            [rng.normal(0.0, 0.8, n_each), rng.normal(-1.5, 0.8, n_each)]
+        )
+        x3 = rng.normal(0.0, 1.0, 2 * n_each)  # pure noise: the primer's 3rd tensor
+        cls = np.concatenate([np.zeros(n_each), np.ones(n_each)])
+        return pd.DataFrame({"x1": x1, "x2": x2, "noise": x3, "class": cls})
+
+    def _found_frame_for_cards(self) -> tuple[Any, str]:
+        """The frame the primer / trainer / stats / attention cards read."""
+        if self._found_frame is not None:
+            return self._found_frame, self._found_label
+        return self._found_synthetic_frame(), "synthetic two-blob demo (seed 42)"
+
+    def _found_xy(self, frame: Any) -> tuple[Any, Any, str]:
+        """Features + target from the frame (the DL tab's own rule)."""
+        import numpy as np
+
+        target = self._found_target_combo.get()
+        columns = [str(column) for column in frame.columns]
+        if target not in columns:
+            target = columns[-1]
+        features = [
+            column
+            for column in columns
+            if column != target and frame[column].dtype.kind in "biufc"
+        ]
+        if not features:
+            raise ValueError("no numeric feature columns — load a numeric table first")
+        x = frame[features].to_numpy(dtype=float)
+        y = frame[target].to_numpy(dtype=float)
+        classes = set(np.unique(y[np.isfinite(y)]).tolist())
+        task = "classification" if classes == {0.0, 1.0} else "regression"
+        return x, y, task
+
+    # -- Foundations: card handlers ---------------------------------------- #
+
+    def _found_run_primer(self) -> None:
+        """Chapter 2's tensor primer over the loaded (or synthetic) frame."""
+        if not self._require_pharmaml():
+            return
+        try:
+            batch_size = parse_int(
+                self._found_batch_spin.get(), "batch size", minimum=1, maximum=512
+            )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        frame, label = self._found_frame_for_cards()
+        target = self._found_target_combo.get()
+
+        def work() -> Any:
+            from pharmaml.ml.tensors import tensor_primer_report
+
+            return tensor_primer_report(frame, target=target or None, batch_size=batch_size)
+
+        def render(report: Any) -> None:
+            self._found_primer_tree.delete(*self._found_primer_tree.get_children())
+            headings = ["tensor", "rank · shape", "dtype", "size", "stats", "batches"]
+            self._found_primer_tree["columns"] = headings
+            for heading in headings:
+                self._found_primer_tree.heading(heading, text=heading)
+                self._found_primer_tree.column(
+                    heading, width=130, minwidth=72, stretch=True
+                )
+            for row in report.rows:
+                self._found_primer_tree.insert("", "end", values=row)
+            self._found_primer_note.configure(
+                text=(
+                    f"{label} · {report.tensor_product}\n{report.reshape}\n"
+                    f"{report.batches}"
+                )
+            )
+
+        self._start_job("tensor primer", work, render)
+
+    def _found_run_broadcast(self) -> None:
+        """Chapter 2's broadcasting rules on two shape strings (sync)."""
+        try:
+            from pharmaml.ml.tensors import broadcast_report
+
+            report = broadcast_report(
+                self._found_shape_a.get(), self._found_shape_b.get()
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not check the shapes", exc)
+            return
+        verdict = report.as_text()
+        extra = (
+            " — the element-wise op NumPy would run"
+            if report.compatible and report.stretched
+            else ""
+        )
+        if not report.compatible:
+            extra = " — NumPy raises ValueError (no axis can reconcile them)"
+        self._found_broadcast_note.configure(text=verdict + extra)
+
+    def _save_found_scratch_figure(self) -> None:
+        """Save the from-scratch trainer's live loss curve (100x-128)."""
+        self._save_card_figure(
+            [self._found_scratch_host],
+            dialog_title="Save the loss curve",
+            empty_hint=(
+                "Train from scratch first -- this saves the loss curve "
+                "the card is currently showing."
+            ),
+        )
+
+    def _save_found_sweep_figure(self) -> None:
+        """Save the capacity sweep's live curve (100x-128)."""
+        self._save_card_figure(
+            [self._found_sweep_host],
+            dialog_title="Save the capacity curve",
+            empty_hint=(
+                "Sweep capacities first -- this saves the train-vs-"
+                "validation curve the card is currently showing."
+            ),
+        )
+
+    def _save_found_seq_figure(self) -> None:
+        """Save the sequence forecast's live comparison (100x-128)."""
+        self._save_card_figure(
+            [self._found_seq_host],
+            dialog_title="Save the forecast figure",
+            empty_hint=(
+                "Run a forecast first -- this saves the actual-vs-model-"
+                "vs-baseline comparison the card is currently showing."
+            ),
+        )
+
+    def _save_found_attn_figure(self) -> None:
+        """Save the attention lab's live grids (100x-128)."""
+        self._save_card_figure(
+            [self._found_attn_host],
+            dialog_title="Save the attention grids",
+            empty_hint=(
+                "Show attention first -- this saves the per-head grids "
+                "the card is currently showing."
+            ),
+        )
+
+    def _save_found_dist_figure(self) -> None:
+        """Save the distribution sampler's live histogram (100x-128)."""
+        self._save_card_figure(
+            [self._found_dist_host],
+            dialog_title="Save the histogram",
+            empty_hint=(
+                "Draw a sample first -- this saves the histogram the "
+                "card is currently showing."
+            ),
+        )
+
+    def _found_run_scratch(self) -> None:
+        """The from-scratch trainer: chapter 2's loop or the DSBC GD line."""
+        if not self._require_pharmaml() or not self._require("matplotlib", "the loss curve"):
+            return
+        kind = self._found_kind_combo.get()
+        frame, label = self._found_frame_for_cards()
+        try:
+            epochs = parse_int(
+                self._found_scratch_epochs.get(), "epochs", minimum=1, maximum=2000
+            )
+            batch_size = parse_int(
+                self._found_scratch_batch.get(), "batch size", minimum=1, maximum=512
+            )
+            learning_rate = parse_float(
+                self._found_scratch_lr.get(), "learning rate", minimum=1e-6, maximum=10.0
+            )
+            if kind == "scratch network":
+                hidden = parse_int(
+                    self._found_hidden_entry.get(), "hidden width", minimum=1, maximum=512
+                )
+            else:
+                hidden = 0
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        try:
+            x, y, task = self._found_xy(frame)
+        except ValueError as exc:
+            messagebox.showerror("Dataset", str(exc))
+            return
+        activation = self._found_act_combo.get()
+
+        def work(report_progress: Any) -> Any:
+            import matplotlib.pyplot as plt
+
+            from pharmaml.ml.tensors import (
+                NaiveDense,
+                NaiveSequential,
+                fit_scratch,
+                linear_regression_gd,
+            )
+
+            if kind == "linear GD":
+                result = linear_regression_gd(
+                    x, y, learning_rate=learning_rate, epochs=epochs
+                )
+                figure, axis = plt.subplots(figsize=(6.2, 3.4))
+                axis.plot(range(1, len(result.mse_history) + 1), result.mse_history)
+                axis.set_xlabel("epoch")
+                axis.set_ylabel("mean squared error")
+                axis.set_title(f"Gradient descent — {label}")
+                axis.grid(alpha=0.3)
+                return figure, ("linear GD", result.final_line())
+
+            head = "sigmoid" if task == "classification" else "linear"
+            layers = [NaiveDense(x.shape[1], hidden, activation, seed=42)]
+            if hidden:
+                layers.append(NaiveDense(hidden, 1, head, seed=43))
+            else:  # pragma: no cover - widths entry guards 1..512, kept honest
+                layers = [NaiveDense(x.shape[1], 1, head, seed=43)]
+            model = NaiveSequential(layers)
+            history = fit_scratch(
+                model,
+                x,
+                y,
+                task=task,
+                epochs=epochs,
+                batch_size=batch_size,
+                learning_rate=learning_rate,
+                val_fraction=0.25,
+                seed=42,
+                progress=report_progress,
+            )
+            figure, axis = plt.subplots(figsize=(6.2, 3.4))
+            axis.plot(range(1, history.epochs_run + 1), history.train_loss, label="train")
+            if history.val_loss:
+                axis.plot(
+                    range(1, history.epochs_run + 1), history.val_loss, label="validation"
+                )
+            axis.set_xlabel("epoch")
+            axis.set_ylabel(
+                "binary cross-entropy" if task == "classification" else "MSE"
+            )
+            axis.set_title(f"From scratch ({task}) — {label}")
+            axis.legend(frameon=False, fontsize=9)
+            axis.grid(alpha=0.3)
+            return figure, ("scratch network", history.final_line())
+
+        def render(payload: Any) -> None:
+            figure, (_kind, line) = payload
+            self._render_figure(self._found_scratch_host, figure, caption="scratch loss curve")
+            self._found_scratch_note.configure(text=line)
+
+        self._start_job("from-scratch training", work, render)
+
+    def _found_run_sweep(self) -> None:
+        """Chapter 5's capacity sweep across the widths entry."""
+        if not self._require_pharmaml() or not self._require("matplotlib", "the sweep curve"):
+            return
+        frame, label = self._found_frame_for_cards()
+        try:
+            widths = tuple(
+                parse_int(part.strip(), "hidden width", minimum=0, maximum=512)
+                for part in self._found_widths_entry.get().split(",")
+                if part.strip()
+            )
+            epochs = parse_int(
+                self._found_sweep_epochs.get(), "epochs each", minimum=5, maximum=500
+            )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        if not widths:
+            messagebox.showerror("Input", "hidden widths: nothing to sweep")
+            return
+        try:
+            x, y, task = self._found_xy(frame)
+        except ValueError as exc:
+            messagebox.showerror("Dataset", str(exc))
+            return
+        activation = self._found_act_combo.get()
+
+        def work(report_progress: Any) -> Any:
+            import matplotlib.pyplot as plt
+
+            from pharmaml.ml.tensors import capacity_sweep
+
+            result = capacity_sweep(
+                x,
+                y,
+                task=task,
+                widths=widths,
+                epochs=epochs,
+                batch_size=32,
+                learning_rate=0.05,
+                activation=activation,
+                seed=42,
+                progress=report_progress,
+            )
+            figure, axis = plt.subplots(figsize=(6.2, 3.4))
+            labels = [point.hidden_width or 0 for point in result.points]
+            positions = range(len(result.points))
+            axis.plot(
+                positions,
+                [point.train_loss for point in result.points],
+                marker="o",
+                label="train loss",
+            )
+            val_points = [
+                (index, point.val_loss)
+                for index, point in enumerate(result.points)
+                if point.val_loss is not None
+            ]
+            if val_points:
+                axis.plot(
+                    [index for index, _ in val_points],
+                    [value for _, value in val_points],
+                    marker="s",
+                    label="validation loss",
+                )
+            axis.set_xticks(list(positions))
+            axis.set_xticklabels(
+                ["linear" if width == 0 else str(width) for width in labels]
+            )
+            axis.set_xlabel("hidden width")
+            axis.set_ylabel(
+                "binary cross-entropy" if task == "classification" else "MSE"
+            )
+            axis.set_title(f"Capacity sweep — {label}")
+            axis.legend(frameon=False, fontsize=9)
+            axis.grid(alpha=0.3)
+            return figure, result
+
+        def render(payload: Any) -> None:
+            figure, result = payload
+            self._render_figure(self._found_sweep_host, figure, caption="capacity sweep")
+            self._found_sweep_note.configure(
+                text=(
+                    f"best width {result.best_width or 'linear'} · "
+                    f"{result.verdict}"
+                )
+            )
+
+        self._start_job("capacity sweep", work, render)
+
+    def _found_run_sequence(self) -> None:
+        """Chapter 13's forecast: synthetic series or a CSV column."""
+        if not self._require_pharmaml() or not self._require("matplotlib", "the forecast"):
+            return
+        source = self._found_series_source.get()
+        series: Any = None
+        name = source
+        if source == "CSV column":
+            column = self._found_series_combo.get()
+            if self._found_frame is None or not column:
+                messagebox.showinfo(
+                    "No dataset",
+                    "Load a CSV on this tab first (or pick a synthetic series).",
+                )
+                return
+            if column not in [
+                str(item) for item in self._found_frame.columns
+            ]:
+                messagebox.showerror("Input", f"unknown column {column!r}")
+                return
+            series = self._found_frame[column].to_numpy(dtype=float)
+            name = column
+        else:
+            # "synthetic — seasonal sine" → "sine", "— AR(2) process" →
+            # "ar2", "— random walk" → "walk"
+            token = source.split("—")[1].strip().split()[0]
+            kind = {"seasonal": "sine", "AR(2)": "ar2", "random": "walk"}.get(
+                token.rstrip(","), "sine"
+            )
+        try:
+            window = parse_int(self._found_seq_window.get(), "window", minimum=4, maximum=200)
+            hidden = parse_int(self._found_seq_hidden.get(), "hidden", minimum=2, maximum=128)
+            epochs = parse_int(self._found_seq_epochs.get(), "epochs", minimum=5, maximum=500)
+            learning_rate = parse_float(
+                self._found_seq_lr.get(), "learning rate", minimum=1e-6, maximum=1.0
+            )
+            dropout = parse_float(
+                self._found_seq_dropout.get(), "recurrent dropout", minimum=0.0, maximum=0.7
+            )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        model_kind = self._found_seq_model.get()
+        bidirectional = bool(self._found_seq_bidir.get())
+
+        def work(report_progress: Any) -> Any:
+            import matplotlib.pyplot as plt
+
+            from pharmaml.ml.sequences import forecast_timeseries, synthetic_series
+
+            if series is None:
+                values = synthetic_series(kind, 300, seed=42)
+            else:
+                values = series
+            result = forecast_timeseries(
+                values,
+                target_name=name,
+                window=window,
+                model=model_kind,
+                hidden=hidden,
+                epochs=epochs,
+                learning_rate=learning_rate,
+                recurrent_dropout=dropout,
+                bidirectional=bidirectional,
+                val_fraction=0.25,
+                seed=42,
+                progress=report_progress,
+            )
+            figure, (full_axis, zoom_axis) = plt.subplots(
+                2, 1, figsize=(6.2, 4.6), sharex=False
+            )
+            full_axis.plot(result.series_tail_index, result.series_tail, lw=1.0)
+            full_axis.set_title(f"{model_kind.upper()} forecast — {name}")
+            full_axis.set_ylabel("value")
+            full_axis.grid(alpha=0.3)
+            zoom_axis.plot(
+                result.val_index, result.val_actual, lw=1.2, label="actual"
+            )
+            zoom_axis.plot(
+                result.val_index, result.val_pred, lw=1.2, ls="--", label="model"
+            )
+            zoom_axis.plot(
+                result.val_index,
+                result.val_baseline_pred,
+                lw=1.0,
+                ls=":",
+                label="commonsense baseline",
+            )
+            zoom_axis.set_xlabel("series index")
+            zoom_axis.set_ylabel("value")
+            zoom_axis.legend(frameon=False, fontsize=8)
+            zoom_axis.grid(alpha=0.3)
+            return figure, result
+
+        def render(payload: Any) -> None:
+            figure, result = payload
+            self._render_figure(self._found_seq_host, figure, caption="sequence forecast")
+            self._found_seq_note.configure(
+                text=(
+                    result.headline()
+                    + f" · R² {result.model_r2:.3f} · {result.n_parameters:,} parameters"
+                )
+            )
+
+        self._start_job("sequence forecast", work, render)
+
+    def _found_run_attention(self) -> None:
+        """Chapter 15's attention grids over the frame's numeric block."""
+        if not self._require_pharmaml() or not self._require("matplotlib", "the attention grids"):
+            return
+        frame, label = self._found_frame_for_cards()
+        try:
+            n_tokens = parse_int(
+                self._found_attn_tokens.get(), "tokens", minimum=4, maximum=64
+            )
+            n_heads = parse_int(self._found_attn_heads.get(), "heads", minimum=1, maximum=8)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        causal = bool(self._found_attn_causal.get())
+
+        def work() -> Any:
+            import matplotlib.pyplot as plt
+
+            from pharmaml.ml.attention import (
+                PositionalReport,
+                self_attention_report,
+                sinusoidal_positions,
+            )
+
+            numeric = [
+                str(column)
+                for column in frame.columns
+                if frame[column].dtype.kind in "biufc"
+            ]
+            if len(numeric) < 2:
+                raise ValueError("the attention lab needs at least two numeric columns")
+            width = min(len(numeric), 16)
+            if width % 2:
+                width -= 1  # keep the positional-encoding pairing honest
+            while width % n_heads:
+                width -= 1
+            if width < n_heads:
+                raise ValueError("too many heads for the numeric width")
+            tokens = min(n_tokens, len(frame))
+            matrix = frame[numeric[:width]].to_numpy(dtype=float)[:tokens]
+            tokens = len(matrix)
+            report = self_attention_report(
+                matrix, n_heads=n_heads, causal=causal, seed=42
+            )
+            positional = PositionalReport(
+                encoding=sinusoidal_positions(tokens, width),
+                seq_len=tokens,
+                dim=width,
+            )
+            columns = min(4, n_heads)
+            rows = -(-n_heads // columns)
+            figure, axes = plt.subplots(
+                rows + 1,
+                columns,
+                figsize=(3.0 * columns, 2.6 * (rows + 1)),
+                squeeze=False,
+            )
+            for index in range(n_heads):
+                axis = axes[index // columns][index % columns]
+                image = axis.imshow(
+                    report.weights[index], cmap="viridis", vmin=0.0, aspect="auto"
+                )
+                axis.set_title(
+                    f"head {index} · H {report.entropies[index]:.2f}", fontsize=9
+                )
+                figure.colorbar(image, ax=axis, fraction=0.046)
+            # the last row's leftover panels carry the positional encoding
+            pe_axis = axes[rows][0]
+            pe_image = pe_axis.imshow(positional.encoding, cmap="magma", aspect="auto")
+            pe_axis.set_title("sinusoidal positions", fontsize=9)
+            figure.colorbar(pe_image, ax=pe_axis, fraction=0.046)
+            for axis in axes[rows][1:]:
+                axis.axis("off")
+            figure.suptitle(f"Self-attention — {label} (first {tokens} rows)", fontsize=10)
+            figure.tight_layout(rect=(0, 0, 1, 0.96))
+            return figure, report, label
+
+        def render(payload: Any) -> None:
+            figure, report, _label = payload
+            self._render_figure(self._found_attn_host, figure, caption="attention grids")
+            self._found_attn_note.configure(text=report.headline())
+
+        self._start_job("attention lab", work, render)
+
+    def _found_run_stats(self) -> None:
+        """The DSBC statistics flow over two columns (or the demo groups)."""
+        if not self._require_pharmaml() or not self._require("scipy", "the tests"):
+            return
+        mode = self._found_stat_mode.get()
+        frame, label = self._found_frame_for_cards()
+        try:
+            alpha = parse_float(
+                self._found_stat_alpha.get(), "α", minimum=1e-6, maximum=0.5
+            )
+            level = parse_float(
+                self._found_stat_level.get(), "CI level", minimum=0.5, maximum=0.999
+            )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        if mode == "CSV columns":
+            column_a = self._found_stat_a.get()
+            column_b = self._found_stat_b.get()
+            if not column_a or not column_b:
+                messagebox.showinfo(
+                    "No columns",
+                    "Load a CSV with numeric columns (or switch to the synthetic demo).",
+                )
+                return
+            if column_a not in [
+                str(item) for item in frame.columns
+            ] or column_b not in [str(item) for item in frame.columns]:
+                messagebox.showerror("Input", "pick columns from the loaded dataset")
+                return
+            if column_a == column_b:
+                messagebox.showerror(
+                    "Input",
+                    "the two groups are the same column — pick two different columns",
+                )
+                return
+            group_a = frame[column_a].to_numpy(dtype=float)
+            group_b = frame[column_b].to_numpy(dtype=float)
+            group_label = f"{label}: {column_a} vs {column_b}"
+        else:
+            import numpy as np
+
+            rng = np.random.default_rng(42)
+            group_a = rng.normal(1.2, 0.4, 60)
+            group_b = rng.normal(1.0, 0.45, 50)
+            group_label = "synthetic demo: N(1.2, 0.4) n=60 vs N(1.0, 0.45) n=50"
+
+        def work() -> Any:
+            from pharmaml.ml.stats import compare_groups
+
+            return compare_groups(group_a, group_b, alpha=alpha, level=level, seed=42)
+
+        def render(report: Any) -> None:
+            lines = [
+                f"groups: {group_label}",
+                "",
+                f"A · {report.group_a.line()}",
+                f"    {report.group_a.five_number()}",
+                f"B · {report.group_b.line()}",
+                f"    {report.group_b.five_number()}",
+                "",
+                f"normality A: {report.normality_a.line()}",
+                f"normality B: {report.normality_b.line()}",
+                "",
+                f"branch: {report.branch}",
+                f"test: {report.result.line()}",
+                f"CI A: {report.interval_a.line()}",
+                f"CI B: {report.interval_b.line()}",
+                "",
+                report.headline(),
+            ]
+            self._found_stats_text.delete("1.0", "end")
+            self._found_stats_text.insert("1.0", "\n".join(lines))
+
+        self._start_job("group comparison", work, render)
+
+    def _found_run_dist(self) -> None:
+        """The DSBC distribution sampler with the theory drawn on top."""
+        if not self._require_pharmaml() or not self._require("matplotlib", "the histogram"):
+            return
+        kind = self._found_dist_kind.get()
+        try:
+            n = parse_int(self._found_dist_n.get(), "sample size", minimum=10, maximum=100000)
+            loc = parse_float(self._found_dist_loc.get(), "loc", minimum=-1e6, maximum=1e6)
+            scale = parse_float(
+                self._found_dist_scale.get(), "scale", minimum=1e-6, maximum=1e6
+            )
+            p = parse_float(self._found_dist_p.get(), "p", minimum=1e-6, maximum=1.0 - 1e-9)
+            trials = parse_int(
+                self._found_dist_trials.get(), "trials", minimum=1, maximum=100000
+            )
+            lam = parse_float(self._found_dist_lam.get(), "λ", minimum=1e-6, maximum=1e6)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work() -> Any:
+            import matplotlib.pyplot as plt
+            import numpy as np
+            from scipy import stats as scipy_stats
+
+            from pharmaml.ml.stats import sample_distribution
+
+            sample = sample_distribution(
+                kind,
+                n=n,
+                loc=loc,
+                scale=scale,
+                p=p,
+                lam=lam,
+                trials=trials,
+                seed=42,
+            )
+            figure, axis = plt.subplots(figsize=(6.2, 3.2))
+            discrete = kind in ("binomial", "poisson")
+            if discrete:
+                values, counts = np.unique(sample.values, return_counts=True)
+                axis.bar(values, counts / sample.n, width=0.8, alpha=0.7, label="sample")
+            else:
+                axis.hist(
+                    sample.values, bins=40, density=True, alpha=0.7, label="sample"
+                )
+            xs = np.linspace(
+                float(sample.values.min()), float(sample.values.max()), 400
+            )
+            if kind == "normal":
+                axis.plot(
+                    xs,
+                    scipy_stats.norm.pdf(xs, loc=loc, scale=scale),
+                    lw=1.6,
+                    label=f"N({loc:g}, {scale:g}²)",
+                )
+            elif kind == "uniform":
+                axis.plot(
+                    xs,
+                    scipy_stats.uniform.pdf(xs, loc=loc, scale=scale),
+                    lw=1.6,
+                    label=f"U[{loc:g}, {loc + scale:g}]",
+                )
+            elif kind == "exponential":
+                axis.plot(
+                    xs,
+                    scipy_stats.expon.pdf(xs, scale=scale),
+                    lw=1.6,
+                    label=f"Exp(scale {scale:g})",
+                )
+            else:
+                grid = np.arange(
+                    int(sample.values.min()), int(sample.values.max()) + 1
+                )
+                pmf = (
+                    scipy_stats.binom.pmf(grid, trials, p)
+                    if kind == "binomial"
+                    else scipy_stats.poisson.pmf(grid, lam)
+                )
+                axis.plot(grid, pmf, "o-", ms=3, lw=1.4, label="theory")
+            axis.set_xlabel("value")
+            axis.set_ylabel("density / frequency")
+            axis.set_title(f"{kind} · n = {sample.n}")
+            axis.legend(frameon=False, fontsize=9)
+            axis.grid(alpha=0.3)
+            return figure, sample
+
+        def render(payload: Any) -> None:
+            figure, sample = payload
+            self._render_figure(self._found_dist_host, figure, caption="distribution sample")
+            self._found_dist_note.configure(text=sample.line())
+
+        self._start_job("distribution sample", work, render)
+
+    # ------------------------------------------------------------------ #
     # Utilities tab -- the rar's own file & table operations, one by one
     # (100x-110: the coverage audit found these scripts covered by the
     # library/CLI but missing from the playground's GUI surface)
@@ -23848,6 +25158,30 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._util_reindex_tree.configure(yscrollcommand=reindex_bar.set)
         self._util_reindex_tree.pack(side="left", fill="both", expand=True)
         reindex_bar.pack(side="right", fill="y")
+
+        # (100x-165) the sixth card: the Data-Science-For-Beginners
+        # repository's docs/git tutorials (git_command.ipynb +
+        # intro_to_git.ipynb, the repo's only shipped teaching content
+        # besides the curriculum outline) as an in-app cheat sheet -- the
+        # version-control lecture the course opens with.
+        git_card = make_card(
+            page.grid,
+            "Git quick reference",
+            span=2,
+            row=3,
+            column=0,
+            collapsible=True,
+            key="utilities-git-reference",
+            subtitle="The Data-Science-For-Beginners docs/git tutorials, "
+            "mouse edition: the command cheat sheet grouped the course "
+            "groups it, and the file-state model every command moves "
+            "things between. Fold it to the heading when the utilities "
+            "workflows matter more than the lecture.",
+        )
+        git_text = _grid_text(git_card, height=22, mono=self._mono)
+        grid_append(git_card, git_text, sticky="nsew", pady=(4, 0))
+        git_text.insert("1.0", _GIT_QUICK_REFERENCE)
+        git_text.configure(state="disabled")
 
         # dynamic trees fill lazily on first render
         self._util_frames: dict[str, Any] = {}
