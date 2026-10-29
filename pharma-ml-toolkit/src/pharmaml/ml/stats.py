@@ -314,7 +314,9 @@ class SignificanceResult:
     def line(self) -> str:
         degrees = f" · df {self.df:g}" if self.df is not None else ""
         effect = (
-            f" · {self.effect_name} {self.effect_value:.3g}" if self.effect_value is not None else ""
+            f" · {self.effect_name} {self.effect_value:.3g}"
+            if self.effect_value is not None
+            else ""
         )
         verdict = "significant" if self.significant else "not significant"
         return (
@@ -653,7 +655,9 @@ class ComparisonReport:
         direction = (
             "a > b"
             if self.group_a.mean > self.group_b.mean
-            else "a < b" if self.group_a.mean < self.group_b.mean else "a = b"
+            else "a < b"
+            if self.group_a.mean < self.group_b.mean
+            else "a = b"
         )
         verdict = (
             f"REJECT H₀ at α {self.result.alpha} -- the groups differ ({direction})"
@@ -709,9 +713,7 @@ def compare_groups(
         if not normality_b.is_normal:
             why.append("b")
         branch = f"non-normal ({'+'.join(why)}) → Mann-Whitney U"
-        interval_a = bootstrap_interval(
-            values_a, level=level, n_resamples=n_resamples, seed=seed
-        )
+        interval_a = bootstrap_interval(values_a, level=level, n_resamples=n_resamples, seed=seed)
         interval_b = bootstrap_interval(
             values_b, level=level, n_resamples=n_resamples, seed=seed + 1
         )
@@ -724,6 +726,129 @@ def compare_groups(
         interval_b=interval_b,
         result=result,
         branch=branch,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Rank correlations (the scipy.stats.spearmanr / kendalltau absorption)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RankCorrelationResult:
+    """The three correlation coefficients, one call.
+
+    ``pearson`` is the linear correlation; ``spearman`` the Pearson
+    of the average ranks (ties share the mean of their span); ``kendall``
+    the τ-b of concordant minus discordant pairs, tie-corrected on
+    both sides -- the three numbers ``scipy.stats.spearmanr`` /
+    ``kendalltau`` are called for, in the toolkit's own NumPy.
+    """
+
+    n: int
+    pearson: float
+    spearman: float
+    kendall: float
+
+    def line(self) -> str:
+        """The one-line report (the house card format)."""
+        return (
+            f"n={self.n} pearson={self.pearson:+.4f} "
+            f"spearman={self.spearman:+.4f} kendall={self.kendall:+.4f}"
+        )
+
+
+def _average_ranks(values: np.ndarray) -> np.ndarray:
+    """1-based average ranks (ties share the mean of their span)."""
+    array = np.asarray(values, dtype=float)
+    order = np.argsort(array, kind="stable")
+    ranks = np.empty(array.size, dtype=float)
+    index = 0
+    while index < array.size:
+        start = index
+        value = array[order[index]]
+        while index < array.size and array[order[index]] == value:
+            index += 1
+        ranks[order[start:index]] = 0.5 * (start + 1 + index)
+    return ranks
+
+
+def _pearson(a: np.ndarray, b: np.ndarray) -> float:
+    centered_a = a - a.mean()
+    centered_b = b - b.mean()
+    denominator = float(np.linalg.norm(centered_a) * np.linalg.norm(centered_b))
+    if denominator < 1e-24:
+        return float("nan")
+    return float(np.dot(centered_a, centered_b) / denominator)
+
+
+def rank_correlations(x: Any, y: Any) -> RankCorrelationResult:
+    """Pearson, Spearman and Kendall τ-b for two paired samples.
+
+    The rank machinery is the toolkit's own (average ranks for ties,
+    the τ-b denominators corrected for ties on both sides), so the
+    numbers match ``scipy.stats.spearmanr``/``kendalltau`` without
+    importing them -- the same contract the rest of this module keeps
+    with the t-test family.
+
+    Raises
+    ------
+    DataValidationError
+        On length mismatch, non-finite values, or fewer than two pairs.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.stats import rank_correlations
+    >>> report = rank_correlations([1, 2, 3, 4, 5], [2, 4, 6, 8, 10])
+    >>> round(report.spearman, 6)
+    1.0
+    >>> round(report.pearson, 6)
+    1.0
+    >>> curved = rank_correlations([1, 2, 3, 4, 5], [1, 4, 9, 16, 25])
+    >>> round(curved.spearman, 6)          # monotone: ranks are perfect
+    1.0
+    >>> round(curved.pearson, 4) < 1.0     # but the line is curved
+    True
+    """
+    a = np.asarray(x, dtype=float).reshape(-1)
+    b = np.asarray(y, dtype=float).reshape(-1)
+    if a.size != b.size:
+        raise DataValidationError(f"x and y must have equal length, got {(a.size, b.size)!r}")
+    if a.size < 2:
+        raise DataValidationError(f"need at least two pairs, got {a.size}")
+    if not np.all(np.isfinite(a)) or not np.all(np.isfinite(b)):
+        raise DataValidationError("x and y must be finite (no NaN/inf)")
+    pearson = _pearson(a, b)
+    spearman = _pearson(_average_ranks(a), _average_ranks(b))
+    # Kendall tau-b: concordant/discordant pairs with tie corrections
+    n = a.size
+    concordant = 0
+    discordant = 0
+    ties_x = 0
+    ties_y = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            dx = a[i] - a[j]
+            dy = b[i] - b[j]
+            product = dx * dy
+            if dx == 0 and dy == 0:
+                continue  # a double tie is neither
+            if dx == 0:
+                ties_x += 1
+            elif dy == 0:
+                ties_y += 1
+            elif product > 0:
+                concordant += 1
+            else:
+                discordant += 1
+    denominator = math.sqrt((0.5 * n * (n - 1) - ties_x) * (0.5 * n * (n - 1) - ties_y))
+    kendall = (concordant - discordant) / denominator if denominator > 0 else float("nan")
+    _LOG.debug("rank correlations: n=%d pearson=%.4f", n, pearson)
+    return RankCorrelationResult(
+        n=int(n),
+        pearson=float(pearson),
+        spearman=float(spearman),
+        kendall=float(kendall),
     )
 
 
@@ -745,6 +870,7 @@ __all__ = [
     "normality_report",
     "one_sample_ttest",
     "paired_ttest",
+    "rank_correlations",
     "sample_distribution",
     "two_sample_ttest",
 ]

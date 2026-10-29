@@ -1,3 +1,112 @@
+## [1.2.100] — 2026-10-30
+
+### Added — best-of-ml-python absorbed: the catalogue as data, the coverage audit, and five new capability modules (100x-166)
+
+The instruction: *"Check the contents and files in this GitHub link
+completely and one by one and add the missing items to playground.py:
+github.com/lukasmasuch/best-of-ml-python."* The repository was cloned
+and reviewed file by file — `projects.yaml` (the source of truth: 34
+category definitions plus the 929 curated entries), the rendered
+README (the ranked list the repository exists to publish), the weekly
+`history/*.csv` snapshots, `config/header.md`/`footer.md`,
+`latest-changes.md` and `CONTRIBUTING.md`.  What the repository *is*
+is a catalogue — so the honest absorption is threefold, and all three
+landed:
+
+* **`ml/catalog.py` — the catalogue itself as queryable data.**  The
+  `2025-10-30_projects.csv` snapshot embedded verbatim as literals:
+  **924 projects** (858 across the 34 declared categories plus the 66
+  the generator files under *Others*), **5,121,472 stars**, **35
+  browsable sections**, with attribution and the collection's
+  CC-BY-SA-4.0 license stated once in the module docstring.  The API:
+  `catalog_categories` (live counts and star totals per section),
+  `catalog_projects` (slug-or-title category resolution, score
+  order), `search_catalog` (case-insensitive over names and
+  descriptions), `catalog_top`, `catalog_summary` (headline numbers +
+  license distribution) and `coverage_table`.
+* **The coverage audit — `CATEGORY_COVERAGE`, 35 honest verdicts.**
+  Every category judged native / partial / external / out-of-scope
+  with the reason stated: 13 native (tabular, hyperopt via the
+  Optuna-absorbing tuner, RL via the generative tab,
+  recommender-systems, privacy-ml, nn-search, adversarial,
+  time-series-data, interpretability via the SHAP-absorbing explain,
+  model-serialisation, sklearn-utils, data-viz), 6 partial (the
+  frameworks/biology/graphs/experiments/probabilistics halves),
+  8 external (the engines deliberately not vendored) and 8 out of
+  scope (audio, geospatial, OCR, distributed, GPU/TF/JAX/PyTorch
+  tiers, db clients, Chinese NLP) — and five categories gained native
+  surfaces *this round*, which is what "add the missing items" means
+  for a catalogue repository:
+  * **`ml/privacy.py`** (privacy-ml: Opacus/diffprivlib's core) —
+    the Laplace and analytic-Gaussian mechanisms with the Dwork-Roth
+    bound's ε≤1 regime enforced, sequential vs parallel composition
+    as reports, `dp_statistics` (count/sum/mean/histogram of an assay
+    column under one ε, the histogram charged once via parallel
+    composition, data-derived bounds flagged as the demo shortcut
+    they are), and the Rényi-DP accountant (`rdp_epsilon`, and
+    `dp_sgd_noise_scale` inverting it by bisection) — deliberately
+    *without* subsampling amplification, so its σ (≈50 at
+    ε=4, δ=10⁻⁵, 1500 steps where Opacus' amplified accountant asks
+    ≈1) is the conservative ceiling, over-noising never under-noising.
+  * **`ml/recommend.py`** (recommender-systems: implicit/LightFM's
+    closed-form half) — pairwise-complete cosine/Pearson similarities
+    over co-rated items only, user-based and item-based k-neighbour
+    CF (per-item neighbourhoods; negative similarities dropped), a
+    seeded latent-factor rating matrix, and `evaluate_recommender`:
+    leave-one-out hit@N **against the popularity baseline**, with the
+    lift reported honestly when popularity wins.
+  * **`ml/annsearch.py`** (nn-search: Faiss/Annoy's lesson) — Charikar
+    random-hyperplane LSH: sign-bit keys, bucket dictionary,
+    multiprobe (Hamming-1 neighbours), the pure hash layer
+    (`LSHIndex.query_plan`) split from the stored-collection
+    re-ranking (`LSHCollection`), `brute_force_knn` as the exact
+    baseline, and `ann_benchmark` measuring the bargain — recall@k
+    against candidate-set compression (28× cheaper at 8 planes /
+    0.425 recall; 1.4× at 2 planes / 0.98 recall — the curve the
+    industrial engines live on).
+  * **`ml/adversarial.py`** (adversarial robustness: foolbox/ART's
+    audit) — a zeroth-order sign-pattern family (all-plus/all-minus,
+    every single-coordinate bump, 8 seeded random patterns — FGSM's
+    structure without its gradients, a lower bound on any
+    gradient-guided attack) that works on any batched predict
+    callable; `minimal_attack_radius` (bisection margin per sample),
+    `adversarial_audit` (broken-rate curve over a radius grid,
+    classification flips *and* regression-beyond-tolerance verdicts,
+    per-feature scales so "±5% of measurement noise" is auditable)
+    and `adversarial_augmentation` (in-ball noisy copies, labels
+    kept — adversarial training's closed-form half).
+  * **`ml/timeseries.py`** (time-series-data: statsmodels/tsfresh's
+    analysis half) — the ACF with its ±1.96/√n band, the PACF by
+    Durbin-Levinson recursion, classical additive decomposition
+    (centered-MA trend with the even-period two-pass convention,
+    phase-averaged seasonal profile centred to sum zero, seasonal and
+    trend *strengths*), offline binary-segmentation changepoints on
+    the CUSUM path judged against the Kolmogorov distribution's own
+    quantile (the K-S table's critical values), and the tsfresh-lite
+    `window_features` table (13 window statistics incl. trend R²,
+    lag-1 autocorrelation and binned entropy).
+* **The Best-of ML tab (7 cards).**  The catalogue browser (search /
+  category / top-10 with stars, licenses, descriptions), the coverage
+  audit table, and five runnable demos — DP statistics on any loaded
+  column (with the RDP noise price of a DP-SGD plan), the CF
+  evaluation, the LSH plane sweep, the train-then-attack robustness
+  audit (logistic/ridge on the Foundations dataset, string targets
+  like 'activity' factorised), and the time-series analysis — every
+  card reading the Foundations tab's dataset or a seeded synthetic
+  fallback so nothing dead-ends.
+
+Two real defects the round-166 headless probe caught and fixed before
+they could ship: the adversarial card read the target *combobox* from
+the worker thread (Tk widgets are main-thread-only — features/target
+now resolve before the job starts), and the card crashed on string
+label columns (`'active'`/`'inactive'`/`'weak'` — now factorised).
+
+The notebooks' committed outputs had drifted one version behind
+(they printed 1.2.98 under the 1.2.99 tree; the bump to 1.2.100
+widened that to all eight) — the re-execution debt is being paid by
+the detached driver while this round proceeds, and is noted honestly
+rather than papered over.
+
 ## [1.2.99] — 2026-10-29
 
 ### Added — Chollet's notebooks + the Data-Science-For-Beginners statistics block: the Foundations tab (100x-165)

@@ -134,9 +134,25 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `AUX_LOSS_WEIGHT` | constant |  |
+| `CATALOG_CATEGORIES` | constant |  |
+| `CATALOG_LICENSE` | constant |  |
+| `CATALOG_PROJECTS` | constant |  |
+| `CATALOG_SNAPSHOT` | constant |  |
+| `CATALOG_SOURCE_URL` | constant |  |
+| `CATEGORY_COVERAGE` | constant |  |
+| `CHANGEPOINT_ALPHA` | constant |  |
+| `CHANGEPOINT_MIN_SEGMENT` | constant |  |
+| `COVERAGE_EXTERNAL` | constant |  |
+| `COVERAGE_NATIVE` | constant |  |
+| `COVERAGE_OUT_OF_SCOPE` | constant |  |
+| `COVERAGE_PARTIAL` | constant |  |
 | `DEFAULT_ALPHA` | constant |  |
+| `DEFAULT_BETA` | constant |  |
 | `DISTRIBUTIONS` | constant |  |
+| `ENTROPY_BINS` | constant |  |
 | `GMM_COVARIANCE_TYPES` | constant |  |
+| `INITIAL_POINTS_PER_DIM` | constant |  |
 | `KDE_KERNELS` | constant |  |
 | `MANIFOLD_METHODS` | constant |  |
 | `MODEL_ALIASES` | constant |  |
@@ -147,63 +163,113 @@ after adding new public functions.
 | `SEQUENCE_MODELS` | constant |  |
 | `SHAP_EXTRA` | constant |  |
 | `SHAP_REQUIREMENT` | constant |  |
+| `SIMILARITY_METRICS` | constant |  |
 | `SYNTHETIC_KINDS` | constant |  |
+| `ANNReport` | class | The bargain measured: recall against the exact baseline. |
+| `AdaptedModel` | class | A K-shot adapted copy of the meta model. |
 | `ApplicabilityDomainResult` | class | Outcome of a full applicability-domain analysis. |
 | `AttentionReport` | class | One sequence's pass through the attention machinery. |
 | `BaselineResult` | class | The commonsense baseline's scorecard (the chapter's first table). |
 | `BatchGenerator` | class | Chollet's ``BatchGenerator`` -- sequential, ``num_batches`` counted. |
+| `BayesTrial` | class | One trial: the parameters tried and the score observed. |
+| `BayesianSearchReport` | class | The oracle's ledger: trials, the best, the acquisition diagnostics. |
 | `BootstrapUncertainty` | class | Bootstrap-ensemble uncertainty of a fitted estimator. |
 | `BroadcastReport` | class | NumPy's broadcasting verdict for two shapes. |
 | `CapacityPoint` | class | One (width, train loss, validation loss) sample of the sweep. |
 | `CapacitySweepResult` | class | Chapter 5's "reducing the network's size" figure, as data. |
+| `CatalogCategory` | class | One catalogue section: slug, title, subtitle, live counts. |
+| `CatalogProject` | class | One catalogue entry, with its category resolved to the title. |
+| `CatalogSummary` | class | The snapshot's headline numbers. |
+| `Changepoint` | class | One detected change: where, which way, how much. |
+| `ChangepointResult` | class | The binary-segmentation CUSUM verdict for a series. |
 | `CiResult` | class | One confidence interval: the estimate and its bounds. |
 | `ComparisonReport` | class | ``compare_groups``: the whole statistics lecture, one record. |
+| `CompositionReport` | class | The ε bill for a sequence of queries. |
+| `CorrelationResult` | class | The lag correlation table, with the significance band. |
+| `CoverageEntry` | class | The audit's verdict for one catalogue category. |
+| `DPNoiseScale` | class | The noise multiplier a training plan needs, by bisection. |
+| `DPStatisticsReport` | class | A column's headline statistics, privatised under one ε. |
+| `DecompositionResult` | class | The additive split: observed = trend + seasonal + remainder. |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
 | `DescriptiveStats` | class | The descriptive lecture's full blackboard for one sample. |
 | `DistributionSample` | class | Seeded draws plus the population moments to compare against. |
+| `DoseResponseReport` | class | A fitted sigmoid Emax curve with its uncertainty. |
 | `EmbeddingRecord` | class | Typed report of :func:`manifold_embedding`. |
+| `FewShotReport` | class | The three-arm verdict on a new task (TCRP's evaluation). |
 | `ForecastResult` | class | Everything the sequence card reports, after one run. |
+| `GaussianProcessSurrogate` | class | An RBF-kernel Gaussian process over the trials seen so far. |
 | `GmmResult` | class | Typed report of :func:`gmm_cluster`. |
 | `GroupDifference` | class | Cohort mean-SHAP differences with a bootstrap interval (100x-160). |
 | `HierarchicalSVR` | class | Hierarchical Support Vector Regression (global + per-cluster SVRs). |
+| `HistogramBin` | class | One DP histogram bin: edges, true count, DP count. |
 | `HyperParameters` | class | The keras-tuner container of hyperparameter definitions. |
 | `Hyperband` | class | Hyperband successive halving over a resource hyperparameter. |
 | `HyperparameterImportance` | class | Per-hyperparameter importances of a finished search. |
 | `KMeansResult` | class | Typed report of :func:`kmeans_cluster`. |
 | `KdeResult` | class | Typed report of :func:`kde_fit`. |
+| `LMResult` | class | One Levenberg-Marquardt run's ledger. |
+| `LSHCollection` | class | The usable engine: an :class:`LSHIndex` plus the stored vectors. |
+| `LSHIndex` | class | The random-hyperplane LSH table (Charikar's SimHash engine). |
+| `LSHQueryResult` | class | One approximate query: the key, the candidates, the neighbours. |
 | `LinearGDResult` | class | Outcome of the from-scratch linear regression. |
+| `MechanismResult` | class | One privatised query: the truth, the release, the price. |
 | `MedianPruner` | function | The median pruner: ``PercentilePruner(50)``. |
+| `MetaHistory` | class | The meta-training curve. |
+| `MetaModel` | class | The meta-trained network (TCRP's ``observed_tissue_model``). |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
 | `NaiveDense` | class | Chollet's ``NaiveDense`` (chapter 2), plain NumPy. |
 | `NaiveSequential` | class | Chollet's ``NaiveSequential``: a stack called like a function. |
+| `Neighbor` | class | One retrieved neighbour: row index and its Euclidean distance. |
 | `NormalityResult` | class | Shapiro-Wilk and D'Agostino-Pearson on one sample. |
 | `OOFStackingResult` | class | Outcome of one out-of-fold stacking run. |
+| `OntologyGraph` | class | A parsed DrugCell ontology: the DAG plus its gene annotations. |
+| `OntologyReport` | class | The hierarchy audit: rows per term plus the headline stats. |
+| `OntologyRow` | class | One term's audit row: size, depth, layer, gene enrichment. |
 | `PcaResult` | class | Typed report of :func:`pca_reduce`. |
 | `PercentilePruner` | class | Prune trials whose running CV mean falls below a percentile. |
 | `PermutationImportance` | class | Permutation feature importances on held-out data. |
 | `PositionalReport` | class | The positional encoding as an auditable object. |
 | `PrimerReport` | class | The full chapter 2 walkthrough for one dataset table. |
 | `QuantileIntervals` | class | Prediction intervals from gradient-boosted quantile regression. |
+| `RDPReport` | class | The (ε, δ) guarantee of T Gaussian steps at noise multiplier σ. |
+| `RadiusResult` | class | One radius of the audit grid: how many samples broke. |
 | `RandomSearch` | class | Random search over the hypermodel's declared space. |
+| `Recommendation` | class | One ranked item: index, predicted rating, neighbourhood score. |
+| `RecommenderEvaluation` | class | Leave-one-out hit-rate, CF versus the popularity baseline. |
 | `RecurrentForecaster` | class | A from-scratch recurrent regressor over fixed-length windows. |
 | `ResidualMLPClassifier` | class | Residual (skip-connection) deep-network classifier (PyTorch). |
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
+| `RobustnessAudit` | class | The verdict curve of a model under the sign-pattern family. |
 | `ScratchHistory` | class | Everything the scratch training loop observed, per epoch. |
 | `SequenceHistory` | class | Per-epoch training telemetry for one recurrent fit. |
 | `ShapInteractions` | class | Pairwise SHAP interaction values of a fitted tree model (100x-160). |
 | `ShapSummary` | class | SHAP values of a fitted tree model over a feature frame. |
-| `TPESearch` | class | Tree-structured Parzen Estimator search — Optuna's flagship sampler. |
-| `TensorSummary` | class | Chapter 2's "key attributes" list for one array. |
 | `SignificanceResult` | class | One test's verdict: statistic, p-value, decision, effect size. |
+| `TPESearch` | class | Tree-structured Parzen Estimator search — Optuna's flagship sampler. |
+| `TaskFamily` | class | Seeded related regression tasks: one shared prior, per-task draws. |
+| `TaskSplit` | class | One task's support/query split (the inner-loop data contract). |
+| `TensorSummary` | class | Chapter 2's "key attributes" list for one array. |
+| `TermContribution` | class | One subsystem's readout: the aux head's contribution, ranked. |
 | `TrialResult` | class | One evaluated trial. |
 | `TunerResults` | class | The outcome of one :meth:`RandomSearch.search` / Hyperband run. |
+| `UserRecommendations` | class | A user's top-N list, with the method and neighbourhood recorded. |
+| `VisibleForward` | class | One forward pass through the hierarchy. |
+| `VisibleHistory` | class | The training curve plus the final agreement numbers. |
+| `VisibleNetwork` | class | DrugCell's architecture in plain NumPy, training included. |
 | `WindowDataset` | class | A windowed timeseries: the chapter's dataset object, NumPy edition. |
+| `adapt` | function | Clone-and-fine-tune on a support set (the inner loop alone). |
+| `adversarial_audit` | function | Run the sign-pattern family across a radius grid. |
+| `adversarial_augmentation` | function | Adversarial training's closed-form half: in-ball noisy copies. |
+| `ann_benchmark` | function | Recall@k and candidate compression of LSH against brute force. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
+| `autocorrelation` | function | The autocorrelation function: which lag carries which memory. |
+| `bayesian_search` | function | The BayesianOptimizationOracle loop, minimising ``objective``. |
 | `benchmark_feature_families` | function | Cross-validated leaderboard ACROSS feature families, one model fixed. |
 | `bootstrap_interval` | function | The percentile bootstrap CI for any statistic (default: the mean). |
 | `bootstrap_uncertainty` | function | Bootstrap-ensemble prediction uncertainty (the upload's step 6). |
 | `broadcast_report` | function | Chapter 2's broadcasting rules, computed on shapes alone. |
+| `brute_force_knn` | function | The exact top-k by Euclidean distance -- the benchmark baseline. |
 | `build_ann_classifier` | function | sklearn MLP classifier hypermodel (the legacy ANN upgrade). |
 | `build_ann_regressor` | function | sklearn MLP regressor hypermodel (the legacy ANN upgrade). |
 | `build_deep_classifier` | function | Deep MLP classifier hypermodel (PyTorch, ``batchnorm`` searchable). |
@@ -214,58 +280,89 @@ after adding new public functions.
 | `build_stacking` | function | Build a stacking ensemble (upgrades Stacking.py / Stacking reg.py). |
 | `build_voting` | function | Build a voting ensemble (upgrades Voting.py / Voting reg.py). |
 | `capacity_sweep` | function | Train the same data through growing hidden widths (chapter 5). |
+| `catalog_categories` | function | The 35 catalogue sections with live project counts and star totals. |
+| `catalog_projects` | function | One category's projects (slug or title), or all 924, score-descending. |
+| `catalog_summary` | function | The snapshot's headline numbers and license distribution. |
+| `catalog_top` | function | The ``n`` highest-scoring projects in a category (or overall). |
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
 | `commonsense_baseline` | function | Predict "the last observed value" (``evaluate_naive_method``). |
 | `compare_groups` | function | The course's decision flow, end to end, every branch reported. |
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
+| `composition_report` | function | Sequential composition: the ε's of queries on the same rows add. |
+| `coverage_table` | function | The category-by-category audit, in catalogue order. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
+| `curve_fit` | function | The scipy-named entry point: (best params, covariance matrix). |
 | `describe_series` | function | One sample's descriptive statistics (scipy's moment machinery). |
 | `describe_tensor` | function | Audit one array with chapter 2's "key attributes" vocabulary. |
+| `detect_changepoints` | function | Offline mean-shift changepoints: binary segmentation on the CUSUM. |
 | `dot_product_attention` | function | Scaled dot-product attention: ``softmax(QKᵀ/√dₖ)·V``. |
+| `dp_sgd_noise_scale` | function | Invert the RDP accountant: the σ that meets (ε, δ) in T steps. |
+| `dp_statistics` | function | Count, sum, mean (+ optional histogram) under one ε budget. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
+| `evaluate_recommender` | function | Leave-one-out: hide one rating per user, rebuild, hit@N. |
+| `expected_improvement` | function | The classic expected improvement over the best observed score. |
+| `few_shot_report` | function | Zero-shot vs K-shot vs from-scratch, Pearson-scored. |
+| `fit_dose_response` | function | Fit the sigmoid Emax (Hill) model to (dose, effect) observations. |
 | `fit_scratch` | function | Chapter 2's full training loop, mouse-free edition. |
+| `fomaml_train` | function | First-order MAML over the task family (TCRP's train loop). |
 | `forecast_timeseries` | function | The chapter's end-to-end workflow on one series. |
+| `gaussian_mechanism` | function | The analytic Gaussian mechanism: (ε, δ)-DP with the classic bound. |
 | `gmm_cluster` | function | Gaussian mixture model (PDSH 05.12) with the AIC/BIC sweep. |
 | `group_difference` | function | Cohort difference of a SHAP summary, with a bootstrap interval. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
+| `hierarchy_report` | function | The peeling audit: per-term rows and the hierarchy's shape. |
 | `kde_fit` | function | Kernel density estimation (PDSH 05.13) for ONE numeric column. |
 | `kmeans_cluster` | function | k-means clustering (PDSH 05.11), with the elbow AND the silhouette. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
+| `laplace_mechanism` | function | The Laplace mechanism: exact (ε, 0)-differential privacy. |
+| `levenberg_marquardt` | function | Levenberg-Marquardt least squares, plain NumPy, deterministic. |
 | `linear_regression_gd` | function | Batch gradient descent on the squared error (DSBC's centrepiece). |
 | `list_models` | function | List registry entries with availability information. |
 | `load_model` | function | Load a model bundle saved by :func:`save_model`. |
+| `lower_confidence_bound` | function | ``mean − β·std`` -- UCB's minimisation form (keras-tuner's pick). |
 | `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
 | `manifold_embedding` | function | Project a feature table onto 2-D with a manifold learner (PDSH 05.10). |
 | `mann_whitney_test` | function | The rank-based test for the non-normal cases. |
 | `mean_confidence_interval` | function | The t-based CI for the mean: ``mean ± t·s/√n``. |
+| `minimal_attack_radius` | function | Bisect the smallest radius at which some pattern breaks the sample. |
 | `multi_head_attention` | function | Multi-head self-attention over one sequence, seeded projections. |
 | `normality_report` | function | Both normality tests (the course's gate before choosing a test). |
 | `one_sample_ttest` | function | Is this sample's mean different from ``mu0``? |
 | `paired_ttest` | function | Did the paired differences move away from zero? |
 | `param_importances` | function | Random-forest (MDI) hyperparameter importances of a finished search. |
+| `parse_ontology` | function | Parse the ``drugcell_ont.txt`` three-column format. |
+| `partial_autocorrelation` | function | The partial ACF via Durbin-Levinson: lag-k credit, shorter lags removed. |
 | `pca_reduce` | function | Principal component analysis (PDSH 05.09). |
 | `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
 | `predict_scratch` | function | Predict with a trained scratch model (standardisation reapplied). |
 | `predict_with_uncertainty` | function | Predictive mean and per-row standard deviation of a GP model. |
 | `quantile_prediction_intervals` | function | Central-``1 - alpha`` prediction intervals via quantile regression. |
+| `rdp_epsilon` | function | The RDP accountant: T plain Gaussian steps -> (ε, δ). |
+| `recommend_itembased` | function | Item-based collaborative filtering: the similarity-weighted sum. |
+| `recommend_userbased` | function | User-based collaborative filtering: the k-neighbour weighted mean. |
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `sample_distribution` | function | Draw ``n`` seeded samples from one of the course's distributions. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
+| `search_catalog` | function | Case-insensitive substring search over names and descriptions. |
+| `seasonal_decomposition` | function | Classical additive decomposition: centered-MA trend, phase-average seasonal. |
 | `select_kbest_union` | function | Select the UNION of per-method top-k columns (upgrades look.ipynb). |
 | `self_attention_report` | function | Run one sequence through multi-head self-attention and read it. |
 | `shap_interactions` | function | Pairwise SHAP interaction values of a fitted tree model over ``X``. |
 | `shap_summary` | function | SHAP values of a fitted tree model over ``X``. |
+| `similarity_matrix` | function | User-user similarities over co-rated items only. |
 | `sinusoidal_positions` | function | The classic fixed positional encoding, ``(seq_len, dim)``. |
 | `sliding_windows` | function | Cut a series (or channel matrix) into overlapping windows. |
 | `split_features_target` | function | Separate features from the target column. |
 | `stack_oof_regressors` | function | Stack registry regressors out-of-fold and rank the blenders. |
+| `synthetic_ratings` | function | A seeded rating matrix with genuine latent structure. |
 | `synthetic_series` | function | Seeded synthetic series: the no-data fallback for the whole card. |
 | `tensor_primer_report` | function | Walk a table through chapter 2's tensor vocabulary. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
 | `two_sample_ttest` | function | Two independent samples: Welch's t (default) or Student's t. |
 | `validate_bundle_input` | function | Audit a new dataset against a saved model bundle before inference. |
+| `window_features` | function | Fixed non-overlapping windows, one feature row each (tsfresh-lite). |
 
 ## `pharmaml.generative`
 

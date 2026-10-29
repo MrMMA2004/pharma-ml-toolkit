@@ -1128,6 +1128,8 @@ class TestDockingGuiUnderXvfb:
             "Unsupervised",
             "Deep Learning",
             "Foundations",
+            "Best-of ML",
+            "Response AI",
             "Generative",
             "Utilities",
         ]
@@ -5945,7 +5947,7 @@ class TestReview123Gui:
     def test_surgery_cards_carry_draw_buttons(self, app: Any) -> None:
         dump = "\n".join(
             str(widget.cget("text"))
-            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[9]))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[11]))
             if widget.winfo_class() == "TButton"
         )
         assert "Draw mutants" in dump
@@ -6217,7 +6219,7 @@ class TestReview124Gui:
     def test_results_card_carries_draw_top_button(self, app: Any) -> None:
         dump = "\n".join(
             str(widget.cget("text"))
-            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[9]))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[11]))
             if widget.winfo_class() == "TButton"
         )
         assert "Draw top molecules" in dump
@@ -6535,7 +6537,7 @@ class TestReview125Gui:
     def test_pareto_card_carries_draw_front_button(self, app: Any) -> None:
         dump = "\n".join(
             str(widget.cget("text"))
-            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[9]))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[11]))
             if widget.winfo_class() == "TButton"
         )
         assert "Draw front" in dump
@@ -6685,7 +6687,7 @@ class TestReview126Gui:
     def test_pareto_card_carries_save_figure_button(self, app: Any) -> None:
         dump = "\n".join(
             str(widget.cget("text"))
-            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[9]))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[11]))
             if widget.winfo_class() == "TButton"
         )
         assert "Save figure…" in dump
@@ -6797,7 +6799,7 @@ class TestReview127Gui:
     def test_generative_tab_carries_four_save_figure_buttons(self, app: Any) -> None:
         dump = [
             str(widget.cget("text"))
-            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[9]))
+            for widget in app._walk_widgets(app._book.nametowidget(app._book.tabs()[11]))
             if widget.winfo_class() == "TButton"
         ]
         # Results, Pareto front, Ring topology moves, Breed two molecules
@@ -7078,7 +7080,7 @@ class TestReview128Gui:
             (6, 1, "Run analysis"),         # Unsupervised: the Results card (1.2.93)
             (7, 2, "Train & evaluate"),     # DL: results + history
             (8, 5, "Train from scratch"),   # Foundations (1.2.99): the five labs
-            (10, 1, "Plot reconciliation"),  # Utilities: compare
+            (12, 1, "Plot reconciliation"),  # Utilities: compare
         ]
         total = 0
         for index, count, neighbour in expectations:
@@ -7089,7 +7091,9 @@ class TestReview128Gui:
         assert total == 21, total
         # plus the four Generative buttons shipped in rounds 126/127 --
         # the pattern now covers every figure card in the app.
-        assert self._tab_buttons(app, 9).count("Save figure…") == 4
+        # (100x-167: Best-of ML sits at 9 and Response AI at 10; the
+        # generative tab moved to 11 with the two new tabs.)
+        assert self._tab_buttons(app, 11).count("Save figure…") == 4
 
     # -- the honest guards, one per new card ------------------------------ #
     @pytest.mark.parametrize(
@@ -10731,8 +10735,10 @@ class TestReview142Gui:
             "text:alert_mol",
         ):
             assert key in chemistry, f"{key} missing from the Chemistry tab's ownership"
-        assert "text:corpus" in owners[9]  # Generative
-        assert "text:gen_alerts" in owners[9]  # Generative (100x-164)
+        # (100x-167: the Best-of ML (9) and Response AI (10) tabs moved
+        # Generative to 11 -- the ownership indices follow the book)
+        assert "text:corpus" in owners[11]  # Generative
+        assert "text:gen_alerts" in owners[11]  # Generative (100x-164)
         assert "text:smiles" in owners[4]  # Docking
 
     def test_chemistry_reset_restores_maccs_and_scan_boxes(self, app: Any) -> None:

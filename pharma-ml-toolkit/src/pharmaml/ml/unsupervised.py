@@ -76,6 +76,7 @@ True
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -274,9 +275,7 @@ def pca_reduce(
     scores = pca.fit_transform(matrix)
     component_names = [f"PC{i + 1}" for i in range(n_components)]
     transformed = pd.DataFrame(scores, index=index, columns=component_names)
-    loadings = pd.DataFrame(
-        pca.components_.T, index=names, columns=component_names
-    )
+    loadings = pd.DataFrame(pca.components_.T, index=names, columns=component_names)
     ratio = [float(value) for value in pca.explained_variance_ratio_]
     cumulative = list(np.cumsum(ratio))
     _LOG.info("PCA fitted %d components over %d features", n_components, n_features)
@@ -408,9 +407,7 @@ def kmeans_cluster(
     matrix, names, index = _as_numeric_matrix(X, caller="kmeans_cluster")
     n_samples = matrix.shape[0]
     if n_samples < 4:
-        raise DataValidationError(
-            f"kmeans_cluster needs at least 4 rows, got {n_samples}"
-        )
+        raise DataValidationError(f"kmeans_cluster needs at least 4 rows, got {n_samples}")
 
     def _fit(k_value: int) -> Any:
         if mini_batch:
@@ -439,9 +436,7 @@ def kmeans_cluster(
         for candidate in range(low, high + 1):
             fitted = _fit(candidate)
             sil = _silhouette_or_none(matrix, fitted.labels_)
-            scan_rows.append(
-                {"k": candidate, "inertia": float(fitted.inertia_), "silhouette": sil}
-            )
+            scan_rows.append({"k": candidate, "inertia": float(fitted.inertia_), "silhouette": sil})
             if sil is not None and (best_sil is None or sil > best_sil):
                 best_k, best_sil = candidate, sil
         chosen_k, chosen_sil = best_k, best_sil
@@ -449,9 +444,7 @@ def kmeans_cluster(
     else:
         chosen_k = int(k)
         if not 1 <= chosen_k <= n_samples:
-            raise DataValidationError(
-                f"k must be in [1, n_samples={n_samples}], got {chosen_k}"
-            )
+            raise DataValidationError(f"k must be in [1, n_samples={n_samples}], got {chosen_k}")
         chosen_sil = None
 
     final = _fit(chosen_k)
@@ -600,9 +593,7 @@ def gmm_cluster(
             )
         high = min(high, n_samples)
         if high < low:
-            raise DataValidationError(
-                f"component_range={component_range} exceeds {n_samples} rows"
-            )
+            raise DataValidationError(f"component_range={component_range} exceeds {n_samples} rows")
         best_n, best_score = low, None
         for candidate in range(low, high + 1):
             fitted = _fit(candidate)
@@ -742,9 +733,7 @@ def kde_fit(
     else:
         array = np.asarray(values, dtype=float)
         if array.ndim != 1:
-            raise DataValidationError(
-                f"kde_fit expects 1-D values, got shape {array.shape}"
-            )
+            raise DataValidationError(f"kde_fit expects 1-D values, got shape {array.shape}")
         column_name, series = "values", pd.Series(array)
     matrix, _names, _index = _as_numeric_matrix(
         series.to_frame() if isinstance(series, pd.Series) else np.asarray(series).reshape(-1, 1),
@@ -754,9 +743,7 @@ def kde_fit(
     flat = matrix.reshape(-1)
     n_samples = int(flat.size)
     if n_samples < 3:
-        raise DataValidationError(
-            f"kde_fit needs at least 3 observations, got {n_samples}"
-        )
+        raise DataValidationError(f"kde_fit needs at least 3 observations, got {n_samples}")
     if grid_size < 10:
         raise DataValidationError(f"grid_size must be >= 10, got {grid_size}")
     sample_std = float(np.std(flat, ddof=1)) if n_samples > 1 else 0.0
@@ -776,7 +763,11 @@ def kde_fit(
         # Silverman's rule: the honest small-sample fallback (CV below
         # 10 points is noise, and the handbook's own tiny examples
         # never cross this bridge).
-        chosen = float(0.9 * min(sample_std, float(np.percentile(flat, 75) - np.percentile(flat, 25)) / 1.349) * n_samples ** (-0.2))
+        chosen = float(
+            0.9
+            * min(sample_std, float(np.percentile(flat, 75) - np.percentile(flat, 25)) / 1.349)
+            * n_samples ** (-0.2)
+        )
         if chosen <= 0:
             chosen = float(max(sample_std, 1e-3) * 0.5)
         source = "silverman"
@@ -808,15 +799,202 @@ def kde_fit(
     )
 
 
+# ---------------------------------------------------------------------------
+# Agglomerative clustering (the scipy.cluster.hierarchy absorption)
+# ---------------------------------------------------------------------------
+
+#: The three linkage rules hierarchical_cluster implements.
+LINKAGE_METHODS = ("ward", "single", "average", "complete")
+
+
+@dataclass(frozen=True)
+class HierarchicalResult:
+    """The cut of an agglomerative tree: labels, order, merge heights.
+
+    ``labels`` assigns every row to a cluster (0..k-1, deterministic
+    by first-appearance order); ``merge_heights`` are the k-1 heights
+    at which the cut clusters formed below (scipy's Z[:,2] column);
+    ``linkage`` records the rule; ``inertia`` is the within-cluster
+    sum of squared Euclidean distances for the cut (Ward's objective,
+    reported for every rule for comparability).
+    """
+
+    labels: np.ndarray
+    k: int
+    linkage: str
+    merge_heights: tuple[float, ...]
+    inertia: float
+    n_samples: int
+
+
+def _euclidean_matrix(matrix: np.ndarray) -> np.ndarray:
+    squared = np.sum(matrix**2, axis=1)
+    distances_sq = squared[:, None] + squared[None, :] - 2.0 * (matrix @ matrix.T)
+    np.maximum(distances_sq, 0.0, out=distances_sq)
+    return np.sqrt(distances_sq)
+
+
+def hierarchical_cluster(X: Any, k: int = 3, *, linkage: str = "ward") -> HierarchicalResult:
+    """Agglomerative clustering with a k-cut -- scipy's linkage + fcluster.
+
+    Lance-Williams agglomeration over the full distance matrix (the
+    textbook O(n³) form; honest note: scipy's nn-chain is O(n²) and
+    is what production uses -- this is the exact same mathematics at
+    teaching scale).  ``ward`` merges by the minimum increase in
+    within-cluster SSE (the height *is* that increase); the geometric
+    rules (``single`` = nearest pair, ``complete`` = farthest pair,
+    ``average`` = mean pair) work on any data, Euclidean distances.
+
+    Raises
+    ------
+    DataValidationError
+        On a malformed matrix, k outside [1, n], or an unknown linkage.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pharmaml.ml.unsupervised import hierarchical_cluster
+    >>> rng = np.random.default_rng(42)
+    >>> blobs = np.vstack([rng.normal(size=(30, 2)) + 4.0,
+    ...                    rng.normal(size=(30, 2)) - 4.0,
+    ...                    rng.normal(size=(30, 2))])
+    >>> result = hierarchical_cluster(blobs, k=3)
+    >>> result.k
+    3
+    >>> import collections
+    >>> counts = collections.Counter(result.labels.tolist())
+    >>> min(counts.values()) > 10        # three real blobs, found
+    True
+    """
+    if linkage not in LINKAGE_METHODS:
+        raise DataValidationError(
+            f"unknown linkage {linkage!r}; valid: {', '.join(LINKAGE_METHODS)}"
+        )
+    matrix, _names, _index = _as_numeric_matrix(X, caller="hierarchical_cluster")
+    n = matrix.shape[0]
+    if not (1 <= k <= n):
+        raise DataValidationError(f"k must be in [1, {n}], got {k}")
+    if n < 2:
+        return HierarchicalResult(
+            labels=np.zeros(n, dtype=int),
+            k=1,
+            linkage=linkage,
+            merge_heights=(),
+            inertia=0.0,
+            n_samples=n,
+        )
+
+    distances = _euclidean_matrix(matrix)
+    # cluster state: id -> member row indices; lance heights accumulate
+    members: dict[int, list[int]] = {index: [index] for index in range(n)}
+    active = set(range(n))
+    centroid = {index: matrix[index].copy() for index in range(n)}
+    count = {index: 1 for index in range(n)}
+    next_id = n
+    heights: dict[int, float] = {}
+    children_pairs: dict[int, tuple[int, int]] = {}
+
+    while len(active) > 1:
+        best_pair: tuple[int, int] | None = None
+        best_height = math.inf
+        for a in sorted(active):
+            for b in sorted(active):
+                if b <= a:
+                    continue
+                if linkage == "ward":
+                    # the exact Ward height: |A||B|/(|A|+|B|) * ||centroid diff||^2
+                    delta = (
+                        count[a]
+                        * count[b]
+                        / (count[a] + count[b])
+                        * float(np.sum((centroid[a] - centroid[b]) ** 2))
+                    )
+                elif linkage == "single":
+                    delta = min(distances[i, j] for i in members[a] for j in members[b])
+                elif linkage == "complete":
+                    delta = max(distances[i, j] for i in members[a] for j in members[b])
+                else:  # average
+                    delta = float(
+                        np.mean([distances[i, j] for i in members[a] for j in members[b]])
+                    )
+                if delta < best_height:
+                    best_height = delta
+                    best_pair = (a, b)
+        if best_pair is None:  # pragma: no cover - len(active) > 1 guarantees one
+            raise DataValidationError("linkage search failed unexpectedly")
+        a, b = best_pair
+        merged = members[a] + members[b]
+        centroid[next_id] = matrix[merged].mean(axis=0)
+        count[next_id] = len(merged)
+        members[next_id] = merged
+        heights[next_id] = best_height
+        children_pairs[next_id] = (a, b)
+        active.discard(a)
+        active.discard(b)
+        active.add(next_id)
+        next_id += 1
+
+    # the cut: greedy top-down k-clusters (scipy fcluster's maxclust
+    # semantics) -- start at the root, repeatedly split the merge with
+    # the largest height until k clusters exist
+    root = next_id - 1
+    clusters: list[int] = [root]
+    while len(clusters) < k:
+        # the current cluster ids that are internal merges (splittable)
+        splittable = [cid for cid in clusters if cid in children_pairs]
+        if not splittable:
+            break  # every cluster is a singleton already
+        target = max(splittable, key=lambda cid: heights[cid])
+        child_a, child_b = children_pairs[target]
+        clusters.remove(target)
+        clusters.extend([child_a, child_b])
+    labels = np.zeros(n, dtype=int)
+    ordered = sorted(
+        (cid for cid in clusters if members.get(cid)),
+        key=lambda cid: min(members[cid]),
+    )
+    for cluster_id, cid in enumerate(ordered):
+        for row in members[cid]:
+            labels[row] = cluster_id
+    inertia = 0.0
+    for cluster_id in range(len(set(labels.tolist()))):
+        mask = labels == cluster_id
+        if mask.any():
+            inertia += float(np.sum((matrix[mask] - matrix[mask].mean(axis=0)) ** 2))
+    result = HierarchicalResult(
+        labels=labels,
+        k=int(labels.max() + 1) if n else 0,
+        linkage=linkage,
+        merge_heights=tuple(
+            float(heights[cid])
+            for cid in sorted(heights.keys(), key=lambda cid: heights[cid])[-(k - 1) :]
+            if cid in children_pairs and cid not in clusters
+        ),
+        inertia=float(inertia),
+        n_samples=int(n),
+    )
+    _LOG.debug(
+        "hierarchical cluster: n=%d k=%d linkage=%s inertia=%.4g",
+        n,
+        result.k,
+        linkage,
+        inertia,
+    )
+    return result
+
+
 __all__ = [
     "GMM_COVARIANCE_TYPES",
     "KDE_KERNELS",
+    "LINKAGE_METHODS",
     "RANDOM_STATE",
     "GmmResult",
+    "HierarchicalResult",
     "KMeansResult",
     "KdeResult",
     "PcaResult",
     "gmm_cluster",
+    "hierarchical_cluster",
     "kde_fit",
     "kmeans_cluster",
     "pca_reduce",
