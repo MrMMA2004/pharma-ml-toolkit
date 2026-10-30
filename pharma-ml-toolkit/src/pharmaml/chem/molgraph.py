@@ -106,7 +106,7 @@ Aspirin, parsed and profiled without RDKit:
 63.6
 >>> profile = lipinski_profile(mol)
 >>> (profile["hbd"], profile["hba"], profile["rotatable_bonds"], profile["rings"])
-(1, 4, 3, 2)
+(1, 4, 3, 1)
 
 Caffeine's published TPSA (58.44) reproduces, kekulé or aromatic:
 
@@ -130,13 +130,13 @@ Implicit hydrogens follow the valence model (perceived pyrrole too):
 Failures are accounted, not swallowed (position-carrying errors):
 
 >>> parse_smiles("C1CC")
-Traceback (most call last):
+Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: unclosed ring bond 1 (opened at position 0)
 >>> parse_smiles("CC(C)(C)(C)C")
-Traceback (most call last):
+Traceback (most recent call last):
 ...
-pharmaml.exceptions.DataValidationError: atom 1 (C, position 2) exceeds its allowed valence 4: bond order sum 5
+pharmaml.exceptions.DataValidationError: atom 1 (C, position 1) exceeds its allowed valence 4: bond order sum 5
 
 The fingerprint is deterministic and radius-aware:
 
@@ -170,7 +170,7 @@ Coordinates and a MOL block come out without any engine:
 
 >>> from pharmaml.chem.molgraph import generate_2d_coordinates, mol_block
 >>> coords = generate_2d_coordinates(parse_smiles("c1ccccc1"))
->>> round(float(abs(coords[0] - coords[1]).max()), 2)   # regular polygon side
+>>> round(float(np.linalg.norm(coords[0] - coords[1])), 2)   # regular polygon side
 1.0
 >>> block = mol_block(parse_smiles("CCO"))
 >>> block.splitlines()[3]
@@ -184,8 +184,8 @@ from __future__ import annotations
 import hashlib
 import math
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 import numpy as np
 
@@ -197,25 +197,25 @@ __all__ = [
     "MolAtom",
     "MolBond",
     "Molecule",
-    "parse_smiles",
-    "implicit_hydrogens",
-    "total_hydrogens",
-    "molecular_formula",
     "average_molecular_weight",
-    "lipinski_profile",
-    "rotatable_bonds",
-    "fraction_csp3",
-    "tpsa",
-    "find_rings",
-    "morgan_fingerprint",
-    "morgan_environments",
-    "substructure_matches",
-    "has_substructure",
     "canonical_smiles",
+    "find_rings",
+    "fraction_csp3",
     "generate_2d_coordinates",
+    "has_substructure",
+    "implicit_hydrogens",
+    "lipinski_profile",
     "mol_block",
-    "sdf_text",
+    "molecular_formula",
     "molecule_profile",
+    "morgan_environments",
+    "morgan_fingerprint",
+    "parse_smiles",
+    "rotatable_bonds",
+    "sdf_text",
+    "substructure_matches",
+    "total_hydrogens",
+    "tpsa",
 ]
 
 
@@ -649,7 +649,7 @@ def parse_smiles(smiles: str, *, strict: bool = True) -> Molecule:
     if branches:
         raise DataValidationError("unclosed branch '(' in the SMILES")
     if open_rings:
-        label, (atom_idx, _spec) = sorted(open_rings.items())[0]
+        label, (atom_idx, _spec) = min(open_rings.items())
         raise DataValidationError(
             f"unclosed ring bond {label} (opened at position "
             f"{mol.atoms[atom_idx].position})"
@@ -862,7 +862,7 @@ def _perceive_legacy(mol: Molecule) -> None:
             (1.0 if b.is_aromatic else float(b.order))
             for b in mol.atom_bonds(atom_index)
         )
-        return int(round(total + implicit_h(mol, atom_index)))
+        return round(total + implicit_h(mol, atom_index))
 
     for _ in range(len(rings) + 1):
         changed = False
@@ -1167,14 +1167,17 @@ def _is_strict_excluded(mol: Molecule, bond: MolBond) -> bool:
     for side, other in ((bond.begin, bond.end), (bond.end, bond.begin)):
         atom = mol.atoms[side]
         other_atom = mol.atoms[other]
-        if atom.symbol == "N" and other_atom.symbol == "C":
-            # amide: C(=O)-N in either orientation
-            if any(
+        # amide: C(=O)-N in either orientation
+        if (
+            atom.symbol == "N"
+            and other_atom.symbol == "C"
+            and any(
                 nb.order == 2
                 for nb in mol.atom_bonds(other)
                 if mol.atoms[mol.other_end(nb, other)].symbol in {"O", "N", "S"}
-            ):
-                return True
+            )
+        ):
+            return True
         if atom.symbol == "C":
             neighbours = [
                 mol.atoms[mol.other_end(nb, atom.index)]
@@ -1441,9 +1444,7 @@ def _atom_query_matches(query_atom: MolAtom, target_atom: MolAtom, target_h: int
         return False
     if query_atom.bracket_h is not None and query_atom.bracket_h != target_h:
         return False
-    if query_atom.charge and query_atom.charge != target_atom.charge:
-        return False
-    return True
+    return not (query_atom.charge and query_atom.charge != target_atom.charge)
 
 
 def _bond_query_matches(query_bond: MolBond, target_bond: MolBond) -> bool:
@@ -1586,6 +1587,25 @@ def canonical_smiles(mol: Molecule) -> str:
     to atom renumbering**; it is *not* guaranteed byte-identical to
     RDKit's canonical SMILES (tie-breaking differs) and stereo markers
     are dropped (they were never interpreted — see the parse notes).
+
+    Round-trip contract -- fused purines included: the kekule and the
+    aromatic spelling of caffeine collapse to one form, and that form
+    reparses to the same graph (formula, fingerprint, ring count):
+
+    >>> caffeine = parse_smiles("CN1C=NC2=C1C(=O)N(C)C(=O)N2C")
+    >>> form = canonical_smiles(caffeine)
+    >>> form == canonical_smiles(parse_smiles("Cn1c(=O)c2c(ncn2C)n(C)c1=O"))
+    True
+    >>> twin = parse_smiles(form)
+    >>> molecular_formula(twin)
+    'C8H10N4O2'
+    >>> bool(
+    ...     (morgan_fingerprint(caffeine, radius=2, n_bits=128)
+    ...      == morgan_fingerprint(twin, radius=2, n_bits=128)).all()
+    ... )
+    True
+    >>> canonical_smiles(twin) == form
+    True
     """
     if not mol.atoms:
         return ""
@@ -1673,8 +1693,13 @@ def canonical_smiles(mol: Molecule) -> str:
         bond = next(b for b in mol.bonds if {b.begin, b.end} == {begin, end})
         if bond.is_aromatic:
             return ""
-        if mol.atoms[begin].is_aromatic or mol.atoms[end].is_aromatic:
-            return {1: ":", 2: "=", 3: "#"}[bond.order]
+        if mol.atoms[begin].is_aromatic and mol.atoms[end].is_aromatic:
+            # kekule bond between two aromatic atoms: the explicit
+            # symbol keeps it non-aromatic on reparse (plain adjacency
+            # between lowercase atoms would be re-read as aromatic)
+            return {1: "-", 2: "=", 3: "#"}[bond.order]
+        # aromatic-aliphatic junction: the plain kekule symbol -- ":"
+        # here would be re-read as an aromatic bond and break kekulization
         return {1: "", 2: "=", 3: "#"}[bond.order]
 
     pieces: list[str] = []
@@ -1693,22 +1718,27 @@ def canonical_smiles(mol: Molecule) -> str:
                 emitted[key] = state["digit"]
                 state["digit"] += 1
                 pieces.append(digit_text(emitted[key]))
-        chain_written = False
-        for nbr in sorted(adj[index], key=lambda j: (order_key[j], j)):
-            if nbr == parent or nbr in visited:
-                continue
-            key = frozenset((index, nbr))
-            if key in closure_bonds:
-                continue  # handled by the digit strings
-            bond_text = write_bond(index, nbr)
-            if chain_written:
-                pieces.append(f"({bond_text}")
-                visit(nbr, index)
-                pieces.append(")")
-            else:
-                pieces.append(bond_text)
-                visit(nbr, index)
-                chain_written = True
+        # SMILES grammar: a '(' branch attaches to the atom written
+        # immediately before it -- so every branch is written *before*
+        # the one child that continues the chain (the last in the
+        # canonical order).  Children are exactly the pass-1 tree
+        # edges: closure bonds carry digits, non-tree non-ring back
+        # edges are unreachable here by construction.
+        children = [
+            nbr
+            for nbr in sorted(adj[index], key=lambda j: (order_key[j], j))
+            if nbr != parent
+            and frozenset((index, nbr)) not in closure_bonds
+            and frozenset((index, nbr)) in tree_edges
+        ]
+        for nbr in children[:-1]:
+            pieces.append(f"({write_bond(index, nbr)}")
+            visit(nbr, index)
+            pieces.append(")")
+        if children:
+            chain = children[-1]
+            pieces.append(write_bond(index, chain))
+            visit(chain, index)
 
     for component_index, component in enumerate(components):
         if component_index:
@@ -1863,7 +1893,7 @@ def generate_2d_coordinates(
     if not placed:
         coords[0] = (0.0, 0.0)
         placed.add(0)
-    queue: deque[int] = deque(sorted(placed))
+    queue = deque(sorted(placed))
     while queue:
         node = queue.popleft()
         for nbr in adj[node]:

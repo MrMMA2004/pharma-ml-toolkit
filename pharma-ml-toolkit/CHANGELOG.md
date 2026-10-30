@@ -1,3 +1,155 @@
+## [1.2.101] — 2026-10-30
+
+### Added — the depiction stack absorbed: RDKit's graph core, mols2grid's grid model, nglview + 3Dmol.js's 3D geometry layer (100x-167)
+
+The instruction: *"Check the contents and files in this GitHub links
+completely and one by one and add the missing items to playground.py:
+github.com/rdkit/rdkit, github.com/cbouy/mols2grid,
+github.com/nglviewer/nglview, github.com/3dmol/3Dmol.js."*  All four
+repositories were cloned and reviewed file by file, and what they have
+in common — they are *molecular depiction* libraries — set the round's
+shape: the rendering layers (C++ engine, WebGL, ipywidgets, Bootstrap)
+are exactly what this toolkit does not vendor, while the data models
+and geometry layers under them transfer natively.  One module per
+repository pair, plus the GUI cards that exercise them:
+
+* **`chem/molgraph.py` — the RDKit concept, absorbed natively.**  A
+  pure-Python molecular graph core: a Daylight/OpenSMILES-subset parser
+  (`parse_smiles` — organic subset, aromatic lowercase, branches, ring
+  closures with `%nn`, bond symbols, dot components, bracket
+  isotope/H/charge, stereo markers recorded-but-never-interpreted),
+  RDKit's *legacy* aromaticity model transcribed (kekulize the author's
+  flags, re-perceive: 4n+2 rings, exocyclic blockers, odd-ring lone
+  pairs — verified against RDKit's own `first_200.tpsa.csv`), the Ertl
+  TPSA table transcribed exactly from `MolSurf.cpp` (aspirin 63.6,
+  caffeine 58.44 — the published values), Lipinski's own HBA/HBD with
+  both rotatable-bond definitions, SSSR ring perception, an
+  ECFP-style Morgan fingerprint, query-SMILES substructure search, a
+  rank-invariant canonical SMILES writer, the `rdDepictor`-concept 2D
+  layout (ring polygons + collision-avoiding chain growth), and
+  MOL-block/SDF text.  **Two real writer bugs were found and fixed this
+  round** before shipping: branches are now written *before* the chain
+  continuation (a trailing `(branch)` attaches to the wrong atom in
+  the SMILES grammar — `CC=O(O)` became `CC(=O)O`), and kekulé bonds
+  at aromatic/aliphatic junctions now carry plain symbols (`:` there
+  was re-read as an aromatic bond and broke kekulization — fused
+  purines now round-trip).  Verified: a 40-molecule round-trip suite
+  (both caffeine spellings collapse to one canonical form; adenine,
+  anthracene, biphenyl, bridged systems, charges, dot-components;  the
+  canonical form is idempotent), plus formula/MW checks against
+  published values.
+* **`chem/molgrid.py` — the mols2grid concept.**  The grid data model
+  without the browser: `MoleculeGrid` (a DataFrame + SMILES column
+  becomes cards — the `subset`/`tooltip` column DSL with per-column
+  `transform` hooks exactly like `tooltip_formatter`, the injected
+  `mols2grid-id`, stable numeric-aware `sort_by`, case-insensitive
+  search over subset+tooltip fields = the DataTables search box's
+  semantics, the SMARTS filter returning matched atom indices per
+  molecule = the highlight circles, and the cached-checkbox card
+  restore), `GridSelections` (the `SelectionRegister`: named grids,
+  the most-recently-updated pointer, `get_selection`/`list_grids`),
+  `descriptor_card` (the `info()` popup — MW, HBA/HBD, TPSA, formula,
+  rings — computed by `molecule_profile` instead of RDKit-JS), and
+  `ascii_depiction` (the SVG card as a character grid: the 2D layout
+  rasterised with dominant-axis bond walking, slope-chosen glyphs,
+  implicit carbons).  Honest scope: the query language is the
+  query-SMILES subset — no SMARTS wildcards or topology operators.
+* **`chem/graphics3d.py` — the nglview + 3Dmol.js concepts.**  The 3D
+  geometry layer both WebGL engines sit on: `build_coordinates_3d`
+  (rule-based conformer builder — rings planar from the 2D layout,
+  chains grown by BFS with hybridisation-aware directions: the
+  ideal-angle cone, the in-plane sp2 bisector, the two tetrahedral
+  completions `-0.5(v1+v2) ± sqrt(2/3)n̂`, the exact `-(v1+v2+v3)`
+  slot; collision-maximising candidate choice makes chains stagger
+  with no randomness; disconnected components separated along x);
+  **both selection dialects** — 3Dmol's dict-based `AtomSelectionSpec`
+  (`elem`/`index`/`bonds`/`aromatic`/`invert`/`and`/`or`/`not`/
+  `within{distance, sel}` with 3Dmol's *intersected-field* semantics)
+  and NGL's string grammar (`all`, `none`, `@1-5,7`, `element C`,
+  `not`/`and`/`or`, parentheses, `within(d, sel)`) via a
+  recursive-descent parser; `Camera` (yaw/pitch/zoom, orthographic —
+  the perspective camera is not modelled and said so); the
+  `REPRESENTATIONS` registry (NGL's `licorice`/`ball+stick`/
+  `spacefill`/`line` and 3Dmol's `stick`/`sphere`/`cross`; `cartoon`
+  absent on purpose — it needs residue records a SMILES-scale toolkit
+  does not have); `sasa` — the Shrake-Rupley algorithm behind
+  `SurfaceType.SAS`/`VDW` (golden-spiral points, probe-expanded Bondi
+  spheres, `probe_radius=0` = the van der Waals surface); the Jmol
+  palette from `colors.ts` as `#rrggbb`; and the renderer —
+  `render_primitives` (depth-sorted typed records, the stand-in for
+  the WebGL draw list, which the playground canvas consumes) and
+  `render_ascii` (the painter's algorithm on a character grid:
+  slope-glyph bonds, element symbols, spacefill fills the van der
+  Waals disc, selected atoms bracketed, labels placed at projected
+  positions).
+* **Two new Chemistry cards in the playground.**  *Molecule grid (the
+  mols2grid concept)*: a pasted `SMILES name` table becomes the text
+  card grid — text + SMARTS filters, sorting, the selection register
+  (checkbox ids → `[x]` marks on re-render), the descriptor-card
+  popup, SMARTS-match highlighting carried onto the depictions.
+  *3D viewer (the nglview + 3Dmol.js concepts)*: build the conformer,
+  then rotate it **live** with yaw/pitch/zoom sliders while the canvas
+  redraws — Jmol-coloured atoms, half-bond endpoint colouring,
+  representation switcher, and a selection entry that accepts *both*
+  dialects (the NGL string `element O` and the 3Dmol dict
+  `{'elem': 'O'}`, resolved in that order) with a yellow halo on
+  selected atoms; the stage line reports formula, representation
+  provenance, camera, selection and SASA.
+
+### Fixed
+
+* The canonical-SMILES writer's two emission bugs (branches after the
+  chain continuation; `:` at aromatic–aliphatic junctions) — both
+  found by the round-trip suite added this round, both with doctests
+  pinning the contract (caffeine's two spellings collapse and
+  re-parse; `CC(=O)O` survives).
+* `select_spec`'s boolean fields follow 3Dmol's intersected-field
+  semantics (`or` is a field an atom must satisfy, not a post-union —
+  `{"or": [{"elem": "N"}, {"elem": "S"}]}` on aspirin correctly
+  selects nothing).
+* The 3D builder's disconnected-component handling: every component
+  now gets its own BFS root after the frontier drains (a second
+  component previously stayed at the origin — zero-length bonds).
+* The projection now pads the fitted span by the largest van der
+  Waals radius, so `spacefill` discs stay on the canvas (benzene
+  previously painted the whole grid).
+
+### Notebooks
+
+* `complete_pk_workflow.ipynb` re-executed under the current tree —
+  its committed outputs now print 1.2.101 (the only one of the eight
+  whose dependencies this environment satisfies).  The remaining
+  seven still carry 1.2.98 outputs: their chemistry/deep-learning
+  cells raise the actionable `DependencyError` here (no `rdkit`, no
+  `torch` in this venv), so they need the full-dependency environment
+  they were authored for — stated plainly rather than papered over,
+  and the `*_no_output.ipynb` twins remain the dependency-free entry
+  point.
+
+### Verified
+
+* Doctests: `molgraph` (module + the strengthened `canonical_smiles`
+  round-trip contract), `molgrid` (7 items), `graphics3d` (8 items) —
+  all green; ruff and mypy clean on every touched file (the
+  playground's pre-existing baseline is unchanged: zero new findings
+  in the inserted range, verified line-by-line).
+* A geometry audit across twelve molecules: no zero-length bonds, no
+  non-bonded atom pair closer than 1.9 Å, ideal C–C/C–O lengths and
+  the 109.5° C–C–O angle exact; aspirin builds in ~3.4 ms, SASA in
+  ~1 ms.
+* GUI smoke under Xvfb: the grid renders six cards with checkbox
+  marks, the register round-trips (`#1 benzene, #3 aspirin`), the
+  SMARTS filter highlights, the viewer builds, rotates live through
+  the sliders, switches representations, and halos exactly the four
+  oxygens under both selection dialects; the pre-existing affinity
+  card still converts 350 nM → 6.456.
+* Regression audit by A/B: `tests/test_playground.py` run against the
+  tree with this round's additions stripped produces the *identical*
+  failure/hang pattern (all pre-existing: absent `rdkit`/`torch`,
+  pandas drift) — zero regressions from this round; the chem-focused
+  suite (`test_chem_tables`, `test_similarity`, `test_descriptors`,
+  `test_features` + the three modules' doctests) passes clean.
+
 ## [1.2.100] — 2026-10-30
 
 ### Added — best-of-ml-python absorbed: the catalogue as data, the coverage audit, and five new capability modules (100x-166)

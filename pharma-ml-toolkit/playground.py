@@ -7845,6 +7845,194 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._alerts_tree.pack(side="left", fill="both", expand=True)
         alerts_bar.pack(side="right", fill="y")
 
+        # -- Molecule grid (mols2grid concept) -- (100x-167) ------------- #
+        grid_card = make_card(
+            page.grid,
+            "Molecule grid (mols2grid concept)",
+            row=9,
+            column=0,
+            span=2,
+            subtitle=(
+                "A pasted table as a grid of cards -- the mols2grid data "
+                "model: ASCII depictions for the SVG cards, the text and "
+                "SMARTS filters, sorting, tooltips, and the checkbox "
+                "selection register (one 'SMILES name' per line)."
+            ),
+        )
+        self._molgrid_text = tk.Text(
+            grid_card, height=7, width=80, font=self._mono_result, undo=True
+        )
+        self._molgrid_text.pack(fill="x", pady=(0, 6))
+        self._molgrid_text.insert(
+            "1.0",
+            "CCO ethanol\n"
+            "c1ccccc1 benzene\n"
+            "CCN ethylamine\n"
+            "CC(=O)Oc1ccccc1C(=O)O aspirin\n"
+            "CN1C=NC2=C1C(=O)N(C)C(=O)N2C caffeine\n"
+            "CC(C)CC(N)C(=O)O leucine",
+        )
+        grid_filter_row = ttk.Frame(grid_card)
+        grid_filter_row.pack(fill="x", pady=(0, 4))
+        ttk.Label(grid_filter_row, text="text filter").pack(side="left")
+        self._molgrid_filter = ttk.Entry(grid_filter_row, width=16)
+        self._molgrid_filter.pack(side="left", padx=(4, 12))
+        ttk.Label(grid_filter_row, text="SMARTS").pack(side="left")
+        self._molgrid_smarts = ttk.Entry(grid_filter_row, width=20)
+        self._molgrid_smarts.pack(side="left", padx=(4, 12))
+        ttk.Label(grid_filter_row, text="sort by").pack(side="left")
+        self._molgrid_sort = ttk.Combobox(
+            grid_filter_row,
+            state="readonly",
+            width=9,
+            values=("id", "name", "SMILES"),
+        )
+        self._molgrid_sort.set("id")
+        self._molgrid_sort.pack(side="left", padx=(4, 12))
+        ttk.Label(grid_filter_row, text="check ids").pack(side="left")
+        self._molgrid_check = ttk.Entry(grid_filter_row, width=9)
+        self._molgrid_check.insert(0, "1, 3")
+        self._molgrid_check.pack(side="left", padx=(4, 0))
+        grid_button_row = ttk.Frame(grid_card)
+        grid_button_row.pack(fill="x", pady=(0, 6))
+        render_btn = self._action_button(
+            grid_button_row,
+            "Render grid",
+            self._molgrid_run,
+            tooltip=(
+                "Filter (text + SMARTS), sort, and render the cards -- "
+                "depictions from the pure-Python 2D layout, matches "
+                "highlighted. No browser, no RDKit."
+            ),
+        )
+        render_btn.pack(side="left")
+        select_btn = self._action_button(
+            grid_button_row,
+            "Apply selection",
+            self._molgrid_apply,
+            tooltip=(
+                "Check those card ids in the register (the checkbox "
+                "semantics); re-render to see the [x] marks."
+            ),
+        )
+        select_btn.pack(side="left", padx=(8, 0))
+        info_btn = self._action_button(
+            grid_button_row,
+            "Descriptor card",
+            self._molgrid_info,
+            tooltip=(
+                "The info() popup as text: MW, HBA/HBD, TPSA for the "
+                "first checked molecule (or the first row)."
+            ),
+        )
+        info_btn.pack(side="left", padx=(8, 0))
+        grid_result_row = ttk.Frame(grid_card)
+        grid_result_row.pack(fill="both", expand=False)
+        self._molgrid_result = tk.Text(
+            grid_result_row,
+            height=30,
+            width=96,
+            font=self._mono_result,
+            wrap="none",
+            relief="sunken",
+            borderwidth=1,
+        )
+        grid_scroll = ttk.Scrollbar(
+            grid_result_row, orient="vertical", command=self._molgrid_result.yview
+        )
+        self._molgrid_result.configure(yscrollcommand=grid_scroll.set)
+        self._molgrid_result.pack(side="left", fill="both")
+        grid_scroll.pack(side="right", fill="y")
+        self._molgrid_summary = ttk.Label(
+            grid_card, text="\u2014", style="Result.TLabel", wraplength=860
+        )
+        self._molgrid_summary.pack(fill="x", pady=(6, 0))
+
+        # -- 3D viewer (nglview + 3Dmol.js concepts) -- (100x-167) ------ #
+        view_card = make_card(
+            page.grid,
+            "3D viewer (nglview + 3Dmol.js concepts)",
+            row=10,
+            column=0,
+            span=2,
+            subtitle=(
+                "Rule-based 3D coordinates, the representation registry, "
+                "both selection dialects and Shrake-Rupley SASA, drawn on "
+                "a canvas -- the geometry layer under the WebGL engines."
+            ),
+        )
+        view_top_row = ttk.Frame(view_card)
+        view_top_row.pack(fill="x", pady=(0, 4))
+        ttk.Label(view_top_row, text="SMILES").pack(side="left")
+        self._view3d_smiles = ttk.Entry(view_top_row, width=42)
+        self._view3d_smiles.insert(0, "CC(=O)Oc1ccccc1C(=O)O")
+        self._view3d_smiles.pack(side="left", padx=(4, 10))
+        view_build_btn = self._action_button(
+            view_top_row,
+            "Build & view",
+            self._view3d_build,
+            tooltip=(
+                "Parse, build the 3D conformer (hybridisation-aware rule "
+                "geometry) and draw it; the sliders then rotate live."
+            ),
+        )
+        view_build_btn.pack(side="left")
+        ttk.Label(view_top_row, text="representation").pack(side="left", padx=(14, 2))
+        self._view3d_repr = ttk.Combobox(
+            view_top_row,
+            state="readonly",
+            width=11,
+            values=("line", "licorice", "stick", "ball+stick", "spacefill", "cross"),
+        )
+        self._view3d_repr.set("ball+stick")
+        self._view3d_repr.pack(side="left")
+        self._view3d_repr.bind(
+            "<<ComboboxSelected>>", lambda _event: self._view3d_draw()
+        )
+        view_mid_row = ttk.Frame(view_card)
+        view_mid_row.pack(fill="x", pady=(0, 4))
+        ttk.Label(view_mid_row, text="selection").pack(side="left")
+        self._view3d_sel = ttk.Entry(view_mid_row, width=30)
+        self._view3d_sel.insert(0, "element O")
+        self._view3d_sel.pack(side="left", padx=(4, 10))
+        self._view3d_sel.bind("<Return>", lambda _event: self._view3d_draw())
+        ttk.Label(view_mid_row, text="yaw").pack(side="left", padx=(6, 0))
+        self._view3d_yaw = ttk.Scale(
+            view_mid_row, from_=0, to=360, command=lambda _v: self._view3d_draw()
+        )
+        self._view3d_yaw.set(25)
+        self._view3d_yaw.pack(side="left", padx=(4, 8))
+        ttk.Label(view_mid_row, text="pitch").pack(side="left", padx=(6, 0))
+        self._view3d_pitch = ttk.Scale(
+            view_mid_row, from_=-90, to=90, command=lambda _v: self._view3d_draw()
+        )
+        self._view3d_pitch.set(20)
+        self._view3d_pitch.pack(side="left", padx=(4, 8))
+        ttk.Label(view_mid_row, text="zoom").pack(side="left", padx=(6, 0))
+        self._view3d_zoom = ttk.Scale(
+            view_mid_row, from_=0.5, to=2.5, command=lambda _v: self._view3d_draw()
+        )
+        self._view3d_zoom.set(1.0)
+        self._view3d_zoom.pack(side="left", padx=(4, 0))
+        self._view3d_canvas = tk.Canvas(
+            view_card,
+            width=640,
+            height=400,
+            bg="#14181d",
+            highlightthickness=1,
+            highlightbackground="#333a44",
+        )
+        self._view3d_canvas.pack(fill="x", pady=(0, 6))
+        self._view3d_report = ttk.Label(
+            view_card,
+            text="\u2014 build a molecule to populate the stage",
+            style="Result.TLabel",
+            wraplength=860,
+            justify="left",
+        )
+        self._view3d_report.pack(fill="x")
+        self._view3d_state = None
+
     def _rism_run(self) -> None:
         """Compute the RISM-KH solvation descriptors for the pasted array."""
         if (
@@ -9390,6 +9578,263 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         self._start_job("variance filter", work, render)
+
+    # -- molecule grid card handlers (100x-167) ------------------------- #
+
+    def _molgrid_records(self, raw: str) -> list[dict]:
+        """The pasted lines as SMILES/name records."""
+        records = []
+        for line in raw.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            parts = stripped.split(None, 1)
+            records.append(
+                {
+                    "SMILES": parts[0],
+                    "name": parts[1].strip() if len(parts) > 1 else "",
+                }
+            )
+        return records
+
+    def _molgrid_run(self) -> None:
+        """Molecule grid card: filter, sort, render the text cards."""
+        if not self._require_pharmaml():
+            return
+        raw = self._molgrid_text.get("1.0", "end")
+        text_filter = self._molgrid_filter.get().strip()
+        smarts = self._molgrid_smarts.get().strip()
+        sort_by = self._molgrid_sort.get()
+
+        def work() -> Any:
+            from pharmaml.chem.molgrid import MoleculeGrid
+            from pharmaml.exceptions import DataValidationError
+
+            grid = MoleculeGrid(
+                self._molgrid_records(raw), subset=["name"], name="playground"
+            )
+            ids = grid.filter(text_filter) if text_filter else grid.ids()
+            smarts_note = ""
+            if smarts:
+                try:
+                    allowed = set(grid.filter_smarts(smarts))
+                    ids = [i for i in ids if i in allowed]
+                except DataValidationError as exc:
+                    smarts_note = f"  SMARTS query rejected: {exc}"
+            column = None if sort_by == "id" else sort_by
+            ids = grid.sort(ids, by=column)
+            art = grid.grid_text(
+                ids, columns=2, width=42, height=15, highlight_query=smarts or None
+            )
+            summary = grid.summary()
+            invalid = grid.invalid_smiles
+            return {
+                "art": art,
+                "summary": summary,
+                "invalid": invalid,
+                "smarts_note": smarts_note,
+            }
+
+        def render(report: Any) -> None:
+            self._molgrid_result.delete("1.0", "end")
+            self._molgrid_result.insert("1.0", report["art"])
+            note = report["summary"] + report["smarts_note"]
+            if report["invalid"]:
+                note += "  unparsable: " + ", ".join(
+                    f"#{row} ({error[:44]})" for row, _s, error in report["invalid"]
+                )
+            self._molgrid_summary.configure(text=note)
+
+        self._start_job("molecule grid", work, render)
+
+    def _molgrid_apply(self) -> None:
+        """Molecule grid card: check ids into the selection register."""
+        if not self._require_pharmaml():
+            return
+        raw = self._molgrid_text.get("1.0", "end")
+        ids_text = self._molgrid_check.get().strip()
+
+        def work() -> Any:
+            from pharmaml.chem.molgrid import MoleculeGrid
+
+            grid = MoleculeGrid(
+                self._molgrid_records(raw), subset=["name"], name="playground"
+            )
+            ids = [int(part) for part in ids_text.replace(",", " ").split()]
+            grid.set_selection(ids)
+            return {"summary": grid.summary(), "selection": grid.get_selection()}
+
+        def render(report: Any) -> None:
+            selection = report["selection"]
+            shown = (
+                ", ".join(f"#{row}: {smiles}" for row, smiles in sorted(selection.items()))
+                or "(none)"
+            )
+            self._molgrid_summary.configure(
+                text=f"{report['summary']} -- register: {shown}"
+            )
+
+        self._start_job("grid selection", work, render)
+
+    def _molgrid_info(self) -> None:
+        """Molecule grid card: the info() popup as a descriptor card."""
+        if not self._require_pharmaml():
+            return
+        raw = self._molgrid_text.get("1.0", "end")
+
+        def work() -> Any:
+            from pharmaml.chem.molgrid import MoleculeGrid, descriptor_card, register
+
+            grid = MoleculeGrid(
+                self._molgrid_records(raw), subset=["name"], name="playground"
+            )
+            selection = register.get_selection("playground")
+            row = min(selection) if selection else 0
+            card = descriptor_card(grid.frame.iloc[row]["SMILES"])
+            return {"row": row, "card": card}
+
+        def render(report: Any) -> None:
+            self._molgrid_result.delete("1.0", "end")
+            self._molgrid_result.insert("1.0", report["card"])
+            self._molgrid_summary.configure(
+                text=f"descriptor card of row #{report['row']} (MW, HBA/HBD, TPSA -- "
+                "the mols2grid info() popup, from the pure-Python profile)"
+            )
+
+        self._start_job("descriptor card", work, render)
+
+    # -- 3D viewer card handlers (100x-167) ------------------------------ #
+
+    def _view3d_build(self) -> None:
+        """3D viewer card: parse and build the coordinates off-thread."""
+        if not self._require_pharmaml():
+            return
+        smiles = self._view3d_smiles.get().strip()
+
+        def work() -> Any:
+            from pharmaml.chem.graphics3d import build_coordinates_3d, view_report
+            from pharmaml.chem.molgraph import parse_smiles
+
+            mol = parse_smiles(smiles)
+            coords = build_coordinates_3d(mol)
+            return {
+                "smiles": smiles,
+                "mol": mol,
+                "coords": coords,
+                "report": view_report(mol, coords),
+            }
+
+        def render(result: Any) -> None:
+            self._view3d_state = result
+            self._view3d_report.configure(
+                text=result["report"].rstrip().replace("\n", "  |  ")
+            )
+            self._view3d_draw()
+
+        self._start_job("3D coordinates", work, render)
+
+    def _view3d_selection_ids(self, mol: Any, coords: Any) -> tuple[Any, str]:
+        """Resolve the selection entry: NGL string first, 3Dmol dict second."""
+        text = self._view3d_sel.get().strip()
+        if not text:
+            return None, ""
+        from pharmaml.chem.graphics3d import select_spec, select_string
+        from pharmaml.exceptions import DataValidationError
+
+        try:
+            return select_string(mol, text, coords), ""
+        except DataValidationError as string_error:
+            import ast
+
+            try:
+                parsed = ast.literal_eval(text)
+            except (ValueError, SyntaxError):
+                parsed = None
+            if not isinstance(parsed, dict):
+                return None, f"selection error: {string_error}"
+            try:
+                return select_spec(mol, parsed, coords), ""
+            except DataValidationError as dict_error:
+                return None, f"selection error: {dict_error}"
+
+    def _view3d_draw(self) -> None:
+        """Redraw the 3D canvas from the cached molecule (live sliders)."""
+        if not self._require_pharmaml():
+            return
+        state = getattr(self, "_view3d_state", None)
+        canvas = getattr(self, "_view3d_canvas", None)
+        if state is None or canvas is None:
+            return
+        from pharmaml.chem.graphics3d import (
+            BondPrimitive,
+            Camera,
+            render_primitives,
+        )
+
+        selection, error = self._view3d_selection_ids(state["mol"], state["coords"])
+        if error:
+            self._view3d_report.configure(text=error)
+            return
+        camera = Camera(
+            yaw=float(self._view3d_yaw.get()),
+            pitch=float(self._view3d_pitch.get()),
+            zoom=float(self._view3d_zoom.get()),
+        )
+        representation = self._view3d_repr.get()
+        primitives = render_primitives(
+            state["mol"],
+            state["coords"],
+            representation=representation,
+            camera=camera,
+            width=640.0,
+            height=400.0,
+            selection=selection,
+        )
+        canvas.delete("all")
+        bond_width = {"line": 1, "licorice": 3, "stick": 4, "ball+stick": 3}.get(
+            representation, 3
+        )
+        for primitive in primitives:
+            if isinstance(primitive, BondPrimitive):
+                mid_x = (primitive.x1 + primitive.x2) / 2.0
+                mid_y = (primitive.y1 + primitive.y2) / 2.0
+                canvas.create_line(
+                    primitive.x1, primitive.y1, mid_x, mid_y,
+                    fill=primitive.color_begin, width=bond_width,
+                )
+                canvas.create_line(
+                    mid_x, mid_y, primitive.x2, primitive.y2,
+                    fill=primitive.color_end, width=bond_width,
+                )
+                continue
+            radius = max(4.0, primitive.radius)
+            canvas.create_oval(
+                primitive.x - radius,
+                primitive.y - radius,
+                primitive.x + radius,
+                primitive.y + radius,
+                fill=primitive.color,
+                outline="#0a0d10",
+            )
+            if representation in ("ball+stick", "licorice", "stick"):
+                ink = "#202020" if primitive.color == "#ffffff" else "#f2f4f7"
+                canvas.create_text(
+                    primitive.x,
+                    primitive.y,
+                    text=primitive.symbol,
+                    fill=ink,
+                    font=self._mono_result,
+                )
+            if primitive.selected:
+                halo = radius + 5.0
+                canvas.create_oval(
+                    primitive.x - halo,
+                    primitive.y - halo,
+                    primitive.x + halo,
+                    primitive.y + halo,
+                    outline="#ffd24d",
+                    width=2,
+                )
 
     # ------------------------------------------------------------------ #
     # PK / PD tab
