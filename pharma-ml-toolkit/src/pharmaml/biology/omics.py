@@ -15,7 +15,11 @@ directly after :func:`normalize_expression` and
   selection, and
 * :func:`correlate_with_response` correlates every gene against one
   drug's response vector across the panel (Spearman by default,
-  Pearson optional), NaN-safe and constant-gene-safe.
+  Pearson optional), NaN-safe and constant-gene-safe, and
+* :func:`single_sample_enrichment` / :func:`enrichment_rank_report`
+  score gene sets per sample -- ssGSEA (Barbie et al. 2009) and GSVA
+  (Hänzelmann et al. 2013) in the toolkit's own NumPy, no R and no
+  enrichment package behind them.
 
 Examples
 --------
@@ -58,6 +62,14 @@ pharmaml.exceptions.DataValidationError: n must be >= 1, got 0
 >>> corr = correlate_with_response(expression, response)
 >>> corr.set_index("gene")["rho"].round(3).to_dict()
 {'G1': 1.0, 'G2': -1.0, 'G3': nan}
+
+>>> enrichment_frame = pd.DataFrame(
+...     {"G1": [3.0, 1.0], "G2": [2.0, 2.0], "G3": [1.0, 3.0], "G4": [0.0, 4.0]},
+...     index=["cell_a", "cell_b"],
+... )
+>>> gene_sets = {"SET_A": {"G1", "G2"}, "SET_B": {"G3"}}
+>>> single_sample_enrichment(enrichment_frame, gene_sets).round(3).to_dict("index")
+{'cell_a': {'SET_A': 2.025, 'SET_B': -0.667}, 'cell_b': {'SET_A': -1.957, 'SET_B': 0.667}}
 """
 
 from __future__ import annotations
@@ -76,9 +88,11 @@ _LOG = get_logger(__name__)
 
 __all__ = [
     "correlate_with_response",
+    "enrichment_rank_report",
     "impute_expression",
     "most_variable_genes",
     "normalize_expression",
+    "single_sample_enrichment",
 ]
 
 #: Correlation methods understood by :func:`correlate_with_response`.
@@ -468,3 +482,341 @@ def correlate_with_response(
         method,
     )
     return result_frame
+
+
+# ---------------------------------------------------------------------------
+# Single-sample enrichment (ssGSEA / GSVA, the toolkit's own NumPy)
+# ---------------------------------------------------------------------------
+
+#: Enrichment methods understood by :func:`single_sample_enrichment`.
+_ENRICHMENT_METHODS = ("ssgsea", "gsva")
+
+#: Default weight exponent of the ssGSEA statistic (Barbie et al. 2009).
+_SSGSEA_ALPHA = 0.25
+
+#: Abramowitz & Stegun 7.1.26 rational-approximation coefficients for erf
+#: (max absolute error 1.5e-7 -- the Gaussian kernel stays pure NumPy).
+_ERF_P = 0.3275911
+_ERF_A = (0.254829592, -0.284496736, 1.421413741, -1.453152027, 1.061405429)
+
+
+def _erf_approx(x: np.ndarray) -> np.ndarray:
+    """Vectorised erf via the A&S 7.1.26 rational approximation."""
+    sign = np.sign(x)
+    ax = np.abs(x)
+    t = 1.0 / (1.0 + _ERF_P * ax)
+    a1, a2, a3, a4, a5 = _ERF_A
+    poly = t * (a1 + t * (a2 + t * (a3 + t * (a4 + t * a5))))
+    return sign * (1.0 - poly * np.exp(-ax * ax))
+
+
+def _normal_cdf(x: np.ndarray) -> np.ndarray:
+    """The standard normal CDF, vectorised, NumPy-only."""
+    return 0.5 * (1.0 + _erf_approx(x / np.sqrt(2.0)))
+
+
+def _ssgsea_score(x: np.ndarray, in_set: np.ndarray, alpha: float) -> float:
+    """One sample's ssGSEA enrichment for one gene set (Barbie et al. 2009).
+
+    Genes are ranked by expression (descending, stable ties); the
+    statistic is the sum over all rank positions of the *weighted*
+    empirical CDF of the set's genes (weights ``|x|^alpha``, normalised
+    by the set's total weight) minus the unweighted CDF of the rest.
+    """
+    n = x.size
+    order = np.argsort(-x, kind="stable")
+    weights = np.abs(x) ** alpha
+    set_sorted = in_set[order]
+    set_weights = np.where(set_sorted, weights[order], 0.0)
+    total_set = float(set_weights.sum())
+    cdf_set = np.cumsum(set_weights) / total_set
+    cdf_rest = np.cumsum(~set_sorted) / float(n - int(set_sorted.sum()))
+    return float(np.sum(cdf_set - cdf_rest))
+
+
+def _gsva_score(x: np.ndarray, in_set: np.ndarray) -> float:
+    """One sample's GSVA enrichment for one gene set (Hänzelmann 2013).
+
+    Genes are ranked by expression (descending, stable ties) and both
+    the set's and the background's CDFs are estimated over the rank
+    positions with a Gaussian kernel whose bandwidth follows Silverman's
+    rule of thumb on the rank spacing (``1.06·sd·N^(-1/5)``); the score
+    is the signed Kolmogorov-Smirnov deviation (``max(F_set - F_rest)``
+    minus ``max(F_rest - F_set)``) at the gene positions, normalised by
+    the two-sample KS null standard deviation ``sqrt(N / (n_set *
+    n_rest))`` so scores stay comparable across set sizes.
+    """
+    n = x.size
+    order = np.argsort(-x, kind="stable")
+    positions = np.arange(1, n + 1, dtype=float)
+    set_sorted = in_set[order]
+    n_set = int(set_sorted.sum())
+    n_rest = n - n_set
+    bandwidth = 1.06 * float(np.std(positions)) * n ** (-0.2)
+    kernel_set = _normal_cdf((positions[:, None] - positions[set_sorted][None, :]) / bandwidth)
+    kernel_rest = _normal_cdf((positions[:, None] - positions[~set_sorted][None, :]) / bandwidth)
+    difference = kernel_set.mean(axis=1) - kernel_rest.mean(axis=1)
+    d_plus = float(difference.max())
+    d_minus = float((-difference).max())
+    ks_std = float(np.sqrt(n / (n_set * n_rest)))
+    return (d_plus - d_minus) / ks_std
+
+
+def _resolve_gene_sets(
+    gene_sets: dict[str, set[str] | list[str] | tuple[str, ...]], columns: pd.Index
+) -> dict[str, np.ndarray]:
+    """Map every gene set onto a boolean column-membership vector."""
+    known = {str(gene) for gene in columns}
+    resolved: dict[str, np.ndarray] = {}
+    unmapped = 0
+    empty_sets: list[str] = []
+    for name, members in gene_sets.items():
+        member_set = {str(gene) for gene in members}
+        missing = member_set - known
+        unmapped += len(missing)
+        membership = np.array([str(gene) in member_set for gene in columns], dtype=bool)
+        resolved[str(name)] = membership
+        if not membership.any():
+            empty_sets.append(str(name))
+    if unmapped:
+        _LOG.warning(
+            "%d gene(s) named in the gene sets are not columns of the frame -- "
+            "skipped (the sets score on their profiled members only)",
+            unmapped,
+        )
+    if empty_sets:
+        _LOG.warning(
+            "%d gene set(s) hold no gene of the frame at all -- scored NaN: %s",
+            len(empty_sets),
+            ", ".join(sorted(empty_sets)[:5]),
+        )
+    return resolved
+
+
+def single_sample_enrichment(
+    frame: pd.DataFrame,
+    gene_sets: dict[str, set[str] | list[str] | tuple[str, ...]],
+    method: str = "ssgsea",
+    alpha: float = _SSGSEA_ALPHA,
+) -> pd.DataFrame:
+    """Per-sample gene-set enrichment: ssGSEA or GSVA, pure NumPy.
+
+    Rows are cell lines (samples), columns are genes -- the omics
+    convention of this module.  For every sample the genes are ranked by
+    expression (descending; ties keep the frame's column order, so the
+    result is deterministic), and each gene set is scored by either
+
+    ``method="ssgsea"``
+        Barbie et al. (2009): the sum over all rank positions of the
+        weighted CDF of the set's genes (weights ``|x|^alpha``) minus
+        the CDF of the rest -- positive when the set's genes sit among
+        the sample's most-expressed genes.  This is the raw integral
+        statistic of the paper's supplement; the per-sample score
+        re-normalisation some implementations apply afterwards is
+        deliberately not applied (the units stay honest).
+
+    ``method="gsva"``
+        Hänzelmann et al. (2013): Gaussian-kernel smoothed CDFs over
+        the sorted expression ranks (Silverman-rule bandwidth), and the
+        signed Kolmogorov-Smirnov-type maximum deviation between the
+        set's and the background's smoothed distributions, normalised
+        by the two-sample KS null standard deviation.
+
+    Both scores run gene by gene in the toolkit's own NumPy -- no R, no
+    GSVA package, no randomness.  The cost note: GSVA is ``O(N²)`` per
+    (sample, set) in the number of genes; at screening scale subsample
+    the frame (e.g. :func:`most_variable_genes`) first.
+
+    Parameters
+    ----------
+    frame:
+        Expression table (cell lines x genes).  Non-numeric columns are
+        coerced to NaN with a warning naming the column and count.
+    gene_sets:
+        Named gene sets (any iterable of gene symbols per name; the
+        caller's key order becomes the output's column order).  Genes
+        missing from the frame are skipped with a warning.
+    method:
+        ``"ssgsea"`` (default) or ``"gsva"``.
+    alpha:
+        The ssGSEA weight exponent (default 0.25, the paper's).  Must
+        be positive; ignored by ``"gsva"``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Samples x gene sets.  A set that covers every finite gene of a
+        sample (no background left) or whose members all carry NaN
+        scores NaN for that sample, with one warning per call.
+
+    Raises
+    ------
+    DataValidationError
+        If ``method`` is unknown, ``alpha`` is not positive, the frame
+        has no genes, or the frame holds duplicated gene symbols
+        (duplicate DataFrame columns).
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from pharmaml.biology.omics import single_sample_enrichment
+    >>> frame = pd.DataFrame(
+    ...     {"G1": [3.0, 1.0], "G2": [2.0, 2.0], "G3": [1.0, 3.0], "G4": [0.0, 4.0]},
+    ...     index=["s1", "s2"],
+    ... )
+    >>> gene_sets = {"SET_A": {"G1", "G2"}, "SET_B": {"G3"}, "SET_AB": {"G1", "G2", "G3"}}
+    >>> scores = single_sample_enrichment(frame, gene_sets)
+    >>> scores.round(3).to_dict("index")
+    {'s1': {'SET_A': 2.025, 'SET_B': -0.667, 'SET_AB': 2.09}, 's2': {'SET_A': -1.957, 'SET_B': 0.667, 'SET_AB': -1.91}}
+    >>> gsva = single_sample_enrichment(frame, gene_sets, method="gsva")
+    >>> gsva.round(3).to_dict("index")
+    {'s1': {'SET_A': 0.92, 'SET_B': -0.25, 'SET_AB': 0.751}, 's2': {'SET_A': -0.92, 'SET_B': 0.25, 'SET_AB': -0.751}}
+    >>> single_sample_enrichment(frame, gene_sets, method="mean")
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: method must be one of ['gsva', 'ssgsea'], got 'mean'
+    """
+    if method not in _ENRICHMENT_METHODS:
+        raise DataValidationError(
+            f"method must be one of {sorted(_ENRICHMENT_METHODS)}, got {method!r}"
+        )
+    if alpha <= 0:
+        raise DataValidationError(f"alpha must be > 0, got {alpha}")
+    values = _numeric_expression(frame)
+    if values.shape[1] < 1:
+        raise DataValidationError("the frame holds no gene columns to enrich against")
+    resolved = _resolve_gene_sets(gene_sets, values.columns)
+
+    n_nan_cells = int(values.isna().any(axis=1).sum())
+    if n_nan_cells:
+        _LOG.warning(
+            "%d sample row(s) hold NaN expression value(s) -- those genes sit out "
+            "of the ranking (and out of every set) for that sample",
+            n_nan_cells,
+        )
+    scores: dict[str, dict[str, float]] = {}
+    degenerate = 0
+    for sample in values.index:
+        row = values.loc[sample]
+        finite = np.isfinite(row.to_numpy(dtype=float))
+        x = row.to_numpy(dtype=float)[finite]
+        sample_scores: dict[str, float] = {}
+        for name, membership in resolved.items():
+            in_set = membership[finite]
+            n_set = int(in_set.sum())
+            if x.size < 2 or n_set < 1 or n_set >= x.size:
+                sample_scores[name] = float("nan")
+                if n_set >= x.size and x.size >= 2:
+                    degenerate += 1
+                continue
+            if method == "ssgsea":
+                sample_scores[name] = _ssgsea_score(x, in_set, alpha)
+            else:
+                sample_scores[name] = _gsva_score(x, in_set)
+        scores[str(sample)] = sample_scores
+    if degenerate:
+        _LOG.warning(
+            "%d (sample, gene set) pair(s) cover every finite gene of their sample "
+            "-- no background left, scored NaN",
+            degenerate,
+        )
+    result = pd.DataFrame.from_dict(scores, orient="index")
+    result = result.reindex(columns=[str(name) for name in gene_sets])
+    _LOG.info(
+        "Enriched %d gene set(s) across %d sample(s) (%s)",
+        result.shape[1],
+        result.shape[0],
+        method,
+    )
+    return result
+
+
+def enrichment_rank_report(
+    frame: pd.DataFrame,
+    gene_sets: dict[str, set[str] | list[str] | tuple[str, ...]],
+    method: str = "ssgsea",
+    alpha: float = _SSGSEA_ALPHA,
+    top: int = 3,
+) -> pd.DataFrame:
+    """Each sample's top enriched gene sets, with their scores.
+
+    Wraps :func:`single_sample_enrichment` and trims it to the
+    leaderboard: the ``top`` highest-scoring gene sets per sample
+    (ties broken by gene-set name ascending -- deterministic), with the
+    per-sample rank attached.
+
+    Parameters
+    ----------
+    frame:
+        Expression table (cell lines x genes).
+    gene_sets:
+        Named gene sets, as for :func:`single_sample_enrichment`.
+    method:
+        ``"ssgsea"`` (default) or ``"gsva"``.
+    alpha:
+        The ssGSEA weight exponent (ignored by ``"gsva"``).
+    top:
+        How many leading sets to report per sample (>= 1).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``sample``, ``gene_set``, ``score`` and ``rank``; only
+        samples with at least one finite score appear.  Asking for more
+        sets than were scored returns however many exist.
+
+    Raises
+    ------
+    DataValidationError
+        On the same conditions as :func:`single_sample_enrichment`, or
+        ``top < 1``.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from pharmaml.biology.omics import enrichment_rank_report
+    >>> frame = pd.DataFrame(
+    ...     {"G1": [3.0, 1.0], "G2": [2.0, 2.0], "G3": [1.0, 3.0], "G4": [0.0, 4.0]},
+    ...     index=["s1", "s2"],
+    ... )
+    >>> gene_sets = {"SET_A": {"G1", "G2"}, "SET_B": {"G3"}, "SET_AB": {"G1", "G2", "G3"}}
+    >>> report = enrichment_rank_report(frame, gene_sets, top=2)
+    >>> report[report["sample"] == "s1"][["gene_set", "score"]].round(3).to_dict("records")
+    [{'gene_set': 'SET_AB', 'score': 2.09}, {'gene_set': 'SET_A', 'score': 2.025}]
+    >>> report["gene_set"].tolist()
+    ['SET_AB', 'SET_A', 'SET_B', 'SET_AB']
+    """
+    if top < 1:
+        raise DataValidationError(f"top must be >= 1, got {top}")
+    scores = single_sample_enrichment(frame, gene_sets, method=method, alpha=alpha)
+    rows: list[dict[str, object]] = []
+    for sample in scores.index:
+        series = scores.loc[sample].dropna()
+        if series.empty:
+            continue
+        ranked = (
+            pd.DataFrame(
+                {"gene_set": series.index.astype(str), "score": series.to_numpy(dtype=float)}
+            )
+            .sort_values(["score", "gene_set"], ascending=[False, True])
+            .head(top)
+        )
+        for position, (gene_set, score) in enumerate(
+            zip(ranked["gene_set"], ranked["score"], strict=True)
+        ):
+            rows.append(
+                {
+                    "sample": str(sample),
+                    "gene_set": str(gene_set),
+                    "score": float(score),
+                    "rank": position + 1,
+                }
+            )
+    report = pd.DataFrame(rows, columns=["sample", "gene_set", "score", "rank"])
+    _LOG.info(
+        "Ranked the top %d gene set(s) for %d sample(s) (%s)",
+        top,
+        int(report["sample"].nunique()) if not report.empty else 0,
+        method,
+    )
+    return report
