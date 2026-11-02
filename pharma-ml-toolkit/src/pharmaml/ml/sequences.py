@@ -268,8 +268,8 @@ def synthetic_series(kind: str, n: int, *, seed: int = RANDOM_STATE) -> np.ndarr
         values = np.zeros(n)
         noise = rng.normal(0.0, 0.2, n)
         values[0], values[1] = noise[0], noise[1]
-        for t in range(2, n):
-            values[t] = 0.6 * values[t - 1] - 0.3 * values[t - 2] + noise[t]
+        for step in range(2, n):
+            values[step] = 0.6 * values[step - 1] - 0.3 * values[step - 2] + noise[step]
         return values
     steps = rng.normal(0.0, 1.0, n)
     return np.cumsum(steps)
@@ -284,7 +284,10 @@ def _sigmoid(z: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-np.clip(z, -60.0, 60.0)))
 
 
-LayerCache = dict[str, np.ndarray]
+# (100x-169) mypy 2.4 honesty: the cache carries ndarrays plus the
+# lone Optional dropout mask, so the value type is Any -- the backward
+# pass reads it back with its own None guard.
+LayerCache = dict[str, Any]
 
 
 class _RecurrentStack:

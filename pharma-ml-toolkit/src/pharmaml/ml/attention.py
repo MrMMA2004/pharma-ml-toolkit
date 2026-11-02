@@ -289,6 +289,10 @@ def multi_head_attention(
         q = matrix @ W_Q
         k = matrix @ W_K
         v = matrix @ W_V
+        # (100x-169) the two branches genuinely differ in type (the
+        # causal mask is always an ndarray; the caller's may be None),
+        # so the variable is declared with the union up front.
+        head_mask: np.ndarray | None
         if causal:
             head_mask = ~np.triu(np.ones((n, n), dtype=bool), k=1)
         else:

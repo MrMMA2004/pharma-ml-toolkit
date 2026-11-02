@@ -70,3 +70,26 @@ Gates (doctests → ruff → mypy → GUI self-test) then version re-pin,
 zip build (outside `download/`, testzip'd, moved in), retention sweep
 and the round commit.  Before it: bump `VERSION`, write the CHANGELOG
 entry, run the round's targeted pytest chunks.
+
+## Verification status after the 23:30 guard (2026-11-02, round 183 / 100x-169)
+
+The four-bug round (v1.2.104) is committed as `c200bd6` (light commit).
+Test slices verified green this turn: `test_tuner.py` (exit 0),
+`TestTunerCard` (incl. the 3 new card tests), `test_explain.py`
+(SHAP +4), `test_rism.py` + `test_features.py` (tqdm wiring).
+Still open before the ship ritual:
+
+1. `test_cli_features.py` (+3 CLI tests) — slow (real MLP fits, 500
+   iter); give it its own ≥590 s window.
+2. `test_playground.py` tail (~38%: `TestPredictionIntervalsGui` …
+   `TestReinvent4DiffDockAbsorptionGui`) — the whole file OOM-killed
+   at ~62% on this box; run the remainder in per-class chunks, one
+   process each.
+3. `encode_class_target` (playground.py) has NO pytest test — the
+   string-class claim rests on `scratch/repro_bugs_169*.py`.  A
+   dedicated test is a candidate redo-round item.
+4. GUI tests need `DISPLAY=:99` (Xvfb up) and
+   `PYTHONPATH=<abs>/src`; without DISPLAY the suite errors en masse
+   (not a code failure).
+5. Ship ritual will re-pin pyproject/`__init__` to 1.2.104 (they lag
+   by design pre-ship) and build the v1.2.104 zip (none since v1.2.90).

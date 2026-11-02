@@ -164,9 +164,13 @@ def ascii_depiction(
             (height - 2 * margin - 1.0) / span[1],
         ]
     )
-    scale = min(float(scale[0]), float(scale[1]))
+    # (100x-169) a fresh name for the scalar: `scale` was reused with
+    # two types (ndarray, then float) and mypy 2.4 refuses the min()
+    # overload across them.
+    sx, sy = float(scale[0]), float(scale[1])
+    grid_scale = min(sx, sy)
     centre = (np.array([width, height], dtype=float) - 1.0) / 2.0
-    points = (coords - (lo + span / 2.0)) * scale + centre
+    points = (coords - (lo + span / 2.0)) * grid_scale + centre
 
     def cell(x: float, y: float) -> tuple[int, int]:
         return round(float(y)), round(float(x))

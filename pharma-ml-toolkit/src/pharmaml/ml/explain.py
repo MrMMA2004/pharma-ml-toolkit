@@ -246,7 +246,7 @@ def shap_summary(
     try:
         from pharmaml.ml.training import TrainingResult
     except ImportError:  # pragma: no cover - circular-import paranoia
-        TrainingResult = None  # type: ignore[assignment]
+        TrainingResult = None  # type: ignore[misc, assignment]
     if TrainingResult is not None and isinstance(model, TrainingResult):
         name_hint = str(model.name)
         model = model.model
