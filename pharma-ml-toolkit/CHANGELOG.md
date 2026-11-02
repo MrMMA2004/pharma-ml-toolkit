@@ -1,3 +1,80 @@
+## [1.2.102] — 2026-11-02
+
+### Added — the engine-semantics round: event tables, steady state, GFR maturation, elasticity sensitivity (round 176)
+
+The instruction: *"Check the contents and files in this GitHub links
+completely and one by one and add the missing items to playground.py:
+github.com/Open-Systems-Pharmacology/PK-Sim,
+github.com/Open-Systems-Pharmacology/OSPSuite-R,
+github.com/metrumresearchgroup/mrgsolve,
+github.com/nlmixr2/rxode2."*  All four were cloned and reviewed file
+by file.  Three of the four are engines (C#, C++, R + compiled) — the
+honest boundary — but their *event-table semantics*, *steady-state
+algorithms*, *database constants* and *sensitivity protocol* transfer
+exactly, and PK-Sim turned out to be a shell around its SQLite
+database, whose constants were queried live:
+
+* **`pharma/events.py` — the engine-agnostic event semantics layer
+  (839 lines).**  `EVID` (the rxode2/mrgsolve taxonomy: 0/1/2/3/4
+  plus infusion-on/off, replace-amount; the classic compound-EVID
+  encoding 100·cmt + 10000·infusion-flag + ss-flag documented) and
+  `EventRecord`.  `expand_events` — ADDL×II materialisation with BOTH
+  `until` conventions: rxode2 inclusive (a dose lands *on* `until`) vs
+  mrgsolve exclusive (last dose strictly before) — the canonical
+  case time 0, ii 28, until 112 gives 5 doses (last at 112) vs 4
+  (last at 84).  `infusion_windows` — the mrgsolve F/R/D ledger
+  (`dur() = Fn·Amt/Rate`: bioavailability always scales the
+  delivered amount and *extends duration* when the rate is
+  data-fixed; modeled duration rate=-2 ⇒ rate = amt·F/D; modeled
+  rate rate=-1 ⇒ F shortens duration; ALAG spawns lagged records).
+  `steady_state_amounts` — mrgsolve's `steady_bolus` iteration
+  transcribed: ≤ ss_n=500 doses advanced one ii each, convergence
+  `|Δy| < ssRtol·|y| + ssAtol`, plus the ss=2 superposition mode
+  (solve from zero, add the incoming state back); verified against
+  the finite-ka closed form to 9.2e-8.  `GFR_MATURATION` +
+  `gfr_maturation` — PKSimDB's renal development formula with its
+  exact constants (TM50 = 44.4 weeks SD 1.04, Hill = 15.0 SD 0.257,
+  fGFRpremat = 0.258, GFRmat = 0.11704 L/min, V_kid_std = 0.44 L,
+  the six-species GFR table, the aging Hill 1.5).  `SOLVER_DEFAULTS`
+  — the three engines' tolerances as data (rxode2 liblsoda 1e-8/1e-6/
+  70000; mrgsolve lsoda 1e-8/1e-8/20000/hmax 0; the OSP CVODES
+  1e-10/1e-5/60/100000 row), with the toolkit's own fixed-step RK4
+  stance stated.  `OSP_PK_PARAMETERS` — the 22 OSP PK-parameter enum
+  codes (AUCM = AUMC, `_norm` = dose-normalised).  `pk_sensitivity`
+  — the OSPSuite-R sensitivity protocol: ±10% around the reference
+  at 2 steps per side (0.90/0.95/1.05/1.10), the result the
+  **elasticity** dln(PK)/dln(P) (−1 ⇒ +10% parameter ⇒ −10% PK) with
+  the 1e-20 log-safe epsilon.  `dubois_bsa` — the PKSimDB Du Bois
+  row (0.007184·W^0.425·H^0.725; Mosteller already lives in
+  dosage.py).
+
+### Rollback ledger — what this changelog records but cannot show
+
+This session the sandbox rolled back **mid-round**: the fully
+implemented, gated and committed rounds 178 (`pharma/pkpd.py` +
+`pharma/pbpk.py` + five PK-tab cards — compartment PK with exact
+regimen superposition, NONMEM datasets, popPK diagnostics, the
+minimal 5-cmt PBPK with ICRP/well-stirred/IVIVE, the itraconazole
+DDI math, Weibull, MABEL/NOAEL FIH, GMFE) and 177 (`pharma/nca.py`
++ `pharma/ddi.py` + six PK-tab cards — the λz window picker, log
+trapezoids, the AUC/AUMC/MRT NCA tier, steady-state metrics, Bailer
+sparse variance, dose proportionality, FDA/EMA DDI classification,
+the digoxin model set, the 34-ratio P-gp network, M3/M4 censoring)
+were lost to the snapshot restore, together with their commits, the
+rounds 168–170 GUI-card recovery and the venv dependency
+reinstall.  This entry salvages the one post-rollback survivor
+(events.py) and records the loss plainly: the two rounds' full
+specifications survive in the session transcript and are queued for
+re-implementation.  The lesson is baked into the workflow from the
+start — commit after every round, immediately.
+
+### Verified
+
+* `events.py`: 9 doctest items green; ruff and mypy clean; the
+  module wired into `pharmaml.pharma` (11 public names); the pharma
+  package regression suite green in this tree; `import pharmaml`
+  works.
+
 ## [1.2.101] — 2026-10-30
 
 ### Added — the depiction stack absorbed: RDKit's graph core, mols2grid's grid model, nglview + 3Dmol.js's 3D geometry layer (100x-167)

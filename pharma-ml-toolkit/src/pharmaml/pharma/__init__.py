@@ -13,6 +13,19 @@ from pharmaml.pharma.dosage import (
     tdm_trough_adjustment,
     youngs_rule,
 )
+from pharmaml.pharma.events import (
+    EVID,
+    GFR_MATURATION,
+    OSP_PK_PARAMETERS,
+    SOLVER_DEFAULTS,
+    EventRecord,
+    dubois_bsa,
+    expand_events,
+    gfr_maturation,
+    infusion_windows,
+    pk_sensitivity,
+    steady_state_amounts,
+)
 from pharmaml.pharma.pd import (
     ec50_for_target_effect,
     effect_table,
@@ -44,6 +57,12 @@ from pharmaml.pharma.pk import (
 from pharmaml.pharma.units import UnitConverter, molar_mass
 
 __all__ = [
+    # events (dosing-event semantics: EVID codes, data constants)
+    "EVID",
+    "GFR_MATURATION",
+    "OSP_PK_PARAMETERS",
+    "SOLVER_DEFAULTS",
+    "EventRecord",
     # PK
     "PKSummary",
     # units
@@ -59,15 +78,19 @@ __all__ = [
     "creatinine_clearance",
     "dose_by_bsa",
     "dose_by_weight",
+    "dubois_bsa",
     # PD
     "ec50_for_target_effect",
     "effect_table",
     "elimination_rate_constant",
     "emax_effect",
+    "expand_events",
     # approvals
     "filter_approved_drugs",
+    "gfr_maturation",
     "half_life",
     "infusion_rate",
+    "infusion_windows",
     "inhibitory_emax_effect",
     "iv_bolus_concentration",
     "iv_infusion_steady_state",
@@ -79,8 +102,10 @@ __all__ = [
     "nca_summary",
     "oral_cmax",
     "oral_tmax",
+    "pk_sensitivity",
     "renal_dose_adjustment",
     "sigmoid_emax_effect",
+    "steady_state_amounts",
     "tdm_trough_adjustment",
     "validate_concentration_series",
     "vd_from_dose_auc",

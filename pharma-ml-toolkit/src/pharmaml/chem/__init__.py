@@ -259,7 +259,6 @@ __all__ = [
     "SelfiesRoundtripReport",
     "TableComparison",
     "VarianceFilterResult",
-    "[",
     "add_ic50_column",
     "add_pic50_column",
     "align_structures",

@@ -45,11 +45,14 @@ after adding new public functions.
 | `ECFP3_BITS` | constant |  |
 | `ECFP3_RADIUS` | constant |  |
 | `ECFP_BITS` | constant |  |
+| `ELEMENTS` | constant |  |
+| `ELEMENT_COLORS` | constant |  |
 | `ERG_BITS` | constant |  |
 | `ESTATE_BITS` | constant |  |
 | `FAMILY_PREFIXES` | constant |  |
 | `FCFP_BITS` | constant |  |
 | `FEATURE_FAMILIES` | constant |  |
+| `INTERACTION_FAMILIES` | constant |  |
 | `LAYERED_BITS` | constant |  |
 | `MACCS_BITS` | constant |  |
 | `MORGAN_BITS` | constant |  |
@@ -58,16 +61,34 @@ after adding new public functions.
 | `PATTERN_BITS` | constant |  |
 | `RDKIT_FP_BITS` | constant |  |
 | `REINVENT_DEFAULT_ELEMENTS` | constant |  |
+| `REPRESENTATIONS` | constant |  |
 | `RISM_DESCRIPTORS` | constant |  |
 | `RISM_DESCRIPTOR_COUNT` | constant |  |
 | `TOPOLOGICAL_BITS` | constant |  |
 | `UNSUPPORTED_METALS` | constant |  |
 | `AtomEnvironment` | class | One ``(atom, radius)`` hit a Morgan bit fires on. |
+| `AtomPrimitive` | class | One drawable atom: screen position, depth, radius, colour. |
+| `AtomRecord` | class | One ATOM/HETATM record of a PDB file. |
+| `BondPrimitive` | class | One drawable bond: both endpoints' screen positions and colours. |
+| `Camera` | class | Yaw/pitch/zoom camera -- the ``setRotation``/``zoomTo`` concept. |
+| `ElementInfo` | class | Static element data: number, weight, allowed valences, radii. |
 | `EndpointDatasetReport` | class | Audit record for one :func:`prepare_pic50_dataset` run. |
 | `FeatureReport` | class | Audit record for one :func:`compute_feature_frame` run. |
 | `FeatureSelection` | class | Result of :func:`select_top_features`. |
+| `GridSelections` | class | Register for grid selections -- mols2grid's ``SelectionRegister``. |
+| `InteractionAtom` | class | One typed atom of the interaction model. |
+| `InteractionCutoffs` | class | Every distance/angle threshold, exposed and documented. |
+| `InteractionFingerprint` | class | The IFP: one bit per (ligand residue, protein residue, family). |
+| `InteractionReport` | class | The full hit list of one :func:`detect_interactions` run. |
+| `MolAtom` | class | One atom of the molecular graph. |
+| `MolBond` | class | One bond: endpoints (atom indices), order 1/2/3, aromatic flag. |
+| `Molecule` | class | A molecular graph plus parse bookkeeping. |
+| `MoleculeGrid` | class | A DataFrame of molecules as a grid of cards -- mols2grid's |
 | `MorganBitInfo` | class | Decode record for one Morgan fingerprint bit on one molecule. |
 | `PdbLigandReport` | class | Audit record for one :func:`smiles_to_pdb` conversion. |
+| `RepresentationSpec` | class | One representation: atom scale, bond switch, provenance. |
+| `Residue` | class | A named group of interaction atoms. |
+| `SasaReport` | class | Solvent-accessible surface areas, per atom and total. |
 | `SdfWriteReport` | class | Audit of one :func:`table_to_sdf` conversion. |
 | `SelfiesBatchConversion` | class | Result of :func:`batch_smiles_to_selfies` -- per-row, never row-destructive. |
 | `SelfiesRobustnessReport` | class | Validity under random corruption: SELFIES symbols vs SMILES characters. |
@@ -76,31 +97,84 @@ after adding new public functions.
 | `VarianceFilterResult` | class | Result of :func:`filter_low_variance`. |
 | `add_ic50_column` | function | Append an IC50 column converted from a pIC50 column. |
 | `add_pic50_column` | function | Append a pIC50 column to a table of measurements. |
+| `align_structures` | function | CA-based alignment with iterative outlier rejection. |
 | `annotate_with_smiles` | function | Annotate ligand-name columns with SMILES from a reference table. |
+| `ascii_depiction` | function | Rasterise the 2D depiction of ``mol`` into a character grid. |
+| `assign_secondary_structure` | function | DSSP-style secondary-structure assignment from backbone geometry. |
+| `assign_types` | function | Type a residue's atoms by element and PDB atom name. |
+| `average_molecular_weight` | function | Average molecular weight (daltons) from the IUPAC tables. |
+| `b_factor_profile` | function | Per-residue B-factor statistics (the crystallographer's QA view). |
 | `batch_smiles_to_selfies` | function | Encode a whole SMILES column, logging per-row failures. |
+| `bond_angle` | function | Angle a-b-c in degrees (b is the vertex). |
+| `build_coordinates_3d` | function | Rule-based 3D coordinates for ``mol`` -- ``(n_atoms, 3)`` array. |
+| `build_peptide_backbone` | function | An ideal-geometry poly-alanine backbone by internal coordinates. |
+| `canonical_smiles` | function | A deterministic canonical SMILES for the graph. |
 | `canonicalize_tautomer` | function | Return the canonical-tautomer SMILES of ``smiles``. |
+| `center_of_mass` | function | Mass-weighted centroid (unknown elements weigh as carbon). |
 | `compare_tables` | function | Compare one ligand-name column across two tables. |
+| `compile_selection` | function | Compile a PyMOL-style selection expression once, reuse forever. |
 | `compute_3d_descriptors` | function | Compute RDKit 3D shape descriptors for a list of SMILES. |
 | `compute_descriptors` | function | Compute molecular descriptors for a list of SMILES. |
 | `compute_feature_frame` | function | Compute a multi-family feature matrix for a batch of SMILES. |
 | `compute_fingerprints` | function | Compute fingerprints for a list of SMILES. |
 | `compute_maccs` | function | Compute the 167-bit MACCS key fingerprints. |
 | `compute_rism_descriptors` | function | Compute 3D-RISM-KH-inspired solvation descriptors for SMILES. |
+| `contact_pairs` | function | All atom pairs within ``cutoff`` Å as ``(i, j, distance)``. |
 | `decode_morgan_bit` | function | Decode one Morgan fingerprint bit into its atom environments. |
+| `demo_complex` | function | A designed ligand/protein pair that triggers nine families. |
+| `descriptor_card` | function | The ``info()`` popup as a text card: the descriptor set mols2grid |
+| `detect_interactions` | function | Run every detector family over a ligand/protein pair. |
+| `dihedral_angle` | function | Signed dihedral p0-p1-p2-p3 in degrees, −180..180. |
+| `distance_matrix` | function | The full pairwise distance matrix ``(n, n)`` in Å. |
 | `family_of_column` | function | Return the feature family a frame column belongs to. |
 | `filter_low_variance` | function | Cut feature columns whose variance is below ``threshold``. |
+| `find_rings` | function | The smallest set of smallest rings, as atom-index sets. |
+| `fingerprint_diversity` | function | Mean pairwise Tanimoto *distance* across a pose series. |
+| `fraction_csp3` | function | The fraction of carbon atoms that are sp3 (all-single, non-aromatic). |
+| `generate_2d_coordinates` | function | Depiction coordinates — ring templates plus chain growth. |
+| `grid_demo` | function | A self-contained demonstration: filter, sort, select, tooltip. |
+| `has_substructure` | function | ``True`` when ``query`` matches anywhere in ``mol`` (early exit). |
+| `hydrogen_bond_energies` | function | Kabsch-Sander backbone hydrogen-bond energies. |
 | `ic50_from_pic50_series` | function | Vectorised pIC50 -> IC50 conversion preserving NaN for bad rows. |
 | `ic50_to_pic50` | function | Convert an IC50 measurement to pIC50 = -log10(IC50 [M]). |
+| `implicit_hydrogens` | function | Per-atom hydrogen counts from the valence model. |
+| `kabsch_rotation` | function | The optimal rotation aligning ``mobile`` onto ``target``. |
 | `ki_to_pki` | function | Convert an inhibition constant to pKi = -log10(Ki [M]). |
+| `ligand_from_pdb` | function | Typed ligand residues from PDB text (HETATM records only). |
+| `lipinski_profile` | function | Lipinski's own HBD/HBA counts plus the rotatable/ring/sp3 numbers. |
 | `merge_table_folder` | function | Merge every table of one extension directly inside ``directory``. |
 | `merge_tables` | function | Row-wise merge of several tables, ignoring the index. |
+| `mol_block` | function | A V2000 MOL block for the graph — purely, no engine required. |
+| `molecular_formula` | function | Hill-order molecular formula (C, H, then alphabetical). |
+| `molecule_profile` | function | One SMILES -> the full graph-core profile (API + GUI surface). |
+| `morgan_environments` | function | Per-atom environment identifiers, for interpretation surfaces. |
+| `morgan_fingerprint` | function | A folded Morgan/ECFP-style bit fingerprint (``uint8`` 0/1 vector). |
+| `parse_pdb_block` | function | Parse ATOM/HETATM records out of a PDB file's text. |
+| `parse_smiles` | function | Parse a SMILES string into a :class:`Molecule` graph. |
+| `perceive_bonds` | function | Distance-based bonds: radii sum × tolerance, no bonded H's. |
+| `perceive_rings` | function | Aromatic rings from connectivity (spanning-tree fundamental cycles). |
 | `pic50_to_ic50` | function | Convert a pIC50 value back to an IC50 concentration. |
+| `point_distance` | function | Euclidean distance between two atoms (Å). |
 | `prepare_pic50_dataset` | function | Turn a raw SMILES + EC50 table into a modelling-ready pEC50 set. |
+| `protein_from_pdb` | function | Typed protein residues from PDB text. |
 | `random_selfies_molecules` | function | Sample ``n`` molecules uniformly from the robust SELFIES alphabet. |
 | `rank_features` | function | Rank feature columns by importance, descending. |
+| `register` | constant |  |
 | `reinvent_standardize_mol` | function | The REINVENT4 ``default`` standardization chain, on an RDKit Mol. |
 | `reinvent_standardize_smiles` | function | :func:`reinvent_standardize_mol` from (and back to) a SMILES. |
+| `render_ascii` | function | Render one molecule as ASCII -- the WebGL canvas as a char grid. |
+| `render_primitives` | function | Depth-sorted drawing primitives (painter's algorithm order). |
+| `residue_groups` | function | Group atom indices by residue, in first-appearance order. |
+| `rmsd` | function | Root-mean-square deviation between two coordinate stacks. |
+| `rmsf` | function | Per-atom RMS fluctuation over a frame stack. |
+| `rotatable_bonds` | function | Lipinski rotatable bonds — RDKit's default (non-strict) definition. |
+| `sasa` | function | Shrake-Rupley solvent-accessible surface area (A^2), per atom. |
+| `sdf_text` | function | A whole SDF text from molecules (2D coordinates, V2000 blocks). |
 | `sdf_to_table` | function | Read an SD file back into a table (SMILES, tags and titles). |
+| `secondary_structure_string` | function | ``assign_secondary_structure`` collapsed to the 1-letter string. |
+| `select_atoms` | function | Evaluate a selection expression against an atom stack. |
+| `select_spec` | function | 3Dmol.js's ``AtomSelectionSpec`` resolved to atom indices. |
+| `select_string` | function | NGL's selection string grammar resolved to atom indices. |
 | `select_top_features` | function | Select the top-K features with the rar's two-layer strategy. |
 | `selection_metadata` | function | Build the JSON-ready metadata dict for a feature-selection run. |
 | `selfies_alphabet` | function | Sorted set of SELFIES symbols appearing in an iterable of strings. |
@@ -121,12 +195,20 @@ after adding new public functions.
 | `smiles_to_pdb` | function | Generate an optimised 3D PDB ligand from a SMILES string. |
 | `smiles_to_selfies` | function | Translate one SMILES string to its SELFIES encoding. |
 | `split_table_into_chunks` | function | Stream a large CSV into fixed-size part files. |
+| `structure_summary` | function | The header-line facts: chains, residues, elements, B-values. |
+| `substructure_matches` | function | All atom-index mappings of ``query`` inside ``mol``. |
+| `superpose` | function | Least-squares superposition of ``mobile`` onto ``target``. |
 | `table_to_sdf` | function | Write a SMILES table to an SD file with 3D structures. |
 | `table_to_smi` | function | Write a SMILES table to a ``.smi`` list file. |
 | `tanimoto_from_bitarrays` | function | Tanimoto coefficient for two equal-length binary arrays. |
 | `tanimoto_from_sets` | function | Tanimoto coefficient for two feature sets: |A∩B| / |A∪B|. |
 | `tanimoto_matrix` | function | All-vs-all Tanimoto similarities between two bit-matrix batches. |
+| `tooltip_line` | function | Format one record's ``columns`` as tooltip key/value pairs. |
 | `top_matches` | function | Return the ``k`` library entries most similar to ``query``. |
+| `total_hydrogens` | function | Alias kept for reader symmetry with RDKit's ``GetTotalNumHs``. |
+| `tpsa` | function | Topological polar surface area — Ertl's algorithm, transcribed. |
+| `view_report` | function | The Stage as text: what the viewer would show, in numbers. |
+| `write_pdb_block` | function | Render atom records back to PDB text (plus ``TER``/``END``). |
 
 ## `pharmaml.ml`
 
@@ -161,14 +243,20 @@ after adding new public functions.
 | `SCRATCH_ACTIVATIONS` | constant |  |
 | `SCRATCH_TASKS` | constant |  |
 | `SEQUENCE_MODELS` | constant |  |
+| `SGD` | class | SGD with momentum, Nesterov and (L2) weight decay. |
 | `SHAP_EXTRA` | constant |  |
 | `SHAP_REQUIREMENT` | constant |  |
 | `SIMILARITY_METRICS` | constant |  |
 | `SYNTHETIC_KINDS` | constant |  |
 | `ANNReport` | class | The bargain measured: recall against the exact baseline. |
+| `ANOVARow` | class | One Type-II row: the term, its SS, F and p. |
+| `Adagrad` | class | Adagrad: the per-coordinate accumulator ``G += g²``. |
+| `Adam` | class | Adam with bias correction (and optional AMSGrad). |
+| `AdamW` | class | Adam with decoupled weight decay (the Loshchilov-Hutter fix). |
 | `AdaptedModel` | class | A K-shot adapted copy of the meta model. |
 | `ApplicabilityDomainResult` | class | Outcome of a full applicability-domain analysis. |
 | `AttentionReport` | class | One sequence's pass through the attention machinery. |
+| `BCEWithLogitsLoss` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `BaselineResult` | class | The commonsense baseline's scorecard (the chapter's first table). |
 | `BatchGenerator` | class | Chollet's ``BatchGenerator`` -- sequential, ``num_batches`` counted. |
 | `BayesTrial` | class | One trial: the parameters tried and the score observed. |
@@ -187,15 +275,18 @@ after adding new public functions.
 | `CompositionReport` | class | The ε bill for a sequence of queries. |
 | `CorrelationResult` | class | The lag correlation table, with the significance band. |
 | `CoverageEntry` | class | The audit's verdict for one catalogue category. |
+| `CrossEntropyLoss` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `DPNoiseScale` | class | The noise multiplier a training plan needs, by bisection. |
 | `DPStatisticsReport` | class | A column's headline statistics, privatised under one ε. |
 | `DecompositionResult` | class | The additive split: observed = trend + seasonal + remainder. |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
 | `DescriptiveStats` | class | The descriptive lecture's full blackboard for one sample. |
+| `DesignInfo` | class | The design matrix and everything about how it was built. |
 | `DistributionSample` | class | Seeded draws plus the population moments to compare against. |
 | `DoseResponseReport` | class | A fitted sigmoid Emax curve with its uncertainty. |
 | `EmbeddingRecord` | class | Typed report of :func:`manifold_embedding`. |
+| `Factor` | class | One predictor inside a term: numeric, categorical or intercept. |
 | `FewShotReport` | class | The three-arm verdict on a new task (TCRP's evaluation). |
 | `ForecastResult` | class | Everything the sequence card reports, after one run. |
 | `GaussianProcessSurrogate` | class | An RBF-kernel Gaussian process over the trials seen so far. |
@@ -212,20 +303,25 @@ after adding new public functions.
 | `LSHCollection` | class | The usable engine: an :class:`LSHIndex` plus the stored vectors. |
 | `LSHIndex` | class | The random-hyperplane LSH table (Charikar's SimHash engine). |
 | `LSHQueryResult` | class | One approximate query: the key, the candidates, the neighbours. |
+| `Linear` | class | ``y = x @ W.T + b`` with PyTorch's default init bounds. |
 | `LinearGDResult` | class | Outcome of the from-scratch linear regression. |
+| `MSELoss` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `MechanismResult` | class | One privatised query: the truth, the release, the price. |
 | `MedianPruner` | function | The median pruner: ``PercentilePruner(50)``. |
 | `MetaHistory` | class | The meta-training curve. |
 | `MetaModel` | class | The meta-trained network (TCRP's ``observed_tissue_model``). |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
+| `Module` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `NaiveDense` | class | Chollet's ``NaiveDense`` (chapter 2), plain NumPy. |
 | `NaiveSequential` | class | Chollet's ``NaiveSequential``: a stack called like a function. |
 | `Neighbor` | class | One retrieved neighbour: row index and its Euclidean distance. |
 | `NormalityResult` | class | Shapiro-Wilk and D'Agostino-Pearson on one sample. |
+| `OLSResult` | class | Ordinary least squares through a formula. |
 | `OOFStackingResult` | class | Outcome of one out-of-fold stacking run. |
 | `OntologyGraph` | class | A parsed DrugCell ontology: the DAG plus its gene annotations. |
 | `OntologyReport` | class | The hierarchy audit: rows per term plus the headline stats. |
 | `OntologyRow` | class | One term's audit row: size, depth, layer, gene enrichment. |
+| `Parameter` | class | A leaf tensor that always requires grad. |
 | `PcaResult` | class | Typed report of :func:`pca_reduce`. |
 | `PercentilePruner` | class | Prune trials whose running CV mean falls below a percentile. |
 | `PermutationImportance` | class | Permutation feature importances on held-out data. |
@@ -233,8 +329,10 @@ after adding new public functions.
 | `PrimerReport` | class | The full chapter 2 walkthrough for one dataset table. |
 | `QuantileIntervals` | class | Prediction intervals from gradient-boosted quantile regression. |
 | `RDPReport` | class | The (ε, δ) guarantee of T Gaussian steps at noise multiplier σ. |
+| `RMSprop` | class | RMSprop: the running quadratic mean with ``alpha`` decay. |
 | `RadiusResult` | class | One radius of the audit grid: how many samples broke. |
 | `RandomSearch` | class | Random search over the hypermodel's declared space. |
+| `ReLU` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `Recommendation` | class | One ranked item: index, predicted rating, neighbourhood score. |
 | `RecommenderEvaluation` | class | Leave-one-out hit-rate, CF versus the popularity baseline. |
 | `RecurrentForecaster` | class | A from-scratch recurrent regressor over fixed-length windows. |
@@ -243,13 +341,18 @@ after adding new public functions.
 | `RobustnessAudit` | class | The verdict curve of a model under the sign-pattern family. |
 | `ScratchHistory` | class | Everything the scratch training loop observed, per epoch. |
 | `SequenceHistory` | class | Per-epoch training telemetry for one recurrent fit. |
+| `Sequential` | class | Modules applied in order. |
 | `ShapInteractions` | class | Pairwise SHAP interaction values of a fitted tree model (100x-160). |
 | `ShapSummary` | class | SHAP values of a fitted tree model over a feature frame. |
+| `Sigmoid` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `SignificanceResult` | class | One test's verdict: statistic, p-value, decision, effect size. |
+| `Softmax` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `TPESearch` | class | Tree-structured Parzen Estimator search — Optuna's flagship sampler. |
 | `TaskFamily` | class | Seeded related regression tasks: one shared prior, per-task draws. |
 | `TaskSplit` | class | One task's support/query split (the inner-loop data contract). |
+| `Tensor` | class | A differentiable value: NumPy data plus reverse-mode history. |
 | `TensorSummary` | class | Chapter 2's "key attributes" list for one array. |
+| `Term` | class | A product of factors (``a:b``); a single factor is a main effect. |
 | `TermContribution` | class | One subsystem's readout: the aux head's contribution, ranked. |
 | `TrialResult` | class | One evaluated trial. |
 | `TunerResults` | class | The outcome of one :meth:`RandomSearch.search` / Hyperband run. |
@@ -262,9 +365,11 @@ after adding new public functions.
 | `adversarial_audit` | function | Run the sign-pattern family across a radius grid. |
 | `adversarial_augmentation` | function | Adversarial training's closed-form half: in-ball noisy copies. |
 | `ann_benchmark` | function | Recall@k and candidate compression of LSH against brute force. |
+| `anova_ii` | function | Type-II ANOVA table from the term slices. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
 | `autocorrelation` | function | The autocorrelation function: which lag carries which memory. |
 | `bayesian_search` | function | The BayesianOptimizationOracle loop, minimising ``objective``. |
+| `bce_with_logits` | function | Binary cross-entropy with logits, the numerically stable form. |
 | `benchmark_feature_families` | function | Cross-validated leaderboard ACROSS feature families, one model fixed. |
 | `bootstrap_interval` | function | The percentile bootstrap CI for any statistic (default: the mean). |
 | `bootstrap_uncertainty` | function | Bootstrap-ensemble prediction uncertainty (the upload's step 6). |
@@ -289,11 +394,14 @@ after adding new public functions.
 | `compare_groups` | function | The course's decision flow, end to end, every branch reported. |
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
 | `composition_report` | function | Sequential composition: the ε's of queries on the same rows add. |
+| `contrast_matrix` | function | The coding matrix for one categorical factor. |
 | `coverage_table` | function | The category-by-category audit, in catalogue order. |
+| `cross_entropy` | function | Softmax cross-entropy: ``mean(−log_softmax[i, label_i])``. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
 | `curve_fit` | function | The scipy-named entry point: (best params, covariance matrix). |
 | `describe_series` | function | One sample's descriptive statistics (scipy's moment machinery). |
 | `describe_tensor` | function | Audit one array with chapter 2's "key attributes" vocabulary. |
+| `design_matrices` | function | Expand a formula against a data frame into the design matrix. |
 | `detect_changepoints` | function | Offline mean-shift changepoints: binary segmentation on the CUSUM. |
 | `dot_product_attention` | function | Scaled dot-product attention: ``softmax(QKᵀ/√dₖ)·V``. |
 | `dp_sgd_noise_scale` | function | Invert the RDP accountant: the σ that meets (ε, δ) in T steps. |
@@ -303,11 +411,13 @@ after adding new public functions.
 | `expected_improvement` | function | The classic expected improvement over the best observed score. |
 | `few_shot_report` | function | Zero-shot vs K-shot vs from-scratch, Pearson-scored. |
 | `fit_dose_response` | function | Fit the sigmoid Emax (Hill) model to (dose, effect) observations. |
+| `fit_ols_formula` | function | Least squares through the formula language. |
 | `fit_scratch` | function | Chapter 2's full training loop, mouse-free edition. |
 | `fomaml_train` | function | First-order MAML over the task family (TCRP's train loop). |
 | `forecast_timeseries` | function | The chapter's end-to-end workflow on one series. |
 | `gaussian_mechanism` | function | The analytic Gaussian mechanism: (ε, δ)-DP with the classic bound. |
 | `gmm_cluster` | function | Gaussian mixture model (PDSH 05.12) with the AIC/BIC sweep. |
+| `gradient_check` | function | Central-difference check of ``function``'s reverse-mode gradient. |
 | `group_difference` | function | Cohort difference of a SHAP summary, with a bootstrap interval. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `hierarchy_report` | function | The peeling audit: per-term rows and the hierarchy's shape. |
@@ -319,6 +429,7 @@ after adding new public functions.
 | `linear_regression_gd` | function | Batch gradient descent on the squared error (DSBC's centrepiece). |
 | `list_models` | function | List registry entries with availability information. |
 | `load_model` | function | Load a model bundle saved by :func:`save_model`. |
+| `log_softmax` | function | Log-softmax, the stable way (x − logsumexp). |
 | `lower_confidence_bound` | function | ``mean − β·std`` -- UCB's minimisation form (keras-tuner's pick). |
 | `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
@@ -326,11 +437,14 @@ after adding new public functions.
 | `mann_whitney_test` | function | The rank-based test for the non-normal cases. |
 | `mean_confidence_interval` | function | The t-based CI for the mean: ``mean ± t·s/√n``. |
 | `minimal_attack_radius` | function | Bisect the smallest radius at which some pattern breaks the sample. |
+| `mse_loss` | function | Mean squared error (no gradient through the target). |
 | `multi_head_attention` | function | Multi-head self-attention over one sequence, seeded projections. |
+| `no_grad` | function | Disable graph construction (the inference-mode switch). |
 | `normality_report` | function | Both normality tests (the course's gate before choosing a test). |
 | `one_sample_ttest` | function | Is this sample's mean different from ``mu0``? |
 | `paired_ttest` | function | Did the paired differences move away from zero? |
 | `param_importances` | function | Random-forest (MDI) hyperparameter importances of a finished search. |
+| `parse_formula` | function | Parse a formula into ``(response, terms)``. |
 | `parse_ontology` | function | Parse the ``drugcell_ont.txt`` three-column format. |
 | `partial_autocorrelation` | function | The partial ACF via Durbin-Levinson: lag-k credit, shorter lags removed. |
 | `pca_reduce` | function | Principal component analysis (PDSH 05.09). |
@@ -351,13 +465,16 @@ after adding new public functions.
 | `self_attention_report` | function | Run one sequence through multi-head self-attention and read it. |
 | `shap_interactions` | function | Pairwise SHAP interaction values of a fitted tree model over ``X``. |
 | `shap_summary` | function | SHAP values of a fitted tree model over ``X``. |
+| `sigmoid` | function |  |
 | `similarity_matrix` | function | User-user similarities over co-rated items only. |
 | `sinusoidal_positions` | function | The classic fixed positional encoding, ``(seq_len, dim)``. |
 | `sliding_windows` | function | Cut a series (or channel matrix) into overlapping windows. |
+| `softmax` | function | Row-stable softmax (subtract-max). |
 | `split_features_target` | function | Separate features from the target column. |
 | `stack_oof_regressors` | function | Stack registry regressors out-of-fold and rank the blenders. |
 | `synthetic_ratings` | function | A seeded rating matrix with genuine latent structure. |
 | `synthetic_series` | function | Seeded synthetic series: the no-data fallback for the whole card. |
+| `tanh` | function |  |
 | `tensor_primer_report` | function | Walk a table through chapter 2's tensor vocabulary. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
 | `two_sample_ttest` | function | Two independent samples: Welch's t (default) or Student's t. |
@@ -446,6 +563,11 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `EVID` | class | Event-identifier (EVID) codes for dosing/observation data records. |
+| `GFR_MATURATION` | constant |  |
+| `OSP_PK_PARAMETERS` | constant |  |
+| `SOLVER_DEFAULTS` | constant |  |
+| `EventRecord` | class | One row of a NONMEM-style dosing/observation data set. |
 | `PKSummary` | class | Non-compartmental PK summary for one concentration-time profile. |
 | `UnitConverter` | class | Dimension-aware unit converter for pharmaceutical quantities. |
 | `accumulation_ratio` | function | Accumulation ratio for regular intermittent dosing. |
@@ -458,13 +580,17 @@ after adding new public functions.
 | `creatinine_clearance` | function | Estimate creatinine clearance (mL/min) with the Cockcroft-Gault |
 | `dose_by_bsa` | function | BSA-scaled dose (Mosteller BSA) with an optional ceiling. |
 | `dose_by_weight` | function | Weight-scaled dose (mg/kg regime) with an optional ceiling. |
+| `dubois_bsa` | function | Body surface area (m2) by the Du Bois 1916 formula. |
 | `ec50_for_target_effect` | function | Inverse Emax: concentration reaching a target effect. |
 | `effect_table` | function | Evaluate the sigmoid Emax model over a concentration grid. |
 | `elimination_rate_constant` | function | Elimination rate constant ``ke = ln(2)/t½`` (1/hours). |
 | `emax_effect` | function | Simple (hyperbolic) Emax model: ``E = E0 + Emax·C/(EC50 + C)``. |
+| `expand_events` | function | Materialize ``addl``/``until`` rows into an explicit event list. |
 | `filter_approved_drugs` | function | Collect the drug names whose regulatory approval matches a status. |
+| `gfr_maturation` | function | Glomerular filtration rate (L/min) from post-menstrual age (PK-Sim model). |
 | `half_life` | function | Elimination half-life ``t½ = ln(2)/ke`` (hours). |
 | `infusion_rate` | function | Constant IV infusion rate achieving a steady state: ``R = CL·Css``. |
+| `infusion_windows` | function | Zero-order infusion windows ``(start, end, cmt, rate)`` for rate > 0 records. |
 | `inhibitory_emax_effect` | function | Inhibitory (inverse) Emax model: ``E = E0 − Imax·C^h/(IC50^h + C^h)``. |
 | `iv_bolus_concentration` | function | Concentration after an IV bolus: ``C(t) = C0 · e^(−ke·t)``. |
 | `iv_infusion_steady_state` | function | Steady-state concentration for a constant IV infusion ``Css = R/CL``. |
@@ -476,8 +602,10 @@ after adding new public functions.
 | `nca_summary` | function | Full non-compartmental analysis of one profile. |
 | `oral_cmax` | function | Peak concentration after a single oral dose (1-compartment). |
 | `oral_tmax` | function | Time of peak concentration for 1-compartment oral dosing. |
+| `pk_sensitivity` | function | PK parameter elasticities by the OSPSuite-R sensitivity protocol. |
 | `renal_dose_adjustment` | function | Linearly scale a dose with renal function (creatinine clearance). |
 | `sigmoid_emax_effect` | function | Sigmoid (Hill) Emax model: ``E = E0 + Emax·C^h/(EC50^h + C^h)``. |
+| `steady_state_amounts` | function | Periodic steady-state amounts for repeated bolus dosing (mrgsolve steady_bolus). |
 | `tdm_trough_adjustment` | function | Proportionally adjust a dose from a measured trough level. |
 | `validate_concentration_series` | function | Validate a paired time/concentration series for PK math. |
 | `vd_from_dose_auc` | function | Dose/AUC ratio — and, with ``mrt``, the steady-state volume. |
