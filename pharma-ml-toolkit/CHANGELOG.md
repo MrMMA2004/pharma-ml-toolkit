@@ -1,3 +1,78 @@
+## [1.2.105] — 2026-11-03
+
+### Added — the XAI absorption (round 185): captum · tf-keras-vis · PAIR-code/saliency · bertviz, offline
+
+The instruction: *"Check the contents and files in this GitHub links
+completely and one by one and add the missing items to
+playground.py(Deep Learning)"* — four interpretability repositories,
+reviewed one by one (`git ls-remote` verified: `meta-pytorch/captum`
+resolves to the same repo as `pytorch/captum`), then absorbed into the
+toolkit with zero engine dependencies.
+
+* **`ml/xai.py` — the offline attribution engine.**  From **captum**:
+  the attribution protocol itself — one call per method, optional
+  baselines, integrated gradients' `convergence_delta` completeness
+  residual, the Saliency (vanilla input gradients) · InputXGradient ·
+  NoiseTunnel/SmoothGrad · Occlusion/FeatureAblation family, and the
+  positive/negative sign split `visualize_image_attr` paints with.
+  From **PAIR-code/saliency**: the two mask visualizers reduced to
+  Tkinter-ready hex (`grayscale_hex`, percentile-capped exactly like
+  `VisualizeImageGrayscale`; `diverging_hex`, blue-negative/red-
+  positive like `VisualizeImageDiverging`).  From **bertviz**: the
+  layer × head attention grid and the query→key token-pair digest,
+  rebuilt on the toolkit's own numpy multi-head attention
+  (`demo_attention_layers`, `token_pairs`).  Gradients are exact
+  analytic backprop through the numpy engine's layer stack
+  (`numpy_layer_stack`), pinned against finite differences in the
+  test suite; occlusion needs only `predict`/`predict_proba` and
+  therefore runs on every engine, torch included.  No torch, no
+  tensorflow, no network.
+* **The Deep Learning tab's "Attribution & attention" card.**  Explain
+  the last trained network on one held-out row (method combobox over
+  the four-method registry, row selector, IG step count): a ranked
+  per-feature table with the push sign and |attribution| share, plus a
+  colorized heatmap (blue = pushes down, red = up) and the convergence
+  Δ read-out for integrated gradients.  "Layer activations" traces the
+  hidden units for the same row (units, min/mean/max, dead-unit share,
+  a grayscale unit heat map).  "Attention grid" builds the bertviz-style
+  layer/head grid over typed tokens — head heat map plus the strongest
+  query→key pairs, with wild spinbox values clamped, never crashing.
+  The six new inputs ride the generic session save/restore like every
+  other `_dl_` input (the round-trip pin moves 18 → 24).
+* **Tests**: `TestXaiHelpers` (11 pure pins — registry, the
+  playground↔registry key sync, finite-difference gradient check, the
+  linear-network IG identity with Δ ≈ 0, occlusion score drops, the
+  predict-only occlusion path, smoothgrad → the plain gradient as the
+  noise vanishes, sign split, both palettes, layer trace shapes, the
+  attention demo + pair ranking, honest refusals) and
+  `TestXaiAbsorptionGui` (7 headless card drives — explain/occlusion/
+  layers/attention, the honest numpy-engine warning for torch runs,
+  the pre-train guard, the clamp).
+* **The zip-safety rule (standing, user instruction 2026-11-03).**
+  After the round-184 rollback proved even a tracked zip can be lost,
+  every ship now saves the fresh zip in three homes before committing:
+  `download/` (retention 2), the toolkit's own `dist-archive/`
+  (retention 4 — inside the ship commit's pathspec, so zip and code
+  land in git together), and an off-repo copy at
+  `/home/<user>/pharma-ml-toolkit-zips/` beyond any git accident.
+  `--doctor`/`--restore` consider all three; v1.2.104 was seeded into
+  all homes on arrival of the rule.
+
+### Re-shipped — the third rollback (same day, ~20:15)
+
+A third whole-filesystem rollback reverted the box to the round-183
+snapshot minutes after the first v1.2.105 ship: the round-185 commits,
+all three zip homes AND the off-repo `/home/<user>/pharma-ml-toolkit-zips`
+copy were lost together (the documented physical limit — nothing on
+this box survives a snapshot rollback that pre-dates it).  This is the
+re-implementation: `ml/xai.py` and the card rebuilt against the
+original contracts (the seeded attention demo reproduces its
+round-185 numbers byte-for-byte), plus one genuine fix found on the
+way — the bare-`_MLPNetwork` path of `numpy_layer_stack` silently
+defaulted the activation token to `relu`; the `_act_np` callable probe
+(`_probe_activation_name`) now recovers tanh/sigmoid/gelu empirically,
+pinned by the finite-difference test.
+
 ## [1.2.104] — 2026-11-02
 
 ### Fixed — the four-bug round (round 183, tag 100x-169)

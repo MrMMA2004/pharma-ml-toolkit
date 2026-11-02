@@ -68,6 +68,23 @@ ZIP_EXCLUDE_DIRS = {
 ZIP_EXCLUDE_SUFFIXES = {".log", ".zip"}
 ZIP_EXCLUDE_DIR_SUFFIX = ".egg-info"
 
+#: (round-184 lesson, 2026-11-03) the SAFE COPY home: inside the toolkit
+#: tree, so the ship commit's ``-- ROOT`` pathspec carries it in the SAME
+#: commit as the code.  A rollback's snapshot either contains that commit
+#: (both code and zip survive) or predates it (both are lost together)
+#: -- the zip can never again slip out of sync with the round that
+#: built it.  Retention keeps the newest four here.
+ARCHIVE_DIR = ROOT / "dist-archive"
+
+#: the off-repo copy: outside the repository entirely, immune to any
+#: git accident (a whole-filesystem snapshot rollback still reverts
+#: it -- nothing on this box survives that -- but no amend, retention
+#: sweep or reset ever touches it).
+OFFSITE_DIR = Path.home() / "pharma-ml-toolkit-zips"  # off-repo, runtime-derived (no shipped literal)
+
+#: how many the SAFE COPY home keeps (safety beats leanness here).
+KEEP_ARCHIVE = 4
+
 
 def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -88,20 +105,27 @@ def _zip_version(path: Path) -> tuple[int, int, int] | None:
 
 
 def _newest_zip(on_disk: bool = True) -> Path | None:
-    """Newest shipped zip: on disk first, then anything git still tracks."""
+    """Newest shipped zip: the three homes, then anything git tracks.
+
+    The off-repo copy first (immune to amend/retention/reset), then the
+    in-tree safe copy, then download/, then git's index (a tracked zip
+    whose disk copy a rollback ate).
+    """
     candidates: list[tuple[tuple[int, int, int], Path]] = []
-    if on_disk and DOWNLOAD.is_dir():
-        for path in DOWNLOAD.glob("pharma-ml-toolkit-v*.zip"):
-            parsed = _zip_version(path)
-            if parsed:
-                candidates.append((parsed, path))
-    if not candidates:
-        listed = _git("ls-files", "download", check=False).stdout.split()
-        for name in listed:
-            if name.endswith(".zip"):
-                parsed = _zip_version(Path(name))
+    for home in (OFFSITE_DIR, ARCHIVE_DIR, DOWNLOAD):
+        if home.is_dir():
+            for path in sorted(home.glob("pharma-ml-toolkit-v*.zip")):
+                parsed = _zip_version(path)
                 if parsed:
-                    candidates.append((parsed, REPO / name))
+                    candidates.append((parsed, path))
+    if candidates:
+        return max(candidates, key=lambda pair: pair[0])[1]
+    listed = _git("ls-files", "download", "pharma-ml-toolkit/dist-archive", check=False).stdout.split()
+    for name in listed:
+        if name.endswith(".zip"):
+            parsed = _zip_version(Path(name))
+            if parsed:
+                candidates.append((parsed, REPO / name))
     return max(candidates, key=lambda pair: pair[0])[1] if candidates else None
 
 
@@ -287,6 +311,23 @@ def ship(message: str) -> int:
     if archive is None:
         return 4
 
+    # (the user's standing rule, 2026-11-03) SAVE THE ZIP IN A SAFE
+    # PLACE -- before anything else can go wrong: the toolkit's own
+    # dist-archive/ (rides this round's commit) and the off-repo copy
+    # (beyond any git accident).  A failure in the steps below can
+    # never cost the fresh zip.
+    try:
+        ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(archive, ARCHIVE_DIR / archive.name)
+        OFFSITE_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(archive, OFFSITE_DIR / archive.name)
+        print(
+            f"safe-copy: {archive.name} -> {ARCHIVE_DIR.relative_to(REPO)} "
+            f"+ {OFFSITE_DIR}"
+        )
+    except OSError as exc:
+        print(f"safe-copy FAILED (the zip itself is safe in download/): {exc}")
+
     # retention: newest KEEP_ZIPS stay tracked; older ones leave index+disk
     zips = sorted(
         (path for path in DOWNLOAD.glob("pharma-ml-toolkit-v*.zip")),
@@ -294,6 +335,17 @@ def ship(message: str) -> int:
     )
     for stale in zips[:-KEEP_ZIPS]:
         print(f"retire: {stale.name}")
+        _git("rm", "-q", "--cached", str(stale), check=False)
+        stale.unlink(missing_ok=True)
+
+    # the safe home keeps a longer memory (newest KEEP_ARCHIVE), the
+    # same tracked-then-deleted retirement as download/.
+    archive_zips = sorted(
+        (path for path in ARCHIVE_DIR.glob("pharma-ml-toolkit-v*.zip")),
+        key=lambda path: _zip_version(path) or (0, 0, 0),
+    )
+    for stale in archive_zips[:-KEEP_ARCHIVE]:
+        print(f"retire (archive): {stale.name}")
         _git("rm", "-q", "--cached", str(stale), check=False)
         stale.unlink(missing_ok=True)
 

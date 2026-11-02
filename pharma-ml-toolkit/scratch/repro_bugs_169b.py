@@ -1,6 +1,6 @@
 """Library repro (100x-169b): classifier figures with STRING class names."""
 import sys
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit/src")
+sys.path.insert(0, "src")
 import numpy as np
 import pandas as pd
 from pharmaml.ml import evaluate_model, train_model

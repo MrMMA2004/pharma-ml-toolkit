@@ -7,7 +7,7 @@ Run headless: pure library calls, no Tk.
 import sys
 import traceback
 
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit/src")
+sys.path.insert(0, "src")
 
 import numpy as np
 import pandas as pd

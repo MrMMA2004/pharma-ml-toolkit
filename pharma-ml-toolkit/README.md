@@ -6,7 +6,7 @@ domains into one coherent package:
 | Domain | What it does |
 |---|---|
 | **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
-| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families** + **hierarchical SVR**), cross-validated training (binary **and multiclass**), evaluation, persistence, hyperparameter search (`RandomSearch` / **`TPESearch`** (Optuna's Parzen sampler) / `Hyperband` over `HyperParameters` spaces — with **`PercentilePruner`/`MedianPruner` fold-loop pruning**, Optuna-style trial states + durations + intermediates, **`param_importances`** (the MDI forest) — plus the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines and `resource_bounds` sizing Hyperband ladders from the family's own declared grid) |
+| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families** + **hierarchical SVR**), cross-validated training (binary **and multiclass**), evaluation, persistence, hyperparameter search (`RandomSearch` / **`TPESearch`** (Optuna's Parzen sampler) / `Hyperband` over `HyperParameters` spaces — with **`PercentilePruner`/`MedianPruner` fold-loop pruning**, Optuna-style trial states + durations + intermediates, **`param_importances`** (the MDI forest) — plus the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines and `resource_bounds` sizing Hyperband ladders from the family's own declared grid) — plus **the offline attribution engine (`ml.xai`: `input_x_gradient` / `integrated_gradients` with the convergence Δ / `smoothgrad` / `occlusion`, layer-activation traces, the bertviz-style attention grid — captum · tf-keras-vis · PAIR-code/saliency · bertviz absorbed with zero engine dependencies)** |
 | **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
 | **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management |
@@ -166,7 +166,16 @@ with the early-stopping verdict, exportable per-epoch as CSV — and the
 same **Check CSV…** audit runs against the last trained network: the
 estimators carry the sklearn feature contract, so missing features,
 extra columns, reordering and version drift are named identically) and
-**Generative** (evolve molecules against QED/LogP objectives with the
+an **Attribution & attention** card (round 185: explain the LAST trained
+network on one held-out row — the method combobox over the four-method
+offline registry `input×gradient / integrated gradients (convergence Δ) /
+smoothgrad / occlusion`, a row selector and IG step count, the ranked
+per-feature table with the push sign and |attribution| share, a
+colorized heat map (blue = pushes down, red = up); **Layer activations**
+traces the hidden units (units, min/mean/max, dead-unit share, a
+grayscale unit heat map); **Attention grid** renders the bertviz-style
+layer × head grid over typed tokens with the strongest query→key pairs)
+and **Generative** (evolve molecules against QED/LogP objectives with the
 genetic algorithm, or fine-tune a SMILES RNN prior with reinforcement
 learning — the optimiser combo swaps the parameter block, and RL runs
 render the four-panel prior-drift introspection plus a first→last
@@ -276,7 +285,7 @@ pharma-ml-toolkit/
 │   ├── data.py              # bring your own data: load_dataset, infer_task, summarize
 │   ├── cli.py               # `pharmaml` command-line interface
 │   ├── chem/                # converters, descriptors, similarity, tables, standardize
-│   ├── ml/                  # preprocessing, models (20: incl. dnn + dnn_residual PyTorch), neural.py, training, evaluation, persistence
+│   ├── ml/                  # preprocessing, models (20: incl. dnn + dnn_residual PyTorch), neural.py, training, evaluation, persistence + xai.py (the offline attribution engine)
 │   ├── generative/          # NEW: molecule generation — corpus, objective library, SMILES GA, RNN prior, RL
 │   ├── biology/             # NEW: response screens, omics, biomarkers — cell line analysis
 │   ├── pharma/              # units, pk, pd, dosage, approvals
@@ -287,7 +296,7 @@ pharma-ml-toolkit/
 │                            # Tkinter window over every domain (chemistry · PK/PD · cell lines · QSAR · generative);
 │                            # probes its dependencies at launch, degrades gracefully, headlessly
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
-├── VERSION                 # the release version (1.2.46) — `cat VERSION` after extracting
+├── VERSION                 # the release version (1.2.105) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
@@ -983,6 +992,66 @@ computation needs shap, the drawing never does. The GUI twins are the
 Results card's four SHAP rows (**beeswarm / top-20 bar / waterfall… /
 force… / dependence… / heatmap / group difference…**), drawn over the
 run's own held-out rows.
+
+#### Offline attribution & attention (`ml.xai`) — captum · tf-keras-vis · PAIR-code/saliency · bertviz, no engines
+
+Round 185 checked, one by one, the contents of four interpretability
+repositories and rebuilt what survives without an engine dependency —
+**pytorch/captum** (the attribution protocol itself: baselines, the
+integrated-gradients `convergence_delta` completeness residual, the
+Saliency / InputXGradient / NoiseTunnel-SmoothGrad / Occlusion family,
+the positive/negative sign split `visualize_image_attr` paints with,
+LayerActivation), **keisen/tf-keras-vis** (the explain-one-network-on-
+one-input card shape), **PAIR-code/saliency** (the grayscale and
+diverging mask palettes) and **jessevig/bertviz** (the layer × head
+attention grid + the query→key token-pair digest, on the toolkit's own
+numpy multi-head attention):
+
+```python
+import numpy as np
+
+from pharmaml.ml.xai import (
+    attribution_methods, input_x_gradient, integrated_gradients,
+    occlusion_attributions, smoothgrad_attributions,   # captum's family
+    positive_negative_split, diverging_hex, grayscale_hex,
+    layer_activation_trace, layer_activation_summary,  # + PAIR-code
+    demo_attention_layers, token_pairs,                 # bertviz
+)
+
+attribution_methods()          # the registry, GUI combobox order
+ig = integrated_gradients(numpy_net, row, steps=50)
+ig.attributions                 # per-feature attribution values
+ig.convergence_delta            # f(x) - f(baseline) - sum(attributions):
+                                # captum's completeness residual, the
+                                # honesty number for the step count
+sg = smoothgrad_attributions(numpy_net, row, n_samples=32,
+                             stdev_ratio=0.2)            # NoiseTunnel
+occ = occlusion_attributions(any_net, row)   # the per-feature score drop
+                                # under replacement -- predict-only, so
+                                # it runs on EVERY engine, torch included
+pos, neg = positive_negative_split(ig.attributions)   # the sign split
+
+trace = layer_activation_trace(numpy_net, row)   # hidden units, numpy
+layer_activation_summary(trace)  # units, min/mean/max, dead-unit share
+
+layers = demo_attention_layers(["the", "kinase", "inhibitor", "binds"])
+pairs = token_pairs(layers[0].weights[0],
+                    ["the", "kinase", "inhibitor", "binds"])
+                                # ranked (weight, query, key) triples,
+                                # bertviz's digest of one head
+diverging_hex(ig.attributions[0], np.abs(ig.attributions).max())
+grayscale_hex(ig.attributions[0], ig.attributions)
+                                # the two Tkinter-ready palettes
+```
+
+The gradient trio is exact analytic backprop through the numpy
+engine's layer stack (`numpy_layer_stack` reads
+`NumpyMLPRegressor`/`NumpyMLPClassifier` — pinned against finite
+differences in the test suite, so the numbers never depend on torch);
+occlusion needs only `predict`/`predict_proba`. No torch, no
+tensorflow, no network — and each registry entry credits its origin
+repo (`ATTRIBUTION_METHODS`). The GUI twin is the Deep Learning tab's
+**Attribution & attention** card.
 
 #### Hierarchical SVR (`hsvr`) — local specialists for heterogeneous data
 

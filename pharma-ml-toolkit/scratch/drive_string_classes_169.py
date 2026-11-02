@@ -14,7 +14,7 @@ from tkinter import messagebox
 import numpy as np
 import pandas as pd
 
-ROOT = Path("/home/z/my-project/pharma-ml-toolkit")
+ROOT = Path(__file__).resolve().parents[1]
 CSV = ROOT / "scratch" / "string_classes_169.csv"
 
 rng = np.random.default_rng(7)

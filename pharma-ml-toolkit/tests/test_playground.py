@@ -3043,9 +3043,10 @@ class TestDeepLearningTab:
     ) -> None:
         # the generic save/restore machinery walks vars(self) for
         # Variable/Entry widgets -- every _dl_* input rides it for free.
-        # This pins the whole tab: 18 saved keys (the optimizer + split
-        # strategy comboboxes since round 179), the mutated values
-        # restored verbatim onto a freshly built window.
+        # This pins the whole tab: 24 saved keys (the optimizer + split
+        # strategy comboboxes since round 179; the six XAI-card inputs
+        # since round 185), the mutated values restored verbatim onto a
+        # freshly built window.
         first = playground.PlaygroundApp(persist_session=False)
         second = playground.PlaygroundApp(persist_session=False)
         try:
@@ -3068,9 +3069,17 @@ class TestDeepLearningTab:
             first._dl_seed_entry.insert(0, "7")
             first._dl_task_combo.set("regression")
             first._dl_batchnorm_var.set(True)
+            # (round 185) the Attribution & attention card's six inputs
+            first._dl_xai_method_combo.set(first._xai_method_labels[2])
+            first._dl_xai_row_spin.set("17")
+            first._dl_xai_steps_spin.set("120")
+            first._dl_xai_tokens_entry.delete(0, "end")
+            first._dl_xai_tokens_entry.insert(0, "the inhibitor blocks the gate")
+            first._dl_xai_layer_spin.set("3")
+            first._dl_xai_head_spin.set("2")
             payload = first._collect_session()
             saved = [key for key in payload["variables"] if key.startswith("_dl_")]
-            assert len(saved) == 18  # every input on the tab (optimizer + split since 179)
+            assert len(saved) == 24  # 18 + the XAI card's six (round 185)
 
             second._session = payload
             second._restore_session()
@@ -3089,6 +3098,12 @@ class TestDeepLearningTab:
             assert second._dl_seed_entry.get() == "7"
             assert second._dl_task_combo.get() == "regression"
             assert second._dl_batchnorm_var.get() is True
+            assert second._dl_xai_method_combo.get() == first._xai_method_labels[2]
+            assert second._dl_xai_row_spin.get() == "17"
+            assert second._dl_xai_steps_spin.get() == "120"
+            assert second._dl_xai_tokens_entry.get() == "the inhibitor blocks the gate"
+            assert second._dl_xai_layer_spin.get() == "3"
+            assert second._dl_xai_head_spin.get() == "2"
         finally:
             first.destroy()
             second.destroy()
@@ -15656,3 +15671,385 @@ class TestReinvent4DiffDockAbsorptionGui:
         summary = app._pocket_summary.cget("text")
         assert "2 residue(s) in the pocket" in summary
         assert "closest ligand atom" in app._pocket_report_text.get("1.0", "end")
+
+
+# --------------------------------------------------------------------- #
+# round 185: the XAI absorption -- captum · tf-keras-vis ·
+# PAIR-code/saliency · bertviz, rebuilt offline on ml/xai.py
+# --------------------------------------------------------------------- #
+class TestXaiHelpers:
+    """The offline attribution engine's pure contracts (no Tk needed)."""
+
+    @staticmethod
+    def _stub_estimator(
+        dims: tuple[int, ...], activation: str = "tanh"
+    ) -> Any:
+        """A numpy-engine estimator stand-in: the real _MLPNetwork with
+        deterministic weights, wrapped so ``_network`` is exposed like
+        the NumpyMLP estimators do (the predict fallback covers the
+        occlusion path)."""
+        import numpy as np
+        from types import SimpleNamespace
+
+        from pharmaml.ml.numpy_neural import _MLPNetwork
+
+        rng = np.random.default_rng(0)
+        network = _MLPNetwork(dims, activation, 0.0, rng)
+        scale = 0.4
+        for index, linear in enumerate(network.linears):
+            fan_in = float(linear.weight.data.shape[1])
+            linear.weight.data = np.asarray(
+                (rng.normal(size=linear.weight.data.shape) * scale / np.sqrt(fan_in)),
+                dtype=float,
+            )
+            if linear.bias is not None:
+                linear.bias.data = np.zeros(linear.bias.data.shape, dtype=float)
+
+        def predict(matrix: Any) -> Any:
+            rows = np.atleast_2d(np.asarray(matrix, dtype=float))
+            return network.forward_numpy(rows)[:, 0]
+
+        return SimpleNamespace(_network=network, predict=predict)
+
+    def test_registry_keys_kinds_and_credit(self) -> None:
+        from pharmaml.ml.xai import ATTRIBUTION_METHODS, attribution_methods
+
+        assert attribution_methods() == (
+            "input_x_gradient",
+            "integrated_gradients",
+            "smoothgrad",
+            "occlusion",
+        )
+        kinds = {name: meta["kind"] for name, meta in ATTRIBUTION_METHODS.items()}
+        assert kinds == {
+            "input_x_gradient": "gradient",
+            "integrated_gradients": "gradient",
+            "smoothgrad": "gradient",
+            "occlusion": "perturbation",
+        }
+        for meta in ATTRIBUTION_METHODS.values():
+            assert meta["label"] and meta["description"]
+            assert meta["origin"]  # the absorbed repo, credited
+
+    def test_playground_combobox_matches_the_registry(self, playground: Any) -> None:
+        # the frozen module-scope tuple must carry the SAME method keys
+        # in the SAME order as ml/xai.py's registry -- the two surfaces
+        # cannot drift (the _TUNE_REGISTRY_FAMILIES discipline).
+        from pharmaml.ml.xai import attribution_methods
+
+        assert tuple(name for name, _label in playground._XAI_METHOD_ITEMS) == (
+            attribution_methods()
+        )
+
+    def test_input_x_gradient_matches_finite_differences(self) -> None:
+        import numpy as np
+
+        from pharmaml.ml.xai import input_x_gradient
+
+        estimator = self._stub_estimator((3, 4, 1), "tanh")
+        row = np.array([0.5, -1.0, 2.0])
+        result = input_x_gradient(estimator, row)
+        network = estimator._network  # type: ignore[attr-defined]
+        eps = 1e-6
+
+        def score(value: Any) -> float:
+            return float(network.forward_numpy(value.reshape(1, -1))[0, 0])
+
+        numeric = np.array(
+            [
+                (score(row + eps * unit) - score(row - eps * unit)) / (2 * eps)
+                for unit in np.eye(3)
+            ]
+        )
+        assert np.allclose(result.attributions, numeric, atol=1e-4)
+        assert result.method == "input_x_gradient"
+        assert result.kind == "gradient"
+        assert result.convergence_delta is None
+
+    def test_integrated_gradients_linear_identity_and_delta(self) -> None:
+        import numpy as np
+
+        from pharmaml.ml.xai import integrated_gradients
+
+        estimator = self._stub_estimator((3, 1), "relu")
+        row = np.array([1.0, -2.0, 0.5])
+        result = integrated_gradients(estimator, row, steps=32)
+        weights = estimator._network.linears[0].weight.data  # type: ignore[attr-defined]
+        assert np.allclose(result.attributions, row * weights[0].reshape(-1), atol=1e-8)
+        assert abs(result.convergence_delta) < 1e-7  # type: ignore[arg-type]
+        assert result.note  # zero baseline named
+
+    def test_occlusion_drops_the_score_on_big_weights(self) -> None:
+        import numpy as np
+
+        from pharmaml.ml.xai import occlusion_attributions
+
+        estimator = self._stub_estimator((3, 1), "relu")
+        row = np.array([0.0, 3.0, 0.0])
+        result = occlusion_attributions(estimator, row)
+        weights = estimator._network.linears[0].weight.data  # type: ignore[attr-defined]
+        expected = weights[0].reshape(-1) * row  # zero baseline: drop = w_i * x_i
+        assert np.allclose(result.attributions, expected, atol=1e-8)
+        assert result.kind == "perturbation"
+
+    def test_occlusion_runs_predict_only_on_any_estimator(self) -> None:
+        # the engine-free path: occlusion needs only predict, so a
+        # torch-style estimator (no _network) still explains.
+        import numpy as np
+
+        from pharmaml.ml.xai import occlusion_attributions
+
+        fake = type("FakeTorch", (), {})()
+        fake.predict = lambda matrix: np.asarray(matrix, dtype=float).sum(axis=1) * 2.0
+        result = occlusion_attributions(fake, np.array([1.0, 2.0, 3.0]))
+        assert np.allclose(result.attributions, [2.0, 4.0, 6.0])
+        assert result.kind == "perturbation"
+
+    def test_smoothgrad_sharpens_into_the_plain_gradient(self) -> None:
+        import numpy as np
+
+        from pharmaml.ml.xai import input_x_gradient, smoothgrad_attributions
+
+        estimator = self._stub_estimator((3, 4, 1), "tanh")
+        row = np.array([0.5, -1.0, 2.0])
+        plain = input_x_gradient(estimator, row)
+        quiet = smoothgrad_attributions(
+            estimator, row, n_samples=24, stdev_ratio=0.0, seed=1
+        )
+        assert np.allclose(quiet.attributions, plain.attributions, atol=1e-12)
+        noisy = smoothgrad_attributions(
+            estimator, row, n_samples=32, stdev_ratio=0.2, seed=1
+        )
+        assert noisy.method == "smoothgrad"
+        assert noisy.note  # the sample count / spread disclosure
+
+    def test_sign_split_and_both_palettes(self) -> None:
+        import numpy as np
+
+        from pharmaml.ml.xai import diverging_hex, grayscale_hex, positive_negative_split
+
+        positive, negative = positive_negative_split(np.array([-1.0, 2.0, -0.5]))
+        assert np.array_equal(positive, [0.0, 2.0, 0.0])  # signs kept
+        assert np.array_equal(negative, [-1.0, 0.0, -0.5])
+        # VisualizeImageDiverging: blue negative, red positive, white 0
+        assert diverging_hex(-1.0, 1.0) == "#0000ff"
+        assert diverging_hex(1.0, 1.0) == "#ff0000"
+        assert diverging_hex(0.0, 1.0) == "#ffffff"
+        # VisualizeImageGrayscale: |value| on white -> black
+        assert grayscale_hex(1.0, np.array([0.0, 1.0])) == "#000000"
+        assert grayscale_hex(0.0, np.array([0.0, 1.0])) == "#ffffff"
+        # the percentile cap: an outlier must not flatten the ramp
+        ramp = np.array([0.0, 0.1, 0.2, 0.3, 40.0])
+        assert grayscale_hex(0.3, ramp) != "#ffffff"
+
+    def test_layer_trace_and_summary_shapes(self) -> None:
+        import numpy as np
+
+        from pharmaml.ml.xai import layer_activation_summary, layer_activation_trace
+
+        estimator = self._stub_estimator((3, 8, 6, 1), "relu")
+        row = np.array([0.5, -1.0, 2.0])
+        trace = layer_activation_trace(estimator, row)
+        assert [layer.shape for layer in trace] == [(8,), (6,)]
+        summary = layer_activation_summary(trace)
+        assert [entry["units"] for entry in summary] == [8, 6]
+        assert [entry["layer"] for entry in summary] == [1, 2]
+        for entry in summary:
+            assert entry["min"] <= entry["mean"] <= entry["max"]
+            assert 0.0 <= entry["dead_fraction"] <= 1.0
+
+    def test_attention_demo_and_pair_ranking(self) -> None:
+        import numpy as np
+
+        from pharmaml.ml.xai import demo_attention_layers, token_pairs
+
+        tokens = ["the", "kinase", "inhibitor", "binds"]
+        reports = demo_attention_layers(tokens)
+        assert len(reports) == 2  # the default 2x2 layer x head grid
+        assert reports[0].n_heads == 2
+        assert reports[0].weights.shape == (2, 4, 4)
+        pairs = token_pairs(reports[0].weights[0], tokens, top_k=6)
+        assert len(pairs) == 6
+        weights = [weight for weight, _q, _k in pairs]
+        assert weights == sorted(weights, reverse=True)  # ranked, strongest first
+        assert all(query in tokens and key in tokens for _w, query, key in pairs)
+        # the seeded demo is deterministic (the reproducibility pin)
+        again = demo_attention_layers(tokens)
+        assert np.allclose(again[0].weights, reports[0].weights)
+
+    def test_honest_refusals(self) -> None:
+        import numpy as np
+
+        from pharmaml.ml.xai import (
+            XaiError,
+            integrated_gradients,
+            input_x_gradient,
+        )
+
+        row = np.array([1.0, 2.0])
+        torch_style = type("FakeTorch", (), {})()
+        torch_style.predict = lambda matrix: np.zeros(len(matrix))
+        with pytest.raises(XaiError):
+            input_x_gradient(torch_style, row)  # no layer stack -> the named sibling
+        with pytest.raises(XaiError):
+            integrated_gradients(self._stub_estimator((3, 1)), row)  # wrong width
+        with pytest.raises(XaiError):
+            integrated_gradients(self._stub_estimator((2, 1)), row, steps=0)
+
+
+class TestXaiAbsorptionGui:
+    """The Deep Learning tab's Attribution & attention card, driven
+    headlessly: explain / occlusion / layers / attention, the honest
+    numpy-engine warning for torch runs, the pre-train guard, and the
+    wild-spinbox clamp."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        """Neutralise modal dialogs so failures assert instead of blocking."""
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _numpy_run() -> tuple[Any, Any, Any]:
+        """A fitted numpy-engine estimator + its held-out rows (the run
+        tuple the card explains)."""
+        import numpy as np
+
+        from pharmaml.ml.numpy_neural import NumpyMLPRegressor
+
+        rng = np.random.default_rng(0)
+        X = rng.normal(size=(60, 5))
+        y = X @ np.array([1.5, -0.5, 2.0, 0.3, -1.0]) + 0.2
+        network = NumpyMLPRegressor(
+            hidden_layers=(8,), epochs=60, random_state=0
+        ).fit(X[:45], y[:45])
+        return network, "NumpyMLPRegressor", X[45:]
+
+    def test_explain_renders_table_strip_and_delta(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        network, name, x_test = self._numpy_run()
+        app._dl_last_run = (network, name, "regression", x_test, "y")
+        app._dl_xai_explain()  # the default method is integrated gradients
+        assert not quiet_dialogs, quiet_dialogs
+        rows = app._dl_xai_tree.get_children()
+        assert len(rows) == 5  # one per feature, ranked by |attribution|
+        first = app._dl_xai_tree.item(rows[0], "values")
+        assert first[4].endswith("pushes up") or first[4].endswith("pushes down")
+        assert float(first[3].rstrip("%")) >= 20.0  # the top share dominates
+        summary = app._dl_xai_summary.cget("text")
+        assert "integrated_gradients" in summary or "Integrated" in summary
+        assert "convergence" in summary  # the Δ read-out
+        assert len(app._dl_xai_strip.find("all")) == 5  # the colorized strip
+
+    def test_occlusion_explains_the_same_run(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        network, name, x_test = self._numpy_run()
+        app._dl_last_run = (network, name, "regression", x_test, "y")
+        app._dl_xai_method_combo.set(app._xai_method_labels[3])  # Occlusion
+        app._dl_xai_explain()
+        assert not quiet_dialogs, quiet_dialogs
+        assert len(app._dl_xai_tree.get_children()) == 5
+        assert "Occlusion" in app._dl_xai_summary.cget("text")
+        assert "convergence" not in app._dl_xai_summary.cget("text")  # no Δ here
+
+    def test_layer_activations_trace_the_hidden_units(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        network, name, x_test = self._numpy_run()
+        app._dl_last_run = (network, name, "regression", x_test, "y")
+        app._dl_xai_layers()
+        assert not quiet_dialogs, quiet_dialogs
+        text = app._dl_xai_summary.cget("text")
+        assert "Layer activations" in text
+        assert "dead" in text  # the dead-unit share disclosure
+        assert len(app._dl_xai_strip.find("all")) == 8  # the grayscale unit map
+
+    def test_attention_grid_renders_pairs(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_xai_attention()
+        assert not quiet_dialogs, quiet_dialogs
+        text = app._dl_xai_pairs.cget("text")
+        assert "attention pairs" in text
+        assert "→" in text  # the query→key digest
+        assert app._dl_xai_attn_canvas.find("all")  # the layer x head grid drew
+
+    def test_torch_run_gets_the_honest_warning_but_occlusion_works(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        import numpy as np
+
+        torch_style = type("FakeTorch", (), {})()
+        torch_style.predict = lambda matrix: np.zeros(len(matrix))
+        app._dl_last_run = (torch_style, "DeepMLPRegressor", "regression",
+                            np.eye(4), "y")
+        # a gradient method refuses honestly, naming the occlusion sibling
+        app._dl_xai_method_combo.set(app._xai_method_labels[1])  # IG
+        app._dl_xai_explain()
+        assert quiet_dialogs and quiet_dialogs[0][0] == "showwarning"
+        assert "occlusion" in str(quiet_dialogs[0][1]).lower()
+        # ... and occlusion itself runs on the predict-only estimator
+        quiet_dialogs.clear()
+        app._dl_xai_method_combo.set(app._xai_method_labels[3])  # Occlusion
+        app._dl_xai_explain()
+        assert not quiet_dialogs, quiet_dialogs
+        assert "Occlusion" in app._dl_xai_summary.cget("text")
+
+    def test_pre_train_guard_warns_instead_of_crashing(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        assert app._dl_last_run is None
+        app._dl_xai_explain()
+        assert quiet_dialogs and quiet_dialogs[0][0] == "showwarning"
+        quiet_dialogs.clear()
+        app._dl_xai_layers()
+        assert quiet_dialogs and quiet_dialogs[0][0] == "showwarning"
+
+    def test_wild_spinbox_values_clamp_never_crash(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        network, name, x_test = self._numpy_run()
+        app._dl_last_run = (network, name, "regression", x_test, "y")
+        # row 99 999 against a 15-row test split clamps to 14
+        app._dl_xai_row_spin.set("99999")
+        index = app._dl_xai_row_index(int(x_test.shape[0]))
+        assert index == 14
+        assert app._dl_xai_row_spin.get() == "14"
+        # junk text degrades to 0, negatives clamp up
+        app._dl_xai_row_spin.delete(0, "end")
+        app._dl_xai_row_spin.insert(0, "not a number")
+        assert app._dl_xai_row_index(15) == 0
+        app._dl_xai_row_spin.set("-7")
+        assert app._dl_xai_row_index(15) == 0
+        # attention spins: 99 / -4 clamp into the 2x2 grid's range
+        app._dl_xai_layer_spin.set("99")
+        app._dl_xai_head_spin.delete(0, "end")
+        app._dl_xai_head_spin.insert(0, "-4")
+        app._dl_xai_attention()
+        assert app._dl_xai_layer_spin.get() == "8"  # the spin range clamps first
+        assert app._dl_xai_head_spin.get() == "1"
+        assert "attention pairs" in app._dl_xai_pairs.cget("text")  # still rendered
+        # IG steps junk degrades to the default, never a crash
+        app._dl_xai_steps_spin.delete(0, "end")
+        app._dl_xai_steps_spin.insert(0, "junk")
+        app._dl_xai_explain()
+        assert app._dl_xai_steps_spin.get() == "50"
+        assert not [d for d in quiet_dialogs if d[0] == "showerror"], quiet_dialogs

@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, "/home/z/my-project/pharma-ml-toolkit/src")
+sys.path.insert(0, "src")
 import numpy as np, pandas as pd
 from pharmaml.ml import evaluate_model, train_model
 from pharmaml.ml.splits import make_train_test_split

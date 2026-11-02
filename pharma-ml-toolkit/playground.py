@@ -2263,6 +2263,18 @@ def resolve_deep_estimator(
     return "NumpyMLP" + name.removeprefix("DeepMLP").removeprefix("ResidualMLP"), "numpy"
 
 
+#: Deep Learning tab (round 185): the offline attribution registry,
+#: frozen here at module scope (the playground never imports
+#: ``pharmaml`` at module scope) and pinned to ``ml/xai.py``'s own
+#: ATTRIBUTION_METHODS by the test suite, so the two surfaces cannot
+#: drift -- the same discipline as _TUNE_REGISTRY_FAMILIES above.
+_XAI_METHOD_ITEMS: tuple[tuple[str, str], ...] = (
+    ("input_x_gradient", "Input × Gradient"),
+    ("integrated_gradients", "Integrated gradients"),
+    ("smoothgrad", "SmoothGrad"),
+    ("occlusion", "Occlusion"),
+)
+
 #: Data & ML tab (100x-90): hypermodel families the Tune card offers --
 #: the same tokens the CLI's ``ml tune --estimator`` accepts.  (100x-169)
 #: the trio grew to EVERY grid-bearing registry family: the tokens
@@ -21945,6 +21957,164 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         save_dl_hist_figure_btn.pack(side="left", padx=(10, 0))
         self._dl_curve_host = self._figure_host(hist, height=300)
 
+        # -- attribution & attention (round 185: the XAI absorption) --- #
+        # Four repos checked one by one -- pytorch/captum (the
+        # attribution protocol: baselines, convergence deltas, the
+        # Saliency/InputXGradient/NoiseTunnel/Occlusion family, the
+        # positive/negative sign split), keisen/tf-keras-vis (the
+        # explain-one-network-on-one-input card shape), PAIR-code/
+        # saliency (grayscale + diverging palettes) and jessevig/
+        # bertviz (the layer x head grid + query/key pairs) -- rebuilt
+        # offline on ml/xai.py: numpy only, no torch, no TF.
+        xai = make_card(
+            page.grid,
+            "Attribution & attention",
+            span=2,
+            row=5,
+            column=0,
+            subtitle="Explain the LAST trained network on one held-out "
+            "row: input×gradient, integrated gradients (with the "
+            "convergence Δ completeness check), smoothgrad and "
+            "1-feature occlusion -- the gradient trio needs the numpy "
+            "engine, occlusion runs on every engine. Layer "
+            "activations expose the hidden units; the attention grid "
+            "is the toolkit's own numpy multi-head attention over your "
+            "tokens (captum · tf-keras-vis · PAIR-code/saliency · "
+            "bertviz, absorbed offline).",
+        )
+        xai_row = ttk.Frame(xai, style="Card.TFrame")
+        grid_append(xai, xai_row, sticky="w")
+        self._xai_method_labels = tuple(
+            f"{name} — {label}" for name, label in _XAI_METHOD_ITEMS
+        )
+        self._dl_xai_method_combo = ttk.Combobox(
+            xai_row, state="readonly", width=34, values=self._xai_method_labels
+        )
+        self._dl_xai_method_combo.set(self._xai_method_labels[1])
+        self._dl_xai_method_combo.pack(side="left")
+        Tooltip(
+            self._dl_xai_method_combo,
+            "The offline attribution registry (ml/xai.py): "
+            "input_x_gradient (captum Saliency · InputXGradient), "
+            "integrated_gradients (zero baseline, midpoint steps, "
+            "convergence_delta), smoothgrad (NoiseTunnel averaging) and "
+            "occlusion (predict-only, so it runs on the torch engine "
+            "too). Each entry credits the repo it was absorbed from.",
+        )
+        ttk.Label(xai_row, text="row", style="CardMuted.TLabel").pack(
+            side="left", padx=(10, 3)
+        )
+        self._dl_xai_row_spin = ttk.Spinbox(xai_row, from_=0, to=99999, width=7)
+        self._dl_xai_row_spin.set("0")
+        self._dl_xai_row_spin.pack(side="left")
+        ttk.Label(xai_row, text="IG steps", style="CardMuted.TLabel").pack(
+            side="left", padx=(10, 3)
+        )
+        self._dl_xai_steps_spin = ttk.Spinbox(
+            xai_row, from_=5, to=500, increment=5, width=7
+        )
+        self._dl_xai_steps_spin.set("50")
+        self._dl_xai_steps_spin.pack(side="left")
+        explain_btn = self._action_button(
+            xai_row,
+            "Explain",
+            self._dl_xai_explain,
+            tooltip="Attribute the row's prediction to its features: a "
+            "ranked table with the push sign and |attribution| share, "
+            "a colorized strip (blue = pushes down, red = up) and, for "
+            "integrated gradients, the convergence Δ completeness "
+            "residual. The gradient trio needs the numpy engine; "
+            "occlusion runs on every engine.",
+        )
+        explain_btn.pack(side="left", padx=(10, 0))
+        layers_btn = self._action_button(
+            xai_row,
+            "Layer activations",
+            self._dl_xai_layers,
+            tooltip="captum LayerActivation, offline: the hidden units' "
+            "values for the same row -- units, min/mean/max, the "
+            "dead-unit share (relu units that never fired) and a "
+            "grayscale unit heat map (PAIR-code/saliency's palette).",
+        )
+        layers_btn.pack(side="left", padx=(8, 0))
+        # the ranked per-feature table (same Treeview idiom as the
+        # preview card; six visible rows, scroll for the rest)
+        self._dl_xai_tree = ttk.Treeview(xai, show="headings", height=6)
+        self._dl_xai_tree["columns"] = (
+            "feature",
+            "value",
+            "attribution",
+            "share",
+            "direction",
+        )
+        for column, text, width in (
+            ("feature", "feature", 150),
+            ("value", "value", 90),
+            ("attribution", "attribution", 110),
+            ("share", "|attr| share", 96),
+            ("direction", "pushes", 110),
+        ):
+            self._dl_xai_tree.heading(column, text=text)
+            self._dl_xai_tree.column(column, width=width, minwidth=64, stretch=True)
+        grid_append(xai, self._dl_xai_tree, sticky="ew")
+        # the colorized strip: one cell per feature, blue = pushes the
+        # score down, red = up (PAIR-code/saliency's diverging palette)
+        self._dl_xai_strip = tk.Canvas(xai, height=24, highlightthickness=0, bd=0)
+        grid_append(xai, self._dl_xai_strip, sticky="ew", pady=(6, 0))
+        self._dl_xai_summary = ttk.Label(
+            xai,
+            text="explain a row to see the attribution",
+            style="CardMuted.TLabel",
+            justify="left",
+            wraplength=560,
+        )
+        grid_append(xai, self._dl_xai_summary, sticky="w", pady=(4, 0))
+        # the attention row: typed tokens + layer/head selectors
+        attn_row = ttk.Frame(xai, style="Card.TFrame")
+        grid_append(xai, attn_row, sticky="w", pady=(8, 0))
+        self._dl_xai_tokens_entry = ttk.Entry(attn_row, width=34)
+        self._dl_xai_tokens_entry.insert(0, "the kinase inhibitor binds deeply")
+        self._dl_xai_tokens_entry.pack(side="left", padx=(4, 0))
+        Tooltip(
+            self._dl_xai_tokens_entry,
+            "Whitespace-separated tokens for the attention demo -- the "
+            "layer × head grid over the toolkit's own numpy multi-head "
+            "attention (bertviz's shape, no transformer weights).",
+        )
+        ttk.Label(attn_row, text="layer", style="CardMuted.TLabel").pack(
+            side="left", padx=(10, 3)
+        )
+        self._dl_xai_layer_spin = ttk.Spinbox(attn_row, from_=1, to=8, width=5)
+        self._dl_xai_layer_spin.set("1")
+        self._dl_xai_layer_spin.pack(side="left")
+        ttk.Label(attn_row, text="head", style="CardMuted.TLabel").pack(
+            side="left", padx=(10, 3)
+        )
+        self._dl_xai_head_spin = ttk.Spinbox(attn_row, from_=1, to=8, width=5)
+        self._dl_xai_head_spin.set("1")
+        self._dl_xai_head_spin.pack(side="left")
+        attention_btn = self._action_button(
+            attn_row,
+            "Attention grid",
+            self._dl_xai_attention,
+            tooltip="bertviz's layer × head grid over the typed tokens: "
+            "every head's n×n heat map (the selected layer/head "
+            "outlined) plus the strongest query→key pairs. Seeded and "
+            "deterministic -- analysis, not training.",
+        )
+        attention_btn.pack(side="left", padx=(10, 0))
+        # the layer × head grid + the pair digest
+        self._dl_xai_attn_canvas = tk.Canvas(xai, height=150, highlightthickness=0, bd=0)
+        grid_append(xai, self._dl_xai_attn_canvas, sticky="ew", pady=(6, 0))
+        self._dl_xai_pairs = ttk.Label(
+            xai,
+            text="type tokens and hit Attention grid to see the pairs",
+            style="CardMuted.TLabel",
+            justify="left",
+            wraplength=560,
+        )
+        grid_append(xai, self._dl_xai_pairs, sticky="w")
+
     def _dl_open_csv(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
             return
@@ -22454,6 +22624,389 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo(f"Dataset audit: {verdict}", message)
 
         self._start_job(f"auditing {path.name}", work, render)
+
+    # -- attribution & attention handlers (round 185: the XAI card) --- #
+
+    def _dl_xai_row_index(self, row_count: int) -> int | None:
+        """Read + clamp the row selector against the run's own rows.
+
+        Wild spinbox text (empty, negative, 99 999 against a 42-row
+        run) clamps into range instead of crashing -- the card's
+        standing rule, pinned by the test suite.
+        """
+        try:
+            wanted = int(float(str(self._dl_xai_row_spin.get()).strip() or "0"))
+        except (TypeError, ValueError):
+            wanted = 0
+        if row_count <= 0:
+            messagebox.showwarning(
+                "No rows", "The last run kept no test rows to explain."
+            )
+            return None
+        index = max(0, min(wanted, row_count - 1))
+        self._dl_xai_row_spin.set(str(index))
+        return index
+
+    def _dl_xai_output_index(self, network: Any, row: Any, task: str) -> int:
+        """The output unit to explain: the row's own predicted class.
+
+        Regression networks have a single output (index 0); a
+        classifier's explanation follows the class the network actually
+        predicted for this row -- the ``predict_proba`` argmax when
+        available, the ``classes_`` position of ``predict`` otherwise.
+        """
+        if task != "classification":
+            return 0
+        import numpy as np
+
+        sample = np.asarray(row, dtype=float).reshape(1, -1)
+        proba = getattr(network, "predict_proba", None)
+        if proba is not None:
+            try:
+                matrix = np.asarray(proba(sample), dtype=float)
+                if matrix.ndim == 2 and matrix.shape[1] > 1:
+                    return int(matrix[0].argmax())
+            except Exception:  # noqa: BLE001 -- fall through to predict
+                pass
+        predict = getattr(network, "predict", None)
+        classes = getattr(network, "classes_", None)
+        if predict is not None and classes is not None:
+            try:
+                label = str(np.asarray(predict(sample)).reshape(-1)[0])
+                names = [str(item) for item in np.asarray(classes).reshape(-1)]
+                if label in names:
+                    return names.index(label)
+            except Exception:  # noqa: BLE001 -- stay honest, explain unit 0
+                pass
+        return 0
+
+    def _dl_xai_feature_names(self, network: Any, row: Any) -> list[str]:
+        """The feature labels for the table: the run's own names."""
+        columns = getattr(row, "columns", None)
+        if columns is not None:  # a pandas row kept its labels
+            return [str(name) for name in columns]
+        names = getattr(network, "feature_names_in_", None)
+        if names is not None:
+            return [str(name) for name in list(names)]
+        return [f"x{i + 1}" for i in range(int(len(row)))]
+
+    def _dl_xai_explain(self) -> None:
+        """Explain the last trained network on one held-out row."""
+        if not self._require_pharmaml():
+            return
+        if self._dl_last_run is None:
+            messagebox.showwarning(
+                "No run yet",
+                "Train a network first -- the attribution card explains "
+                "the LAST trained network on one held-out row.",
+            )
+            return
+        import numpy as np
+
+        from pharmaml.exceptions import PharmaMLError
+        from pharmaml.ml.xai import (
+            ATTRIBUTION_METHODS,
+            input_x_gradient,
+            integrated_gradients,
+            occlusion_attributions,
+            smoothgrad_attributions,
+        )
+
+        network, estimator_name, task, x_test, target = self._dl_last_run
+        matrix = np.asarray(x_test, dtype=float)
+        if matrix.ndim != 2 or matrix.shape[0] == 0:
+            messagebox.showwarning(
+                "No rows", "The last run kept no test rows to explain."
+            )
+            return
+        row_index = self._dl_xai_row_index(int(matrix.shape[0]))
+        if row_index is None:
+            return
+        raw = str(self._dl_xai_method_combo.get()).strip()
+        method = raw.split(" — ")[0].strip() if " — " in raw else raw
+        if method not in ATTRIBUTION_METHODS:
+            method = "integrated_gradients"
+        output_index = self._dl_xai_output_index(network, matrix[row_index], task)
+        try:
+            if method == "integrated_gradients":
+                try:
+                    steps = int(float(str(self._dl_xai_steps_spin.get()).strip() or "50"))
+                except (TypeError, ValueError):
+                    steps = 50
+                steps = max(5, min(steps, 500))
+                self._dl_xai_steps_spin.set(str(steps))
+                result = integrated_gradients(
+                    network, matrix[row_index], steps=steps, output_index=output_index
+                )
+            elif method == "smoothgrad":
+                result = smoothgrad_attributions(
+                    network, matrix[row_index], output_index=output_index
+                )
+            elif method == "occlusion":
+                result = occlusion_attributions(
+                    network, matrix[row_index], output_index=output_index
+                )
+            else:
+                result = input_x_gradient(
+                    network, matrix[row_index], output_index=output_index
+                )
+        except PharmaMLError as exc:
+            # the honest refusal: a torch-engine run under a gradient
+            # method names the occlusion sibling that still works.
+            messagebox.showwarning("Cannot explain this run", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Attribution failed", exc)
+            return
+        self._fill_xai_attribution(
+            result, matrix[row_index], network, estimator_name, target, row_index, method
+        )
+
+    def _fill_xai_attribution(
+        self,
+        result: Any,
+        row: Any,
+        network: Any,
+        estimator_name: str,
+        target: str,
+        row_index: int,
+        method: str,
+    ) -> None:
+        """Render one attribution: ranked table + strip + Δ read-out."""
+        import numpy as np
+
+        from pharmaml.ml.xai import ATTRIBUTION_METHODS, diverging_hex
+
+        values = np.asarray(result.attributions, dtype=float).reshape(-1)
+        names = self._dl_xai_feature_names(network, row)
+        if len(names) != values.size:
+            names = [f"x{i + 1}" for i in range(values.size)]
+        order = np.argsort(np.abs(values))[::-1]
+        total = float(np.abs(values).sum()) or 1.0
+        self._dl_xai_tree.delete(*self._dl_xai_tree.get_children())
+        for index in order:
+            share = abs(float(values[index])) / total
+            direction = (
+                "↑ pushes up"
+                if values[index] > 0
+                else "↓ pushes down" if values[index] < 0 else "· no push"
+            )
+            self._dl_xai_tree.insert(
+                "",
+                "end",
+                iid=str(int(index)),
+                values=(
+                    f"{names[int(index)]}",
+                    f"{float(row[int(index)]):.4g}",
+                    f"{float(values[index]):+.4g}",
+                    f"{share:5.1%}",
+                    direction,
+                ),
+            )
+        # the strip: one colored cell per feature, blue negative / red
+        # positive, saturation by |value| / vmax (PAIR-code's palette)
+        self._dl_xai_strip.delete("all")
+        self._dl_xai_strip.configure(bg=BG)
+        vmax = float(np.abs(values).max()) if values.size else 0.0
+        shown = min(int(values.size), 48)
+        cell = max(6.0, 560.0 / shown) if shown else 6.0
+        for i in range(shown):
+            color = diverging_hex(float(values[i]), vmax)
+            self._dl_xai_strip.create_rectangle(
+                i * cell, 2, (i + 1) * cell - 1, 22, fill=color, outline=BG
+            )
+        label = ATTRIBUTION_METHODS.get(method, {}).get("label", method)
+        delta = (
+            f"  ·  convergence Δ = {float(result.convergence_delta):+.2e}"
+            if result.convergence_delta is not None
+            else ""
+        )
+        self._dl_xai_summary.configure(
+            text=f"{label} — {estimator_name} · target {target} · "
+            f"row {row_index} ({int(values.size)} features)\n"
+            f"{result.note}{delta}"
+        )
+
+    def _dl_xai_layers(self) -> None:
+        """Trace the hidden units for the same row (LayerActivation)."""
+        if not self._require_pharmaml():
+            return
+        if self._dl_last_run is None:
+            messagebox.showwarning(
+                "No run yet",
+                "Train a network first -- layer activations trace the "
+                "LAST trained network on one held-out row.",
+            )
+            return
+        import numpy as np
+
+        from pharmaml.exceptions import PharmaMLError
+        from pharmaml.ml.xai import grayscale_hex, layer_activation_summary, layer_activation_trace
+
+        network, estimator_name, task, x_test, target = self._dl_last_run
+        matrix = np.asarray(x_test, dtype=float)
+        if matrix.ndim != 2 or matrix.shape[0] == 0:
+            messagebox.showwarning(
+                "No rows", "The last run kept no test rows to trace."
+            )
+            return
+        row_index = self._dl_xai_row_index(int(matrix.shape[0]))
+        if row_index is None:
+            return
+        try:
+            trace = layer_activation_trace(network, matrix[row_index])
+            summary = layer_activation_summary(trace)
+        except PharmaMLError as exc:
+            messagebox.showwarning("Cannot trace this run", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Layer trace failed", exc)
+            return
+        # the grayscale unit map: one cell per hidden unit, dark = the
+        # unit fired hard for this row (PAIR-code's monochrome palette)
+        self._dl_xai_strip.delete("all")
+        self._dl_xai_strip.configure(bg=BG)
+        cells = [np.asarray(layer, dtype=float).reshape(-1) for layer in trace]
+        flat = np.concatenate(cells) if cells else np.zeros(1)
+        shown = min(int(flat.size), 48)
+        cell = max(6.0, 560.0 / shown) if shown else 6.0
+        offset = 0
+        for layer in cells:
+            for unit in layer:
+                if offset >= shown:
+                    break
+                color = grayscale_hex(float(unit), flat)
+                self._dl_xai_strip.create_rectangle(
+                    offset * cell, 2, (offset + 1) * cell - 1, 22,
+                    fill=color, outline=BG,
+                )
+                offset += 1
+        lines = [
+            f"layer {row['layer']}: {row['units']} units · "
+            f"min {row['min']:+.3g} · mean {row['mean']:+.3g} · "
+            f"max {row['max']:+.3g} · dead {row['dead_fraction']:.0%}"
+            for row in summary
+        ]
+        self._dl_xai_summary.configure(
+            text=f"Layer activations — {estimator_name} · target {target} · "
+            f"row {row_index}\n" + "\n".join(lines)
+        )
+
+    def _dl_xai_attention(self) -> None:
+        """The bertviz-style layer × head grid over the typed tokens."""
+        if not self._require_pharmaml():
+            return
+        import numpy as np
+
+        from pharmaml.exceptions import PharmaMLError
+        from pharmaml.ml.xai import demo_attention_layers, token_pairs
+
+        raw = str(self._dl_xai_tokens_entry.get())
+        tokens = [token for token in re.split(r"\s+", raw.strip()) if token]
+        if len(tokens) < 2:
+            messagebox.showwarning(
+                "Needs tokens",
+                "Type at least two whitespace-separated tokens -- the "
+                "attention grid is over token pairs.",
+            )
+            return
+
+        def _spin(widget: Any, default: int) -> int:
+            try:
+                return int(float(str(widget.get()).strip() or str(default)))
+            except (TypeError, ValueError):
+                return default
+
+        # wild spinbox values clamp, never crash (the pinned rule)
+        layer_wanted = max(1, min(_spin(self._dl_xai_layer_spin, 1), 8))
+        head_wanted = max(1, min(_spin(self._dl_xai_head_spin, 1), 8))
+        self._dl_xai_layer_spin.set(str(layer_wanted))
+        self._dl_xai_head_spin.set(str(head_wanted))
+        try:
+            reports = demo_attention_layers(tokens, n_layers=2, n_heads=2, seed=42)
+        except PharmaMLError as exc:
+            messagebox.showwarning("Cannot build the grid", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Attention grid failed", exc)
+            return
+        layer_index = min(layer_wanted, len(reports)) - 1
+        report = reports[layer_index]
+        head_index = min(head_wanted, int(report.n_heads))
+        head = np.asarray(report.weights[head_index - 1], dtype=float)
+        try:
+            pairs = token_pairs(head, tokens, top_k=12)
+        except PharmaMLError as exc:
+            messagebox.showwarning("Cannot rank the pairs", str(exc))
+            return
+        self._fill_xai_attention(
+            reports, tokens, layer_index, head_index, pairs
+        )
+
+    def _fill_xai_attention(
+        self,
+        reports: list[Any],
+        tokens: list[str],
+        layer_index: int,
+        head_index: int,
+        pairs: list[tuple[float, str, str]],
+    ) -> None:
+        """Render the layer × head grid + the strongest query→key pairs."""
+        import numpy as np
+
+        from pharmaml.ml.xai import grayscale_hex
+
+        self._dl_xai_attn_canvas.delete("all")
+        self._dl_xai_attn_canvas.configure(bg=BG)
+        n = len(tokens)
+        cell = max(3.0, min(14.0, 120.0 / max(n, 1)))
+        pad = 10.0
+        grid_w = n * cell + pad
+        grid_h = n * cell + pad
+        origin_x = 6.0
+        origin_y = 6.0
+        for layer, report in enumerate(reports):
+            for head in range(int(report.n_heads)):
+                weights = np.asarray(report.weights[head], dtype=float)
+                top = float(weights.max()) or 1.0
+                block_x = origin_x + (head * (grid_w + 14.0))
+                block_y = origin_y + (layer * (grid_h + 14.0))
+                selected = layer == layer_index and (head + 1) == head_index
+                for i in range(n):
+                    for j in range(n):
+                        color = grayscale_hex(float(weights[i, j]), top)
+                        self._dl_xai_attn_canvas.create_rectangle(
+                            block_x + j * cell,
+                            block_y + i * cell,
+                            block_x + (j + 1) * cell - 1,
+                            block_y + (i + 1) * cell - 1,
+                            fill=color,
+                            outline=BG,
+                        )
+                self._dl_xai_attn_canvas.create_rectangle(
+                    block_x - 2,
+                    block_y - 2,
+                    block_x + grid_w,
+                    block_y + grid_h,
+                    outline="#a855f7" if selected else BG,
+                    width=2 if selected else 1,
+                )
+                self._dl_xai_attn_canvas.create_text(
+                    block_x + grid_w / 2,
+                    block_y + grid_h + 6,
+                    text=f"L{layer + 1}·H{head + 1}",
+                    fill=INK,
+                    font=("TkDefaultFont", 8),
+                )
+        digest = "  ·  ".join(
+            f"{query} → {key} {weight:.3f}" for weight, query, key in pairs[:8]
+        )
+        self._dl_xai_pairs.configure(
+            text=(
+                f"attention pairs (layer {layer_index + 1}, head "
+                f"{head_index}; strongest of {len(pairs)} shown):\n{digest}"
+            )
+        )
 
     # ------------------------------------------------------------------ #
     # Generative tab
