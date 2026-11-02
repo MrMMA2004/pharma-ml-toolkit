@@ -164,6 +164,10 @@ from pharmaml.ml.neural import (
     ResidualMLPClassifier,
     ResidualMLPRegressor,
 )
+from pharmaml.ml.numpy_neural import (
+    NumpyMLPClassifier,
+    NumpyMLPRegressor,
+)
 from pharmaml.ml.persistence import (
     ModelInputReport,
     load_model,
@@ -216,6 +220,13 @@ from pharmaml.ml.sequences import (
     sliding_windows,
     synthetic_series,
 )
+from pharmaml.ml.splits import (
+    SPLIT_STRATEGIES,
+    murcko_scaffold_key,
+    scaffold_groups,
+    split_indices,
+)
+from pharmaml.ml.splits import make_train_test_split as make_strategy_split
 from pharmaml.ml.stacking import OOFStackingResult, stack_oof_regressors
 from pharmaml.ml.stats import (
     DEFAULT_ALPHA,
@@ -349,6 +360,7 @@ __all__ = [
     "SHAP_EXTRA",
     "SHAP_REQUIREMENT",
     "SIMILARITY_METRICS",
+    "SPLIT_STRATEGIES",
     "SYNTHETIC_KINDS",
     "ANNReport",
     "ANOVARow",
@@ -418,6 +430,8 @@ __all__ = [
     "NaiveSequential",
     "Neighbor",
     "NormalityResult",
+    "NumpyMLPClassifier",
+    "NumpyMLPRegressor",
     "OLSResult",
     "OOFStackingResult",
     "OntologyGraph",
@@ -534,6 +548,7 @@ __all__ = [
     "log_softmax",
     "lower_confidence_bound",
     "make_cv_splitter",
+    "make_strategy_split",
     "make_train_test_split",
     "manifold_embedding",
     "mann_whitney_test",
@@ -541,6 +556,7 @@ __all__ = [
     "minimal_attack_radius",
     "mse_loss",
     "multi_head_attention",
+    "murcko_scaffold_key",
     "no_grad",
     "normality_report",
     "one_sample_ttest",
@@ -561,6 +577,7 @@ __all__ = [
     "resource_bounds",
     "sample_distribution",
     "save_model",
+    "scaffold_groups",
     "search_catalog",
     "seasonal_decomposition",
     "select_kbest_union",
@@ -573,6 +590,7 @@ __all__ = [
     "sliding_windows",
     "softmax",
     "split_features_target",
+    "split_indices",
     "stack_oof_regressors",
     "synthetic_ratings",
     "synthetic_series",

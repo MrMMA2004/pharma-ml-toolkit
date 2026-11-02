@@ -805,6 +805,7 @@ def compute_feature_frame(
     smiles: Sequence[str],
     families: Iterable[str] = FEATURE_FAMILIES,
     n_conformers: int = 3,
+    n_jobs: int = 1,
 ) -> tuple[pd.DataFrame, FeatureReport]:
     """Compute a multi-family feature matrix for a batch of SMILES.
 
@@ -821,6 +822,14 @@ def compute_feature_frame(
     n_conformers:
         ETKDG conformer count for the ``shape_3d`` family only (the
         ``xxx.ipynb`` cell 6 default 3); every other family ignores it.
+    n_jobs:
+        Worker count for the per-molecule loop, joblib convention
+        (``1`` = serial, ``-1`` = all cores, ``0`` invalid).  Threads,
+        not processes: RDKit's fingerprint/descriptor C++ releases the
+        GIL, so real parallelism needs no pickling of the per-family
+        computers (which are closures and would not survive a process
+        boundary).  Order, drops and the report are byte-identical to
+        the serial run whatever the worker count.
 
     Returns
     -------
@@ -845,10 +854,20 @@ def compute_feature_frame(
     ValueError
         If ``smiles`` is a bare string or empty, ``families`` is a bare
         string, ``None`` or empty, or contains a name outside
-        :data:`FEATURE_FAMILIES`.
+        :data:`FEATURE_FAMILIES`, or ``n_jobs``/``n_conformers`` is not
+        a valid count.
     DependencyError
         If RDKit is not installed (raised by the shared
         :func:`pharmaml.chem.descriptors.require_rdkit` guard).
+
+    Examples
+    --------
+    The ``n_jobs`` count is validated before any chemistry runs:
+
+    >>> compute_feature_frame(["CCO"], families=("ecfp",), n_jobs=0)
+    Traceback (most recent call last):
+    ...
+    ValueError: n_jobs must be a nonzero integer (joblib convention: -1 = all cores), got 0
 
     Notes
     -----
@@ -933,17 +952,30 @@ def compute_feature_frame(
         or int(n_conformers) < 1
     ):
         raise ValueError(f"n_conformers must be an integer >= 1, got {n_conformers!r}")
+    if (
+        not isinstance(n_jobs, (int, np.integer))
+        or isinstance(n_jobs, bool)
+        or int(n_jobs) == 0
+    ):
+        raise ValueError(
+            "n_jobs must be a nonzero integer (joblib convention: "
+            f"-1 = all cores), got {n_jobs!r}"
+        )
     requested_set = set(family_list)
     requested = [family for family in FEATURE_FAMILIES if family in requested_set]
 
     Chem = require_rdkit()
     computers, columns, family_widths = _family_plan(requested, int(n_conformers))
 
-    rows: list[np.ndarray] = []
-    valid_smiles: list[str] = []
-    valid_positions: list[int] = []
-    dropped: list[tuple[int, str]] = []
-    for row, smi in enumerate(smiles_list):
+    def compute_one(pair: tuple[int, str]) -> tuple[int, str, np.ndarray | None, str]:
+        """One molecule -> ``(row, text, vector-or-None, error-or-"")``.
+
+        The try/except mirrors the serial loop's drop rule (a blank
+        cell, a hostile SMILES, an RDKit zoo exception: all drops, none
+        crashes the batch).  Runs in worker threads when ``n_jobs != 1``
+        -- closures stay in-process, and RDKit's C++ releases the GIL.
+        """
+        row, smi = pair
         text = smi if isinstance(smi, str) else str(smi)
         try:
             # Blank cells parse as valid 0-atom molecules in RDKit; they are
@@ -955,19 +987,39 @@ def compute_feature_frame(
             )
             if mol is None:
                 raise ValueError("SMILES did not parse to a valid molecule")
-            rows.append(np.concatenate([computers[family](mol) for family in requested]))
-            valid_smiles.append(text)
-            valid_positions.append(row)
+            vector = np.concatenate([computers[family](mol) for family in requested])
+            return row, text, vector, ""
         except Exception as exc:  # noqa: BLE001 — RDKit raises a zoo per molecule
+            return row, text, None, f"{type(exc).__name__}: {exc}"
+
+    pairs = list(enumerate(smiles_list))
+    if int(n_jobs) != 1 and len(pairs) > 1:
+        from joblib import Parallel, delayed  # sklearn's own dependency
+
+        results = Parallel(n_jobs=int(n_jobs), prefer="threads")(
+            delayed(compute_one)(pair) for pair in pairs
+        )
+    else:
+        results = [compute_one(pair) for pair in pairs]
+
+    rows: list[np.ndarray] = []
+    valid_smiles: list[str] = []
+    valid_positions: list[int] = []
+    dropped: list[tuple[int, str]] = []
+    for row, text, vector, error in results:
+        if error:
             _LOG.warning(
                 "Dropping molecule at row %d (%r): feature computation failed "
-                "(%s: %s)",
+                "(%s)",
                 row,
                 text,
-                type(exc).__name__,
-                exc,
+                error,
             )
             dropped.append((row, text))
+        else:
+            rows.append(vector)  # type: ignore[arg-type]
+            valid_smiles.append(text)
+            valid_positions.append(row)
 
     if rows:
         matrix = np.vstack(rows)

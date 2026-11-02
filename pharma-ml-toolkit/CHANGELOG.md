@@ -1,3 +1,109 @@
+## [1.2.103] — 2026-11-02
+
+### Added — the split-strategy / n_jobs / Adam round (round 179)
+
+The instruction: *"In playground.py, I want to be able to specify the
+type of ML data split into train and test (random, scaffold splitting,
+etc), and to be able to change n_jobs for different calculations
+(features, ML, etc.).  Add Adam optimizer.  After each round, make sure
+to update the changelog and save the changes to the new version of the
+zip file."*  Three features, one honest fallback, and the round-end
+archive ritual made standing.
+
+* **`ml/splits.py` — the strategy-aware split module (511 lines).**
+  `SPLIT_STRATEGIES`: ``random`` (the shuffled classic, index-identical
+  to the preprocessing twin), ``stratified`` (class-balanced; continuous
+  targets fall back to random with a warning, the preprocessing
+  convention), ``scaffold`` (Bemis–Murcko groups NEVER span the fence —
+  DeepChem's ``ScaffoldSplitter`` greedy convention: groups ordered
+  largest-first fill the training quota, so the test set holds the RARE
+  scaffolds, the honest generalisation test), ``group`` (caller-supplied
+  batch/plate/series labels, whole groups assigned together,
+  seed-shuffled order), ``kennard_stone`` (the classic chemometrics
+  max-min spread selection over autoscaled features — deterministic,
+  seed-free, the spread set trains), and ``temporal`` (first rows
+  train, last rows test).  `murcko_scaffold_key` computes the framework
+  **on the toolkit's own numpy SMILES engine**
+  (`chem.molgraph.parse_smiles` → iterative terminal pruning →
+  `canonical_smiles`) — no RDKit needed, hostile SMILES degrade to the
+  ``""`` singleton group instead of crashing the split.  One-scaffold
+  datasets fail BY NAME ("no group-honest test set exists; use another
+  strategy") — never an empty-test crash downstream.
+  `make_train_test_split(X, y, strategy=...)` returns the familiar
+  sklearn quartet; `smiles=` rides alongside for the scaffold strategy.
+  Exported from `pharmaml.ml` as `make_strategy_split` (the
+  preprocessing twin keeps its own name), plus `SPLIT_STRATEGIES`,
+  `split_indices`, `murcko_scaffold_key`, `scaffold_groups`.
+
+* **`ml/numpy_neural.py` — the autograd engine finally gets a trainer
+  (566 lines).**  `NumpyMLPClassifier` / `NumpyMLPRegressor`:
+  scikit-learn-contract feed-forward networks trained by the toolkit's
+  OWN reverse-mode autodiff engine (`ml/autograd.py`), with **the
+  optimizer as a constructor parameter** — ``sgd`` (momentum, Nesterov,
+  weight decay), ``adagrad``, ``rmsprop``, ``adam`` (bias correction,
+  the default) and ``adamw`` (decoupled decay): the five classes the
+  engine has shipped since round 165, driven by a real trainer at
+  last.  The contract mirrors the torch estimators exactly — minibatch
+  training, early stopping on a held-out validation fraction with
+  best-weights restore, per-feature standardisation fitted on the
+  training rows, the `on_epoch` progress callback (the playground's
+  Deep Learning tab drives its progress bar from it), the per-epoch
+  `history_` records, `n_iter_`, string class labels out of the box,
+  `n_features_in_`/`feature_names_in_` (the check-CSV audits read
+  them), and a hard `ModelError` on NaN-divergence instead of a
+  silently-broken estimator.  Registry key ``dnn_numpy`` — no
+  `requires` flag, pure numpy — so `train_model('dnn_numpy', ...)`
+  works everywhere; aliases ``numpy_dnn``/``autograd_mlp``/``np_dnn``.
+
+* **`chem/features.py` — `compute_feature_frame(..., n_jobs=1)`.**  The
+  per-molecule descriptor/fingerprint loop now maps over joblib worker
+  THREADS when `n_jobs != 1`: RDKit's C++ releases the GIL, so real
+  parallelism needs no pickling of the per-family computers (which are
+  closures and would not survive a process boundary).  Drops, row
+  order and the report stay byte-identical whatever the count; `0` is
+  rejected up front with the joblib convention named.
+
+* **playground.py — the controls.**  The ML Lab's Train card gains a
+  **split strategy** combobox (random/stratified/scaffold/kennard_
+  stone/temporal, each explained in its tooltip; scaffold auto-detects
+  any column whose name contains "smiles", pre-flighting with the
+  remedy named when the dataset has none) and an **n_jobs** spinbox —
+  both shared by the tab's Train, Ensemble, Tune, leaderboard and
+  feature-family-benchmark cards.  The Deep Learning tab gains the
+  same split-strategy combobox plus an **optimizer** combobox
+  (adam/adamw/rmsprop/sgd/adagrad) and the architecture option
+  *"Numpy MLP (autograd engine)"*.  **The honest fallback**: torch
+  architectures now degrade to the numpy engine when torch is absent
+  (`resolve_deep_estimator`, pure and self-test-pinned) — the metrics
+  card names `NumpyMLP*` and the job label names the engine, so the
+  substitution is visible, never silent; the tab no longer gates on
+  torch at all and trains end-to-end on machines without it.  Batch
+  norm + numpy engine stops pre-flight with the reason and the
+  remedies.  The Chemistry tab's feature factory gains its own n_jobs
+  spinbox for descriptor batches.
+
+* **Verified**: 6 doctest items green across the two new modules;
+  ruff and mypy clean on all eight touched files; `--self-test`
+  green with the new assertions (split settings, SMILES detection,
+  engine fallback, optimizer defaults); the test suite updated and
+  extended — the registry pins (33 families / 31 torch-free), the DL
+  tab's session round-trip (18 keys), engine-aware name assertions,
+  and four new ML-tab integration tests (scaffold end-to-end on the
+  7-scaffold walkthrough CSV, the single-scaffold honest failure, the
+  no-SMILES pre-flight guard, the n_jobs spinbox round-trip).  Every
+  failure count compared against the pre-change tree: **zero new
+  failures, eight previously-red DL tests now green** (they trained
+  on the numpy engine the moment torch stopped being required).
+
+### The zip ritual (standing from this round on)
+
+Every round now ends with the changelog updated and the tree shipped
+as the new versioned archive — the codified `build_zip_160.py` recipe:
+archive-out every historical release zip first (the nested-zip trap),
+build outside `download/`, scrub, testzip + leak-scan, then move in.
+This round shipped `pharma-ml-toolkit-v1.2.103.zip` and archived out
+the stale v1.2.97 survivor of the sandbox rollback.
+
 ## [1.2.102] — 2026-11-02
 
 ### Added — the engine-semantics round: event tables, steady state, GFR maturation, elasticity sensitivity (round 176)

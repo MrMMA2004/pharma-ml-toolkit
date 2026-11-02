@@ -323,6 +323,18 @@ def _res_dnn_reg():
     return ResidualMLPRegressor(random_state=42)
 
 
+def _np_dnn_cls():
+    from pharmaml.ml.numpy_neural import NumpyMLPClassifier
+
+    return NumpyMLPClassifier(random_state=42)
+
+
+def _np_dnn_reg():
+    from pharmaml.ml.numpy_neural import NumpyMLPRegressor
+
+    return NumpyMLPRegressor(random_state=42)
+
+
 def _gp_reg() -> GaussianProcessRegressor:
     # The classic QSAR surrogate kernel: amplitude-scaled RBF smoothness
     # plus white observation noise.  The marginal-likelihood gradient
@@ -690,6 +702,21 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
             "needs `pip install 'pharmaml[deep]'`"
         ),
     ),
+    "dnn_numpy": ModelSpec(
+        name="dnn_numpy",
+        task="both",
+        factory=None,
+        param_grid={
+            "hidden_layers": [(64, 32), (128, 64, 32)],
+            "optimizer": ["adam", "adamw"],
+            "learning_rate": [1e-3, 3e-4],
+        },
+        notes=(
+            "deep feed-forward network on the toolkit's own autograd "
+            "engine — numpy only (no torch), optimizer selectable: sgd, "
+            "adagrad, rmsprop, adam (default), adamw"
+        ),
+    ),
     "hsvr": ModelSpec(
         name="hsvr",
         task="regression",
@@ -790,6 +817,10 @@ MODEL_ALIASES: dict[str, str] = {
     "dnn_residual": "dnn_residual",
     "resnet": "dnn_residual",
     "residual_dnn": "dnn_residual",
+    "dnn_numpy": "dnn_numpy",
+    "numpy_dnn": "dnn_numpy",
+    "autograd_mlp": "dnn_numpy",
+    "np_dnn": "dnn_numpy",
     "hsvr": "hsvr",
     "hierarchical_svr": "hsvr",
     "hierarchicalsvr": "hsvr",
@@ -898,6 +929,10 @@ _TASK_FACTORIES: dict[str, dict[str, Callable[[], Any]]] = {
     "dnn_residual": {
         "classification": _res_dnn_cls,
         "regression": _res_dnn_reg,
+    },
+    "dnn_numpy": {
+        "classification": _np_dnn_cls,
+        "regression": _np_dnn_reg,
     },
 }
 

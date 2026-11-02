@@ -247,6 +247,7 @@ after adding new public functions.
 | `SHAP_EXTRA` | constant |  |
 | `SHAP_REQUIREMENT` | constant |  |
 | `SIMILARITY_METRICS` | constant |  |
+| `SPLIT_STRATEGIES` | constant |  |
 | `SYNTHETIC_KINDS` | constant |  |
 | `ANNReport` | class | The bargain measured: recall against the exact baseline. |
 | `ANOVARow` | class | One Type-II row: the term, its SS, F and p. |
@@ -316,6 +317,8 @@ after adding new public functions.
 | `NaiveSequential` | class | Chollet's ``NaiveSequential``: a stack called like a function. |
 | `Neighbor` | class | One retrieved neighbour: row index and its Euclidean distance. |
 | `NormalityResult` | class | Shapiro-Wilk and D'Agostino-Pearson on one sample. |
+| `NumpyMLPClassifier` | class | Feed-forward classifier trained on the autograd engine. |
+| `NumpyMLPRegressor` | class | Feed-forward regressor trained on the autograd engine. |
 | `OLSResult` | class | Ordinary least squares through a formula. |
 | `OOFStackingResult` | class | Outcome of one out-of-fold stacking run. |
 | `OntologyGraph` | class | A parsed DrugCell ontology: the DAG plus its gene annotations. |
@@ -432,6 +435,7 @@ after adding new public functions.
 | `log_softmax` | function | Log-softmax, the stable way (x − logsumexp). |
 | `lower_confidence_bound` | function | ``mean − β·std`` -- UCB's minimisation form (keras-tuner's pick). |
 | `make_cv_splitter` | function | The tuners' fold protocol, as a public helper. |
+| `make_strategy_split` | function | Strategy-aware train/test split, drop-in for the preprocessing twin. |
 | `make_train_test_split` | function | Stratified train/test split with automatic fallback. |
 | `manifold_embedding` | function | Project a feature table onto 2-D with a manifold learner (PDSH 05.10). |
 | `mann_whitney_test` | function | The rank-based test for the non-normal cases. |
@@ -439,6 +443,7 @@ after adding new public functions.
 | `minimal_attack_radius` | function | Bisect the smallest radius at which some pattern breaks the sample. |
 | `mse_loss` | function | Mean squared error (no gradient through the target). |
 | `multi_head_attention` | function | Multi-head self-attention over one sequence, seeded projections. |
+| `murcko_scaffold_key` | function | Canonical Bemis–Murcko scaffold SMILES for one molecule. |
 | `no_grad` | function | Disable graph construction (the inference-mode switch). |
 | `normality_report` | function | Both normality tests (the course's gate before choosing a test). |
 | `one_sample_ttest` | function | Is this sample's mean different from ``mu0``? |
@@ -459,6 +464,7 @@ after adding new public functions.
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `sample_distribution` | function | Draw ``n`` seeded samples from one of the course's distributions. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
+| `scaffold_groups` | function | Scaffold key per SMILES, in input order (``[""]`` for failures). |
 | `search_catalog` | function | Case-insensitive substring search over names and descriptions. |
 | `seasonal_decomposition` | function | Classical additive decomposition: centered-MA trend, phase-average seasonal. |
 | `select_kbest_union` | function | Select the UNION of per-method top-k columns (upgrades look.ipynb). |
@@ -471,6 +477,7 @@ after adding new public functions.
 | `sliding_windows` | function | Cut a series (or channel matrix) into overlapping windows. |
 | `softmax` | function | Row-stable softmax (subtract-max). |
 | `split_features_target` | function | Separate features from the target column. |
+| `split_indices` | function | Core dispatcher: ``(train_indices, test_indices)`` for a strategy. |
 | `stack_oof_regressors` | function | Stack registry regressors out-of-fold and rank the blenders. |
 | `synthetic_ratings` | function | A seeded rating matrix with genuine latent structure. |
 | `synthetic_series` | function | Seeded synthetic series: the no-data fallback for the whole card. |

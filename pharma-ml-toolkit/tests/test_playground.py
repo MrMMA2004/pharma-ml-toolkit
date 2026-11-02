@@ -1035,6 +1035,75 @@ class TestGuiUnderXvfb:
         assert str(app._progress.cget("mode")) == "indeterminate"
         assert quiet_dialogs == []
 
+    def test_scaffold_split_strategy_trains_end_to_end(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # (round 179) the split strategy combobox reaches the split: a
+        # scaffold run on the walkthrough CSV (7 scaffold groups across
+        # 180 molecules) trains cleanly through the whole job.  The
+        # qsar_*.csv examples are single-scaffold datasets -- the honest
+        # guard's territory, pinned by the test below.
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "walkthrough_compounds.csv")
+        assert app._target_combo.get() == "activity"  # the smart default
+        app._ml_split_combo.set("scaffold")
+        app._model_combo.set("logistic_regression")
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        assert quiet_dialogs == []
+        assert app._ml_last_run is not None
+        app._ml_split_combo.set("random")  # restore the default
+
+    def test_scaffold_strategy_on_a_single_scaffold_dataset_fails_honestly(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # qsar_classification.csv's molecules all share one framework:
+        # no scaffold-honest test set exists, and the split must say so
+        # by name (never an empty-test crash downstream).
+        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv")
+        app._ml_split_combo.set("scaffold")
+        app._model_combo.set("logistic_regression")
+        app._ml_train()
+        assert self._drain_jobs(app), "the failing job still drains"
+        kinds = [call[0] for call in quiet_dialogs]
+        assert "showerror" in kinds
+        message = next(call[1][1] for call in quiet_dialogs if call[0] == "showerror")
+        assert "shares one group/scaffold" in message
+        app._ml_split_combo.set("random")
+
+    def test_scaffold_strategy_without_smiles_warns_before_the_job(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # qsar_regression.csv is descriptors-only: the scaffold strategy
+        # must stop pre-flight, naming the missing column -- never a
+        # mid-job DataValidationError.
+        app._ml_load_example()
+        app._ml_split_combo.set("scaffold")
+        app._ml_train()
+        assert not app._busy  # the gate stopped before any job started
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "Check the split strategy" in titles
+        assert "SMILES column" in quiet_dialogs[0][1][1]
+        app._ml_split_combo.set("random")
+
+    def test_njobs_spinbox_reaches_the_train_call(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # (round 179) the n_jobs spinbox parses pre-flight and rides
+        # train_model; a bad value stops before the job starts.
+        app._ml_load_example()
+        app._ml_njobs_spin.set("4")
+        assert app._ml_split_settings() == ("random", 4)
+        app._ml_train()
+        assert self._drain_jobs(app), "train job hung"
+        assert quiet_dialogs == []
+        app._ml_njobs_spin.set("not-a-number")
+        app._ml_train()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "Check the manual settings" in titles
+        assert "n_jobs" in quiet_dialogs[-1][1][1]
+        app._ml_njobs_spin.set("1")
+
     def test_tune_search_reports_progress_with_eta(
         self, app: Any, quiet_dialogs: list[Any]
     ) -> None:
@@ -2734,15 +2803,48 @@ class TestDeepLearningTab:
                 playground.parse_hidden_layers(junk)
 
     def test_estimator_name_covers_all_four_combinations(self, playground: Any) -> None:
-        deep, residual = playground._DL_ARCHITECTURES
+        deep, residual, numpy_arch = playground._DL_ARCHITECTURES
         assert playground.deep_estimator_name(deep, "regression") == "DeepMLPRegressor"
         assert playground.deep_estimator_name(deep, "classification") == "DeepMLPClassifier"
         assert playground.deep_estimator_name(residual, "regression") == "ResidualMLPRegressor"
         assert playground.deep_estimator_name(residual, "classification") == "ResidualMLPClassifier"
+        assert playground.deep_estimator_name(numpy_arch, "regression") == "NumpyMLPRegressor"
+        assert (
+            playground.deep_estimator_name(numpy_arch, "classification") == "NumpyMLPClassifier"
+        )
         with pytest.raises(ValueError, match="architecture"):
             playground.deep_estimator_name("CNN", "regression")
         with pytest.raises(ValueError, match="task"):
             playground.deep_estimator_name(deep, "auto")
+
+    def test_deep_engine_resolution_falls_back_to_numpy(self, playground: Any) -> None:
+        # (round 179) torch architectures degrade to the numpy autograd
+        # engine when torch is absent; the numpy architecture stays
+        # numpy whatever torch says.  Pure, so both branches pin here.
+        deep = playground._DL_ARCHITECTURES[0]
+        assert playground.resolve_deep_estimator(deep, "regression", True) == (
+            "DeepMLPRegressor",
+            "torch",
+        )
+        assert playground.resolve_deep_estimator(deep, "classification", False) == (
+            "NumpyMLPClassifier",
+            "numpy",
+        )
+        assert playground.resolve_deep_estimator(
+            playground._DL_ARCHITECTURES[2], "regression", True
+        ) == ("NumpyMLPRegressor", "numpy")
+
+    def test_optimizer_and_split_tokens_mirror_the_library(self, playground: Any) -> None:
+        # the combobox values are the library's own accepted tokens --
+        # pinned together so the two can never drift apart (the
+        # _DL_ACTIVATIONS pattern, round-179 edition).
+        from pharmaml.ml.numpy_neural import OPTIMIZERS
+        from pharmaml.ml.splits import SPLIT_STRATEGIES
+
+        assert set(playground._DL_OPTIMIZERS) == set(OPTIMIZERS)
+        assert playground._ML_SPLIT_STRATEGIES == tuple(
+            name for name in SPLIT_STRATEGIES if name != "group"
+        )
 
     def test_activation_tokens_mirror_the_library(self, playground: Any) -> None:
         # the combobox values are the estimator's own accepted tokens --
@@ -2766,7 +2868,7 @@ class TestDeepLearningTab:
 
     # -- the training runs -------------------------------------------------- #
     def test_small_regression_run_fills_all_three_cards(
-        self, app: Any, quiet_dialogs: list[Any]
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
     ) -> None:
         self._configure_tiny(app)
         app._dl_load_example()
@@ -2774,14 +2876,21 @@ class TestDeepLearningTab:
         assert self._drain_jobs(app), "network training hung"
         assert quiet_dialogs == []
         texts = self._metric_texts(app)
-        assert "DeepMLPRegressor (regression)" in texts
+        # (round 179) the engine is resolved honestly: DeepMLP with
+        # torch, its numpy autograd stand-in without.
+        expected, _engine = playground.resolve_deep_estimator(
+            "Deep MLP (feed-forward)",
+            "regression",
+            importlib.util.find_spec("torch") is not None,
+        )
+        assert f"{expected} (regression)" in texts
         assert "R²" in texts and "RMSE" in texts
         assert "epochs run" in texts and "best val loss" in texts
         assert "hidden layers" in texts and "8" in texts
         assert app._dl_host._pg_figure is not None  # parity figure
         assert app._dl_hist_host._pg_figure is not None  # loss curves
         summary = app._dl_hist_summary.cget("text")
-        assert "DeepMLPRegressor ·" in summary
+        assert f"{expected} ·" in summary
         assert "epochs run" in summary and "best val loss" in summary
         assert app._dl_history  # the export payload is live
         assert app._dl_history[0]["epoch"] == 1
@@ -2789,7 +2898,7 @@ class TestDeepLearningTab:
         assert any(entry["val_loss"] is not None for entry in app._dl_history)
 
     def test_residual_classifier_run_uses_the_right_estimator(
-        self, app: Any, quiet_dialogs: list[Any]
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
     ) -> None:
         self._configure_tiny(app)
         app._dl_example_combo.set("qsar_classification.csv")
@@ -2802,7 +2911,12 @@ class TestDeepLearningTab:
         assert self._drain_jobs(app), "network training hung"
         assert quiet_dialogs == []
         texts = self._metric_texts(app)
-        assert "ResidualMLPClassifier (classification)" in texts
+        expected, _engine = playground.resolve_deep_estimator(
+            "Residual MLP (skip connections)",
+            "classification",
+            importlib.util.find_spec("torch") is not None,
+        )
+        assert f"{expected} (classification)" in texts
         assert "accuracy" in texts and "MCC" in texts
         # SMILES + compound_id are not numeric -> reported as dropped
         assert "dropped non-numeric" in texts
@@ -2811,6 +2925,10 @@ class TestDeepLearningTab:
         assert app._dl_hist_host._pg_figure is not None  # loss curves
 
     # -- batch normalisation (100x-90) --------------------------------------- #
+    @pytest.mark.skipif(
+        importlib.util.find_spec("torch") is None,
+        reason="batch norm is a torch-engine feature (the numpy stand-in has none)",
+    )
     def test_batchnorm_run_trains_with_the_flag_set(
         self, app: Any, quiet_dialogs: list[Any]
     ) -> None:
@@ -2894,12 +3012,15 @@ class TestDeepLearningTab:
     ) -> None:
         # the generic save/restore machinery walks vars(self) for
         # Variable/Entry widgets -- every _dl_* input rides it for free.
-        # This pins the whole tab: 15 saved keys, 13 mutated values
+        # This pins the whole tab: 18 saved keys (the optimizer + split
+        # strategy comboboxes since round 179), the mutated values
         # restored verbatim onto a freshly built window.
         first = playground.PlaygroundApp(persist_session=False)
         second = playground.PlaygroundApp(persist_session=False)
         try:
             first._dl_arch_combo.set("Residual MLP (skip connections)")
+            first._dl_optimizer_combo.set("rmsprop")
+            first._dl_split_combo.set("temporal")
             first._dl_hidden_entry.delete(0, "end")
             first._dl_hidden_entry.insert(0, "128, 64, 32")
             first._dl_activation_combo.set("gelu")
@@ -2918,11 +3039,13 @@ class TestDeepLearningTab:
             first._dl_batchnorm_var.set(True)
             payload = first._collect_session()
             saved = [key for key in payload["variables"] if key.startswith("_dl_")]
-            assert len(saved) == 16  # every input on the tab (CV folds since 121)
+            assert len(saved) == 18  # every input on the tab (optimizer + split since 179)
 
             second._session = payload
             second._restore_session()
             assert second._dl_arch_combo.get() == "Residual MLP (skip connections)"
+            assert second._dl_optimizer_combo.get() == "rmsprop"
+            assert second._dl_split_combo.get() == "temporal"
             assert second._dl_hidden_entry.get() == "128, 64, 32"
             assert second._dl_activation_combo.get() == "gelu"
             assert second._dl_dropout.get() == "0.25"

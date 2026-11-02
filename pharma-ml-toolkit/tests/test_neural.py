@@ -183,14 +183,16 @@ class TestRegistry:
         entries = list_models(only_available=False)
         # 26 + voting + stacking (1.2.49) + sgd_classifier (1.2.86,
         # xxx.ipynb cell 26) + the three naive-Bayes variants (1.2.93,
-        # PDSH 05.05): every dual-task family
-        assert len(entries) == 32
+        # PDSH 05.05) + dnn_numpy (1.2.103, the autograd engine): every
+        # dual-task family
+        assert len(entries) == 33
         dnn_entries = [e for e in entries if e["name"] in {"dnn", "dnn_residual"}]
         assert len(dnn_entries) == 2
         assert {e["name"] for e in entries} >= {
             "hsvr",
             "dnn",
             "dnn_residual",
+            "dnn_numpy",
             "extra_trees",
             "gradient_boosting",
             "pls",
@@ -200,7 +202,7 @@ class TestRegistry:
         }
         if not all(e["available"] for e in dnn_entries):
             pytest.skip("torch not installed in this environment")
-        assert len(list_models()) == 32
+        assert len(list_models()) == 33
 
     def test_aliases_resolve(self) -> None:
         assert resolve_model_name("deep_mlp") == "dnn"
@@ -240,8 +242,10 @@ class TestRegistry:
         flagged = {e["name"]: e["available"] for e in entries}
         assert flagged["dnn"] is False and flagged["dnn_residual"] is False
         # only_available=True drops them (26 core/boosting/hsvr/pls/gp/gpc
-        # + voting/stacking + sgd_classifier + 3 naive-Bayes entries remain)
-        assert len(list_models()) == 30
+        # + voting/stacking + sgd_classifier + 3 naive-Bayes entries remain,
+        # and dnn_numpy -- the autograd engine needs no torch)
+        assert len(list_models()) == 31
+        assert flagged["dnn_numpy"] is True  # the numpy engine never flags
         with pytest.raises(DependencyError, match="torch"):
             build_model("dnn", "classification")
 

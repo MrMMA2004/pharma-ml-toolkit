@@ -2035,6 +2035,31 @@ def build_objective(
 _DL_ARCHITECTURES: tuple[str, ...] = (
     "Deep MLP (feed-forward)",
     "Residual MLP (skip connections)",
+    "Numpy MLP (autograd engine)",
+)
+
+#: Optimizer tokens the numpy engine accepts (mirrors
+#: ``pharmaml.ml.numpy_neural.OPTIMIZERS``; the torch estimators train
+#: with torch.optim.Adam and ignore this knob).  Pinned together with
+#: the library by the test suite so the two cannot drift.
+_DL_OPTIMIZERS: tuple[str, ...] = (
+    "adam",
+    "adamw",
+    "rmsprop",
+    "sgd",
+    "adagrad",
+)
+
+#: Split strategies offered by the ML / Deep Learning tabs (the
+#: ``pharmaml.ml.splits`` registry minus ``group``, which needs
+#: caller-supplied group labels the GUI has no source for).  Pinned
+#: against the library by the test suite.
+_ML_SPLIT_STRATEGIES: tuple[str, ...] = (
+    "random",
+    "stratified",
+    "scaffold",
+    "kennard_stone",
+    "temporal",
 )
 
 #: Hidden-activation tokens -- mirrors ``pharmaml.ml.neural._ACTIVATIONS``
@@ -2171,8 +2196,34 @@ def deep_estimator_name(architecture: str, task: str) -> str:
         raise ValueError(f"unknown architecture {architecture!r}")
     if task not in ("classification", "regression"):
         raise ValueError(f"unknown task {task!r}")
-    family = "ResidualMLP" if architecture.startswith("Residual") else "DeepMLP"
+    if architecture.startswith("Numpy"):
+        family = "NumpyMLP"
+    elif architecture.startswith("Residual"):
+        family = "ResidualMLP"
+    else:
+        family = "DeepMLP"
     return family + ("Classifier" if task == "classification" else "Regressor")
+
+
+def resolve_deep_estimator(
+    architecture: str, task: str, torch_available: bool
+) -> tuple[str, str]:
+    """``(estimator class name, engine)`` with the honest fallback.
+
+    The torch architectures (Deep/Residual MLP) degrade to the numpy
+    autograd engine when torch is absent -- a working network beats a
+    DependencyError dialog, and the metrics card names
+    ``NumpyMLP*`` so the substitution is visible, never silent.  The
+    numpy architecture is engine-"numpy" whatever torch says.  Pure
+    and module-level so the self-test can pin both branches without
+    importing anything.
+    """
+    name = deep_estimator_name(architecture, task)
+    if architecture.startswith("Numpy"):
+        return name, "numpy"
+    if torch_available:
+        return name, "torch"
+    return "NumpyMLP" + name.removeprefix("DeepMLP").removeprefix("ResidualMLP"), "numpy"
 
 
 #: Data & ML tab (100x-90): hypermodel families the Tune card offers --
@@ -7003,6 +7054,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._feat_k_entry.insert(0, "1000")  # the rar pipeline's own default
         Tooltip(self._feat_k_entry, _FEAT_K_PRESETS)
         form_row(factory, "Features to keep (K)", self._feat_k_entry)
+        self._feat_njobs_spin = ttk.Spinbox(factory, from_=1, to=32, increment=1, width=8)
+        self._feat_njobs_spin.set("1")
+        Tooltip(
+            self._feat_njobs_spin,
+            "Worker threads for the per-molecule descriptor/fingerprint "
+            "batch (compute_feature_frame n_jobs, 1.2.103). RDKit's C++ "
+            "releases the GIL, so threads are real parallelism here; 1 = "
+            "the historical serial run; -1-style all-cores is not offered "
+            "in the GUI to keep the sandbox honest. Drops, row order and "
+            "the report are identical whatever the count.",
+        )
+        form_row(factory, "n_jobs", self._feat_njobs_spin)
         self._feat_ranker_combo = ttk.Combobox(
             factory, state="readonly", width=28, values=_FEAT_RANKERS
         )
@@ -9267,6 +9330,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             k = parse_int(
                 self._feat_k_entry.get(), "features to keep (K)", minimum=1, maximum=100000
             )
+            feat_jobs = parse_int(
+                self._feat_njobs_spin.get(), "n_jobs", minimum=1, maximum=32
+            )
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -9291,7 +9357,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 select_top_features,
             )
 
-            frame, report = compute_feature_frame(smiles, families=families)
+            frame, report = compute_feature_frame(
+                smiles, families=families, n_jobs=feat_jobs
+            )
             target_values: list[float] | None = None
             if target_frame is not None:
                 # align against the frame's original-row index (dropped
@@ -15796,6 +15864,36 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "leaderboard button keeps its own 3-fold convention.",
         )
         form_row(config, "cv folds", self._ml_cv_spin)
+        # (round 179) the split strategy + worker count, shared by the
+        # tab's Train / Ensemble / Tune cards.
+        self._ml_split_combo = ttk.Combobox(
+            config, state="readonly", width=26, values=_ML_SPLIT_STRATEGIES
+        )
+        self._ml_split_combo.set("random")
+        Tooltip(
+            self._ml_split_combo,
+            "How the train/test fence is drawn (pharmaml.ml.splits): "
+            "random -- the shuffled classic; stratified -- class-balanced "
+            "(classification); scaffold -- Bemis-Murcko groups never span "
+            "the fence, the test set holds the RARE scaffolds (the honest "
+            "generalisation test; needs a SMILES column in the dataset); "
+            "kennard_stone -- the max-min spread set trains, deterministic; "
+            "temporal -- first rows train, last rows test. Applies to the "
+            "Train, Ensemble and Tune cards.",
+        )
+        form_row(config, "split strategy", self._ml_split_combo)
+        self._ml_njobs_spin = ttk.Spinbox(config, from_=1, to=32, increment=1, width=10)
+        self._ml_njobs_spin.set("1")
+        Tooltip(
+            self._ml_njobs_spin,
+            "Worker count for the grid search / leaderboard CV "
+            "(train_model and compare_models n_jobs). 1 = the historical "
+            "serial behaviour; -1-style all-cores lives inside the forest "
+            "families already, so this knob parallelises the search over "
+            "them, not the trees. The Chemistry tab's feature factory has "
+            "its own n_jobs for descriptor batches.",
+        )
+        form_row(config, "n_jobs", self._ml_njobs_spin)
         self._tune_var = tk.BooleanVar(value=False)
         tune_check = ttk.Checkbutton(
             config, text="tune hyperparameters (grid search, slower)", variable=self._tune_var
@@ -17538,6 +17636,35 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 raise ValueError(f"{key}: {exc}") from None
         return params or None
 
+    def _ml_split_settings(self) -> tuple[str, int]:
+        """(strategy, n_jobs) parsed pre-flight from the Train card."""
+        strategy = self._ml_split_combo.get()
+        n_jobs = parse_int(self._ml_njobs_spin.get(), "n_jobs", minimum=1, maximum=32)
+        return strategy, n_jobs
+
+    def _smiles_for_split(self, frame: Any, strategy: str) -> list[str] | None:
+        """SMILES per row for scaffold splits, from the frame's own column.
+
+        Any column whose (lower-cased) name contains "smiles" qualifies
+        (``smiles``, ``SMILES``, ``canonical_smiles`` ...); the first
+        match wins.  ``None`` for every non-scaffold strategy, so the
+        call site stays one line.
+        """
+        if strategy != "scaffold":
+            return None
+        column = next(
+            (name for name in frame.columns if "smiles" in str(name).lower()), None
+        )
+        if column is None:
+            names = ", ".join(str(name) for name in list(frame.columns)[:8])
+            more = "; ..." if len(frame.columns) > 8 else ""
+            raise ValueError(
+                "the scaffold split needs a SMILES column, but this dataset "
+                f"has none (columns: {names}{more}). Load a dataset that "
+                "keeps its SMILES column, or pick another split strategy."
+            )
+        return [str(value) for value in frame[column].tolist()]
+
     def _ml_train(self) -> None:
         if not self._require_pharmaml():
             return
@@ -17577,6 +17704,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         try:
             model_params = self._ml_manual_params(model_name, task)
             cv = parse_int(self._ml_cv_spin.get(), "cv folds", minimum=2, maximum=10)
+            split_strategy, n_jobs = self._ml_split_settings()
         except ValueError as exc:
             messagebox.showwarning("Check the manual settings", str(exc))
             return
@@ -17585,15 +17713,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # _ml_clean_frame pattern): reading self._ml_frame inside work()
         # raced a concurrent dataset swap (Ctrl+O during the job).
         frame = self._ml_frame
+        # (round 179) the scaffold split's SMILES column is resolved on
+        # the MAIN thread too -- same race class, same pre-flight rule.
+        try:
+            split_smiles = self._smiles_for_split(frame, split_strategy)
+        except ValueError as exc:
+            messagebox.showwarning("Check the split strategy", str(exc))
+            return
 
         def work() -> Any:
             from pharmaml.ml import evaluate_model, train_model
-            from pharmaml.ml.preprocessing import make_train_test_split
+            from pharmaml.ml.splits import make_train_test_split
 
             y = frame[target]
             numeric, dropped = numeric_feature_columns(frame, target)
             x_train, x_test, y_train, y_test = make_train_test_split(
-                frame[numeric], y, random_state=42
+                frame[numeric],
+                y,
+                strategy=split_strategy,
+                random_state=42,
+                smiles=split_smiles,
             )
             trained = train_model(
                 model_name,
@@ -17602,7 +17741,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 y_train,
                 tune=tune,
                 cv=cv,
-                n_jobs=1,
+                n_jobs=n_jobs,
                 model_params=model_params,
             )
             # (100x-152) the train-side diagnostics (the overfit gap as
@@ -17722,18 +17861,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if kind == "voting" and task == "regression":
             voting_rule = "soft"  # ignored by VotingRegressor; keep valid
 
+        # (round 179) the tab's shared split strategy (the Train card's
+        # combobox), resolved pre-flight on the MAIN thread.
+        try:
+            split_strategy, _n_jobs = self._ml_split_settings()
+            split_smiles = self._smiles_for_split(self._ml_frame, split_strategy)
+        except ValueError as exc:
+            messagebox.showwarning("Check the split strategy", str(exc))
+            return
+
         # (100x-142) same main-thread capture as _ml_train.
         frame = self._ml_frame
 
         def work() -> Any:
             from pharmaml.ml.evaluation import evaluate_model
             from pharmaml.ml.models import build_stacking, build_voting
-            from pharmaml.ml.preprocessing import make_train_test_split
+            from pharmaml.ml.splits import make_train_test_split
             from pharmaml.ml.training import TrainingResult
 
             y = frame[target]
             x_train, x_test, y_train, y_test = make_train_test_split(
-                frame[numeric], y, random_state=42
+                frame[numeric], y, strategy=split_strategy, random_state=42,
+                smiles=split_smiles,
             )
             if kind == "voting":
                 estimator = build_voting(task, members, voting=voting_rule)
@@ -18815,6 +18964,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # "report" name was shadowed by the evaluate_model binding below
         # and survived only because the last on_trial call happened
         # before the rebinding.
+        # (round 179) the tab's shared split strategy, resolved pre-flight
+        # on the MAIN thread (the same combobox the Train card reads).
+        try:
+            split_strategy, _n_jobs = self._ml_split_settings()
+            split_smiles = self._smiles_for_split(self._ml_frame, split_strategy)
+        except ValueError as exc:
+            messagebox.showwarning("Check the split strategy", str(exc))
+            return
         frame = self._ml_frame
 
         def work(notify: Any) -> Any:
@@ -18822,7 +18979,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
             import pharmaml.ml.tuner as tuner_module
             from pharmaml.ml import evaluate_model
-            from pharmaml.ml.preprocessing import make_train_test_split
+            from pharmaml.ml.splits import make_train_test_split
             from pharmaml.ml.tuner import (
                 Hyperband,
                 HyperParameters,
@@ -18852,7 +19009,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             y = frame[target]
             numeric, _dropped = numeric_feature_columns(frame, target)
             x_train, x_test, y_train, y_test = make_train_test_split(
-                frame[numeric], y, random_state=42
+                frame[numeric], y, strategy=split_strategy, random_state=42,
+                smiles=split_smiles,
             )
             ladder: tuple[int, int] | None = None
             # (100x-160) the pruner rides the full-budget searchers only
@@ -19220,6 +19378,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         task = self._task_combo.get()
         if task == "auto":
             task = self._infer_task(target)
+        # (round 179) the leaderboard's worker count rides the Train
+        # card's n_jobs spinbox (1 = the historical serial run).
+        try:
+            _strategy, n_jobs = self._ml_split_settings()
+        except ValueError as exc:
+            messagebox.showwarning("Check the n_jobs setting", str(exc))
+            return
 
         # (100x-142) same main-thread capture as _ml_train.
         frame = self._ml_frame
@@ -19235,7 +19400,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 # model name is the note, index/total the fraction.
                 report(info["index"], info["total"], info["model"])
 
-            return compare_models(frame[numeric], y, task, cv=3, n_jobs=1, on_model=on_model)
+            return compare_models(frame[numeric], y, task, cv=3, n_jobs=n_jobs, on_model=on_model)
 
         def render(board: Any) -> None:
             self._board_frame = board
@@ -19287,6 +19452,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             task = self._infer_task(target)
         try:
             folds = parse_int(self._bench_cv.get(), "benchmark folds", minimum=2, maximum=10)
+            n_jobs = parse_int(self._ml_njobs_spin.get(), "n_jobs", minimum=1, maximum=32)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -19307,7 +19473,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 task,
                 model=None if model_name in ("", "auto") else model_name,
                 cv=folds,
-                n_jobs=1,
+                n_jobs=n_jobs,
                 on_family=on_family,
             )
 
@@ -21446,19 +21612,51 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             span=2,
             row=2,
             column=0,
-            subtitle="The pharmaml.ml.neural estimators: Adam with weight "
+            subtitle="The pharmaml.ml estimators: Adam with weight "
             "decay, per-feature standardisation and early stopping "
             "on a held-out validation fraction. Hidden layers are "
             "comma-separated widths -- empty = a single linear "
             "layer, the regularised baseline. Batch norm (1.2.36) "
             "inserts a BatchNorm1d between every hidden linear "
-            "map and its activation.",
+            "map and its activation. The numpy engine (1.2.103) is "
+            "the toolkit's own autograd trainer with a selectable "
+            "optimizer -- and the automatic stand-in when torch is "
+            "absent, so the card trains everywhere.",
         )
         self._dl_arch_combo = ttk.Combobox(
             net, state="readonly", width=26, values=_DL_ARCHITECTURES
         )
         self._dl_arch_combo.set(_DL_ARCHITECTURES[0])
         form_row(net, "architecture", self._dl_arch_combo)
+        self._dl_optimizer_combo = ttk.Combobox(
+            net, state="readonly", width=16, values=_DL_OPTIMIZERS
+        )
+        self._dl_optimizer_combo.set("adam")
+        Tooltip(
+            self._dl_optimizer_combo,
+            "The numpy engine's optimizer (pharmaml.ml.autograd's own "
+            "family, driven by ml/numpy_neural): adam (bias-corrected, "
+            "the default), adamw (decoupled weight decay), rmsprop, sgd "
+            "(plain -- tune the learning rate up), adagrad. The torch "
+            "architectures train with torch.optim.Adam and ignore this "
+            "knob; the numpy engine is also the automatic stand-in when "
+            "torch is absent, so the choice matters on every machine.",
+        )
+        form_row(net, "optimizer", self._dl_optimizer_combo)
+        self._dl_split_combo = ttk.Combobox(
+            net, state="readonly", width=16, values=_ML_SPLIT_STRATEGIES
+        )
+        self._dl_split_combo.set("random")
+        Tooltip(
+            self._dl_split_combo,
+            "How this tab's 80/20 fence is drawn (pharmaml.ml.splits): "
+            "random, stratified (class-balanced), scaffold (Bemis-Murcko "
+            "groups never span the fence -- needs a SMILES column in "
+            "the loaded CSV), kennard_stone (max-min spread set trains), "
+            "temporal (last rows test). The estimator's own validation "
+            "split for early stopping is always random.",
+        )
+        form_row(net, "split strategy", self._dl_split_combo)
         self._dl_hidden_entry = ttk.Entry(net, width=16)
         self._dl_hidden_entry.insert(0, "64, 32")
         form_row(net, "hidden layers", self._dl_hidden_entry)
@@ -21706,7 +21904,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _dl_train(self) -> None:
         if not self._require_pharmaml():
             return
-        for module in ("pandas", "sklearn", "torch"):
+        # (round 179) torch is NOT gated here anymore: the numpy
+        # autograd engine (pharmaml.ml.numpy_neural) trains the same
+        # contract without it, and resolve_deep_estimator picks the
+        # engine below -- a working network beats a DependencyError.
+        for module in ("pandas", "sklearn"):
             if not self._require(module, "network training"):
                 return
         if self._dl_frame is None:
@@ -21760,13 +21962,44 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             task = self._infer_task(target, self._dl_frame)
         architecture = self._dl_arch_combo.get()
         activation = self._dl_activation_combo.get()
-        estimator_name = deep_estimator_name(architecture, task)
+        optimizer_name = self._dl_optimizer_combo.get()
+        split_strategy = self._dl_split_combo.get()
+        # (round 179) the honest engine resolution: torch architectures
+        # degrade to the toolkit's own autograd engine when torch is
+        # absent -- the metrics card names NumpyMLP* so the
+        # substitution is visible, never silent.
+        import importlib.util
+
+        torch_available = importlib.util.find_spec("torch") is not None
+        estimator_name, engine = resolve_deep_estimator(
+            architecture, task, torch_available
+        )
+        if engine == "numpy" and batchnorm:
+            reason = (
+                "the numpy architecture was picked"
+                if architecture.startswith("Numpy")
+                else "torch is not installed"
+            )
+            messagebox.showwarning(
+                "Batch norm needs the torch engine",
+                "Batch normalisation is a torch-estimator feature, but this "
+                f"run resolves to the numpy autograd engine ({reason}). "
+                "Untick batch norm, or pick the numpy engine without it, or "
+                "install torch (pip install 'pharmaml[deep]') and keep a "
+                "torch architecture.",
+            )
+            return
+        try:
+            split_smiles = self._smiles_for_split(self._dl_frame, split_strategy)
+        except ValueError as exc:
+            messagebox.showwarning("Check the split strategy", str(exc))
+            return
 
         def work(notify: Any) -> Any:
             import time as _time
 
-            from pharmaml.ml import evaluate_model, neural
-            from pharmaml.ml.preprocessing import make_train_test_split
+            from pharmaml.ml import evaluate_model
+            from pharmaml.ml.splits import make_train_test_split
 
             def on_epoch(info: dict[str, Any]) -> None:
                 # epoch/epochs drive the bar + ETA (100x-106); the
@@ -21783,22 +22016,34 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             y = frame[target]
             numeric, dropped = numeric_feature_columns(frame, target)
             x_train, x_test, y_train, y_test = make_train_test_split(
-                frame[numeric], y, random_state=seed
-            )
-            estimator_cls = getattr(neural, estimator_name)
-            network = estimator_cls(
-                hidden_layers=hidden,
-                dropout=dropout,
-                activation=activation,
-                epochs=epochs,
-                batch_size=batch_size,
-                learning_rate=learning_rate,
-                weight_decay=weight_decay,
-                patience=patience,
-                val_split=val_split,
-                batchnorm=batchnorm,
+                frame[numeric],
+                y,
+                strategy=split_strategy,
                 random_state=seed,
+                smiles=split_smiles,
             )
+            if engine == "numpy":
+                from pharmaml.ml import numpy_neural as module
+            else:
+                from pharmaml.ml import neural as module
+            estimator_cls = getattr(module, estimator_name)
+            network_kwargs: dict[str, Any] = {
+                "hidden_layers": hidden,
+                "dropout": dropout,
+                "activation": activation,
+                "epochs": epochs,
+                "batch_size": batch_size,
+                "learning_rate": learning_rate,
+                "weight_decay": weight_decay,
+                "patience": patience,
+                "val_split": val_split,
+                "random_state": seed,
+            }
+            if engine == "torch":
+                network_kwargs["batchnorm"] = batchnorm
+            else:  # the numpy engine's own knob (round 179)
+                network_kwargs["optimizer"] = optimizer_name
+            network = estimator_cls(**network_kwargs)
             started = _time.perf_counter()
             network.fit(x_train, y_train, on_epoch=on_epoch)
             seconds = _time.perf_counter() - started
@@ -21858,7 +22103,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             except Exception as exc:  # noqa: BLE001
                 self._show_error("Plot failed", exc)
 
-        self._start_job(f"training {estimator_name} ({task})", work, render)
+        self._start_job(
+            f"training {estimator_name} ({task}, {engine} engine)", work, render
+        )
 
     def _fill_dl_metrics(
         self, network: Any, report: Any, task: str, dropped: list[str], seconds: float
@@ -27963,6 +28210,53 @@ def self_test() -> int:
     assert app._ml_params_var.get() == "{}", "reset clears the JSON"
     assert app._ml_manual_params("ridge", "regression") is None
 
+    # -- split strategies + n_jobs + the numpy engine (round 179) ---- #
+    assert app._ml_split_combo.get() == "random", "the split combobox default"
+    assert app._ml_njobs_spin.get() == "1", "the ML n_jobs default"
+    assert app._ml_split_settings() == ("random", 1)
+    app._ml_njobs_spin.set("4")
+    assert app._ml_split_settings() == ("random", 4)
+    app._ml_njobs_spin.set("1")
+    assert app._smiles_for_split(app._ml_frame, "random") is None
+    try:
+        app._smiles_for_split(app._ml_frame, "scaffold")
+        raise AssertionError("scaffold without a SMILES column must raise")
+    except ValueError as exc:
+        assert "SMILES column" in str(exc)
+    import pandas as _pd
+
+    frame_with_smiles = _pd.DataFrame(
+        {"smiles": ["CCO", "CCN", "CCC"], "value": [1.0, 2.0, 3.0]}
+    )
+    assert app._smiles_for_split(frame_with_smiles, "scaffold") == ["CCO", "CCN", "CCC"]
+    try:
+        from pharmaml.ml.splits import make_train_test_split, murcko_scaffold_key
+
+        assert murcko_scaffold_key("CCO") == "", "acyclic: no framework"
+        _xtr, _xte, ytr, yte = make_train_test_split(
+            frame_with_smiles[["value"]],
+            frame_with_smiles["value"],
+            strategy="temporal",
+            test_size=0.3,
+        )
+        assert ytr.tolist() == [1.0, 2.0] and yte.tolist() == [3.0]
+    except ImportError:  # pragma: no cover - standalone --self-test
+        pass
+    assert resolve_deep_estimator("Deep MLP (feed-forward)", "regression", False) == (
+        "NumpyMLPRegressor",
+        "numpy",
+    )
+    assert resolve_deep_estimator("Deep MLP (feed-forward)", "regression", True) == (
+        "DeepMLPRegressor",
+        "torch",
+    )
+    assert resolve_deep_estimator(
+        "Numpy MLP (autograd engine)", "classification", True
+    ) == ("NumpyMLPClassifier", "numpy")
+    assert app._dl_optimizer_combo.get() == "adam", "the optimizer default"
+    assert app._dl_split_combo.get() == "random", "the DL split default"
+    assert app._feat_njobs_spin.get() == "1", "the feature n_jobs default"
+
     # -- progress + ETA plumbing (100x-106) --------------------------- #
     assert _fmt_duration(0) == "0 s" and _fmt_duration(42.4) == "42 s"
     assert _fmt_duration(192) == "3 min 12 s" and _fmt_duration(3720) == "1 h 02 min"
@@ -27996,7 +28290,8 @@ def self_test() -> int:
     app.destroy()
     print(
         "self-test: UI built, every tab visited, manual hyperparameters "
-        "+ progress/ETA verified, no errors"
+        "+ progress/ETA + split strategies + n_jobs + engine fallback "
+        "verified, no errors"
     )
     return 0
 
