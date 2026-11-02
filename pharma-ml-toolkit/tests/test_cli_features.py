@@ -1388,12 +1388,23 @@ class TestCliStderrSingleCopy:
     """
 
     def test_failure_message_appears_exactly_once_on_stderr(self, tmp_path):
+        import os
         import subprocess
         import sys
 
         tiny = tmp_path / "tiny.csv"
         pd.DataFrame({"a": [1, 2]}).to_csv(tiny, index=False)
         log_file = tmp_path / "cli.log"
+        # (100x-169) hermetic PYTHONPATH: pytest's pythonpath=["src"]
+        # ini option only holds in-process -- a bare `python -m
+        # pharmaml.cli` subprocess inherits NOTHING and dies on the
+        # import.  The ABSOLUTE src path keeps the run green whatever
+        # the caller's cwd/env (the 100x-168 fix, lost to the sandbox
+        # rollback, re-applied).
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(
+            Path(__file__).resolve().parent.parent / "src"
+        ) + os.pathsep + env.get("PYTHONPATH", "")
         proc = subprocess.run(
             [
                 sys.executable, "-m", "pharmaml.cli",
@@ -1404,6 +1415,7 @@ class TestCliStderrSingleCopy:
             text=True,
             timeout=300,
             check=False,  # the failure's exit code is asserted below
+            env=env,
         )
         assert proc.returncode == 1
         marker = "too few to split"
@@ -1829,12 +1841,14 @@ class TestMLTuneCommand:
         assert "resource=" in out
 
     def test_hyperband_over_hsvr_errors(self, reg_csv, capsys) -> None:
+        # (100x-169) the refusal moved up front: the CLI names the
+        # resource-bearing families before any bracket starts.
         code = main([
             "ml", "tune", "--data", reg_csv, "--estimator", "hsvr",
             "--searcher", "hyperband",
         ])
         assert code == 1
-        assert "does not declare the resource" in capsys.readouterr().err
+        assert "no resource slot" in capsys.readouterr().err
 
     def test_classification_objective_auto(self, clf_csv, tmp_path, capsys, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -1843,3 +1857,48 @@ class TestMLTuneCommand:
         ])
         assert code == 0
         assert "objective=accuracy" in capsys.readouterr().out
+
+    def test_registry_family_estimator(
+        self, reg_csv, tmp_path, capsys, monkeypatch
+    ) -> None:
+        # (100x-169) the tune surfaces cover EVERY grid-bearing
+        # registry family, not just ann/dnn/hsvr -- random_forest
+        # here, over the registry's own declared grid.
+        monkeypatch.chdir(tmp_path)
+        code = main([
+            "ml", "tune", "--data", reg_csv, "--estimator", "random_forest",
+            "--max-trials", "2", "--cv", "2", "--seed", "11",
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "tuner:    random over random_forest (objective=r2)" in out
+        assert "n_estimators" in out
+        assert "max_depth" in out
+
+    def test_classification_only_family_uses_classifier_hypermodel(
+        self, clf_csv, tmp_path, capsys, monkeypatch
+    ) -> None:
+        # (100x-169) a classification-only family resolves its
+        # classifier hypermodel under the auto-detected task.
+        monkeypatch.chdir(tmp_path)
+        code = main([
+            "ml", "tune", "--data", clf_csv, "--estimator", "logistic_regression",
+            "--max-trials", "2", "--cv", "2", "--seed", "11",
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "tuner:    random over logistic_regression (objective=accuracy)" in out
+        assert "penalty" in out
+
+    def test_hyperband_over_resourceless_family_errors(
+        self, reg_csv, capsys
+    ) -> None:
+        # (100x-169) hyperband halves a declared resource budget --
+        # a registry-grid family declares none, so the CLI refuses up
+        # front instead of raising from inside the first bracket.
+        code = main([
+            "ml", "tune", "--data", reg_csv, "--estimator", "ridge",
+            "--searcher", "hyperband",
+        ])
+        assert code == 1
+        assert "no resource slot" in capsys.readouterr().err

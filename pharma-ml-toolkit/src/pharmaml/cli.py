@@ -247,10 +247,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="task type; 'auto' infers it from the target column (default)",
     )
     tune.add_argument(
-        "--estimator", choices=["ann", "dnn", "hsvr"], default="ann",
-        help="hypermodel family: sklearn MLP ('ann'), PyTorch deep network "
-        "('dnn', batchnorm searchable) or hierarchical SVR ('hsvr', "
-        "regression only)",
+        "--estimator", default="ann",
+        help="hypermodel family: ann (sklearn MLP), dnn (PyTorch deep "
+        "network, batchnorm searchable), hsvr (hierarchical SVR, "
+        "regression only), or ANY grid-bearing registry family "
+        "(random_forest, svm, knn, xgboost, ridge, ... -- its declared "
+        "param_grid becomes the searchable space)",
     )
     tune.add_argument(
         "--searcher", choices=["random", "hyperband", "tpe"], default="random",
@@ -1323,22 +1325,38 @@ def _cmd_ml_check(args: argparse.Namespace) -> int:
 
 #: Hypermodel registry for `ml tune`: (estimator token, task) -> builder.
 def _tune_hypermodels() -> dict[tuple[str, str], Any]:
-    """Lazily import the tuner hypermodels (keeps CLI import path lean)."""
+    """Lazily import the tuner hypermodels (keeps CLI import path lean).
+
+    (100x-169) the five bespoke builders (ann / dnn / hsvr) plus a
+    generated hypermodel for EVERY grid-bearing registry family --
+    the "hyperparameter optimization is only available for limited
+    models" report closed: the searchable space of a generated family
+    IS its own ``MODEL_REGISTRY`` ``param_grid``.
+    """
     from pharmaml.ml.tuner import (
         build_ann_classifier,
         build_ann_regressor,
         build_deep_classifier,
         build_deep_regressor,
         build_hsvr,
+        registry_hypermodels,
     )
 
-    return {
+    merged: dict[tuple[str, str], Any] = {
         ("ann", "regression"): build_ann_regressor,
         ("ann", "classification"): build_ann_classifier,
         ("dnn", "regression"): build_deep_regressor,
         ("dnn", "classification"): build_deep_classifier,
         ("hsvr", "regression"): build_hsvr,
     }
+    merged.update(registry_hypermodels())
+    return merged
+
+
+#: The resource slot each Hyperband-able family halves over --
+#: ``max_iter`` for the sklearn ann, ``epochs`` for the torch dnn;
+#: every other family declares none, so hyperband refuses up front.
+_TUNE_RESOURCES: dict[str, str] = {"ann": "max_iter", "dnn": "epochs"}
 
 
 def _cmd_ml_tune(args: argparse.Namespace) -> int:
@@ -1370,12 +1388,24 @@ def _cmd_ml_tune(args: argparse.Namespace) -> int:
         ):
             tune_task = "regression"
     hypermodels = _tune_hypermodels()
+    tokens = sorted({key[0] for key in hypermodels})
+    if args.estimator not in tokens:
+        print(
+            f"error: estimator {args.estimator!r} has no hypermodel (valid: "
+            f"{', '.join(tokens)})",
+            file=sys.stderr,
+        )
+        return 1
     key = (args.estimator, tune_task)
     hypermodel = hypermodels.get(key)
     if hypermodel is None:
+        # (100x-169) the honest, general wording: which task the
+        # family actually supports (hsvr is regression-only; a
+        # classification-only family names classification).
+        other = "classification" if tune_task == "regression" else "regression"
         print(
             f"error: estimator {args.estimator!r} has no hypermodel for task "
-            f"{tune_task!r} (hsvr is regression-only; ann/dnn are dual-task)",
+            f"{tune_task!r} (the family supports {other!r} only)",
             file=sys.stderr,
         )
         return 1
@@ -1405,7 +1435,19 @@ def _cmd_ml_tune(args: argparse.Namespace) -> int:
             seed=args.seed,
         )
     else:
-        resource = "max_iter" if args.estimator == "ann" else "epochs"
+        # (100x-169) hyperband halves a DECLARED resource budget --
+        # only ann (max_iter) and dnn (epochs) carry one; every other
+        # family is refused up front instead of raising from inside
+        # the first bracket.
+        resource = _TUNE_RESOURCES.get(args.estimator)
+        if resource is None:
+            print(
+                f"error: estimator {args.estimator!r} has no resource slot "
+                "for hyperband to halve (ann: max_iter, dnn: epochs) -- use "
+                "--searcher random or tpe instead",
+                file=sys.stderr,
+            )
+            return 1
         tuner = Hyperband(
             hypermodel,
             objective=objective,

@@ -2264,8 +2264,54 @@ def resolve_deep_estimator(
 
 
 #: Data & ML tab (100x-90): hypermodel families the Tune card offers --
-#: the same tokens the CLI's ``ml tune --estimator`` accepts.
-_TUNE_ESTIMATORS: tuple[str, ...] = ("ann", "hsvr", "dnn")
+#: the same tokens the CLI's ``ml tune --estimator`` accepts.  (100x-169)
+#: the trio grew to EVERY grid-bearing registry family: the tokens
+#: below are frozen here (the playground never imports ``pharmaml``
+#: at module scope) and pinned to the CLI's own dynamically-derived
+#: registry by the test suite, so the two surfaces cannot drift --
+#: the bespoke trio first (muscle memory), then the registry families
+#: in the registry's own declared order.
+_TUNE_REGISTRY_FAMILIES: tuple[tuple[str, str, str], ...] = (
+    ("logistic_regression", "classification", "build_logistic_regression_classifier"),
+    ("ridge_classifier", "classification", "build_ridge_classifier_classifier"),
+    ("sgd_classifier", "classification", "build_sgd_classifier_classifier"),
+    ("lasso_logistic", "classification", "build_lasso_logistic_classifier"),
+    ("elastic_net_logistic", "classification", "build_elastic_net_logistic_classifier"),
+    ("lasso", "regression", "build_lasso_regressor"),
+    ("ridge", "regression", "build_ridge_regressor"),
+    ("elastic_net", "regression", "build_elastic_net_regressor"),
+    ("huber_regression", "regression", "build_huber_regression_regressor"),
+    ("pls", "regression", "build_pls_regressor"),
+    ("knn", "regression", "build_knn_regressor"),
+    ("knn", "classification", "build_knn_classifier"),
+    ("gaussian_nb", "classification", "build_gaussian_nb_classifier"),
+    ("multinomial_nb", "classification", "build_multinomial_nb_classifier"),
+    ("bernoulli_nb", "classification", "build_bernoulli_nb_classifier"),
+    ("decision_tree", "regression", "build_decision_tree_regressor"),
+    ("decision_tree", "classification", "build_decision_tree_classifier"),
+    ("random_forest", "regression", "build_random_forest_regressor"),
+    ("random_forest", "classification", "build_random_forest_classifier"),
+    ("extra_trees", "regression", "build_extra_trees_regressor"),
+    ("extra_trees", "classification", "build_extra_trees_classifier"),
+    ("svm", "regression", "build_svm_regressor"),
+    ("svm", "classification", "build_svm_classifier"),
+    ("adaboost", "regression", "build_adaboost_regressor"),
+    ("adaboost", "classification", "build_adaboost_classifier"),
+    ("gradient_boosting", "regression", "build_gradient_boosting_regressor"),
+    ("gradient_boosting", "classification", "build_gradient_boosting_classifier"),
+    ("xgboost", "regression", "build_xgboost_regressor"),
+    ("xgboost", "classification", "build_xgboost_classifier"),
+    ("lightgbm", "regression", "build_lightgbm_regressor"),
+    ("lightgbm", "classification", "build_lightgbm_classifier"),
+    ("catboost", "regression", "build_catboost_regressor"),
+    ("catboost", "classification", "build_catboost_classifier"),
+)
+
+_TUNE_ESTIMATORS: tuple[str, ...] = (
+    "ann",
+    "hsvr",
+    "dnn",
+) + tuple(dict.fromkeys(token for token, _task, _name in _TUNE_REGISTRY_FAMILIES))
 
 #: Ensemble-builder card: registry members offered as checkboxes --
 #: ``(registry token, label)``.  Dual-task, dependency-free families
@@ -2310,7 +2356,9 @@ _TUNE_RESOURCES: dict[str, str] = {"ann": "max_iter", "dnn": "epochs"}
 
 #: Hypermodel builder names for the Tune card, keyed by
 #: ``(estimator, task)`` -- resolved on the worker thread (the playground
-#: never imports ``pharmaml`` at module scope), and pinned to the CLI's
+#: never imports ``pharmaml`` at module scope) via the tuner's own
+#: ``hypermodel_by_name`` (the generated registry builders live in its
+#: cache, not its module namespace), and pinned to the CLI's
 #: own ``ml tune`` registry by the test suite so the two surfaces cannot
 #: drift apart (the ``_DL_ACTIVATIONS`` pin pattern).
 _TUNE_HYPERMODELS: dict[tuple[str, str], str] = {
@@ -2319,6 +2367,21 @@ _TUNE_HYPERMODELS: dict[tuple[str, str], str] = {
     ("dnn", "regression"): "build_deep_regressor",
     ("dnn", "classification"): "build_deep_classifier",
     ("hsvr", "regression"): "build_hsvr",
+    **{
+        (token, task): name
+        for token, task, name in _TUNE_REGISTRY_FAMILIES
+    },
+}
+
+#: (100x-169) optional backends a Tune family needs before any search
+#: starts -- the dnn/torch guard pattern, extended to the boosting
+#: families (a missing backend would otherwise surface only as the
+#: all-trials-failed ModelError).
+_TUNE_REQUIRES: dict[str, str] = {
+    "dnn": "torch",
+    "xgboost": "xgboost",
+    "lightgbm": "lightgbm",
+    "catboost": "catboost",
 }
 
 
@@ -16045,7 +16108,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=0,
             subtitle="The ml tune story, mouse edition: a keras-tuner-style "
             "search over a whole estimator family (not the "
-            "per-model grid search above). RandomSearch samples "
+            "per-model grid search above) -- and (100x-169) over EVERY "
+            "grid-bearing registry family, not just the bespoke trio: "
+            "a generated family's searchable space IS its registry "
+            "param_grid. RandomSearch samples "
             "full-budget trials; Hyperband starts brackets of "
             "configs at a fraction of the resource budget (ann's "
             "max_iter, dnn's epochs -- the ladder is the family's "
@@ -16063,8 +16129,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._tune_estimator_combo,
             "ann = the sklearn MLP hypermodel; dnn = the torch deep MLP "
             "(batchnorm searchable, needs torch); hsvr = the hierarchical "
-            "SVR (regression only). The same families the CLI's "
-            "ml tune --estimator accepts.",
+            "SVR (regression only); every other grid-bearing registry "
+            "family (random_forest, svm, knn, xgboost, ridge, ...) is "
+            "searched over its own declared param_grid. The same families "
+            "the CLI's ml tune --estimator accepts.",
         )
         form_row(tuner, "estimator", self._tune_estimator_combo)
         self._tune_searcher_combo = ttk.Combobox(
@@ -18972,13 +19040,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         estimator = self._tune_estimator_combo.get()
         hypermodel_name = _TUNE_HYPERMODELS.get((estimator, task))
         if hypermodel_name is None:
+            # (100x-169) the honest, general wording: name the task the
+            # family ACTUALLY supports (hsvr stays regression-only; the
+            # classification-only linear families name classification).
+            other = "regression" if task == "classification" else "classification"
             messagebox.showwarning(
-                "hsvr is regression-only",
-                "The HierarchicalSVR hypermodel has no classification "
-                "variant -- pick ann or dnn for a classification target.",
+                f"{estimator} is {other}-only",
+                f"The {estimator} family has no {task} variant -- pick a "
+                "dual-task family (ann, dnn, knn, random_forest, ...) for "
+                f"a {task} target.",
             )
             return
-        if estimator == "dnn" and not self._require("torch", "the dnn search"):
+        # (100x-169) the optional-backend guard, generalized from the
+        # dnn/torch original to the boosting families too.
+        required = _TUNE_REQUIRES.get(estimator)
+        if required is not None and not self._require(required, f"the {estimator} search"):
             return
         searcher = self._tune_searcher_combo.get()
         # (100x-160) the pruner choice rides the full-budget searchers
@@ -18989,9 +19065,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         resource = _TUNE_RESOURCES.get(estimator)
         if searcher == "hyperband" and resource is None:
             messagebox.showwarning(
-                "hsvr has no resource slot",
+                f"{estimator} has no resource slot",
                 "Hyperband halves a resource budget rung by rung -- ann's "
-                "max_iter, dnn's epochs. The HierarchicalSVR hypermodel "
+                "max_iter, dnn's epochs. The " + estimator + " hypermodel "
                 "declares no resource slot, so there is nothing to halve. "
                 "Pick ann or dnn, or switch the searcher back to random.",
             )
@@ -19049,7 +19125,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     note = (note + " · " if note else "") + "trial failed"
                 notify(info["trial"], info.get("total"), note)
 
-            hypermodel = getattr(tuner_module, hypermodel_name)
+            hypermodel = tuner_module.hypermodel_by_name(hypermodel_name)
             objective = "r2" if task == "regression" else "accuracy"
             y = frame[target]
             numeric, _dropped = numeric_feature_columns(frame, target)

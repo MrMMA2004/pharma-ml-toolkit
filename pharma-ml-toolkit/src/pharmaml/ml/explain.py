@@ -295,7 +295,7 @@ def shap_summary(
         source: Any = X if isinstance(X, pd.DataFrame) else matrix
         try:
             transformed = np.asarray(prefix.transform(source), dtype=float)
-        except Exception as exc:  # noqa: BLE001 - transformer zoo
+        except Exception as exc:  # the transformer zoo; re-raised typed below
             raise ModelError(
                 "the Pipeline's preprocessing steps could not transform X "
                 f"({exc}).  Explain the final step directly: "

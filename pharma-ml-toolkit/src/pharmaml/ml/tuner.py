@@ -142,8 +142,11 @@ __all__ = [
     "build_deep_classifier",
     "build_deep_regressor",
     "build_hsvr",
+    "hypermodel_by_name",
     "make_cv_splitter",
     "param_importances",
+    "registry_hypermodel",
+    "registry_hypermodels",
     "resource_bounds",
 ]
 
@@ -2301,4 +2304,239 @@ def build_hsvr(hp: HyperParameters) -> Any:
     alpha = hp.Float("alpha", 0.0, 1.0, step=0.1, default=0.8)
     return HierarchicalSVR(
         n_clusters=n_clusters, C=C, gamma=gamma, alpha=alpha, random_state=42
+    )
+
+
+# ---------------------------------------------------------------------------
+# (100x-169) the registry-grid hypermodels
+# ---------------------------------------------------------------------------
+#: Registry families that deliberately carry NO generated hypermodel.
+#: ``voting`` / ``stacking`` are meta-ensembles over other families (the
+#: Ensemble card owns their composition); ``gaussian_process`` /
+#: ``gaussian_process_classifier`` grid over kernel OBJECTS, not
+#: name->value hyperparameters; ``linear_regression`` has an empty grid;
+#: ``ann`` / ``dnn`` / ``hsvr`` have bespoke hand-written spaces above;
+#: ``dnn_residual`` / ``dnn_numpy`` are the dnn family's twins (the
+#: ``dnn`` token already tunes the family).
+_REGISTRY_TUNE_EXCLUSIONS: frozenset[str] = frozenset(
+    {
+        "voting",
+        "stacking",
+        "gaussian_process",
+        "gaussian_process_classifier",
+        "linear_regression",
+        "ann",
+        "dnn",
+        "hsvr",
+        "dnn_residual",
+        "dnn_numpy",
+    }
+)
+
+#: Generated builders, keyed ``(registry token, task)`` -- built lazily
+#: and cached so ``registry_hypermodel`` is identity-stable (the GUI
+#: resolves builders by NAME, the CLI by (token, task), and both must
+#: see the very same callable).
+_REGISTRY_HYPERMODEL_CACHE: dict[tuple[str, str], HyperModel] = {}
+
+
+def _registry_tune_pairs() -> list[tuple[str, str]]:
+    """The ``(token, task)`` pairs every grid-bearing family offers."""
+    from pharmaml.ml.models import MODEL_REGISTRY
+
+    pairs: list[tuple[str, str]] = []
+    for key, spec in MODEL_REGISTRY.items():
+        if key in _REGISTRY_TUNE_EXCLUSIONS or not spec.param_grid:
+            continue
+        tasks = (
+            ("regression", "classification")
+            if spec.task == "both"
+            else (spec.task,)
+        )
+        pairs.extend((key, task) for task in tasks)
+    return pairs
+
+
+def registry_hypermodel(name: str, task: str) -> HyperModel:
+    """Derive a hypermodel from a registry family's own ``param_grid``.
+
+    (100x-169) the Tune surfaces (the ``ml tune`` CLI and the
+    playground's Tune card) used to search only the three bespoke
+    families -- ann / dnn / hsvr -- which is exactly the "hyperparameter
+    optimization is only available for limited models" report.  The
+    factory here closes the gap: EVERY grid-bearing family in
+    :data:`~pharmaml.ml.models.MODEL_REGISTRY` becomes a hypermodel
+    whose searchable space IS the registry's own declared grid, so the
+    keras-tuner-style searchers (RandomSearch / TPESearch) and the
+    registry's GridSearchCV sweep the same values, and the leaderboard's
+    ``k=v`` tokens mean the same thing on both surfaces.
+
+    The builder calls :func:`~pharmaml.ml.models.build_model` per trial
+    (aliases resolve, dual-task families dispatch to the task's own
+    estimator class, ``random_state=42`` comes with the registry's
+    factories), then draws every grid slot as an ``hp.Choice`` and
+    ``set_params`` the drawn values onto the estimator.  A missing
+    optional backend (xgboost / lightgbm / catboost) raises the
+    registry's own :class:`~pharmaml.exceptions.DependencyError` from
+    the failing trial -- the search's all-trials-failed error carries
+    the install hint.
+
+    Parameters
+    ----------
+    name:
+        Registry token or alias (``'random_forest'``, ``'rf'``).
+    task:
+        ``'regression'`` or ``'classification'``.
+
+    Returns
+    -------
+    HyperModel
+        A cached ``(hp) -> estimator`` builder whose ``__name__``
+        follows the module convention --
+        ``build_random_forest_regressor`` / ``build_knn_classifier``.
+
+    Raises
+    ------
+    ModelError
+        Unknown family, task mismatch with the registry, or a family
+        with no grid to search (the exclusions above).
+
+    Examples
+    --------
+    >>> builder = registry_hypermodel("random_forest", "regression")
+    >>> builder.__name__
+    'build_random_forest_regressor'
+    >>> hp = HyperParameters()
+    >>> estimator = builder(hp)
+    >>> sorted(spec.name for spec in hp.space)
+    ['max_depth', 'min_samples_split', 'n_estimators']
+    >>> estimator.n_estimators            # collection mode: grid[0]
+    100
+
+    Trial mode threads the drawn values through:
+
+    >>> hp = HyperParameters(values={"n_neighbors": 11, "weights": "distance"})
+    >>> registry_hypermodel("knn", "classification")(hp).n_neighbors
+    11
+
+    The builder is cached (identity-stable), and refusals are typed:
+
+    >>> registry_hypermodel("knn", "regression") is registry_hypermodel("knn", "regression")
+    True
+    >>> registry_hypermodel("banana", "regression")  # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: Unknown model 'banana'. Registered models: ...
+    >>> registry_hypermodel("ridge", "classification")
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: Model 'ridge' supports 'regression', not 'classification'
+    >>> registry_hypermodel("linear_regression", "regression")
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: the model 'linear_regression' declares no param_grid to search
+    """
+    from pharmaml.ml.models import MODEL_REGISTRY, resolve_model_name
+
+    key = resolve_model_name(name)
+    if task not in {"regression", "classification"}:
+        raise ModelError(
+            f"task must be 'regression' or 'classification', got {task!r}"
+        )
+    spec = MODEL_REGISTRY[key]
+    if spec.task != "both" and spec.task != task:
+        raise ModelError(
+            f"Model {key!r} supports {spec.task!r}, not {task!r}"
+        )
+    if not spec.param_grid:
+        raise ModelError(
+            f"the model {key!r} declares no param_grid to search"
+        )
+    cached = _REGISTRY_HYPERMODEL_CACHE.get((key, task))
+    if cached is not None:
+        return cached
+
+    grid = spec.param_grid
+    token, suffix = key, "regressor" if task == "regression" else "classifier"
+
+    def build(hp: HyperParameters) -> Any:
+        from pharmaml.ml.models import build_model
+
+        estimator = build_model(token, task)
+        for slot in sorted(grid):
+            values = list(grid[slot])
+            estimator.set_params(**{slot: hp.Choice(slot, values)})
+        return estimator
+
+    build.__name__ = f"build_{token}_{suffix}"
+    build.__qualname__ = build.__name__
+    build.__doc__ = (
+        f"(100x-169) registry hypermodel for {token!r} ({task}): the "
+        f"searchable space IS MODEL_REGISTRY[{token!r}].param_grid -- "
+        f"{', '.join(sorted(grid))} -- sampled as hp.Choice slots."
+    )
+    _REGISTRY_HYPERMODEL_CACHE[(key, task)] = build
+    return build
+
+
+def registry_hypermodels() -> dict[tuple[str, str], HyperModel]:
+    """The full ``(token, task) -> builder`` registry-grid mapping.
+
+    Every grid-bearing, non-excluded
+    :data:`~pharmaml.ml.models.MODEL_REGISTRY` family for exactly the
+    task(s) the registry itself declares.  The CLI's ``ml tune`` and the
+    playground's Tune card both resolve through this mapping (plus the
+    five bespoke builders), pinned together by the test suite so the
+    surfaces cannot drift.
+
+    Examples
+    --------
+    >>> mapping = registry_hypermodels()
+    >>> ("random_forest", "regression") in mapping
+    True
+    >>> mapping[("ridge", "regression")].__name__
+    'build_ridge_regressor'
+    >>> ("hsvr", "regression") in mapping      # bespoke, not generated
+    False
+    >>> ("voting", "regression") in mapping    # meta-ensemble
+    False
+    """
+    return {pair: registry_hypermodel(*pair) for pair in _registry_tune_pairs()}
+
+
+def hypermodel_by_name(name: str) -> HyperModel:
+    """Resolve a hypermodel by its exported builder name.
+
+    The playground's Tune card carries builder NAMES (strings resolved
+    on the worker thread, so the GUI never imports ``pharmaml`` at
+    module scope); this is the name -> callable side of that contract,
+    covering the five bespoke builders plus every generated registry
+    builder.  Unknown names raise the typed error.
+
+    Examples
+    --------
+    >>> hypermodel_by_name("build_hsvr") is build_hsvr
+    True
+    >>> hypermodel_by_name("build_knn_classifier").__name__
+    'build_knn_classifier'
+    >>> hypermodel_by_name("build_nope_regressor")
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: no hypermodel named 'build_nope_regressor' (known: the build_* builders of pharmaml.ml.tuner)
+    """
+    bespoke: dict[str, HyperModel] = {
+        "build_ann_regressor": build_ann_regressor,
+        "build_ann_classifier": build_ann_classifier,
+        "build_deep_regressor": build_deep_regressor,
+        "build_deep_classifier": build_deep_classifier,
+        "build_hsvr": build_hsvr,
+    }
+    if name in bespoke:
+        return bespoke[name]
+    for builder in registry_hypermodels().values():
+        if builder.__name__ == name:
+            return builder
+    raise ModelError(
+        f"no hypermodel named {name!r} (known: the build_* builders "
+        "of pharmaml.ml.tuner)"
     )

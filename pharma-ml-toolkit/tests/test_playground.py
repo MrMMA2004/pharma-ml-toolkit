@@ -3277,6 +3277,31 @@ class TestTunerCard:
         # hsvr really is the regression-only odd one out
         assert ("hsvr", "classification") not in playground._TUNE_HYPERMODELS
 
+    def test_registry_families_covered_by_the_card(self, playground: Any) -> None:
+        # (100x-169) the card tunes EVERY grid-bearing registry family,
+        # not just the bespoke trio -- representative members of each
+        # zoo class resolve to their generated builder names.
+        assert "random_forest" in playground._TUNE_ESTIMATORS
+        assert "logistic_regression" in playground._TUNE_ESTIMATORS
+        assert "ridge" in playground._TUNE_ESTIMATORS
+        assert playground._TUNE_HYPERMODELS[("random_forest", "regression")] == (
+            "build_random_forest_regressor"
+        )
+        assert playground._TUNE_HYPERMODELS[("logistic_regression", "classification")] == (
+            "build_logistic_regression_classifier"
+        )
+        assert playground._TUNE_HYPERMODELS[("knn", "classification")] == (
+            "build_knn_classifier"
+        )
+        # the dual-task families really are dual-task
+        assert ("knn", "regression") in playground._TUNE_HYPERMODELS
+        # the optional-backend families carry their dependency guard
+        # (the dnn/torch pattern, extended to the boosters)
+        assert playground._TUNE_REQUIRES["dnn"] == "torch"
+        assert playground._TUNE_REQUIRES["xgboost"] == "xgboost"
+        assert playground._TUNE_REQUIRES["lightgbm"] == "lightgbm"
+        assert playground._TUNE_REQUIRES["catboost"] == "catboost"
+
     def test_defaults_before_any_run(self, app: Any) -> None:
         assert app._tune_estimator_combo.get() == "ann"
         assert app._tune_searcher_combo.get() == "random"
@@ -3441,6 +3466,56 @@ class TestTunerCard:
         assert "hsvr has no resource slot" in titles
         body = quiet_dialogs[0][1][1]
         assert "ann or dnn" in body and "random" in body
+
+    def test_registry_family_hyperband_guards_with_the_general_message(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # (100x-169) the guard text generalises: any family without a
+        # declared resource slot is named, not just the hsvr original.
+        app._ml_load_example()
+        app._tune_estimator_combo.set("ridge")
+        app._tune_searcher_combo.set("hyperband")
+        app._ml_tune()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "ridge has no resource slot" in titles
+        body = quiet_dialogs[0][1][1]
+        assert "ann or dnn" in body and "random" in body
+
+    def test_random_forest_search_fills_the_leaderboard(
+        self, playground: Any, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # (100x-169) a registry-grid family runs the SAME card flow as
+        # ann: leaderboard rows, summary, held-out score, Apply-best.
+        app._ml_load_example()
+        app._tune_estimator_combo.set("random_forest")
+        app._tune_trials.set("4")
+        app._tune_cv.set("2")
+        app._ml_tune()
+        assert self._drain_jobs(app), "the random_forest search hung"
+        assert quiet_dialogs == []
+
+        rows = app._board_tree.get_children()
+        assert len(rows) == 4
+        results = app._tune_last[0]
+        assert len(results.trials) == 4
+        # the searched space IS the registry's own grid
+        from pharmaml.ml.models import MODEL_REGISTRY
+
+        grid = MODEL_REGISTRY["random_forest"].param_grid
+        assert set(results.best_params) == set(grid)
+        assert results.best_params["n_estimators"] in grid["n_estimators"]
+
+        status = app._board_status.cget("text")
+        assert status.startswith("RandomSearch over random_forest (regression)")
+        summary = app._tune_summary.cget("text")
+        assert "winner:" in summary and "held-out R²" in summary
+
+        # Apply best (random_forest): the model combobox points at the family
+        app._ml_tune_apply()
+        assert quiet_dialogs == []
+        assert app._model_combo.get() == "random_forest"
+        assert app._task_combo.get() == "regression"
 
     def test_apply_and_save_before_any_search_guard(
         self, app: Any, quiet_dialogs: list[Any]

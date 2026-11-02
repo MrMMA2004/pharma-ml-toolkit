@@ -30,6 +30,7 @@ from sklearn.neural_network import MLPRegressor
 
 from pharmaml.exceptions import DataValidationError, ModelError
 from pharmaml.ml.hierarchical import HierarchicalSVR
+from pharmaml.ml.models import MODEL_REGISTRY
 from pharmaml.ml.tuner import (
     Hyperband,
     HyperParameters,
@@ -45,8 +46,11 @@ from pharmaml.ml.tuner import (
     build_ann_classifier,
     build_ann_regressor,
     build_hsvr,
+    hypermodel_by_name,
     make_cv_splitter,
     param_importances,
+    registry_hypermodel,
+    registry_hypermodels,
     resource_bounds,
 )
 
@@ -175,6 +179,117 @@ class TestHypermodels:
         tuner = Hyperband(build_hsvr, resource="epochs", max_resource=9)
         with pytest.raises(ModelError, match="does not declare the resource"):
             tuner.search(*linear_data(20))
+
+
+# ---------------------------------------------------------------------------
+# (100x-169) the registry-grid hypermodels
+# ---------------------------------------------------------------------------
+class TestRegistryHypermodels:
+    """Every grid-bearing sklearn registry family is searchable.
+
+    The Tune surfaces (CLI + card) used to offer ann/hsvr/dnn only;
+    the factory here derives a hypermodel from the registry's OWN
+    param_grid, so the keras-tuner-style searchers cover the whole
+    sklearn zoo.
+    """
+
+    def test_factory_space_mirrors_the_registry_grid(self) -> None:
+        builder = registry_hypermodel("random_forest", "regression")
+        assert builder.__name__ == "build_random_forest_regressor"
+        hp = HyperParameters()
+        estimator = builder(hp)
+        from sklearn.ensemble import RandomForestRegressor
+
+        assert isinstance(estimator, RandomForestRegressor)
+        grid = MODEL_REGISTRY["random_forest"].param_grid
+        assert sorted(spec.name for spec in hp.space) == sorted(grid)
+        assert estimator.random_state == 42  # deterministic refits
+        # collection mode returns each slot's first grid value
+        assert estimator.n_estimators == grid["n_estimators"][0]
+
+    def test_trial_mode_threads_drawn_values(self) -> None:
+        builder = registry_hypermodel("knn", "classification")
+        hp = HyperParameters(values={"n_neighbors": 11, "weights": "distance"})
+        estimator = builder(hp)
+        from sklearn.neighbors import KNeighborsClassifier
+
+        assert isinstance(estimator, KNeighborsClassifier)
+        assert estimator.n_neighbors == 11
+        assert estimator.weights == "distance"
+
+    def test_unknown_family_and_task_refused(self) -> None:
+        with pytest.raises(ModelError, match="Unknown model"):
+            registry_hypermodel("banana", "regression")
+        with pytest.raises(ModelError, match="supports"):
+            registry_hypermodel("ridge", "classification")
+
+    def test_random_search_over_a_registry_family(self) -> None:
+        X, y = linear_data(60)
+        tuner = RandomSearch(
+            registry_hypermodel("ridge", "regression"), objective="r2",
+            max_trials=3, cv=2, seed=42,
+        )
+        results = tuner.search(X, y)
+        assert len(results.trials) == 3
+        alphas = MODEL_REGISTRY["ridge"].param_grid["alpha"]
+        assert results.best_params["alpha"] in alphas
+        assert results.best_score > 0.9  # a linear surface is learnable
+
+    def test_by_name_resolution(self) -> None:
+        builder = hypermodel_by_name("build_knn_classifier")
+        assert builder is registry_hypermodel("knn", "classification")
+        assert hypermodel_by_name("build_hsvr") is build_hsvr
+        with pytest.raises(ModelError, match="no hypermodel named"):
+            hypermodel_by_name("build_nope_regressor")
+
+    def test_coverage_pin(self) -> None:
+        mapping = registry_hypermodels()
+        # every token resolves in the model registry
+        tokens = {key[0] for key in mapping}
+        assert tokens <= set(MODEL_REGISTRY)
+        # representative members of each exclusion class stay out
+        for token in (
+            "voting", "stacking",               # meta-ensembles
+            "gaussian_process",                  # kernel-OBJECT grids
+            "gaussian_process_classifier",
+            "linear_regression",                 # empty grid
+            "ann", "dnn", "hsvr",               # bespoke hypermodels
+            "dnn_residual", "dnn_numpy",         # the dnn family twins
+        ):
+            assert token not in tokens
+        # ...while every OTHER grid-bearing family is in, with the
+        # task pairing the registry itself declares
+        for key, spec in MODEL_REGISTRY.items():
+            if key in {
+                "voting", "stacking", "gaussian_process",
+                "gaussian_process_classifier", "linear_regression",
+                "ann", "dnn", "hsvr", "dnn_residual", "dnn_numpy",
+            }:
+                continue
+            if not spec.param_grid:
+                continue
+            tasks = ("regression", "classification") if spec.task == "both" else (spec.task,)
+            for task in tasks:
+                assert (key, task) in mapping, (key, task)
+
+    def test_names_follow_the_regressor_classifier_convention(self) -> None:
+        mapping = registry_hypermodels()
+        assert mapping[("ridge", "regression")].__name__ == "build_ridge_regressor"
+        assert (
+            mapping[("logistic_regression", "classification")].__name__
+            == "build_logistic_regression_classifier"
+        )
+
+    def test_booster_family_searchable_when_installed(self) -> None:
+        pytest.importorskip("xgboost")
+        X, y = linear_data(48)
+        tuner = RandomSearch(
+            registry_hypermodel("xgboost", "regression"), objective="r2",
+            max_trials=2, cv=2, seed=7,
+        )
+        results = tuner.search(X, y)
+        assert len(results.trials) == 2
+        assert "n_estimators" in results.best_params
 
 
 # ---------------------------------------------------------------------------

@@ -157,10 +157,11 @@ def doctor(verbose: bool = True) -> int:
     missing: list[str] = []
     probe = subprocess.run(
         [sys.executable, "-c",
-         "import importlib.util, sys, json\n"
-         "print(json.dumps([m for m in sys.argv[1:] if importlib.util.find_spec(m) is None]))",
+         ("import importlib.util, sys, json\n"
+          "print(json.dumps([m for m in sys.argv[1:] "
+          "if importlib.util.find_spec(m) is None]))"),
          *VENV_PACKAGES],
-        capture_output=True, text=True,
+        capture_output=True, text=True, check=False,
     )
     if probe.returncode == 0 and probe.stdout.strip().startswith("["):
         missing = [name.strip(' "') for name in probe.stdout.strip()[1:-1].split(",") if name.strip()]
@@ -201,7 +202,7 @@ def _gate(label: str, *args: str, env: dict[str, str] | None = None) -> bool:
     print(f"gate: {label}", flush=True)
     run = subprocess.run(
         list(args), cwd=str(ROOT), capture_output=True, text=True,
-        env={**os.environ, **(env or {})},
+        env={**os.environ, **(env or {})}, check=False,
     )
     if run.returncode != 0:
         tail = "\n".join((run.stdout + run.stderr).splitlines()[-25:])

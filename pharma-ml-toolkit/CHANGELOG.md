@@ -1,3 +1,92 @@
+## [1.2.104] — 2026-11-02
+
+### Fixed — the four-bug round (round 183, tag 100x-169)
+
+The instruction: *"In playground.py, heatmaps are not generated for
+classes with string names, and Shap charts also give errors when
+generated.  Also, hyperparameter optimization is only available for
+limited models.  And the tqdm section doesn't work."*  Four bugs, the
+TDD discipline, and (behind them) the 17th venv reset absorbed — the
+sandbox rollback ate the uncommitted round-182 grouping work with it,
+so this round ships from the round-179 base.
+
+* **String-class correlation buttons (the heatmap bug).**  A STRING
+  class target (``"active"/"inactive"``, ``"low"/"mid"/"high"``) killed
+  both Results-card correlation buttons: the library's typed
+  ``target must be numeric`` refusal surfaced as a dead button, and
+  the joined target column then tripped the heatmap's own
+  numeric-columns guard.  `encode_class_target` (playground.py)
+  encodes the classes as their sorted-unique codes — the evaluation
+  module's own label convention — and returns the disclosure note
+  (``high=0 low=1 mid=2``) so both the figure title and the render
+  note state the mapping the encoding used.  The confusion-matrix
+  heatmap itself was verified green with string labels (binary and
+  multiclass) — the report's ``labels`` ride it unchanged.
+
+* **SHAP charts over the GUI's own runs.**  The Results-card SHAP
+  buttons pass the run's ``TrainingResult`` whole — and the registry
+  wraps every estimator in the impute+scale ``Pipeline``, which
+  ``shap_summary`` used to refuse with the typed "not a Pipeline"
+  error (the "Shap charts give errors" report).  `ml/explain.py` now
+  unwraps BOTH: a ``TrainingResult`` yields its ``.model`` (the
+  summary's ``model_name`` becomes the registry name), and a
+  ``Pipeline`` is explained as the final step over its OWN
+  preprocessed rows — exactly the rows it predicts on.  Pipelines
+  whose preprocessing changes the feature count are still refused
+  honestly (the names/values pairing would be a lie), with the manual
+  unwrap alternative named.  +4 tests; the 64-test SHAP block green.
+
+* **Hyperparameter optimization for every model.**  The Tune surfaces
+  (the ``ml tune`` CLI and the Data & ML tab's Tune card) offered
+  only ``ann`` / ``dnn`` / ``hsvr``.  `ml/tuner.py` gains
+  `registry_hypermodel(name, task)`: a factory that derives a
+  hypermodel from a registry family's OWN ``param_grid`` — every
+  grid slot an ``hp.Choice``, the estimator built by ``build_model``
+  (aliases, dual-task dispatch, ``random_state=42``) — plus
+  `registry_hypermodels()` (the full ``(token, task)`` mapping) and
+  `hypermodel_by_name()` (the playground worker's name→builder
+  resolver; the generated builders live in the cache, not the module
+  namespace).  23 families / 33 (token, task) pairs join the bespoke
+  trio: the linear family (logistic/ridge/lasso/elastic-net/SGD/huber/
+  PLS), the naive-Bayes trio, KNN, the trees (decision/forest/extra/
+  ada/gradient), SVM, and the boosters (xgboost/lightgbm/catboost —
+  the card guards their optional backends up front, the dnn/torch
+  pattern).  The honest exclusions: the meta-ensembles (voting/
+  stacking), the kernel-OBJECT grids (gaussian_process), the empty
+  grid (linear_regression) and the dnn family twins.  The CLI's
+  ``--estimator`` takes any family (validated against the merged
+  registry with the full token list in the error); hyperband refusal
+  moved up front (``no resource slot`` names the ann/dnn pair instead
+  of raising from inside the first bracket); the card's guards
+  generalized (``<family> is <task>-only`` / ``<family> has no
+  resource slot``).  The searched space IS the registry grid, so the
+  leaderboard's ``k=v`` tokens mean the same thing as
+  GridSearchCV's — pinned GUI↔CLI by the existing registry test.
+  +8 tuner tests, +3 CLI tests, +3 card tests (a full
+  random_forest search through the real card flow).
+
+* **The tqdm flag that never worked.**  ``compute_rism_descriptors``
+  accepted ``progress=`` and ignored it — the docstring promised a
+  tqdm bar since the module's birth.  Now ``True`` wraps the molecule
+  loop in a tqdm bar (batches of 20+ only), a CALLABLE receives the
+  GUI's ``progress(done, total, note)`` convention per molecule, and
+  ``False``/``None`` stays silent.  ``compute_feature_frame`` gains
+  the same callable (chunked dispatch: the reporter fires between
+  chunks on the CALLING thread, order/drops/report byte-identical),
+  and the two playground cards (RISM descriptors, the feature
+  factory) drive the status bar's determinate bar + ETA from it
+  instead of spinning silently.
+
+### Ops
+
+* The 17th venv reset: the sandbox rollback restored round-179's tree
+  and reset the venv to the numpy-2.1.3 generic stack (chem stack
+  gone).  Restored per the pinned requirements — numpy 1.26.4, shap
+  0.54.1 over it via ``--no-deps`` (the documented metadata conflict),
+  rdkit/selfies/meeko/gemmi/mordred/torch/mypy/ruff.  The round-182
+  workflow-grouping work (uncommitted at the rollback) was lost; the
+  queue holds it for a redo round.
+
 ## [1.2.103] — 2026-11-02
 
 ### Added — the split-strategy / n_jobs / Adam round (round 179)
