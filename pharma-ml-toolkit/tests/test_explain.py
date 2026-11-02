@@ -876,7 +876,11 @@ class TestShapSummaryRealPath:
         with pytest.raises(ModelError, match="permutation_feature_importance"):
             shap_summary(model, X)
 
-    def test_pipeline_refused_with_typed_error(self) -> None:
+    def test_pipeline_explained_over_its_own_preprocessed_rows(self) -> None:
+        # (100x-169) the registry wraps every estimator in the
+        # impute+scale Pipeline, so shap_summary must explain it whole:
+        # the final step over the pipeline's OWN transformed rows --
+        # refusing here broke every GUI SHAP button.
         from sklearn.ensemble import GradientBoostingRegressor
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import StandardScaler
@@ -886,8 +890,59 @@ class TestShapSummaryRealPath:
         pipeline = Pipeline(
             [("scale", StandardScaler()), ("model", GradientBoostingRegressor(random_state=42))]
         ).fit(X, X[:, :1].ravel())
-        with pytest.raises(ModelError, match="Pipeline"):
+        summary = shap_summary(pipeline, X)
+        assert summary.model_name == "GradientBoostingRegressor"
+        assert summary.values.shape == (30, 2)
+        assert summary.n_samples == 30
+        # the explained rows are the SCALED ones (what the final step
+        # actually predicts on), so the feature values are standardised
+        assert abs(float(np.mean(summary.feature_values))) < 0.1
+
+    def test_pipeline_with_width_changing_preprocessing_refused(self) -> None:
+        from sklearn.decomposition import PCA
+        from sklearn.ensemble import GradientBoostingRegressor
+        from sklearn.pipeline import Pipeline
+
+        rng = np.random.default_rng(42)
+        X = rng.normal(size=(30, 4))
+        pipeline = Pipeline(
+            [("pca", PCA(n_components=2)), ("model", GradientBoostingRegressor(random_state=42))]
+        ).fit(X, X[:, :1].ravel())
+        with pytest.raises(ModelError, match="feature count"):
             shap_summary(pipeline, X)
+
+    def test_training_result_unwrapped_with_registry_name(self) -> None:
+        # (100x-169) the GUI passes its TrainingResult whole -- the
+        # summary must unwrap it and name the registry model.
+        from pharmaml.ml import train_model
+
+        rng = np.random.default_rng(42)
+        frame = pd.DataFrame(
+            {
+                "strong": rng.normal(size=50),
+                "weak": rng.normal(size=50),
+            }
+        )
+        target = 2.0 * frame["strong"]
+        trained = train_model(
+            "random_forest", "regression", frame, target, tune=False
+        )
+        summary = shap_summary(trained, frame)
+        assert summary.model_name == "random_forest"
+        assert summary.task == "regression"
+        assert summary.values.shape == (50, 2)
+        assert summary.ranking(top_n=1)[0][0] == "strong"
+
+    def test_unfitted_pipeline_refused(self) -> None:
+        from sklearn.ensemble import GradientBoostingRegressor
+        from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import StandardScaler
+
+        pipeline = Pipeline(
+            [("scale", StandardScaler()), ("model", GradientBoostingRegressor(random_state=42))]
+        )
+        with pytest.raises(ModelError, match="could not transform X"):
+            shap_summary(pipeline, np.zeros((6, 2)))
 
     def test_empty_and_non_2d_inputs_refused(self) -> None:
         model, _ = self._gbr()

@@ -89,6 +89,12 @@ True
 ...     - float(twin["RISM_Gsolv_kcalmol"].iloc[0])) < 1e-9   # deterministic
 True
 
+>>> seen = []                                    # (100x-169) live progress
+>>> frame = compute_rism_descriptors(
+...     ["CCO", "CCC"], progress=lambda d, t, n: seen.append((d, t, n)))
+>>> seen[0], seen[-1]
+((0, 2, 'RISM-KH descriptors'), (2, 2, 'RISM-KH descriptors'))
+
 >>> frame = compute_rism_descriptors(["CCO", "not-a-smiles", "CCC"], progress=False)
 >>> list(frame.index)                             # invalid row dropped
 [0, 2]
@@ -116,7 +122,7 @@ pharmaml.exceptions.DataValidationError: smiles must be a list or pandas.Series 
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 import numpy as np
@@ -422,7 +428,7 @@ def compute_rism_descriptors(
     smiles: pd.Series | list[str],
     solvent: str = "spc",
     temperature: float = 298.15,
-    progress: bool = True,
+    progress: bool | Callable[..., Any] | None = True,
 ) -> pd.DataFrame:
     """Compute 3D-RISM-KH-inspired solvation descriptors for SMILES.
 
@@ -438,7 +444,13 @@ def compute_rism_descriptors(
         Absolute temperature in kelvin (drives ``kT`` and the closure
         inverse temperature).  Must be positive.
     progress:
-        Show a tqdm progress bar for large batches.
+        (100x-169) the parameter finally does what this docstring
+        always promised: ``True`` wraps the molecule loop in a tqdm
+        bar (batches of 20+ molecules only), a CALLABLE receives
+        ``progress(done, total, note)`` per molecule (the GUI's
+        determinate-bar convention), and ``False``/``None`` stays
+        silent.  Before the fix the flag was accepted and ignored --
+        the "tqdm doesn't work" report.
 
     Returns
     -------
@@ -494,11 +506,34 @@ def compute_rism_descriptors(
     kbt = _GAS_CONSTANT_KCAL * float(temperature)
     sites = _SOLVENT_SITES[solvent]
 
+    # (100x-169) the progress plumbing, finally wired: True -> a tqdm
+    # bar over the molecule loop (large batches only, the docstring's
+    # own wording); a callable -> (done, total, note) per molecule on
+    # THIS thread (the GUI feeds it straight into its queue); the
+    # pre-report + final-report pattern keeps the count monotone and
+    # terminal at (total, total) whatever the drop paths do.
+    total = len(smiles_list)
+    iterator: Iterable[tuple[int, str]] = enumerate(smiles_list)
+    if progress is True and total >= 20:
+        try:
+            from tqdm import tqdm
+
+            iterator = enumerate(
+                tqdm(smiles_list, desc="RISM-KH", unit="mol")  # type: ignore[assignment]
+            )
+        except ImportError:
+            iterator = enumerate(smiles_list)
+    report_progress = progress if callable(progress) else None
+
     rows: list[dict[str, float]] = []
     valid_idx: list[int] = []
     failures: list[str] = []
     n_parsed = 0
-    for idx, smi in enumerate(smiles_list):
+    done = 0
+    for idx, smi in iterator:
+        if report_progress is not None:
+            report_progress(done, total, "RISM-KH descriptors")
+        done += 1
         mol = Chem.MolFromSmiles(smi) if isinstance(smi, str) and smi.strip() else None
         if mol is None or mol.GetNumAtoms() == 0:
             failures.append(f"index {idx}: {smi!r}")
@@ -521,6 +556,8 @@ def compute_rism_descriptors(
             failures.append(f"index {idx}: {smi!r}")
             continue
         valid_idx.append(idx)
+    if report_progress is not None:
+        report_progress(total, total, "RISM-KH descriptors")
     if failures:
         _LOG.warning("Dropping %d molecules: %s", len(failures), failures[:5])
     if n_parsed == 0:

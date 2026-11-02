@@ -806,6 +806,7 @@ def compute_feature_frame(
     families: Iterable[str] = FEATURE_FAMILIES,
     n_conformers: int = 3,
     n_jobs: int = 1,
+    progress: Callable[..., Any] | None = None,
 ) -> tuple[pd.DataFrame, FeatureReport]:
     """Compute a multi-family feature matrix for a batch of SMILES.
 
@@ -830,6 +831,12 @@ def compute_feature_frame(
         computers (which are closures and would not survive a process
         boundary).  Order, drops and the report are byte-identical to
         the serial run whatever the worker count.
+    progress:
+        (100x-169) Optional ``progress(done, total, note)`` callback,
+        fired on the calling thread as molecule batches COMPLETE --
+        the GUI's determinate progress bar + ETA convention (the
+        docking ``_progress_sink`` twin).  ``None`` keeps the silent
+        behaviour byte for byte.
 
     Returns
     -------
@@ -868,6 +875,17 @@ def compute_feature_frame(
     Traceback (most recent call last):
     ...
     ValueError: n_jobs must be a nonzero integer (joblib convention: -1 = all cores), got 0
+
+    (100x-169) the progress callback sees completed-molecule counts,
+    monotone from the first chunk to the total:
+
+    >>> seen = []
+    >>> _frame, _report = compute_feature_frame(
+    ...     ["CCO", "CCC"], families=("ecfp",),
+    ...     progress=lambda done, total, note: seen.append((done, total, note)),
+    ... )
+    >>> seen
+    [(2, 2, 'feature factory')]
 
     Notes
     -----
@@ -993,14 +1011,31 @@ def compute_feature_frame(
             return row, text, None, f"{type(exc).__name__}: {exc}"
 
     pairs = list(enumerate(smiles_list))
-    if int(n_jobs) != 1 and len(pairs) > 1:
-        from joblib import Parallel, delayed  # sklearn's own dependency
+    # (100x-169) chunked dispatch: the progress callback (when given)
+    # sees COMPLETED molecule counts -- the GUI's determinate bar +
+    # ETA -- while order, drops and the report stay byte-identical to
+    # the unchunked run (results extend in submission order).  The
+    # reporter fires on the CALLING thread, between chunks, so no
+    # locking is needed.
+    total = len(pairs)
+    chunk = max(1, min(25, total))
+    results: list[tuple[int, str, np.ndarray | None, str]] = []
+    done = 0
+    for start in range(0, total, chunk):
+        batch = pairs[start : start + chunk]
+        if int(n_jobs) != 1 and len(batch) > 1:
+            from joblib import Parallel, delayed  # sklearn's own dependency
 
-        results = Parallel(n_jobs=int(n_jobs), prefer="threads")(
-            delayed(compute_one)(pair) for pair in pairs
-        )
-    else:
-        results = [compute_one(pair) for pair in pairs]
+            results.extend(
+                Parallel(n_jobs=int(n_jobs), prefer="threads")(
+                    delayed(compute_one)(pair) for pair in batch
+                )
+            )
+        else:
+            results.extend(compute_one(pair) for pair in batch)
+        done += len(batch)
+        if progress is not None:
+            progress(done, total, "feature factory")
 
     rows: list[np.ndarray] = []
     valid_smiles: list[str] = []

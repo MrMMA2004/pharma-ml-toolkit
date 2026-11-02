@@ -1830,6 +1830,43 @@ def numeric_feature_columns(frame: Any, target: str) -> tuple[list[str], list[st
     return numeric, dropped
 
 
+def encode_class_target(values: Any) -> tuple[Any, str]:
+    """(100x-169) Correlation-safe encoding of a class target column.
+
+    A STRING class target ("active"/"inactive", "low"/"mid"/"high")
+    killed both Results-card correlation buttons: the library's typed
+    ``target must be numeric`` refusal surfaced as a dead button, and
+    the heatmap's joined target column tripped the numeric-columns
+    guard.  The fix encodes the classes as their sorted-unique codes --
+    the evaluation module's own label convention -- and returns the
+    disclosure note so every figure states the mapping it used.
+
+    Numeric targets pass through untouched (empty note).  The
+    binary case is the classic point-biserial correlation; a 3+ class
+    code correlation is a monotone-trend summary, and the note says
+    exactly that so the figure never claims more than the encoding
+    delivers.
+
+    Returns
+    -------
+    ``(encoded, note)``
+        ``encoded`` keeps the input's shape (ndarray of float codes);
+        ``note`` is ``""`` for numeric targets, else
+        ``"high=0 low=1 mid=2"`` (sorted-label order).
+    """
+    import numpy as np
+    import pandas as pd
+
+    series = values if isinstance(values, pd.Series) else pd.Series(list(values))
+    if pd.api.types.is_numeric_dtype(series):
+        return series.to_numpy(dtype=float), ""
+    labels = sorted({str(value) for value in series.tolist()})
+    mapping = {label: code for code, label in enumerate(labels)}
+    encoded = np.asarray([mapping[str(value)] for value in series.tolist()], dtype=float)
+    note = " ".join(f"{label}={code}" for label, code in mapping.items())
+    return encoded, note
+
+
 def format_number(value: float, digits: int = 4) -> str:
     """Human-friendly number rendering for result labels and tables."""
     if isinstance(value, bool) or value is None:
@@ -8117,14 +8154,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showerror("Input", str(exc))
             return
 
-        def work() -> Any:
+        def work(report: Any) -> Any:
             from pharmaml.chem.rism import compute_rism_descriptors
 
+            # (100x-169) the reporter rides the parameter the library
+            # finally honours -- the card's batch runs now move the
+            # status bar's determinate progress + ETA molecule by
+            # molecule instead of spinning silently.
             return compute_rism_descriptors(
                 smiles,
                 solvent=solvent,
                 temperature=temperature,
-                progress=False,
+                progress=report,
             )
 
         def render(frame: Any) -> None:
@@ -9350,15 +9391,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
             return
 
-        def work() -> Any:
+        def work(notify: Any) -> Any:
             from pharmaml.chem.features import (
                 compute_feature_frame,
                 rank_features,
                 select_top_features,
             )
 
+            # (100x-169) the factory's long batch now reports completed
+            # molecules (the "notify" name keeps the tuner's convention
+            # -- the returned FeatureReport is shadowed as `report`
+            # below, so the reporter cannot share that name).
             frame, report = compute_feature_frame(
-                smiles, families=families, n_jobs=feat_jobs
+                smiles, families=families, n_jobs=feat_jobs, progress=notify
             )
             target_values: list[float] | None = None
             if target_frame is not None:
@@ -20099,25 +20144,33 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.chem.interpret import signed_feature_correlations
             from pharmaml.viz import plot_signed_correlations
 
-            correlations = signed_feature_correlations(x_test, y_test, method="pearson")
+            # (100x-169) string class names get their sorted-unique
+            # codes (the disclosure note rides the render) -- the
+            # button used to die on the typed numeric-target refusal.
+            y_numeric, note = encode_class_target(y_test)
+            correlations = signed_feature_correlations(x_test, y_numeric, method="pearson")
+            title = f"Top signed correlations — {target} (held-out rows)"
+            if note:
+                title += f" · classes {note}"
             figure = plot_signed_correlations(
                 correlations,
                 top=10,
-                title=f"Top signed correlations — {target} (held-out rows)",
+                title=title,
             )
-            return correlations, figure
+            return correlations, figure, note
 
-        def render(payload: tuple[Any, Any]) -> None:
-            correlations, figure = payload
+        def render(payload: tuple[Any, Any, str]) -> None:
+            correlations, figure, note = payload
             self._render_figure(self._ml_host, figure)
-            self._ml_result_note.configure(
-                text=(
-                    "signed correlations replace the parity figure — Train & "
-                    "evaluate brings it back · "
-                    f"{len(correlations)} numeric feature(s) ranked by |r| · "
-                    f"over the run's {len(x_test)} held-out rows"
-                )
+            text = (
+                "signed correlations replace the parity figure — Train & "
+                "evaluate brings it back · "
+                f"{len(correlations)} numeric feature(s) ranked by |r| · "
+                f"over the run's {len(x_test)} held-out rows"
             )
+            if note:
+                text += f" · target encoded as class codes ({note})"
+            self._ml_result_note.configure(text=text)
 
         self._start_job("signed correlations", work, render)
 
@@ -20154,7 +20207,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.chem.interpret import signed_feature_correlations
             from pharmaml.viz import plot_correlation_heatmap
 
-            correlations = signed_feature_correlations(x_test, y_test, method="pearson")
+            # (100x-169) string class names get their sorted-unique
+            # codes before ANY correlation runs -- the button used to
+            # die on the typed numeric-target refusal, and the joined
+            # target column then tripped the heatmap's own numeric
+            # guard.  The disclosure note rides title + render note.
+            y_numeric, note = encode_class_target(y_test)
+            correlations = signed_feature_correlations(x_test, y_numeric, method="pearson")
             top_columns = [str(name) for name in correlations.head(10).index]
             # (100x-153) the target joins from the RUN's OWN split,
             # never the session frame: a same-shaped swapped dataset
@@ -20172,11 +20231,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 import pandas as pd
 
                 if isinstance(y_test, pd.Series):
-                    frame[target] = y_test.loc[frame.index].to_numpy()
+                    aligned, _note = encode_class_target(y_test.loc[frame.index])
+                    frame[target] = aligned
                 else:
-                    import numpy as np
-
-                    values = np.asarray(y_test, dtype=float).reshape(-1)
+                    aligned, _note = encode_class_target(y_test)
                     # (100x-154) exact length only: the round-36 version
                     # sliced values[: len(frame)], silently pairing a
                     # LONGER y_test's prefix with the frame's rows -- a
@@ -20185,42 +20243,47 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     # leaves the matrix honestly feature x feature and
                     # the note says so (the shorter case always raised
                     # into this branch; now both do).
-                    if len(values) != len(frame):
+                    if len(aligned) != len(frame):
                         raise ValueError(
-                            f"y_test carries {len(values)} value(s) for "
+                            f"y_test carries {len(aligned)} value(s) for "
                             f"{len(frame)} held-out row(s)"
                         )
-                    frame[target] = values
+                    frame[target] = aligned
                 joined = True
             except (KeyError, IndexError, ValueError, TypeError):
                 joined = False
             columns = list(top_columns) + ([target] if joined else [])
+            title = (
+                f"Correlation heatmap — top 10 |r| "
+                f"{'+ ' + target if joined else '(target not joined)'}"
+            )
+            if joined and note:
+                title += f" · target encoded {note}"
             figure = plot_correlation_heatmap(
                 frame,
                 columns=columns,
-                title=(
-                    f"Correlation heatmap — top 10 |r| "
-                    f"{'+ ' + target if joined else '(target not joined)'}"
-                ),
+                title=title,
             )
-            return figure, joined, len(columns), len(frame)
+            return figure, joined, len(columns), len(frame), note
 
-        def render(payload: tuple[Any, bool, int, int]) -> None:
-            figure, joined, n_columns, n_rows = payload
+        def render(payload: tuple[Any, bool, int, int, str]) -> None:
+            figure, joined, n_columns, n_rows, note = payload
             self._render_figure(self._ml_host, figure)
-            note = (
+            note_text = (
                 "correlation heatmap replaces the parity figure — Train & "
                 "evaluate brings it back · "
                 f"{n_columns} column(s) over the run's {n_rows} held-out rows"
             )
             if joined:
-                note += f" (top 10 |r| + {target})"
+                note_text += f" (top 10 |r| + {target})"
             else:
-                note += (
+                note_text += (
                     " (top 10 |r| only — the run's own target column could "
                     "not be aligned with the held-out rows)"
                 )
-            self._ml_result_note.configure(text=note)
+            if note:
+                note_text += f" · target encoded as class codes ({note})"
+            self._ml_result_note.configure(text=note_text)
 
         self._start_job("correlation heatmap", work, render)
 

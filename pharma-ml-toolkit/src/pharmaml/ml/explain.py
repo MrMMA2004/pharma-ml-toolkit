@@ -170,8 +170,14 @@ def shap_summary(
     ----------
     model:
         A FITTED tree estimator (LightGBM / XGBoost / CatBoost /
-        sklearn's tree families).  Pipelines are refused with the
-        typed error -- explain the final step directly.
+        sklearn's tree families).  (100x-169) a
+        :class:`~pharmaml.ml.training.TrainingResult` is unwrapped to
+        its ``.model`` (the summary's ``model_name`` becomes the
+        registry name), and a sklearn ``Pipeline`` is unwrapped to its
+        final step -- the values are computed over the pipeline's OWN
+        preprocessed rows, exactly what it predicts on.  Pipelines
+        whose preprocessing changes the feature count are refused
+        with the typed error naming the manual alternative.
     X:
         The feature rows to explain (a DataFrame keeps its column
         names; an ndarray gets ``x0, x1, ...``).
@@ -190,8 +196,9 @@ def shap_summary(
         ``pip install 'pharmaml[explain]'`` command.
     ModelError
         When ``model`` is not fitted, not a tree model the explainer
-        supports, a pipeline, or a multiclass classifier (each error
-        names the permutation-importance sibling that works instead).
+        supports, a width-changing pipeline, or a multiclass
+        classifier (each error names the permutation-importance
+        sibling that works instead).
 
     Examples
 --------
@@ -202,6 +209,20 @@ def shap_summary(
     >>> y = X[:, 0] * 2.0
     >>> model = RandomForestRegressor(random_state=42).fit(X, y)
     >>> summary = shap_summary(model, X)
+    >>> summary.ranking(top_n=1)[0][0]
+    'x0'
+
+    (100x-169) the registry's impute+scale Pipeline is explained
+    whole -- the final step over its own preprocessed rows:
+
+    >>> from sklearn.pipeline import make_pipeline
+    >>> from sklearn.preprocessing import StandardScaler
+    >>> pipe = make_pipeline(
+    ...     StandardScaler(), RandomForestRegressor(random_state=42)
+    ... ).fit(X, y)
+    >>> summary = shap_summary(pipe, X)
+    >>> summary.model_name
+    'RandomForestRegressor'
     >>> summary.ranking(top_n=1)[0][0]
     'x0'
     """
@@ -215,11 +236,20 @@ def shap_summary(
             "Install with:  pip install 'pharmaml[explain]'"
         ) from exc
 
-    if isinstance(model, __import__("sklearn").pipeline.Pipeline):
-        raise ModelError(
-            "shap_summary explains one tree estimator, not a Pipeline -- "
-            "pass the fitted final step (pipeline.steps[-1][1]) directly"
-        )
+    # (100x-169) the GUI hands its TrainingResult over whole (and the
+    # registry wraps every estimator in the impute+scale Pipeline) --
+    # unwrap both instead of refusing: the TreeExplainer runs on the
+    # FINAL step over the PREPROCESSED rows, exactly the rows the
+    # pipeline predicts on, so the values explain the fitted model the
+    # caller actually has.
+    name_hint: str | None = None
+    try:
+        from pharmaml.ml.training import TrainingResult
+    except ImportError:  # pragma: no cover - circular-import paranoia
+        TrainingResult = None  # type: ignore[assignment]
+    if TrainingResult is not None and isinstance(model, TrainingResult):
+        name_hint = str(model.name)
+        model = model.model
 
     if not hasattr(model, "fit"):
         raise ModelError(
@@ -248,6 +278,44 @@ def shap_summary(
         raise ModelError(
             f"X must carry at least one row and one feature, got shape {matrix.shape}"
         )
+
+    # (100x-169) Pipeline unwrap: explain the final estimator over its
+    # own preprocessed output.  Width-changing preprocessing is
+    # refused honestly (the names/values pairing would be a lie), as is
+    # a transform failure -- both name the manual unwrap alternative.
+    from sklearn.pipeline import Pipeline as _SkPipeline
+
+    if isinstance(model, _SkPipeline):
+        if len(model.steps) == 0:
+            raise ModelError(
+                "an empty Pipeline carries no estimator to explain"
+            )
+        final = model.steps[-1][1]
+        prefix = _SkPipeline(model.steps[:-1])
+        source: Any = X if isinstance(X, pd.DataFrame) else matrix
+        try:
+            transformed = np.asarray(prefix.transform(source), dtype=float)
+        except Exception as exc:  # noqa: BLE001 - transformer zoo
+            raise ModelError(
+                "the Pipeline's preprocessing steps could not transform X "
+                f"({exc}).  Explain the final step directly: "
+                "shap_summary(pipeline.steps[-1][1], "
+                "pipeline[:-1].transform(X))"
+            ) from exc
+        if (
+            transformed.ndim != 2
+            or transformed.shape[0] != matrix.shape[0]
+            or transformed.shape[1] != matrix.shape[1]
+        ):
+            raise ModelError(
+                "shap_summary explains pipelines whose preprocessing keeps "
+                f"the feature count fixed: X has {matrix.shape[1]} column(s) "
+                f"but the pipeline emits {transformed.shape[1] if transformed.ndim == 2 else 'non-2D'} "
+                "-- explain the final step over its transformed rows "
+                "directly instead"
+            )
+        matrix = transformed
+        model = final
 
     try:
         explainer = shap.TreeExplainer(model)
@@ -302,7 +370,7 @@ def shap_summary(
         values=values,
         feature_values=matrix,
         base_value=base_value,
-        model_name=type(model).__name__,
+        model_name=name_hint or type(model).__name__,
         task=task,
         n_samples=int(matrix.shape[0]),
     )
