@@ -77,19 +77,32 @@ The four-bug round (v1.2.104) is committed as `c200bd6` (light commit).
 Test slices verified green this turn: `test_tuner.py` (exit 0),
 `TestTunerCard` (incl. the 3 new card tests), `test_explain.py`
 (SHAP +4), `test_rism.py` + `test_features.py` (tqdm wiring).
-Still open before the ship ritual:
 
-1. `test_cli_features.py` (+3 CLI tests) — slow (real MLP fits, 500
-   iter); give it its own ≥590 s window.
-2. `test_playground.py` tail (~38%: `TestPredictionIntervalsGui` …
-   `TestReinvent4DiffDockAbsorptionGui`) — the whole file OOM-killed
-   at ~62% on this box; run the remainder in per-class chunks, one
-   process each.
-3. `encode_class_target` (playground.py) has NO pytest test — the
-   string-class claim rests on `scratch/repro_bugs_169*.py`.  A
-   dedicated test is a candidate redo-round item.
+**CLOSED (the "Continue" turn, same night):**
+
+1. `test_cli_features.py` — exit 0 in its own 590 s window.
+2. `test_playground.py` — fully verified in per-class chunks: the
+   first ~62% green in the OOM-attempt run, then chunks
+   `TestReview130Gui…136Gui`, `137…141`, `148…151`+
+   `TestPredictionIntervalsGui`, `TestOverfitGap/Interpretability/
+   CrossModelImportance/VarianceFilter/UnsupervisedTab`, and
+   `TestDearPyGui*` + `TestShapOptuna/Reinvent4DiffDockAbsorption` —
+   all exit 0.  The whole-file OOM at ~62% is a box RAM limit, not a
+   code failure; chunking is the standing workaround.
+3. `encode_class_target` now has its pytest pair in
+   `TestPureHelpers` (multiclass/binary/list + numeric
+   pass-through), green.
+
+Standing environment notes (kept):
+
 4. GUI tests need `DISPLAY=:99` (Xvfb up) and
    `PYTHONPATH=<abs>/src`; without DISPLAY the suite errors en masse
    (not a code failure).
 5. Ship ritual will re-pin pyproject/`__init__` to 1.2.104 (they lag
    by design pre-ship) and build the v1.2.104 zip (none since v1.2.90).
+6. Bash-tool output can silently EAT bracket-letter pairs (``[m`` →
+   nothing): a line displayed as ``np.asarray(apping[`` was actually
+   ``np.asarray([mapping[``.  When Bash output shows impossible code,
+   cross-check with the Read tool or an ast/tokenizer dump before
+   "fixing" anything.
+

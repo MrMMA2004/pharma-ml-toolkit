@@ -21,7 +21,10 @@ so this round ships from the round-179 base.
   (``high=0 low=1 mid=2``) so both the figure title and the render
   note state the mapping the encoding used.  The confusion-matrix
   heatmap itself was verified green with string labels (binary and
-  multiclass) — the report's ``labels`` ride it unchanged.
+  multiclass) — the report's ``labels`` ride it unchanged.  The
+  helper now carries its own pytest pair (``TestPureHelpers``):
+  multiclass/binary/list-input encoding with the note, and the
+  silent numeric pass-through.
 
 * **SHAP charts over the GUI's own runs.**  The Results-card SHAP
   buttons pass the run's ``TrainingResult`` whole — and the registry

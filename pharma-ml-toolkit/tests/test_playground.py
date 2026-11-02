@@ -231,6 +231,37 @@ class TestPureHelpers:
         assert playground._cell_text("CC(=O)Oc1ccccc1C(=O)O", limit=10) == "CC(=O)Oc1…"
         assert playground._cell_text(None) == ""
 
+    def test_encode_class_target_string_classes_get_codes_and_note(self, playground: Any) -> None:
+        # (100x-169) the heatmap/correlation bug: a STRING class target
+        # must encode as sorted-unique float codes with the disclosure
+        # note, never raise, and never come back string-typed.
+        import pandas as pd
+
+        codes, note = playground.encode_class_target(
+            pd.Series(["high", "low", "mid", "low"])
+        )
+        assert codes.tolist() == [0.0, 1.0, 2.0, 1.0]
+        assert note == "high=0 low=1 mid=2"
+
+        # binary case: the classic point-biserial pairing
+        codes, note = playground.encode_class_target(
+            pd.Series(["inactive", "active", "active"])
+        )
+        assert codes.tolist() == [1.0, 0.0, 0.0]
+        assert note == "active=0 inactive=1"
+
+        # a plain list (not a Series) takes the same path
+        codes, note = playground.encode_class_target(["b", "a", "b"])
+        assert codes.tolist() == [1.0, 0.0, 1.0]
+        assert note == "a=0 b=1"
+
+    def test_encode_class_target_numeric_passes_through_silently(self, playground: Any) -> None:
+        import pandas as pd
+
+        values, note = playground.encode_class_target(pd.Series([1.5, 2.5, 3.5]))
+        assert values.tolist() == [1.5, 2.5, 3.5]
+        assert note == ""
+
 
 # --------------------------------------------------------------------- #
 # the manual-hyperparameter + progress helpers (100x-106)
