@@ -1,4 +1,6 @@
-"""Tests for :mod:`pharmaml.chem.interpret` and its two viz twins.
+"""Tests for :mod:`pharmaml.chem.interpret` + its two viz twins, and
+for :mod:`pharmaml.ml.interpret` (the round-187 InterpretML
+absorption).
 
 Round 100x-152 (GAP 2 of the ``Ml/D2.py`` audit): the upload's
 interpretability block — Morgan-bit decoding (``decode_morgan_bit``),
@@ -30,12 +32,30 @@ The suite pins:
 
 The decode tests need RDKit (skipped as a class without it); the
 correlation and plot tests run everywhere.
+
+Round 187 appends the ml/interpret suite — the glassbox EBM and
+partial dependence re-implemented offline from InterpretML 0.7.8 —
+pinning: the quantile-binning contract (strictly increasing deduped
+cuts, the ``max_bins - 2`` budget, lower-bound-inclusive value bins,
+NaN -> the missing bin 0); the classifier on a separable synthetic
+(accuracy + balanced predictions, exact ``eval_terms`` additivity,
+seed determinism, early stopping via ``n_steps_``); the regressor on
+``2*x0 - x1 + noise`` (r^2, the residual-mean polish); the FAST pair
+screen picking the TRUE interacting pair of ``x0*x1``; the
+postprocess (centered weighted means, zero-weight bins zeroed); the
+term surfaces (importances, ``term_functions`` records); and the
+partial-dependence/ICE record (percentile grid pins, the ICE matrix,
+multiclass refusal, ``predict_fn`` overrides, the Doane density).
+Every fit uses tiny boosting settings; the ONE default-settings model
+runs with ``outer_bags=3, max_rounds=60``.
 """
 
 from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
+from itertools import pairwise
+from typing import ClassVar
 
 import matplotlib
 import numpy as np
@@ -53,6 +73,15 @@ from pharmaml.chem.interpret import (
     signed_feature_correlations,
 )
 from pharmaml.exceptions import DataValidationError
+from pharmaml.ml.interpret import (
+    EbmBin,
+    EBMClassifier,
+    EBMRegressor,
+    InterpretError,
+    discretize,
+    ebm_bins,
+    partial_dependence,
+)
 from pharmaml.viz._compat import PALETTE
 from pharmaml.viz.ml_plots import (
     plot_correlation_heatmap,
@@ -700,3 +729,496 @@ class TestPlotCorrelationHeatmap:
         yticks = [tick.get_text() for tick in heat_fig.axes[0].get_yticklabels()]
         assert yticks == top_columns
         assert len(heat_fig.axes[0].texts) == 16  # 4x4 annotated cells
+
+
+# ------------------------------------------------------------ ml/interpret
+#
+# Round 187: the InterpretML 0.7.8 glassbox absorption.  Every fit uses
+# tiny boosting settings (the ONE default-settings model is
+# ``test_default_settings_small_model``).
+
+#: The task-pinned tiny settings: separable synthetic, 300 rows.
+FAST_SETTINGS: dict[str, object] = {
+    "outer_bags": 2,
+    "max_rounds": 40,
+    "smoothing_rounds": 5,
+    "interactions": 2,
+    "early_stopping_rounds": 10,
+    "random_state": 42,
+}
+
+
+def _separable_data(rows: int = 300, seed: int = 11) -> tuple[np.ndarray, np.ndarray]:
+    """y = (x0 > 0.5) on uniform noise columns (both classes present)."""
+    rng = np.random.default_rng(seed)
+    X = rng.random((rows, 3))
+    y = (X[:, 0] > 0.5).astype(int)
+    return X, y
+
+
+@pytest.fixture(scope="module")
+def separable_model() -> tuple[EBMClassifier, np.ndarray, np.ndarray]:
+    """One shared tiny fit of the separable synthetic."""
+    X, y = _separable_data()
+    model = EBMClassifier(**FAST_SETTINGS).fit(X, y)  # type: ignore[arg-type]
+    return model, X, y
+
+
+class TestEbmBins:
+    """ebm_bins/discretize -- the EBM quantile-binning contract."""
+
+    def test_cuts_strictly_increasing_within_budget(self) -> None:
+        rng = np.random.default_rng(3)
+        column = rng.random(500)
+        for max_bins in (16, 64, 1024):
+            record = ebm_bins(column, max_bins=max_bins)
+            assert isinstance(record, EbmBin)
+            cuts = record.cuts
+            assert all(a < b for a, b in pairwise(cuts))  # strictly increasing
+            assert len(cuts) <= max_bins - 2  # the budget pin
+            assert len(cuts) >= 1  # continuous data earns cuts
+            assert float(column.min()) <= min(cuts) and max(cuts) <= float(column.max())
+
+    def test_repeated_quantiles_dedup(self) -> None:
+        # Two clusters + a lone value: the quantiles collapse onto few
+        # distinct values, and a constant column dedups to no cuts at all.
+        column = np.array([0.0] * 50 + [10.0] * 49 + [11.0])
+        record = ebm_bins(column, max_bins=32)
+        assert len(record.cuts) <= 3
+        assert all(a < b for a, b in pairwise(record.cuts))
+        assert ebm_bins(np.full(40, 7.5), max_bins=64).cuts == ()
+
+    def test_lower_bound_inclusive_pinned(self) -> None:
+        record = ebm_bins(np.array([0.0, 1.0, 2.0, 3.0]), max_bins=6)
+        assert record.cuts == (1.0, 2.0)
+        # bin(x) = searchsorted(cuts, x, "right") + 1: below c1 -> 1,
+        # c1 <= x < c2 -> 2, x >= c2 -> 3.
+        values = np.array([-5.0, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 5.0])
+        assert discretize(values, record).tolist() == [1, 1, 1, 2, 2, 3, 3, 3]
+
+    def test_nan_maps_to_missing_bin_zero(self) -> None:
+        record = ebm_bins(np.array([0.0, 1.0, 2.0, 3.0]), max_bins=6)
+        values = np.array([np.nan, 0.5, np.nan, 3.0])
+        assert discretize(values, record).tolist() == [0, 1, 0, 3]
+        # +/-inf is lumped with the missing bin (the documented choice).
+        assert discretize(np.array([np.inf, -np.inf]), record).tolist() == [0, 0]
+
+    def test_all_nan_column_and_bad_arguments_refused(self) -> None:
+        with pytest.raises(InterpretError):
+            ebm_bins(np.full(10, np.nan))
+        with pytest.raises(InterpretError):
+            ebm_bins(np.arange(10.0), max_bins=3)
+        with pytest.raises(InterpretError):
+            ebm_bins(np.arange(10.0), min_samples_bin=0)
+
+    def test_min_samples_bin_merges_thin_bins(self) -> None:
+        column = np.array([0.0] * 4 + [5.0] * 4 + [7.0])
+        # cuts before merging are (0.0, 5.0); the empty x < 0 bin merges
+        # away, then the 4-row [0, 5) bin survives min_samples_bin=4.
+        assert ebm_bins(column, max_bins=8, min_samples_bin=4).cuts == (5.0,)
+        # min_samples_bin=5 also absorbs the 4-row bin: one value bin left.
+        assert ebm_bins(column, max_bins=8, min_samples_bin=5).cuts == ()
+
+
+class TestEBMClassifier:
+    """EBMClassifier -- the glassbox fit on a separable synthetic."""
+
+    def test_separable_accuracy_and_balanced_predictions(
+        self, separable_model: tuple[EBMClassifier, np.ndarray, np.ndarray]
+    ) -> None:
+        model, X, y = separable_model
+        predictions = model.predict(X)
+        accuracy = float((predictions == y).mean())
+        assert accuracy >= 0.95
+        positives = int(predictions.sum())
+        assert 0 < positives < len(y)  # balanced: both classes predicted
+        assert set(np.unique(predictions)) == {0, 1}
+
+    def test_predict_proba_rows_sum_to_one(
+        self, separable_model: tuple[EBMClassifier, np.ndarray, np.ndarray]
+    ) -> None:
+        model, X, _ = separable_model
+        probs = model.predict_proba(X)
+        assert probs.shape == (X.shape[0], 2)
+        assert np.allclose(probs.sum(axis=1), 1.0)
+        # sigma to machine precision (the module's numerically stable
+        # branch differs from the naive formula only in the last ulp).
+        expected = 1.0 / (1.0 + np.exp(-model.decision_function(X)))
+        assert np.allclose(probs[:, 1], expected, rtol=1e-12, atol=1e-15)
+        assert model.classes_.tolist() == [0, 1]
+
+    def test_eval_terms_exact_additivity(
+        self, separable_model: tuple[EBMClassifier, np.ndarray, np.ndarray]
+    ) -> None:
+        model, X, _ = separable_model
+        terms = model.eval_terms(X)
+        assert terms.shape == (X.shape[0], len(model.terms_))
+        assert np.array_equal(
+            terms.sum(axis=1) + model.intercept_, model.decision_function(X)
+        )
+
+    def test_same_random_state_is_bit_deterministic(self) -> None:
+        X, y = _separable_data(rows=150)
+        settings = {
+            "outer_bags": 2, "max_rounds": 15, "smoothing_rounds": 2,
+            "interactions": 1, "early_stopping_rounds": 5, "random_state": 0,
+        }
+        first = EBMClassifier(**settings).fit(X, y).decision_function(X)  # type: ignore[arg-type]
+        second = EBMClassifier(**settings).fit(X, y).decision_function(X)  # type: ignore[arg-type]
+        other = EBMClassifier(**{**settings, "random_state": 43}).fit(X, y).decision_function(X)  # type: ignore[arg-type]
+        assert np.array_equal(first, second)
+        assert not np.array_equal(first, other)
+
+    def test_early_stopping_stops_before_the_step_cap(self) -> None:
+        # One strong feature with 8% label noise: the validation logloss
+        # bottoms out and rises, so the circular-buffer check fires well
+        # before the max_rounds * n_terms cap.
+        rng = np.random.default_rng(3)
+        X = rng.random((300, 2))
+        y = (X[:, 0] > 0.5).astype(int)
+        flip = rng.random(300) < 0.08  # one mask, flipped once
+        y[flip] = 1 - y[flip]
+        model = EBMClassifier(
+            outer_bags=2, learning_rate=0.4, max_rounds=50, smoothing_rounds=2,
+            interactions=0, early_stopping_rounds=5, random_state=3,
+        ).fit(X, y)
+        cap = 2 * 50 * 2  # outer_bags * max_rounds * n_features
+        assert 0 < model.n_steps_ < cap
+
+    def test_invalid_targets_refused(self) -> None:
+        X = np.array([[0.0, 1.0], [1.0, 0.0], [0.5, 0.5], [0.2, 0.8]])
+        for bad_y in (
+            np.array([0, 1, 2, 0]),      # multiclass -> typed binary refusal
+            np.array([1, 2, 1, 2]),      # non-{0, 1} labels
+            np.array([1, 1, 1, 1]),      # single class
+            np.array([0.0, 1.0, np.nan, 0.0]),  # NaN target
+            np.array([0, 1]),            # length mismatch
+        ):
+            with pytest.raises(InterpretError):
+                EBMClassifier(outer_bags=2, max_rounds=5).fit(X, bad_y)
+
+    def test_parameter_and_state_guards(self) -> None:
+        X, y = _separable_data(rows=40)
+        for kwargs in (
+            {"max_leaves": 3},
+            {"inner_bags": 2},
+            {"interactions": "abc"},
+            {"validation_size": 0.0},
+            {"early_stopping_rounds": 0},
+            {"exclude": [0, 1, 2]},
+        ):
+            with pytest.raises(InterpretError):
+                EBMClassifier(**kwargs).fit(X, y)  # type: ignore[arg-type]
+        unfitted = EBMClassifier()
+        with pytest.raises(InterpretError):
+            unfitted.predict(X)
+        fitted = EBMClassifier(
+            outer_bags=2, max_rounds=5, smoothing_rounds=1, interactions=0,
+            early_stopping_rounds=2, random_state=0,
+        ).fit(X, y)
+        with pytest.raises(InterpretError):
+            fitted.predict(X[:, :2])
+
+    def test_nan_rows_train_and_predict(self) -> None:
+        rng = np.random.default_rng(4)
+        X = rng.random((200, 3))
+        y = (X[:, 0] > 0.5).astype(int)
+        mask = rng.random((200, 3)) < 0.1
+        mask[:, 0] = False  # keep the signal column complete
+        X[mask] = np.nan
+        model = EBMClassifier(
+            outer_bags=2, max_rounds=30, smoothing_rounds=3, interactions=0,
+            early_stopping_rounds=5, random_state=2,
+        ).fit(X, y)
+        assert np.isfinite(model.decision_function(X)).all()
+        assert np.allclose(model.predict_proba(X).sum(axis=1), 1.0)
+        assert float((model.predict(X) == y).mean()) >= 0.9
+
+    def test_default_settings_small_model(self) -> None:
+        # The ONE near-default fit (only outer_bags/max_rounds shrunk):
+        # everything else is the upstream 0.7.8 default table.
+        X, y = _separable_data(rows=120, seed=8)
+        model = EBMClassifier(outer_bags=3, max_rounds=60).fit(X, y)
+        assert float((model.predict(X) == y).mean()) >= 0.9
+        assert (model.term_importances() >= 0).all()
+        assert model.feature_importances_.shape == (3,)
+        assert model.n_features_in_ == 3
+
+    def test_exclude_and_cyclic_progress(self) -> None:
+        X, y = _separable_data(rows=150)
+        excluded = EBMClassifier(
+            outer_bags=2, max_rounds=15, smoothing_rounds=2, interactions=0,
+            early_stopping_rounds=5, exclude=[1], random_state=0,
+        ).fit(X, y)
+        assert [term.features for term in excluded.terms_] == [(0,), (2,)]
+        assert excluded.feature_importances_[1] == 0.0
+        cyclic = EBMClassifier(
+            outer_bags=2, max_rounds=15, smoothing_rounds=2, interactions=0,
+            early_stopping_rounds=5, cyclic_progress=True, random_state=0,
+        ).fit(X, y)
+        assert float((cyclic.predict(X) == y).mean()) >= 0.9
+
+
+class TestEBMRegressor:
+    """EBMRegressor -- the RMSE glassbox on a linear surface."""
+
+    @pytest.fixture(scope="class")
+    def regression_model(self) -> tuple[EBMRegressor, np.ndarray, np.ndarray]:
+        rng = np.random.default_rng(5)
+        X = rng.random((300, 3))
+        y = 2.0 * X[:, 0] - X[:, 1] + 0.1 * rng.standard_normal(300)
+        model = EBMRegressor(
+            outer_bags=2, max_rounds=80, smoothing_rounds=5, interactions=0,
+            early_stopping_rounds=10, random_state=1,
+        ).fit(X, y)
+        return model, X, y
+
+    def test_linear_surface_r2_and_rmse(
+        self,
+        regression_model: tuple[EBMRegressor, np.ndarray, np.ndarray],
+    ) -> None:
+        model, X, y = regression_model
+        predictions = model.predict(X)
+        ss_res = float(np.sum((y - predictions) ** 2))
+        ss_tot = float(np.sum((y - y.mean()) ** 2))
+        assert 1.0 - ss_res / ss_tot >= 0.9
+        assert float(np.sqrt(np.mean((y - predictions) ** 2))) < 0.15
+
+    def test_residual_mean_polish(
+        self,
+        regression_model: tuple[EBMRegressor, np.ndarray, np.ndarray],
+    ) -> None:
+        model, X, y = regression_model
+        assert abs(float(np.mean(y - model.predict(X)))) < 1e-9
+
+    def test_additivity_and_decision_function_match(
+        self,
+        regression_model: tuple[EBMRegressor, np.ndarray, np.ndarray],
+    ) -> None:
+        model, X, _ = regression_model
+        terms = model.eval_terms(X)
+        assert np.array_equal(
+            terms.sum(axis=1) + model.intercept_, model.decision_function(X)
+        )
+        assert np.array_equal(model.predict(X), model.decision_function(X))
+
+    def test_objective_guard(self) -> None:
+        with pytest.raises(InterpretError):
+            EBMRegressor(objective="mae")
+
+
+class TestFastPairSelection:
+    """The FAST screen -- the true interacting pair wins."""
+
+    @pytest.fixture(scope="class")
+    def pair_model(self) -> tuple[EBMClassifier, np.ndarray, np.ndarray]:
+        rng = np.random.default_rng(9)
+        X = rng.random((300, 3))  # x0, x1 carry the signal; x2 is noise
+        y = (X[:, 0] * X[:, 1] > 0.25).astype(int)
+        model = EBMClassifier(
+            outer_bags=2, max_rounds=30, smoothing_rounds=5, interactions=1,
+            early_stopping_rounds=10, random_state=42,
+        ).fit(X, y)
+        return model, X, y
+
+    def test_true_interacting_pair_selected(
+        self, pair_model: tuple[EBMClassifier, np.ndarray, np.ndarray]
+    ) -> None:
+        model, X, y = pair_model
+        pairs = [term.features for term in model.terms_ if len(term.features) == 2]
+        assert pairs == [(0, 1)]
+        assert float((model.predict(X) == y).mean()) >= 0.8
+
+    def test_pair_term_record_structure(
+        self, pair_model: tuple[EBMClassifier, np.ndarray, np.ndarray]
+    ) -> None:
+        model, _, _ = pair_model
+        pair = model.terms_[-1]
+        assert pair.features == (0, 1)
+        assert pair.tensor.ndim == 2
+        assert pair.tensor.shape == pair.bin_weights.shape == pair.std.shape
+        record = model.term_functions()[-1]
+        assert record.kind == "pair"
+        assert record.scores.ndim == 2
+        assert [len(c) for c in record.bin_centers] == list(record.scores.shape)
+        assert record.scores_std.shape == record.scores.shape
+
+
+class TestEbmPostprocess:
+    """Centering, zero-weight bins -- the EBM postprocess contract."""
+
+    def test_term_weighted_means_are_zero(
+        self, separable_model: tuple[EBMClassifier, np.ndarray, np.ndarray]
+    ) -> None:
+        model, _, _ = separable_model
+        for term in model.terms_:
+            mean = float(np.average(term.tensor, weights=term.bin_weights))
+            assert abs(mean) < 1e-9
+
+    def test_zero_weight_bins_are_zeroed(self) -> None:
+        rng = np.random.default_rng(8)
+        # A two-cluster column: the bins below the first cluster and the
+        # missing bin (no NaNs anywhere) carry zero weight.
+        X = np.column_stack([
+            np.concatenate([np.zeros(100), np.full(100, 100.0)]),
+            rng.random(200),
+        ])
+        y = (X[:, 0] > 50.0).astype(int)
+        model = EBMClassifier(
+            outer_bags=2, max_rounds=15, smoothing_rounds=2, interactions=1,
+            early_stopping_rounds=5, random_state=0,
+        ).fit(X, y)
+        for term in model.terms_:
+            empty = term.bin_weights == 0
+            assert empty.any()
+            assert float(np.abs(term.tensor[empty]).max()) == 0.0
+
+
+class TestTermSurfaces:
+    """term_importances / feature_importances_ / term_functions."""
+
+    def test_importances_shapes_and_ordering(
+        self, separable_model: tuple[EBMClassifier, np.ndarray, np.ndarray]
+    ) -> None:
+        model, _, _ = separable_model
+        importances = model.term_importances()
+        assert importances.shape == (len(model.terms_),)
+        assert (importances >= 0).all()
+        # The signal feature dominates the noise features.
+        mains = importances[:3]
+        assert mains[0] > mains[1] and mains[0] > mains[2]
+        feature_wise = model.feature_importances_
+        assert feature_wise.shape == (3,)
+        # Pairs are excluded from feature_importances_ by design.
+        assert abs(float(feature_wise.sum()) - float(mains.sum())) < 1e-12
+
+    def test_term_functions_records(
+        self, separable_model: tuple[EBMClassifier, np.ndarray, np.ndarray]
+    ) -> None:
+        model, _, _ = separable_model
+        records = model.term_functions()
+        assert len(records) == len(model.terms_)
+        for record in records:
+            assert record.kind in ("main", "pair")
+            assert len(record.bin_centers) == len(record.features)
+            assert record.scores.shape == record.scores_std.shape
+            assert record.scores.shape == record.weights.shape
+            assert (record.scores_std >= 0).all()
+            if record.kind == "main":
+                assert record.scores.ndim == 1
+                assert len(record.bin_centers[0]) == len(record.scores)
+            else:
+                assert record.scores.ndim == 2
+
+
+class _Line:
+    """A tiny linear model for the partial-dependence pins."""
+
+    def __init__(self, coef: np.ndarray) -> None:
+        self.coef = coef
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        return np.asarray(X, dtype=float) @ self.coef
+
+
+class TestPartialDependence:
+    """partial_dependence -- the interpret.blackbox sweep, offline."""
+
+    def test_percentile_grid_pinned_and_unique_short_grid(self) -> None:
+        column = np.arange(100.0)
+        X = np.column_stack([column, column * 2.0])
+        record = partial_dependence(_Line(np.array([1.0, 0.0])), X, feature=0, num_points=5)
+        assert record.grid.tolist() == pytest.approx([0.0, 24.75, 49.5, 74.25, 99.0])
+        # Fewer unique values than num_points -> the sorted uniques.
+        short = np.array([[3.0, 0.0], [1.0, 0.0], [2.0, 0.0], [1.0, 0.0]])
+        record_short = partial_dependence(
+            _Line(np.array([1.0, 0.0])), short, feature=0, num_points=10
+        )
+        assert record_short.grid.tolist() == [1.0, 2.0, 3.0]
+
+    def test_monotone_model_gives_monotone_mean(self) -> None:
+        rng = np.random.default_rng(2)
+        X = rng.random((80, 2))
+        record = partial_dependence(
+            _Line(np.array([2.0, -1.0])), X, feature=0, num_points=8
+        )
+        assert np.all(np.diff(record.mean) >= 0)
+        assert record.mean.shape == record.grid.shape
+
+    def test_ice_matrix_mean_and_bounds(self) -> None:
+        rng = np.random.default_rng(6)
+        X = rng.random((30, 3))
+        record = partial_dependence(
+            _Line(np.array([1.0, 2.0, 0.5])), X, feature=1, num_points=6
+        )
+        assert record.ice.shape == (30, record.grid.size)
+        assert np.array_equal(record.mean, record.ice.mean(axis=0))
+        assert np.array_equal(record.std, record.ice.std(axis=0))
+        assert record.bounds.shape == (2, record.grid.size)
+        assert np.array_equal(record.bounds[0], record.mean - record.std)
+        assert np.array_equal(record.bounds[1], record.mean + record.std)
+
+    def test_multiclass_predict_proba_refused(self) -> None:
+        class _Multi:
+            def predict_proba(self, X: np.ndarray) -> np.ndarray:
+                return np.tile([0.2, 0.3, 0.5], (X.shape[0], 1))
+
+        X = np.zeros((4, 2))
+        with pytest.raises(InterpretError, match="binary-only"):
+            partial_dependence(_Multi(), X, feature=0)
+
+    def test_predict_fn_override_respected(self) -> None:
+        X = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+        record = partial_dependence(
+            _Line(np.array([2.0, -1.0])),
+            X,
+            feature=0,
+            num_points=3,
+            predict_fn=lambda A: A @ np.array([3.0, -1.0]),
+        )
+        # grid [0, 1, 2]: 3*g - mean(col 1 of X) = 3*g - 1 -- and NOT the
+        # model's own 2*g - 1, which is what a ignored override would give.
+        assert record.mean.tolist() == pytest.approx([-1.0, 2.0, 5.0])
+        assert record.mean.tolist() != pytest.approx([-1.0, 1.0, 3.0])
+
+    def test_density_shapes(self) -> None:
+        rng = np.random.default_rng(1)
+        X = rng.random((120, 2))
+        record = partial_dependence(_Line(np.array([1.0, 0.0])), X, feature=0)
+        assert int(record.density_counts.sum()) == 120
+        assert record.density_edges.size == record.density_counts.size + 1
+
+    def test_feature_resolution_and_guards(self) -> None:
+        X = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+
+        class _Named:
+            feature_names_: ClassVar[tuple[str, ...]] = ("a", "b")
+
+            def predict(self, X: np.ndarray) -> np.ndarray:
+                return X[:, 1]
+
+        record = partial_dependence(_Named(), X, feature="b", num_points=3)
+        assert record.feature == 1
+        assert record.feature_name == "b"
+        with pytest.raises(InterpretError):
+            partial_dependence(_Named(), X, feature="zz")
+        with pytest.raises(InterpretError):
+            partial_dependence(_Line(np.array([1.0, 0.0])), X, feature=5)
+        with pytest.raises(InterpretError):
+            partial_dependence(_Line(np.array([1.0])), X, feature=0, num_points=1)
+        with pytest.raises(InterpretError):
+            partial_dependence(_Line(np.array([1.0, 0.0])), X[:, 0], feature=0)
+
+    def test_on_a_fitted_ebm_proba_column(self) -> None:
+        # The default resolution path: predict_proba(X)[:, 1].
+        X, y = _separable_data(rows=150, seed=13)
+        model = EBMClassifier(
+            outer_bags=2, max_rounds=15, smoothing_rounds=2, interactions=0,
+            early_stopping_rounds=5, random_state=0,
+        ).fit(X, y)
+        record = partial_dependence(model, X, feature=0, num_points=8)
+        assert record.feature == 0
+        assert float(X[:, 0].min()) <= float(record.grid.min())
+        assert float(record.grid.max()) <= float(X[:, 0].max())
+        assert np.isfinite(record.ice).all()
+        assert record.ice.shape == (150, record.grid.size)

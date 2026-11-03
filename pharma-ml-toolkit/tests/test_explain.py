@@ -1009,3 +1009,507 @@ class TestShapSummaryRealPath:
             isinstance(figure, Figure)
             for figure in (heat, fall, push, scatter, bars)
         )
+
+
+class TestCaptum187:
+    """Round 187: the captum extensions on :mod:`pharmaml.ml.xai`.
+
+    Every method is a pure-numpy port of the captum algorithm onto the
+    toolkit's own LayerStack.  The suite pins the shapes and metadata,
+    the completeness identities the algorithms guarantee (DeepLIFT's
+    telescoping sum, Shapley sampling's exact telescope, kernel SHAP's
+    pinned endpoints), the dual estimator contract (numpy stack or
+    predict/predict_proba), the typed ``XaiError`` refusals, and the
+    captum.metrics validators.
+    """
+
+    ROW = (0.5, -1.0, 2.0)
+
+    @staticmethod
+    def _net() -> Any:
+        from pharmaml.ml.xai import _demo_network
+
+        return _demo_network()
+
+    @staticmethod
+    def _background(rows: int = 16, seed: int = 3) -> np.ndarray:
+        rng = np.random.default_rng(seed)
+        return rng.normal(size=(rows, 3))
+
+    @staticmethod
+    def _linear_scorer(weights: np.ndarray, bias: float = 0.1) -> Any:
+        """A sklearn-style stub: f(x) = x @ weights + bias (the predict path)."""
+
+        class _LinearModel:
+            def predict(self, values: np.ndarray) -> np.ndarray:
+                return np.asarray(values, dtype=float) @ weights + bias
+
+        return _LinearModel()
+
+    @staticmethod
+    def _interaction_scorer() -> Any:
+        """A sklearn-style stub with a cross-column term: x0 * x1."""
+
+        class _InteractionModel:
+            def predict(self, values: np.ndarray) -> np.ndarray:
+                matrix = np.asarray(values, dtype=float)
+                return matrix[:, 0] * matrix[:, 1]
+
+        return _InteractionModel()
+
+    # -- gradient_shap --------------------------------------------------
+
+    def test_gradient_shap_shape_metadata_and_seeded_determinism(self) -> None:
+        from pharmaml.ml.xai import gradient_shap
+
+        net = self._net()
+        first = gradient_shap(net, self.ROW, n_baseline=4, n_samples=8, seed=0)
+        second = gradient_shap(net, self.ROW, n_baseline=4, n_samples=8, seed=0)
+        assert first.method == "gradient_shap"
+        assert first.kind == "gradient"
+        assert first.convergence_delta is None
+        assert first.attributions.shape == (3,)
+        assert np.allclose(first.attributions, second.attributions)
+        assert "4 baselines" in first.note
+
+    def test_gradient_shap_sign_agrees_with_integrated_gradients(self) -> None:
+        from pharmaml.ml.xai import gradient_shap, integrated_gradients
+
+        net = self._net()
+        shap_values = gradient_shap(
+            net, self.ROW, n_baseline=8, n_samples=16, seed=1
+        ).attributions
+        ig_values = integrated_gradients(net, self.ROW, steps=32).attributions
+        correlation = float(np.corrcoef(shap_values, ig_values)[0, 1])
+        assert correlation > 0.5
+
+    def test_gradient_shap_rejects_bad_counts(self) -> None:
+        from pharmaml.ml.xai import XaiError, gradient_shap
+
+        net = self._net()
+        with pytest.raises(XaiError, match="n_baseline >= 1"):
+            gradient_shap(net, self.ROW, n_baseline=0)
+        with pytest.raises(XaiError, match="n_samples >= 1"):
+            gradient_shap(net, self.ROW, n_samples=0)
+
+    # -- deep_lift ------------------------------------------------------
+
+    def test_deep_lift_completeness_holds(self) -> None:
+        from pharmaml.ml.xai import deep_lift
+
+        net = self._net()
+        zero_baseline = deep_lift(net, self.ROW)
+        assert zero_baseline.method == "deep_lift"
+        assert zero_baseline.kind == "gradient"
+        assert abs(zero_baseline.convergence_delta) < 1e-8
+        given = deep_lift(net, self.ROW, baseline=[0.1, 0.2, -0.3])
+        assert abs(given.convergence_delta) < 1e-8
+
+    def test_deep_lift_sign_matches_input_x_gradient(self) -> None:
+        from pharmaml.ml.xai import deep_lift, input_x_gradient
+
+        net = self._net()
+        rescale = deep_lift(net, self.ROW).attributions
+        raw = input_x_gradient(net, self.ROW).attributions
+        assert float(np.corrcoef(rescale, raw)[0, 1]) > 0.0
+
+    def test_deep_lift_rejects_mismatched_baseline(self) -> None:
+        from pharmaml.ml.xai import XaiError, deep_lift
+
+        with pytest.raises(XaiError, match="baseline has 2 features"):
+            deep_lift(self._net(), self.ROW, baseline=[1.0, 2.0])
+
+    # -- kernel_shap ----------------------------------------------------
+
+    def test_kernel_shap_exact_on_a_linear_scorer(self) -> None:
+        from pharmaml.ml.xai import kernel_shap
+
+        weights = np.array([2.0, -1.0, 0.5])
+        row = np.array([0.5, -1.0, 2.0])
+        background = self._background()
+        result = kernel_shap(
+            self._linear_scorer(weights), background, row, n_coalitions=6, seed=0
+        )
+        expected = weights * (row - background.mean(axis=0))
+        assert np.allclose(result.attributions, expected, atol=1e-9)
+        assert abs(result.convergence_delta) < 1e-9
+
+    def test_kernel_shap_mlp_shape_and_small_delta(self) -> None:
+        from pharmaml.ml.xai import kernel_shap
+
+        result = kernel_shap(
+            self._net(), self._background(), self.ROW, n_coalitions=8, seed=0
+        )
+        assert result.method == "kernel_shap"
+        assert result.kind == "perturbation"
+        assert result.attributions.shape == (3,)
+        assert abs(result.convergence_delta) < 1e-4
+        assert "column means" in result.note
+
+    def test_kernel_shap_rejects_mismatched_background(self) -> None:
+        from pharmaml.ml.xai import XaiError, kernel_shap
+
+        net = self._net()
+        with pytest.raises(XaiError, match="background has 4 features"):
+            kernel_shap(net, np.zeros((5, 4)), self.ROW)
+        with pytest.raises(XaiError, match="2-D"):
+            kernel_shap(net, np.zeros(6), self.ROW)
+
+    # -- lime_tabular ---------------------------------------------------
+
+    def test_lime_tabular_recovers_the_exact_linear_slope(self) -> None:
+        from pharmaml.ml.xai import lime_tabular
+
+        weights = np.array([2.0, -1.0, 0.5])
+        result = lime_tabular(
+            self._linear_scorer(weights),
+            self._background(),
+            self.ROW,
+            n_samples=32,
+            kernel_width=2.0,
+            seed=0,
+        )
+        assert result.method == "lime_tabular"
+        assert result.kind == "perturbation"
+        # on an exactly linear scorer the surrogate slopes ARE the weights
+        assert np.allclose(result.attributions, weights, atol=1e-8)
+
+    def test_lime_tabular_mlp_shape(self) -> None:
+        from pharmaml.ml.xai import lime_tabular
+
+        result = lime_tabular(
+            self._net(), self._background(), self.ROW, n_samples=24, seed=0
+        )
+        assert result.attributions.shape == (3,)
+        assert np.all(np.isfinite(result.attributions))
+        assert "kernel_width" in result.note
+
+    def test_lime_tabular_rejects_bad_params(self) -> None:
+        from pharmaml.ml.xai import XaiError, lime_tabular
+
+        net = self._net()
+        background = self._background()
+        with pytest.raises(XaiError, match="n_samples >= 2"):
+            lime_tabular(net, background, self.ROW, n_samples=1)
+        with pytest.raises(XaiError, match="kernel_width"):
+            lime_tabular(net, background, self.ROW, kernel_width=0.0)
+
+    # -- shapley_value --------------------------------------------------
+
+    def test_shapley_value_telescopes_and_is_seeded(self) -> None:
+        from pharmaml.ml.xai import shapley_value
+
+        net = self._net()
+        first = shapley_value(
+            net, self._background(), self.ROW, n_permutations=8, seed=0
+        )
+        second = shapley_value(
+            net, self._background(), self.ROW, n_permutations=8, seed=0
+        )
+        assert first.method == "shapley_value"
+        assert first.kind == "perturbation"
+        assert abs(first.convergence_delta) < 1e-9
+        assert np.allclose(first.attributions, second.attributions)
+
+    def test_shapley_value_exact_on_a_linear_scorer(self) -> None:
+        from pharmaml.ml.xai import shapley_value
+
+        weights = np.array([2.0, -1.0, 0.5])
+        row = np.array([0.5, -1.0, 2.0])
+        background = self._background()
+        result = shapley_value(
+            self._linear_scorer(weights), background, row, n_permutations=4, seed=0
+        )
+        assert np.allclose(
+            result.attributions, weights * (row - background.mean(axis=0)), atol=1e-9
+        )
+
+    def test_shapley_value_rejects_bad_calls(self) -> None:
+        from pharmaml.ml.xai import XaiError, shapley_value
+
+        net = self._net()
+        with pytest.raises(XaiError, match="n_permutations >= 1"):
+            shapley_value(net, self._background(), self.ROW, n_permutations=0)
+        with pytest.raises(XaiError, match="background has 5 features"):
+            shapley_value(net, np.zeros((4, 5)), self.ROW)
+
+    # -- feature_permutation --------------------------------------------
+
+    def test_feature_permutation_runs_on_both_estimator_kinds(self) -> None:
+        from pharmaml.ml.xai import feature_permutation
+
+        rng = np.random.default_rng(11)
+        matrix = rng.normal(size=(24, 3))
+        matrix[:, 0] *= 4.0  # a strong column
+        row = [0.5, -1.0, 2.0]
+        stack_result = feature_permutation(
+            self._net(), matrix, row, n_repeats=4, seed=0
+        )
+        assert stack_result.method == "feature_permutation"
+        assert stack_result.attributions.shape == (3,)
+        # the strong column dominates the numpy stack's score drops
+        assert stack_result.attributions[0] > stack_result.attributions[1]
+        # an interaction scorer pairs columns, so shuffling either moves the
+        # mean (the empirical covariance breaks) while the untouched third
+        # column drops exactly nothing
+        interaction = self._interaction_scorer()
+        pair_result = feature_permutation(
+            interaction, matrix, row, n_repeats=4, seed=0
+        )
+        assert abs(pair_result.attributions[0]) > 0.0
+        assert abs(pair_result.attributions[1]) > 0.0
+        assert pair_result.attributions[2] == pytest.approx(0.0, abs=1e-12)
+        # an ADDITIVE scorer's mean prediction is permutation-invariant:
+        # every drop is exactly zero, however strong its weights are
+        additive = feature_permutation(
+            self._linear_scorer(np.array([3.0, -2.0, 1.0])),
+            matrix,
+            row,
+            n_repeats=4,
+            seed=0,
+        )
+        assert np.allclose(additive.attributions, 0.0, atol=1e-12)
+
+    def test_feature_permutation_rejects_and_guards(self) -> None:
+        from pharmaml.ml.xai import XaiError, feature_permutation
+
+        with pytest.raises(XaiError, match="predict/predict_proba"):
+            feature_permutation(object(), self._background(), self.ROW)
+        with pytest.raises(XaiError, match="output_index must be 0"):
+            feature_permutation(
+                self._linear_scorer(np.ones(3)),
+                self._background(),
+                self.ROW,
+                output_index=1,
+            )
+        with pytest.raises(XaiError, match="at least 2 rows"):
+            feature_permutation(self._net(), np.zeros((1, 3)), self.ROW)
+
+    # -- noise_tunnel ---------------------------------------------------
+
+    def test_noise_tunnel_smoothgrad_matches_smoothgrad_attributions(self) -> None:
+        from pharmaml.ml.xai import noise_tunnel, smoothgrad_attributions
+
+        net = self._net()
+        tunnel = noise_tunnel(
+            net, self.ROW, method="smoothgrad", n_noise=8, noise_scale=0.2, seed=7
+        )
+        smooth = smoothgrad_attributions(
+            net, self.ROW, n_samples=8, stdev_ratio=0.2, seed=7
+        )
+        assert np.allclose(tunnel.attributions, smooth.attributions)
+
+    @pytest.mark.parametrize("method", ["smoothgrad", "smoothgrad_sq", "vargrad"])
+    def test_noise_tunnel_types_shapes(self, method: str) -> None:
+        from pharmaml.ml.xai import noise_tunnel
+
+        result = noise_tunnel(
+            self._net(), self.ROW, method=method, n_noise=8, seed=0
+        )
+        assert result.method == "noise_tunnel"
+        assert result.kind == "gradient"
+        assert result.attributions.shape == (3,)
+        assert np.all(np.isfinite(result.attributions))
+        if method == "vargrad":
+            assert np.all(result.attributions >= -1e-12)
+
+    def test_noise_tunnel_rejects_unknown_type(self) -> None:
+        from pharmaml.ml.xai import XaiError, noise_tunnel
+
+        with pytest.raises(XaiError, match="noise tunnel type"):
+            noise_tunnel(self._net(), self.ROW, method="vargrad_sq")
+
+    # -- lrp ------------------------------------------------------------
+
+    def test_lrp_conserves_relevance_up_to_the_bias_leak(self) -> None:
+        from pharmaml.ml.xai import _stack_score, lrp, numpy_layer_stack
+
+        net = self._net()
+        result = lrp(net, self.ROW)
+        assert result.method == "lrp"
+        assert result.kind == "gradient"
+        score = _stack_score(
+            numpy_layer_stack(net), np.asarray(self.ROW, dtype=float), 0
+        )
+        total = float(result.attributions.sum())
+        # the bias terms leak relevance; conservation holds up to that leak
+        assert abs(total - score) <= 0.5 * abs(score) + 1e-9
+        assert result.convergence_delta == pytest.approx(score - total, abs=1e-12)
+
+    def test_lrp_sign_matches_input_x_gradient(self) -> None:
+        from pharmaml.ml.xai import input_x_gradient, lrp
+
+        net = self._net()
+        relevance = lrp(net, self.ROW).attributions
+        raw = input_x_gradient(net, self.ROW).attributions
+        assert float(np.corrcoef(relevance, raw)[0, 1]) > 0.0
+
+    def test_lrp_rejects_nonpositive_eps_and_bad_output_index(self) -> None:
+        from pharmaml.ml.xai import XaiError, lrp
+
+        net = self._net()
+        with pytest.raises(XaiError, match="eps > 0"):
+            lrp(net, self.ROW, eps=0.0)
+        with pytest.raises(XaiError, match="output_index 3 out of range"):
+            lrp(net, self.ROW, output_index=3)
+
+    # -- layer_conductance ----------------------------------------------
+
+    def test_layer_conductance_shapes_and_keys(self) -> None:
+        from pharmaml.ml.xai import layer_conductance
+
+        neurons = layer_conductance(self._net(), self.ROW, n_samples=8)
+        assert len(neurons) == 4  # the demo network's single hidden layer
+        assert set(neurons[0]) == {
+            "neuron",
+            "conductance",
+            "mean_activation",
+            "mean_gradient",
+        }
+        assert all(isinstance(entry["conductance"], float) for entry in neurons)
+        assert neurons[1]["neuron"] == 1.0
+        last = layer_conductance(self._net(), self.ROW, layer_index=-1, n_samples=8)
+        assert len(last) == 4  # -1 wraps onto the same hidden layer
+
+    def test_layer_conductance_rejects_bad_layer(self) -> None:
+        from pharmaml.ml.xai import XaiError, layer_conductance
+
+        with pytest.raises(XaiError, match="layer_index 5 out of range"):
+            layer_conductance(self._net(), self.ROW, layer_index=5)
+
+    # -- cav_directional_derivative --------------------------------------
+
+    def test_cav_directional_derivative_report(self) -> None:
+        from pharmaml.ml.xai import cav_directional_derivative
+
+        rng = np.random.default_rng(3)
+        concept = rng.normal(size=(12, 3)) + np.array([2.0, 0.0, 0.0])
+        random_rows = rng.normal(size=(12, 3))
+        report = cav_directional_derivative(
+            self._net(), concept, random_rows, self.ROW
+        )
+        assert sorted(report) == ["cav", "directional_derivative", "tcav_score"]
+        assert len(report["cav"]) == 4
+        assert 0.0 <= report["tcav_score"] <= 1.0
+        assert np.isfinite(report["directional_derivative"])
+        # the CAV is a unit direction
+        assert float(np.linalg.norm(report["cav"])) == pytest.approx(1.0, abs=1e-9)
+
+    def test_cav_rejects_degenerate_sets(self) -> None:
+        from pharmaml.ml.xai import XaiError, cav_directional_derivative
+
+        good = self._background()
+        with pytest.raises(XaiError, match="at least 2 rows"):
+            cav_directional_derivative(self._net(), good[:1], good, self.ROW)
+        with pytest.raises(XaiError, match="features but the row has 3"):
+            cav_directional_derivative(
+                self._net(), np.zeros((4, 5)), good, self.ROW
+            )
+
+    # -- fgsm / pgd -------------------------------------------------------
+
+    @pytest.mark.parametrize("eps", [0.05, 0.1])
+    def test_fgsm_clips_to_the_eps_ball(self, eps: float) -> None:
+        from pharmaml.ml.xai import fgsm_attack
+
+        row = np.asarray(self.ROW, dtype=float)
+        adversarial = fgsm_attack(self._net(), row, eps=eps)
+        assert isinstance(adversarial, np.ndarray)
+        assert np.all(np.isfinite(adversarial))
+        assert np.max(np.abs(adversarial - row)) <= eps + 1e-12
+        assert np.max(np.abs(adversarial - row)) > 0.0  # it actually moved
+
+    def test_pgd_stays_in_the_ball(self) -> None:
+        from pharmaml.ml.xai import pgd_attack
+
+        row = np.asarray(self.ROW, dtype=float)
+        adversarial = pgd_attack(self._net(), row, eps=0.1, alpha=0.02, n_steps=8)
+        assert np.all(np.isfinite(adversarial))
+        assert np.max(np.abs(adversarial - row)) <= 0.1 + 1e-12
+        assert not np.allclose(adversarial, row)
+
+    def test_attacks_reject_bad_params(self) -> None:
+        from pharmaml.ml.xai import XaiError, fgsm_attack, pgd_attack
+
+        net = self._net()
+        with pytest.raises(XaiError, match="fgsm needs eps > 0"):
+            fgsm_attack(net, self.ROW, eps=0.0)
+        with pytest.raises(XaiError, match="pgd needs alpha > 0"):
+            pgd_attack(net, self.ROW, alpha=0.0)
+        with pytest.raises(XaiError, match="pgd needs n_steps >= 1"):
+            pgd_attack(net, self.ROW, n_steps=0)
+
+    # -- the captum.metrics validators ------------------------------------
+
+    def test_sensitivity_max_zero_for_constant_attribution(self) -> None:
+        from pharmaml.ml.xai import sensitivity_max
+
+        value = sensitivity_max(
+            lambda values: np.ones(3), self.ROW, n_noise=4, noise_scale=0.2, seed=0
+        )
+        assert value == 0.0
+
+    def test_sensitivity_max_positive_for_input_gradients(self) -> None:
+        from pharmaml.ml.xai import input_x_gradient, sensitivity_max
+
+        def attribution_fn(values: np.ndarray) -> np.ndarray:
+            return input_x_gradient(self._net(), values).attributions
+
+        value = sensitivity_max(
+            attribution_fn, self.ROW, n_noise=8, noise_scale=0.2, seed=0
+        )
+        assert value > 0.0
+        assert np.isfinite(value)
+
+    def test_infidelity_vanishes_for_the_exact_gradient(self) -> None:
+        from pharmaml.ml.xai import infidelity, input_x_gradient
+
+        def attribution_fn(values: np.ndarray) -> np.ndarray:
+            return input_x_gradient(self._net(), values).attributions
+
+        # tiny noise keeps every ReLU on the same branch: the analytic
+        # gradient is EXACT there, so the completeness residual is ~0
+        value = infidelity(
+            attribution_fn, self._net(), self.ROW, n_noise=8, noise_scale=1e-4, seed=0
+        )
+        assert value < 1e-10
+
+    def test_infidelity_finite_and_guards(self) -> None:
+        from pharmaml.ml.xai import XaiError, infidelity, input_x_gradient
+
+        def attribution_fn(values: np.ndarray) -> np.ndarray:
+            return input_x_gradient(self._net(), values).attributions
+
+        value = infidelity(
+            attribution_fn, self._net(), self.ROW, n_noise=8, noise_scale=0.3, seed=0
+        )
+        assert np.isfinite(value)
+        assert value >= 0.0
+        with pytest.raises(XaiError, match="n_noise >= 1"):
+            infidelity(attribution_fn, self._net(), self.ROW, n_noise=0)
+
+    def test_attribution_effectiveness_perfect_on_linear_scorer(self) -> None:
+        from pharmaml.ml.xai import attribution_effectiveness
+
+        weights = np.array([2.0, 1.0, 0.5])  # one sign: |attrs| ranks == drop ranks
+        row = np.array([1.0, 1.0, 1.0])  # constant row -> alternatives collapse to 0
+        value = attribution_effectiveness(
+            self._linear_scorer(weights), row, weights, n_alternatives=4, seed=0
+        )
+        assert value == pytest.approx(1.0, abs=1e-9)
+
+    def test_attribution_effectiveness_range_and_constant_guard(self) -> None:
+        from pharmaml.ml.xai import XaiError, attribution_effectiveness, input_x_gradient
+
+        net = self._net()
+        grads = input_x_gradient(net, self.ROW).attributions
+        value = attribution_effectiveness(
+            net, self.ROW, grads, n_alternatives=8, seed=0
+        )
+        assert -1.0 <= value <= 1.0
+        flat = attribution_effectiveness(net, self.ROW, np.zeros(3))
+        assert flat == 0.0  # a flat ranking is undefined -> the 0.0 guard
+        with pytest.raises(XaiError, match="n_alternatives >= 1"):
+            attribution_effectiveness(net, self.ROW, grads, n_alternatives=0)
+        with pytest.raises(XaiError, match="the attribution carries 2 values"):
+            attribution_effectiveness(net, self.ROW, np.zeros(2))

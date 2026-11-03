@@ -503,6 +503,126 @@ def log_softmax(x: Tensor, axis: int = -1) -> Tensor:
     return shifted - exp.sum(axis=axis, keepdims=True).log()
 
 
+def scatter_add(src: Tensor, index: object, size: int, dim: int = 0) -> Tensor:
+    """Segment-sum aggregation — ``torch_geometric.utils.scatter(reduce="add")``.
+
+    ``index`` holds the destination segment of every ``src`` row along
+    ``dim`` (0 only — the message-passing axis); the result has ``size``
+    rows.  The backward is the gather ``g[index]`` — exactly the
+    transpose of the forward's ``np.add.at``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pharmaml.ml.autograd import Tensor, gradient_check, scatter_add
+    >>> out = scatter_add(Tensor([[1.0], [2.0], [3.0]]), np.array([0, 2, 2]), 4)
+    >>> out.numpy().ravel().tolist()
+    [1.0, 0.0, 5.0, 0.0]
+    >>> check = gradient_check(
+    ...     lambda t: scatter_add(t, np.array([0, 1, 1]), 2).sum() ** 2,
+    ...     np.array([[1.0, 2.0], [3.0, 4.0], [0.5, -0.5]]),
+    ... )
+    >>> bool(check < 1e-7)
+    True
+    """
+
+    if dim != 0:
+        raise DataValidationError("scatter_*: only the node axis (dim=0) is supported")
+    idx = np.asarray(index, dtype=int).reshape(-1)
+    if idx.shape[0] != src.data.shape[0]:
+        raise DataValidationError("scatter_add: index must name every src row")
+    out = np.zeros((size,) + tuple(src.data.shape[1:]), dtype=float)
+    np.add.at(out, idx, src.data)
+
+    def dx(g: np.ndarray) -> np.ndarray:
+        return np.asarray(g, dtype=float)[idx]
+
+    return Tensor._from_op(out, [src], [dx])
+
+
+def scatter_max(src: Tensor, index: object, size: int, dim: int = 0) -> Tensor:
+    """Segment-max aggregation, first-occurrence tie-break.
+
+    The gradient routes to the FIRST row achieving each segment's max
+    (``torch_geometric.utils.scatter(reduce="max")``'s convention) and
+    is zero elsewhere — the forward's ``np.maximum.at`` keeps cells the
+    backward cannot split.  Segments with no row stay ``-inf``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pharmaml.ml.autograd import Tensor, gradient_check, scatter_max
+    >>> out = scatter_max(Tensor([[1.0], [4.0], [4.0], [2.0]]), np.array([0, 2, 2, 2]), 3)
+    >>> out.numpy().ravel().tolist()
+    [1.0, -inf, 4.0]
+    >>> check = gradient_check(
+    ...     lambda t: scatter_max(t, np.array([0, 1, 1, 0]), 2).sum(),
+    ...     np.array([[3.0], [1.0], [2.0], [1.5]]),
+    ... )
+    >>> bool(check < 1e-8)
+    True
+    """
+
+    if dim != 0:
+        raise DataValidationError("scatter_*: only the node axis (dim=0) is supported")
+    idx = np.asarray(index, dtype=int).reshape(-1)
+    if idx.shape[0] != src.data.shape[0]:
+        raise DataValidationError("scatter_max: index must name every src row")
+    shape = (size,) + tuple(src.data.shape[1:])
+    out = np.full(shape, -np.inf)
+    np.maximum.at(out, idx, src.data)
+    claims = src.data == out[idx]
+    keep = np.zeros_like(claims)
+    claimed = np.zeros(shape, dtype=bool)
+    for row in range(idx.shape[0]):  # first occurrence per cell wins
+        take = claims[row] & ~claimed[idx[row]]
+        keep[row] = take
+        claimed[idx[row]] |= take
+
+    def dx(g: np.ndarray) -> np.ndarray:
+        return np.asarray(g, dtype=float)[idx] * keep
+
+    return Tensor._from_op(out, [src], [dx])
+
+
+def scatter_softmax(src: Tensor, index: object, size: int, dim: int = 0) -> Tensor:
+    """Per-segment softmax — ``torch_geometric.utils.softmax``.
+
+    The segment max is subtracted for stability and DETACHED (PyG's
+    own choice): the max's gradient routes through the exponential
+    path, not through the comparison.  Composed entirely of tape ops,
+    so the backward is automatic.  Requires every named segment to be
+    non-empty (self-loops guarantee that in the message-passing use).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pharmaml.ml.autograd import Tensor, gradient_check, scatter_softmax
+    >>> out = scatter_softmax(Tensor([[0.0], [1.0], [2.0]]), np.array([0, 1, 1]), 2)
+    >>> out.numpy().ravel().round(3).tolist()
+    [1.0, 0.269, 0.731]
+    >>> check = gradient_check(
+    ...     lambda t: (scatter_softmax(t, np.array([0, 0, 1, 1]), 2)
+    ...                * Tensor(np.array([[0.5], [1.5], [2.5], [3.5]]))).sum(),
+    ...     np.array([[0.3], [-0.2], [1.1], [0.7]]),
+    ... )
+    >>> bool(check < 1e-8)
+    True
+    """
+
+    if dim != 0:
+        raise DataValidationError("scatter_*: only the node axis (dim=0) is supported")
+    idx = np.asarray(index, dtype=int).reshape(-1)
+    if idx.shape[0] != src.data.shape[0]:
+        raise DataValidationError("scatter_softmax: index must name every src row")
+    m = np.full((size,) + tuple(src.data.shape[1:]), -np.inf)
+    np.maximum.at(m, idx, src.data)
+    shifted = src - Tensor(m[idx])
+    weights = shifted.exp()
+    denom = scatter_add(weights, idx, size)
+    return weights / denom[idx]
+
+
 def gradient_check(
     function: Callable[[Tensor], Tensor],
     x: object,
