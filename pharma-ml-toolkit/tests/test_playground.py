@@ -15688,8 +15688,9 @@ class TestXaiHelpers:
         deterministic weights, wrapped so ``_network`` is exposed like
         the NumpyMLP estimators do (the predict fallback covers the
         occlusion path)."""
-        import numpy as np
         from types import SimpleNamespace
+
+        import numpy as np
 
         from pharmaml.ml.numpy_neural import _MLPNetwork
 
@@ -15882,8 +15883,8 @@ class TestXaiHelpers:
 
         from pharmaml.ml.xai import (
             XaiError,
-            integrated_gradients,
             input_x_gradient,
+            integrated_gradients,
         )
 
         row = np.array([1.0, 2.0])

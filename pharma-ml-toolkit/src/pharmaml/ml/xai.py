@@ -580,10 +580,10 @@ def _clamp01(value: float) -> float:
 
 def _to_hex(r: float, g: float, b: float) -> str:
     """One Tkinter hex color from 0-1 floats (clamped, 2-digit each)."""
-    return "#{:02x}{:02x}{:02x}".format(
-        int(round(_clamp01(r) * 255)),
-        int(round(_clamp01(g) * 255)),
-        int(round(_clamp01(b) * 255)),
+    return (
+        f"#{round(_clamp01(r) * 255):02x}"
+        f"{round(_clamp01(g) * 255):02x}"
+        f"{round(_clamp01(b) * 255):02x}"
     )
 
 

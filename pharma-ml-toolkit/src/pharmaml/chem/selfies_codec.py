@@ -440,8 +440,15 @@ def random_selfies_molecules(
         raise DataValidationError(f"n must be >= 0, got {n}")
     if length < 1:
         raise DataValidationError(f"length must be >= 1, got {length}")
-    symbols = sorted(alphabet) if alphabet else selfies.get_semantic_robust_alphabet()
-    symbols = [str(symbol) for symbol in symbols]
+    # sorted() on BOTH branches: get_semantic_robust_alphabet() returns a
+    # set, and iterating a raw set rides PYTHONHASHSEED -- the same seed
+    # would sample different symbols in every process (the flaky-gate
+    # bug this line fixes; a seeded sampler owes cross-process determinism).
+    symbols = sorted(
+        str(symbol) for symbol in alphabet
+    ) if alphabet else sorted(
+        str(symbol) for symbol in selfies.get_semantic_robust_alphabet()
+    )
     if not symbols:
         raise DataValidationError("the alphabet is empty — nothing to draw from")
     rng = random.Random(seed)
@@ -498,7 +505,7 @@ def selfies_mutants(
     tokens = selfies_tokens(encoded)
     if not tokens:
         raise DataValidationError(f"{smiles!r} encoded to an empty SELFIES string")
-    alphabet = [str(symbol) for symbol in selfies.get_semantic_robust_alphabet()]
+    alphabet = sorted(str(symbol) for symbol in selfies.get_semantic_robust_alphabet())
     rng = random.Random(seed)
     seen: dict[str, None] = {}
     for _ in range(n):
@@ -917,7 +924,7 @@ def selfies_robustness_experiment(
     # the mutation alphabets: the full semantic robust alphabet on the
     # SELFIES side (the paper's setting — arbitrary symbols); the pool's
     # own observed charset on the SMILES side (its organic-subset sibling)
-    alphabet = [str(symbol) for symbol in selfies.get_semantic_robust_alphabet()]
+    alphabet = sorted(str(symbol) for symbol in selfies.get_semantic_robust_alphabet())
     charset = sorted(set("".join(pool))) or list("CNO")
     encoded = {smiles: selfies_tokens(str(selfies.encoder(smiles))) for smiles in pool}
 

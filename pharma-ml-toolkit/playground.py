@@ -22666,7 +22666,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 matrix = np.asarray(proba(sample), dtype=float)
                 if matrix.ndim == 2 and matrix.shape[1] > 1:
                     return int(matrix[0].argmax())
-            except Exception:  # noqa: BLE001 -- fall through to predict
+            except Exception:  # noqa: BLE001, S110 -- fall through to predict
                 pass
         predict = getattr(network, "predict", None)
         classes = getattr(network, "classes_", None)
@@ -22676,7 +22676,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 names = [str(item) for item in np.asarray(classes).reshape(-1)]
                 if label in names:
                     return names.index(label)
-            except Exception:  # noqa: BLE001 -- stay honest, explain unit 0
+            except Exception:  # noqa: BLE001, S110 -- stay honest, explain unit 0
                 pass
         return 0
 
@@ -22688,7 +22688,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         names = getattr(network, "feature_names_in_", None)
         if names is not None:
             return [str(name) for name in list(names)]
-        return [f"x{i + 1}" for i in range(int(len(row)))]
+        return [f"x{i + 1}" for i in range(len(row))]
 
     def _dl_xai_explain(self) -> None:
         """Explain the last trained network on one held-out row."""
@@ -22843,7 +22843,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         from pharmaml.exceptions import PharmaMLError
         from pharmaml.ml.xai import grayscale_hex, layer_activation_summary, layer_activation_trace
 
-        network, estimator_name, task, x_test, target = self._dl_last_run
+        network, estimator_name, _task, x_test, target = self._dl_last_run
         matrix = np.asarray(x_test, dtype=float)
         if matrix.ndim != 2 or matrix.shape[0] == 0:
             messagebox.showwarning(
