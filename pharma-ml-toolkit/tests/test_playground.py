@@ -3077,9 +3077,21 @@ class TestDeepLearningTab:
             first._dl_xai_tokens_entry.insert(0, "the inhibitor blocks the gate")
             first._dl_xai_layer_spin.set("3")
             first._dl_xai_head_spin.set("2")
+            # (round 186) the four new cards' thirteen inputs
+            first._dl_rb_smooth_spin.set("0.85")
+            first._dl_umap_knn_spin.set("25")
+            first._dl_umap_mindist_spin.set("0.3")
+            first._dl_umap_metric_combo.set("cosine")
+            first._dl_cur_op_combo.set("between")
+            first._dl_cur_value_entry.delete(0, "end")
+            first._dl_cur_value_entry.insert(0, "1,5")
+            first._dl_exp_kind_combo.set("histogram")
+            first._dl_exp_template_combo.set("ggplot2")
+            first._dl_exp_hover_entry.delete(0, "end")
+            first._dl_exp_hover_entry.insert(0, "SMILES,compound_id")
             payload = first._collect_session()
             saved = [key for key in payload["variables"] if key.startswith("_dl_")]
-            assert len(saved) == 24  # 18 + the XAI card's six (round 185)
+            assert len(saved) == 37  # 18 + XAI's six + round-186's thirteen
 
             second._session = payload
             second._restore_session()
@@ -3104,6 +3116,16 @@ class TestDeepLearningTab:
             assert second._dl_xai_tokens_entry.get() == "the inhibitor blocks the gate"
             assert second._dl_xai_layer_spin.get() == "3"
             assert second._dl_xai_head_spin.get() == "2"
+            # (round 186) the four new cards restore too
+            assert second._dl_rb_smooth_spin.get() == "0.85"
+            assert second._dl_umap_knn_spin.get() == "25"
+            assert second._dl_umap_mindist_spin.get() == "0.3"
+            assert second._dl_umap_metric_combo.get() == "cosine"
+            assert second._dl_cur_op_combo.get() == "between"
+            assert second._dl_cur_value_entry.get() == "1,5"
+            assert second._dl_exp_kind_combo.get() == "histogram"
+            assert second._dl_exp_template_combo.get() == "ggplot2"
+            assert second._dl_exp_hover_entry.get() == "SMILES,compound_id"
         finally:
             first.destroy()
             second.destroy()
