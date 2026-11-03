@@ -7,7 +7,6 @@ import {
   ZIP_EXCLUDE_ARGS,
   openReleaseZip,
   readToolkitVersion,
-  releaseZipAbsPath,
 } from "@/lib/toolkit-fs";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +17,10 @@ export const runtime = "nodejs";
  * a fresh on-the-fly build otherwise.
  *
  * Release path (the normal case): the round-end builder leaves a
- * testzip-verified, leak-scanned archive at
- * download/pharma-ml-toolkit-v<version>.zip. It is streamed straight from
+ * testzip-verified, leak-scanned archive in the ship ritual's homes
+ * (repo-root download/, toolkit dist-archive/, legacy toolkit
+ * download/ — tried in order by openReleaseZip in toolkit-fs.ts). It
+ * is streamed straight from
  * disk with Content-Length (the browser gets a real progress bar), a strong
  * ETag (repeat clicks revalidate — a matching If-None-Match is a zero-byte
  * 304), and the exact bytes of the shipped release: a stable SHA-256 per
@@ -108,7 +109,7 @@ export async function GET(req: Request) {
       // the 100x-156 fd-lifecycle probe) and reads exactly
       // [0, release.size - 1] of the inode the fstat described: the
       // Content-Length cannot lie about the bytes streamed.
-      const nodeStream = createReadStream(releaseZipAbsPath(version), {
+      const nodeStream = createReadStream(release.path, {
         fd: release.fh,
         start: 0,
         end: release.size - 1,

@@ -258,19 +258,37 @@ async function readProjectVersion(): Promise<string | null> {
 /* Release artifact serving                                            */
 /* ------------------------------------------------------------------ */
 
-/** Directory holding the round-end release artifacts (the verification
- *  screenshots + the versioned archive). It sits INSIDE the toolkit tree,
- *  but `*.zip` is excluded from the streamed archive (ZIP_EXCLUDE_ARGS),
- *  so the prebuilt release zip never nests inside itself. */
-const RELEASE_ZIP_DIR = path.join(TOOLKIT_ROOT, "download");
+/** The round-end release artifacts' homes, in lookup order — the SAME
+ *  homes the ship ritual (tools/checkpoint.py) safe-copies the archive
+ *  to. This route historically looked ONLY in the toolkit-internal
+ *  download/ (the home up to v1.2.103); the ritual moved to the
+ *  repo-root download/ + dist-archive/ pair after that, which silently
+ *  forced every later release onto the rebuild-per-request fallback
+ *  (x-toolkit-zip-source: stream, no Content-Length/ETag). Trying each
+ *  home in order also survives any SINGLE home being eaten by a sandbox
+ *  rollback (a documented, recurring event): repo-root download/ first
+ *  (the canonical home), the in-tree dist-archive/ (rides the ship
+ *  commit) second, the legacy toolkit-internal download/ last. `*.zip`
+ *  stays excluded from the streamed archive (ZIP_EXCLUDE_ARGS), so the
+ *  prebuilt release zip never nests inside itself. */
+const RELEASE_ZIP_DIRS = [
+  path.join(process.cwd(), "download"),
+  path.join(TOOLKIT_ROOT, "dist-archive"),
+  path.join(TOOLKIT_ROOT, "download"),
+] as const;
 
-/** Absolute path of the prebuilt release archive for a given version —
- *  the round-end builder's output (testzip-verified, leak-scanned). */
-export function releaseZipAbsPath(version: string): string {
-  return path.join(RELEASE_ZIP_DIR, `pharma-ml-toolkit-v${version}.zip`);
+/** Absolute paths of the prebuilt release archive for a given version —
+ *  the round-end builder's output (testzip-verified, leak-scanned), one
+ *  candidate per home, most-preferred first. */
+export function releaseZipPaths(version: string): string[] {
+  const name = `pharma-ml-toolkit-v${version}.zip`;
+  return RELEASE_ZIP_DIRS.map((dir) => path.join(dir, name));
 }
 
 export interface ReleaseZipHandle {
+  /** Absolute path of the home the archive was OPENED from (the first
+ *  home, in lookup order, that held a complete artifact). */
+  path: string;
   /** The open file handle — the caller streams from it or closes it. */
   fh: FileHandle;
   /** Exact byte size OF THE OPEN INODE — becomes the download's
@@ -313,9 +331,24 @@ const ZIP_TAIL_WINDOW = 65_600;
  *  paths) or closed by the caller itself (the 304 / size-stat paths
  *  where no stream ever takes ownership). */
 export async function openReleaseZip(version: string): Promise<ReleaseZipHandle | null> {
+  /* The homes are tried in order — the first one holding a COMPLETE
+   * artifact wins; a home that is absent, unreadable or incomplete (say,
+   * eaten by a sandbox rollback) just falls through to the next, and
+   * only after the last one fails does the caller's on-the-fly fallback
+   * take over. */
+  for (const candidate of releaseZipPaths(version)) {
+    const handle = await openReleaseZipAt(candidate);
+    if (handle) return handle;
+  }
+  return null;
+}
+
+/** One candidate home — open, fstat, EOCD-validate (the probe-A guard);
+ *  null when absent/unreadable/implausibly empty/incomplete. */
+async function openReleaseZipAt(candidate: string): Promise<ReleaseZipHandle | null> {
   let fh: FileHandle;
   try {
-    fh = await fs.open(releaseZipAbsPath(version), "r");
+    fh = await fs.open(candidate, "r");
   } catch {
     return null;
   }
@@ -335,7 +368,7 @@ export async function openReleaseZip(version: string): Promise<ReleaseZipHandle 
       await fh.close();
       return null;
     }
-    return { fh, size: st.size, mtimeMs: st.mtimeMs };
+    return { path: candidate, fh, size: st.size, mtimeMs: st.mtimeMs };
   } catch {
     await fh.close().catch(() => undefined);
     return null;
