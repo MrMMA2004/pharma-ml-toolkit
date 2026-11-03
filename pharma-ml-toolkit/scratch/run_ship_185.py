@@ -15,11 +15,13 @@ from pathlib import Path
 TOOLKIT = Path(__file__).resolve().parents[1]
 PY = str(Path.home() / ".venv" / "bin" / "python")
 MESSAGE = (
-    "round 185: the XAI absorption re-ship -- "
-    "captum/tf-keras-vis/PAIR-code-saliency/bertviz as the offline ml.xai "
-    "engine (attribution methods, layer traces, attention grid) + Deep "
-    "Learning GUI cards, notebooks re-executed for 1.2.105, suite "
-    "chunk-green at 3896 tests (v1.2.105)"
+    "round 185 re-ship, lean -- the zip rebuilt without the research "
+    "clones (the first re-ship attempt walked scratch/gh-* into a 1.15 GB "
+    "archive and filled the disk; clones deleted, artifacts rebuilt); "
+    "gate fixes on the way: the EXE002 exec-bit sweep, S110/RUF046/"
+    "RUF059/UP032/I001 lint, and the selfies sampler PYTHONHASHSEED "
+    "determinism fix (sorted default alphabet in three call sites -- "
+    "the flaky doctest gate's root cause) (v1.2.105)"
 )
 COMMAND = [PY, "tools/checkpoint.py", "--commit", MESSAGE]
 OUT = "/tmp/ship185b.txt"
