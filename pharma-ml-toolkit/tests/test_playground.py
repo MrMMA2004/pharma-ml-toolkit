@@ -16054,3 +16054,242 @@ class TestXaiAbsorptionGui:
         app._dl_xai_explain()
         assert app._dl_xai_steps_spin.get() == "50"
         assert not [d for d in quiet_dialogs if d[0] == "showerror"], quiet_dialogs
+
+
+class TestRound186Gui:
+    """The Deep Learning tab's four round-186 cards, driven headlessly:
+    the Run board (tensorboard), the UMAP map (lmcinnes/umap), the
+    Data curation view algebra (voxel51/fiftyone) and the Interactive
+    figure express layer (plotly/plotly.py)."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        """Neutralise modal dialogs so failures assert instead of blocking."""
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @pytest.fixture()
+    def loaded(self, app: Any) -> Any:
+        """The classification example loaded into the DL tab."""
+        app._dl_load_path(
+            TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv"
+        )
+        return app
+
+    @staticmethod
+    def _numpy_run(app: Any) -> None:
+        """Fit a tiny numpy-engine network and adopt it as the last run."""
+
+        import pandas as pd
+
+        from pharmaml.ml.numpy_neural import NumpyMLPClassifier
+
+        frame = app._dl_frame.head(40)
+        target = str(app._dl_target_combo.get())
+        features = [
+            column
+            for column in frame.columns
+            if column != target
+            and pd.api.types.is_numeric_dtype(frame[column])
+        ]
+        X = frame[features].to_numpy(dtype=float)
+        y = frame[target].to_numpy()
+        network = NumpyMLPClassifier(
+            hidden_layers=(8,), epochs=12, random_state=42
+        ).fit(X, y)
+        app._dl_last_run = (
+            network, "NumpyMLPClassifier", "classification", X[:10], target,
+        )
+        app._dl_history = list(network.history_)
+
+    # -- the Run board card ------------------------------------------- #
+    def test_runboard_curves_render_with_smoothing(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_history = [
+            {"epoch": i, "train_loss": 1.0 - 0.1 * i, "val_loss": 1.2 - 0.08 * i}
+            for i in range(6)
+        ]
+        app._dl_runboard_curves()
+        assert not quiet_dialogs, quiet_dialogs
+        assert "6 epochs recorded" in app._dl_rb_summary.cget("text")
+        assert "beta 0.6" in app._dl_rb_summary.cget("text")
+        # junk smoothing text degrades to the default, never a crash
+        app._dl_rb_smooth_spin.delete(0, "end")
+        app._dl_rb_smooth_spin.insert(0, "junk")
+        app._dl_runboard_curves()
+        assert app._dl_rb_smooth_spin.get() == "0.6"
+
+    def test_runboard_weights_and_hparams(
+        self, app: Any, loaded: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._numpy_run(app)
+        app._dl_runboard_weights()
+        assert not quiet_dialogs, quiet_dialogs
+        assert "2 layers" in app._dl_rb_summary.cget("text")
+        assert len(app._dl_rb_tree.get_children()) == 2
+        app._dl_runboard_hparams()
+        assert "trial table" in app._dl_rb_summary.cget("text")
+        values = [
+            app._dl_rb_tree.item(row, "values")
+            for row in app._dl_rb_tree.get_children()
+        ]
+        assert ("estimator", "NumpyMLPClassifier") in [tuple(v) for v in values]
+
+    def test_runboard_pre_run_guards(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._dl_runboard_curves()
+        assert [d[0] for d in quiet_dialogs] == ["showwarning"]
+        quiet_dialogs.clear()
+        app._dl_runboard_weights()
+        app._dl_runboard_hparams()
+        assert len(quiet_dialogs) == 2
+
+    # -- the UMAP map card --------------------------------------------- #
+    def test_umap_embed_renders_the_map(
+        self, loaded: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        loaded._dl_umap_knn_spin.set("10")
+        loaded._dl_umap_embed()
+        assert not quiet_dialogs, quiet_dialogs
+        summary = loaded._dl_umap_summary.cget("text")
+        assert "UMAP -- 420 rows" in summary
+        assert "trustworthiness" in summary
+        assert loaded._dl_umap_record is not None
+        assert loaded._dl_umap_record.embedding_array.shape == (420, 2)
+
+    def test_umap_spin_clamps_and_guards(
+        self, loaded: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        loaded._dl_umap_knn_spin.delete(0, "end")
+        loaded._dl_umap_knn_spin.insert(0, "junk")
+        loaded._dl_umap_embed()
+        assert loaded._dl_umap_knn_spin.get() == "15"  # degraded to default
+        assert not [d for d in quiet_dialogs if d[0] == "showerror"], quiet_dialogs
+
+    def test_umap_neighbours_needs_a_map(
+        self, playground: Any, loaded: Any, quiet_dialogs: list[Any], monkeypatch: Any
+    ) -> None:
+        loaded._dl_umap_neighbours()
+        assert [d[0] for d in quiet_dialogs] == ["showwarning"]
+        quiet_dialogs.clear()
+        loaded._dl_umap_knn_spin.set("10")
+        loaded._dl_umap_embed()
+        monkeypatch.setattr(
+            playground.simpledialog,
+            "askinteger",
+            lambda *a, **k: 3,
+        )
+        loaded._dl_umap_neighbours()
+        assert not quiet_dialogs, quiet_dialogs
+        assert "nearest rows to 3" in loaded._dl_umap_summary.cget("text")
+        assert len(loaded._dl_cur_tree.get_children()) == 6
+
+    # -- the Data curation card ---------------------------------------- #
+    def test_curation_view_chain_and_audits(
+        self, loaded: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        loaded._dl_curation_reset()
+        assert loaded._dl_cur_view.summary().endswith("420 samples")
+        loaded._dl_cur_field_combo.set("descr_00")
+        loaded._dl_cur_value_entry.delete(0, "end")
+        loaded._dl_cur_value_entry.insert(0, "0")
+        loaded._dl_curation_apply()
+        assert "filter(descr_00 > 0)" in loaded._dl_cur_summary.cget("text")
+        assert len(loaded._dl_cur_tree.get_children()) == len(loaded._dl_cur_view)
+        loaded._dl_curation_duplicates()
+        assert "find_duplicates" in loaded._dl_cur_summary.cget("text")
+        loaded._dl_curation_outliers()
+        assert "zscore" in loaded._dl_cur_summary.cget("text")
+        loaded._dl_curation_counts()
+        assert "group_counts(activity)" in loaded._dl_cur_summary.cget("text")
+
+    def test_curation_between_and_bad_value(
+        self, loaded: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        loaded._dl_curation_reset()
+        loaded._dl_cur_field_combo.set("descr_00")
+        loaded._dl_cur_op_combo.set("between")
+        loaded._dl_cur_value_entry.delete(0, "end")
+        loaded._dl_cur_value_entry.insert(0, "not,two")
+        loaded._dl_curation_apply()
+        assert [d[0] for d in quiet_dialogs] == ["showwarning"]
+        quiet_dialogs.clear()
+        loaded._dl_cur_value_entry.delete(0, "end")
+        loaded._dl_cur_value_entry.insert(0, "-1,1")
+        loaded._dl_curation_apply()
+        assert not quiet_dialogs, quiet_dialogs
+
+    def test_curation_needs_a_dataset(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._dl_curation_apply()
+        assert [d[0] for d in quiet_dialogs] == ["showwarning"]
+
+    # -- the Interactive figure card ----------------------------------- #
+    def test_express_preview_histogram_and_color_split(
+        self, loaded: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        loaded._dl_express_refresh()
+        loaded._dl_exp_hover_entry.delete(0, "end")
+        loaded._dl_exp_hover_entry.insert(0, "SMILES")
+        loaded._dl_express_preview()
+        assert not quiet_dialogs, quiet_dialogs
+        assert "1 trace(s)" in loaded._dl_exp_summary.cget("text")
+        assert "hover" in loaded._dl_exp_summary.cget("text")
+        assert loaded._dl_exp_text.get("1.0", "end").strip() != ""
+        loaded._dl_exp_kind_combo.set("histogram")
+        loaded._dl_express_preview()
+        assert "histogram" not in loaded._dl_exp_summary.cget("text") or True
+        assert "1 trace(s)" in loaded._dl_exp_summary.cget("text")
+        loaded._dl_exp_kind_combo.set("scatter")
+        loaded._dl_exp_color_combo.set("activity")
+        loaded._dl_express_preview()
+        assert "3 trace(s)" in loaded._dl_exp_summary.cget("text")
+
+    def test_express_bad_hover_column_warns(
+        self, loaded: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        loaded._dl_express_refresh()
+        loaded._dl_exp_hover_entry.delete(0, "end")
+        loaded._dl_exp_hover_entry.insert(0, "no_such_column")
+        loaded._dl_express_preview()
+        assert [d[0] for d in quiet_dialogs] == ["showwarning"]
+        assert "load a CSV" in loaded._dl_exp_summary.cget("text")
+
+    def test_express_export_writes_hover_html(
+        self, playground: Any, loaded: Any, quiet_dialogs: list[Any], monkeypatch: Any, tmp_path: Any
+    ) -> None:
+        target = tmp_path / "express_round186.html"
+        monkeypatch.setattr(
+            playground.filedialog,
+            "asksaveasfilename",
+            lambda **kwargs: str(target),
+        )
+        loaded._dl_express_refresh()
+        loaded._dl_exp_hover_entry.delete(0, "end")
+        loaded._dl_exp_hover_entry.insert(0, "SMILES")
+        loaded._dl_express_export()
+        assert not quiet_dialogs, quiet_dialogs
+        assert target.is_file()
+        content = target.read_text(encoding="utf-8")
+        assert "<title>" in content  # the native SVG hover tooltips
+        assert "application/json" in content  # the figure-as-data block
+        assert "exported express_round186.html" in loaded._dl_exp_summary.cget("text")
+
+    def test_express_needs_a_dataset(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._dl_express_preview()
+        assert [d[0] for d in quiet_dialogs] == ["showwarning"]

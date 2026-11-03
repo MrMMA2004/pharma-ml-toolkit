@@ -2424,6 +2424,20 @@ def tune_config_text(params: dict[str, Any]) -> str:
     return " ".join(tokens)
 
 
+def _maybe_number(text: str) -> Any:
+    """Best-effort numeric parse for curation filter values ('' if empty)."""
+    stripped = text.strip()
+    if stripped == "":
+        return ""
+    try:
+        return int(stripped)
+    except ValueError:
+        try:
+            return float(stripped)
+        except ValueError:
+            return stripped
+
+
 def _cell_text(value: Any, limit: int = 26) -> str:
     """Render one table cell for the preview/leaderboard trees."""
     if value is None:
@@ -22114,6 +22128,963 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             wraplength=560,
         )
         grid_append(xai, self._dl_xai_pairs, sticky="w")
+
+        # -- run board (round 186: the tensorboard absorption) -------- #
+        # tensorflow/tensorboard checked one by one -- the summary-writer
+        # event model (scalars / histograms / hparams), the event
+        # accumulator's reservoir and the scalar dashboard's EMA
+        # smoothing, rebuilt offline on ml/runboard.py: no event files,
+        # no web server, bounded memory.
+        board = make_card(
+            page.grid,
+            "Run board",
+            span=2,
+            row=6,
+            column=0,
+            subtitle="The last training run as a TensorBoard-style event "
+            "log: per-epoch loss curves with the dashboard's EMA "
+            "smoothing slider, the first hidden layer's weight histogram "
+            "(the histogram dashboard's overlay stats + buckets) and the "
+            "run's hparams table -- every event list reservoir-sampled "
+            "so even a million-epoch run stays bounded "
+            "(tensorflow/tensorboard, absorbed offline).",
+        )
+        board_row = ttk.Frame(board, style="Card.TFrame")
+        grid_append(board, board_row, sticky="w")
+        ttk.Label(board_row, text="smoothing", style="CardMuted.TLabel").pack(
+            side="left", padx=(0, 3)
+        )
+        self._dl_rb_smooth_spin = ttk.Spinbox(
+            board_row, from_=0.0, to=0.95, increment=0.05, width=5
+        )
+        self._dl_rb_smooth_spin.set("0.6")
+        self._dl_rb_smooth_spin.pack(side="left")
+        Tooltip(
+            self._dl_rb_smooth_spin,
+            "The scalars dashboard's smoothing slider: the EMA weight "
+            "(0 = raw curve, 0.95 = heavy smoothing, bias-corrected "
+            "leading edge).",
+        )
+        curves_btn = self._action_button(
+            board_row,
+            "Loss curves",
+            self._dl_runboard_curves,
+            tooltip="The run's train/val loss per epoch, raw (thin) and "
+            "EMA-smoothed (bold) -- one line per tag, the way the "
+            "scalars dashboard overlays them.",
+        )
+        curves_btn.pack(side="left", padx=(10, 0))
+        weights_btn = self._action_button(
+            board_row,
+            "Weight histogram",
+            self._dl_runboard_weights,
+            tooltip="The first hidden layer's weight distribution: the "
+            "30 fixed-width buckets the histogram dashboard builds, "
+            "with min/max/mean/std in the title (needs the numpy "
+            "engine's layer stack).",
+        )
+        weights_btn.pack(side="left", padx=(8, 0))
+        hparams_btn = self._action_button(
+            board_row,
+            "hparams table",
+            self._dl_runboard_hparams,
+            tooltip="The hparams dashboard's trial row: the run's "
+            "hyperparameters and final metrics in one table.",
+        )
+        hparams_btn.pack(side="left", padx=(8, 0))
+        self._dl_rb_host = self._figure_host(board, height=240)
+        self._dl_rb_tree = ttk.Treeview(board, show="headings", height=6)
+        self._dl_rb_tree["columns"] = ("param", "value")
+        for column, text, width in (
+            ("param", "hyperparameter / metric", 220),
+            ("value", "value", 260),
+        ):
+            self._dl_rb_tree.heading(column, text=text)
+            self._dl_rb_tree.column(column, width=width, minwidth=64, stretch=True)
+        grid_append(board, self._dl_rb_tree, sticky="ew", pady=(6, 0))
+        self._dl_rb_summary = ttk.Label(
+            board,
+            text="train a network, then read its run here",
+            style="CardMuted.TLabel",
+            justify="left",
+            wraplength=560,
+        )
+        grid_append(board, self._dl_rb_summary, sticky="w", pady=(4, 0))
+
+        # -- UMAP map (round 186: the lmcinnes/umap absorption) ------- #
+        # the algorithm's own machinery -- smooth_knn_dist's binary
+        # search, the fuzzy simplicial set and its union symmetrisation,
+        # find_ab_params' curve fit, the negative-sampling SGD and the
+        # Venna-Kaski trustworthiness score -- numpy-only, no numba.
+        umap_card = make_card(
+            page.grid,
+            "UMAP map",
+            span=2,
+            row=7,
+            column=0,
+            subtitle="Project the run's test rows (or the loaded CSV) "
+            "with UMAP's own pipeline: the fuzzy k-NN graph, the a/b "
+            "curve from min_dist, spectral init and negative-sampling "
+            "SGD. The title carries the Venna-Kaski trustworthiness "
+            "score; colour = the target column (lmcinnes/umap, absorbed "
+            "offline in numpy).",
+        )
+        umap_row = ttk.Frame(umap_card, style="Card.TFrame")
+        grid_append(umap_card, umap_row, sticky="w")
+        ttk.Label(umap_row, text="neighbours", style="CardMuted.TLabel").pack(
+            side="left", padx=(0, 3)
+        )
+        self._dl_umap_knn_spin = ttk.Spinbox(umap_row, from_=5, to=50, width=5)
+        self._dl_umap_knn_spin.set("15")
+        self._dl_umap_knn_spin.pack(side="left")
+        ttk.Label(umap_row, text="min_dist", style="CardMuted.TLabel").pack(
+            side="left", padx=(10, 3)
+        )
+        self._dl_umap_mindist_spin = ttk.Spinbox(
+            umap_row, from_=0.0, to=0.99, increment=0.05, width=5
+        )
+        self._dl_umap_mindist_spin.set("0.1")
+        self._dl_umap_mindist_spin.pack(side="left")
+        ttk.Label(umap_row, text="metric", style="CardMuted.TLabel").pack(
+            side="left", padx=(10, 3)
+        )
+        self._dl_umap_metric_combo = ttk.Combobox(
+            umap_row, state="readonly", width=11, values=("euclidean", "manhattan", "cosine")
+        )
+        self._dl_umap_metric_combo.set("euclidean")
+        self._dl_umap_metric_combo.pack(side="left")
+        embed_btn = self._action_button(
+            umap_row,
+            "Embed",
+            self._dl_umap_embed,
+            tooltip="Fit UMAP on the numeric feature rows and draw the "
+            "2-D map coloured by the target column. Deterministic per "
+            "seed; n_epochs fixed at 200 (the honest default budget).",
+        )
+        embed_btn.pack(side="left", padx=(10, 0))
+        neighbours_btn = self._action_button(
+            umap_row,
+            "Nearest rows…",
+            self._dl_umap_neighbours,
+            tooltip="The projector's click interaction without a "
+            "browser: pick a row, meet its nearest neighbours by "
+            "cosine similarity over the ORIGINAL features.",
+        )
+        neighbours_btn.pack(side="left", padx=(8, 0))
+        save_umap_btn = self._action_button(
+            umap_row,
+            "Save map as CSV…",
+            self._dl_umap_save,
+            tooltip="Save the embedding coordinates (UMAP1/UMAP2 plus "
+            "the target column) as a CSV.",
+        )
+        save_umap_btn.pack(side="left", padx=(8, 0))
+        self._dl_umap_host = self._figure_host(umap_card, height=280)
+        self._dl_umap_summary = ttk.Label(
+            umap_card,
+            text="load a CSV (or train a network) and hit Embed",
+            style="CardMuted.TLabel",
+            justify="left",
+            wraplength=560,
+        )
+        grid_append(umap_card, self._dl_umap_summary, sticky="w", pady=(4, 0))
+        self._dl_umap_record = None
+
+        # -- Data curation (round 186: the voxel51/fiftyone absorption) #
+        # the view-stage algebra over the loaded CSV -- filter / sort /
+        # limit / shuffle / take, duplicate + outlier + similarity +
+        # uniqueness audits, the free-form tag set -- no MongoDB, no app.
+        curation = make_card(
+            page.grid,
+            "Data curation",
+            span=2,
+            row=8,
+            column=0,
+            subtitle="Curate the loaded CSV the fiftyone way: views are "
+            "immutable stage chains (filter → sort → limit …) that never "
+            "mutate the data; the audits answer the curation questions "
+            "-- duplicates, outliers, class counts, most-similar rows "
+            "(voxel51/fiftyone's stage algebra and brain methods, "
+            "absorbed offline).",
+        )
+        cur_row = ttk.Frame(curation, style="Card.TFrame")
+        grid_append(curation, cur_row, sticky="w")
+        self._dl_cur_field_combo = ttk.Combobox(cur_row, state="readonly", width=16)
+        self._dl_cur_field_combo.pack(side="left")
+        self._dl_cur_op_combo = ttk.Combobox(
+            cur_row,
+            state="readonly",
+            width=9,
+            values=("==", "!=", ">", ">=", "<", "<=", "in", "between", "contains"),
+        )
+        self._dl_cur_op_combo.set(">")
+        self._dl_cur_op_combo.pack(side="left", padx=(6, 0))
+        self._dl_cur_value_entry = ttk.Entry(cur_row, width=14)
+        self._dl_cur_value_entry.pack(side="left", padx=(6, 0))
+        Tooltip(
+            self._dl_cur_value_entry,
+            "The comparison value: a number for the comparison ops, a "
+            "comma-separated list for 'in', 'lo,hi' for 'between', a "
+            "substring for 'contains'.",
+        )
+        apply_view_btn = self._action_button(
+            cur_row,
+            "Apply view",
+            self._dl_curation_apply,
+            tooltip="Chain this filter stage onto the current view "
+            "(views compose -- the stage chain rides along as "
+            "provenance).",
+        )
+        apply_view_btn.pack(side="left", padx=(8, 0))
+        reset_view_btn = self._action_button(
+            cur_row,
+            "Reset",
+            self._dl_curation_reset,
+            tooltip="Back to the identity view over the full dataset.",
+        )
+        reset_view_btn.pack(side="left", padx=(8, 0))
+        cur_row2 = ttk.Frame(curation, style="Card.TFrame")
+        grid_append(curation, cur_row2, sticky="w", pady=(6, 0))
+        dupes_btn = self._action_button(
+            cur_row2, "Duplicates", self._dl_curation_duplicates,
+            tooltip="find_duplicates: rows whose fields form an "
+            "identical tuple, reported past the first (keep=first).",
+        )
+        dupes_btn.pack(side="left")
+        outliers_btn = self._action_button(
+            cur_row2, "Outliers", self._dl_curation_outliers,
+            tooltip="The z-score audit (|x - mean| / std > 4) over every "
+            "numeric field; the fences ride in the summary.",
+        )
+        outliers_btn.pack(side="left", padx=(8, 0))
+        counts_btn = self._action_button(
+            cur_row2, "Class counts", self._dl_curation_counts,
+            tooltip="group_counts over the target column: value → "
+            "sample count for the current view.",
+        )
+        counts_btn.pack(side="left", padx=(8, 0))
+        similar_btn = self._action_button(
+            cur_row2, "Similar rows…", self._dl_curation_similar,
+            tooltip="sort_by_similarity: the 5 rows most cosine-similar "
+            "to a chosen row over the numeric fields.",
+        )
+        similar_btn.pack(side="left", padx=(8, 0))
+        self._dl_cur_tree = ttk.Treeview(curation, show="headings", height=6)
+        self._dl_cur_tree["columns"] = ("row", "detail")
+        for column, text, width in (
+            ("row", "row", 70),
+            ("detail", "detail", 420),
+        ):
+            self._dl_cur_tree.heading(column, text=text)
+            self._dl_cur_tree.column(column, width=width, minwidth=64, stretch=True)
+        grid_append(curation, self._dl_cur_tree, sticky="ew", pady=(6, 0))
+        self._dl_cur_summary = ttk.Label(
+            curation,
+            text="load a CSV to curate it",
+            style="CardMuted.TLabel",
+            justify="left",
+            wraplength=560,
+        )
+        grid_append(curation, self._dl_cur_summary, sticky="w", pady=(4, 0))
+        self._dl_cur_view = None
+
+        # -- Interactive figure (round 186: the plotly.py absorption) -- #
+        # plotly.express's one-liners over the figure-as-data model of
+        # viz/interactive.py -- colour splits, hover labels, named
+        # templates and the self-contained hover-HTML export.
+        express = make_card(
+            page.grid,
+            "Interactive figure",
+            span=2,
+            row=9,
+            column=0,
+            subtitle="Turn the loaded CSV into a figure-as-data: pick a "
+            "chart kind, split by a colour column, ride hover labels "
+            "from any column, choose a named template -- then export a "
+            "self-contained HTML whose SVG carries native hover "
+            "tooltips, no CDN, no JavaScript (plotly/plotly.py's "
+            "express layer, absorbed offline).",
+        )
+        exp_row = ttk.Frame(express, style="Card.TFrame")
+        grid_append(express, exp_row, sticky="w")
+        self._dl_exp_kind_combo = ttk.Combobox(
+            exp_row, state="readonly", width=11, values=("scatter", "line", "bar", "histogram")
+        )
+        self._dl_exp_kind_combo.set("scatter")
+        self._dl_exp_kind_combo.pack(side="left")
+        self._dl_exp_x_combo = ttk.Combobox(exp_row, state="readonly", width=13)
+        self._dl_exp_x_combo.pack(side="left", padx=(6, 0))
+        self._dl_exp_y_combo = ttk.Combobox(exp_row, state="readonly", width=13)
+        self._dl_exp_y_combo.pack(side="left", padx=(6, 0))
+        self._dl_exp_color_combo = ttk.Combobox(exp_row, state="readonly", width=13)
+        self._dl_exp_color_combo.pack(side="left", padx=(6, 0))
+        Tooltip(
+            self._dl_exp_color_combo,
+            "The colour column (express's legend split: one trace per "
+            "level) -- '(none)' keeps a single trace.",
+        )
+        self._dl_exp_template_combo = ttk.Combobox(
+            exp_row, state="readonly", width=12,
+            values=("plotly", "plotly_white", "ggplot2", "seaborn"),
+        )
+        self._dl_exp_template_combo.set("plotly")
+        self._dl_exp_template_combo.pack(side="left", padx=(6, 0))
+        exp_row2 = ttk.Frame(express, style="Card.TFrame")
+        grid_append(express, exp_row2, sticky="w", pady=(6, 0))
+        ttk.Label(exp_row2, text="hover cols", style="CardMuted.TLabel").pack(
+            side="left", padx=(0, 3)
+        )
+        self._dl_exp_hover_entry = ttk.Entry(exp_row2, width=30)
+        self._dl_exp_hover_entry.pack(side="left")
+        Tooltip(
+            self._dl_exp_hover_entry,
+            "Comma-separated column names whose values ride on the "
+            "points as hovertext (plotly's hover_data, text edition).",
+        )
+        preview_btn = self._action_button(
+            exp_row2,
+            "Preview ASCII",
+            self._dl_express_preview,
+            tooltip="Build the figure and show its unicode block "
+            "preview (the first trace) in the card.",
+        )
+        preview_btn.pack(side="left", padx=(8, 0))
+        export_btn = self._action_button(
+            exp_row2,
+            "Export hover HTML…",
+            self._dl_express_export,
+            tooltip="Save the self-contained HTML: the figure JSON, a "
+            "static SVG whose markers carry <title> tooltips and the "
+            "text report -- deterministic bytes, viewable offline "
+            "forever.",
+        )
+        export_btn.pack(side="left", padx=(8, 0))
+        self._dl_exp_text = tk.Text(express, height=8, wrap="none")
+        grid_append(express, self._dl_exp_text, sticky="ew", pady=(6, 0))
+        self._dl_exp_summary = ttk.Label(
+            express,
+            text="load a CSV, pick columns and preview",
+            style="CardMuted.TLabel",
+            justify="left",
+            wraplength=560,
+        )
+        grid_append(express, self._dl_exp_summary, sticky="w", pady=(4, 0))
+
+    # ------------------------------------------------------------- #
+    # Round 186: the four absorbed cards' handlers
+    # ------------------------------------------------------------- #
+    def _dl_frame_columns(self) -> list[str]:
+        """The loaded CSV's columns (empty when no dataset)."""
+        frame = getattr(self, "_dl_frame", None)
+        if frame is None:
+            return []
+        return [str(column) for column in frame.columns]
+
+    def _dl_runboard_curves(self) -> None:
+        """The scalars dashboard: loss curves with EMA smoothing."""
+        if not self._require_pharmaml():
+            return
+        if not self._dl_history:
+            messagebox.showwarning(
+                "No run yet", "Train a network first -- the board reads the "
+                "LAST run's per-epoch history."
+            )
+            return
+        import numpy as np
+
+        from pharmaml.ml.runboard import RunTrace, smooth_series
+        from pharmaml.viz._compat import new_figure
+
+        trace = RunTrace("last-run")
+        for record in self._dl_history:
+            epoch = int(record.get("epoch", 0))
+            trace.add_scalar("loss/train", float(record.get("train_loss", 0.0)), step=epoch)
+            if record.get("val_loss") is not None:
+                trace.add_scalar("loss/val", float(record.get("val_loss", 0.0)), step=epoch)
+        try:
+            beta = float(str(self._dl_rb_smooth_spin.get()) or "0.6")
+        except ValueError:
+            beta = 0.6
+        beta = max(0.0, min(beta, 0.95))
+        self._dl_rb_smooth_spin.set(str(beta))
+
+        figure, axes = new_figure(figsize=(8.0, 4.2))
+        ax = axes if not hasattr(axes, "ravel") else np.atleast_1d(axes).ravel()[0]
+        for index, tag in enumerate(trace.tags("scalar")):
+            events = trace.scalars(tag)
+            steps = [event.step for event in events]
+            values = [event.value for event in events]
+            smoothed = smooth_series(values, beta=beta)
+            color = ("#2563eb", "#dc2626")[index % 2]
+            ax.plot(steps, values, linewidth=0.9, alpha=0.45, color=color, label=f"{tag} (raw)")
+            ax.plot(steps, smoothed, linewidth=2.4, color=color, label=f"{tag} (EMA {beta:g})")
+        ax.set_xlabel("epoch")
+        ax.set_ylabel("loss")
+        ax.set_title(f"Run board -- {trace.summary()}")
+        ax.legend(frameon=False, fontsize=9)
+        self._render_figure(self._dl_rb_host, figure, caption="Run board: loss curves")
+        self._dl_rb_summary.configure(
+            text=f"{len(trace.scalars('loss/train'))} epochs recorded · "
+            f"smoothing beta {beta:g} (0 = raw)"
+        )
+
+    def _dl_runboard_weights(self) -> None:
+        """The histogram dashboard: the first layer's weight buckets."""
+        if not self._require_pharmaml():
+            return
+        if self._dl_last_run is None:
+            messagebox.showwarning(
+                "No run yet", "Train a network first -- weight histograms "
+                "read the LAST trained network."
+            )
+            return
+        import numpy as np
+
+        from pharmaml.exceptions import PharmaMLError
+        from pharmaml.ml.runboard import histogram_event
+        from pharmaml.ml.xai import numpy_layer_stack
+        from pharmaml.viz._compat import new_figure
+
+        network = self._dl_last_run[0]
+        try:
+            stack = numpy_layer_stack(network)
+        except PharmaMLError as exc:
+            messagebox.showwarning("Cannot read this run's layers", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Weight histogram failed", exc)
+            return
+        if not stack.layers:
+            messagebox.showwarning("Empty stack", "The network has no layers.")
+            return
+        weight = np.asarray(stack.layers[0][0], dtype=float).reshape(-1)
+        event = histogram_event(weight, step=0)
+        figure, axes = new_figure(figsize=(8.0, 4.2))
+        ax = axes if not hasattr(axes, "ravel") else np.atleast_1d(axes).ravel()[0]
+        edges = np.asarray(event.bucket_edges)
+        centers = (edges[:-1] + edges[1:]) / 2.0
+        widths = np.maximum(edges[1:] - edges[:-1], 1e-9)
+        ax.bar(centers, event.bucket_counts, width=widths, color="#2563eb", alpha=0.8)
+        ax.set_xlabel("weight value")
+        ax.set_ylabel("count")
+        ax.set_title(
+            f"weights/layer1 -- {event.count} weights · "
+            f"min {event.min:.3g} · max {event.max:.3g} · "
+            f"mean {event.mean:.3g} ± {event.std:.3g}"
+        )
+        self._render_figure(
+            self._dl_rb_host, figure, caption="Run board: weight histogram"
+        )
+        # the per-layer overlay stats table (the histogram dashboard's
+        # summary strip: one row per layer)
+        self._dl_rb_tree.delete(*self._dl_rb_tree.get_children())
+        for index, (layer_weight, layer_bias) in enumerate(stack.layers, start=1):
+            values = np.asarray(layer_weight, dtype=float).reshape(-1)
+            row_event = histogram_event(values, step=0)
+            self._dl_rb_tree.insert(
+                "", "end",
+                values=(
+                    f"layer{index} weights",
+                    f"{row_event.count} · min {row_event.min:.3g} · "
+                    f"max {row_event.max:.3g} · mean {row_event.mean:.3g} ± "
+                    f"{row_event.std:.3g}"
+                    + (
+                        f" · bias ±{histogram_event(np.asarray(layer_bias, dtype=float).reshape(-1), step=0).std:.3g}"
+                        if layer_bias is not None
+                        else ""
+                    ),
+                ),
+            )
+        self._dl_rb_summary.configure(
+            text=f"{len(stack.layers)} layers · buckets: {len(event.bucket_counts)}"
+        )
+
+    def _dl_runboard_hparams(self) -> None:
+        """The hparams dashboard: the run's trial row."""
+        if not self._require_pharmaml():
+            return
+        if self._dl_last_run is None:
+            messagebox.showwarning(
+                "No run yet", "Train a network first -- hparams describe "
+                "the LAST run."
+            )
+            return
+        network, estimator_name, _task, _x_test, target = self._dl_last_run
+        params = dict(network.get_params()) if hasattr(network, "get_params") else {}
+        self._dl_rb_tree.delete(*self._dl_rb_tree.get_children())
+        self._dl_rb_tree.insert(
+            "", "end", values=("estimator", estimator_name)
+        )
+        self._dl_rb_tree.insert("", "end", values=("target", str(target)))
+        for key in sorted(params):
+            self._dl_rb_tree.insert(
+                "", "end", values=(key, str(params[key]))
+            )
+        if self._dl_history:
+            last = self._dl_history[-1]
+            for key in ("epoch", "train_loss", "val_loss"):
+                if last.get(key) is not None:
+                    self._dl_rb_tree.insert(
+                        "", "end", values=(f"final/{key}", f"{last[key]:.4g}")
+                    )
+        self._dl_rb_summary.configure(
+            text=f"{len(params) + 4} rows -- the hparams dashboard's trial table"
+        )
+
+    def _dl_umap_embed(self) -> None:
+        """Fit UMAP on the run's test rows (or the loaded CSV)."""
+        if not self._require_pharmaml():
+            return
+        import numpy as np
+        import pandas as pd
+
+        from pharmaml.exceptions import PharmaMLError
+        from pharmaml.ml.umap import trustworthiness, umap_embed
+        from pharmaml.viz._compat import PALETTE, new_figure
+
+        matrix = None
+        labels: np.ndarray | None = None
+        target_name = None
+        if self._dl_last_run is not None:
+            _network, _name, _task, x_test, target = self._dl_last_run
+            candidate = np.asarray(x_test, dtype=float)
+            if candidate.ndim == 2 and candidate.shape[0] >= 10:
+                matrix = candidate
+                target_name = str(target)
+        if matrix is None and self._dl_frame is not None:
+            frame = self._dl_frame
+            target_name = str(self._dl_target_combo.get() or "")
+            numeric = [
+                column
+                for column in frame.columns
+                if column != target_name
+                and pd.api.types.is_numeric_dtype(frame[column])
+            ]
+            if len(numeric) >= 2 and len(frame) >= 10:
+                matrix = frame[numeric].to_numpy(dtype=float)
+        if matrix is None:
+            messagebox.showwarning(
+                "Not enough rows",
+                "UMAP needs a run's test rows or a loaded CSV with at "
+                "least 10 numeric rows.",
+            )
+            return
+        if self._dl_frame is not None and target_name in list(self._dl_frame.columns):
+            target_values = np.asarray(self._dl_frame[target_name])
+            if len(target_values) >= matrix.shape[0]:
+                labels = target_values[: matrix.shape[0]]
+        try:
+            n_neighbors = int(float(str(self._dl_umap_knn_spin.get()) or "15"))
+        except (TypeError, ValueError):
+            n_neighbors = 15
+        try:
+            min_dist = float(str(self._dl_umap_mindist_spin.get()) or "0.1")
+        except (TypeError, ValueError):
+            min_dist = 0.1
+        try:
+            metric = str(self._dl_umap_metric_combo.get() or "euclidean")
+            n_neighbors = max(5, min(n_neighbors, matrix.shape[0] - 1))
+            min_dist = max(0.0, min(min_dist, 0.99))
+            self._dl_umap_knn_spin.set(str(n_neighbors))
+            self._dl_umap_mindist_spin.set(str(min_dist))
+            record = umap_embed(
+                matrix,
+                n_neighbors=n_neighbors,
+                min_dist=min_dist,
+                metric=metric,
+                n_epochs=200,
+                random_state=42,
+            )
+        except PharmaMLError as exc:
+            messagebox.showwarning("UMAP refused", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("UMAP failed", exc)
+            return
+        self._dl_umap_record = record
+        embedding = record.embedding_array
+        score = trustworthiness(matrix, embedding, n_neighbors=min(10, matrix.shape[0] // 3 or 1))
+        figure, axes = new_figure(figsize=(8.0, 5.0))
+        ax = axes if not hasattr(axes, "ravel") else np.atleast_1d(axes).ravel()[0]
+        if labels is not None:
+            levels = sorted({str(v) for v in labels.tolist()})
+            for index, level in enumerate(levels):
+                mask = np.asarray([str(v) == level for v in labels.tolist()])
+                ax.scatter(
+                    embedding[mask, 0], embedding[mask, 1], s=26, alpha=0.85,
+                    color=PALETTE[index % len(PALETTE)], label=str(level),
+                )
+            ax.legend(frameon=False, fontsize=9, title=target_name)
+        else:
+            ax.scatter(embedding[:, 0], embedding[:, 1], s=26, alpha=0.85, color=PALETTE[0])
+        ax.set_xlabel("UMAP1")
+        ax.set_ylabel("UMAP2")
+        ax.set_title(
+            f"UMAP -- trustworthiness {score:.2f} · a={record.a:.3f} b={record.b:.3f} "
+            f"· {record.n_edges} edges"
+        )
+        self._render_figure(self._dl_umap_host, figure, caption="UMAP map")
+        self._dl_umap_summary.configure(
+            text=f"{record} · trustworthiness {score:.3f} (Venna-Kaski, k≤10)"
+        )
+
+    def _dl_umap_neighbours(self) -> None:
+        """The projector's click: nearest rows by original-space cosine."""
+        if not self._require_pharmaml():
+            return
+        if self._dl_umap_record is None:
+            messagebox.showwarning(
+                "No map yet", "Hit Embed first -- neighbours are looked up "
+                "in the ORIGINAL feature space of the embedded rows."
+            )
+            return
+        if simpledialog is None:  # pragma: no cover - headless import
+            messagebox.showwarning("Unavailable", "The dialog is unavailable.")
+            return
+        raw = self._dl_umap_record._raw
+        row = simpledialog.askinteger(
+            "Nearest rows",
+            f"Row index to inspect (0-{raw.shape[0] - 1}):",
+            parent=self._dl_page,
+            initialvalue=0,
+            minvalue=0,
+            maxvalue=raw.shape[0] - 1,
+        )
+        if row is None:
+            return
+        from pharmaml.ml.runboard import nearest_neighbours
+
+        hits = nearest_neighbours(raw, int(row), k=5)
+        self._dl_cur_tree.delete(*self._dl_cur_tree.get_children())
+        for index, similarity, _label in hits:
+            self._dl_cur_tree.insert(
+                "", "end",
+                values=(f"row {index}", f"cosine similarity {similarity:.3f}"),
+            )
+        self._dl_umap_summary.configure(
+            text=f"nearest rows to {row}: "
+            + " · ".join(f"#{i} ({s:.2f})" for i, s, _l in hits[1:])
+        )
+
+    def _dl_umap_save(self) -> None:
+        """Save the embedding coordinates as CSV."""
+        if self._dl_umap_record is None:
+            messagebox.showwarning("No map yet", "Hit Embed first.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save the UMAP map",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        frame = self._dl_umap_record.as_frame()
+        frame.to_csv(path, index=True)
+        self._dl_umap_summary.configure(
+            text=f"saved {len(frame)} rows to {Path(path).name}"
+        )
+
+    def _dl_curation_set_frame(self) -> bool:
+        """(Re)build the curation view + refresh its combos.
+
+        Returns ``False`` (with a warning) when no CSV is loaded.
+        """
+        if self._dl_frame is None:
+            messagebox.showwarning(
+                "No dataset", "Open a CSV in the Dataset card first."
+            )
+            return False
+        columns = self._dl_frame_columns()
+        self._dl_cur_field_combo["values"] = columns
+        if columns and not self._dl_cur_field_combo.get():
+            self._dl_cur_field_combo.set(columns[0])
+        if self._dl_cur_view is None:
+            from pharmaml.ml.curation import SampleSet
+
+            self._dl_cur_view = SampleSet.from_frame(self._dl_frame).view()
+        return True
+
+    def _dl_curation_apply(self) -> None:
+        """Chain one filter stage onto the view."""
+        if not self._require_pharmaml():
+            return
+        if not self._dl_curation_set_frame():
+            return
+        from pharmaml.exceptions import PharmaMLError
+
+        field = str(self._dl_cur_field_combo.get())
+        op = str(self._dl_cur_op_combo.get())
+        raw = str(self._dl_cur_value_entry.get()).strip()
+        try:
+            if op == "in":
+                value: Any = [piece.strip() for piece in raw.split(",") if piece.strip()]
+                value = [
+                    _maybe_number(piece) for piece in value
+                ]
+            elif op == "between":
+                pieces = [piece.strip() for piece in raw.split(",")]
+                if len(pieces) != 2:
+                    raise ValueError("between needs 'lo,hi'")
+                value = (_maybe_number(pieces[0]), _maybe_number(pieces[1]))
+            else:
+                value = _maybe_number(raw)
+            self._dl_cur_view = self._dl_cur_view.filter(field, op, value)
+        except PharmaMLError as exc:
+            messagebox.showwarning("Stage refused", str(exc))
+            return
+        except ValueError as exc:
+            messagebox.showwarning("Bad value", str(exc))
+            return
+        self._dl_curation_render()
+
+    def _dl_curation_reset(self) -> None:
+        """Back to the identity view."""
+        if self._dl_frame is None:
+            messagebox.showwarning("No dataset", "Open a CSV first.")
+            return
+        from pharmaml.ml.curation import SampleSet
+
+        self._dl_cur_view = SampleSet.from_frame(self._dl_frame).view()
+        self._dl_curation_render()
+
+    def _dl_curation_render(self) -> None:
+        """Materialise the view into the card's tree + summary."""
+        view = self._dl_cur_view
+        self._dl_cur_tree.delete(*self._dl_cur_tree.get_children())
+        frame = view.to_frame()
+        columns = list(frame.columns)
+        self._dl_cur_tree["columns"] = tuple(["row"] + columns)
+        for column in ["row"] + columns:
+            self._dl_cur_tree.heading(column, text=column)
+            self._dl_cur_tree.column(column, width=90, minwidth=48, stretch=True)
+        for sample_id, row in zip(frame.index.tolist(), frame.itertuples(index=False)):
+            self._dl_cur_tree.insert(
+                "", "end",
+                values=[str(sample_id)] + [_cell_text(value) for value in row],
+            )
+        self._dl_cur_summary.configure(
+            text=f"view: {view.summary()}"
+        )
+
+    def _dl_curation_duplicates(self) -> None:
+        """find_duplicates over the current view."""
+        if not self._require_pharmaml():
+            return
+        if not self._dl_curation_set_frame():
+            return
+        from pharmaml.ml.curation import find_duplicates
+
+        report = find_duplicates(self._dl_cur_view)
+        self._dl_cur_tree.delete(*self._dl_cur_tree.get_children())
+        for group in report.groups:
+            self._dl_cur_tree.insert(
+                "", "end",
+                values=(
+                    f"{len(group)} rows",
+                    "identical: " + ", ".join(f"#{sid}" for sid in group),
+                ),
+            )
+        if not report.groups:
+            self._dl_cur_tree.insert(
+                "", "end", values=("0", "no duplicate rows -- every row is unique")
+            )
+        self._dl_cur_summary.configure(text=f"find_duplicates: {report.summary()}")
+
+    def _dl_curation_outliers(self) -> None:
+        """The z-score audit over the current view."""
+        if not self._require_pharmaml():
+            return
+        if not self._dl_curation_set_frame():
+            return
+        from pharmaml.ml.curation import find_outliers
+
+        report = find_outliers(self._dl_cur_view, method="zscore", threshold=4.0)
+        self._dl_cur_tree.delete(*self._dl_cur_tree.get_children())
+        for name, ids in report.flagged.items():
+            lo, hi = report.fences[name]
+            self._dl_cur_tree.insert(
+                "", "end",
+                values=(
+                    name,
+                    f"{len(ids)} row(s) outside [{lo:.3g}, {hi:.3g}]: "
+                    + ", ".join(f"#{sid}" for sid in ids),
+                ),
+            )
+        if not report.flagged:
+            self._dl_cur_tree.insert(
+                "", "end", values=("0", "no z-score outliers at |z| > 4")
+            )
+        self._dl_cur_summary.configure(text=f"outliers: {report.summary()}")
+
+    def _dl_curation_counts(self) -> None:
+        """group_counts over the target column."""
+        if not self._require_pharmaml():
+            return
+        if not self._dl_curation_set_frame():
+            return
+        target = str(self._dl_target_combo.get() or "")
+        if target not in self._dl_frame_columns():
+            messagebox.showwarning(
+                "No target", "Pick a target column in the Dataset card first."
+            )
+            return
+        counts = self._dl_cur_view.group_counts(target)
+        self._dl_cur_tree.delete(*self._dl_cur_tree.get_children())
+        for value, count in sorted(counts.items()):
+            self._dl_cur_tree.insert(
+                "", "end", values=(value, f"{count} sample(s)")
+            )
+        self._dl_cur_summary.configure(
+            text=f"group_counts({target}): {self._dl_cur_view.summary()}"
+        )
+
+    def _dl_curation_similar(self) -> None:
+        """sort_by_similarity for a chosen row."""
+        if not self._require_pharmaml():
+            return
+        if not self._dl_curation_set_frame():
+            return
+        if simpledialog is None:  # pragma: no cover - headless import
+            messagebox.showwarning("Unavailable", "The dialog is unavailable.")
+            return
+        ids = self._dl_cur_view.sample_ids()
+        row = simpledialog.askinteger(
+            "Similar rows",
+            f"Row id to query ({ids[0]}-{ids[-1]}):",
+            parent=self._dl_page,
+            initialvalue=ids[0],
+            minvalue=min(ids),
+            maxvalue=max(ids),
+        )
+        if row is None:
+            return
+        from pharmaml.exceptions import PharmaMLError
+        from pharmaml.ml.curation import sort_by_similarity
+
+        try:
+            hits = sort_by_similarity(self._dl_cur_view, int(row), k=5)
+        except PharmaMLError as exc:
+            messagebox.showwarning("Similarity refused", str(exc))
+            return
+        self._dl_cur_tree.delete(*self._dl_cur_tree.get_children())
+        for sample_id, similarity in hits:
+            self._dl_cur_tree.insert(
+                "", "end",
+                values=(f"#{sample_id}", f"cosine similarity {similarity:.3f}"),
+            )
+        self._dl_cur_summary.configure(
+            text=f"sort_by_similarity(#{row}): "
+            + " · ".join(f"#{i} ({s:.2f})" for i, s in hits[1:])
+        )
+
+    def _dl_express_refresh(self) -> bool:
+        """Refresh the express combos from the loaded CSV."""
+        if self._dl_frame is None:
+            messagebox.showwarning(
+                "No dataset", "Open a CSV in the Dataset card first."
+            )
+            return False
+        import pandas as pd
+
+        columns = self._dl_frame_columns()
+        target = str(self._dl_target_combo.get() or "")
+        numeric = [
+            column
+            for column in columns
+            if column != target
+            and pd.api.types.is_numeric_dtype(self._dl_frame[column])
+        ]
+        self._dl_exp_x_combo["values"] = columns
+        self._dl_exp_y_combo["values"] = columns
+        self._dl_exp_color_combo["values"] = ["(none)"] + columns
+        if columns and not self._dl_exp_x_combo.get():
+            self._dl_exp_x_combo.set(numeric[0] if numeric else columns[0])
+        if columns and not self._dl_exp_y_combo.get():
+            self._dl_exp_y_combo.set(
+                numeric[1] if len(numeric) > 1 else (numeric[0] if numeric else columns[0])
+            )
+        if not self._dl_exp_color_combo.get():
+            self._dl_exp_color_combo.set("(none)")
+        return True
+
+    def _dl_express_figure(self):
+        """Build the express figure from the card's current controls."""
+        from pharmaml.exceptions import PharmaMLError
+        from pharmaml.viz.interactive import express_figure
+
+        if not self._dl_express_refresh():
+            return None
+        kind = str(self._dl_exp_kind_combo.get() or "scatter")
+        x = str(self._dl_exp_x_combo.get())
+        y = str(self._dl_exp_y_combo.get() or "") or None
+        color = str(self._dl_exp_color_combo.get() or "(none)")
+        hover_raw = str(self._dl_exp_hover_entry.get() or "").strip()
+        hover = [piece.strip() for piece in hover_raw.split(",") if piece.strip()] or None
+        try:
+            return express_figure(
+                self._dl_frame,
+                kind,
+                x,
+                y if kind != "histogram" else None,
+                color=None if color == "(none)" else color,
+                hover=hover,
+                template=str(self._dl_exp_template_combo.get() or "plotly"),
+            )
+        except PharmaMLError as exc:
+            messagebox.showwarning("Express refused", str(exc))
+            return None
+
+    def _dl_express_preview(self) -> None:
+        """The ASCII preview into the card's text box."""
+        if not self._require_pharmaml():
+            return
+        figure = self._dl_express_figure()
+        if figure is None:
+            return
+        try:
+            preview = figure.to_ascii(width=68, height=12)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showwarning("Preview failed", str(exc))
+            return
+        self._dl_exp_text.delete("1.0", "end")
+        self._dl_exp_text.insert("1.0", preview)
+        traces = ", ".join(
+            f"{trace['name']} ({len(trace['x'])} pts"
+            + (" · hover" if trace.get("hovertext") else "")
+            + ")"
+            for trace in figure.traces
+        )
+        self._dl_exp_summary.configure(
+            text=f"{len(figure.traces)} trace(s): {traces}"
+        )
+
+    def _dl_express_export(self) -> None:
+        """Save the self-contained hover HTML."""
+        if not self._require_pharmaml():
+            return
+        figure = self._dl_express_figure()
+        if figure is None:
+            return
+        from pharmaml.viz.interactive import save_interactive_html
+
+        path = filedialog.asksaveasfilename(
+            title="Export the interactive figure",
+            defaultextension=".html",
+            filetypes=[("HTML files", "*.html"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            written = save_interactive_html(
+                figure, path, title="PharmaML express figure"
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("HTML export failed", exc)
+            return
+        self._dl_exp_summary.configure(
+            text=f"exported {written.name} ({written.stat().st_size:,} bytes) -- "
+            "hover the markers"
+        )
 
     def _dl_open_csv(self) -> None:
         if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):

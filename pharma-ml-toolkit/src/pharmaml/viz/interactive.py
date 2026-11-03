@@ -335,6 +335,7 @@ _LAYOUT_DEFAULTS: dict[str, Any] = {
     "y_title": None,
     "x_log": False,
     "y_log": False,
+    "template": None,
 }
 
 #: Required keys per trace kind (``from_json`` validation).
@@ -343,6 +344,52 @@ _REQUIRED_TRACE_KEYS: dict[str, tuple[str, ...]] = {
     "bar": ("type", "name", "x", "y"),
     "heatmap": ("type", "name", "z", "x", "y"),
 }
+
+#: The template registry (plotly's named themes, reduced to the knobs
+#: the static SVG renderer actually consumes: the trace colour cycle,
+#: the paper (page) fill and the axis ink).
+TEMPLATES: dict[str, dict[str, Any]] = {
+    "plotly": {
+        "colors": _TRACE_COLORS,
+        "paper": "#ffffff",
+        "ink": "#64748b",
+    },
+    "plotly_white": {
+        "colors": ("#636efa", "#EF553B", "#00cc96", "#ab63fa", "#19d3f3"),
+        "paper": "#ffffff",
+        "ink": "#b0b8c4",
+    },
+    "ggplot2": {
+        "colors": ("#f8766d", "#00ba38", "#619cff", "#e58e00", "#b07aff"),
+        "paper": "#f7f7f7",
+        "ink": "#999999",
+    },
+    "seaborn": {
+        "colors": ("#4c72b0", "#dd8452", "#55a868", "#c44e52", "#8172b3"),
+        "paper": "#eaeaf2",
+        "ink": "#a0a0a0",
+    },
+}
+
+
+def _hovertext_list(
+    hovertext: Any, expected: int, caller: str
+) -> list[str] | None:
+    """Validate a per-point hover label sequence (plotly's hovertext)."""
+    if hovertext is None:
+        return None
+    try:
+        labels = [str(label) for label in hovertext]
+    except TypeError as exc:
+        raise DataValidationError(
+            f"{caller}: hovertext must be a sequence of labels"
+        ) from exc
+    if len(labels) != expected:
+        raise DataValidationError(
+            f"{caller}: hovertext ({len(labels)}) must match the point count "
+            f"({expected})"
+        )
+    return labels
 
 
 def _numeric_list(values: Any, caller: str, axis: str) -> list[float]:
@@ -445,9 +492,15 @@ class Figure:
         self.layout: dict[str, Any] = dict(_LAYOUT_DEFAULTS)
 
     def add_scatter(
-        self, x: Any, y: Any, name: str, mode: str = "lines"
+        self, x: Any, y: Any, name: str, mode: str = "lines",
+        hovertext: Any = None,
     ) -> None:
-        """Append a scatter trace (``mode``: lines, markers or both)."""
+        """Append a scatter trace (``mode``: lines, markers or both).
+
+        ``hovertext`` (plotly's own trace field) carries one label per
+        point -- the express layer fills it from a DataFrame column and
+        the SVG export renders each as a native ``<title>`` tooltip.
+        """
         xs = _numeric_list(x, "add_scatter", "x")
         ys = _numeric_list(y, "add_scatter", "y")
         if len(xs) != len(ys):
@@ -460,11 +513,15 @@ class Figure:
                 f"add_scatter: mode must be one of {', '.join(_SCATTER_MODES)} "
                 f"— got {mode!r}"
             )
-        self.traces.append(
-            {"type": "scatter", "name": str(name), "mode": mode, "x": xs, "y": ys}
-        )
+        trace: dict[str, Any] = {
+            "type": "scatter", "name": str(name), "mode": mode, "x": xs, "y": ys,
+        }
+        labels = _hovertext_list(hovertext, len(xs), "add_scatter")
+        if labels is not None:
+            trace["hovertext"] = labels
+        self.traces.append(trace)
 
-    def add_bar(self, x: Any, y: Any, name: str) -> None:
+    def add_bar(self, x: Any, y: Any, name: str, hovertext: Any = None) -> None:
         """Append a bar trace (``x`` may be string categories)."""
         xs = _category_list(x, "add_bar", "x")
         ys = _numeric_list(y, "add_bar", "y")
@@ -473,9 +530,11 @@ class Figure:
                 f"add_bar: x ({len(xs)}) and y ({len(ys)}) must have the same "
                 "length"
             )
-        self.traces.append(
-            {"type": "bar", "name": str(name), "x": xs, "y": ys}
-        )
+        trace: dict[str, Any] = {"type": "bar", "name": str(name), "x": xs, "y": ys}
+        labels = _hovertext_list(hovertext, len(xs), "add_bar")
+        if labels is not None:
+            trace["hovertext"] = labels
+        self.traces.append(trace)
 
     def add_heatmap(self, z: Any, x: Any = None, y: Any = None) -> None:
         """Append a heatmap trace (``z``: rectangular numeric rows)."""
@@ -529,6 +588,7 @@ class Figure:
         y_title: str | None = None,
         x_log: bool = False,
         y_log: bool = False,
+        template: str | None = None,
     ) -> None:
         """Set the whole layout in one call — unset arguments CLEAR their field.
 
@@ -542,6 +602,7 @@ class Figure:
             "y_title": None if y_title is None else str(y_title),
             "x_log": bool(x_log),
             "y_log": bool(y_log),
+            "template": None if template is None else str(template),
         }
 
     def axis_ranges(self) -> dict[str, tuple[float, float] | None]:
@@ -1012,6 +1073,12 @@ def _figure_to_svg(figure: Figure, width: float = 640.0, height: float = 400.0) 
     ranges = figure.axis_ranges()
     x0, x1 = ranges["x"] or (0.0, 1.0)
     y0, y1 = ranges["y"] or (0.0, 1.0)
+    template = TEMPLATES.get(str(figure.layout.get("template")), {}) if (
+        figure.layout.get("template")
+    ) else {}
+    trace_colors = template.get("colors", _TRACE_COLORS)
+    paper = template.get("paper", "#ffffff")
+    ink = template.get("ink", "#64748b")
     x_log = bool(figure.layout.get("x_log"))
     y_log = bool(figure.layout.get("y_log"))
     if x_log and x0 <= 0.0:
@@ -1044,11 +1111,11 @@ def _figure_to_svg(figure: Figure, width: float = 640.0, height: float = 400.0) 
         ),
         (
             f'<rect x="0" y="0" width="{width:.0f}" height="{height:.0f}" '
-            f'fill="#ffffff"/>'
+            f'fill="{paper}"/>'
         ),
         (
             f'<rect x="{left:.2f}" y="{top:.2f}" width="{plot_w:.2f}" '
-            f'height="{plot_h:.2f}" fill="none" stroke="#64748b" '
+            f'height="{plot_h:.2f}" fill="none" stroke="{ink}" '
             f'stroke-width="1"/>'
         ),
     ]
@@ -1059,7 +1126,7 @@ def _figure_to_svg(figure: Figure, width: float = 640.0, height: float = 400.0) 
         cx = left + fraction * plot_w
         parts.append(
             f'<line x1="{cx:.2f}" y1="{top + plot_h:.2f}" x2="{cx:.2f}" '
-            f'y2="{top + plot_h + 4.0:.2f}" stroke="#64748b"/>'
+            f'y2="{top + plot_h + 4.0:.2f}" stroke="{ink}"/>'
         )
         parts.append(
             f'<text x="{cx:.2f}" y="{top + plot_h + 16.0:.2f}" '
@@ -1073,7 +1140,7 @@ def _figure_to_svg(figure: Figure, width: float = 640.0, height: float = 400.0) 
         cy = top + (1.0 - fraction) * plot_h
         parts.append(
             f'<line x1="{left - 4.0:.2f}" y1="{cy:.2f}" x2="{left:.2f}" '
-            f'y2="{cy:.2f}" stroke="#64748b"/>'
+            f'y2="{cy:.2f}" stroke="{ink}"/>'
         )
         parts.append(
             f'<text x="{left - 7.0:.2f}" y="{cy + 3.0:.2f}" text-anchor="end" '
@@ -1101,8 +1168,9 @@ def _figure_to_svg(figure: Figure, width: float = 640.0, height: float = 400.0) 
         )
 
     for index, trace in enumerate(figure.traces):
-        color = _TRACE_COLORS[index % len(_TRACE_COLORS)]
+        color = trace_colors[index % len(trace_colors)]
         kind = trace.get("type")
+        hovers = trace.get("hovertext") or []
         if kind == "scatter":
             mode = trace.get("mode", "lines")
             xs = trace.get("x") or []
@@ -1114,10 +1182,15 @@ def _figure_to_svg(figure: Figure, width: float = 640.0, height: float = 400.0) 
                     f'stroke-width="2"/>'
                 )
             if "markers" in mode:
-                for x, y in zip(xs, ys):
+                for i, (x, y) in enumerate(zip(xs, ys)):
+                    title = (
+                        f"<title>{escape(str(hovers[i]))}</title>"
+                        if i < len(hovers)
+                        else ""
+                    )
                     parts.append(
                         f'<circle cx="{px(x):.2f}" cy="{py(y):.2f}" r="3" '
-                        f'fill="{color}"/>'
+                        f'fill="{color}">{title}</circle>'
                     )
         elif kind == "bar":
             positions = _trace_positions(trace)
@@ -1126,15 +1199,20 @@ def _figure_to_svg(figure: Figure, width: float = 640.0, height: float = 400.0) 
             min_gap = min(gaps) if gaps else plot_w
             half = min(0.4 * min_gap, 24.0)
             baseline = 0.0 if y0 <= 0.0 <= y1 else (y0 if y0 > 0.0 else y1)
-            for x, y in zip(positions, trace.get("y") or []):
+            for i, (x, y) in enumerate(zip(positions, trace.get("y") or [])):
                 cx = px(x)
                 y_top = py(float(y))
                 y_base = py(baseline)
+                title = (
+                    f"<title>{escape(str(hovers[i]))}</title>"
+                    if i < len(hovers)
+                    else ""
+                )
                 parts.append(
                     f'<polygon points="{cx - half:.2f},{y_base:.2f} '
                     f'{cx + half:.2f},{y_base:.2f} {cx + half:.2f},{y_top:.2f} '
                     f'{cx - half:.2f},{y_top:.2f}" fill="{color}" '
-                    f'fill-opacity="0.85"/>'
+                    f'fill-opacity="0.85">{title}</polygon>'
                 )
         elif kind == "heatmap":
             z = trace.get("z") or []
@@ -1242,3 +1320,205 @@ def save_interactive_html(
     with open(file_path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(html_text)
     return file_path
+
+
+# --------------------------------------------------------------------------- #
+# Express -- the plotly.express layer (round 186)
+# --------------------------------------------------------------------------- #
+#: The express chart kinds (one trace family each).
+EXPRESS_KINDS = ("scatter", "line", "bar", "histogram")
+
+#: Default bin strategy for ``express_histogram``.
+_HISTOGRAM_BINS = 24
+
+
+def _fd_bin_count(values: list[float]) -> int:
+    """Freedman-Diaconis bin count (Sturges fallback when IQR collapses)."""
+    import numpy as np
+
+    array = np.asarray(values, dtype=float)
+    q75, q25 = np.percentile(array, [75.0, 25.0])
+    iqr = float(q75 - q25)
+    n = array.size
+    if iqr <= 0.0:
+        return max(int(np.ceil(np.log2(n) + 1.0)), 1)
+    width = 2.0 * iqr / max(n ** (1.0 / 3.0), 1e-12)
+    if width <= 0.0:
+        return max(int(np.ceil(np.log2(n) + 1.0)), 1)
+    span = float(array.max() - array.min())
+    count = int(np.ceil(span / width)) if span > 0 else 1
+    return max(min(count, _HISTOGRAM_BINS), 1)
+
+
+def _express_groups(
+    frame: Any, color: str | None
+) -> list[tuple[str | None, list[int]]]:
+    """One ``(name, row positions)`` group per color level (or a single
+    group when ``color`` is ``None``) -- plotly express's legend split."""
+    rows = list(range(len(frame)))
+    if color is None:
+        return [(None, rows)]
+    if color not in frame.columns:
+        raise DataValidationError(
+            f"express: color column {color!r} not in the frame"
+        )
+    levels: dict[str | None, list[int]] = {}
+    for position, value in zip(rows, frame[color]):
+        levels.setdefault(str(value), []).append(position)
+    return sorted(levels.items(), key=lambda item: str(item[0]))
+
+
+def _express_hover(
+    frame: Any, hover: Sequence[str] | None, positions: Sequence[int]
+) -> list[str] | None:
+    """The hover label per row: ``field=value`` joined over the chosen
+    columns (plotly's ``hover_data`` rendered as text)."""
+    if not hover:
+        return None
+    for column in hover:
+        if column not in frame.columns:
+            raise DataValidationError(
+                f"express: hover column {column!r} not in the frame"
+            )
+    labels = []
+    for position in positions:
+        pieces = [
+            f"{column}={frame[column].iloc[position]}" for column in hover
+        ]
+        labels.append(" · ".join(pieces))
+    return labels
+
+
+def express_figure(
+    frame: Any,
+    kind: str,
+    x: str,
+    y: str | None = None,
+    *,
+    color: str | None = None,
+    hover: Sequence[str] | None = None,
+    labels: dict[str, str] | None = None,
+    template: str = "plotly",
+    title: str | None = None,
+) -> Figure:
+    """The ``plotly.express`` one-liner over the figure-as-data model.
+
+    ``kind`` picks the trace family (``scatter`` / ``line`` / ``bar`` /
+    ``histogram``); ``color`` splits the rows into one trace per level
+    (the legend semantics); ``hover`` lists DataFrame columns whose
+    values ride on the points as ``hovertext``; ``labels`` renames the
+    axis titles; ``template`` picks one of :data:`TEMPLATES`.
+    ``histogram`` bins ``x`` server-side (Freedman-Diaconis) into a bar
+    trace -- the aggregation ``px.histogram`` does in JS, done here in
+    numpy so the data model stays complete offline.
+    """
+    if kind not in EXPRESS_KINDS:
+        raise DataValidationError(
+            f"express: kind must be one of {EXPRESS_KINDS}, got {kind!r}"
+        )
+    if template not in TEMPLATES:
+        raise DataValidationError(
+            f"express: template must be one of {tuple(TEMPLATES)}, got {template!r}"
+        )
+    if x not in frame.columns:
+        raise DataValidationError(f"express: x column {x!r} not in the frame")
+    if y is not None and y not in frame.columns:
+        raise DataValidationError(f"express: y column {y!r} not in the frame")
+    if len(frame) == 0:
+        raise DataValidationError("express: the frame is empty")
+    renames = dict(labels or {})
+
+    figure = Figure()
+    if kind == "histogram":
+        if y is not None:
+            raise DataValidationError(
+                "express: histogram takes only x (the value column to bin)"
+            )
+        values = [float(v) for v in frame[x]]
+        n_bins = _fd_bin_count(values)
+        lo, hi = min(values), max(values)
+        if hi <= lo:
+            hi = lo + 1.0
+        import numpy as np
+
+        edges = np.linspace(lo, hi, n_bins + 1)
+        index = np.clip(
+            ((np.asarray(values) - lo) / (hi - lo) * n_bins).astype(int),
+            0,
+            n_bins - 1,
+        )
+        counts = np.bincount(index, minlength=n_bins)
+        centers = [
+            float((edges[i] + edges[i + 1]) / 2.0) for i in range(n_bins)
+        ]
+        hovers = _express_hover(frame, hover, list(range(len(frame))))
+        if hovers is not None:
+            by_bin: list[list[str]] = [[] for _ in range(n_bins)]
+            for label, slot in zip(hovers, index.tolist()):
+                by_bin[slot].append(label)
+            hovers = ["; ".join(items) for items in by_bin]
+        figure.add_bar(
+            centers, [int(c) for c in counts], name=x, hovertext=hovers
+        )
+        figure.set_layout(
+            title=title or renames.get("title"),
+            x_title=renames.get("x", x),
+            y_title=renames.get("y", "count"),
+            template=template,
+        )
+        return figure
+
+    if y is None:
+        raise DataValidationError(
+            f"express: kind {kind!r} needs a y column"
+        )
+    for level, positions in _express_groups(frame, color):
+        ys = [float(v) for v in frame[y].iloc[positions]]
+        name = f"{color}={level}" if level is not None else f"{y} vs {x}"
+        hovers = _express_hover(frame, hover, positions)
+        if kind == "bar":
+            bar_xs = [str(v) for v in frame[x].iloc[positions]]
+            figure.add_bar(bar_xs, ys, name=name, hovertext=hovers)
+        else:
+            scatter_xs = [float(v) for v in frame[x].iloc[positions]]
+            mode = "markers" if kind == "scatter" else "lines"
+            figure.add_scatter(scatter_xs, ys, name=name, mode=mode, hovertext=hovers)
+    figure.set_layout(
+        title=title or renames.get("title"),
+        x_title=renames.get("x", x),
+        y_title=renames.get("y", y),
+        template=template,
+    )
+    return figure
+
+
+def express_scatter(
+    frame: Any, x: str, y: str, **kwargs: Any
+) -> Figure:
+    """``px.scatter`` -- one marker trace per colour level."""
+    return express_figure(frame, "scatter", x, y, **kwargs)
+
+
+def express_line(frame: Any, x: str, y: str, **kwargs: Any) -> Figure:
+    """``px.line`` -- one line trace per colour level."""
+    return express_figure(frame, "line", x, y, **kwargs)
+
+
+def express_bar(frame: Any, x: str, y: str, **kwargs: Any) -> Figure:
+    """``px.bar`` -- one bar trace per colour level."""
+    return express_figure(frame, "bar", x, y, **kwargs)
+
+
+def express_histogram(frame: Any, x: str, **kwargs: Any) -> Figure:
+    """``px.histogram`` -- Freedman-Diaconis bins as one bar trace."""
+    return express_figure(frame, "histogram", x, **kwargs)
+
+
+def apply_template(figure: Figure, name: str) -> Figure:
+    """Switch a figure's template in place (plotly's named themes)."""
+    if name not in TEMPLATES:
+        raise DataValidationError(
+            f"template must be one of {tuple(TEMPLATES)}, got {name!r}"
+        )
+    figure.layout["template"] = name
+    return figure

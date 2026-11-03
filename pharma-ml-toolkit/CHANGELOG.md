@@ -1,3 +1,82 @@
+## [1.2.106] — 2026-11-03
+
+### Added — round 186: tensorboard · umap · fiftyone · plotly.py, absorbed offline into the Deep Learning tab
+
+The same instruction, four new repositories, checked file by file via
+treeless shallow clones (the four engines land in the Deep Learning tab
+as four new cards at rows 6-9):
+
+* **`ml/runboard.py` — tensorflow/tensorboard**: the summary-writer
+  event model (`add_scalar` / `add_histogram` / `add_text` /
+  `add_embedding` / hparams trials, one tag at a time), the event
+  accumulator's Vitter reservoir with TensorBoard's own
+  `always_keep_last` twist (`randint(0, num_seen)`, per-tag
+  determinism — ported faithfully from `reservoir.py`), the scalars
+  dashboard's bias-corrected EMA smoothing, the histogram dashboard's
+  dual view (summary stats + 30 fixed-width buckets), hparams session
+  groups, and the embedding projector's cosine nearest-neighbour
+  lookup. 36 tests.
+* **`ml/umap.py` — lmcinnes/umap**: the algorithm's own machinery,
+  gradient for gradient — `smooth_knn_dist`'s 64-iteration binary
+  search on the `log2(k)` target, membership strengths with the
+  rho/sigma normalisers, the fuzzy union symmetrisation
+  `A + A^T - A.A^T`, `find_ab_params` via the very same
+  `scipy.optimize.curve_fit` (a=1.577, b=0.895 at umap's defaults --
+  pinned), the negative-sampling SGD (`-2ab d^{2b-1}/(a d^{2b}+1)`
+  attraction, `2 gamma b / ((0.001+d^2)(a d^{2b}+1))` repulsion, +-4
+  gradient clip, `epochs_per_sample = w_max/w` firing schedule, linear
+  alpha decay), spectral init over the fuzzy graph with the honest
+  random fallback, `transform` (membership-weighted-average init, the
+  fitted side frozen), and the Venna-Kaski trustworthiness -- pinned
+  bit-for-bit against sklearn's own implementation at k in {1,3,5,10}.
+  27 tests.
+* **`ml/curation.py` — voxel51/fiftyone**: the view-stage algebra
+  (the 43 stage classes inventoried; the tabular subset ported):
+  `filter` (the FilterField op family), `match`, `sort_by`, `limit`,
+  `skip`, `shuffle`, `take`, `select`/`exclude`, `exists`,
+  `has_tag`, `select_fields`, `concat` -- every stage returns a NEW
+  view with its chain as provenance; plus the brain methods
+  (`find_duplicates` with keep=first, `find_outliers` z-score/IQR,
+  `uniqueness` = 1 - mean k-NN cosine, `sort_by_similarity`) and
+  ground-truth-vs-prediction `evaluate_classification` (confusion,
+  per-class P/R/F1, mistakes). 26 tests.
+* **`viz/interactive.py` — plotly/plotly.py's express layer** over the
+  existing figure-as-data model: `hovertext` per trace (validated,
+  JSON round-tripping), the four named templates (plotly /
+  plotly_white / ggplot2 / seaborn -- colour cycle + paper + ink in
+  the SVG renderer), `express_figure` + the four one-liners
+  (scatter/line/bar/histogram with colour splits, hover columns,
+  labels; histogram bins Freedman-Diaconis, numpy-side), and the SVG
+  export renders native `<title>` tooltips (hover with no JavaScript).
+  20 tests.
+* **playground.py**: the four Deep Learning cards -- **Run board**
+  (loss curves with the smoothing spin, the first layer's weight
+  histogram + per-layer stats strip, the hparams trial table),
+  **UMAP map** (neighbours/min_dist/metric knobs, the map coloured by
+  the target, trustworthiness in the title, nearest rows by
+  original-space cosine, CSV export), **Data curation** (filter chains
+  with provenance, duplicates, outliers, class counts, similar rows),
+  **Interactive figure** (kind/x/y/colour/template selectors, hover
+  columns, ASCII preview, self-contained hover-HTML export). 13 GUI
+  tests (`TestRound186Gui`, headless under Xvfb).
+
+### Fixed on the way (the re-ship's gate damage)
+
+* The SELFIES samplers' PYTHONHASHSEED determinism bug: the default
+  alphabet came from iterating `get_semantic_robust_alphabet()`'s raw
+  SET in three call sites, so the same seed sampled different
+  molecules in every process (the flaky doctest gate's root cause;
+  now sorted at all three sites).
+* The EXE002 exec-bit sweep (385 editor-corrupted +X files stripped),
+  S110/RUF046/RUF059/UP032/I001 lint in the round-185 code, and the
+  round-185 ship's own lesson: research clones under `scratch/` rode
+  the zip walk into a 1.15 GB archive that filled the disk -- the
+  clones are deleted before shipping now (RESUME.md's rule 7).
+
+**122 new tests** (`tests/test_runboard.py` 36 · `tests/test_umap.py`
+27 · `tests/test_curation.py` 26 · `tests/test_interactive.py` 20 ·
+`TestRound186Gui` 13). Suite: 4032 collected across 147 files.
+
 ## [1.2.105] — 2026-11-03
 
 ### Added — the XAI absorption (round 185): captum · tf-keras-vis · PAIR-code/saliency · bertviz, offline

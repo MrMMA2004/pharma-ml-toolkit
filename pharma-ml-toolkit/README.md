@@ -6,7 +6,7 @@ domains into one coherent package:
 | Domain | What it does |
 |---|---|
 | **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
-| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families** + **hierarchical SVR**), cross-validated training (binary **and multiclass**), evaluation, persistence, hyperparameter search (`RandomSearch` / **`TPESearch`** (Optuna's Parzen sampler) / `Hyperband` over `HyperParameters` spaces — with **`PercentilePruner`/`MedianPruner` fold-loop pruning**, Optuna-style trial states + durations + intermediates, **`param_importances`** (the MDI forest) — plus the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines and `resource_bounds` sizing Hyperband ladders from the family's own declared grid) — plus **the offline attribution engine (`ml.xai`: `input_x_gradient` / `integrated_gradients` with the convergence Δ / `smoothgrad` / `occlusion`, layer-activation traces, the bertviz-style attention grid — captum · tf-keras-vis · PAIR-code/saliency · bertviz absorbed with zero engine dependencies)** |
+| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families** + **hierarchical SVR**), cross-validated training (binary **and multiclass**), evaluation, persistence, hyperparameter search (`RandomSearch` / **`TPESearch`** (Optuna's Parzen sampler) / `Hyperband` over `HyperParameters` spaces — with **`PercentilePruner`/`MedianPruner` fold-loop pruning**, Optuna-style trial states + durations + intermediates, **`param_importances`** (the MDI forest) — plus the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines and `resource_bounds` sizing Hyperband ladders from the family's own declared grid) — plus **the offline attribution engine (`ml.xai`: `input_x_gradient` / `integrated_gradients` with the convergence Δ / `smoothgrad` / `occlusion`, layer-activation traces, the bertviz-style attention grid — captum · tf-keras-vis · PAIR-code/saliency · bertviz absorbed with zero engine dependencies)**, **the run-trace board (`ml.runboard`: scalar/histogram/hparams/embedding event records over Vitter reservoirs with `always_keep_last`, the bias-corrected EMA smoothing, the projector's cosine nearest-neighbours — tensorflow/tensorboard absorbed), `ml.umap` (the fuzzy-simplicial-set pipeline: `smooth_knn_dist`'s binary search, the union symmetrisation, `find_ab_params`' curve fit, the negative-sampling SGD layout with gradient-for-gradient ports, `transform`, sklearn-pinned trustworthiness — lmcinnes/umap absorbed) and `ml.curation` (fiftyone's immutable view-stage algebra over any CSV — filter/match/sort/limit/skip/shuffle/take/select/exists/tags, plus the brain audits: duplicates, z-score/IQR outliers, uniqueness, similarity, evaluation — voxel51/fiftyone absorbed)** |
 | **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
 | **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management |
@@ -174,8 +174,23 @@ per-feature table with the push sign and |attribution| share, a
 colorized heat map (blue = pushes down, red = up); **Layer activations**
 traces the hidden units (units, min/mean/max, dead-unit share, a
 grayscale unit heat map); **Attention grid** renders the bertviz-style
-layer × head grid over typed tokens with the strongest query→key pairs)
-and **Generative** (evolve molecules against QED/LogP objectives with the
+layer × head grid over typed tokens with the strongest query→key pairs);
+a **Run board** card (round 186: the last run as a TensorBoard-style
+event log — per-epoch loss curves with the dashboard's EMA smoothing
+slider, the first layer's weight histogram over 30 fixed-width buckets
+with the per-layer stats strip, and the hparams trial table; every
+event list reservoir-sampled so long runs stay bounded); a **UMAP map**
+card (the run's test rows or the loaded CSV through UMAP's own
+pipeline — neighbours/min_dist/metric knobs, the map coloured by the
+target column, the Venna-Kaski trustworthiness in the title, nearest
+rows by original-space cosine, the embedding exportable as CSV); a
+**Data curation** card (fiftyone's view algebra over the loaded CSV —
+filter chains with stage provenance, duplicates, z-score outliers, class
+counts, most-similar rows); and an **Interactive figure** card
+(plotly.express over the figure-as-data model — kind/x/y/colour/template
+selectors, hover columns riding the points, the ASCII preview, and a
+self-contained hover-HTML export whose SVG carries native `<title>`
+tooltips) — and **Generative** (evolve molecules against QED/LogP objectives with the
 genetic algorithm, or fine-tune a SMILES RNN prior with reinforcement
 learning — the optimiser combo swaps the parameter block, and RL runs
 render the four-panel prior-drift introspection plus a first→last
@@ -296,7 +311,7 @@ pharma-ml-toolkit/
 │                            # Tkinter window over every domain (chemistry · PK/PD · cell lines · QSAR · generative);
 │                            # probes its dependencies at launch, degrades gracefully, headlessly
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
-├── VERSION                 # the release version (1.2.105) — `cat VERSION` after extracting
+├── VERSION                 # the release version (1.2.106) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
@@ -1052,6 +1067,75 @@ occlusion needs only `predict`/`predict_proba`. No torch, no
 tensorflow, no network — and each registry entry credits its origin
 repo (`ATTRIBUTION_METHODS`). The GUI twin is the Deep Learning tab's
 **Attribution & attention** card.
+
+#### The run board, UMAP, curation views & express figures (`ml.runboard` · `ml.umap` · `ml.curation` · `viz.interactive`) — tensorboard · umap · fiftyone · plotly.py, offline
+
+Round 186 checked four more repositories file by file and lifted what
+survives without their engines (no TensorFlow graph, no numba, no
+MongoDB, no plotly.js):
+
+```python
+import numpy as np
+import pandas as pd
+from pharmaml.ml.runboard import (
+    RunTrace, RunBoard, smooth_series, reservoir_sample, nearest_neighbours,
+)
+from pharmaml.ml.umap import (
+    find_ab_params, fuzzy_simplicial_set, umap_embed, trustworthiness,
+)
+from pharmaml.ml.curation import (
+    SampleSet, find_duplicates, find_outliers, uniqueness,
+    sort_by_similarity, evaluate_classification,
+)
+from pharmaml.viz.interactive import (
+    express_scatter, express_histogram, apply_template, TEMPLATES,
+    save_interactive_html,
+)
+
+# tensorboard: the writer API + the accumulator's reservoir + the
+# dashboard's EMA smoothing (bias-corrected)
+rng = np.random.default_rng(42)
+trace = RunTrace("fit-01")
+trace.add_scalar("loss/train", 0.9, step=0)
+trace.add_histogram("weights/layer1", rng.normal(size=64), step=0)
+trace.add_hparams({"lr": 0.01}, {"val_loss": 0.35})
+smooth_series([1.0, 0.5, 0.2], beta=0.6)      # the slider's formula
+reservoir_sample(list(range(1000)), 10, seed=42)  # Vitter + keep-last
+nearest_neighbours(matrix, row=0, k=5)        # the projector's click
+
+# umap: the algorithm's own machinery, gradient for gradient
+a, b = find_ab_params(1.0, 0.1)               # (1.577, 0.895) -- umap's own fit
+record = umap_embed(features, n_neighbors=15, min_dist=0.1, n_epochs=200)
+record.transform(new_rows)                    # weighted-average init + frozen SGD
+trustworthiness(features, record.embedding_array, n_neighbors=10)  # == sklearn's
+
+# fiftyone: views are immutable stage chains, never mutations
+samples = SampleSet.from_frame(frame)
+view = samples.view().filter("ic50", ">", 5.0).sort_by("ic50").limit(20)
+view.summary()          # '420 samples -> filter(ic50 > 5.0) -> ... -> 20 samples'
+find_duplicates(samples, fields=["smiles"]).groups
+find_outliers(samples, method="iqr", threshold=1.5).flagged
+uniqueness(samples, fields=["x", "y"])        # 1 - mean k-NN cosine
+evaluate_classification(samples, "cls", "pred").confusion
+
+# plotly.express: one-liners over the figure-as-data model + hover HTML
+figure = express_scatter(frame, "dose", "response", color="arm", hover=["pid"])
+express_histogram(frame, "dose")              # Freedman-Diaconis bins, numpy-side
+apply_template(figure, "ggplot2")             # the named themes
+save_interactive_html(figure, "map.html")     # <title> tooltips, no CDN, no JS
+```
+
+The honest scope, stated once: tensorboard's served dashboards, event
+files and graph viewer; umap's numba/nndescent acceleration, densMAP,
+parametric/aligned variants; fiftyone's MongoDB/ODM layer, image-only
+constructs (patches/frames/clips) and annotation integrations; plotly's
+JavaScript/WebGL renderer and kaleido static export — none of it is
+vendored. What transfers is the event model, the algorithm, the view
+algebra and the express API, each pinned by its own test suite
+(`tests/test_runboard.py`, `tests/test_umap.py`,
+`tests/test_curation.py`, `tests/test_interactive.py` — the
+trustworthiness port is pinned against sklearn's own implementation,
+and the find_ab_params fit against umap's published defaults).
 
 #### Hierarchical SVR (`hsvr`) — local specialists for heterogeneous data
 

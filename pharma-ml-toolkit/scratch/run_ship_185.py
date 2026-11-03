@@ -15,13 +15,18 @@ from pathlib import Path
 TOOLKIT = Path(__file__).resolve().parents[1]
 PY = str(Path.home() / ".venv" / "bin" / "python")
 MESSAGE = (
-    "round 185 re-ship, lean -- the zip rebuilt without the research "
-    "clones (the first re-ship attempt walked scratch/gh-* into a 1.15 GB "
-    "archive and filled the disk; clones deleted, artifacts rebuilt); "
-    "gate fixes on the way: the EXE002 exec-bit sweep, S110/RUF046/"
-    "RUF059/UP032/I001 lint, and the selfies sampler PYTHONHASHSEED "
-    "determinism fix (sorted default alphabet in three call sites -- "
-    "the flaky doctest gate's root cause) (v1.2.105)"
+    "round 186: the four-repo absorption -- tensorflow/tensorboard "
+    "(ml/runboard.py: the summary-writer event model, the Vitter "
+    "reservoir with always_keep_last, the EMA smoothing, the projector's "
+    "nearest-neighbours), lmcinnes/umap (ml/umap.py: smooth_knn_dist, "
+    "the fuzzy simplicial set, find_ab_params, the negative-sampling "
+    "SGD, transform, sklearn-pinned trustworthiness), voxel51/fiftyone "
+    "(ml/curation.py: the view-stage algebra + the brain methods) and "
+    "plotly/plotly.py's express layer (viz/interactive.py: hovertext, "
+    "templates, express_figure, SVG title tooltips) -- four new Deep "
+    "Learning cards (Run board, UMAP map, Data curation, Interactive "
+    "figure), 122 new tests, notebooks re-executed for 1.2.106, "
+    "4032 collected across 147 files (v1.2.106)"
 )
 COMMAND = [PY, "tools/checkpoint.py", "--commit", MESSAGE]
 OUT = "/tmp/ship185b.txt"
